@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import UUID
@@ -8,18 +10,22 @@ from sqlalchemy import delete, select
 from storage.database import a_session_maker
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
-from storage.versioned_credential_store import (
-    SaasVersionedCredentialStore,
-    credential_version,
-)
 
 from openhands.app_server.secrets.credential_binding_models import (
     is_runtime_managed_credential,
 )
 from openhands.app_server.secrets.secrets_models import Secrets
-from openhands.app_server.secrets.secrets_store import SecretsStore
+from openhands.app_server.secrets.secrets_store import (
+    CredentialVersionConflict,
+    SecretsStore,
+)
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+
+def _credential_version(row: StoredCustomSecrets) -> str:
+    source = f"{row.id}\0{row.secret_value}"
+    return hashlib.sha256(source.encode()).hexdigest()
 
 
 @dataclass
@@ -76,7 +82,7 @@ class SaasSecretsStore(SecretsStore):
 
             self._decrypt_kwargs(kwargs)
             loaded_managed = {
-                name: (value, credential_version(row))
+                name: (value, _credential_version(row))
                 for name, row in managed_rows.items()
                 if isinstance(value := kwargs.get(name, {}).get("secret"), str)
             }
@@ -203,11 +209,14 @@ class SaasSecretsStore(SecretsStore):
             org_id = user.current_org_id if user else None
         if org_id is None:
             raise KeyError(name)
-        return await SaasVersionedCredentialStore(
-            self.user_id,
-            org_id,
-            self._jwt_svc,
-        ).load(name)
+        async with a_session_maker() as session:
+            result = await session.execute(self._versioned_query(name, org_id).limit(1))
+            row = result.scalars().first()
+            if row is None:
+                raise KeyError(name)
+            return self._jwt_svc.decrypt_value(row.secret_value), _credential_version(
+                row
+            )
 
     async def replace_versioned(
         self,
@@ -222,11 +231,34 @@ class SaasSecretsStore(SecretsStore):
             org_id = user.current_org_id if user else None
         if org_id is None:
             raise KeyError(name)
-        return await SaasVersionedCredentialStore(
-            self.user_id,
-            org_id,
-            self._jwt_svc,
-        ).replace(name, expected_version, value)
+        async with a_session_maker() as session:
+            result = await session.execute(
+                self._versioned_query(name, org_id).with_for_update()
+            )
+            rows = result.scalars().all()
+            if not rows:
+                raise KeyError(name)
+            if not hmac.compare_digest(
+                _credential_version(rows[0]).encode(),
+                expected_version.encode(errors="surrogatepass"),
+            ):
+                raise CredentialVersionConflict
+            encrypted = self._jwt_svc.encrypt_value(value)
+            for row in rows:
+                row.secret_value = encrypted
+            await session.commit()
+            return _credential_version(rows[0])
+
+    def _versioned_query(self, name: str, organization_id: UUID):
+        return (
+            select(StoredCustomSecrets)
+            .filter(
+                StoredCustomSecrets.keycloak_user_id == self.user_id,
+                StoredCustomSecrets.org_id == organization_id,
+                StoredCustomSecrets.secret_name == name,
+            )
+            .order_by(StoredCustomSecrets.id.desc())
+        )
 
     def _decrypt_kwargs(self, kwargs: dict):
         for key, value in kwargs.items():
