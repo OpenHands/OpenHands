@@ -749,36 +749,51 @@ class OrgConversationService:
                 )
             )
 
-        # 6. Model usage (by model)
+        # 6. Model usage (by model) — aggregated from the cost-event ledger so
+        # spend is attributed to the model that incurred it (a conversation can
+        # span several LLMs and its llm_model column only holds the latest).
+        # Pre-attribution rows (NULL llm_model) fall back to the conversation's
+        # current model; windowing is on spend time, not conversation creation.
+        model_label = func.coalesce(
+            StoredConversationCostEvent.llm_model,
+            StoredConversationMetadata.llm_model,
+        )
         model_query = (
             select(
-                StoredConversationMetadata.llm_model,
-                func.count(StoredConversationMetadata.conversation_id).label(
-                    'conv_count'
-                ),
+                model_label.label('llm_model'),
+                func.count(
+                    func.distinct(StoredConversationCostEvent.conversation_id)
+                ).label('conv_count'),
                 func.coalesce(
                     func.sum(
-                        StoredConversationMetadata.prompt_tokens
-                        + StoredConversationMetadata.completion_tokens
+                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
+                        + func.coalesce(
+                            StoredConversationCostEvent.completion_tokens, 0
+                        )
                     ),
                     0,
                 ).label('token_count'),
                 func.coalesce(
-                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                    func.sum(StoredConversationCostEvent.cost_delta), 0
                 ).label('total_cost'),
             )
-            .select_from(StoredConversationMetadata)
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
             .join(
                 StoredConversationMetadataSaas,
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
             .where(*base_filter)
-            .where(StoredConversationMetadata.created_at >= cutoff)
-            .group_by(StoredConversationMetadata.llm_model)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+            .group_by(model_label)
             .order_by(
                 func.coalesce(
-                    func.sum(StoredConversationMetadata.accumulated_cost), 0
+                    func.sum(StoredConversationCostEvent.cost_delta), 0
                 ).desc()
             )
         )

@@ -236,8 +236,14 @@ class TestUpdateConversationStatistics:
         """Test that cost deltas are recorded for stats updates."""
         conversation_id, stored = v1_conversation_metadata
 
-        stored.accumulated_cost = 0.01
-        await async_session.commit()
+        await service.update_conversation_statistics(
+            conversation_id,
+            ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(model_name='test-model', accumulated_cost=0.01)
+                }
+            ),
+        )
 
         event_timestamp = datetime(2025, 1, 15, tzinfo=timezone.utc)
         agent_metrics = Metrics(
@@ -251,11 +257,11 @@ class TestUpdateConversationStatistics:
         )
 
         result = await async_session.execute(
-            select(StoredConversationCostEvent).where(
-                StoredConversationCostEvent.conversation_id == str(conversation_id)
-            )
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
         )
-        cost_event = result.scalar_one()
+        cost_event = result.scalars().all()[-1]
         assert cost_event.cost_delta == pytest.approx(0.04)
         occurred_at = cost_event.occurred_at
         if occurred_at.tzinfo is None:
@@ -319,12 +325,59 @@ class TestUpdateConversationStatistics:
         assert stored.completion_tokens == 30
 
         result = await async_session.execute(
-            select(StoredConversationCostEvent).where(
-                StoredConversationCostEvent.conversation_id == str(conversation_id)
-            )
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
         )
-        cost_event = result.scalar_one()
-        assert cost_event.cost_delta == pytest.approx(0.1741)
+        events = result.scalars().all()
+        # The ledger self-heals the pre-seeded agent spend, then records opus.
+        assert [(e.usage_id, e.llm_model) for e in events] == [
+            ('agent', 'gpt-5.5'),
+            ('profile:opus-repro:abc123', 'claude-opus-4-8'),
+        ]
+        assert events[1].cost_delta == pytest.approx(0.1741)
+        assert events[1].prompt_tokens == 200
+        assert events[1].completion_tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_bucket_attribution_across_turns(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Each bucket's spend lands in its own ledger rows, per model."""
+        conversation_id, stored = v1_conversation_metadata
+
+        agent_turn1 = Metrics(model_name='gpt-5.5', accumulated_cost=0.08)
+        await service.update_conversation_statistics(
+            conversation_id, ConversationStats(usage_to_metrics={'agent': agent_turn1})
+        )
+
+        agent_turn2 = Metrics(model_name='gpt-5.5', accumulated_cost=0.08)
+        profile_turn2 = Metrics(model_name='claude-opus-4-8', accumulated_cost=0.17)
+        await service.update_conversation_statistics(
+            conversation_id,
+            ConversationStats(
+                usage_to_metrics={
+                    'agent': agent_turn2,
+                    'profile:opus:xyz': profile_turn2,
+                }
+            ),
+        )
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.25)
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
+        )
+        events = result.scalars().all()
+        assert [(e.usage_id, e.llm_model) for e in events] == [
+            ('agent', 'gpt-5.5'),
+            ('profile:opus:xyz', 'claude-opus-4-8'),
+        ]
+        assert events[0].cost_delta == pytest.approx(0.08)
+        assert events[1].cost_delta == pytest.approx(0.17)
 
     @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(

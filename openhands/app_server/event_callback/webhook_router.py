@@ -8,7 +8,6 @@ from typing import Any
 from uuid import UUID
 
 import httpx
-
 from fastapi import (
     APIRouter,
     BackgroundTasks,

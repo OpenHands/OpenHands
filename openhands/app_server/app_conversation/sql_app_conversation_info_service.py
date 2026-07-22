@@ -31,6 +31,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Identity,
+    Integer,
     Select,
     String,
     func,
@@ -103,8 +104,7 @@ def _combine_usage_metrics(
                 model=combined.model,
                 prompt_tokens=combined.prompt_tokens + usage.prompt_tokens,
                 completion_tokens=combined.completion_tokens + usage.completion_tokens,
-                cache_read_tokens=combined.cache_read_tokens
-                + usage.cache_read_tokens,
+                cache_read_tokens=combined.cache_read_tokens + usage.cache_read_tokens,
                 cache_write_tokens=combined.cache_write_tokens
                 + usage.cache_write_tokens,
                 reasoning_tokens=combined.reasoning_tokens + usage.reasoning_tokens,
@@ -202,6 +202,12 @@ class StoredConversationCostEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
+    # Attribution: which usage bucket / model incurred this delta. Nullable
+    # for rows written before the columns existed (treated as 'agent').
+    usage_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 @dataclass
@@ -552,14 +558,10 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 accumulated_cost,
             )
             return
-        if delta_cost > 0:
-            self.db_session.add(
-                StoredConversationCostEvent(
-                    conversation_id=stored.conversation_id,
-                    cost_delta=delta_cost,
-                    occurred_at=event_timestamp,
-                )
-            )
+        # Ledger deltas are computed against the ledger's own per-bucket sums
+        # (not the column), so it self-heals if the column ever advances
+        # through a path that skips the ledger.
+        await self._record_bucket_cost_deltas(stored, usage_to_metrics, event_timestamp)
 
         stored.accumulated_cost = accumulated_cost
         if agent_metrics is not None and agent_metrics.max_budget_per_task is not None:
@@ -577,6 +579,62 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored.last_updated_at = utc_now()
 
         await self.db_session.commit()
+
+    async def _record_bucket_cost_deltas(
+        self,
+        stored: StoredConversationMetadata,
+        usage_to_metrics: dict[str, MetricsSnapshot],
+        event_timestamp: datetime,
+    ) -> None:
+        """Write per-bucket cost deltas so spend stays attributable per model.
+
+        Prior per-bucket totals come from the ledger itself; rows written
+        before attribution existed have NULL usage_id and count as 'agent'.
+        """
+        bucket_key = func.coalesce(StoredConversationCostEvent.usage_id, 'agent')
+        result = await self.db_session.execute(
+            select(
+                bucket_key,
+                func.sum(StoredConversationCostEvent.cost_delta),
+                func.sum(StoredConversationCostEvent.prompt_tokens),
+                func.sum(StoredConversationCostEvent.completion_tokens),
+            )
+            .where(
+                StoredConversationCostEvent.conversation_id == stored.conversation_id
+            )
+            .group_by(bucket_key)
+        )
+        prior = {row[0]: row for row in result.all()}
+
+        for usage_id, snapshot in usage_to_metrics.items():
+            prior_row = prior.get(usage_id)
+            prior_cost = float(prior_row[1] or 0.0) if prior_row is not None else 0.0
+            bucket_delta = float(snapshot.accumulated_cost or 0.0) - prior_cost
+            if bucket_delta <= 0:
+                continue
+            model = snapshot.model_name
+            if not model or model == 'default':
+                model = stored.llm_model if usage_id == 'agent' else None
+            usage = snapshot.accumulated_token_usage
+            prompt_delta = completion_delta = None
+            if usage is not None:
+                prior_prompt = int(prior_row[2] or 0) if prior_row is not None else 0
+                prior_completion = (
+                    int(prior_row[3] or 0) if prior_row is not None else 0
+                )
+                prompt_delta = max(usage.prompt_tokens - prior_prompt, 0)
+                completion_delta = max(usage.completion_tokens - prior_completion, 0)
+            self.db_session.add(
+                StoredConversationCostEvent(
+                    conversation_id=stored.conversation_id,
+                    cost_delta=bucket_delta,
+                    occurred_at=event_timestamp,
+                    usage_id=usage_id,
+                    llm_model=model,
+                    prompt_tokens=prompt_delta,
+                    completion_tokens=completion_delta,
+                )
+            )
 
     async def process_stats_event(
         self,
