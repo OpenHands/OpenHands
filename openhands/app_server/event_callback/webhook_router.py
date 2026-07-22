@@ -7,6 +7,8 @@ import pkgutil
 from typing import Any
 from uuid import UUID
 
+import httpx
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -36,6 +38,7 @@ from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
     depends_jwt_service,
+    get_app_conversation_service,
     get_event_callback_service,
     get_global_config,
     get_sandbox_service,
@@ -465,6 +468,50 @@ async def on_conversation_update(
     return Success()
 
 
+_LIVE_STATS_PULL_STATUSES = {
+    ConversationExecutionStatus.FINISHED,
+    ConversationExecutionStatus.IDLE,
+    ConversationExecutionStatus.ERROR,
+    ConversationExecutionStatus.STUCK,
+}
+
+
+async def _sync_live_conversation_stats(
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+    app_conversation_info_service: AppConversationInfoService,
+) -> None:
+    """Pull the registry's combined stats from the agent-server at run end.
+
+    Switched-in LLMs and ACP agents never attach a stats callback, so their
+    spend emits no stats events; without this pull the persisted totals
+    under-report whatever ran outside the startup-wired LLMs.
+    """
+    state = InjectorState()
+    setattr(
+        state,
+        USER_CONTEXT_ATTR,
+        SpecifyUserContext(app_conversation_info.created_by_user_id),
+    )
+    async with get_app_conversation_service(state) as app_conversation_service:
+        conversation = await app_conversation_service.get_app_conversation(
+            conversation_id
+        )
+    if conversation is None or not conversation.conversation_url:
+        return
+    headers = {}
+    if conversation.session_api_key:
+        headers['X-Session-API-Key'] = conversation.session_api_key
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(conversation.conversation_url, headers=headers)
+        response.raise_for_status()
+        info = ConversationInfo.model_validate(response.json())
+    if info.stats and info.stats.usage_to_metrics:
+        await app_conversation_info_service.update_conversation_statistics(
+            conversation_id, info.stats
+        )
+
+
 @router.post('/events/{conversation_id}')
 async def on_event(
     background_tasks: BackgroundTasks,
@@ -513,6 +560,7 @@ async def on_event(
 
         # Analytics: conversation terminal state detection
         # Also persist execution status to database for dashboard queries
+        run_ended = False
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
@@ -524,6 +572,8 @@ async def on_event(
                 await app_conversation_info_service.update_execution_status(
                     conversation_id, exec_status.value
                 )
+                if exec_status in _LIVE_STATS_PULL_STATUSES:
+                    run_ended = True
                 if exec_status.is_terminal():
                     await _track_conversation_terminal(
                         conversation_id, app_conversation_info, events, exec_status
@@ -532,6 +582,16 @@ async def on_event(
                 _logger.exception(
                     'analytics:conversation_terminal:failed', stack_info=True
                 )
+
+        if run_ended:
+            try:
+                await _sync_live_conversation_stats(
+                    conversation_id,
+                    app_conversation_info,
+                    app_conversation_info_service,
+                )
+            except Exception:
+                _logger.warning('live_stats_pull_failed', exc_info=True)
 
         background_tasks.add_task(
             _run_callbacks_in_bg_and_close,

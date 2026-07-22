@@ -85,6 +85,46 @@ def _normalize_event_timestamp(value: datetime | None) -> datetime:
     return value
 
 
+def _combine_usage_metrics(
+    usage_to_metrics: dict[str, MetricsSnapshot],
+) -> tuple[float, TokenUsage | None]:
+    """Sum cost and token usage across every usage bucket in the registry."""
+    total_cost = 0.0
+    combined: TokenUsage | None = None
+    for snapshot in usage_to_metrics.values():
+        total_cost += snapshot.accumulated_cost or 0.0
+        usage = snapshot.accumulated_token_usage
+        if usage is None:
+            continue
+        if combined is None:
+            combined = usage.model_copy()
+        else:
+            combined = TokenUsage(
+                model=combined.model,
+                prompt_tokens=combined.prompt_tokens + usage.prompt_tokens,
+                completion_tokens=combined.completion_tokens + usage.completion_tokens,
+                cache_read_tokens=combined.cache_read_tokens
+                + usage.cache_read_tokens,
+                cache_write_tokens=combined.cache_write_tokens
+                + usage.cache_write_tokens,
+                reasoning_tokens=combined.reasoning_tokens + usage.reasoning_tokens,
+                context_window=max(combined.context_window, usage.context_window),
+                per_turn_token=combined.per_turn_token,
+            )
+    # context_window/per_turn_token are per-model snapshots, not additive;
+    # prefer the primary agent's when present.
+    agent_snapshot = usage_to_metrics.get('agent')
+    agent_usage = agent_snapshot.accumulated_token_usage if agent_snapshot else None
+    if combined is not None and agent_usage is not None:
+        combined = combined.model_copy(
+            update={
+                'context_window': agent_usage.context_window,
+                'per_turn_token': agent_usage.per_turn_token,
+            }
+        )
+    return total_cost, combined
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -469,13 +509,10 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             stats: ConversationStats object containing usage_to_metrics data from stats event
             event_timestamp: Timestamp of the stats event (UTC if naive)
         """
-        # Extract agent metrics from usage_to_metrics
         usage_to_metrics = stats.usage_to_metrics
-        agent_metrics = usage_to_metrics.get('agent')
-
-        if not agent_metrics:
+        if not usage_to_metrics:
             logger.debug(
-                'No agent metrics found in stats for conversation %s', conversation_id
+                'No usage metrics found in stats for conversation %s', conversation_id
             )
             return
 
@@ -496,67 +533,45 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         event_timestamp = _normalize_event_timestamp(event_timestamp)
 
-        # Extract accumulated_cost and max_budget_per_task from Metrics object
-        accumulated_cost = agent_metrics.accumulated_cost
-        max_budget_per_task = agent_metrics.max_budget_per_task
+        # Combine ALL usage buckets: switched-in LLMs ("profile:*") and ACP
+        # agents ("acp-managed") accrue spend outside the "agent" bucket, so
+        # an agent-only read freezes persisted cost at the pre-switch value.
+        accumulated_cost, accumulated_token_usage = _combine_usage_metrics(
+            usage_to_metrics
+        )
+        agent_metrics = usage_to_metrics.get('agent')
 
-        if accumulated_cost is not None:
-            previous_cost = stored.accumulated_cost or 0.0
-            delta_cost = float(accumulated_cost) - float(previous_cost)
-            if delta_cost > 0:
-                self.db_session.add(
-                    StoredConversationCostEvent(
-                        conversation_id=stored.conversation_id,
-                        cost_delta=delta_cost,
-                        occurred_at=event_timestamp,
-                    )
+        previous_cost = stored.accumulated_cost or 0.0
+        delta_cost = accumulated_cost - float(previous_cost)
+        if delta_cost < 0:
+            # Stale/out-of-order snapshot; never regress the running total.
+            logger.debug(
+                'Accumulated cost decreased for conversation %s (prev=%s, new=%s)',
+                conversation_id,
+                previous_cost,
+                accumulated_cost,
+            )
+            return
+        if delta_cost > 0:
+            self.db_session.add(
+                StoredConversationCostEvent(
+                    conversation_id=stored.conversation_id,
+                    cost_delta=delta_cost,
+                    occurred_at=event_timestamp,
                 )
-            elif delta_cost < 0:
-                logger.debug(
-                    'Accumulated cost decreased for conversation %s (prev=%s, new=%s)',
-                    conversation_id,
-                    previous_cost,
-                    accumulated_cost,
-                )
+            )
 
-        # Extract accumulated_token_usage from Metrics object
-        accumulated_token_usage = agent_metrics.accumulated_token_usage
-        if accumulated_token_usage:
-            prompt_tokens = accumulated_token_usage.prompt_tokens
-            completion_tokens = accumulated_token_usage.completion_tokens
-            cache_read_tokens = accumulated_token_usage.cache_read_tokens
-            cache_write_tokens = accumulated_token_usage.cache_write_tokens
-            reasoning_tokens = accumulated_token_usage.reasoning_tokens
-            context_window = accumulated_token_usage.context_window
-            per_turn_token = accumulated_token_usage.per_turn_token
-        else:
-            prompt_tokens = None
-            completion_tokens = None
-            cache_read_tokens = None
-            cache_write_tokens = None
-            reasoning_tokens = None
-            context_window = None
-            per_turn_token = None
-
-        # Update fields only if values are provided (not None)
-        if accumulated_cost is not None:
-            stored.accumulated_cost = accumulated_cost
-        if max_budget_per_task is not None:
-            stored.max_budget_per_task = max_budget_per_task
-        if prompt_tokens is not None:
-            stored.prompt_tokens = prompt_tokens
-        if completion_tokens is not None:
-            stored.completion_tokens = completion_tokens
-        if cache_read_tokens is not None:
-            stored.cache_read_tokens = cache_read_tokens
-        if cache_write_tokens is not None:
-            stored.cache_write_tokens = cache_write_tokens
-        if reasoning_tokens is not None:
-            stored.reasoning_tokens = reasoning_tokens
-        if context_window is not None:
-            stored.context_window = context_window
-        if per_turn_token is not None:
-            stored.per_turn_token = per_turn_token
+        stored.accumulated_cost = accumulated_cost
+        if agent_metrics is not None and agent_metrics.max_budget_per_task is not None:
+            stored.max_budget_per_task = agent_metrics.max_budget_per_task
+        if accumulated_token_usage is not None:
+            stored.prompt_tokens = accumulated_token_usage.prompt_tokens
+            stored.completion_tokens = accumulated_token_usage.completion_tokens
+            stored.cache_read_tokens = accumulated_token_usage.cache_read_tokens
+            stored.cache_write_tokens = accumulated_token_usage.cache_write_tokens
+            stored.reasoning_tokens = accumulated_token_usage.reasoning_tokens
+            stored.context_window = accumulated_token_usage.context_window
+            stored.per_turn_token = accumulated_token_usage.per_turn_token
 
         # Update last_updated_at timestamp
         stored.last_updated_at = utc_now()

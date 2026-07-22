@@ -263,12 +263,11 @@ class TestUpdateConversationStatistics:
         assert occurred_at == event_timestamp
 
     @pytest.mark.asyncio
-    async def test_update_statistics_no_agent_metrics(
-        self, service, v1_conversation_metadata
+    async def test_update_statistics_non_agent_bucket_counted(
+        self, service, async_session, v1_conversation_metadata
     ):
-        """Test that update is skipped when no agent metrics are present."""
+        """Spend outside the "agent" bucket (ACP, switched LLMs) is persisted."""
         conversation_id, stored = v1_conversation_metadata
-        original_cost = stored.accumulated_cost
 
         condenser_metrics = Metrics(
             model_name='test-model',
@@ -278,8 +277,87 @@ class TestUpdateConversationStatistics:
 
         await service.update_conversation_statistics(conversation_id, stats)
 
-        # Verify no update occurred
-        assert stored.accumulated_cost == original_cost
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.1)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_combines_switch_buckets(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """A mid-conversation LLM switch accrues under "profile:*"; totals combine."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.0824
+        await async_session.commit()
+
+        agent_metrics = Metrics(
+            model_name='gpt-5.5',
+            accumulated_cost=0.0824,
+            accumulated_token_usage=TokenUsage(
+                model='gpt-5.5', prompt_tokens=100, completion_tokens=10
+            ),
+        )
+        profile_metrics = Metrics(
+            model_name='claude-opus-4-8',
+            accumulated_cost=0.1741,
+            accumulated_token_usage=TokenUsage(
+                model='claude-opus-4-8', prompt_tokens=200, completion_tokens=20
+            ),
+        )
+        stats = ConversationStats(
+            usage_to_metrics={
+                'agent': agent_metrics,
+                'profile:opus-repro:abc123': profile_metrics,
+            }
+        )
+
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.2565)
+        assert stored.prompt_tokens == 300
+        assert stored.completion_tokens == 30
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        cost_event = result.scalar_one()
+        assert cost_event.cost_delta == pytest.approx(0.1741)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_stale_snapshot_ignored(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """A snapshot below the stored total never regresses it."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.5
+        stored.prompt_tokens = 1000
+        await async_session.commit()
+
+        agent_metrics = Metrics(
+            model_name='test-model',
+            accumulated_cost=0.3,
+            accumulated_token_usage=TokenUsage(
+                model='test-model', prompt_tokens=50, completion_tokens=5
+            ),
+        )
+        stats = ConversationStats(usage_to_metrics={'agent': agent_metrics})
+
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.5)
+        assert stored.prompt_tokens == 1000
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        assert result.scalars().all() == []
 
     @pytest.mark.asyncio
     async def test_update_statistics_conversation_not_found(self, service):
