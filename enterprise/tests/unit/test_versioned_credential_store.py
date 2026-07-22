@@ -62,6 +62,14 @@ async def test_compare_and_swap(async_session_maker, jwt_svc, store):
 
 
 @pytest.mark.asyncio
+async def test_non_ascii_version_is_a_conflict(async_session_maker, jwt_svc, store):
+    await _insert(async_session_maker, jwt_svc, '{}')
+
+    with pytest.raises(CredentialVersionConflict):
+        await store.replace('CODEX_AUTH_JSON', 'é', '{}')
+
+
+@pytest.mark.asyncio
 async def test_delete_and_identical_recreate_changes_version(
     async_session_maker, jwt_svc, store
 ):

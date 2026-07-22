@@ -49,7 +49,10 @@ class SaasVersionedCredentialStore:
             rows = result.scalars().all()
             if not rows:
                 raise KeyError(name)
-            if not hmac.compare_digest(credential_version(rows[0]), expected_version):
+            if not hmac.compare_digest(
+                credential_version(rows[0]).encode(),
+                expected_version.encode(errors='surrogatepass'),
+            ):
                 raise CredentialVersionConflict
             encrypted = self.jwt_service.encrypt_value(value)
             for row in rows:

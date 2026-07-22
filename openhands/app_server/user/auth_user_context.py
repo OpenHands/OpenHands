@@ -14,6 +14,7 @@ from openhands.app_server.integrations.provider import (
     ProviderType,
 )
 from openhands.app_server.integrations.service_types import UserGitInfo
+from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import USER_CONTEXT_ATTR
 from openhands.app_server.user.user_context import UserContext, UserContextInjector
@@ -167,6 +168,9 @@ class AuthUserContext(UserContext):
                 )
 
         return results
+
+    async def get_secrets_store(self) -> SecretsStore:
+        return await self.user_auth.get_secrets_store()
 
     async def get_mcp_api_key(self) -> str | None:
         mcp_api_key = await self.user_auth.get_mcp_api_key()

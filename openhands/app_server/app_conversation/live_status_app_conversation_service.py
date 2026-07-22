@@ -2328,38 +2328,66 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         ):
             return request
         if not self.web_url or not sandbox.session_api_key:
-            raise SandboxError('Credential binding context is incomplete')
+            _logger.warning(
+                'Credential binding context is incomplete',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            return request
 
-        user_id = await self.user_context.get_user_id() or 'root'
-        organization_id = await self.user_context.get_effective_org_id()
-        token = self.jwt_service.create_jws_token(
-            payload={
-                'purpose': 'credential-binding',
-                'user_id': user_id,
-                'organization_id': (
-                    str(organization_id) if organization_id is not None else None
-                ),
-                'conversation_id': str(conversation_id),
-                'runtime_id': sandbox.id,
-                'secret_name': CODEX_AUTH_SECRET_NAME,
-                'actions': ['load', 'replace'],
-            },
-            expires_in=self.access_token_hard_timeout,
-        )
-        activation_response = await self.httpx_client.put(
-            f'{agent_server_url}/api/conversations/{conversation_id}'
-            f'/credential-bindings/{CODEX_AUTH_SECRET_NAME}',
-            headers=headers,
-            json={
-                'url': (
-                    f'{self.web_url.rstrip("/")}'
-                    f'{credential_binding_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
-                ),
-                'headers': {'Authorization': f'Bearer {token}'},
-            },
-            timeout=self.sandbox_startup_timeout,
-        )
-        activation_response.raise_for_status()
+        try:
+            secrets_store = await self.user_context.get_secrets_store()
+        except Exception:
+            _logger.warning(
+                'Could not determine credential binding store capabilities',
+                extra={'conversation_id': str(conversation_id)},
+                exc_info=True,
+            )
+            return request
+        if not secrets_store.supports_versioned_credentials:
+            _logger.warning(
+                'Credential binding store does not support atomic versioned writes',
+                extra={'conversation_id': str(conversation_id)},
+            )
+            return request
+
+        try:
+            user_id = await self.user_context.get_user_id() or 'root'
+            organization_id = await self.user_context.get_effective_org_id()
+            token = self.jwt_service.create_jws_token(
+                payload={
+                    'purpose': 'credential-binding',
+                    'user_id': user_id,
+                    'organization_id': (
+                        str(organization_id) if organization_id is not None else None
+                    ),
+                    'conversation_id': str(conversation_id),
+                    'runtime_id': sandbox.id,
+                    'secret_name': CODEX_AUTH_SECRET_NAME,
+                    'actions': ['load', 'replace'],
+                },
+                expires_in=self.access_token_hard_timeout,
+            )
+            activation_response = await self.httpx_client.put(
+                f'{agent_server_url}/api/conversations/{conversation_id}'
+                f'/credential-bindings/{CODEX_AUTH_SECRET_NAME}',
+                headers=headers,
+                json={
+                    'url': (
+                        f'{self.web_url.rstrip("/")}'
+                        f'{credential_binding_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
+                    ),
+                    'headers': {'Authorization': f'Bearer {token}'},
+                },
+                timeout=self.sandbox_startup_timeout,
+            )
+            activation_response.raise_for_status()
+        except Exception:
+            _logger.warning(
+                'Could not activate agent-server credential binding',
+                extra={'conversation_id': str(conversation_id)},
+                exc_info=True,
+            )
+            return request
         secrets = dict(request_secrets)
         secrets.pop(CODEX_AUTH_SECRET_NAME, None)
         return request.model_copy(update={'secrets': secrets})

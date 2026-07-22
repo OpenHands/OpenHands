@@ -34,6 +34,10 @@ class SaasSecretsStore(SecretsStore):
         default_factory=dict, init=False, repr=False
     )
 
+    @property
+    def supports_versioned_credentials(self) -> bool:
+        return True
+
     async def load(self) -> Secrets | None:
         if not self.user_id:
             return None

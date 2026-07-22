@@ -1,7 +1,9 @@
 from types import MappingProxyType
+from unittest.mock import MagicMock
 
 import pytest
 
+from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
@@ -112,3 +114,17 @@ async def test_stale_whole_save_preserves_deletion(store):
     assert loaded is not None
     assert 'CODEX_AUTH_JSON' not in loaded.custom_secrets
     assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
+
+
+@pytest.mark.asyncio
+async def test_versioned_bindings_reject_store_without_cross_process_lock():
+    file_store = MagicMock(spec=FileStore)
+    file_store.read.side_effect = FileNotFoundError
+    store = FileSecretsStore(file_store)
+
+    with pytest.raises(NotImplementedError):
+        await store.load_versioned('CODEX_AUTH_JSON')
+    with pytest.raises(NotImplementedError):
+        await store.replace_versioned('CODEX_AUTH_JSON', 'version', _ROTATED)
+
+    file_store.read.assert_not_called()

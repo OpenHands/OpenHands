@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from openhands.app_server.file_store.files import FileStore
+from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import (
     CredentialVersionConflict,
@@ -31,6 +32,12 @@ else:
 _CREDENTIAL_VERSIONS_KEY = '_credential_versions'
 _CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
 _process_lock = threading.RLock()
+
+
+def _supports_atomic_versioned_writes(file_store: FileStore) -> bool:
+    return isinstance(file_store, InMemoryFileStore) or callable(
+        getattr(file_store, 'get_full_path', None)
+    )
 
 
 @contextmanager
@@ -69,6 +76,10 @@ class FileSecretsStore(SecretsStore):
         init=False,
         repr=False,
     )
+
+    @property
+    def supports_versioned_credentials(self) -> bool:
+        return _supports_atomic_versioned_writes(self.file_store)
 
     def _read_data(self) -> dict[str, Any]:
         try:
@@ -194,6 +205,8 @@ class FileSecretsStore(SecretsStore):
         organization_id: UUID | None = None,
     ) -> tuple[str, str]:
         del organization_id
+        if not _supports_atomic_versioned_writes(self.file_store):
+            raise NotImplementedError
 
         def load_locked() -> tuple[str, str]:
             with _file_lock(self.file_store, self.path):
@@ -222,6 +235,8 @@ class FileSecretsStore(SecretsStore):
         organization_id: UUID | None = None,
     ) -> str:
         del organization_id
+        if not _supports_atomic_versioned_writes(self.file_store):
+            raise NotImplementedError
 
         def replace_locked() -> str:
             with _file_lock(self.file_store, self.path):
