@@ -88,7 +88,6 @@ const getBudgetErrorMessageKey = (errorMessage: string) => {
   return null;
 };
 
-
 export function ConversationWebSocketProvider({
   children,
   conversationId,
