@@ -16,9 +16,13 @@ vi.mock("#/hooks/query/use-is-authed", () => ({
   useIsAuthed: () => ({ data: true }),
 }));
 
-// Mock useConfig to return SaaS mode (organizations are a SaaS-only feature)
+// Mock useConfig to return SaaS mode (organizations are a SaaS-only feature).
+// Tests can override mockConfig.data to exercise feature flags.
+const mockConfig = vi.hoisted(() => ({
+  data: { app_mode: "saas" } as Record<string, unknown>,
+}));
 vi.mock("#/hooks/query/use-config", () => ({
-  useConfig: () => ({ data: { app_mode: "saas" } }),
+  useConfig: () => mockConfig,
 }));
 
 const mockGetOrganizations = vi.mocked(organizationService.getOrganizations);
@@ -65,6 +69,7 @@ describe("useOrganizations", () => {
       },
     });
     vi.clearAllMocks();
+    mockConfig.data = { app_mode: "saas" };
   });
 
   it("sorts personal workspace first, then non-personal alphabetically by name", async () => {
@@ -162,5 +167,71 @@ describe("useOrganizations", () => {
     // Returned data is sorted
     expect(result.current.data!.organizations[0].id).toBe("1");
     expect(result.current.data!.organizations[1].id).toBe("2");
+  });
+
+  it("filters out personal workspaces when hide_personal_workspaces is on", async () => {
+    mockConfig.data = {
+      app_mode: "saas",
+      feature_flags: { hide_personal_workspaces: true },
+    };
+    mockGetOrganizations.mockResolvedValue({
+      items: [
+        createMinimalOrg("1", "Personal Workspace", true),
+        createMinimalOrg("2", "Acme Corp", false),
+      ],
+      currentOrgId: "1",
+    });
+
+    const { result } = renderHook(() => useOrganizations(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    const { organizations } = result.current.data!;
+    expect(organizations).toHaveLength(1);
+    expect(organizations[0].id).toBe("2");
+    expect(organizations[0].is_personal).toBe(false);
+  });
+
+  it("keeps the personal workspace when it is the user's only org even with hide_personal_workspaces on", async () => {
+    mockConfig.data = {
+      app_mode: "saas",
+      feature_flags: { hide_personal_workspaces: true },
+    };
+    mockGetOrganizations.mockResolvedValue({
+      items: [createMinimalOrg("1", "Personal Workspace", true)],
+      currentOrgId: "1",
+    });
+
+    const { result } = renderHook(() => useOrganizations(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    // Never leave the user with zero workspaces (e.g. the default org has
+    // not been created yet, or the user is not a member of any team org).
+    const { organizations } = result.current.data!;
+    expect(organizations).toHaveLength(1);
+    expect(organizations[0].id).toBe("1");
+  });
+
+  it("does not filter personal workspaces when the flag is off", async () => {
+    mockGetOrganizations.mockResolvedValue({
+      items: [
+        createMinimalOrg("1", "Personal Workspace", true),
+        createMinimalOrg("2", "Acme Corp", false),
+      ],
+      currentOrgId: "1",
+    });
+
+    const { result } = renderHook(() => useOrganizations(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data!.organizations).toHaveLength(2);
   });
 });

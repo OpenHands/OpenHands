@@ -153,8 +153,8 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
         send_message_request = AskAgentRequest(question=message_content)
 
         url = (
-            f"{agent_server_url.rstrip('/')}"
-            f"/api/conversations/{conversation_id}/ask_agent"
+            f'{agent_server_url.rstrip("/")}'
+            f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
         payload = send_message_request.model_dump()
@@ -180,36 +180,38 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
             except Exception:  # noqa: BLE001
                 pass
 
-            _logger.error(
+            _logger.exception(
                 '[GitLab V1] HTTP error sending message to %s: %s. '
                 'Request payload: %s. Response headers: %s',
                 url,
                 error_detail,
                 payload,
                 dict(e.response.headers),
-                exc_info=True,
+                stack_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to send message to agent server: {error_detail}'
+            ) from e
 
         except httpx.TimeoutException:
             error_detail = f'Request timeout after 30 seconds to {url}'
-            _logger.error(
+            _logger.exception(
                 '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
-                exc_info=True,
+                stack_info=True,
             )
             raise Exception(error_detail)
 
         except httpx.RequestError as e:
             error_detail = f'Request error to {url}: {str(e)}'
-            _logger.error(
+            _logger.exception(
                 '[GitLab V1] %s. Request payload: %s',
                 error_detail,
                 payload,
-                exc_info=True,
+                stack_info=True,
             )
-            raise Exception(error_detail)
+            raise Exception(error_detail) from e
 
     # -------------------------------------------------------------------------
     # Summary orchestration
@@ -257,9 +259,9 @@ class GitlabV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert (
-                sandbox.session_api_key is not None
-            ), f'No session API key for sandbox: {sandbox.id}'
+            assert sandbox.session_api_key is not None, (
+                f'No session API key for sandbox: {sandbox.id}'
+            )
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)

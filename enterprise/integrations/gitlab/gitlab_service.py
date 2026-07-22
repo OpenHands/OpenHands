@@ -29,7 +29,7 @@ class SaaSGitLabService(GitLabService):
         base_domain: str | None = None,
     ):
         logger.info(
-            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {'set' if external_auth_token else 'None'}, gitlab_token {'set' if token else 'None'}, external_token_manager {external_token_manager}'
+            f'SaaSGitLabService created with user_id {user_id}, external_auth_id {external_auth_id}, external_auth_token {"set" if external_auth_token else "None"}, gitlab_token {"set" if token else "None"}, external_token_manager {external_token_manager}'
         )
         super().__init__(
             user_id=user_id,
@@ -316,7 +316,7 @@ class SaaSGitLabService(GitLabService):
 
         # Store webhook and repository info
         if store_in_background:
-            asyncio.create_task(
+            _ = asyncio.create_task(
                 self.store_repository_data(users_personal_projects, repositories)
             )
         else:
@@ -567,8 +567,8 @@ class SaaSGitLabService(GitLabService):
             params = {'body': body}
 
             await self._make_request(url=url, params=params, method=RequestMethod.POST)
-        except Exception as e:
-            logger.exception(f'[GitLab]: Reply to issue failed {e}')
+        except Exception:
+            logger.exception('[GitLab]: Reply to issue failed', stack_info=True)
 
     async def reply_to_mr(
         self, project_id: str, merge_request_iid: str, discussion_id: str, body: str
@@ -581,8 +581,8 @@ class SaaSGitLabService(GitLabService):
             params = {'body': body}
 
             await self._make_request(url=url, params=params, method=RequestMethod.POST)
-        except Exception as e:
-            logger.exception(f'[GitLab]: Reply to MR failed {e}')
+        except Exception:
+            logger.exception('[GitLab]: Reply to MR failed', stack_info=True)
 
     async def get_user_resources_with_admin_access(
         self,

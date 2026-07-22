@@ -34,6 +34,7 @@ class UserAppSettingsResponse(BaseModel):
     enable_sound_notifications: bool | None = None
     git_user_name: str | None = None
     git_user_email: EmailStr | None = None
+    git_full_clone: bool | None = None
 
     @classmethod
     def from_user(cls, user: User) -> 'UserAppSettingsResponse':
@@ -44,6 +45,7 @@ class UserAppSettingsResponse(BaseModel):
             enable_sound_notifications=user.enable_sound_notifications,
             git_user_name=user.git_user_name,
             git_user_email=user.git_user_email,
+            git_full_clone=user.git_full_clone,
         )
 
 
@@ -55,3 +57,4 @@ class UserAppSettingsUpdate(BaseModel):
     enable_sound_notifications: bool | None = None
     git_user_name: str | None = None
     git_user_email: EmailStr | None = None
+    git_full_clone: bool | None = None

@@ -1,6 +1,7 @@
 """Database configuration and session management for OpenHands App Server."""
 
 import asyncio
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.util import await_only
 
 from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.db.ssl import build_asyncpg_connect_args, build_pg8000_connect_args
 
 _logger = logging.getLogger(__name__)
 DB_SESSION_ATTR = 'db_session'
@@ -32,12 +34,15 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
     user: str | None = None
     password: SecretStr | None = None
     echo: bool = False
+    # can be overriden with DB_POOL_SIZE / DB_MAX_OVERFLOW (see fill_empty_fields).
     pool_size: int = 25
     max_overflow: int = 10
     pool_recycle: int = 1800
+    pool_use_lifo: bool = True
     gcp_db_instance: str | None = None
     gcp_project: str | None = None
     gcp_region: str | None = None
+    ssl_mode: str | None = None
 
     # Private attrs
     _engine: Engine | None = PrivateAttr(default=None)
@@ -65,6 +70,14 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             self.gcp_project = os.getenv('GCP_PROJECT')
         if self.gcp_region is None:
             self.gcp_region = os.getenv('GCP_REGION')
+        if self.ssl_mode is None:
+            self.ssl_mode = os.getenv('DB_SSL_MODE') or os.getenv('PGSSLMODE')
+        pool_size = os.getenv('DB_POOL_SIZE')
+        if pool_size:
+            self.pool_size = int(pool_size)
+        max_overflow = os.getenv('DB_MAX_OVERFLOW')
+        if max_overflow:
+            self.max_overflow = int(max_overflow)
         return self
 
     def _create_gcp_db_connection(self):
@@ -120,6 +133,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             pool_size=self.pool_size,
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
+            pool_use_lifo=self.pool_use_lifo,
         )
         return engine
 
@@ -157,6 +171,7 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             max_overflow=self.max_overflow,
             pool_pre_ping=True,
             pool_recycle=self.pool_recycle,
+            pool_use_lifo=self.pool_use_lifo,
         )
 
     async def get_async_db_engine(self) -> AsyncEngine:
@@ -189,10 +204,12 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
             if self.host:
                 async_engine = create_async_engine(
                     url,
+                    connect_args=build_asyncpg_connect_args(self.ssl_mode),
                     pool_size=self.pool_size,
                     max_overflow=self.max_overflow,
                     pool_recycle=self.pool_recycle,
                     pool_pre_ping=True,
+                    pool_use_lifo=self.pool_use_lifo,
                 )
             else:
                 async_engine = create_async_engine(
@@ -232,10 +249,12 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                 url = f'sqlite:///{self.persistence_dir}/openhands.db'
             engine = create_engine(
                 url,
+                connect_args=build_pg8000_connect_args(self.ssl_mode),
                 pool_size=self.pool_size,
                 max_overflow=self.max_overflow,
                 pool_recycle=self.pool_recycle,
                 pool_pre_ping=True,
+                pool_use_lifo=self.pool_use_lifo,
             )
         assert engine is not None  # Always assigned in either branch above
         self._engine = engine
@@ -314,7 +333,48 @@ class DbSessionInjector(BaseModel, Injector[AsyncSession]):
                     # Clean up the session from request state
                     if hasattr(state, DB_SESSION_ATTR):
                         delattr(state, DB_SESSION_ATTR)
-                    await db_session.close()
+                    # ``close`` is async, so it can still fail (e.g. the pool
+                    # is in an inconsistent state because we were cancelled
+                    # mid-query). Suppress secondary failures so the original
+                    # exception keeps propagating.
+                    with contextlib.suppress(Exception):
+                        await db_session.close()
+
+    async def close(self) -> None:
+        """Release long-lived resources owned by this injector.
+
+        Currently this closes the GCP Cloud SQL connector (which in turn stops
+        its background cert-refresh tasks and aiohttp ClientSession) and
+        disposes the async SQLAlchemy engine. ``close`` is idempotent and
+        safe to call multiple times.
+
+        Call this from the application lifespan ``__aexit__`` so that workers
+        exiting gracefully don't leak the connector's background resources
+        across respawns.
+        """
+        connector = self._gcp_connector
+        if connector is not None:
+            # ``close_async`` may not exist on older connector versions; fall
+            # back to ``close`` if so.
+            close = getattr(connector, 'close_async', None)
+            if close is None:
+                close = connector.close
+            try:
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                _logger.exception(
+                    'Error closing GCP Cloud SQL connector', stack_info=True
+                )
+            self._gcp_connector = None
+
+        engine = self._async_engine
+        if engine is not None:
+            try:
+                await engine.dispose()
+            except Exception:
+                _logger.exception('Error disposing async DB engine', stack_info=True)
 
 
 def set_db_session_keep_open(state: InjectorState, keep_open: bool):

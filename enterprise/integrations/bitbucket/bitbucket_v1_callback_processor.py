@@ -113,7 +113,7 @@ class BitbucketV1CallbackProcessor(EventCallbackProcessor):
     ) -> str:
         send_message_request = AskAgentRequest(question=message_content)
         url = (
-            f"{agent_server_url.rstrip('/')}"
+            f'{agent_server_url.rstrip("/")}'
             f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
@@ -132,12 +132,17 @@ class BitbucketV1CallbackProcessor(EventCallbackProcessor):
                     error_detail += f': {e.response.text}'
             except Exception:  # noqa: BLE001
                 pass
-            _logger.error('[Bitbucket V1] HTTP error: %s', error_detail, exc_info=True)
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            _logger.exception(
+                '[Bitbucket V1] HTTP error',
+                stack_info=True,
+            )
+            raise Exception(
+                f'Failed to send message to agent server: {error_detail}'
+            ) from e
         except httpx.TimeoutException:
             raise Exception(f'Request timeout after 30 seconds to {url}')
         except httpx.RequestError as e:
-            raise Exception(f'Request error to {url}: {e}')
+            raise Exception(f'Request error to {url}') from e
 
     async def _request_summary(self, conversation_id: UUID) -> str:
         from openhands.app_server.config import (

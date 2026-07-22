@@ -112,6 +112,86 @@ describe("parseMcpConfig", () => {
     });
   });
 
+  it("should parse api_key from SDK bearer credentials", () => {
+    const input = {
+      "auth-server": {
+        url: "https://example.com",
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    const result = parseMcpConfig(input);
+
+    expect(result.shttp_servers[0]).toEqual({
+      name: "auth-server",
+      url: "https://example.com",
+      api_key: "**********",
+      auth: { strategy: "bearer", value: "**********" },
+    });
+  });
+
+  it.each([
+    {
+      strategy: "api_key" as const,
+      value: "**********",
+      header_name: "X-API-Key",
+    },
+    {
+      strategy: "basic" as const,
+      username: "user",
+      password: "**********",
+    },
+    {
+      strategy: "header" as const,
+      headers: { "X-API-Key": "**********" },
+    },
+    {
+      strategy: "oauth2" as const,
+      state: { tokens: { access_token: "**********" } },
+    },
+  ])("round-trips typed $strategy auth", (auth) => {
+    const parsed = parseMcpConfig({
+      server: { url: "https://example.com", auth },
+    });
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual(auth);
+  });
+
+  it("round-trips custom headers alongside bearer auth", () => {
+    const persisted = {
+      server: {
+        url: "https://example.com",
+        headers: { "X-Tenant": "**********" },
+        auth: { strategy: "bearer", value: "**********" },
+      },
+    };
+
+    expect(toSdkMcpConfig(parseMcpConfig(persisted))?.server).toEqual(
+      persisted.server,
+    );
+  });
+
+  it("preserves api_key header metadata when updating its value", () => {
+    const parsed = parseMcpConfig({
+      server: {
+        url: "https://example.com",
+        auth: {
+          strategy: "api_key",
+          value: "**********",
+          header_name: "X-API-Key",
+        },
+      },
+    });
+    const server = parsed.shttp_servers[0];
+    if (typeof server === "object") server.api_key = "replacement";
+
+    expect(toSdkMcpConfig(parsed)?.server.auth).toEqual({
+      strategy: "api_key",
+      value: "replacement",
+      header_name: "X-API-Key",
+    });
+  });
+
   it("should not include api_key when auth is 'oauth'", () => {
     const input = {
       mcpServers: {
@@ -129,7 +209,9 @@ describe("parseMcpConfig", () => {
       name: "oauth-server",
       url: "https://example.com",
     });
-    expect((result.sse_servers[0] as { api_key?: string }).api_key).toBeUndefined();
+    expect(
+      (result.sse_servers[0] as { api_key?: string }).api_key,
+    ).toBeUndefined();
   });
 
   it("should parse timeout for shttp servers", () => {
@@ -174,11 +256,9 @@ describe("toSdkMcpConfig", () => {
     const result = toSdkMcpConfig(config);
 
     expect(result).toEqual({
-      mcpServers: {
-        "my-custom-name": {
-          url: "https://example.com",
-          transport: "sse",
-        },
+      "my-custom-name": {
+        url: "https://example.com",
+        transport: "sse",
       },
     });
   });
@@ -193,11 +273,9 @@ describe("toSdkMcpConfig", () => {
     const result = toSdkMcpConfig(config);
 
     expect(result).toEqual({
-      mcpServers: {
-        sse: {
-          url: "https://example.com",
-          transport: "sse",
-        },
+      sse: {
+        url: "https://example.com",
+        transport: "sse",
       },
     });
   });
@@ -215,29 +293,83 @@ describe("toSdkMcpConfig", () => {
 
     const result = toSdkMcpConfig(config);
 
-    expect(result?.mcpServers).toHaveProperty("sse");
-    expect(result?.mcpServers).toHaveProperty("sse_1");
-    expect(result?.mcpServers).toHaveProperty("sse_2");
-    expect(result?.mcpServers["sse"].url).toBe("https://example1.com");
-    expect(result?.mcpServers["sse_1"].url).toBe("https://example2.com");
-    expect(result?.mcpServers["sse_2"].url).toBe("https://example3.com");
+    expect(result).toHaveProperty("sse");
+    expect(result).toHaveProperty("sse_1");
+    expect(result).toHaveProperty("sse_2");
+    expect(result?.["sse"].url).toBe("https://example1.com");
+    expect(result?.["sse_1"].url).toBe("https://example2.com");
+    expect(result?.["sse_2"].url).toBe("https://example3.com");
   });
 
-  it("should include api_key as auth field", () => {
+  it("should serialize api_key as an SDK bearer credential", () => {
     const config: MCPConfig = {
       sse_servers: [
         { name: "secure", url: "https://example.com", api_key: "my-secret" },
       ],
       stdio_servers: [],
-      shttp_servers: [],
+      shttp_servers: [
+        {
+          name: "shttp",
+          url: "https://shttp.example",
+          api_key: "shttp-secret",
+        },
+      ],
     };
 
     const result = toSdkMcpConfig(config);
 
-    expect(result?.mcpServers["secure"]).toEqual({
+    expect(result?.["secure"]).toEqual({
       url: "https://example.com",
       transport: "sse",
-      auth: "my-secret",
+      auth: { strategy: "bearer", value: "my-secret" },
+    });
+    expect(result?.["shttp"]).toEqual({
+      url: "https://shttp.example",
+      auth: { strategy: "bearer", value: "shttp-secret" },
+    });
+  });
+
+  it("round-trips persisted Authorization headers back to api_key fields", () => {
+    const persisted = {
+      mcpServers: {
+        shttp: {
+          url: "https://shttp.example",
+          headers: { Authorization: "Bearer shttp-secret" },
+        },
+      },
+    };
+
+    const parsed = parseMcpConfig(persisted);
+
+    expect(parsed.shttp_servers).toEqual([
+      {
+        name: "shttp",
+        url: "https://shttp.example",
+        api_key: "shttp-secret",
+        headers: { Authorization: "Bearer shttp-secret" },
+      },
+    ]);
+  });
+
+  it("migrates legacy auth credentials to Authorization headers on re-serialize", () => {
+    const persisted = {
+      mcpServers: {
+        sse: {
+          url: "https://example.com",
+          transport: "sse",
+          auth: "legacy-secret",
+        },
+      },
+    };
+
+    const written = toSdkMcpConfig(parseMcpConfig(persisted));
+
+    expect(written).toEqual({
+      sse: {
+        url: "https://example.com",
+        transport: "sse",
+        auth: { strategy: "bearer", value: "legacy-secret" },
+      },
     });
   });
 
@@ -252,7 +384,7 @@ describe("toSdkMcpConfig", () => {
 
     const result = toSdkMcpConfig(config);
 
-    expect(result?.mcpServers["timeout"]).toEqual({
+    expect(result?.["timeout"]).toEqual({
       url: "https://example.com",
       timeout: 60,
     });
@@ -274,7 +406,7 @@ describe("toSdkMcpConfig", () => {
 
     const result = toSdkMcpConfig(config);
 
-    expect(result?.mcpServers["my-stdio"]).toEqual({
+    expect(result?.["my-stdio"]).toEqual({
       command: "/usr/bin/server",
       args: ["--flag"],
       env: { KEY: "value" },
@@ -303,9 +435,9 @@ describe("round-trip preservation", () => {
     const parsed = parseMcpConfig(original);
     const serialized = toSdkMcpConfig(parsed);
 
-    expect(serialized?.mcpServers).toHaveProperty("custom-sse-name");
-    expect(serialized?.mcpServers).toHaveProperty("custom-http-name");
-    expect(serialized?.mcpServers).toHaveProperty("custom-stdio-name");
+    expect(serialized).toHaveProperty("custom-sse-name");
+    expect(serialized).toHaveProperty("custom-http-name");
+    expect(serialized).toHaveProperty("custom-stdio-name");
   });
 
   it("should not generate new names if original names are preserved", () => {
@@ -320,10 +452,10 @@ describe("round-trip preservation", () => {
     const serialized = toSdkMcpConfig(parsed);
 
     // Should use original names, not "sse" or "sse_1"
-    expect(serialized?.mcpServers).toHaveProperty("server1");
-    expect(serialized?.mcpServers).toHaveProperty("server2");
-    expect(serialized?.mcpServers).not.toHaveProperty("sse");
-    expect(serialized?.mcpServers).not.toHaveProperty("sse_1");
+    expect(serialized).toHaveProperty("server1");
+    expect(serialized).toHaveProperty("server2");
+    expect(serialized).not.toHaveProperty("sse");
+    expect(serialized).not.toHaveProperty("sse_1");
   });
 });
 
@@ -420,9 +552,9 @@ describe("edge cases", () => {
     const parsed = parseMcpConfig(input);
     const serialized = toSdkMcpConfig(parsed);
 
-    expect(serialized?.mcpServers).toHaveProperty("server/with/slashes");
-    expect(serialized?.mcpServers).toHaveProperty("server:with:colons");
-    expect(serialized?.mcpServers).toHaveProperty("server with spaces");
+    expect(serialized).toHaveProperty("server/with/slashes");
+    expect(serialized).toHaveProperty("server:with:colons");
+    expect(serialized).toHaveProperty("server with spaces");
   });
 
   it("should handle cross-type name collisions", () => {
@@ -434,7 +566,7 @@ describe("edge cases", () => {
 
     const result = toSdkMcpConfig(config);
 
-    const names = Object.keys(result?.mcpServers || {});
+    const names = Object.keys(result || {});
     expect(names).toContain("myserver");
     expect(names).toContain("myserver_1");
     expect(names).toHaveLength(2);

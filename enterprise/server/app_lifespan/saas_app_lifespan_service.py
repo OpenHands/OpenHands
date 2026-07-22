@@ -41,4 +41,15 @@ class SaasAppLifespanService(AppLifespanService):
             if svc is not None:
                 svc.shutdown()
         except Exception:
-            logger.exception('Error shutting down analytics service')
+            logger.exception('Error shutting down analytics service', stack_info=True)
+
+        # Release long-lived database resources: the GCP Cloud SQL connector
+        # (background cert-refresh tasks + aiohttp ClientSession) and the
+        # SQLAlchemy async engine's pool. Without this, every worker respawn
+        # leaves the connector's tasks running on the previous event loop.
+        try:
+            from openhands.app_server.config import get_global_config
+
+            await get_global_config().db_session.close()
+        except Exception:
+            logger.exception('Error closing DB session injector', stack_info=True)

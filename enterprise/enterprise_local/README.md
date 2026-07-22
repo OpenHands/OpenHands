@@ -160,7 +160,11 @@ A Local redis instance is required for clustered communication between server no
 A Local postgres instance is required. I used the official docker image:
 `docker run -p 5432:5432 --name my-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=openhands -d postgres`
 Run the alembic migrations:
-`poetry run alembic upgrade head `
+`poetry run alembic upgrade head`
+
+> **Note:** By default, migrations use the `pg8000` driver (matching production,
+> which connects through the Cloud SQL connector on pg8000). To use psycopg2 instead,
+> set `DB_DRIVER=''` before running alembic commands.
 
 #### VSCode launch.json
 

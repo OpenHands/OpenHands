@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import { OpenHandsEvent } from "#/types/v1/core";
-import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import {
+  handleEventForUI,
+  mergeStreamingDeltaEvent,
+} from "#/utils/handle-event-for-ui";
 import { OpenHandsParsedEvent } from "#/types/core";
-import { isV1Event } from "#/types/v1/type-guards";
+import { isStreamingDeltaEvent, isV1Event } from "#/types/v1/type-guards";
 
 // While we transition to v1 events, our store can handle both v0 and v1 events
 export type OHEvent = (OpenHandsEvent | OpenHandsParsedEvent) & {
@@ -70,8 +73,28 @@ export const useEventStore = create<EventState>()((set) => ({
         return state;
       }
 
-      // Add event and sort if needed to maintain chronological order
-      let newEvents = [...state.events, event];
+      // Merge consecutive streaming token deltas into a single growing entry
+      // (keeping the first delta's id) so the durable log isn't flooded with one
+      // entry per token. Deltas must stay in `events`: the chat passes this list
+      // as `allEvents` for lookups, and a delta missing from it renders empty.
+      // Non-delta events append normally.
+      const lastEvent = state.events[state.events.length - 1];
+      let newEvents: OHEvent[];
+      if (
+        lastEvent &&
+        isV1Event(event) &&
+        isV1Event(lastEvent) &&
+        isStreamingDeltaEvent(event) &&
+        isStreamingDeltaEvent(lastEvent)
+      ) {
+        newEvents = [...state.events];
+        newEvents[newEvents.length - 1] = mergeStreamingDeltaEvent(
+          event,
+          lastEvent,
+        );
+      } else {
+        newEvents = [...state.events, event];
+      }
       if (needsSorting(state.events, event)) {
         newEvents = newEvents.sort(compareEventsByTimestamp);
       }

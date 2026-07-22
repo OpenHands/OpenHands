@@ -13,8 +13,8 @@ def should_set_litellm_extra_body(model_name: str) -> bool:
     Only set litellm_extra_body for openhands models to avoid issues
     with providers that don't support extra_body parameters.
 
-    The SDK internally translates "openhands/" prefix to "litellm_proxy/"
-    when making API calls, so we check for both.
+    The SDK translates "openhands/" models to the LiteLLM proxy only when
+    making transport calls.
 
     Args:
         model_name: Name of the LLM model
@@ -22,7 +22,7 @@ def should_set_litellm_extra_body(model_name: str) -> bool:
     Returns:
         True if litellm_extra_body should be set, False otherwise
     """
-    return 'openhands/' in model_name or 'litellm_proxy/' in model_name
+    return model_name.startswith('openhands/')
 
 
 def get_llm_metadata(
@@ -30,16 +30,24 @@ def get_llm_metadata(
     llm_type: str,
     conversation_id: UUID | str | None = None,
     user_id: str | None = None,
+    repo_name: str | None = None,
+    git_provider: str | None = None,
+    selected_branch: str | None = None,
 ) -> dict[str, Any]:
     """Generate LLM metadata for OpenHands V1 conversations.
 
     This metadata is passed to the LiteLLM proxy for tracing and analytics.
+    Repository tags use concise filter prefixes (``repo:`` and ``branch:``)
+    while metadata keys use explicit field names.
 
     Args:
         model_name: Name of the LLM model
         llm_type: Type of LLM usage (e.g., 'agent', 'condenser', 'planning_condenser')
         conversation_id: Optional conversation identifier
         user_id: Optional user identifier
+        repo_name: Optional selected repository name
+        git_provider: Optional git provider identifier
+        selected_branch: Optional selected branch name
 
     Returns:
         Dictionary containing metadata for LLM initialization
@@ -69,5 +77,15 @@ def get_llm_metadata(
 
     if user_id is not None:
         metadata['trace_user_id'] = user_id
+
+    if repo_name:
+        metadata['repo_name'] = repo_name
+        metadata['tags'].append(f'repo:{repo_name}')
+    if git_provider:
+        metadata['git_provider'] = git_provider
+        metadata['tags'].append(f'git_provider:{git_provider}')
+    if selected_branch:
+        metadata['selected_branch'] = selected_branch
+        metadata['tags'].append(f'branch:{selected_branch}')
 
     return metadata

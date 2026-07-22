@@ -115,7 +115,7 @@ async def device_authorization(
             interval=device_code_entry.current_interval,
         )
     except Exception as e:
-        logger.exception('Error in device authorization: %s', str(e))
+        logger.exception('Error in device authorization: %s', str(e), stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Internal server error',
@@ -231,7 +231,7 @@ async def device_token(device_code: str = Form(...)):
         )
 
     except Exception as e:
-        logger.exception('Error in device token: %s', str(e))
+        logger.exception('Error in device token: %s', str(e), stack_info=True)
         return _oauth_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             'server_error',
@@ -298,7 +298,9 @@ async def device_verification_authenticated(
             )
         except Exception as e:
             logger.exception(
-                'Failed to create device API key after authorization: %s', str(e)
+                'Failed to create device API key after authorization: %s',
+                str(e),
+                stack_info=True,
             )
 
             # Clean up: revert the device authorization since API key creation failed
@@ -313,12 +315,13 @@ async def device_verification_authenticated(
                 logger.exception(
                     'Failed to revert device authorization during cleanup: %s',
                     str(cleanup_error),
+                    stack_info=True,
                 )
 
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail='Failed to create API key for device access.',
-            )
+            ) from e
 
         logger.info(
             'Device code authorized with API key successfully',
@@ -354,6 +357,7 @@ async def device_verification_authenticated(
                 logger.exception(
                     'oauth_device:analytics:failed',
                     extra={'user_id': user_id},
+                    stack_info=True,
                 )
 
         return JSONResponse(
@@ -364,8 +368,8 @@ async def device_verification_authenticated(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception('Error in device verification: %s', str(e))
+        logger.exception('Error in device verification: %s', str(e), stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An unexpected error occurred. Please try again.',
-        )
+        ) from e

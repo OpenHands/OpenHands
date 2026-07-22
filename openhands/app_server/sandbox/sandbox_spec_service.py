@@ -1,6 +1,9 @@
 import asyncio
+import importlib
+import logging
 import os
 from abc import ABC, abstractmethod
+from functools import cache
 
 from openhands.agent_server import env_parser
 from openhands.app_server.errors import SandboxError
@@ -11,9 +14,25 @@ from openhands.app_server.sandbox.sandbox_spec_models import (
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
 
-# The version of the agent server to use for deployments.
-# Typically this will be the same as the values from the pyproject.toml
-AGENT_SERVER_IMAGE = 'ghcr.io/openhands/agent-server:1.25.0-python'
+_DEFAULT_REPOSITORY = 'ghcr.io/openhands/agent-server'
+
+
+@cache
+def _bundled_agent_server_version() -> str:
+    """Version of the installed openhands-agent-server package.
+
+    openhands-agent-server is a hard runtime dependency of the V1 app server;
+    if it's not installed the V1 app server has no business starting. Let
+    PackageNotFoundError surface at first call rather than degrading silently
+    to a wrong default. Memoised via ``functools.cache`` so the lookup runs
+    once per process and remains mockable in tests.
+    """
+    return importlib.metadata.version('openhands-agent-server')
+
+
+def _bundled_default_image() -> str:
+    """Image URL of the bundled agent-server: ``<repo>:<version>-python``."""
+    return f'{_DEFAULT_REPOSITORY}:{_bundled_agent_server_version()}-python'
 
 
 class SandboxSpecService(ABC):
@@ -61,12 +80,70 @@ class SandboxSpecServiceInjector(
     pass
 
 
+async def resolve_sandbox_spec(
+    sandbox_spec_id: str | None,
+    user_default_spec_id: str | None,
+    sandbox_spec_service: SandboxSpecService,
+    logger: logging.Logger,
+) -> SandboxSpecInfo:
+    """Return the SandboxSpecInfo to use for a new sandbox.
+
+    Resolution order:
+    1. ``sandbox_spec_id`` (caller-explicit) — not found is a hard error.
+    2. ``user_default_spec_id`` (user preference) — if missing, log a warning
+       and fall back to the system default.
+    3. System default (first spec returned by the service).
+    """
+    from_user_default = sandbox_spec_id is None and user_default_spec_id is not None
+    effective_id = (
+        sandbox_spec_id if sandbox_spec_id is not None else user_default_spec_id
+    )
+
+    if effective_id is None:
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    spec = await sandbox_spec_service.get_sandbox_spec(effective_id)
+    if spec is not None:
+        return spec
+
+    if from_user_default:
+        logger.warning(
+            'User default sandbox spec %r not found; falling back to system default.',
+            effective_id,
+        )
+        return await sandbox_spec_service.get_default_sandbox_spec()
+
+    raise ValueError(f'Sandbox Spec {effective_id!r} not found')
+
+
+@cache  # memoize so the auto-correct warning fires once per process
 def get_agent_server_image() -> str:
-    agent_server_image_repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY')
-    agent_server_image_tag = os.getenv('AGENT_SERVER_IMAGE_TAG')
-    if agent_server_image_repository and agent_server_image_tag:
-        return f'{agent_server_image_repository}:{agent_server_image_tag}'
-    return AGENT_SERVER_IMAGE
+    repository = os.getenv('AGENT_SERVER_IMAGE_REPOSITORY') or _DEFAULT_REPOSITORY
+    bundled_version = _bundled_agent_server_version()
+    tag = os.getenv('AGENT_SERVER_IMAGE_TAG') or f'{bundled_version}-python'
+
+    if repository == _DEFAULT_REPOSITORY:
+        parts = tag.split('-', 1)
+        if len(parts) == 2 and parts[0] != bundled_version:
+            parts[0] = bundled_version
+            updated_tag = '-'.join(parts)
+            logging.getLogger(__name__).warning(
+                f'AGENT_SERVER_IMAGE_TAG={tag} does not match the installed '
+                f'openhands-sdk (using {updated_tag} instead). Pin to a custom '
+                f'image repository via AGENT_SERVER_IMAGE_REPOSITORY if you '
+                f'need to use a different build.'
+            )
+            tag = updated_tag
+
+    return f'{repository}:{tag}'
+
+
+def is_custom_sandbox_spec(sandbox_spec_id: str) -> bool:
+    """True when the sandbox spec differs from the bundled release default (e.g. a
+    custom image registered via runtime-api). The bundled spec always matches the
+    SDK the app server ships with, so non-default specs are the only ones worth
+    flagging on a sandbox-create failure."""
+    return sandbox_spec_id != _bundled_default_image()
 
 
 # Prefixes for environment variables that should be auto-forwarded to agent-server

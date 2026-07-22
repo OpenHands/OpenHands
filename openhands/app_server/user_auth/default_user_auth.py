@@ -52,15 +52,6 @@ class DefaultUserAuth(UserAuth):
         self._settings_store = settings_store
         return settings_store
 
-    async def get_user_settings(self) -> Settings | None:
-        settings = self._settings
-        if settings:
-            return settings
-        settings_store = await self.get_user_settings_store()
-        settings = await settings_store.load()
-        self._settings = settings
-        return settings
-
     async def get_secrets_store(self) -> SecretsStore:
         secrets_store = self._secrets_store
         if secrets_store:

@@ -88,15 +88,13 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
             )
 
     async def _post_summary_to_bitbucket_dc(self, summary: str) -> None:
-        from integrations.bitbucket_data_center.bitbucket_dc_service import (
-            SaaSBitbucketDCService,
+        from integrations.bitbucket_data_center.bitbucket_dc_service_account import (
+            bitbucket_dc_posting_service,
         )
 
-        keycloak_user_id = self.bitbucket_dc_view_data.get('keycloak_user_id')
-        if not keycloak_user_id:
-            raise RuntimeError('Missing keycloak user ID for Bitbucket DC')
-
-        bitbucket_service = SaaSBitbucketDCService(external_auth_id=keycloak_user_id)
+        # Always post as the bot account -- a user-authored reply containing
+        # "@openhands" would re-fire the webhook (duplicate run).
+        bitbucket_service = bitbucket_dc_posting_service()
         await bitbucket_service.reply_to_pr_comment(
             owner=self.bitbucket_dc_view_data['project_key'],
             repo_slug=self.bitbucket_dc_view_data['repo_slug'],
@@ -115,7 +113,7 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
     ) -> str:
         send_message_request = AskAgentRequest(question=message_content)
         url = (
-            f"{agent_server_url.rstrip('/')}"
+            f'{agent_server_url.rstrip("/")}'
             f'/api/conversations/{conversation_id}/ask_agent'
         )
         headers = {'X-Session-API-Key': session_api_key}
@@ -134,14 +132,17 @@ class BitbucketDCV1CallbackProcessor(EventCallbackProcessor):
                     error_detail += f': {e.response.text}'
             except Exception:  # noqa: BLE001
                 pass
-            _logger.error(
-                '[Bitbucket DC V1] HTTP error: %s', error_detail, exc_info=True
+            _logger.exception(
+                '[Bitbucket DC V1] HTTP error',
+                stack_info=True,
             )
-            raise Exception(f'Failed to send message to agent server: {error_detail}')
+            raise Exception(
+                f'Failed to send message to agent server: {error_detail}'
+            ) from e
         except httpx.TimeoutException:
             raise Exception(f'Request timeout after 30 seconds to {url}')
         except httpx.RequestError as e:
-            raise Exception(f'Request error to {url}: {e}')
+            raise Exception(f'Request error to {url}') from e
 
     async def _request_summary(self, conversation_id: UUID) -> str:
         from openhands.app_server.config import (

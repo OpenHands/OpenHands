@@ -10,14 +10,20 @@ thin proxy that:
 All source-specific skill loading is handled by the agent-server.
 """
 
+import asyncio
 import logging
+import re
+from collections.abc import Mapping
+from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel
 
-from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.integrations.provider import ProviderHandler, ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.user.user_context import UserContext
 from openhands.sdk.skills import KeywordTrigger, Skill, TaskTrigger
 
@@ -69,7 +75,7 @@ async def _is_gitlab_repository(repo_name: str, user_context: UserContext) -> bo
         True if the repository is hosted on GitLab, False otherwise
     """
     try:
-        provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
+        provider_handler = await user_context.get_provider_handler()
         repository = await provider_handler.verify_repo_provider(
             repo_name, is_optional=True
         )
@@ -91,7 +97,7 @@ async def _is_azure_devops_repository(
         True if the repository is hosted on Azure DevOps, False otherwise
     """
     try:
-        provider_handler = await user_context.get_provider_handler()  # type: ignore[attr-defined]
+        provider_handler = await user_context.get_provider_handler()
         repository = await provider_handler.verify_repo_provider(
             repo_name, is_optional=True
         )
@@ -194,51 +200,395 @@ async def _get_org_repository_url(
         return None
 
 
-async def build_org_config(
+def _candidate_repo_paths(provider: ProviderType, owner: str) -> list[str]:
+    """Return the global skill-repo paths for an owner, by provider convention.
+
+    GitHub-style providers expose two independent repos (``.openhands`` and
+    ``.agents``) that are loaded concurrently. GitLab and Azure DevOps use a
+    single ``openhands-config`` repository (they have no ``.agents`` analog).
+
+    Args:
+        provider: Git provider the owner belongs to.
+        owner: Account login or organization/group name.
+
+    Returns:
+        List of repository paths (e.g., ['owner/.openhands', 'owner/.agents']).
+    """
+    if provider == ProviderType.GITLAB:
+        return [f'{owner}/openhands-config']
+    if provider == ProviderType.AZURE_DEVOPS:
+        return [f'{owner}/openhands-config/openhands-config']
+    return [f'{owner}/.openhands', f'{owner}/.agents']
+
+
+async def _enumerate_owners_for_provider(
+    provider_handler: ProviderHandler, provider: ProviderType
+) -> list[str]:
+    """Collect skill-repo owners for a provider: the user's login plus their orgs.
+
+    Failures are swallowed so that a single provider error never prevents skill
+    loading; the underlying enumeration helpers already return ``[]`` on error.
+
+    Args:
+        provider_handler: Handler holding the user's provider tokens.
+        provider: Provider to enumerate owners for.
+
+    Returns:
+        List of owner names (login first, then organizations/groups).
+    """
+    owners: list[str] = []
+
+    try:
+        service = provider_handler.get_service(provider)
+        user = await service.get_user()
+        if user and user.login:
+            owners.append(user.login)
+    except Exception as e:
+        _logger.debug(f'Failed to get user login for provider {provider}: {e}')
+
+    try:
+        if provider == ProviderType.GITHUB:
+            owners.extend(await provider_handler.get_github_organizations())
+        elif provider == ProviderType.GITLAB:
+            owners.extend(await provider_handler.get_gitlab_groups())
+        elif provider == ProviderType.BITBUCKET:
+            owners.extend(await provider_handler.get_bitbucket_workspaces())
+        elif provider == ProviderType.AZURE_DEVOPS:
+            owners.extend(await provider_handler.get_azure_devops_organizations())
+        # Bitbucket Data Center is intentionally excluded: get_bitbucket_dc_projects
+        # hits /rest/api/1.0/projects, which returns every project the user can
+        # *browse* on the server (not their memberships). Enumerating it here would
+        # fan out to ~all projects on the instance and inject their skills into every
+        # conversation. BBDC org skills still load via the selected-repo path.
+    except Exception as e:
+        _logger.debug(f'Failed to enumerate orgs for provider {provider}: {e}')
+
+    return owners
+
+
+# Upper bound on how many global skill repos we will verify for a single
+# conversation, and how many of those verifications run concurrently. These
+# cap the HTTP fan-out against the user's git provider(s) on conversation start.
+_MAX_ORG_CANDIDATES = 30
+_URL_RESOLVE_CONCURRENCY = 8
+
+
+async def build_org_configs(
     selected_repository: str | None,
     user_context: UserContext,
-) -> OrgConfig | None:
-    """Build organization config for agent-server API request.
+) -> list[OrgConfig]:
+    """Build the list of global org/user skill-repo configs for the agent-server.
+
+    Skills are loaded for every conversation regardless of repository selection.
+    The list always covers the authenticated user's account and every
+    organization/group they belong to (across all authenticated providers),
+    resolving both ``.openhands`` and ``.agents`` repos for GitHub-style
+    providers. When a repository is selected, the repo owner's repos are
+    included too. Only repos whose authenticated URL resolves are returned, and
+    duplicate repo paths are collapsed. Failures degrade to fewer (or no)
+    configs rather than raising.
 
     Args:
         selected_repository: Repository name (e.g., 'owner/repo') or None
         user_context: UserContext to access authentication and provider info
 
     Returns:
-        org_config dict if org repository exists and is accessible, None otherwise
+        List of OrgConfig for every accessible global skill repository.
     """
-    if not selected_repository:
-        return None
+    # Each candidate is (repo_path, org_name, provider_value).
+    candidates: list[tuple[str, str, str]] = []
 
-    repo_parts = selected_repository.split('/')
-    if len(repo_parts) < 2:
-        _logger.warning(
-            f'Repository path has insufficient parts ({len(repo_parts)} < 2), '
-            f'skipping org-level skills'
-        )
-        return None
+    # 1. Selected repository owner first. This entry doubles as the legacy
+    #    single ``org_config`` (org_configs[0]) for agent-servers that predate
+    #    the list API, so it must keep the pre-list "selected repo's org skills"
+    #    semantics regardless of which global repos happen to resolve.
+    if selected_repository and len(selected_repository.split('/')) >= 2:
+        try:
+            org_openhands_repo, org_name = await _determine_org_repo_path(
+                selected_repository, user_context
+            )
+            selected_provider = await _get_provider_type(
+                selected_repository, user_context
+            )
+            candidates.append((org_openhands_repo, org_name, selected_provider))
+            if selected_provider == 'github':
+                candidates.append((f'{org_name}/.agents', org_name, selected_provider))
+        except Exception as e:
+            _logger.debug(f'Failed to determine selected-repo org config: {e}')
 
+    # 2. Global owners: the user's account plus their orgs/groups, per provider.
     try:
-        org_openhands_repo, org_name = await _determine_org_repo_path(
-            selected_repository, user_context
-        )
-
-        org_repo_url = await _get_org_repository_url(org_openhands_repo, user_context)
-        if not org_repo_url:
-            return None
-
-        provider = await _get_provider_type(selected_repository, user_context)
-
-        return OrgConfig(
-            repository=selected_repository,
-            provider=provider,
-            org_repo_url=org_repo_url,
-            org_name=org_name,
-        )
-
+        provider_handler = await user_context.get_provider_handler()
+        for provider in provider_handler.provider_tokens:
+            owners = await _enumerate_owners_for_provider(provider_handler, provider)
+            for owner in owners:
+                for path in _candidate_repo_paths(provider, owner):
+                    candidates.append((path, owner, provider.value))
     except Exception as e:
-        _logger.debug(f'Failed to build org config: {str(e)}')
+        _logger.debug(f'Failed to enumerate global skill repos: {e}')
+
+    if not candidates:
+        return []
+
+    # 3. Deduplicate by repo path (covers owner == login and org overlaps).
+    #    Dedup is path-only, so the rare case of a same-named owner on two
+    #    providers collapses to the first provider's config; acceptable because
+    #    the resolved authenticated URL determines which repo is actually cloned.
+    seen: set[str] = set()
+    unique: list[tuple[str, str, str]] = []
+    for path, org_name, provider_value in candidates:
+        if path not in seen:
+            seen.add(path)
+            unique.append((path, org_name, provider_value))
+
+    # 4. Bound the verification fan-out. Because the selected-repo entry is first,
+    #    truncation here can never drop it.
+    if len(unique) > _MAX_ORG_CANDIDATES:
+        _logger.warning(
+            f'Truncating org skill candidates from {len(unique)} to '
+            f'{_MAX_ORG_CANDIDATES}'
+        )
+        unique = unique[:_MAX_ORG_CANDIDATES]
+
+    # 5. Resolve authenticated URLs concurrently (bounded); keep repos that exist.
+    sem = asyncio.Semaphore(_URL_RESOLVE_CONCURRENCY)
+
+    async def _resolve(path: str) -> str | None:
+        async with sem:
+            return await _get_org_repository_url(path, user_context)
+
+    urls = await asyncio.gather(*[_resolve(path) for path, _, _ in unique])
+
+    configs: list[OrgConfig] = []
+    for (path, org_name, provider_value), org_repo_url in zip(
+        unique, urls, strict=True
+    ):
+        if org_repo_url:
+            configs.append(
+                OrgConfig(
+                    repository=path,
+                    provider=provider_value,
+                    org_repo_url=org_repo_url,
+                    org_name=org_name,
+                )
+            )
+    return configs
+
+
+def parse_marketplace_source(source: str) -> tuple[str, str]:
+    """Parse marketplace source into provider and repo path.
+
+    Args:
+        source: Marketplace source (e.g., 'github:owner/repo', 'gitlab:owner/repo',
+                'https://github.com/owner/repo.git')
+
+    Returns:
+        Tuple of (provider, repo_path) where provider is 'github', 'gitlab', etc.
+    """
+    # Handle github:owner/repo format
+    if source.startswith('github:'):
+        return ('github', source[7:].lstrip('/'))
+    if source.startswith('gitlab:'):
+        return ('gitlab', source[7:].lstrip('/'))
+    if source.startswith('bitbucket:'):
+        return ('bitbucket', source[10:].lstrip('/'))
+    if source.startswith('azure-devops:'):
+        return ('azure-devops', source[13:].lstrip('/'))
+
+    # Handle URL format
+    lower = source.lower()
+    if 'github.com' in lower:
+        path = source.split('github.com', 1)[1].lstrip('/').rstrip('/')
+        # Remove .git suffix if present (use removesuffix to avoid character-by-character stripping)
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('github', path)
+    if 'gitlab.com' in lower or 'gitlab' in lower:
+        path = (
+            source.split(('gitlab.com' if 'gitlab.com' in lower else 'gitlab'), 1)[1]
+            .lstrip('/')
+            .rstrip('/')
+        )
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('gitlab', path)
+    if 'bitbucket.org' in lower:
+        path = source.split('bitbucket.org', 1)[1].lstrip('/').rstrip('/')
+        if path.endswith('.git'):
+            path = path[:-4]
+        return ('bitbucket', path)
+
+    # Default to github
+    path = source.rstrip('/')
+    if path.endswith('.git'):
+        path = path[:-4]
+    return ('github', path)
+
+
+# Marketplace source prefixes that name a provider explicitly; handled by
+# parse_marketplace_source, never treated as scp-style host:path.
+_PROVIDER_SOURCE_PREFIXES = ('github:', 'gitlab:', 'bitbucket:', 'azure-devops:')
+
+
+def _split_git_url_source(source: str) -> tuple[str, str] | None:
+    """Return ``(host, path)`` for a URL/scp git source, else ``None``.
+
+    Handles ``scheme://[user@]host[:port]/path`` and scp ``[user@]host:path``.
+    The host comes from a real URL parse (userinfo is ignored), so a source
+    like ``https://github.com@evil/o/r`` reports host ``evil`` — it can never
+    masquerade as a provider via substring matching.
+    """
+    s = source.strip()
+    if s.startswith(_PROVIDER_SOURCE_PREFIXES):
         return None
+    if '://' in s:
+        parsed = urlparse(s)
+        host = (parsed.hostname or '').lower()
+        return (host, parsed.path) if host else None
+    # scp-style: [user@]host:path. Require a dotted host so provider-prefix and
+    # bare name:tag forms don't match.
+    m = re.match(r'^(?:[^@/]+@)?([^/:]+):(.+)$', s)
+    if m and '.' in m.group(1):
+        return (m.group(1).lower(), m.group(2))
+    return None
+
+
+def _repo_path_from_url_path(path: str, provider: ProviderType) -> str:
+    """Extract an ``owner/repo`` path from a git URL path for ``provider``."""
+    p = path.strip('/')
+    if p.endswith('.git'):
+        p = p[:-4]
+    # Bitbucket DC HTTP clone URLs are /scm/<project>/<repo>; the SSH form omits
+    # /scm/. Both reduce to <project>/<repo> (personal repos use ~user).
+    if provider == ProviderType.BITBUCKET_DATA_CENTER and p.startswith('scm/'):
+        p = p[len('scm/') :]
+    return p
+
+
+async def _match_url_source_to_provider(
+    source: str, user_context: UserContext
+) -> tuple[ProviderType, str] | None:
+    """Resolve a URL/scp source to ``(provider, owner/repo)`` by host match.
+
+    Matches strictly on the URL host against configured provider tokens (a
+    token's own ``host``, or the provider default domain only when the token
+    has no host). Returns ``None`` for non-URL sources and for hosts that match
+    no provider, so an unrelated-host URL is never rewritten to a provider repo.
+    """
+    split = _split_git_url_source(source)
+    if split is None:
+        return None
+    host, path = split
+    if not host:
+        return None
+    try:
+        provider_tokens = await user_context.get_provider_tokens()
+    except Exception:
+        return None
+    if not isinstance(provider_tokens, Mapping):
+        return None
+    for provider, token in provider_tokens.items():
+        try:
+            provider_type = ProviderType(provider)
+        except ValueError:
+            continue
+        token_host = getattr(token, 'host', None)
+        if token_host:
+            if '://' not in token_host:
+                token_host = f'https://{token_host}'
+            matched = (urlparse(token_host).hostname or '').lower() == host
+        else:
+            default_domain = ProviderHandler.PROVIDER_DOMAINS.get(provider_type)
+            matched = default_domain is not None and default_domain.lower() == host
+        if matched:
+            repo_path = _repo_path_from_url_path(path, provider_type)
+            if not repo_path or '/' not in repo_path:
+                return None
+            return provider_type, repo_path
+    return None
+
+
+async def authenticate_marketplace_sources(
+    registered_marketplaces: list[MarketplaceRegistration] | None,
+    user_context: UserContext,
+) -> list[MarketplaceRegistration] | None:
+    """Swap auto-load marketplace sources for authenticated git URLs.
+
+    The agent-server clones ``auto_load`` marketplace registrations itself but
+    has no provider credentials, so private repositories fail to clone (and a
+    bare ``owner/repo`` source is misread as a nonexistent local path). Resolve
+    each such source to an authenticated URL via the user's provider tokens and
+    return copies with ``source`` replaced. Registrations that cannot be
+    resolved (local sources, missing tokens, inaccessible repos) pass through
+    unchanged and failures never raise, so public/local behavior is unaffected.
+
+    The rewritten URLs embed credentials (like ``OrgConfig.org_repo_url``):
+    never log or persist them.
+
+    Args:
+        registered_marketplaces: Composed marketplace registrations, or None.
+        user_context: UserContext to resolve authenticated URLs.
+
+    Returns:
+        New list with rewritten copies (input not mutated), or the input
+        itself when None/empty.
+    """
+    if not registered_marketplaces:
+        return registered_marketplaces
+
+    sem = asyncio.Semaphore(_URL_RESOLVE_CONCURRENCY)
+
+    async def _authenticate(reg: MarketplaceRegistration) -> MarketplaceRegistration:
+        # Only auto_load registrations are cloned during /api/skills.
+        if not reg.auto_load:
+            return reg
+        # URL/scp sources resolve strictly against the provider whose host
+        # matches, pinned so a host-blind resolver can't claim a same-named
+        # repo elsewhere. Unrelated-host URLs match nothing and pass through.
+        matched = await _match_url_source_to_provider(reg.source, user_context)
+        if matched is not None:
+            provider_type, repo_path = matched
+            try:
+                async with sem:
+                    handler = await user_context.get_provider_handler()
+                    url = await handler.get_authenticated_git_url(
+                        repo_path,
+                        is_optional=True,
+                        specified_provider=provider_type,
+                    )
+            except Exception as e:
+                _logger.debug(
+                    f'Could not resolve authenticated URL for marketplace '
+                    f'{reg.name} ({repo_path}); keeping original source: {e}'
+                )
+                return reg
+            return reg.model_copy(update={'source': url})
+        # URL-shaped but no provider host matched: never rewrite to a provider.
+        if _split_git_url_source(reg.source) is not None:
+            return reg
+        # Non-URL owner/repo forms (github:owner/repo, bare owner/repo).
+        _, repo_name = parse_marketplace_source(reg.source)
+        if not repo_name or '/' not in repo_name or '://' in repo_name:
+            return reg
+        try:
+            async with sem:
+                url = await user_context.get_authenticated_git_url(
+                    repo_name, is_optional=True
+                )
+        except Exception as e:
+            _logger.debug(
+                f'Could not resolve authenticated URL for marketplace '
+                f'{reg.name} ({repo_name}); keeping original source: {e}'
+            )
+            return reg
+        # model_copy() intentionally skips re-validation: validate_source
+        # rejects credentialed URLs, and the rewritten value is wire-only
+        # (never persisted or returned via the settings API).
+        return reg.model_copy(update={'source': url})
+
+    return list(
+        await asyncio.gather(*[_authenticate(reg) for reg in registered_marketplaces])
+    )
 
 
 def build_sandbox_config(sandbox: SandboxInfo) -> SandboxConfig | None:
@@ -265,12 +615,13 @@ async def load_skills_from_agent_server(
     agent_server_url: str,
     session_api_key: str | None,
     project_dir: str,
-    org_config: OrgConfig | None = None,
+    org_configs: list[OrgConfig] | None = None,
     sandbox_config: SandboxConfig | None = None,
     load_public: bool = True,
     load_user: bool = True,
     load_project: bool = True,
     load_org: bool = True,
+    registered_marketplaces: list[MarketplaceRegistration] | None = None,
 ) -> list[Skill]:
     """Load all skills from the agent-server.
 
@@ -281,28 +632,45 @@ async def load_skills_from_agent_server(
         agent_server_url: URL of the agent server (e.g., 'http://localhost:8000')
         session_api_key: Session API key for authentication (optional)
         project_dir: Workspace directory path for project skills
-        org_config: Organization skills configuration (optional)
+        org_configs: Organization/user skill repositories to load (optional)
         sandbox_config: Sandbox skills configuration (optional)
         load_public: Whether to load public skills (default: True)
         load_user: Whether to load user skills (default: True)
         load_project: Whether to load project skills (default: True)
         load_org: Whether to load organization skills (default: True)
+        registered_marketplaces: List of marketplace registrations (optional)
 
     Returns:
         List of Skill objects merged from all sources.
         Returns empty list on error.
     """
     try:
-        # Build request payload
-        payload = {
+        # Build request payload. ``org_configs`` is the current list form;
+        # ``org_config`` (the first entry) is kept for backward compatibility
+        # with older agent-server images that only understand a single config.
+        payload: dict[str, Any] = {
             'load_public': load_public,
             'load_user': load_user,
             'load_project': load_project,
             'load_org': load_org,
             'project_dir': project_dir,
-            'org_config': org_config.model_dump() if org_config else None,
+            'org_configs': (
+                [c.model_dump() for c in org_configs] if org_configs else None
+            ),
+            'org_config': org_configs[0].model_dump() if org_configs else None,
             'sandbox_config': sandbox_config.model_dump() if sandbox_config else None,
         }
+
+        # Only include ``registered_marketplaces`` when we actually have a value.
+        # The agent-server field is a non-Optional ``list`` with a default, so an
+        # explicit ``null`` fails validation (422) and would drop *all* skills.
+        # Omitting the key lets the agent-server apply its own default, and older
+        # agent-servers without the field simply ignore an absent key.
+        if registered_marketplaces is not None:
+            payload['registered_marketplaces'] = [
+                reg.model_dump(exclude_none=True, exclude={'scope'})
+                for reg in registered_marketplaces
+            ]
 
         # Build headers
         headers = {'Content-Type': 'application/json'}

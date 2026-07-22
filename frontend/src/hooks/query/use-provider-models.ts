@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
 
@@ -26,11 +26,18 @@ async function fetchPage(
   return page.items;
 }
 
-export const useProviderModels = (provider: string | null) =>
-  useQuery({
+// Shared with imperative queryClient.fetchQuery callers so they reuse the
+// same cache entry (and staleness rules) as the hook.
+export const providerModelsQueryOptions = (provider: string | null) =>
+  queryOptions({
     queryKey: ["config", "models", provider],
     queryFn: () => fetchPage(provider!),
-    enabled: !!provider,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 15,
+  });
+
+export const useProviderModels = (provider: string | null) =>
+  useQuery({
+    ...providerModelsQueryOptions(provider),
+    enabled: !!provider,
   });

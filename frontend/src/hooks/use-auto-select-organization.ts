@@ -23,8 +23,15 @@ export function useAutoSelectOrganization() {
 
   React.useEffect(() => {
     if (!organizationId && organizations && organizations.length > 0) {
-      // Prefer backend's current_org_id (last selected org), fall back to first org
-      const initialOrgId = currentOrgId ?? organizations[0].id;
+      // Prefer backend's current_org_id (last selected org), fall back to
+      // first org. Ignore a current_org_id that isn't in the visible list —
+      // e.g. a personal workspace while hide_personal_workspaces is on.
+      const visibleCurrentOrgId = organizations.some(
+        (org) => org.id === currentOrgId,
+      )
+        ? currentOrgId
+        : undefined;
+      const initialOrgId = visibleCurrentOrgId ?? organizations[0].id;
       // Skip revalidation for initial auto-selection to avoid duplicate API calls.
       // Revalidation is only needed when user explicitly switches organizations
       // to redirect away from admin-only pages they may no longer have access to.

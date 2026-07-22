@@ -339,9 +339,9 @@ class TestLogOutput:
         assert 'ts' in output
         assert 'timestamp' not in output
         # Verify 'ts' appears only once in the raw output (not duplicated as key)
-        assert (
-            raw_output.count('"ts"') == 1
-        ), f"'ts' should appear exactly once, found in: {raw_output}"
+        assert raw_output.count('"ts"') == 1, (
+            f"'ts' should appear exactly once, found in: {raw_output}"
+        )
         assert output['message'] == 'Test both modes message'
         assert output['severity'] == 'INFO'
         # When LOG_JSON_FOR_CONSOLE=1, custom_json_serializer uses datetime.now().isoformat()

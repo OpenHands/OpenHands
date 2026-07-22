@@ -177,6 +177,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeDefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeDefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeDefined();
     });
 
     it("should hide org routes when isPersonalOrg is true", async () => {
@@ -202,6 +206,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide org routes when user role is member", async () => {
@@ -227,6 +235,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide org routes when no organization is selected", async () => {
@@ -253,6 +265,10 @@ describe("useSettingsNavItems", () => {
       expect(
         findItemByPath(result.current, "/settings/org-members"),
       ).toBeUndefined();
+      expect(
+        findItemByPath(result.current, "/settings/usage-monitoring"),
+      ).toBeUndefined();
+      expect(findItemByPath(result.current, "/settings/budgets")).toBeUndefined();
     });
 
     it("should hide billing route when isTeamOrg is true", async () => {
@@ -550,5 +566,32 @@ describe("useSettingsNavItems", () => {
         ).toBeDefined();
       });
     });
+  });
+});
+
+describe("disabledByAcp flags (ACP-incompatible settings surfaces)", () => {
+  // The ACP sub-agent owns its own LLM and condenser, so those pages stay
+  // greyed-out/redirected under ACP. MCP is intentionally NOT gated: servers
+  // configured on the MCP page are forwarded to the ACP subprocess at session
+  // creation, so the page is meaningful for ACP agents too.
+  it.each([
+    ["SAAS_NAV_ITEMS", SAAS_NAV_ITEMS],
+    ["OSS_NAV_ITEMS", OSS_NAV_ITEMS],
+  ])("does not gate the MCP page for ACP in %s", (_name, items) => {
+    const mcp = items.find((item) => item.to === "/settings/mcp");
+    expect(mcp).toBeDefined();
+    expect(mcp?.disabledByAcp ?? false).toBe(false);
+  });
+
+  it.each([
+    ["SAAS_NAV_ITEMS", SAAS_NAV_ITEMS],
+    ["OSS_NAV_ITEMS", OSS_NAV_ITEMS],
+  ])("still gates LLM and condenser for ACP in %s", (_name, items) => {
+    expect(items.find((item) => item.to === "/settings")?.disabledByAcp).toBe(
+      true,
+    );
+    expect(
+      items.find((item) => item.to === "/settings/condenser")?.disabledByAcp,
+    ).toBe(true);
   });
 });

@@ -24,6 +24,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.sandbox.sandbox_service import (
@@ -32,7 +33,10 @@ from openhands.app_server.sandbox.sandbox_service import (
     SandboxService,
     SandboxServiceInjector,
 )
-from openhands.app_server.sandbox.sandbox_spec_service import SandboxSpecService
+from openhands.app_server.sandbox.sandbox_spec_service import (
+    SandboxSpecService,
+    resolve_sandbox_spec,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
@@ -102,6 +106,7 @@ class DockerSandboxService(SandboxService):
     startup_grace_seconds: int = STARTUP_GRACE_SECONDS
     use_host_network: bool = False
     kvm_enabled: bool = False
+    default_sandbox_spec_id: str | None = None
 
     def _find_unused_port(self) -> int:
         """Find an unused port on the host machine."""
@@ -357,6 +362,26 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return None
 
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key."""
+        try:
+            all_containers = self.docker_client.containers.list(all=True)
+            for container in all_containers:
+                if container.name and container.name.startswith(
+                    self.container_name_prefix
+                ):
+                    env_vars = self._get_container_env_vars(container)
+                    if env_vars.get(SESSION_API_KEY_VARIABLE) == session_api_key:
+                        return SandboxRecord(
+                            id=container.name,
+                            created_by_user_id=None,
+                        )
+            return None
+        except (NotFound, APIError):
+            return None
+
     async def start_sandbox(
         self, sandbox_spec_id: str | None = None, sandbox_id: str | None = None
     ) -> SandboxInfo:
@@ -373,15 +398,12 @@ class DockerSandboxService(SandboxService):
         # Enforce sandbox limits by cleaning up old sandboxes
         await self.pause_old_sandboxes(self.max_num_sandboxes - 1)
 
-        if sandbox_spec_id is None:
-            sandbox_spec = await self.sandbox_spec_service.get_default_sandbox_spec()
-        else:
-            sandbox_spec_maybe = await self.sandbox_spec_service.get_sandbox_spec(
-                sandbox_spec_id
-            )
-            if sandbox_spec_maybe is None:
-                raise ValueError('Sandbox Spec not found')
-            sandbox_spec = sandbox_spec_maybe
+        sandbox_spec = await resolve_sandbox_spec(
+            sandbox_spec_id,
+            self.default_sandbox_spec_id,
+            self.sandbox_spec_service,
+            _logger,
+        )
 
         # Generate a sandbox id if none was provided
         if sandbox_id is None:
@@ -491,7 +513,7 @@ class DockerSandboxService(SandboxService):
             return sandbox_info
 
         except APIError as e:
-            raise SandboxError(f'Failed to start container: {e}')
+            raise SandboxError('Failed to start container') from e
 
     async def resume_sandbox(self, sandbox_id: str) -> bool:
         """Resume a paused sandbox."""

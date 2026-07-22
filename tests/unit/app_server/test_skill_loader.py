@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from openhands.app_server.app_conversation.skill_loader import (
+    _MAX_ORG_CANDIDATES,
     OrgConfig,
     SandboxConfig,
     SkillInfo,
@@ -20,11 +21,12 @@ from openhands.app_server.app_conversation.skill_loader import (
     _get_provider_type,
     _is_azure_devops_repository,
     _is_gitlab_repository,
-    build_org_config,
+    authenticate_marketplace_sources,
+    build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
 )
-from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.sandbox.sandbox_models import (
     ExposedUrl,
@@ -159,73 +161,233 @@ class TestGetProviderType:
         assert result == 'github'
 
 
-class TestBuildOrgConfig:
-    """Test build_org_config function."""
+class TestBuildOrgConfigs:
+    """Test build_org_configs function."""
+
+    @staticmethod
+    def _make_provider_handler(logins, orgs=None):
+        """Build a mock ProviderHandler.
+
+        Args:
+            logins: Mapping of ProviderType -> account login.
+            orgs: Optional mapping of ProviderType -> list of org/group names.
+        """
+        orgs = orgs or {}
+        handler = MagicMock()
+        # Iterating a ProviderHandler's provider_tokens yields ProviderType keys.
+        handler.provider_tokens = dict.fromkeys(logins)
+
+        def _get_service(provider):
+            service = MagicMock()
+            user = MagicMock()
+            user.login = logins[provider]
+            service.get_user = AsyncMock(return_value=user)
+            return service
+
+        handler.get_service = MagicMock(side_effect=_get_service)
+        handler.get_github_organizations = AsyncMock(
+            return_value=orgs.get(ProviderType.GITHUB, [])
+        )
+        handler.get_gitlab_groups = AsyncMock(
+            return_value=orgs.get(ProviderType.GITLAB, [])
+        )
+        handler.get_bitbucket_workspaces = AsyncMock(return_value=[])
+        handler.get_bitbucket_dc_projects = AsyncMock(return_value=[])
+        handler.get_azure_devops_organizations = AsyncMock(
+            return_value=orgs.get(ProviderType.AZURE_DEVOPS, [])
+        )
+        return handler
 
     @pytest.mark.asyncio
-    @patch(
-        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
-    )
     @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_loads_account_and_orgs_when_no_repository(
+        self, mock_get_url, mock_user_context
+    ):
+        """Account and org repos (both .openhands and .agents) load with no repo."""
+        # Arrange
+        handler = self._make_provider_handler(
+            logins={ProviderType.GITHUB: 'hieptl'},
+            orgs={ProviderType.GITHUB: ['acme']},
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        result = await build_org_configs(None, mock_user_context)
+
+        # Assert
+        assert {c.repository for c in result} == {
+            'hieptl/.openhands',
+            'hieptl/.agents',
+            'acme/.openhands',
+            'acme/.agents',
+        }
+
+    @pytest.mark.asyncio
     @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
-    async def test_builds_config_successfully(
-        self, mock_get_provider, mock_get_url, mock_determine_path, mock_user_context
-    ):
-        """Test successfully building org config."""
-        # Arrange
-        mock_determine_path.return_value = ('owner/.openhands', 'owner')
-        mock_get_url.return_value = 'https://token@github.com/owner/.openhands.git'
-        mock_get_provider.return_value = 'github'
-
-        # Act
-        result = await build_org_config('owner/repo', mock_user_context)
-
-        # Assert
-        assert result is not None
-        assert isinstance(result, OrgConfig)
-        assert result.repository == 'owner/repo'
-        assert result.provider == 'github'
-        assert result.org_repo_url == 'https://token@github.com/owner/.openhands.git'
-        assert result.org_name == 'owner'
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_no_repository(self, mock_user_context):
-        """Test returns None when selected_repository is None."""
-        # Act
-        result = await build_org_config(None, mock_user_context)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_returns_none_when_repository_has_insufficient_parts(
-        self, mock_user_context
-    ):
-        """Test returns None when repository path has less than 2 parts."""
-        # Act
-        result = await build_org_config('repo', mock_user_context)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
     @patch(
         'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
     )
     @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
-    async def test_returns_none_when_url_not_available(
-        self, mock_get_url, mock_determine_path, mock_user_context
+    async def test_includes_selected_repo_owner_both_repos(
+        self,
+        mock_get_url,
+        mock_determine_path,
+        mock_get_provider,
+        mock_user_context,
     ):
-        """Test returns None when org repository URL cannot be retrieved."""
+        """A selected GitHub repo loads the owner's .openhands and .agents repos."""
         # Arrange
-        mock_determine_path.return_value = ('owner/.openhands', 'owner')
-        mock_get_url.return_value = None
+        handler = self._make_provider_handler(logins={})  # no global owners
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_determine_path.return_value = ('other/.openhands', 'other')
+        mock_get_provider.return_value = 'github'
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
 
         # Act
-        result = await build_org_config('owner/repo', mock_user_context)
+        result = await build_org_configs('other/web', mock_user_context)
 
         # Assert
-        assert result is None
+        assert {c.org_repo_url for c in result} == {
+            'https://git/other/.openhands.git',
+            'https://git/other/.agents.git',
+        }
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
+    @patch(
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
+    )
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_dedupes_when_owner_equals_login(
+        self,
+        mock_get_url,
+        mock_determine_path,
+        mock_get_provider,
+        mock_user_context,
+    ):
+        """A repo shared by the account and the selected repo is resolved once."""
+        # Arrange
+        handler = self._make_provider_handler(logins={ProviderType.GITHUB: 'hieptl'})
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_determine_path.return_value = ('hieptl/.openhands', 'hieptl')
+        mock_get_provider.return_value = 'github'
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        await build_org_configs('hieptl/web', mock_user_context)
+
+        # Assert
+        resolved_paths = sorted(call.args[0] for call in mock_get_url.call_args_list)
+        assert resolved_paths == ['hieptl/.agents', 'hieptl/.openhands']
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_skips_agents_for_gitlab(self, mock_get_url, mock_user_context):
+        """GitLab owners resolve only openhands-config (no .openhands/.agents)."""
+        # Arrange
+        handler = self._make_provider_handler(logins={ProviderType.GITLAB: 'mygroup'})
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        result = await build_org_configs(None, mock_user_context)
+
+        # Assert
+        assert {c.repository for c in result} == {'mygroup/openhands-config'}
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_filters_unresolvable_repos(self, mock_get_url, mock_user_context):
+        """Repos whose authenticated URL does not resolve are excluded."""
+        # Arrange
+        handler = self._make_provider_handler(logins={ProviderType.GITHUB: 'hieptl'})
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+
+        def _resolve(path, ctx):
+            return f'https://git/{path}.git' if path == 'hieptl/.openhands' else None
+
+        mock_get_url.side_effect = _resolve
+
+        # Act
+        result = await build_org_configs(None, mock_user_context)
+
+        # Assert
+        assert {c.repository for c in result} == {'hieptl/.openhands'}
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_provider_type')
+    @patch(
+        'openhands.app_server.app_conversation.skill_loader._determine_org_repo_path'
+    )
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_selected_repo_is_first_for_legacy_org_config(
+        self,
+        mock_get_url,
+        mock_determine_path,
+        mock_get_provider,
+        mock_user_context,
+    ):
+        """The selected repo's config is org_configs[0].
+
+        Older agent-servers read only the first/legacy ``org_config``, so the
+        selected repository's org skills must stay first even when global
+        account/org repos also resolve.
+        """
+        # Arrange: the user also has global account + org repos that resolve.
+        handler = self._make_provider_handler(
+            logins={ProviderType.GITHUB: 'hieptl'},
+            orgs={ProviderType.GITHUB: ['acme']},
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_determine_path.return_value = ('selectedorg/.openhands', 'selectedorg')
+        mock_get_provider.return_value = 'github'
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        result = await build_org_configs('selectedorg/web', mock_user_context)
+
+        # Assert
+        assert result[0].repository == 'selectedorg/.openhands'
+        assert result[0].org_name == 'selectedorg'
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_does_not_enumerate_bitbucket_dc_projects(
+        self, mock_get_url, mock_user_context
+    ):
+        """Bitbucket DC's server-wide project enumeration is never triggered."""
+        # Arrange
+        handler = self._make_provider_handler(
+            logins={ProviderType.BITBUCKET_DATA_CENTER: 'bbuser'}
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        await build_org_configs(None, mock_user_context)
+
+        # Assert
+        handler.get_bitbucket_dc_projects.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('openhands.app_server.app_conversation.skill_loader._get_org_repository_url')
+    async def test_caps_candidate_fan_out(self, mock_get_url, mock_user_context):
+        """No more than _MAX_ORG_CANDIDATES repos are verified per conversation."""
+        # Arrange: 1 login + 40 orgs => 82 GitHub-style candidate paths.
+        orgs = [f'org{i}' for i in range(40)]
+        handler = self._make_provider_handler(
+            logins={ProviderType.GITHUB: 'hieptl'},
+            orgs={ProviderType.GITHUB: orgs},
+        )
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+        mock_get_url.side_effect = lambda path, ctx: f'https://git/{path}.git'
+
+        # Act
+        await build_org_configs(None, mock_user_context)
+
+        # Assert
+        assert len(mock_get_url.call_args_list) == _MAX_ORG_CANDIDATES
 
 
 class TestBuildSandboxConfig:
@@ -381,17 +543,19 @@ class TestLoadSkillsFromAgentServer:
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_client_class.return_value = mock_client
 
+        org_config = OrgConfig(
+            repository='owner/repo',
+            provider='github',
+            org_repo_url='https://github.com/owner/.openhands.git',
+            org_name='owner',
+        )
+
         # Act
         result = await load_skills_from_agent_server(
             agent_server_url='http://localhost:8000',
             session_api_key='test-key',
             project_dir='/workspace/project',
-            org_config=OrgConfig(
-                repository='owner/repo',
-                provider='github',
-                org_repo_url='https://github.com/owner/.openhands.git',
-                org_name='owner',
-            ),
+            org_configs=[org_config],
             sandbox_config=SandboxConfig(exposed_urls=[]),
         )
 
@@ -402,8 +566,11 @@ class TestLoadSkillsFromAgentServer:
         mock_client.post.assert_called_once()
         call_args = mock_client.post.call_args
         assert call_args[0][0] == 'http://localhost:8000/api/skills'
-        assert 'X-Session-API-Key' in call_args[1]['headers']
         assert call_args[1]['headers']['X-Session-API-Key'] == 'test-key'
+        # The list form is sent, and the legacy single field mirrors its first entry.
+        payload = call_args[1]['json']
+        assert payload['org_configs'] == [org_config.model_dump()]
+        assert payload['org_config'] == org_config.model_dump()
 
     @pytest.mark.asyncio
     @patch('httpx.AsyncClient')
@@ -691,3 +858,428 @@ class TestGetOrgRepositoryUrl:
 
         # Assert
         assert result is None
+
+
+# ===== Tests for registered_marketplaces support =====
+
+
+class TestLoadSkillsWithMarketplaces:
+    """Test load_skills_from_agent_server with registered_marketplaces parameter."""
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_passes_registered_marketplaces_in_payload(self, mock_client_class):
+        """Test that registered_marketplaces is included in the API payload."""
+        from openhands.app_server.settings.settings_models import (
+            MarketplaceRegistration,
+        )
+
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        marketplaces = [
+            MarketplaceRegistration(
+                name='public',
+                source='github:OpenHands/skills',
+                auto_load=True,
+            ),
+            MarketplaceRegistration(
+                name='team',
+                source='github:acme/plugins',
+                ref='v1.0.0',
+                repo_path='marketplaces/internal',
+            ),
+        ]
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=marketplaces,
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        assert 'registered_marketplaces' in payload
+        assert len(payload['registered_marketplaces']) == 2
+
+        # Verify first marketplace
+        mp1 = payload['registered_marketplaces'][0]
+        assert mp1['name'] == 'public'
+        assert mp1['source'] == 'github:OpenHands/skills'
+        assert mp1['auto_load']
+        # None values are stripped by model_dump()
+        assert 'ref' not in mp1
+        assert 'repo_path' not in mp1
+
+        # Verify second marketplace
+        mp2 = payload['registered_marketplaces'][1]
+        assert mp2['name'] == 'team'
+        assert mp2['source'] == 'github:acme/plugins'
+        assert mp2['ref'] == 'v1.0.0'
+        assert mp2['repo_path'] == 'marketplaces/internal'
+        # auto_load=False is included (not stripped like None values)
+        assert mp2['auto_load'] is False
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_handles_none_registered_marketplaces(self, mock_client_class):
+        """None registered_marketplaces omits the key entirely from the payload.
+
+        The agent-server field is a non-optional list, so sending ``null`` would
+        fail validation and drop all skills; omitting the key uses its default.
+        """
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=None,
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        # The key is omitted entirely (not sent as null) when not provided.
+        assert 'registered_marketplaces' not in payload
+
+    @pytest.mark.asyncio
+    @patch('httpx.AsyncClient')
+    async def test_handles_empty_registered_marketplaces(self, mock_client_class):
+        """Test that empty registered_marketplaces list is handled correctly."""
+        # Arrange
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'skills': [],
+            'sources': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        # Act
+        await load_skills_from_agent_server(
+            agent_server_url='http://localhost:8000',
+            session_api_key='test-key',
+            project_dir='/workspace/project',
+            registered_marketplaces=[],
+        )
+
+        # Assert
+        mock_client.post.assert_called_once()
+        call_args = mock_client.post.call_args
+        payload = call_args[1]['json']
+
+        # Empty list is now preserved (semantic distinction from None)
+        # Empty list = "explicitly no marketplaces", None = "not specified"
+        assert payload.get('registered_marketplaces') == []
+
+
+# ===== Tests for authenticate_marketplace_sources =====
+
+
+AUTHENTICATED_URL = (
+    'https://x-access-token:token123@github.com/OpenHands/extensions-private.git'
+)
+
+
+def _make_registration(**overrides):
+    """Build a MarketplaceRegistration with private-repo defaults."""
+    from openhands.app_server.settings.settings_models import MarketplaceRegistration
+
+    fields = {
+        'name': 'extensions-private',
+        'source': 'github:OpenHands/extensions-private',
+        'auto_load': True,
+    }
+    fields.update(overrides)
+    return MarketplaceRegistration(**fields)
+
+
+class TestAuthenticateMarketplaceSources:
+    """Test authenticate_marketplace_sources source rewriting."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'github:OpenHands/extensions-private',
+            'OpenHands/extensions-private',
+        ],
+    )
+    async def test_rewrites_owner_repo_source_to_authenticated_url(self, source):
+        """Non-URL owner/repo sources resolve via user_context and are rewritten."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = None
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == AUTHENTICATED_URL
+        mock_user_context.get_authenticated_git_url.assert_awaited_once_with(
+            'OpenHands/extensions-private', is_optional=True
+        )
+
+    @pytest.mark.asyncio
+    async def test_rewrites_recognized_domain_url_pinned_to_provider(self):
+        """A github.com URL resolves pinned to the matching github token."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.GITHUB: ProviderToken()  # host=None -> default domain
+        }
+        handler = AsyncMock()
+        handler.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        mock_user_context.get_provider_handler.return_value = handler
+        registrations = [
+            _make_registration(
+                source='https://github.com/OpenHands/extensions-private.git'
+            )
+        ]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == AUTHENTICATED_URL
+        handler.get_authenticated_git_url.assert_awaited_once_with(
+            'OpenHands/extensions-private',
+            is_optional=True,
+            specified_provider=ProviderType.GITHUB,
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_copy_preserving_fields_without_mutating_input(self):
+        """The rewrite lands on a copy; other fields and the input stay intact."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.return_value = AUTHENTICATED_URL
+        registration = _make_registration(ref='main', repo_path='marketplaces/team')
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            [registration], mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        rewritten = result[0]
+        assert (rewritten.name, rewritten.ref, rewritten.repo_path) == (
+            'extensions-private',
+            'main',
+            'marketplaces/team',
+        )
+        assert registration.source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_keeps_source_when_resolution_fails(self):
+        """A failed token resolution degrades to the original source, not an error."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_authenticated_git_url.side_effect = Exception(
+            'no provider tokens'
+        )
+        registrations = [_make_registration()]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+
+    @pytest.mark.asyncio
+    async def test_skips_non_auto_load_registrations(self):
+        """Registrations that are not auto-loaded are never resolved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        registrations = [_make_registration(auto_load=False)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == 'github:OpenHands/extensions-private'
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'localskills',  # single segment: relative local path
+            'https://codeberg.org/owner/repo.git',  # URL host matches no provider
+        ],
+    )
+    async def test_skips_sources_without_provider_repo_shape(self, source):
+        """Sources that do not map to an owner/repo path pass through untouched."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = None
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'https://bitbucket.dc.example.com/scm/~jane.doe/skills.git',
+            'https://jane.doe@bitbucket.dc.example.com/scm/~jane.doe/skills.git',
+            'ssh://git@bitbucket.dc.example.com:7999/~jane.doe/skills.git',
+        ],
+    )
+    async def test_rewrites_bbdc_personal_url_pinned_to_provider(self, source):
+        """BBDC personal-repo URLs resolve to project/repo pinned to the DC token."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                host='bitbucket.dc.example.com'
+            )
+        }
+        dc_url = 'https://user:pat@bitbucket.dc.example.com/scm/~jane.doe/skills.git'
+        handler = AsyncMock()
+        handler.get_authenticated_git_url.return_value = dc_url
+        mock_user_context.get_provider_handler.return_value = handler
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert — /scm/ stripped, .git stripped, resolved pinned to the DC token
+        assert result is not None
+        assert result[0].source == dc_url
+        handler.get_authenticated_git_url.assert_awaited_once_with(
+            '~jane.doe/skills',
+            is_optional=True,
+            specified_provider=ProviderType.BITBUCKET_DATA_CENTER,
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_custom_host_url_on_other_provider_host(self):
+        """A URL on a host that matches no provider token is never rewritten."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                host='https://bitbucket.other.example.com'
+            )
+        }
+        source = 'https://git.unrelated.example.com/scm/proj/skills.git'
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_provider_handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'source',
+        [
+            'https://github.com@evil.example.com/OpenHands/extensions-private.git',
+            'https://evil.example.com/gitlab.com/OpenHands/extensions-private.git',
+        ],
+    )
+    async def test_provider_substring_in_url_does_not_bypass_host_match(self, source):
+        """A provider name in userinfo/path can't route resolution to that provider."""
+        # Arrange — real host is evil.example.com, matching no configured token.
+        mock_user_context = AsyncMock(spec=UserContext)
+        mock_user_context.get_provider_tokens.return_value = {
+            ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                host='bitbucket.dc.example.com'
+            )
+        }
+        registrations = [_make_registration(source=source)]
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert — never rewritten, provider handler never consulted.
+        assert result is not None
+        assert result[0].source == source
+        mock_user_context.get_provider_handler.assert_not_awaited()
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('registrations', [None, []])
+    async def test_passes_through_falsy_input_untouched(self, registrations):
+        """None/empty inputs are returned as-is so wire semantics are preserved."""
+        # Arrange
+        mock_user_context = AsyncMock(spec=UserContext)
+
+        # Act
+        result = await authenticate_marketplace_sources(
+            registrations, mock_user_context
+        )
+
+        # Assert
+        assert result is registrations
+        mock_user_context.get_authenticated_git_url.assert_not_awaited()

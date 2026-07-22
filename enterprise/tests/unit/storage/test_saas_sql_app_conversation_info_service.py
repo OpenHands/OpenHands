@@ -397,17 +397,17 @@ class TestSaasSQLAppConversationInfoService:
 
         # User should NOT see org1's conversations after switching to org2
         page_in_org2 = await user1_service_org2.search_app_conversation_info()
-        assert (
-            len(page_in_org2.items) == 0
-        ), 'User should not see conversations from org1 after switching to org2'
+        assert len(page_in_org2.items) == 0, (
+            'User should not see conversations from org1 after switching to org2'
+        )
 
         # User should not be able to get the specific conversation from org1
         conv_from_org2 = await user1_service_org2.get_app_conversation_info(
             conv_in_org1.id
         )
-        assert (
-            conv_from_org2 is None
-        ), 'User should not be able to access org1 conversation from org2'
+        assert conv_from_org2 is None, (
+            'User should not be able to access org1 conversation from org2'
+        )
 
         # Now create a conversation in org2
         conv_in_org2 = AppConversationInfo(
@@ -524,15 +524,15 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # ADMIN should see ALL conversations (unfiltered)
         admin_page = await admin_service.search_app_conversation_info()
-        assert (
-            len(admin_page.items) == 3
-        ), 'ADMIN context should see all conversations without filtering'
+        assert len(admin_page.items) == 3, (
+            'ADMIN context should see all conversations without filtering'
+        )
 
         # ADMIN count should return total count (3)
         admin_count = await admin_service.count_app_conversation_info()
-        assert (
-            admin_count == 3
-        ), 'ADMIN context should count all conversations without filtering'
+        assert admin_count == 3, (
+            'ADMIN context should count all conversations without filtering'
+        )
 
     @pytest.mark.asyncio
     async def test_admin_context_can_access_any_conversation(
@@ -602,12 +602,12 @@ class TestSaasSQLAppConversationInfoServiceAdminContext:
 
         # For ADMIN, there should be no user_id or org_id filtering
         # The query should not contain filters for user_id or org_id
-        assert str(USER1_ID) not in query_str.replace(
-            '-', ''
-        ), 'ADMIN context should not filter by user_id'
-        assert str(USER2_ID) not in query_str.replace(
-            '-', ''
-        ), 'ADMIN context should not filter by user_id'
+        assert str(USER1_ID) not in query_str.replace('-', ''), (
+            'ADMIN context should not filter by user_id'
+        )
+        assert str(USER2_ID) not in query_str.replace('-', ''), (
+            'ADMIN context should not filter by user_id'
+        )
 
     @pytest.mark.asyncio
     async def test_regular_user_context_filters_correctly(
@@ -712,9 +712,9 @@ class TestSaasSQLAppConversationInfoServiceWebhookFallback:
         saas_metadata = result.scalar_one_or_none()
 
         assert saas_metadata is not None, 'SAAS metadata should be created'
-        assert (
-            saas_metadata.user_id == USER1_ID
-        ), 'user_id should match info.created_by_user_id'
+        assert saas_metadata.user_id == USER1_ID, (
+            'user_id should match info.created_by_user_id'
+        )
         assert saas_metadata.org_id == ORG1_ID, 'org_id should match user current org'
 
     @pytest.mark.asyncio
@@ -754,9 +754,9 @@ class TestSaasSQLAppConversationInfoServiceWebhookFallback:
         result = await async_session_with_users.execute(saas_query)
         saas_metadata = result.scalar_one_or_none()
 
-        assert (
-            saas_metadata is None
-        ), 'SAAS metadata should not be created without user_id'
+        assert saas_metadata is None, (
+            'SAAS metadata should not be created without user_id'
+        )
 
     @pytest.mark.asyncio
     async def test_webhook_created_conversation_visible_to_user(
@@ -1086,20 +1086,22 @@ class TestApiKeyOrgIdHandling:
 
         assert saas_metadata is not None, 'SAAS metadata should be created'
         assert saas_metadata.user_id == USER1_ID
-        assert (
-            saas_metadata.org_id == ORG1_ID
-        ), 'Conversation should be in API key org (ORG1), not user current org (ORG2)'
+        assert saas_metadata.org_id == ORG1_ID, (
+            'Conversation should be in API key org (ORG1), not user current org (ORG2)'
+        )
 
     @pytest.mark.asyncio
-    async def test_legacy_api_key_without_org_uses_user_current_org(
+    async def test_unbound_api_key_without_org_uses_user_current_org(
         self,
         async_session_with_users: AsyncSession,
     ):
-        """Test that legacy API keys (without org_id) fall back to user's current org.
+        """An unbound API key falls back to the user's current org.
 
-        Legacy API keys created before the org_id feature was added will have
-        api_key_org_id = None. In this case, we should fall back to the user's
-        current_org_id.
+        An unbound key (``api_key_org_id = None``) is explicitly supported:
+        the effective org is resolved per-request from the ``X-Org-Id``
+        header or, as a fallback, the caller's ``user.current_org_id``.
+        The mock here returns ``None`` from ``get_effective_org_id`` so the
+        injector falls back to the persisted ``user.current_org_id``.
         """
         from dataclasses import dataclass
 
@@ -1107,7 +1109,7 @@ class TestApiKeyOrgIdHandling:
             StoredConversationMetadataSaas,
         )
 
-        # Create a mock UserAuth with API key but NO org_id (legacy key)
+        # Create a mock UserAuth with an unbound API key.
         @dataclass
         class MockUserAuth:
             user_id: str
@@ -1132,10 +1134,10 @@ class TestApiKeyOrgIdHandling:
             async def get_user_id(self) -> str | None:
                 return await self.user_auth.get_user_id()
 
-        # Create service with mock auth context where API key has NO org_id
+        # Create service with mock auth context where API key is unbound.
         mock_user_auth = MockUserAuth(
             user_id=str(USER1_ID),
-            api_key_org_id=None,  # Legacy key without org binding
+            api_key_org_id=None,  # Unbound key
         )
         mock_context = MockAuthUserContext(user_auth=mock_user_auth)
 
@@ -1149,8 +1151,8 @@ class TestApiKeyOrgIdHandling:
         conv_info = AppConversationInfo(
             id=conv_id,
             created_by_user_id=str(USER1_ID),
-            sandbox_id='sandbox_legacy_key_test',
-            title='Legacy API Key Conversation',
+            sandbox_id='sandbox_unbound_key_test',
+            title='Unbound API Key Conversation',
         )
         await service.save_app_conversation_info(conv_info)
 
@@ -1163,9 +1165,9 @@ class TestApiKeyOrgIdHandling:
 
         assert saas_metadata is not None, 'SAAS metadata should be created'
         assert saas_metadata.user_id == USER1_ID
-        assert (
-            saas_metadata.org_id == ORG1_ID
-        ), 'Legacy key should fall back to user current org (ORG1)'
+        assert saas_metadata.org_id == ORG1_ID, (
+            'Unbound key should fall back to user current org (ORG1)'
+        )
 
     @pytest.mark.asyncio
     async def test_cookie_auth_without_api_key_uses_user_current_org(
@@ -1208,9 +1210,9 @@ class TestApiKeyOrgIdHandling:
 
         assert saas_metadata is not None, 'SAAS metadata should be created'
         assert saas_metadata.user_id == USER1_ID
-        assert (
-            saas_metadata.org_id == ORG1_ID
-        ), 'Cookie auth should use user current org (ORG1)'
+        assert saas_metadata.org_id == ORG1_ID, (
+            'Cookie auth should use user current org (ORG1)'
+        )
 
     @pytest.mark.asyncio
     async def test_api_key_org_isolation_cross_org_visibility(
@@ -1288,15 +1290,15 @@ class TestApiKeyOrgIdHandling:
             user_context=SpecifyUserContext(user_id=str(USER1_ID)),
         )
         page_org2 = await user_service_org2.search_app_conversation_info()
-        assert (
-            len(page_org2.items) == 0
-        ), 'User in ORG2 should not see conversation created via API key in ORG1'
+        assert len(page_org2.items) == 0, (
+            'User in ORG2 should not see conversation created via API key in ORG1'
+        )
 
         # Also verify get_app_conversation_info returns None
         conv_from_org2 = await user_service_org2.get_app_conversation_info(conv_id)
-        assert (
-            conv_from_org2 is None
-        ), 'User in ORG2 should not access conversation from ORG1'
+        assert conv_from_org2 is None, (
+            'User in ORG2 should not access conversation from ORG1'
+        )
 
         # Step 4: Switch user back to ORG1
         result = await async_session_with_users.execute(
@@ -1313,9 +1315,9 @@ class TestApiKeyOrgIdHandling:
             user_context=SpecifyUserContext(user_id=str(USER1_ID)),
         )
         page_org1 = await user_service_org1.search_app_conversation_info()
-        assert (
-            len(page_org1.items) == 1
-        ), 'User in ORG1 should see conversation created via API key in ORG1'
+        assert len(page_org1.items) == 1, (
+            'User in ORG1 should see conversation created via API key in ORG1'
+        )
         assert page_org1.items[0].id == conv_id
         assert page_org1.items[0].title == 'E2E API Key Conversation'
 

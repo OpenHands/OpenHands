@@ -80,7 +80,9 @@ class DefaultUserAuthorizer(UserAuthorizer):
 
             return UserAuthorizationResponse(success=True)
         except Exception:
-            logger.exception('error authorizing user', extra={'user_id': user_id})
+            logger.exception(
+                'error authorizing user', extra={'user_id': user_id}, stack_info=True
+            )
             return UserAuthorizationResponse(success=False)
 
 

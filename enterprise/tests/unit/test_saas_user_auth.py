@@ -15,6 +15,7 @@ from server.auth.auth_error import (
 from server.auth.saas_user_auth import (
     SaasUserAuth,
     get_api_key_from_header,
+    get_user_auth_from_keycloak_id,
     saas_user_auth_from_bearer,
     saas_user_auth_from_cookie,
     saas_user_auth_from_signed_token,
@@ -24,6 +25,7 @@ from storage.user_authorization import UserAuthorizationType
 
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.secrets.secrets_models import Secrets
+from openhands.app_server.user_auth.user_auth import AuthType
 
 
 @pytest.fixture
@@ -284,7 +286,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -307,7 +311,9 @@ class TestGetProviderTokensBitbucketDCHost:
                 'bitbucket.company.com',
             ),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_secrets = Secrets(
                 provider_tokens={
@@ -335,7 +341,9 @@ class TestGetProviderTokensBitbucketDCHost:
             patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
             patch('server.auth.saas_user_auth.BITBUCKET_DATA_CENTER_HOST', ''),
         ):
-            mock_tm.get_idp_token = AsyncMock(return_value='bdc_access_token')
+            mock_tm.get_idp_token_by_user_id = AsyncMock(
+                return_value='bdc_access_token'
+            )
             user_auth, mock_session = self._make_user_auth(mock_session_maker)
             user_auth.get_secrets = AsyncMock(return_value=None)
 
@@ -366,6 +374,140 @@ async def test_get_provider_tokens_cached(mock_token_manager):
     assert result[ProviderType.GITHUB].token.get_secret_value() == 'cached_github_token'
     mock_token_manager.get_user_info_from_user_id.assert_not_called()
     mock_token_manager.get_idp_token.assert_not_called()
+
+
+# =============================================================================
+# API-key (bearer) decoupling from Keycloak offline sessions
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_user_email_lazy_loads_from_db():
+    """Bearer auth resolves email from the DB (User row), not from Keycloak."""
+    # Arrange
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    mock_user = MagicMock()
+    mock_user.email = 'user@example.com'
+    mock_user.email_verified = True
+
+    with patch('server.auth.saas_user_auth.UserStore') as mock_user_store:
+        mock_user_store.get_user_by_id = AsyncMock(return_value=mock_user)
+
+        # Act
+        email = await user_auth.get_user_email()
+
+    # Assert
+    assert email == 'user@example.com'
+    assert user_auth.email_verified is True
+
+
+@pytest.mark.asyncio
+async def test_get_access_token_returns_none_for_bearer_when_session_revoked():
+    """Bearer get_access_token degrades to None when the offline session is gone.
+
+    A revoked offline session surfaces as a Keycloak refresh failure
+    (``invalid_grant``). For API-key auth that must not raise a 401 — the
+    Keycloak access token is optional.
+    """
+    # Arrange
+    from keycloak.exceptions import KeycloakPostError
+
+    offline_token = jwt.encode(
+        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
+        'secret',
+        algorithm='HS256',
+    )
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+
+    with patch('server.auth.saas_user_auth.token_manager') as mock_tm:
+        mock_tm.load_offline_token = AsyncMock(return_value=offline_token)
+        mock_tm.refresh = AsyncMock(
+            side_effect=KeycloakPostError(
+                'invalid_grant: Offline user session not found'
+            )
+        )
+
+        # Act
+        result = await user_auth.get_access_token()
+
+    # Assert
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_provider_tokens_succeeds_without_offline_session():
+    """Provider tokens resolve by user_id with no offline session / refresh.
+
+    The core decoupling: a key whose Keycloak offline session is gone (empty
+    refresh token) still gets provider tokens, which come from the auth_tokens
+    table + provider OAuth — never a Keycloak refresh.
+    """
+    # Arrange
+    mock_auth_token = MagicMock()
+    mock_auth_token.identity_provider = 'github'
+    mock_auth_token.id = 'token-id-1'
+
+    mock_session = AsyncMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_auth_token]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    user_auth = SaasUserAuth(
+        user_id='test_user_id',
+        refresh_token=SecretStr(''),
+        auth_type=AuthType.BEARER,
+    )
+    user_auth.get_secrets = AsyncMock(return_value=None)
+
+    with (
+        patch('server.auth.saas_user_auth.token_manager') as mock_tm,
+        patch('server.auth.saas_user_auth.a_session_maker') as mock_session_maker,
+    ):
+        mock_session_maker.return_value = mock_session
+        mock_tm.get_idp_token_by_user_id = AsyncMock(return_value='github_token')
+        mock_tm.refresh = AsyncMock()
+        mock_tm.load_offline_token = AsyncMock()
+
+        # Act
+        result = await user_auth.get_provider_tokens()
+
+    # Assert
+    assert result[ProviderType.GITHUB].token.get_secret_value() == 'github_token'
+    mock_tm.get_idp_token_by_user_id.assert_called_once_with(
+        'test_user_id', idp=ProviderType.GITHUB
+    )
+    mock_tm.refresh.assert_not_called()
+    mock_tm.load_offline_token.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'build',
+    [
+        lambda: SaasUserAuth.get_for_user('test_user_id'),
+        lambda: get_user_auth_from_keycloak_id('test_user_id'),
+    ],
+    ids=['get_for_user', 'get_user_auth_from_keycloak_id'],
+)
+async def test_background_user_auth_does_not_require_offline_session(build):
+    """Background/integration entry points build BEARER auth with no offline token."""
+    # Act
+    built = await build()
+
+    # Assert
+    assert built.user_id == 'test_user_id'
+    assert built.auth_type == AuthType.BEARER
+    assert built.refresh_token.get_secret_value() == ''
 
 
 @pytest.mark.asyncio
@@ -472,17 +614,15 @@ async def test_get_instance_no_auth(mock_request):
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_success():
-    """Test successful authentication from bearer token sets user_id and api_key_org_id."""
+    """A valid API key authenticates with no Keycloak round-trip.
+
+    Bearer auth must not load an offline token or call refresh(): the key
+    alone authenticates the request, so a missing/revoked offline session can
+    no longer turn a valid key into a 401.
+    """
     # Arrange
     mock_request = MagicMock()
     mock_request.headers = {'Authorization': 'Bearer test_api_key'}
-
-    # Create a valid offline token (refresh token)
-    offline_token = jwt.encode(
-        {'sub': 'test_user_id', 'exp': int(time.time()) + 3600},
-        'secret',
-        algorithm='HS256',
-    )
 
     mock_org_id = uuid.uuid4()
     mock_validation_result = ApiKeyValidationResult(
@@ -501,29 +641,31 @@ async def test_saas_user_auth_from_bearer_success():
             return_value=mock_validation_result
         )
         mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+        mock_token_manager.load_offline_token = AsyncMock()
+        mock_token_manager.refresh = AsyncMock()
 
-        mock_token_manager.load_offline_token = AsyncMock(return_value=offline_token)
-        mock_token_manager.refresh = AsyncMock(
-            return_value=create_mock_jwt_tokens('test_user_id')
-        )
-
+        # Act
         result = await saas_user_auth_from_bearer(mock_request)
 
+        # Assert
         assert isinstance(result, SaasUserAuth)
         assert result.user_id == 'test_user_id'
         assert result.api_key_org_id == mock_org_id
         assert result.api_key_id == 42
         assert result.api_key_name == 'Test Key'
+        assert result.auth_type == AuthType.BEARER
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
-        mock_token_manager.load_offline_token.assert_called_once_with('test_user_id')
-        mock_token_manager.refresh.assert_called_once_with(offline_token)
+        # Decoupled from Keycloak: no offline-session load, no refresh.
+        mock_token_manager.load_offline_token.assert_not_called()
+        mock_token_manager.refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_saas_user_auth_from_bearer_no_auth_header():
-    """Test that saas_user_auth_from_bearer returns None if no auth header."""
+    """Test that saas_user_auth_from_bearer returns None if no auth header or cookie."""
     mock_request = MagicMock()
     mock_request.headers = {}
+    mock_request.cookies = {}
 
     result = await saas_user_auth_from_bearer(mock_request)
 
@@ -545,6 +687,23 @@ async def test_saas_user_auth_from_bearer_invalid_api_key():
 
         assert result is None
         mock_api_key_store.validate_api_key.assert_called_once_with('test_api_key')
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_key_outside_active_window():
+    """A key that validate_api_key rejects (e.g. not yet active) must not produce auth."""
+    mock_request = MagicMock()
+    mock_request.headers = {'Authorization': 'Bearer scheduled_key'}
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        # Simulate what validate_api_key returns when not_before is in the future.
+        mock_api_key_store.validate_api_key = AsyncMock(return_value=None)
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert result is None
 
 
 @pytest.mark.asyncio
@@ -684,10 +843,11 @@ def test_get_api_key_from_header_with_both_headers():
 
 
 def test_get_api_key_from_header_with_no_headers():
-    """Test that get_api_key_from_header returns None when no relevant headers are present."""
-    # Create a mock request with no relevant headers
+    """Test that get_api_key_from_header returns None when no relevant headers or cookies are present."""
+    # Create a mock request with no relevant headers or cookies
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {'Other-Header': 'some_value'}
+    mock_request.cookies = {}
 
     # Call the function
     api_key = get_api_key_from_header(mock_request)
@@ -701,6 +861,7 @@ def test_get_api_key_from_header_with_invalid_authorization_format():
     # Create a mock request with incorrectly formatted Authorization header
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {'Authorization': 'InvalidFormat api_key'}
+    mock_request.cookies = {}
 
     # Call the function
     api_key = get_api_key_from_header(mock_request)
@@ -819,6 +980,134 @@ def test_get_api_key_from_header_bearer_with_empty_token():
     # Assert that empty string from Bearer is returned (current behavior)
     # This tests the current implementation behavior
     assert api_key == ''
+
+
+def test_get_api_key_from_header_with_api_key_cookie():
+    """Test that get_api_key_from_header extracts API key from the api_key cookie."""
+    # Create a mock request with the api_key cookie set
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    # Call the function
+    api_key = get_api_key_from_header(mock_request)
+
+    # Assert that the API key from the cookie was correctly extracted
+    assert api_key == 'cookie_api_key'
+
+
+def test_get_api_key_from_header_priority_authorization_over_api_key_cookie():
+    """Test that the Authorization header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'Authorization': 'Bearer auth_api_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The Authorization header value should win.
+    assert api_key == 'auth_api_key'
+
+
+def test_get_api_key_from_header_priority_x_session_over_api_key_cookie():
+    """Test that the X-Session-API-Key header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Session-API-Key': 'session_api_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The X-Session-API-Key header value should win.
+    assert api_key == 'session_api_key'
+
+
+def test_get_api_key_from_header_priority_x_access_token_over_api_key_cookie():
+    """Test that the X-Access-Token header takes priority over the api_key cookie."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {'X-Access-Token': 'access_token_key'}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # The X-Access-Token header value should win over the cookie.
+    assert api_key == 'access_token_key'
+
+
+def test_get_api_key_from_header_with_empty_api_key_cookie():
+    """An empty api_key cookie value should be treated as absent and fall through."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': ''}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    # Empty cookie value yields an empty string (mirrors the empty-header
+    # behaviour). Callers like `saas_user_auth_from_bearer` treat falsy
+    # values as missing credentials.
+    assert api_key == ''
+
+
+def test_get_api_key_from_header_with_unrelated_cookies():
+    """Unrelated cookies must not be picked up as an API key."""
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {}
+    mock_request.cookies = {'session': 'abc123', 'preferences': 'dark'}
+
+    api_key = get_api_key_from_header(mock_request)
+
+    assert api_key is None
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_via_api_key_cookie():
+    """A valid api_key cookie should authenticate the same as an X-Access-Token header."""
+    mock_request = MagicMock()
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'cookie_api_key'}
+
+    mock_org_id = uuid.uuid4()
+    mock_validation_result = ApiKeyValidationResult(
+        user_id='test_user_id',
+        org_id=mock_org_id,
+        key_id=7,
+        key_name='Cookie Key',
+    )
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(
+            return_value=mock_validation_result
+        )
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert isinstance(result, SaasUserAuth)
+        assert result.user_id == 'test_user_id'
+        assert result.api_key_org_id == mock_org_id
+        assert result.api_key_id == 7
+        assert result.api_key_name == 'Cookie Key'
+        assert result.auth_type == AuthType.BEARER
+        mock_api_key_store.validate_api_key.assert_called_once_with('cookie_api_key')
+
+
+@pytest.mark.asyncio
+async def test_saas_user_auth_from_bearer_via_api_key_cookie_invalid():
+    """An api_key cookie with an invalid key should produce no auth, same as a bad header."""
+    mock_request = MagicMock()
+    mock_request.headers = {}
+    mock_request.cookies = {'api_key': 'invalid_cookie_key'}
+
+    with patch('server.auth.saas_user_auth.ApiKeyStore') as mock_api_key_store_cls:
+        mock_api_key_store = MagicMock()
+        mock_api_key_store.validate_api_key = AsyncMock(return_value=None)
+        mock_api_key_store_cls.get_instance.return_value = mock_api_key_store
+
+        result = await saas_user_auth_from_bearer(mock_request)
+
+        assert result is None
+        mock_api_key_store.validate_api_key.assert_called_once_with(
+            'invalid_cookie_key'
+        )
 
 
 @pytest.mark.asyncio

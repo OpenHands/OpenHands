@@ -41,6 +41,12 @@ from openhands.app_server.types import (
 )
 from openhands.app_server.utils.logger import openhands_logger as logger
 
+IGNORED_GITHUB_EVENT_SENDERS = frozenset(
+    {
+        'openhands-ai[bot]',
+    }
+)
+
 
 class GithubManager(Manager[GithubViewType]):
     def __init__(
@@ -122,6 +128,13 @@ class GithubManager(Manager[GithubViewType]):
 
             return False
 
+    def _get_ignored_sender_login(self, message: Message) -> str | None:
+        payload = message.message.get('payload', {})
+        login = payload.get('sender', {}).get('login')
+        if login and login.lower() in IGNORED_GITHUB_EVENT_SENDERS:
+            return login
+        return None
+
     def _get_issue_number_from_payload(self, message: Message) -> int | None:
         """Extract issue/PR number from a GitHub webhook payload.
 
@@ -186,14 +199,20 @@ class GithubManager(Manager[GithubViewType]):
                 repo = github_client.get_repo(full_repo_name)
                 issue = repo.get_issue(number=issue_number)
                 issue.create_comment(get_user_not_found_message(username))
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 f'[GitHub] Failed to send user not found message to {username} '
-                f'on {full_repo_name}#{issue_number}: {e}'
+                f'on {full_repo_name}#{issue_number}',
+                stack_info=True,
             )
 
     async def is_job_requested(self, message: Message) -> bool:
         self._confirm_incoming_source_type(message)
+
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return False
 
         installation_id = message.message['installation']
         payload = message.message.get('payload', {})
@@ -235,11 +254,18 @@ class GithubManager(Manager[GithubViewType]):
 
     async def receive_message(self, message: Message):
         self._confirm_incoming_source_type(message)
+
+        ignored_sender = self._get_ignored_sender_login(message)
+        if ignored_sender:
+            logger.info('[GitHub] Ignoring event from %s', ignored_sender)
+            return
+
         try:
             await self.data_collector.process_payload(message)
         except Exception:
-            logger.warning(
-                '[Github]: Error processing payload for gh interaction', exc_info=True
+            logger.exception(
+                '[Github]: Error processing payload for gh interaction',
+                stack_info=True,
             )
 
         if await self.is_job_requested(message):
@@ -405,7 +431,7 @@ class GithubManager(Manager[GithubViewType]):
             await self.send_message(msg_info, github_view)
 
         except Exception:
-            logger.exception('[Github]: Error starting job')
+            logger.exception('[Github]: Error starting job', stack_info=True)
             await self.send_message(
                 'Uh oh! There was an unexpected error starting the job :(', github_view
             )

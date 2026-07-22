@@ -7,7 +7,7 @@ import uuid
 from typing import cast
 from urllib.parse import urlencode, urlparse
 
-import requests
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from integrations.jira.jira_manager import JiraManager
@@ -34,6 +34,7 @@ JIRA_AUTH_URL = 'https://auth.atlassian.com/authorize'
 JIRA_TOKEN_URL = 'https://auth.atlassian.com/oauth/token'
 JIRA_RESOURCES_URL = 'https://api.atlassian.com/oauth/token/accessible-resources'
 JIRA_USER_INFO_URL = 'https://api.atlassian.com/me'
+JIRA_TIMEOUT = httpx.Timeout(30.0)
 
 
 # Request/Response models
@@ -300,7 +301,21 @@ async def jira_events(
 
         signature = parts[1]
         body = await request.body()
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            logger.error(
+                '[Jira] Webhook body is not valid JSON',
+                extra={
+                    'content_type': request.headers.get('content-type'),
+                    'body_length': len(body),
+                    'body_preview': body[:2000].decode('utf-8', errors='replace'),
+                },
+            )
+            raise HTTPException(
+                status_code=400,
+                detail='Webhook body is not valid JSON',
+            )
 
         await verify_jira_signature(body, signature, payload)
 
@@ -326,8 +341,8 @@ async def jira_events(
     except HTTPException:
         # Re-raise HTTP exceptions (like signature verification failures)
         raise
-    except Exception as e:
-        logger.exception(f'Error processing Jira webhook: {e}')
+    except Exception:
+        logger.exception('Error processing Jira webhook', stack_info=True)
         return JSONResponse(
             status_code=500,
             content={'error': 'Internal server error processing webhook.'},
@@ -391,11 +406,11 @@ async def create_jira_workspace(request: Request, workspace_data: JiraWorkspaceC
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error creating Jira workspace: {e}')
+        logger.exception('Error creating Jira workspace', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to create workspace',
-        )
+        ) from e
 
 
 @jira_integration_router.post('/workspaces/link')
@@ -450,11 +465,11 @@ async def create_workspace_link(request: Request, link_data: JiraLinkCreate):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error registering Jira user: {e}')
+        logger.exception('Error registering Jira user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to register user',
-        )
+        ) from e
 
 
 @jira_integration_router.get('/callback')
@@ -480,7 +495,8 @@ async def jira_callback(request: Request, code: str, state: str):
         'code': code,
         'redirect_uri': JIRA_REDIRECT_URI,
     }
-    response = requests.post(JIRA_TOKEN_URL, json=token_payload)
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
+        response = await client.post(JIRA_TOKEN_URL, json=token_payload)
     if response.status_code != 200:
         raise HTTPException(
             status_code=400, detail=f'Error fetching token: {response.text}'
@@ -490,7 +506,8 @@ async def jira_callback(request: Request, code: str, state: str):
     access_token = token_data['access_token']
 
     headers = {'Authorization': f'Bearer {access_token}'}
-    response = requests.get(JIRA_RESOURCES_URL, headers=headers)
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
+        response = await client.get(JIRA_RESOURCES_URL, headers=headers)
 
     if response.status_code != 200:
         raise HTTPException(
@@ -520,7 +537,8 @@ async def jira_callback(request: Request, code: str, state: str):
 
     jira_cloud_id = target_workspace_data.get('id', '')
 
-    jira_user_response = requests.get(JIRA_USER_INFO_URL, headers=headers)
+    async with httpx.AsyncClient(timeout=JIRA_TIMEOUT) as client:
+        jira_user_response = await client.get(JIRA_USER_INFO_URL, headers=headers)
     if jira_user_response.status_code != 200:
         raise HTTPException(
             status_code=400,
@@ -651,11 +669,11 @@ async def get_current_workspace_link(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error retrieving Jira user: {e}')
+        logger.exception('Error retrieving Jira user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to retrieve user',
-        )
+        ) from e
 
 
 @jira_integration_router.post('/workspaces/unlink')
@@ -703,11 +721,11 @@ async def unlink_workspace(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error unlinking Jira user: {e}')
+        logger.exception('Error unlinking Jira user', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to unlink user',
-        )
+        ) from e
 
 
 @jira_integration_router.get(
@@ -758,8 +776,8 @@ async def validate_workspace_integration(request: Request, workspace_name: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f'Error validating Jira organization: {e}')
+        logger.exception('Error validating Jira organization', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Failed to validate organization',
-        )
+        ) from e

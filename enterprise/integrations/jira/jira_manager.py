@@ -21,7 +21,7 @@ from integrations.jira.jira_payload import (
 )
 from integrations.jira.jira_types import (
     JiraViewInterface,
-    RepositoryNotFoundError,
+    RepositorySelectionError,
     StartingConvoException,
 )
 from integrations.jira.jira_view import JiraFactory
@@ -36,6 +36,7 @@ from integrations.utils import (
     get_session_expired_message,
 )
 from jinja2 import Environment, FileSystemLoader
+from server.auth.constants import JIRA_HTTP_TIMEOUT
 from server.auth.saas_user_auth import get_user_auth_from_keycloak_id
 from server.auth.token_manager import TokenManager
 from storage.jira_integration_store import JiraIntegrationStore
@@ -140,9 +141,9 @@ class JiraManager(Manager[JiraViewInterface]):
                 user_auth=saas_user_auth,
                 decrypted_api_key=decrypted_api_key,
             )
-        except RepositoryNotFoundError as e:
+        except RepositorySelectionError as e:
             logger.warning(
-                '[Jira] Repository not found',
+                '[Jira] Repository selection failed',
                 extra={'issue_key': payload.issue_key, 'error': str(e)},
             )
             await self._send_error_from_payload(payload, workspace, str(e))
@@ -154,11 +155,13 @@ class JiraManager(Manager[JiraViewInterface]):
             )
             await self._send_error_from_payload(payload, workspace, str(e))
             return
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Unexpected error creating view',
-                extra={'issue_key': payload.issue_key, 'error': str(e)},
-                exc_info=True,
+                extra={
+                    'issue_key': payload.issue_key,
+                },
+                stack_info=True,
             )
             await self._send_error_from_payload(
                 payload,
@@ -311,11 +314,13 @@ class JiraManager(Manager[JiraViewInterface]):
             )
             msg_info = str(e)
 
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Unexpected error starting job',
-                extra={'issue_key': view.payload.issue_key, 'error': str(e)},
-                exc_info=True,
+                extra={
+                    'issue_key': view.payload.issue_key,
+                },
+                stack_info=True,
             )
             msg_info = 'Sorry, there was an unexpected error starting the job. Please try again.'
 
@@ -343,7 +348,9 @@ class JiraManager(Manager[JiraViewInterface]):
             f'{JIRA_CLOUD_API_URL}/{jira_cloud_id}/rest/api/2/issue/{issue_key}/comment'
         )
         data = format_jira_comment_body(message)
-        async with httpx.AsyncClient(verify=httpx_verify_option()) as client:
+        async with httpx.AsyncClient(
+            verify=httpx_verify_option(), timeout=JIRA_HTTP_TIMEOUT
+        ) as client:
             response = await client.post(
                 url, auth=(svc_acc_email, svc_acc_api_key), json=data
             )
@@ -363,10 +370,13 @@ class JiraManager(Manager[JiraViewInterface]):
                 svc_acc_email=view.jira_workspace.svc_acc_email,
                 svc_acc_api_key=api_key,
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Failed to send comment',
-                extra={'issue_key': view.payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': view.payload.issue_key,
+                },
+                stack_info=True,
             )
 
     async def _send_error_from_payload(
@@ -385,10 +395,13 @@ class JiraManager(Manager[JiraViewInterface]):
                 svc_acc_email=workspace.svc_acc_email,
                 svc_acc_api_key=api_key,
             )
-        except Exception as e:
-            logger.error(
+        except Exception:
+            logger.exception(
                 '[Jira] Failed to send error comment',
-                extra={'issue_key': payload.issue_key, 'error': str(e)},
+                extra={
+                    'issue_key': payload.issue_key,
+                },
+                stack_info=True,
             )
 
     def get_workspace_name_from_payload(self, payload: dict) -> str | None:

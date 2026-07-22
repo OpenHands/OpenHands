@@ -1,16 +1,17 @@
-"""
-SQLAlchemy model for Organization.
-"""
+"""SQLAlchemy model for Organization."""
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from pydantic import SecretStr
 from server.constants import DEFAULT_BILLING_MARGIN
-from sqlalchemy import JSON, String
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from storage.base import Base
 from storage.encrypt_utils import EncryptedJSON, decrypt_value, encrypt_value
+
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
 if TYPE_CHECKING:
     from storage.api_key import ApiKey
@@ -64,11 +65,35 @@ class Org(Base):
     max_budget_per_task: Mapped[float | None] = mapped_column(nullable=True)
     v1_enabled: Mapped[bool | None] = mapped_column(nullable=True)
     conversation_expiration: Mapped[int | None] = mapped_column(nullable=True)
+    # Source of truth for BYOR/OpenHands LLM key export entitlement.
+    # Set by completed billing sessions or when positive org credits are detected.
     byor_export_enabled: Mapped[bool] = mapped_column(nullable=False, default=False)
     sandbox_grouping_strategy: Mapped[str | None] = mapped_column(String, nullable=True)
     # Encrypted column for LLM profiles (contains API keys)
     llm_profiles: Mapped[dict[str, Any] | None] = mapped_column(
         EncryptedJSON, nullable=True
+    )
+    # Encrypted column for agent profiles. Mirrors llm_profiles: the column is
+    # the at-rest encryption boundary, so secret-bearing skills[].mcp_tools ride
+    # in cleartext inside the encrypted blob. Envelope is
+    # ``{profiles: {<id>: AgentProfile}, active: <id> | null}`` (see AgentProfiles).
+    agent_profiles: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
+    # Marks the bootstrapped default org on OHE installs; a partial unique
+    # index allows at most one default org per install.
+    is_default: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # Marketplace registrations at org level for plugin resolution
+    # Composable with instance defaults and user personal marketplaces
+    registered_marketplaces: Mapped[
+        list[dict[str, Any] | MarketplaceRegistration] | None
+    ] = mapped_column(JSON, nullable=True)
+    # Timestamp for optimistic locking - tracks last modification
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        nullable=False,
     )
 
     # Relationships

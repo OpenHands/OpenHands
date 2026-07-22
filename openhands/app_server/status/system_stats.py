@@ -7,12 +7,22 @@
 # Tag: Legacy-V0
 """Utilities for getting system resource statistics."""
 
+import importlib.metadata
 import time
 
 import psutil
 
+from openhands.app_server.version import get_version
+
 _start_time = time.time()
 _last_execution_time = time.time()
+
+
+def get_sdk_version() -> str:
+    try:
+        return importlib.metadata.version('openhands-sdk')
+    except importlib.metadata.PackageNotFoundError:
+        return 'unknown'
 
 
 def get_system_info() -> dict[str, object]:
@@ -22,6 +32,8 @@ def get_system_info() -> dict[str, object]:
     return {
         'uptime': uptime,
         'idle_time': idle_time,
+        'app_version': get_version(),
+        'sdk_version': get_sdk_version(),
         'resources': get_system_stats(),
     }
 

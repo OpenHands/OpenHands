@@ -4,9 +4,18 @@ import asyncio
 import importlib
 import logging
 import pkgutil
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from jwt import InvalidTokenError
 from pydantic import SecretStr
@@ -14,10 +23,12 @@ from pydantic import SecretStr
 from openhands import tools  # type: ignore[attr-defined]
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.app_server import shared
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    ACP_SERVER_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -33,11 +44,18 @@ from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.errors import AuthError
 from openhands.app_server.event.event_service import EventService
 from openhands.app_server.event_callback.event_callback_models import EventCallback
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResultStatus,
+)
 from openhands.app_server.event_callback.set_title_callback_processor import (
     SetTitleCallbackProcessor,
 )
+from openhands.app_server.event_callback.sql_event_callback_service import (
+    StoredEventCallbackResult,
+    invoke_callback,
+)
 from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.user.auth_user_context import AuthUserContext
@@ -52,6 +70,8 @@ from openhands.app_server.user_auth.user_auth import (
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
+from openhands.sdk.settings import ACPAgentSettings
+from openhands.sdk.settings.acp_providers import detect_acp_provider_by_command
 from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
@@ -232,8 +252,8 @@ async def valid_sandbox(
     session_api_key: str = Depends(
         APIKeyHeader(name='X-Session-API-Key', auto_error=False)
     ),
-) -> SandboxInfo:
-    """Use a session api key for validation, and get a sandbox. Subsequent actions
+) -> SandboxRecord:
+    """Use a session api key for validation, and get a sandbox record. Subsequent actions
     are executed in the context of the owner of the sandbox"""
     if not session_api_key:
         raise HTTPException(
@@ -246,36 +266,36 @@ async def valid_sandbox(
     # Since we need access to all sandboxes, this is executed in the context of the admin.
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
     async with get_sandbox_service(state) as sandbox_service:
-        sandbox_info = await sandbox_service.get_sandbox_by_session_api_key(
+        sandbox_record = await sandbox_service.get_sandbox_record_by_session_api_key(
             session_api_key
         )
-        if sandbox_info is None:
+        if sandbox_record is None:
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
             )
 
         # In SAAS Mode there is always a user, so we set the owner of the sandbox
         # as the current user (Validated by the session_api_key they provided)
-        if sandbox_info.created_by_user_id:
+        if sandbox_record.created_by_user_id:
             setattr(
                 request.state,
                 USER_CONTEXT_ATTR,
-                SpecifyUserContext(sandbox_info.created_by_user_id),
+                SpecifyUserContext(sandbox_record.created_by_user_id),
             )
         elif app_mode == AppMode.SAAS:
             _logger.error(
-                'Sandbox had no user specified', extra={'sandbox_id': sandbox_info.id}
+                'Sandbox had no user specified', extra={'sandbox_id': sandbox_record.id}
             )
             raise HTTPException(
                 status.HTTP_401_UNAUTHORIZED, detail='Sandbox had no user specified'
             )
 
-        return sandbox_info
+        return sandbox_record
 
 
 async def valid_conversation(
     conversation_id: UUID,
-    sandbox_info: SandboxInfo = Depends(valid_sandbox),
+    sandbox_record: SandboxRecord = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
     app_conversation_info = (
@@ -285,21 +305,50 @@ async def valid_conversation(
         # Conversation does not yet exist - create a stub
         return AppConversationInfo(
             id=conversation_id,
-            sandbox_id=sandbox_info.id,
-            created_by_user_id=sandbox_info.created_by_user_id,
+            sandbox_id=sandbox_record.id,
+            created_by_user_id=sandbox_record.created_by_user_id,
         )
 
     # Sanity check - Make sure that the conversation and sandbox were created by the same user
-    if app_conversation_info.created_by_user_id != sandbox_info.created_by_user_id:
+    if app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id:
         raise AuthError()
 
     return app_conversation_info
 
 
+async def _resolve_acp_server_key(agent: Any, user_id: str | None) -> str | None:
+    """Resolve the ACP provider key for a conversation whose tag is not yet set.
+
+    Prefer the conversation's own launch command (``ACPAgent.acp_command``): it
+    is authoritative for the agent that is actually running and matched against
+    the SDK registry by ``detect_acp_provider_by_command``. Only fall back to the
+    user's saved settings when the command is unknown (a custom server) or absent
+    (older agent payloads) — the global setting can have drifted to a different
+    provider since this conversation was created, so it must not win over the
+    conversation's own command.
+    """
+    command = getattr(agent, 'acp_command', None)
+    if command:
+        provider = detect_acp_provider_by_command(command)
+        if provider is not None:
+            return provider.key
+    try:
+        settings_store = await shared.SettingsStoreImpl.get_instance(user_id)
+        settings = await settings_store.load() if settings_store else None
+        agent_settings = getattr(settings, 'agent_settings', None)
+        if isinstance(agent_settings, ACPAgentSettings):
+            return agent_settings.acp_server
+    except Exception:
+        _logger.warning(
+            'Failed to resolve ACP server key for user %s', user_id, exc_info=True
+        )
+    return None
+
+
 @router.post('/conversations')
 async def on_conversation_update(
     conversation_info: ConversationInfo,
-    sandbox_info: SandboxInfo = Depends(valid_sandbox),
+    sandbox_record: SandboxRecord = Depends(valid_sandbox),
     app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> Success:
     """Webhook callback for when a conversation starts, pauses, resumes, or deletes.
@@ -309,7 +358,7 @@ async def on_conversation_update(
     accepted on this single endpoint.
     """
     existing = await valid_conversation(
-        conversation_info.id, sandbox_info, app_conversation_info_service
+        conversation_info.id, sandbox_record, app_conversation_info_service
     )
 
     # If the conversation is being deleted, no action is required...
@@ -329,19 +378,30 @@ async def on_conversation_update(
         existing.trigger,
         merged_tags,
         conversation_id=str(conversation_info.id),
-        sandbox_id=sandbox_info.id,
+        sandbox_id=sandbox_record.id,
     )
 
-    # Trust the discriminated-union payload over any stored ``agent_kind``
-    # on ``existing``: a webhook is always authoritative for the agent
-    # currently running, and a drifted row (e.g. mid-migration data) must
-    # not lock us into the wrong branch. Branch on the ``agent_kind``
-    # discriminator (an ``AgentBase`` property) so we don't import a
-    # concrete SDK subclass just to do a kind check.
     agent = conversation_info.agent
     if agent.agent_kind == 'acp':
         agent_kind = 'acp'
-        llm_model = None
+        # Prefer the model the ACP server is actually running
+        # (``current_model_id`` is reconciled from the live session response, so
+        # it survives a provider-side remap, e.g. gemini flash). Fall back to the
+        # requested ``acp_model``, then to the last-persisted value so a payload
+        # that hasn't reported a live model yet doesn't wipe a user-set model.
+        llm_model = (
+            conversation_info.current_model_id
+            or getattr(agent, 'acp_model', None)
+            or existing.llm_model
+        )
+        # Re-derive provider key if not in tags (race with creation, or a
+        # conversation created directly on the agent-server).
+        if ACP_SERVER_TAG_KEY not in merged_tags:
+            acp_server_key = await _resolve_acp_server_key(
+                agent, sandbox_record.created_by_user_id
+            )
+            if acp_server_key:
+                merged_tags[ACP_SERVER_TAG_KEY] = acp_server_key
     else:
         # ``AgentBase.llm: LLM`` is non-optional on both arms of the union.
         agent_kind = 'openhands'
@@ -350,8 +410,8 @@ async def on_conversation_update(
     app_conversation_info = AppConversationInfo(
         id=conversation_info.id,
         title=existing.title or f'Conversation {conversation_info.id.hex}',
-        sandbox_id=sandbox_info.id,
-        created_by_user_id=sandbox_info.created_by_user_id,
+        sandbox_id=sandbox_record.id,
+        created_by_user_id=sandbox_record.created_by_user_id,
         llm_model=llm_model,
         agent_kind=agent_kind,
         # Git parameters
@@ -378,7 +438,7 @@ async def on_conversation_update(
         setattr(
             state,
             USER_CONTEXT_ATTR,
-            SpecifyUserContext(sandbox_info.created_by_user_id),
+            SpecifyUserContext(sandbox_record.created_by_user_id),
         )
         async with get_event_callback_service(state) as event_callback_service:
             await event_callback_service.save_event_callback(
@@ -391,8 +451,8 @@ async def on_conversation_update(
 
     # Analytics: conversation created
     analytics = get_analytics_service()
-    if analytics and sandbox_info.created_by_user_id:
-        ctx = await resolve_analytics_context(sandbox_info.created_by_user_id)
+    if analytics and sandbox_record.created_by_user_id:
+        ctx = await resolve_analytics_context(sandbox_record.created_by_user_id)
         analytics.track_conversation_created(
             ctx=ctx,
             conversation_id=str(conversation_info.id),
@@ -407,6 +467,7 @@ async def on_conversation_update(
 
 @router.post('/events/{conversation_id}')
 async def on_event(
+    background_tasks: BackgroundTasks,
     events: list[Event],
     conversation_id: UUID,
     app_conversation_info: AppConversationInfo = Depends(valid_conversation),
@@ -451,6 +512,7 @@ async def on_event(
                 await app_conversation_info_service.save_app_conversation_info(info)
 
         # Analytics: conversation terminal state detection
+        # Also persist execution status to database for dashboard queries
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
@@ -458,23 +520,36 @@ async def on_event(
                 continue
             try:
                 exec_status = ConversationExecutionStatus(event.value)
+                # Persist execution status for org-wide dashboard
+                await app_conversation_info_service.update_execution_status(
+                    conversation_id, exec_status.value
+                )
                 if exec_status.is_terminal():
                     await _track_conversation_terminal(
                         conversation_id, app_conversation_info, events, exec_status
                     )
             except Exception:
-                _logger.exception('analytics:conversation_terminal:failed')
+                _logger.exception(
+                    'analytics:conversation_terminal:failed', stack_info=True
+                )
 
-        asyncio.create_task(
-            _run_callbacks_in_bg_and_close(
-                conversation_id, app_conversation_info.created_by_user_id, events
-            )
+        background_tasks.add_task(
+            _run_callbacks_in_bg_and_close,
+            conversation_id,
+            app_conversation_info.created_by_user_id,
+            events,
         )
 
     except Exception:
         _logger.exception('Error in webhook', stack_info=True)
 
     return Success()
+
+
+async def _resolve_user_context(user_id: str | None) -> AuthUserContext:
+    """Resolve a UserContext from a user_id, falling back to DefaultUserAuth in OSS mode."""
+    user_auth = await get_user_auth_for_user(user_id) if user_id else DefaultUserAuth()
+    return AuthUserContext(user_auth=user_auth)
 
 
 @router.get('/secrets')
@@ -485,20 +560,14 @@ async def get_secret(
     """Given an access token, retrieve a user secret. The access token
     is limited by user and provider type, and may include a timeout, limiting
     the damage in the event that a token is ever leaked"""
+    if not access_token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED)
     try:
         payload = jwt_service.verify_jws_token(access_token)
         user_id = payload['user_id']
         provider_type = ProviderType(payload['provider_type'])
 
-        # Get UserAuth for the user_id
-        if user_id:
-            user_auth = await get_user_auth_for_user(user_id)
-        else:
-            # OpenHands (OSS mode) - use default user auth
-            user_auth = DefaultUserAuth()
-
-        # Create UserContext directly
-        user_context = AuthUserContext(user_auth=user_auth)
+        user_context = await _resolve_user_context(user_id)
 
         secret = await user_context.get_latest_token(provider_type)
         if secret is None:
@@ -518,14 +587,46 @@ async def _run_callbacks_in_bg_and_close(
     user_id: str | None,
     events: list[Event],
 ):
-    """Run all callbacks and close the session"""
+    """Run all active callbacks for the given events.
+
+    The ``SQLEventCallbackService`` opens its own short-lived ``AsyncSession``
+    per method call, so the SQLAlchemy pool connection is only checked out for
+    the SELECT (in :meth:`get_active_callbacks`) and the COMMIT (in
+    :meth:`persist_callback_results`). The slow callback processors run with
+    **no** connection held — which is what stops webhook bursts from
+    exhausting the 25+10 pool and starving subsequent ``asyncpg.connect``
+    attempts.
+    """
     state = InjectorState()
     setattr(state, USER_CONTEXT_ATTR, SpecifyUserContext(user_id=user_id))
 
-    async with get_event_callback_service(state) as event_callback_service:
-        # We don't use asynio.gather here because callbacks must be run in sequence.
+    async with get_event_callback_service(state) as service:
         for event in events:
-            await event_callback_service.execute_callbacks(conversation_id, event)
+            callbacks = await service.get_active_callbacks(conversation_id, event)
+            if not callbacks:
+                continue
+            outcomes = await asyncio.gather(
+                *[invoke_callback(cb, conversation_id, event) for cb in callbacks],
+                return_exceptions=True,
+            )
+            normalised: list[StoredEventCallbackResult | None] = []
+            for callback, outcome in zip(callbacks, outcomes, strict=False):
+                if isinstance(outcome, BaseException):
+                    _logger.exception(
+                        f'Exception in callback {callback.id}', stack_info=True
+                    )
+                    normalised.append(
+                        StoredEventCallbackResult(
+                            status=EventCallbackResultStatus.ERROR,
+                            event_callback_id=callback.id,
+                            event_id=event.id,
+                            conversation_id=conversation_id,
+                            detail=str(outcome),
+                        )
+                    )
+                else:
+                    normalised.append(outcome)
+            await service.persist_callback_results(callbacks, normalised)
 
 
 def _import_all_tools():
@@ -534,8 +635,11 @@ def _import_all_tools():
         if is_pkg:  # Check if it's a subpackage
             try:
                 importlib.import_module(name)
-            except ImportError as e:
-                _logger.error(f"Warning: Could not import subpackage '{name}': {e}")
+            except ImportError:
+                _logger.exception(
+                    f"Warning: Could not import subpackage '{name}'",
+                    stack_info=True,
+                )
 
 
 _import_all_tools()

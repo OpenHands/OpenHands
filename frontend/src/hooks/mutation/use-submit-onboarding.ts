@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 type SubmitOnboardingArgs = {
   selections: Record<string, string | string[]>;
@@ -45,8 +46,7 @@ export const useSubmitOnboarding = () => {
         // For external URLs, redirect using window.location
         window.location.href = finalRedirectUrl;
       } else {
-        // For internal routes, use navigate
-        navigate(finalRedirectUrl);
+        navigateOrHardRedirect(navigate, finalRedirectUrl);
       }
     },
     onError: (error) => {

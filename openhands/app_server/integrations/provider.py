@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import cast
@@ -165,7 +166,7 @@ class ProviderHandler:
         )
 
     async def get_user(self) -> User:
-        """Get user information from the first available provider"""
+        """Get user information from the first available provider."""
         exceptions: list[tuple[ProviderType, Exception]] = []
         for provider in self.provider_tokens:
             try:
@@ -174,11 +175,21 @@ class ProviderHandler:
             except Exception as e:
                 exceptions.append((provider, e))
                 continue
+
         for provider, exc in exceptions:
             logger.warning(
                 f'Failed to get user from provider {provider}: {exc}',
                 exc_info=(type(exc), exc, exc.__traceback__),
             )
+
+        # Only invalid provider credentials should surface as an authentication
+        # failure. Transient upstream/provider errors (for example GitHub 5xx or
+        # timeouts) must not become 401s, because the web client treats a 401
+        # from /users/git-info as a signal to log out the browser session.
+        for _, exc in exceptions:
+            if not isinstance(exc, AuthenticationError):
+                raise exc
+
         raise AuthenticationError('Need valid provider token')
 
     async def _get_latest_provider_token(
@@ -205,10 +216,10 @@ class ProviderHandler:
             data = TokenResponse.model_validate_json(resp.text)
             return SecretStr(data.token)
 
-        except Exception as e:
-            logger.error(
-                f'Failed to fetch latest token for provider {provider}: {e}',
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                f'Failed to fetch latest token for provider {provider}',
+                stack_info=True,
             )
 
         return None
@@ -451,7 +462,10 @@ class ProviderHandler:
             log_fn(
                 f'Failed to access repository {repository}: Unknown error (no providers tried, no errors recorded)'
             )
-        raise AuthenticationError(f'Unable to access repo {repository}')
+        # Keep the underlying provider error(s) in the message so callers can
+        # log why (e.g. 404 vs 401) instead of an opaque failure.
+        detail = f': {"; ".join(errors)}' if errors else ''
+        raise AuthenticationError(f'Unable to access repo {repository}{detail}')
 
     async def get_branches(
         self,
@@ -503,23 +517,45 @@ class ProviderHandler:
         )
 
     async def get_authenticated_git_url(
-        self, repo_name: str, is_optional: bool = False
+        self,
+        repo_name: str,
+        is_optional: bool = False,
+        specified_provider: ProviderType | None = None,
     ) -> str:
         """Get an authenticated git URL for a repository.
 
         Args:
             repo_name: Repository name (owner/repo)
             is_optional: If True, logs at debug level instead of error level when repo not found
+            specified_provider: If set, resolve only against this provider instead
+                of trying every token in turn (avoids a host-blind resolver
+                claiming a same-named repo on the wrong provider).
 
         Returns:
             Authenticated git URL if credentials are available, otherwise regular HTTPS URL
         """
-        try:
-            repository = await self.verify_repo_provider(
-                repo_name, is_optional=is_optional
-            )
-        except AuthenticationError:
-            raise Exception('Git provider authentication issue when getting remote URL')
+        if specified_provider is not None:
+            # Resolve against ONLY this provider — verify_repo_provider falls
+            # through to every token on failure, which would let a host-blind
+            # resolver claim a same-named repo on the wrong provider.
+            try:
+                service = self.get_service(specified_provider)
+                repository = await service.get_repository_details_from_repo_name(
+                    repo_name
+                )
+            except Exception:
+                raise Exception(
+                    'Git provider authentication issue when getting remote URL'
+                )
+        else:
+            try:
+                repository = await self.verify_repo_provider(
+                    repo_name, is_optional=is_optional
+                )
+            except AuthenticationError:
+                raise Exception(
+                    'Git provider authentication issue when getting remote URL'
+                )
 
         provider = repository.git_provider
         repo_name = repository.full_name
@@ -552,9 +588,10 @@ class ProviderHandler:
         if domain:
             domain = domain.strip()
             domain = domain.replace('https://', '').replace('http://', '')
-            # Remove any trailing path like /api/v3 or /api/v4
-            if '/' in domain:
-                domain = domain.split('/')[0]
+            # Strip a trailing API path (e.g. /api/v3) but preserve any subpath
+            # that is part of the repo URL (e.g. Forgejo under myserver/forgejo).
+            domain = re.sub(r'/api/(?:v\d+|graphql)/?$', '', domain)
+            domain = domain.rstrip('/')
 
         # Try to use token if available, otherwise use public URL
         if self.provider_tokens and provider in self.provider_tokens:

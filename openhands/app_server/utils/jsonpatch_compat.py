@@ -4,7 +4,7 @@ from typing import Any
 
 # Keys that should be replaced wholesale (not deep merged) because they
 # represent sets of items where merging would resurrect deleted entries.
-WHOLESALE_REPLACEMENT_KEYS: frozenset[str] = frozenset({'mcp_config', 'acp_env'})
+WHOLESALE_REPLACEMENT_KEYS: frozenset[str] = frozenset({'mcp_config'})
 
 
 def deep_merge(
@@ -35,8 +35,8 @@ def deep_merge_with_wholesale_keys(
 ) -> dict[str, Any]:
     """Like deep_merge, but specified keys are replaced wholesale (not merged).
 
-    Useful for keys like 'mcp_config' and 'acp_env' where the dict represents
-    a set of items and deep merging would resurrect deleted items.
+    Useful for keys like 'mcp_config' where the dict represents a set of items
+    and deep merging would resurrect deleted items.
 
     Args:
         base: The base dictionary to merge into.

@@ -94,7 +94,9 @@ class AnalyticsService:
                 properties=merged,
             )
         except Exception:
-            logger.exception('AnalyticsService.capture failed for event=%s', event)
+            logger.exception(
+                'AnalyticsService.capture failed for event=%s', event, stack_info=True
+            )
 
     def set_person_properties(
         self,
@@ -116,7 +118,9 @@ class AnalyticsService:
                 properties=properties,
             )
         except Exception:
-            logger.exception('AnalyticsService.set_person_properties failed')
+            logger.exception(
+                'AnalyticsService.set_person_properties failed', stack_info=True
+            )
 
     def group_identify(
         self,
@@ -142,7 +146,7 @@ class AnalyticsService:
                 distinct_id=self._distinct_id(ctx.user_id),
             )
         except Exception:
-            logger.exception('AnalyticsService.group_identify failed')
+            logger.exception('AnalyticsService.group_identify failed', stack_info=True)
 
     # ------------------------------------------------------------------
     # Typed event methods
@@ -521,7 +525,7 @@ class AnalyticsService:
                         },
                     )
         except Exception:
-            logger.exception('AnalyticsService.identify_user failed')
+            logger.exception('AnalyticsService.identify_user failed', stack_info=True)
 
     def shutdown(self) -> None:
         """Flush and shut down the PostHog client.
@@ -531,7 +535,7 @@ class AnalyticsService:
         try:
             self._client.shutdown()
         except Exception:
-            logger.exception('AnalyticsService.shutdown failed')
+            logger.exception('AnalyticsService.shutdown failed', stack_info=True)
 
     # ------------------------------------------------------------------
     # Private helpers

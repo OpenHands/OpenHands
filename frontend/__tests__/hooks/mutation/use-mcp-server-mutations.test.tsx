@@ -6,6 +6,7 @@ import { useAddMcpServer } from "#/hooks/mutation/use-add-mcp-server";
 import { useDeleteMcpServer } from "#/hooks/mutation/use-delete-mcp-server";
 import { useUpdateMcpServer } from "#/hooks/mutation/use-update-mcp-server";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import type { Settings } from "#/types/settings";
 
 describe("MCP Server Mutation Hooks", () => {
   beforeEach(() => {
@@ -25,6 +26,11 @@ describe("MCP Server Mutation Hooks", () => {
     );
   };
 
+  // SDK 1.31.x dropped the ``mcpServers`` wrapper from ``model_dump``, so the
+  // settings endpoint now returns a flat server map. ``parseMcpConfig`` still
+  // accepts the legacy wrapped shape, and ``toSdkMcpConfig`` now emits the
+  // flat shape. Tests below cover both directions.
+
   describe("useAddMcpServer", () => {
     it("fetches fresh settings at mutation time", async () => {
       const getSettingsSpy = vi
@@ -32,9 +38,7 @@ describe("MCP Server Mutation Hooks", () => {
         .mockResolvedValue({
           agent_settings: {
             mcp_config: {
-              mcpServers: {
-                existing: { url: "https://existing.com", transport: "sse" },
-              },
+              existing: { url: "https://existing.com", transport: "sse" },
             },
           },
         } as any);
@@ -59,11 +63,53 @@ describe("MCP Server Mutation Hooks", () => {
       expect(getSettingsSpy).toHaveBeenCalledTimes(1);
       expect(saveSettingsSpy).toHaveBeenCalledWith({
         agent_settings_diff: {
+          mcp_config: expect.objectContaining({
+            existing: expect.objectContaining({ url: "https://existing.com" }),
+          }),
+        },
+      });
+      // Should not wrap in the legacy ``mcpServers`` envelope.
+      const savedConfig = (
+        saveSettingsSpy.mock.calls[0][0] as {
+          agent_settings_diff: { mcp_config: Record<string, unknown> };
+        }
+      ).agent_settings_diff.mcp_config;
+      expect(savedConfig).not.toHaveProperty("mcpServers");
+    });
+
+    it("also accepts the legacy wrapped shape on read", async () => {
+      // Backwards-compat: a server persisted before the SDK 1.31.x bump may
+      // still come back as ``{ mcpServers: {...} }`` if the value has not yet
+      // been rewritten by the backend. The frontend must still parse it.
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
           mcp_config: {
-            mcpServers: expect.objectContaining({
-              existing: expect.objectContaining({ url: "https://existing.com" }),
-            }),
+            mcpServers: {
+              existing: { url: "https://existing.com", transport: "sse" },
+            },
           },
+        },
+      } as any);
+
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+
+      const { result } = renderHook(() => useAddMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({ type: "sse", url: "https://new-server.com" });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      expect(saveSettingsSpy).toHaveBeenCalledWith({
+        agent_settings_diff: {
+          mcp_config: expect.objectContaining({
+            existing: expect.objectContaining({ url: "https://existing.com" }),
+          }),
         },
       });
     });
@@ -93,11 +139,9 @@ describe("MCP Server Mutation Hooks", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith({
         agent_settings_diff: {
           mcp_config: {
-            mcpServers: {
-              sse: {
-                url: "https://first-server.com",
-                transport: "sse",
-              },
+            sse: {
+              url: "https://first-server.com",
+              transport: "sse",
             },
           },
         },
@@ -128,11 +172,9 @@ describe("MCP Server Mutation Hooks", () => {
       expect(saveSettingsSpy).toHaveBeenCalledWith({
         agent_settings_diff: {
           mcp_config: {
-            mcpServers: {
-              sse: {
-                url: "https://server.com",
-                transport: "sse",
-              },
+            sse: {
+              url: "https://server.com",
+              transport: "sse",
             },
           },
         },
@@ -145,11 +187,9 @@ describe("MCP Server Mutation Hooks", () => {
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
         agent_settings: {
           mcp_config: {
-            mcpServers: {
-              server1: { url: "https://server1.com", transport: "sse" },
-              server2: { url: "https://server2.com", transport: "sse" },
-              server3: { url: "https://server3.com", transport: "sse" },
-            },
+            server1: { url: "https://server1.com", transport: "sse" },
+            server2: { url: "https://server2.com", transport: "sse" },
+            server3: { url: "https://server3.com", transport: "sse" },
           },
         },
       } as any);
@@ -171,11 +211,11 @@ describe("MCP Server Mutation Hooks", () => {
 
       const savedPayload = saveSettingsSpy.mock.calls[0][0] as {
         agent_settings_diff: {
-          mcp_config: { mcpServers: Record<string, unknown> } | null;
+          mcp_config: Record<string, unknown> | null;
         };
       };
       const savedConfig = savedPayload.agent_settings_diff.mcp_config;
-      const serverNames = Object.keys(savedConfig?.mcpServers ?? {});
+      const serverNames = Object.keys(savedConfig ?? {});
       expect(serverNames).toHaveLength(2);
     });
 
@@ -209,9 +249,7 @@ describe("MCP Server Mutation Hooks", () => {
       vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
         agent_settings: {
           mcp_config: {
-            mcpServers: {
-              myserver: { url: "https://old-url.com", transport: "sse" },
-            },
+            myserver: { url: "https://old-url.com", transport: "sse" },
           },
         },
       } as any);
@@ -239,14 +277,225 @@ describe("MCP Server Mutation Hooks", () => {
 
       const savedPayload = saveSettingsSpy.mock.calls[0][0] as {
         agent_settings_diff: {
-          mcp_config: { mcpServers: Record<string, { url: string }> };
+          mcp_config: Record<string, { url: string }>;
         };
       };
       const savedConfig = savedPayload.agent_settings_diff.mcp_config;
-      const serverUrls = Object.values(savedConfig.mcpServers).map(
-        (s) => s.url,
-      );
+      const serverUrls = Object.values(savedConfig).map((s) => s.url);
       expect(serverUrls).toContain("https://new-url.com");
+      expect(savedConfig).toHaveProperty("myserver");
+    });
+
+    it("removes a cleared SHTTP timeout", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              timeout: 45,
+            },
+          },
+        },
+      } as unknown as Settings);
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: { type: "shttp", url: "https://server.example.com" },
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const payload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { timeout?: number }>;
+        };
+      };
+      expect(
+        payload.agent_settings_diff.mcp_config.myserver,
+      ).not.toHaveProperty("timeout");
+    });
+
+    it("sends explicit null when removing remote auth", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              auth: { strategy: "bearer", value: "**********" },
+            },
+          },
+        },
+      } as unknown as Settings);
+
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: {
+          type: "shttp",
+          url: "https://server.example.com",
+        },
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      const savedPayload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { auth?: unknown }>;
+        };
+      };
+      const savedConfig = savedPayload.agent_settings_diff.mcp_config;
+      expect(savedConfig.myserver).toHaveProperty("auth", null);
+    });
+
+    it.each([
+      {
+        strategy: "basic",
+        username: "user",
+        password: "**********",
+      },
+      {
+        strategy: "header",
+        headers: { "X-API-Key": "**********" },
+      },
+      {
+        strategy: "oauth2",
+        state: { tokens: { access_token: "**********" } },
+      },
+    ])("preserves $strategy auth on unrelated edits", async (auth) => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              auth,
+            },
+          },
+        },
+      } as unknown as Settings);
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: {
+          type: "shttp",
+          url: "https://server.example.com",
+          timeout: 45,
+        },
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const payload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { auth?: unknown }>;
+        };
+      };
+      expect(payload.agent_settings_diff.mcp_config.myserver.auth).toEqual(
+        auth,
+      );
+    });
+
+    it("preserves custom API-key strategy and headers on edit", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              headers: { "X-Tenant": "**********" },
+              auth: {
+                strategy: "api_key",
+                value: "**********",
+                header_name: "X-API-Key",
+              },
+            },
+          },
+        },
+      } as unknown as Settings);
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: {
+          type: "shttp",
+          url: "https://server.example.com",
+          api_key: "**********",
+        },
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const payload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { auth?: unknown; headers?: unknown }>;
+        };
+      };
+      expect(payload.agent_settings_diff.mcp_config.myserver).toMatchObject({
+        headers: { "X-Tenant": "**********" },
+        auth: {
+          strategy: "api_key",
+          value: "**********",
+          header_name: "X-API-Key",
+        },
+      });
+    });
+
+    it("removes an Authorization header without clearing custom headers", async () => {
+      vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+        agent_settings: {
+          mcp_config: {
+            myserver: {
+              url: "https://server.example.com",
+              headers: {
+                Authorization: "Bearer **********",
+                "X-Tenant": "**********",
+              },
+            },
+          },
+        },
+      } as unknown as Settings);
+      const saveSettingsSpy = vi
+        .spyOn(SettingsService, "saveSettings")
+        .mockResolvedValue(true);
+      const { result } = renderHook(() => useUpdateMcpServer(), {
+        wrapper: createWrapper(),
+      });
+
+      result.current.mutate({
+        serverId: "shttp-0",
+        server: { type: "shttp", url: "https://server.example.com" },
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      const payload = saveSettingsSpy.mock.calls[0][0] as {
+        agent_settings_diff: {
+          mcp_config: Record<string, { auth?: unknown; headers?: unknown }>;
+        };
+      };
+      expect(payload.agent_settings_diff.mcp_config.myserver).toMatchObject({
+        auth: null,
+        headers: { "X-Tenant": "**********" },
+      });
     });
   });
 

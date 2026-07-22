@@ -71,8 +71,8 @@ def init_tavily_proxy() -> None:
         # Mount under 'tavily' namespace so tools are accessible as tavily_*
         mcp_server.mount(namespace='tavily', server=proxy_server)
         logger.info('Tavily MCP proxy initialized successfully')
-    except Exception as e:
-        logger.error(f'Failed to initialize Tavily MCP proxy: {e}')
+    except Exception:
+        logger.exception('Failed to initialize Tavily MCP proxy', stack_info=True)
 
 
 async def get_conversation_link(
@@ -207,7 +207,7 @@ async def create_pr(
 
     except Exception as e:
         error = f'Error creating pull request: {e}'
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from e
 
     return response
 
@@ -281,7 +281,7 @@ async def create_mr(
 
     except Exception as e:
         error = f'Error creating merge request: {e}'
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from e
 
     return response
 
@@ -347,8 +347,8 @@ async def create_bitbucket_pr(
 
     except Exception as e:
         error = f'Error creating pull request: {e}'
-        logger.error(error)
-        raise ToolError(str(error))
+        logger.exception(error, stack_info=True)
+        raise ToolError(str(error)) from e
 
     return response
 
@@ -414,8 +414,8 @@ async def create_bitbucket_data_center_pr(
 
     except Exception as e:
         error = f'Error creating pull request: {e}'
-        logger.error(error)
-        raise ToolError(str(error))
+        logger.exception(error, stack_info=True)
+        raise ToolError(str(error)) from e
 
     return response
 
@@ -481,7 +481,7 @@ async def create_azure_devops_pr(
 
     except Exception as e:
         error = f'Error creating pull request: {e}'
-        logger.error(error)
-        raise ToolError(str(error))
+        logger.exception(error, stack_info=True)
+        raise ToolError(str(error)) from e
 
     return response

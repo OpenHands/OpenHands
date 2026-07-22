@@ -10,6 +10,7 @@ from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     SandboxInfo,
     SandboxPage,
+    SandboxRecord,
     SandboxStatus,
 )
 from openhands.app_server.services.injector import Injector
@@ -46,6 +47,20 @@ class SandboxService(ABC):
         self, session_api_key: str
     ) -> SandboxInfo | None:
         """Get a single sandbox by session API key. Return None if the sandbox was not found."""
+
+    @abstractmethod
+    async def get_sandbox_record_by_session_api_key(
+        self, session_api_key: str
+    ) -> SandboxRecord | None:
+        """Get persisted sandbox identity by session API key without querying the runtime.
+
+        Returns only the fields stored in the app server's own database (id and
+        owner). Use this for authentication paths that do not need live status,
+        exposed URLs, or the plain-text session key — callers avoid a runtime
+        API round-trip.
+
+        Return None if no sandbox matches the key.
+        """
 
     async def batch_get_sandboxes(
         self, sandbox_ids: list[str]
@@ -182,8 +197,28 @@ class SandboxService(ABC):
     async def delete_sandbox(self, sandbox_id: str) -> bool:
         """Begin the process of deleting a sandbox (which may involve stopping it).
 
-        Return False if the sandbox did not exist.
+        Return False if the sandbox did not exist. Purely sandbox-scoped (stop the
+        runtime, delete the record); workspace capture is a separate
+        conversation-scoped step (``archive_conversation_workspace``) the
+        conversation-delete finalizer runs before the sandbox is torn down.
         """
+
+    async def archive_conversation_workspace(
+        self,
+        sandbox_id: str,
+        conversation_id: str | None = None,
+        workspace_path: str | None = None,
+    ) -> bool:
+        """Archive one conversation's workspace; return whether delete may proceed.
+
+        Default no-op (returns True) for backends that do not archive; overridden
+        by RemoteSandboxService. The conversation-delete finalizer calls this
+        before ``delete_sandbox`` so the workspace is captured while the runtime is
+        still up. ``workspace_path`` is the path pinned at creation. Returns False
+        only when archiving is REQUIRED and failed, so the caller leaves the
+        sandbox up for a later (idle-reap) capture.
+        """
+        return True
 
     async def pause_old_sandboxes(self, max_num_sandboxes: int) -> list[str]:
         """Pause the oldest sandboxes if there are more than max_num_sandboxes running.

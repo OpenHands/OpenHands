@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import BackgroundTasks
 from integrations.slack.slack_manager import (
+    SLACK_FORM_INTERACTION_KEY_PREFIX,
     SLACK_USER_MSG_EXPIRATION,
     SLACK_USER_MSG_KEY_PREFIX,
     SlackManager,
@@ -235,6 +236,62 @@ class TestRepoVerificationHandling:
             assert call_args.message['selected_repo'] is None
             assert call_args.message['message_ts'] == '1234567890.123456'
             assert call_args.message['thread_ts'] is None
+
+    @pytest.mark.asyncio
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
+    async def test_duplicate_no_repository_click_is_ignored(
+        self,
+        mock_get_redis_client_async,
+        slack_manager,
+    ):
+        """Test repeated "No Repository" clicks only process the first interaction."""
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(side_effect=[True, None])
+        stored_msg = json.dumps({'text': 'Hello, help me with code', 'user': 'U123'})
+        mock_redis.get = AsyncMock(return_value=stored_msg)
+        mock_get_redis_client_async.return_value = mock_redis
+
+        button_payload = {
+            'type': 'block_actions',
+            'actions': [
+                {
+                    'action_id': 'no_repository:1234567890.123456:None',
+                    'type': 'button',
+                    'value': '-',
+                }
+            ],
+            'user': {'id': 'U123'},
+            'container': {'channel_id': 'C123'},
+            'team': {'id': 'T123'},
+            'response_url': 'https://hooks.slack.com/actions/test',
+        }
+
+        with (
+            patch.object(
+                slack_manager, 'receive_message', new_callable=AsyncMock
+            ) as mock_receive,
+            patch.object(
+                slack_manager, '_replace_repo_selection_form', new_callable=AsyncMock
+            ) as mock_replace_form,
+        ):
+            await slack_manager.receive_form_interaction(button_payload)
+            await slack_manager.receive_form_interaction(button_payload)
+
+            mock_receive.assert_called_once()
+            mock_replace_form.assert_awaited_once_with(
+                'https://hooks.slack.com/actions/test', None
+            )
+
+        expected_claim_key = (
+            f'{SLACK_FORM_INTERACTION_KEY_PREFIX}:T123:C123:1234567890.123456:None'
+        )
+        mock_redis.set.assert_any_call(
+            expected_claim_key,
+            'processing',
+            ex=SLACK_USER_MSG_EXPIRATION,
+            nx=True,
+        )
+        mock_redis.get.assert_called_once()
 
     @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')

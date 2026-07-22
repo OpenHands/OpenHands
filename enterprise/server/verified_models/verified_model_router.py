@@ -78,7 +78,7 @@ async def create_verified_model(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(ex),
-        )
+        ) from ex
 
 
 @api_router.put('/{provider}/{model_name:path}')
@@ -124,7 +124,7 @@ async def delete_verified_model(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(ex),
-        )
+        ) from ex
 
 
 class SaaSLLMModelService(DefaultLLMModelService):

@@ -22,12 +22,14 @@ from openhands.app_server.app_conversation.app_conversation_service import (
     AppConversationService,
 )
 from openhands.app_server.app_conversation.skill_loader import (
-    build_org_config,
+    authenticate_marketplace_sources,
+    build_org_configs,
     build_sandbox_config,
     load_skills_from_agent_server,
 )
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.sandbox.sandbox_models import SandboxInfo
+from openhands.app_server.settings.settings_models import MarketplaceRegistration
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.auth import looks_like_jwt
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
@@ -46,6 +48,7 @@ from openhands.sdk.skills import Skill
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 _logger = logging.getLogger(__name__)
+
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
 PRE_COMMIT_LOCAL = '.git/hooks/pre-commit.local'
 
@@ -100,6 +103,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         selected_repository: str | None,
         project_dir: str,
         agent_server_url: str,
+        registered_marketplaces: list[MarketplaceRegistration] | None = None,
     ) -> list[Skill]:
         """Load skills from all sources via the agent-server.
 
@@ -110,12 +114,16 @@ class AppConversationServiceBase(AppConversationService, ABC):
         - Organization skills (from {org}/.openhands repo)
         - Project/repo skills (from repo .agents/skills/, .openhands/microagents/, and legacy .openhands/skills/)
         - Sandbox skills (from exposed URLs)
+        - Registered marketplaces (from user settings)
 
         Args:
             sandbox: SandboxInfo containing exposed URLs and agent-server URL
             selected_repository: Repository name or None
             project_dir: Project root directory (resolved via get_project_dir).
             agent_server_url: Agent-server URL (required)
+            registered_marketplaces: Optional list of MarketplaceRegistration objects
+                from user settings. Marketplaces with auto_load=True will have
+                their plugins loaded automatically.
 
         Returns:
             List of merged Skill objects from all sources, or empty list on failure
@@ -127,23 +135,33 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 _logger.warning('No agent-server URL available, cannot load skills')
                 return []
 
-            # Build org config (authentication handled by app-server)
-            org_config = await build_org_config(selected_repository, self.user_context)
+            # Build org configs (authentication handled by app-server)
+            org_configs = await build_org_configs(
+                selected_repository, self.user_context
+            )
 
             # Build sandbox config (exposed URLs)
             sandbox_config = build_sandbox_config(sandbox)
+
+            # Swap marketplace sources for authenticated git URLs so the
+            # agent-server can clone private marketplace repos. Never raises;
+            # unresolvable sources pass through unchanged.
+            registered_marketplaces = await authenticate_marketplace_sources(
+                registered_marketplaces, self.user_context
+            )
 
             # Single API call to agent-server for ALL skills
             all_skills = await load_skills_from_agent_server(
                 agent_server_url=agent_server_url,
                 session_api_key=sandbox.session_api_key,
                 project_dir=project_dir,
-                org_config=org_config,
+                org_configs=org_configs,
                 sandbox_config=sandbox_config,
                 load_public=True,
                 load_user=True,
                 load_project=True,
                 load_org=True,
+                registered_marketplaces=registered_marketplaces,
             )
 
             _logger.info(
@@ -213,6 +231,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         selected_repository: str | None,
         project_dir: str,
         disabled_skills: list[str] | None = None,
+        registered_marketplaces: list[MarketplaceRegistration] | None = None,
     ):
         """Load all skills and update agent with them.
 
@@ -222,6 +241,8 @@ class AppConversationServiceBase(AppConversationService, ABC):
             selected_repository: Repository name or None (used for org config)
             project_dir: Project root directory (already resolved via get_project_dir).
             disabled_skills: Optional list of skill names to exclude
+            registered_marketplaces: Optional composed marketplaces (instance +
+                org + user) whose auto_load plugins the agent-server should load.
 
         Returns:
             Updated agent with skills loaded into context
@@ -232,6 +253,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             selected_repository,
             project_dir,
             agent_server_url,
+            registered_marketplaces=registered_marketplaces,
         )
 
         # Filter out disabled skills
@@ -250,6 +272,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
         sandbox: SandboxInfo,
         workspace: AsyncRemoteWorkspace,
         agent_server_url: str,
+        conversation_id: UUID,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         task.status = AppConversationStartTaskStatus.PREPARING_REPOSITORY
         yield task
@@ -349,6 +372,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
                 _logger.info('Not initializing a new git repository.')
             return
 
+        user_info = await self.user_context.get_user_info()
         remote_repo_url: str = await self.user_context.get_authenticated_git_url(
             request.selected_repository
         )
@@ -364,17 +388,29 @@ class AppConversationServiceBase(AppConversationService, ABC):
             remote_repo_url,
         )
 
+        if request.selected_branch:
+            ensure_valid_git_branch_name(request.selected_branch)
+
+        full_clone = bool(getattr(user_info, 'git_full_clone', False))
+        clone_flags = ''
+        if not full_clone:
+            clone_flags = ' --depth 1'
+            if request.selected_branch:
+                clone_flags += f' --branch {shlex.quote(request.selected_branch)}'
+
         # Clone the repo - this is the slow part!
         if azure_devops_bearer_token:
             auth_header = shlex.quote(
                 f'Authorization: Bearer {azure_devops_bearer_token}'
             )
             clone_command = (
-                f'git -c http.extraheader={auth_header} clone '
+                f'git -c http.extraheader={auth_header} clone{clone_flags} '
                 f'{quoted_remote_repo_url} {quoted_dir_name}'
             )
         else:
-            clone_command = f'git clone {quoted_remote_repo_url} {quoted_dir_name}'
+            clone_command = (
+                f'git clone{clone_flags} {quoted_remote_repo_url} {quoted_dir_name}'
+            )
         result = await workspace.execute_command(
             clone_command, workspace.working_dir, 120
         )
@@ -390,7 +426,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         # Checkout the appropriate branch
         if request.selected_branch:
-            ensure_valid_git_branch_name(request.selected_branch)
+            # Needed for full clones; harmless no-op after shallow clones with --branch.
             checkout_command = f'git checkout {shlex.quote(request.selected_branch)}'
         else:
             # Generate a random branch name to avoid conflicts

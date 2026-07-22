@@ -17,6 +17,9 @@ import { useLinkIntegration } from "#/hooks/mutation/use-link-integration";
 import { useUnlinkIntegration } from "#/hooks/mutation/use-unlink-integration";
 import { useUpdateJiraDcWorkspaceStatus } from "#/hooks/mutation/use-update-jira-dc-workspace-status";
 import { useValidateIntegration } from "#/hooks/mutation/use-validate-integration";
+import { useMe } from "#/hooks/query/use-me";
+import { usePermission } from "#/hooks/organizations/use-permissions";
+import { useJiraDcInstanceStatus } from "#/hooks/query/use-jira-dc-instance-status";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { CopyableValue, generateWebhookSecret } from "./configure-modal";
 
@@ -69,6 +72,24 @@ export function JiraDcIntegrationPanel() {
   const isActiveIntegration = existingWorkspace
     ? existingWorkspace.status === "active"
     : integrationData?.status === "active";
+
+  // Setting up the connection is admin/owner-only; members just link their own
+  // account. (In personal-org mode everyone is an owner, but that path is OAuth
+  // -- jira_dc_oauth_host set -- and never routes through the setup form.)
+  const { data: me } = useMe();
+  const { hasPermission } = usePermission(me?.role ?? "member");
+  const canConfigure = hasPermission("manage_integration_providers");
+
+  // A member (email mode, not linked) needs to know whether the connection is
+  // set up (and its host) to show "link your account" vs "ask an admin".
+  const memberNeedsStatus =
+    !existingWorkspace && !jiraDcOAuthHost && !canConfigure;
+  const { data: jiraDcInstanceStatus } =
+    useJiraDcInstanceStatus(memberNeedsStatus);
+  const memberStatusReady =
+    memberNeedsStatus && jiraDcInstanceStatus !== undefined;
+  const instanceConfigured = jiraDcInstanceStatus?.configured ?? false;
+  const instanceHost = jiraDcInstanceStatus?.host ?? null;
 
   const configureMutation = useConfigureIntegration("jira-dc", {
     onSettled: () => {},
@@ -181,11 +202,10 @@ export function JiraDcIntegrationPanel() {
     statusMutation.isPending;
 
   const handleInitialAction = () => {
+    // OAuth mode only: the Connect button starts the per-user OAuth link.
     if (jiraDcOAuthHost) {
       validateMutation.mutate(jiraDcOAuthHost);
-      return;
     }
-    openEdit();
   };
 
   const handleEmailChange = (value: string) => {
@@ -567,13 +587,81 @@ export function JiraDcIntegrationPanel() {
     </div>
   );
 
+  // Entry action for a not-yet-linked user. OAuth mode -> Connect your own
+  // account. Email mode -> members do nothing (they auto-link on their first
+  // @openhands mention, and must never see the admin setup form -- FDE-87);
+  // admins set up / manage the connection, with a note on live Jira queries.
+  const renderEntryAction = () => {
+    if (jiraDcOAuthHost) {
+      return (
+        <div>
+          <BrandButton
+            variant="primary"
+            onClick={handleInitialAction}
+            testId="jira-dc-connect-button"
+            type="button"
+            isDisabled={isBusy}
+          >
+            {t(I18nKey.PROJECT_MANAGEMENT$CONNECT_BUTTON_LABEL)}
+          </BrandButton>
+        </div>
+      );
+    }
+    if (!canConfigure) {
+      // Member, email mode. Set up -> a bare "Link account" button (the subtitle
+      // carries the prompt). Not set up / still loading -> nothing (the subtitle
+      // says "ask an admin"); never the admin setup form (FDE-87).
+      if (instanceConfigured) {
+        return (
+          <div>
+            <BrandButton
+              variant="primary"
+              type="button"
+              onClick={() => instanceHost && linkMutation.mutate(instanceHost)}
+              testId="jira-dc-link-button"
+              isDisabled={isBusy}
+            >
+              {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_LINK_BUTTON_LABEL)}
+            </BrandButton>
+          </div>
+        );
+      }
+      return null;
+    }
+    return (
+      <div>
+        <BrandButton
+          variant="primary"
+          onClick={openEdit}
+          testId="jira-dc-configure-button"
+          type="button"
+          isDisabled={isBusy}
+        >
+          {t(I18nKey.PROJECT_MANAGEMENT$CONFIGURE_BUTTON_LABEL)}
+        </BrandButton>
+      </div>
+    );
+  };
+
+  // Subtitle is state-aware for the not-linked entry: a member sees the link/
+  // ask-admin prompt in place of the generic line; an email-mode admin sees the
+  // generic line plus the live-query note (folded in, no separate box).
+  let subtitleKey = I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PANEL_SUBTITLE;
+  if (memberStatusReady) {
+    subtitleKey = instanceConfigured
+      ? I18nKey.PROJECT_MANAGEMENT$JIRA_DC_MEMBER_LINK_PROMPT
+      : I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ASK_ADMIN;
+  } else if (canConfigure && !jiraDcOAuthHost) {
+    subtitleKey = I18nKey.PROJECT_MANAGEMENT$JIRA_DC_ADMIN_SUBTITLE;
+  }
+
   return (
     <div className="flex flex-col gap-4" data-testid="jira-dc-panel">
       <Typography.H3 className="text-lg font-medium text-white">
         {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PLATFORM_NAME)}
       </Typography.H3>
       <Typography.Text className="text-sm text-gray-400">
-        {t(I18nKey.PROJECT_MANAGEMENT$JIRA_DC_PANEL_SUBTITLE)}
+        {t(subtitleKey)}
       </Typography.Text>
 
       {existingWorkspace ? (
@@ -679,21 +767,7 @@ export function JiraDcIntegrationPanel() {
           </table>
         </div>
       ) : (
-        <div>
-          <BrandButton
-            variant="primary"
-            onClick={handleInitialAction}
-            testId="jira-dc-configure-button"
-            type="button"
-            isDisabled={isBusy}
-          >
-            {t(
-              jiraDcOAuthHost
-                ? I18nKey.PROJECT_MANAGEMENT$CONNECT_BUTTON_LABEL
-                : I18nKey.PROJECT_MANAGEMENT$CONFIGURE_BUTTON_LABEL,
-            )}
-          </BrandButton>
-        </div>
+        renderEntryAction()
       )}
 
       {modalView === "edit" && (
