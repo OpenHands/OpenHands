@@ -52,6 +52,7 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { isBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 import useMetricsStore from "#/stores/metrics-store";
+import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 import { setConversationState } from "#/utils/conversation-local-storage";
@@ -161,25 +162,25 @@ export function ConversationWebSocketProvider({
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
     (event: ConversationStateUpdateEventStats) => {
-      if (event.value.usage_to_metrics?.agent) {
-        const agentMetrics = event.value.usage_to_metrics.agent;
+      const usageToMetrics = event.value.usage_to_metrics;
+      if (usageToMetrics && Object.keys(usageToMetrics).length > 0) {
+        // Sum every usage bucket: switched-in LLMs ("profile:*"), ACP
+        // ("acp-managed") and the condenser accrue outside "agent".
+        const combined = combineUsageMetrics(usageToMetrics);
         const metrics = {
-          cost: agentMetrics.accumulated_cost,
-          max_budget_per_task: agentMetrics.max_budget_per_task ?? null,
-          usage: agentMetrics.accumulated_token_usage
+          cost: combined.accumulated_cost ?? 0,
+          max_budget_per_task: combined.max_budget_per_task,
+          usage: combined.accumulated_token_usage
             ? {
-                prompt_tokens:
-                  agentMetrics.accumulated_token_usage.prompt_tokens,
+                prompt_tokens: combined.accumulated_token_usage.prompt_tokens,
                 completion_tokens:
-                  agentMetrics.accumulated_token_usage.completion_tokens,
+                  combined.accumulated_token_usage.completion_tokens,
                 cache_read_tokens:
-                  agentMetrics.accumulated_token_usage.cache_read_tokens,
+                  combined.accumulated_token_usage.cache_read_tokens,
                 cache_write_tokens:
-                  agentMetrics.accumulated_token_usage.cache_write_tokens,
-                context_window:
-                  agentMetrics.accumulated_token_usage.context_window,
-                per_turn_token:
-                  agentMetrics.accumulated_token_usage.per_turn_token,
+                  combined.accumulated_token_usage.cache_write_tokens,
+                context_window: combined.accumulated_token_usage.context_window,
+                per_turn_token: combined.accumulated_token_usage.per_turn_token,
               }
             : null,
         };

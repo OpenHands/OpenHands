@@ -4,29 +4,34 @@ import type {
   V1TokenUsage,
 } from "#/api/conversation-service/v1-conversation-service.types";
 
+interface CombinableTokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  context_window: number;
+  per_turn_token: number;
+}
+
+interface CombinableMetrics {
+  accumulated_cost: number;
+  max_budget_per_task: number | null;
+  accumulated_token_usage?: CombinableTokenUsage | null;
+}
+
 /**
- * TypeScript equivalent of the get_combined_metrics method from the Python SDK
- * Combines metrics from all LLM usage IDs in the conversation stats
+ * Combines metrics across every usage bucket (agent, condenser, profile:*,
+ * acp-managed, ...). Reading a single bucket under-reports whenever spend
+ * accrues outside "agent".
  */
-export function getCombinedMetrics(
-  conversationInfo: V1RuntimeConversationInfo,
+export function combineUsageMetrics(
+  usageToMetrics: Record<string, CombinableMetrics>,
 ): V1MetricsSnapshot {
-  const { stats } = conversationInfo;
-
-  if (!stats?.usage_to_metrics) {
-    return {
-      accumulated_cost: 0,
-      max_budget_per_task: null,
-      accumulated_token_usage: null,
-    };
-  }
-
   let totalCost = 0;
   let maxBudgetPerTask: number | null = null;
   let combinedTokenUsage: V1TokenUsage | null = null;
 
-  // Iterate through all metrics and combine them
-  for (const metrics of Object.values(stats.usage_to_metrics)) {
+  for (const metrics of Object.values(usageToMetrics)) {
     // Add up costs
     totalCost += metrics.accumulated_cost;
 
@@ -68,4 +73,24 @@ export function getCombinedMetrics(
     max_budget_per_task: maxBudgetPerTask,
     accumulated_token_usage: combinedTokenUsage,
   };
+}
+
+/**
+ * TypeScript equivalent of the get_combined_metrics method from the Python SDK
+ * Combines metrics from all LLM usage IDs in the conversation stats
+ */
+export function getCombinedMetrics(
+  conversationInfo: V1RuntimeConversationInfo,
+): V1MetricsSnapshot {
+  const { stats } = conversationInfo;
+
+  if (!stats?.usage_to_metrics) {
+    return {
+      accumulated_cost: 0,
+      max_budget_per_task: null,
+      accumulated_token_usage: null,
+    };
+  }
+
+  return combineUsageMetrics(stats.usage_to_metrics);
 }

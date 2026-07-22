@@ -41,8 +41,9 @@ export interface LLMMetrics {
  * Usage metrics mapping for different components
  */
 export interface UsageToMetrics {
-  agent: LLMMetrics;
-  condenser: LLMMetrics;
+  // Keyed by usage id: "agent", "condenser", plus dynamic buckets such as
+  // "profile:<name>:<hash>" (switched-in LLMs) and "acp-managed".
+  [usageId: string]: LLMMetrics;
 }
 
 /**
