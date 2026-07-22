@@ -567,7 +567,13 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored.accumulated_cost = accumulated_cost
         if agent_metrics is not None and agent_metrics.max_budget_per_task is not None:
             stored.max_budget_per_task = agent_metrics.max_budget_per_task
-        if accumulated_token_usage is not None:
+        # Tokens need their own monotonic gate: for zero-cost models the cost
+        # guard never trips, so a stale snapshot could regress the totals.
+        if accumulated_token_usage is not None and (
+            accumulated_token_usage.prompt_tokens
+            + accumulated_token_usage.completion_tokens
+            >= (stored.prompt_tokens or 0) + (stored.completion_tokens or 0)
+        ):
             stored.prompt_tokens = accumulated_token_usage.prompt_tokens
             stored.completion_tokens = accumulated_token_usage.completion_tokens
             stored.cache_read_tokens = accumulated_token_usage.cache_read_tokens
