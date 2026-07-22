@@ -524,10 +524,13 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             return
 
         # Query existing record using secure select (filters for V1 and user if available)
+        # Row-lock so concurrent snapshots (stats events, run-end pull)
+        # serialize per conversation instead of racing the guard/ledger.
+        # No-op on SQLite.
         query = await self._secure_select()
         query = query.where(
             StoredConversationMetadata.conversation_id == str(conversation_id)
-        )
+        ).with_for_update()
         result = await self.db_session.execute(query)
         stored = result.scalar_one_or_none()
 
