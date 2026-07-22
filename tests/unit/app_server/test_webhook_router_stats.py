@@ -459,6 +459,36 @@ class TestUpdateConversationStatistics:
         assert all(e.llm_model == 'custom-llm' for e in events)
 
     @pytest.mark.asyncio
+    async def test_update_statistics_zero_cost_stale_tokens_ignored(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Equal-cost out-of-order snapshots must not regress token totals."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(conversation_id, stats(200, 20))
+        # Stale snapshot with the same (zero) cost but older token counts.
+        await service.update_conversation_statistics(conversation_id, stats(100, 10))
+
+        await async_session.refresh(stored)
+        assert stored.prompt_tokens == 200
+        assert stored.completion_tokens == 20
+
+    @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(
         self, service, async_session, v1_conversation_metadata
     ):
