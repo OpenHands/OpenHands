@@ -5,9 +5,6 @@ from uuid import UUID
 
 import httpx
 
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationInfo,
-)
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -137,15 +134,10 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
                 )
                 return None
 
-            # Save the conversation info
-            info = AppConversationInfo(
-                **{
-                    name: getattr(app_conversation, name)
-                    for name in AppConversationInfo.model_fields
-                }
-            )
-            info.title = title
-            await app_conversation_info_service.save_app_conversation_info(info)
+            # Column-specific write: the snapshot fetched before the poll is
+            # stale, and a full-row save would clobber concurrent updates
+            # (metrics, llm_model).
+            await app_conversation_info_service.update_title(conversation_id, title)
 
             # Disable callback - we have already set the status
             callback.status = EventCallbackStatus.DISABLED

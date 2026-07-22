@@ -117,6 +117,14 @@ class AppConversationInfoService(ABC):
         """
 
     @abstractmethod
+    async def update_title(
+        self,
+        conversation_id: UUID,
+        title: str,
+    ) -> None:
+        """Update only the title for a conversation (no full-row rewrite)."""
+
+    @abstractmethod
     async def update_execution_status(
         self,
         conversation_id: UUID,

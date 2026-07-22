@@ -609,6 +609,35 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                 stack_info=True,
             )
 
+    async def update_title(
+        self,
+        conversation_id: UUID,
+        title: str,
+    ) -> None:
+        """Column-specific title write.
+
+        The title poller holds a stale snapshot for many seconds; a full-row
+        save from it would clobber concurrently updated fields (metrics,
+        llm_model), so only the title column is touched.
+        """
+        query = await self._secure_select()
+        query = query.where(
+            StoredConversationMetadata.conversation_id == str(conversation_id)
+        )
+        result = await self.db_session.execute(query)
+        stored = result.scalar_one_or_none()
+
+        if not stored:
+            logger.debug(
+                'Conversation %s not found or not accessible, skipping title update',
+                conversation_id,
+            )
+            return
+
+        stored.title = title
+        stored.last_updated_at = utc_now()
+        await self.db_session.commit()
+
     async def update_execution_status(
         self,
         conversation_id: UUID,
