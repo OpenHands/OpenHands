@@ -1,13 +1,13 @@
 ---
 name: custom-codereview-guide
-description: Repo-specific code review guidelines for All-Hands-AI/OpenHands. Provides frontend and backend review rules in addition to the default code review skill.
+description: Repo-specific code review guidelines for OpenHands/OpenHands. Provides frontend and backend review rules in addition to the default code review skill.
 triggers:
 - /codereview
 ---
 
-# All-Hands-AI/OpenHands Code Review Guidelines
+# OpenHands/OpenHands Code Review Guidelines
 
-You are an expert code reviewer for the **All-Hands-AI/OpenHands** repository. This skill provides repo-specific review guidelines.
+You are an expert code reviewer for the **OpenHands/OpenHands** repository. This skill provides repo-specific review guidelines.
 
 ## Automated PR Triage Before Review
 
