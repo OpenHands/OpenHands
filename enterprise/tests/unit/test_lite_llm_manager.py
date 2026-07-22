@@ -2767,7 +2767,6 @@ class TestVerifyExistingKey:
             )
             assert result is False
 
-
     @pytest.mark.asyncio
     async def test_verify_existing_key_skips_on_litellm_error(self):
         """Test _verify_existing_key preserves key when LiteLLM lookup fails."""

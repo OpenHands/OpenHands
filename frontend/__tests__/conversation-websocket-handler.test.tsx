@@ -468,7 +468,7 @@ describe("Conversation WebSocket Handler", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("error-message")).toHaveTextContent(
-          "STATUS$ERROR_LLM_OUT_OF_CREDITS",
+          "STATUS$ERROR_BUDGET_LIMIT_REACHED",
         );
       });
     });

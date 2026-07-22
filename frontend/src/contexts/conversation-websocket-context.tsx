@@ -157,7 +157,8 @@ export function ConversationWebSocketProvider({
     (event: { source?: string }) => {
       const currentError = useErrorMessageStore.getState().errorMessage;
       const isBudgetError =
-        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS;
+        currentError === I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS ||
+        currentError === I18nKey.STATUS$ERROR_BUDGET_LIMIT_REACHED;
       const isAgentEvent = event.source === "agent";
 
       // Budget errors persist until agent proves LLM is working
@@ -796,7 +797,13 @@ export function ConversationWebSocketProvider({
         setMainConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefMain.current) {
-          setErrorMessage("Failed to connect to server");
+          const currentError = useErrorMessageStore.getState().errorMessage;
+          if (
+            currentError !== I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS &&
+            currentError !== I18nKey.STATUS$ERROR_BUDGET_LIMIT_REACHED
+          ) {
+            setErrorMessage("Failed to connect to server");
+          }
         }
       },
       onMessage: handleMainMessage,
@@ -863,7 +870,13 @@ export function ConversationWebSocketProvider({
         setPlanningConnectionState("CLOSED");
         // Only show error message if we've previously connected successfully
         if (hasConnectedRefPlanning.current) {
-          setErrorMessage("Failed to connect to server");
+          const currentError = useErrorMessageStore.getState().errorMessage;
+          if (
+            currentError !== I18nKey.STATUS$ERROR_LLM_OUT_OF_CREDITS &&
+            currentError !== I18nKey.STATUS$ERROR_BUDGET_LIMIT_REACHED
+          ) {
+            setErrorMessage("Failed to connect to server");
+          }
         }
       },
       onMessage: handlePlanningMessage,

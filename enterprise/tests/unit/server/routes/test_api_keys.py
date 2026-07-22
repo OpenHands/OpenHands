@@ -123,7 +123,6 @@ class TestVerifyByorKeyInLitellm:
         # Assert
         assert result is True
 
-
     @pytest.mark.asyncio
     @patch('storage.lite_llm_manager.LITE_LLM_API_URL', 'https://litellm.example.com')
     @patch('storage.lite_llm_manager.httpx.AsyncClient')
