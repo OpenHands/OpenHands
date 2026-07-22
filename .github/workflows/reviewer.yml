@@ -1,0 +1,80 @@
+---
+# Reviewer Agent — Automated PR code review triggered by the `review-this` label.
+#
+# When the `review-this` label is added to a same-repo PR, the Reviewer Agent
+# analyzes the changes across four dimensions:
+#   - PR template compliance
+#   - Security (secrets, injection, XSS, etc.)
+#   - Code quality & style (function length, nesting, dead code, etc.)
+#   - Performance (N+1 queries, pagination, bundle impact, etc.)
+#
+# Results are posted as a PR comment with structured severity levels.
+#
+# Cost optimization:
+#   - Only triggers on explicit `review-this` label (not on every push)
+#   - Template compliance check is pattern-based (no LLM cost)
+#   - Large diffs (>15K chars) are sampled, not fully reviewed
+name: Reviewer Agent
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize]
+  # Also re-review when a new commit is pushed after the label is already set
+  pull_request_target:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  reviewer:
+    # Run only when:
+    #   1. The PR is from the same repo (not a fork — no secrets available)
+    #   2. The PR is not a draft
+    #   3. The `review-this` label is present
+    #   4. Not triggered by the bot itself to avoid loops
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false &&
+      contains(github.event.pull_request.labels.*.name, 'review-this') &&
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'openhands-bot'
+    concurrency:
+      group: reviewer-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff calculation
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install openai requests
+
+      - name: Run Reviewer Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          REVIEWER_LLM_API_KEY: ${{ secrets.REVIEWER_LLM_API_KEY }}
+          REVIEWER_LLM_BASE_URL: ${{ secrets.REVIEWER_LLM_BASE_URL }}
+        run: |
+          python -m scripts.reviewer.main \
+            --llm-model "gpt-4o" \
+            --set-status
+
+      - name: Log completion
+        run: |
+          echo "✅ Reviewer Agent finished for PR #${{ github.event.pull_request.number }}"
