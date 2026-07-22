@@ -212,6 +212,42 @@ class TestRemoteSandboxService:
             await remote_sandbox_service._send_runtime_api_request('GET', '/test')
 
     @pytest.mark.asyncio
+    async def test_send_runtime_api_request_get_retries_once_on_timeout(
+        self, remote_sandbox_service
+    ):
+        """A timed-out idempotent read is retried once and can succeed."""
+        # Setup
+        mock_response = MagicMock()
+        remote_sandbox_service.httpx_client.request.side_effect = [
+            httpx.TimeoutException('Request timeout'),
+            mock_response,
+        ]
+
+        # Execute
+        response = await remote_sandbox_service._send_runtime_api_request(
+            'GET', '/test'
+        )
+
+        # Verify
+        assert response == mock_response
+        assert remote_sandbox_service.httpx_client.request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_send_runtime_api_request_post_does_not_retry(
+        self, remote_sandbox_service
+    ):
+        """Non-idempotent requests are not retried on timeout."""
+        # Setup
+        remote_sandbox_service.httpx_client.request.side_effect = (
+            httpx.TimeoutException('Request timeout')
+        )
+
+        # Execute & Verify
+        with pytest.raises(httpx.TimeoutException):
+            await remote_sandbox_service._send_runtime_api_request('POST', '/start')
+        assert remote_sandbox_service.httpx_client.request.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_send_runtime_api_request_http_error(self, remote_sandbox_service):
         """Test API request HTTP error handling."""
         # Setup

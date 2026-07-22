@@ -1097,17 +1097,48 @@ class TestIsJobRequested:
         jira_dc_manager._create_provider_handler = AsyncMock(return_value=MagicMock())
         jira_dc_manager._verify_mentioned_repos = AsyncMock(return_value=[repo])
 
-        message = Message(source=SourceType.JIRA_DC, message={})
-        result = await jira_dc_manager.is_job_requested(message, mock_view)
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
+            return_value=['company/repo'],
+        ):
+            message = Message(source=SourceType.JIRA_DC, message={})
+            result = await jira_dc_manager.is_job_requested(message, mock_view)
 
         assert result is True
         assert mock_view.selected_repo == 'company/repo'
 
     @pytest.mark.asyncio
-    async def test_is_job_requested_new_conversation_no_repo_match(
+    async def test_is_job_requested_new_conversation_without_repo(
         self, jira_dc_manager, sample_job_context, sample_user_auth
     ):
-        """Zero verified repos -> repository-selection comment, job blocked."""
+        """No mentioned repository allows the job to start with an empty workspace."""
+        mock_view = MagicMock(spec=JiraDcNewConversationView)
+        mock_view.saas_user_auth = sample_user_auth
+        mock_view.job_context = sample_job_context
+        mock_view.selected_repo = None
+
+        jira_dc_manager._create_provider_handler = AsyncMock()
+        jira_dc_manager._verify_mentioned_repos = AsyncMock()
+        jira_dc_manager._send_repo_selection_comment = AsyncMock()
+
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
+            return_value=[],
+        ):
+            message = Message(source=SourceType.JIRA_DC, message={})
+            result = await jira_dc_manager.is_job_requested(message, mock_view)
+
+        assert result is True
+        assert mock_view.selected_repo is None
+        jira_dc_manager._create_provider_handler.assert_not_awaited()
+        jira_dc_manager._verify_mentioned_repos.assert_not_awaited()
+        jira_dc_manager._send_repo_selection_comment.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_is_job_requested_blocks_unverified_mentioned_repo(
+        self, jira_dc_manager, sample_job_context, sample_user_auth
+    ):
+        """An explicitly mentioned inaccessible repository still blocks the job."""
         mock_view = MagicMock(spec=JiraDcNewConversationView)
         mock_view.saas_user_auth = sample_user_auth
         mock_view.job_context = sample_job_context
@@ -1118,14 +1149,55 @@ class TestIsJobRequested:
 
         with patch(
             'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
-            return_value=[],
+            return_value=['company/missing'],
         ):
             message = Message(source=SourceType.JIRA_DC, message={})
             result = await jira_dc_manager.is_job_requested(message, mock_view)
 
         assert result is False
-        jira_dc_manager._send_repo_selection_comment.assert_called_once_with(
-            mock_view, [], []
+        jira_dc_manager._send_repo_selection_comment.assert_awaited_once_with(
+            mock_view, ['company/missing'], []
+        )
+
+    @pytest.mark.asyncio
+    async def test_is_job_requested_blocks_multiple_verified_repos(
+        self, jira_dc_manager, sample_job_context, sample_user_auth
+    ):
+        """Multiple verified repositories still require disambiguation."""
+        mock_view = MagicMock(spec=JiraDcNewConversationView)
+        mock_view.saas_user_auth = sample_user_auth
+        mock_view.job_context = sample_job_context
+        repos = [
+            Repository(
+                id='1',
+                full_name='company/repo1',
+                stargazers_count=10,
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+            Repository(
+                id='2',
+                full_name='company/repo2',
+                stargazers_count=5,
+                git_provider=ProviderType.GITHUB,
+                is_public=True,
+            ),
+        ]
+
+        jira_dc_manager._create_provider_handler = AsyncMock(return_value=MagicMock())
+        jira_dc_manager._verify_mentioned_repos = AsyncMock(return_value=repos)
+        jira_dc_manager._send_repo_selection_comment = AsyncMock()
+
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
+            return_value=['company/repo1', 'company/repo2'],
+        ):
+            message = Message(source=SourceType.JIRA_DC, message={})
+            result = await jira_dc_manager.is_job_requested(message, mock_view)
+
+        assert result is False
+        jira_dc_manager._send_repo_selection_comment.assert_awaited_once_with(
+            mock_view, ['company/repo1', 'company/repo2'], repos
         )
 
     @pytest.mark.asyncio
@@ -1174,8 +1246,12 @@ class TestIsJobRequested:
             side_effect=Exception('boom')
         )
 
-        message = Message(source=SourceType.JIRA_DC, message={})
-        result = await jira_dc_manager.is_job_requested(message, mock_view)
+        with patch(
+            'integrations.jira_dc.jira_dc_manager.infer_repo_from_message',
+            return_value=['company/repo'],
+        ):
+            message = Message(source=SourceType.JIRA_DC, message={})
+            result = await jira_dc_manager.is_job_requested(message, mock_view)
 
         assert result is False
 

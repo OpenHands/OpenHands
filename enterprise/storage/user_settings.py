@@ -10,7 +10,11 @@ from sqlalchemy import DateTime, Identity, String
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from storage.base import Base
-from storage.encrypt_utils import decrypt_legacy_value, encrypt_legacy_value
+from storage.encrypt_utils import (
+    EncryptedJSON,
+    decrypt_legacy_value,
+    encrypt_legacy_value,
+)
 
 from openhands.app_server.settings.settings_models import MarketplaceRegistration
 
@@ -50,8 +54,10 @@ class UserSettings(Base):
     default_sandbox_spec_id: Mapped[str | None] = mapped_column(String, nullable=True)
     user_version: Mapped[int] = mapped_column(nullable=False, default=0)
     accepted_tos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    # Deprecated (v0): mcp_config now lives inside AgentSettings on Org / OrgMember.
-    mcp_config: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Deprecated (v0): retained only while old users migrate to OrgMember.
+    mcp_config: Mapped[dict[str, Any] | None] = mapped_column(
+        EncryptedJSON, nullable=True
+    )
     disabled_skills: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     search_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     sandbox_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -117,8 +123,14 @@ class UserSettings(Base):
             source_name='user settings',
         )
 
-        return Settings(
-            agent_settings=self.agent_settings or {},
+        agent_settings = dict(self.agent_settings or {})
+        if self.mcp_config is not None:
+            agent_settings['mcp_config'] = self.mcp_config
+
+        settings = Settings(
+            agent_settings=agent_settings,
             conversation_settings=self.conversation_settings or {},
             registered_marketplaces=marketplaces,
         )
+        settings._mcp_config_updated = False
+        return settings

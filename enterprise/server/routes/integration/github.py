@@ -102,6 +102,6 @@ async def github_events(
             status_code=408,
             content={'error': 'Request timeout - client took too long to send data.'},
         )
-    except Exception as e:
-        logger.exception(f'Error processing GitHub event: {e}')
+    except Exception:
+        logger.exception('Error processing GitHub event', stack_info=True)
         return JSONResponse(status_code=400, content={'error': 'Invalid payload.'})

@@ -104,13 +104,15 @@ async def update_email(
 
     except ValueError as e:
         # Handle validation errors from Pydantic
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from e
     except Exception as e:
-        logger.exception(f'Error updating email: {str(e)}')
+        logger.exception('Error updating email', stack_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='An error occurred while updating the email',
-        )
+        ) from e
 
 
 @api_router.put('/resend')

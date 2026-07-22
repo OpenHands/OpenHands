@@ -137,7 +137,7 @@ async def install_callback(
 
         return RedirectResponse(auth_url)
     except Exception:  # type: ignore
-        logger.error('unexpected_error', exc_info=True, stack_info=True)
+        logger.exception('unexpected_error', stack_info=True)
         return _html_response(
             title='Error',
             description='Internal server Error',
@@ -442,8 +442,8 @@ async def on_options_load(request: Request, background_tasks: BackgroundTasks):
             extra={
                 'slack_user_id': slack_user_id,
                 'search_value': search_value,
-                'error': str(e),
             },
+            stack_info=True,
         )
         # Notify user about the unexpected error with error code
         background_tasks.add_task(

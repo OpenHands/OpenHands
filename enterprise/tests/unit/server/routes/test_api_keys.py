@@ -1,5 +1,6 @@
 """Unit tests for API keys routes, focusing on BYOR key validation and retrieval."""
 
+import contextlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,19 +10,31 @@ import pytest
 from fastapi import HTTPException
 from pydantic import SecretStr
 from server.auth.saas_user_auth import SaasUserAuth
-from server.constants import BYOR_KEY_ALIAS_PATTERN
+from server.constants import BYOR_KEY_ALIAS_PATTERN, ORG_SETTINGS_VERSION
 from server.routes.api_keys import (
     ByorPermittedResponse,
     CurrentApiKeyResponse,
     LlmApiKeyResponse,
+    ManagedLlmApiKeyRefreshResponse,
     _create_byor_key_alias,
     check_byor_permitted,
     delete_byor_key_from_litellm,
     generate_byor_key,
     get_current_api_key,
     get_llm_api_key_for_byor,
+    refresh_managed_llm_api_key,
 )
-from storage.lite_llm_manager import LiteLlmManager
+from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
+from storage.org import Org
+from storage.org_member import OrgMember
+from storage.role import Role
+from storage.saas_settings_store import (
+    ManagedLlmKeyConfig,
+    ManagedLlmKeyStatus,
+    SaasSettingsStore,
+    managed_llm_key_config_from_model,
+)
+from storage.user import User
 
 from openhands.app_server.user_auth.user_auth import AuthType
 
@@ -390,6 +403,553 @@ class TestGetLlmApiKeyForByor:
 
         assert exc_info.value.status_code == 402
         assert 'BYOR key export is not enabled' in exc_info.value.detail
+
+
+class TestRefreshManagedLlmApiKey:
+    """Test the managed LLM API key refresh endpoint.
+
+    These tests exercise the REAL managed-key lifecycle
+    (``SaasSettingsStore.rotate_managed_llm_key``) against an in-memory SQLite
+    database, mocking only the external LiteLLM HTTP calls. They prove the
+    actual managed-config classification (from effective org+member settings,
+    with org-default precedence), the OpenHands metadata attachment, and the
+    persist/missing-member behavior — not stubs of the route helpers.
+    """
+
+    MANAGED_BASE_URL = 'https://litellm.example.com'
+
+    @pytest.fixture
+    def managed_env(self):
+        """Point the managed base_url at a constant value for classification."""
+        with (
+            patch('server.constants.LITE_LLM_API_URL', self.MANAGED_BASE_URL),
+            patch('storage.lite_llm_manager.LITE_LLM_API_URL', self.MANAGED_BASE_URL),
+            patch(
+                'storage.saas_settings_store.LITE_LLM_API_URL',
+                self.MANAGED_BASE_URL,
+            ),
+        ):
+            yield
+
+    @staticmethod
+    async def _seed(
+        async_session_maker,
+        *,
+        llm_model='openhands/claude-sonnet-4',
+        llm_base_url=None,
+        member_custom=False,
+        member_key='sk-old-managed-key',
+        org_key=None,
+    ):
+        """Create a user/org/role/member with the given effective LLM config.
+
+        The org's agent_settings carry the LLM model/base_url, so the effective
+        config (org defaults merged with an empty member diff) is what
+        ``load()`` resolves — exercising org-default precedence.
+        Returns (user_id_str, org_id).
+        """
+        org_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        llm_settings = {'model': llm_model}
+        if llm_base_url is not None:
+            llm_settings['base_url'] = llm_base_url
+
+        async with async_session_maker() as session:
+            role = Role(name='owner', rank=1)
+            org_kwargs = {
+                'id': org_id,
+                'name': f'test-org-{org_id}',
+                'org_version': ORG_SETTINGS_VERSION,
+                'agent_settings': {'llm': llm_settings},
+                'enable_proactive_conversation_starters': True,
+                'sandbox_grouping_strategy': 'NO_GROUPING',
+            }
+            if org_key is not None:
+                org_kwargs['llm_api_key'] = org_key
+            org = Org(**org_kwargs)
+            user = User(
+                id=user_id,
+                current_org_id=org_id,
+                enable_sound_notifications=False,
+                git_full_clone=False,
+                sandbox_grouping_strategy='NO_GROUPING',
+            )
+            session.add_all([role, org, user])
+            await session.flush()
+            member = OrgMember(
+                org_id=org_id,
+                user_id=user_id,
+                role_id=role.id,
+                llm_api_key=member_key,
+            )
+            member.has_custom_llm_api_key = member_custom
+            session.add(member)
+            await session.commit()
+        return str(user_id), org_id
+
+    @staticmethod
+    async def _member_key(async_session_maker, org_id, user_id):
+        from sqlalchemy import select
+
+        async with async_session_maker() as session:
+            member = (
+                (
+                    await session.execute(
+                        select(OrgMember).where(
+                            OrgMember.org_id == org_id,
+                            OrgMember.user_id == uuid.UUID(user_id),
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            return member
+
+    @staticmethod
+    def _session_patches(async_session_maker):
+        """Point every store's session maker at the test DB."""
+        return (
+            patch('storage.user_store.a_session_maker', async_session_maker),
+            patch('storage.org_store.a_session_maker', async_session_maker),
+            patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        )
+
+    @staticmethod
+    def _litellm_patches(*, generated_key='sk-new-managed-key'):
+        """Patch only the external LiteLLM HTTP calls."""
+        return (
+            patch(
+                'storage.lite_llm_manager.LiteLlmManager.delete_key_by_alias',
+                new_callable=AsyncMock,
+            ),
+            patch(
+                'storage.lite_llm_manager.LiteLlmManager.generate_key',
+                new_callable=AsyncMock,
+                return_value=generated_key,
+            ),
+            patch(
+                'storage.lite_llm_manager.LiteLlmManager.delete_key',
+                new_callable=AsyncMock,
+            ),
+        )
+
+    @classmethod
+    @contextlib.contextmanager
+    def _patched(cls, async_session_maker, *, generated_key='sk-new-managed-key'):
+        """Enter session + LiteLLM patches together, yielding the LiteLLM mocks.
+
+        (mock_delete_alias, mock_generate, mock_delete_token)
+        """
+        with contextlib.ExitStack() as stack:
+            for p in cls._session_patches(async_session_maker):
+                stack.enter_context(p)
+            mock_delete_alias, mock_generate, mock_delete_token = (
+                stack.enter_context(p)
+                for p in cls._litellm_patches(generated_key=generated_key)
+            )
+            yield mock_delete_alias, mock_generate, mock_delete_token
+
+    @classmethod
+    @contextlib.contextmanager
+    def _patched_route(
+        cls, async_session_maker, user_id, org_id, *, generated_key='sk-new-managed-key'
+    ):
+        """Like ``_patched`` but also patches ``get_instance`` to return a real
+        ``SaasSettingsStore`` bound to the test DB, so the route exercises the
+        real rotation end-to-end.
+        """
+        with contextlib.ExitStack() as stack:
+            for p in cls._session_patches(async_session_maker):
+                stack.enter_context(p)
+            mock_delete_alias, mock_generate, mock_delete_token = (
+                stack.enter_context(p)
+                for p in cls._litellm_patches(generated_key=generated_key)
+            )
+            stack.enter_context(
+                patch(
+                    'storage.saas_settings_store.SaasSettingsStore.get_instance',
+                    new_callable=AsyncMock,
+                    return_value=SaasSettingsStore(user_id, effective_org_id=org_id),
+                )
+            )
+            yield mock_delete_alias, mock_generate, mock_delete_token
+
+    # --- pure classification (no DB) ---
+
+    def test_managed_config_detects_managed_base_url(self):
+        with patch(
+            'storage.saas_settings_store.LITE_LLM_API_URL',
+            'https://litellm.example.com/',
+        ):
+            assert managed_llm_key_config_from_model(
+                'anthropic/claude-sonnet-4', 'https://litellm.example.com'
+            ) == ManagedLlmKeyConfig(openhands_type=False)
+
+    def test_managed_config_detects_openhands_model_without_base_url(self):
+        with patch(
+            'storage.saas_settings_store.LITE_LLM_API_URL',
+            'https://litellm.example.com',
+        ):
+            assert managed_llm_key_config_from_model(
+                'openhands/claude-sonnet-4', None
+            ) == ManagedLlmKeyConfig(openhands_type=True)
+
+    def test_managed_config_detects_openhands_model_with_all_hands_base_url(self):
+        with patch(
+            'storage.saas_settings_store.LITE_LLM_API_URL',
+            'https://litellm.example.com',
+        ):
+            assert managed_llm_key_config_from_model(
+                'openhands/claude-sonnet-4',
+                'https://llm-proxy.staging.all-hands.dev/v1',
+            ) == ManagedLlmKeyConfig(openhands_type=True)
+
+    def test_managed_config_rejects_openhands_model_custom_base_url(self):
+        with patch(
+            'storage.saas_settings_store.LITE_LLM_API_URL',
+            'https://litellm.example.com',
+        ):
+            assert (
+                managed_llm_key_config_from_model(
+                    'openhands/claude-sonnet-4', 'https://custom-llm.example.com'
+                )
+                is None
+            )
+
+    def test_managed_config_rejects_non_managed_provider_base_url(self):
+        with patch(
+            'storage.saas_settings_store.LITE_LLM_API_URL',
+            'https://litellm.example.com',
+        ):
+            assert (
+                managed_llm_key_config_from_model(
+                    'anthropic/claude-sonnet-4', 'https://api.anthropic.com'
+                )
+                is None
+            )
+
+    # --- real rotate_managed_llm_key behavior ---
+
+    @pytest.mark.asyncio
+    async def test_rotate_openhands_model_attaches_openhands_metadata(
+        self, async_session_maker, managed_env
+    ):
+        """An openhands/* effective config rotates with {'type': 'openhands'}."""
+        user_id, org_id = await self._seed(async_session_maker)
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.ROTATED
+        assert rotation.openhands_type is True
+        assert rotation.old_key == 'sk-old-managed-key'
+        assert rotation.new_key == 'sk-new-managed-key'
+
+        expected_alias = get_openhands_cloud_key_alias(user_id, str(org_id))
+        # The alias is deleted before generating, so rotation never orphans.
+        mock_delete_alias.assert_awaited_once_with(key_alias=expected_alias)
+        mock_generate.assert_awaited_once_with(
+            user_id, str(org_id), expected_alias, {'type': 'openhands'}
+        )
+        # The previous token is NOT deleted by the store; the route does that.
+        mock_delete_token.assert_not_called()
+
+        member = await self._member_key(async_session_maker, org_id, user_id)
+        assert member.llm_api_key.get_secret_value() == 'sk-new-managed-key'
+        assert member.has_custom_llm_api_key is False
+
+    @pytest.mark.asyncio
+    async def test_rotate_managed_base_url_attaches_no_openhands_metadata(
+        self, async_session_maker, managed_env
+    ):
+        """A non-openhands model on the managed base_url rotates without the
+        openhands metadata marker.
+        """
+        user_id, org_id = await self._seed(
+            async_session_maker,
+            llm_model='anthropic/claude-sonnet-4',
+            llm_base_url=self.MANAGED_BASE_URL,
+        )
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            _mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.ROTATED
+        assert rotation.openhands_type is False
+        expected_alias = get_openhands_cloud_key_alias(user_id, str(org_id))
+        mock_delete_alias.assert_awaited_once_with(key_alias=expected_alias)
+        mock_generate.assert_awaited_once_with(
+            user_id, str(org_id), expected_alias, None
+        )
+
+    @pytest.mark.asyncio
+    async def test_rotate_non_managed_byok_base_url_is_rejected(
+        self, async_session_maker, managed_env
+    ):
+        """A config pointing at a third-party base_url is NOT managed and is
+        rejected before any key is generated or stored.
+        """
+        user_id, org_id = await self._seed(
+            async_session_maker,
+            llm_model='anthropic/claude-sonnet-4',
+            llm_base_url='https://api.anthropic.com',
+        )
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.NOT_MANAGED
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+        mock_delete_token.assert_not_called()
+
+        member = await self._member_key(async_session_maker, org_id, user_id)
+        assert member.llm_api_key.get_secret_value() == 'sk-old-managed-key'
+
+    @pytest.mark.asyncio
+    async def test_rotate_custom_byok_member_is_rejected(
+        self, async_session_maker, managed_env
+    ):
+        """A member flagged BYOK (has_custom_llm_api_key) is rejected even when
+        the effective model/base_url would otherwise be managed.
+        """
+        user_id, org_id = await self._seed(async_session_maker, member_custom=True)
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            _mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.BYOK
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rotate_org_level_byok_key_is_rejected(
+        self, async_session_maker, managed_env
+    ):
+        """An org-level key has precedence over the member managed key, so
+        rotating the member key would not affect the effective runtime key.
+        """
+        user_id, org_id = await self._seed(async_session_maker, org_key='sk-org-byok')
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            _mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+            current_key = await store.get_current_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.BYOK
+        assert current_key is None
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_rotate_missing_member_does_not_persist_or_delete_old_key(
+        self, async_session_maker, managed_env, session_maker
+    ):
+        """If the member row is gone at persist time, rotation reports
+        MISSING_MEMBER, generates nothing, and does not delete the old key.
+        """
+        user_id, org_id = await self._seed(async_session_maker)
+        # Drop the membership so load() resolves no acting member.
+        with session_maker() as sync_session:
+            from sqlalchemy import delete as sa_delete
+
+            sync_session.execute(
+                sa_delete(OrgMember).where(
+                    OrgMember.org_id == org_id,
+                    OrgMember.user_id == uuid.UUID(user_id),
+                )
+            )
+            sync_session.commit()
+
+        with self._patched(async_session_maker) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            store = SaasSettingsStore(user_id, effective_org_id=org_id)
+            rotation = await store.rotate_managed_llm_key()
+
+        assert rotation.status == ManagedLlmKeyStatus.MISSING_MEMBER
+        assert rotation.old_key is None
+        assert rotation.new_key is None
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+        mock_delete_token.assert_not_called()
+
+    # --- endpoint wiring (delegates to the real store) ---
+
+    @pytest.mark.asyncio
+    async def test_route_refreshes_and_deletes_previous_token(
+        self, async_session_maker, managed_env
+    ):
+        """The endpoint delegates to the real store and best-effort deletes the
+        old token only after the new key is persisted.
+        """
+        user_id, org_id = await self._seed(async_session_maker)
+
+        with self._patched_route(async_session_maker, user_id, org_id) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            result = await refresh_managed_llm_api_key(
+                user_id=user_id, effective_org_id=org_id
+            )
+
+        assert result == ManagedLlmApiKeyRefreshResponse(refreshed=True)
+        mock_delete_alias.assert_awaited_once()
+        mock_generate.assert_awaited_once()
+        # The old token is deleted best-effort after persist.
+        mock_delete_token.assert_awaited_once_with('sk-old-managed-key')
+
+    @pytest.mark.asyncio
+    async def test_route_rejects_non_managed_effective_config(
+        self, async_session_maker, managed_env
+    ):
+        user_id, org_id = await self._seed(
+            async_session_maker,
+            llm_model='anthropic/claude-sonnet-4',
+            llm_base_url='https://api.anthropic.com',
+        )
+
+        with self._patched_route(async_session_maker, user_id, org_id) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_managed_llm_api_key(
+                    user_id=user_id, effective_org_id=org_id
+                )
+
+        assert exc_info.value.status_code == 400
+        assert 'non-managed LLM API key' in exc_info.value.detail
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+        mock_delete_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_route_custom_byok_member_returns_400(
+        self, async_session_maker, managed_env
+    ):
+        user_id, org_id = await self._seed(async_session_maker, member_custom=True)
+
+        with self._patched_route(async_session_maker, user_id, org_id) as (
+            mock_delete_alias,
+            mock_generate,
+            _mock_delete_token,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_managed_llm_api_key(
+                    user_id=user_id, effective_org_id=org_id
+                )
+
+        assert exc_info.value.status_code == 400
+        assert 'custom BYOK' in exc_info.value.detail
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_route_missing_member_returns_404_without_rotating(
+        self, async_session_maker, managed_env
+    ):
+        """User belongs to no member row for the effective org."""
+        user_id, _org_id = await self._seed(async_session_maker)
+        other_org_id = uuid.uuid4()
+        async with async_session_maker() as session:
+            session.add(
+                Org(
+                    id=other_org_id,
+                    name=f'other-org-{other_org_id}',
+                    org_version=ORG_SETTINGS_VERSION,
+                    agent_settings={'llm': {'model': 'openhands/claude-sonnet-4'}},
+                )
+            )
+            await session.commit()
+
+        with self._patched_route(async_session_maker, user_id, other_org_id) as (
+            mock_delete_alias,
+            mock_generate,
+            mock_delete_token,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_managed_llm_api_key(
+                    user_id=user_id, effective_org_id=other_org_id
+                )
+
+        assert exc_info.value.status_code == 404
+        mock_delete_alias.assert_not_called()
+        mock_generate.assert_not_called()
+        mock_delete_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_route_continues_when_old_key_delete_fails(
+        self, async_session_maker, managed_env
+    ):
+        user_id, org_id = await self._seed(async_session_maker)
+
+        with (
+            self._patched_route(async_session_maker, user_id, org_id) as (
+                _mock_delete_alias,
+                _mock_generate,
+                _mock_delete_token_ok,
+            ),
+            patch(
+                'storage.lite_llm_manager.LiteLlmManager.delete_key',
+                new_callable=AsyncMock,
+                side_effect=Exception('delete failed'),
+            ) as mock_delete_token,
+        ):
+            result = await refresh_managed_llm_api_key(
+                user_id=user_id, effective_org_id=org_id
+            )
+
+        assert result == ManagedLlmApiKeyRefreshResponse(refreshed=True)
+        mock_delete_token.assert_awaited_once_with('sk-old-managed-key')
+
+    @pytest.mark.asyncio
+    async def test_route_unexpected_error_returns_500(self, managed_env):
+        user_id = str(uuid.uuid4())
+        org_id = uuid.uuid4()
+        mock_store = MagicMock()
+        mock_store.rotate_managed_llm_key = AsyncMock(side_effect=RuntimeError('boom'))
+        with patch(
+            'storage.saas_settings_store.SaasSettingsStore.get_instance',
+            new_callable=AsyncMock,
+            return_value=mock_store,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_managed_llm_api_key(
+                    user_id=user_id, effective_org_id=org_id
+                )
+
+        assert exc_info.value.status_code == 500
+        assert 'Failed to refresh managed LLM API key' in exc_info.value.detail
 
 
 class TestDeleteByorKeyFromLitellm:

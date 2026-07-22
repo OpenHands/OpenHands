@@ -154,8 +154,11 @@ def resolve_llm_base_url(
         return managed_proxy_url
     try:
         return get_provider_api_base(model)
-    except Exception as e:
-        logger.error(f'Failed to get api_base from litellm for model {model}: {e}')
+    except Exception:
+        logger.exception(
+            f'Failed to get api_base from litellm for model {model}',
+            stack_info=True,
+        )
         return None
 
 

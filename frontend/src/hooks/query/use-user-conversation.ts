@@ -37,7 +37,8 @@ export const useUserConversation = (
     },
     enabled: !!cid && !cid.startsWith("task-"),
     retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
-    retryDelay: (_failureCount, error) => getRateLimitRetryDelayMs(error),
+    retryDelay: (failureCount, error) =>
+      getRateLimitRetryDelayMs(failureCount, error),
     refetchInterval,
     staleTime: FIVE_MINUTES,
     gcTime: FIFTEEN_MINUTES,

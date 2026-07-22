@@ -567,8 +567,8 @@ class SaaSGitLabService(GitLabService):
             params = {'body': body}
 
             await self._make_request(url=url, params=params, method=RequestMethod.POST)
-        except Exception as e:
-            logger.exception(f'[GitLab]: Reply to issue failed {e}')
+        except Exception:
+            logger.exception('[GitLab]: Reply to issue failed', stack_info=True)
 
     async def reply_to_mr(
         self, project_id: str, merge_request_iid: str, discussion_id: str, body: str
@@ -581,8 +581,8 @@ class SaaSGitLabService(GitLabService):
             params = {'body': body}
 
             await self._make_request(url=url, params=params, method=RequestMethod.POST)
-        except Exception as e:
-            logger.exception(f'[GitLab]: Reply to MR failed {e}')
+        except Exception:
+            logger.exception('[GitLab]: Reply to MR failed', stack_info=True)
 
     async def get_user_resources_with_admin_access(
         self,

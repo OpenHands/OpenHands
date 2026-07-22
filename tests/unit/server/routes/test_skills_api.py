@@ -432,3 +432,102 @@ class TestMarketplaceSkillsCloneFailures:
 
         assert result[0] is None
         assert 'Repo path not found' in result[1]
+
+    @pytest.mark.asyncio
+    async def test_clone_bbdc_personal_url_uses_pinned_authenticated_url(self):
+        """A BBDC personal-repo URL clones via the host-matched, pinned token URL."""
+        handler = AsyncMock()
+        dc_url = 'https://user:pat@bitbucket.dc.example.com/scm/~jane/marketplace.git'
+        handler.get_authenticated_git_url.return_value = dc_url
+
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                    host='bitbucket.dc.example.com'
+                )
+            }
+        )
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+        mock_user_context.get_provider_handler = AsyncMock(return_value=handler)
+
+        marketplace = MarketplaceRegistration(
+            name='personal',
+            source='https://bitbucket.dc.example.com/scm/~jane/marketplace.git',
+        )
+
+        mock_clone = MagicMock(returncode=0)
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run',
+            return_value=mock_clone,
+        ) as mock_run:
+            with patch('tempfile.mkdtemp', return_value=Path('/tmp/test_clone')):
+                await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        handler.get_authenticated_git_url.assert_awaited_once_with(
+            '~jane/marketplace',
+            specified_provider=ProviderType.BITBUCKET_DATA_CENTER,
+        )
+        clone_argv = mock_run.call_args[0][0]
+        assert clone_argv[:3] == ['git', 'clone', '--']
+        assert clone_argv[3] == dc_url
+
+    @pytest.mark.asyncio
+    async def test_clone_refuses_unmatched_custom_host_url(self):
+        """A full-URL source on a host matching no provider is refused (no SSRF)."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                    host='bitbucket.dc.example.com'
+                )
+            }
+        )
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+        mock_user_context.get_provider_handler = AsyncMock()
+
+        marketplace = MarketplaceRegistration(
+            name='evil',
+            source='https://attacker.example.com/scm/proj/repo.git',
+        )
+
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run'
+        ) as mock_run:
+            result = await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        assert result[0] is None
+        assert 'Unsupported marketplace host' in result[1]
+        mock_run.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_clone_public_github_url_works_with_non_github_provider(self):
+        """A public github.com URL is a public clone even for a Bitbucket-only user."""
+        mock_user_context = MagicMock()
+        mock_user_context.get_provider_tokens = AsyncMock(
+            return_value={
+                ProviderType.BITBUCKET_DATA_CENTER: ProviderToken(
+                    host='bitbucket.dc.example.com'
+                )
+            }
+        )
+        mock_user_context.get_user_id = AsyncMock(return_value='test-user')
+        mock_user_context.get_provider_handler = AsyncMock()
+
+        marketplace = MarketplaceRegistration(
+            name='public-gh',
+            source='https://github.com/OpenHands/skills.git',
+        )
+
+        mock_clone = MagicMock(returncode=0)
+        with patch(
+            'openhands.app_server.user.skills_router.subprocess.run',
+            return_value=mock_clone,
+        ) as mock_run:
+            with patch('tempfile.mkdtemp', return_value=Path('/tmp/test_clone')):
+                await _clone_marketplace_repo(marketplace, mock_user_context)
+
+        # Not refused; cloned from the public github.com domain (no credentials).
+        clone_argv = mock_run.call_args[0][0]
+        assert clone_argv[3] == 'https://github.com/OpenHands/skills.git'
+        mock_user_context.get_provider_handler.assert_not_awaited()

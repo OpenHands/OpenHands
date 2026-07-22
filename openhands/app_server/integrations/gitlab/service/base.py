@@ -81,9 +81,9 @@ class GitLabMixinBase(BaseGitService, HTTPClient):
                     return response.text, headers
 
         except httpx.HTTPStatusError as e:
-            raise self.handle_http_status_error(e)
+            raise self.handle_http_status_error(e) from e
         except httpx.HTTPError as e:
-            raise self.handle_http_error(e)
+            raise self.handle_http_error(e) from e
 
     async def execute_graphql_query(
         self, query: str, variables: dict[str, Any] | None = None
@@ -134,9 +134,9 @@ class GitLabMixinBase(BaseGitService, HTTPClient):
 
                 return result.get('data')
         except httpx.HTTPStatusError as e:
-            raise self.handle_http_status_error(e)
+            raise self.handle_http_status_error(e) from e
         except httpx.HTTPError as e:
-            raise self.handle_http_error(e)
+            raise self.handle_http_error(e) from e
 
     async def get_user(self) -> User:
         url = f'{self.BASE_URL}/user'

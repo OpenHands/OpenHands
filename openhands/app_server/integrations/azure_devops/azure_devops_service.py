@@ -212,9 +212,9 @@ class AzureDevOpsService(
                 return response.json(), headers
 
         except httpx.HTTPStatusError as e:
-            raise self.handle_http_status_error(e)
+            raise self.handle_http_status_error(e) from e
         except httpx.HTTPError as e:
-            raise self.handle_http_error(e)
+            raise self.handle_http_error(e) from e
 
     def _parse_repository(self, repository: str) -> tuple[str, str, str]:
         """Parse repository string into organization, project, and repo name.

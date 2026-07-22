@@ -79,5 +79,5 @@ class LocalFileStore(FileStore):
             elif os.path.isdir(full_path):
                 shutil.rmtree(full_path)
                 logger.debug(f'Removed local directory: {full_path}')
-        except Exception as e:
-            logger.error(f'Error clearing local file store: {str(e)}')
+        except Exception:
+            logger.exception('Error clearing local file store', stack_info=True)

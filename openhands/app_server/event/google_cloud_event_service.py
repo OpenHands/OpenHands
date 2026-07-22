@@ -51,7 +51,7 @@ class GoogleCloudEventService(EventServiceBase):
         except NotFound:
             return None
         except Exception:
-            _logger.exception(f'Error reading event from {path}')
+            _logger.exception(f'Error reading event from {path}', stack_info=True)
             return None
 
     def _store_event(self, path: Path, event: Event):

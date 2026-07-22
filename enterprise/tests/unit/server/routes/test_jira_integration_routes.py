@@ -453,6 +453,38 @@ async def test_jira_events_general_exception(mock_redis, mock_verify, mock_reque
         assert 'Internal server error processing webhook' in body['error']
 
 
+@pytest.mark.asyncio
+@patch('server.routes.integration.jira.logger')
+@patch('server.routes.integration.jira.verify_jira_signature', new_callable=AsyncMock)
+@patch('server.routes.integration.jira.redis_client', new_callable=MagicMock)
+async def test_jira_events_invalid_json_body(
+    mock_redis, mock_verify, mock_logger, mock_request
+):
+    """A non-JSON body should be logged with its preview and return 400."""
+    with patch('server.routes.integration.jira.JIRA_WEBHOOKS_ENABLED', True):
+        bad_body = b'<html>some proxy error page</html>'
+        mock_request.body = AsyncMock(return_value=bad_body)
+        mock_request.json = AsyncMock(
+            side_effect=json.JSONDecodeError('Expecting value', '', 0)
+        )
+        mock_request.headers = {'content-type': 'text/html'}
+
+        with pytest.raises(HTTPException) as exc_info:
+            await jira_events(
+                mock_request, MagicMock(), x_hub_signature='sha256=sig123'
+            )
+
+        assert exc_info.value.status_code == 400
+        assert 'not valid JSON' in exc_info.value.detail
+        mock_logger.error.assert_called_once()
+        log_kwargs = mock_logger.error.call_args.kwargs
+        assert log_kwargs['extra']['body_preview'] == bad_body.decode('utf-8')
+        assert log_kwargs['extra']['body_length'] == len(bad_body)
+        assert log_kwargs['extra']['content_type'] == 'text/html'
+        # Signature verification must NOT have been reached
+        mock_verify.assert_not_called()
+
+
 # Test verify_jira_signature
 class TestVerifyJiraSignature:
     """Test Jira webhook signature verification."""

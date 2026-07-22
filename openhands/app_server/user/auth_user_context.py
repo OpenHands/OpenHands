@@ -1,7 +1,9 @@
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, cast
+from uuid import UUID
 
 from fastapi import Request
 from pydantic import PrivateAttr, SecretStr
@@ -177,6 +179,12 @@ class AuthUserContext(UserContext):
     async def get_default_sandbox_spec_id(self) -> str | None:
         user_info = await self.get_user_info()
         return user_info.default_sandbox_spec_id
+
+    async def get_effective_org_id(self) -> UUID | None:
+        get_effective_org_id = getattr(self.user_auth, 'get_effective_org_id', None)
+        if get_effective_org_id is None:
+            return None
+        return await cast(Callable[[], Awaitable[UUID | None]], get_effective_org_id)()
 
 
 USER_ID_ATTR = 'user_id'

@@ -13,6 +13,9 @@ from pydantic import BaseModel
 
 import openhands
 from openhands.app_server.app_conversation.skill_loader import (
+    _match_url_source_to_provider,
+)
+from openhands.app_server.app_conversation.skill_loader import (
     parse_marketplace_source as _parse_marketplace_source,
 )
 from openhands.app_server.config import depends_user_context
@@ -214,39 +217,55 @@ async def _clone_marketplace_repo(
     if not repo_path or '/' not in repo_path:
         return None, f'Invalid repository path: {repo_path}'
 
-    # Build fallback URLs for public repositories
-    provider_domain_map = {
-        'github': 'github.com',
-        'gitlab': 'gitlab.com',
-        'bitbucket': 'bitbucket.org',
-    }
-    fallback_url = (
-        f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
-    )
-
-    # Get authenticated URL from provider handler
+    # Authenticate URL/scp sources against the provider whose host matches
+    # (pinned), so private self-hosted repos (e.g. Bitbucket DC) clone with
+    # credentials. Non-URL owner/repo sources fall through to the public path.
     authenticated_url = None
     try:
-        provider_tokens = await user_context.get_provider_tokens()
-        if not provider_tokens:
-            logger.info(
-                f'No provider tokens available for {provider}, will try unauthenticated clone'
+        matched = await _match_url_source_to_provider(marketplace.source, user_context)
+        if matched is not None:
+            matched_provider, matched_repo = matched
+            handler = await user_context.get_provider_handler()
+            authenticated_url = await handler.get_authenticated_git_url(
+                matched_repo, specified_provider=matched_provider
             )
-        else:
-            # Cast to expected type - user_context may return dict[str, str] in some contexts
-            typed_provider_tokens = cast(PROVIDER_TOKEN_TYPE, provider_tokens)
-            client = ProviderHandler(
-                provider_tokens=MappingProxyType(typed_provider_tokens),
-                external_auth_id=await user_context.get_user_id(),
-            )
-            authenticated_url = await client.get_authenticated_git_url(repo_path)
+        elif '://' not in repo_path:
+            # Bare owner/repo (or recognized public domain): resolve normally.
+            provider_tokens = await user_context.get_provider_tokens()
+            if provider_tokens:
+                typed_provider_tokens = cast(PROVIDER_TOKEN_TYPE, provider_tokens)
+                client = ProviderHandler(
+                    provider_tokens=MappingProxyType(typed_provider_tokens),
+                    external_auth_id=await user_context.get_user_id(),
+                )
+                authenticated_url = await client.get_authenticated_git_url(repo_path)
     except Exception as e:
         logger.warning(
-            f'Failed to get authenticated URL for {repo_path}: {e}, will try unauthenticated clone'
+            f'Failed to get authenticated URL for {repo_path}: {e}, '
+            'will try unauthenticated clone'
         )
 
-    # Use authenticated URL if available, otherwise fallback to public URL
-    clone_url = authenticated_url or fallback_url
+    if authenticated_url:
+        clone_url = authenticated_url
+    elif '://' in repo_path:
+        # repo_path still carries a scheme, so the source is a full URL on a host
+        # _parse_marketplace_source did not recognize AND no configured provider
+        # matched it. Refuse rather than git-cloning an arbitrary (possibly
+        # attacker-controlled) host (SSRF). Recognized public domains
+        # (github.com/gitlab.com/bitbucket.org) reduce to owner/repo above and
+        # fall through to the public clone below regardless of login provider.
+        return None, f'Unsupported marketplace host: {marketplace.source}'
+    else:
+        # Public bare owner/repo, recognized provider prefix, or a recognized
+        # public-domain URL: clone from the public domain, no auth needed.
+        provider_domain_map = {
+            'github': 'github.com',
+            'gitlab': 'gitlab.com',
+            'bitbucket': 'bitbucket.org',
+        }
+        clone_url = (
+            f'https://{provider_domain_map.get(provider, "github.com")}/{repo_path}.git'
+        )
 
     # Create unique temporary directory for this clone using tempfile.mkdtemp
     try:
@@ -430,13 +449,15 @@ async def get_marketplace_skills(
             marketplace_skills[marketplace.name] = skill_names
 
     except Exception as e:
-        logger.exception(f'Unexpected error in marketplace-skills endpoint: {e}')
+        logger.exception(
+            'Unexpected error in marketplace-skills endpoint', stack_info=True
+        )
         errors.append(f'Internal error: {str(e)}')
         # Clean up before raising
         for clone_dir in cloned_dirs:
             _cleanup_clone_dir(clone_dir)
         # Raise HTTP 500 for critical errors
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         # Clean up cloned directories
         for clone_dir in cloned_dirs:

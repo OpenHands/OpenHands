@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router";
 import { useIsAuthed } from "./query/use-is-authed";
 import { LoginMethod, setLoginMethod } from "#/utils/local-storage";
 import { useConfig } from "./query/use-config";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 /**
  * Hook to handle authentication callback and set login method after successful authentication
@@ -55,7 +56,7 @@ export const useAuthCallback = () => {
         ? `${destination}?${remainingParams}`
         : destination;
 
-      navigate(finalUrl, { replace: true });
+      navigateOrHardRedirect(navigate, finalUrl, { replace: true });
     }
   }, [
     isAuthed,

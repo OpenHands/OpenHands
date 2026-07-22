@@ -3,6 +3,7 @@ import { usePostHog } from "posthog-js/react";
 import { useNavigate } from "react-router";
 import { openHands } from "#/api/open-hands-axios";
 import { handleCaptureConsent } from "#/utils/handle-capture-consent";
+import { navigateOrHardRedirect } from "#/utils/cross-app-redirect";
 
 interface AcceptTosVariables {
   redirectUrl: string;
@@ -38,8 +39,7 @@ export const useAcceptTos = () => {
         // For external URLs, redirect using window.location
         window.location.href = finalRedirectUrl;
       } else {
-        // For internal routes, use navigate
-        navigate(finalRedirectUrl);
+        navigateOrHardRedirect(navigate, finalRedirectUrl);
       }
     },
     onError: () => {

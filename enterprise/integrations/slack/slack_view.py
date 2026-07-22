@@ -440,13 +440,13 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                 response.raise_for_status()
 
             except Exception as e:
-                logger.error(
+                logger.exception(
                     '[Slack V1] Failed to send message to conversation %s: %s',
                     self.conversation_id,
                     str(e),
-                    exc_info=True,
+                    stack_info=True,
                 )
-                raise Exception(f'Failed to send message to v1 conversation: {str(e)}')
+                raise Exception('Failed to send message to v1 conversation') from e
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
         """Send new user message to conversation."""

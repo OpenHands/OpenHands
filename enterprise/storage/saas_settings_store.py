@@ -9,7 +9,10 @@ from pydantic import SecretStr
 from server.auth.token_manager import TokenManager
 from server.constants import LITE_LLM_API_URL
 from server.logger import logger
-from server.routes.org_models import OrgMemberSettingsUpdate
+from server.routes.org_models import (
+    MEMBER_PRIVATE_AGENT_KEYS,
+    OrgMemberSettingsUpdate,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from storage.agent_profile_resolution import (
@@ -21,7 +24,7 @@ from storage.database import a_session_maker
 from storage.lite_llm_manager import LiteLlmManager, get_openhands_cloud_key_alias
 from storage.org import Org
 from storage.org_member import OrgMember
-from storage.org_member_store import OrgMemberStore
+from storage.org_member_store import OrgMemberStore, serialize_mcp_config
 from storage.org_store import OrgStore
 from storage.user import User
 from storage.user_settings import UserSettings
@@ -31,7 +34,6 @@ from openhands.app_server.settings.llm_profiles import LLMProfiles, resolve_prof
 from openhands.app_server.settings.settings_models import Settings
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.utils.jsonpatch_compat import (
-    WHOLESALE_REPLACEMENT_KEYS,
     deep_merge,
     deep_merge_with_wholesale_keys,
 )
@@ -42,34 +44,64 @@ from openhands.sdk.llm.utils.openhands_provider import (
 from openhands.sdk.mcp.config import MCPServer, coerce_mcp_config
 from openhands.sdk.profiles import resolve_agent_profile
 
-# Agent-settings keys private to each org member: never written to
-# org-level defaults nor broadcast across the org. Covers ``mcp_config``
-# (per-user MCP server set, a dict-of-items collection). ACP provider
-# creds are not here — they ride the per-user Secrets panel
-# (``request.secrets`` -> ``state.secret_registry``), not agent_settings.
-MEMBER_PRIVATE_AGENT_KEYS: frozenset[str] = WHOLESALE_REPLACEMENT_KEYS
 
+class ManagedLlmKeyStatus:
+    """Outcomes for ``SaasSettingsStore.rotate_managed_llm_key``.
 
-def _split_member_private_keys(
-    agent_settings_diff: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split an agent_settings dump into (shared, private) halves.
-
-    The shared half is safe to write to ``org.agent_settings`` and to
-    broadcast through ``update_all_members_settings_async``. The private
-    half must be applied only to the acting member's row.
+    Kept as plain string constants (not an Enum) so callers can compare
+    against the literals without importing a type.
     """
-    private = {
-        key: agent_settings_diff[key]
-        for key in MEMBER_PRIVATE_AGENT_KEYS
-        if key in agent_settings_diff
-    }
-    shared = {
-        key: value
-        for key, value in agent_settings_diff.items()
-        if key not in MEMBER_PRIVATE_AGENT_KEYS
-    }
-    return shared, private
+
+    ROTATED = 'rotated'
+    NOT_MANAGED = 'not_managed'
+    BYOK = 'byok'
+    MISSING_MEMBER = 'missing_member'
+
+
+@dataclass(frozen=True)
+class ManagedLlmKeyConfig:
+    """Whether an effective LLM config uses a managed LiteLLM/OpenHands key."""
+
+    openhands_type: bool
+
+
+@dataclass(frozen=True)
+class ManagedLlmKeyRotation:
+    """Result of a managed-key rotation attempt."""
+
+    status: str
+    old_key: str | None = None
+    new_key: str | None = None
+    openhands_type: bool = False
+
+
+def managed_llm_key_config_from_model(
+    llm_model: str | None, llm_base_url: str | None
+) -> ManagedLlmKeyConfig | None:
+    """Classify an effective LLM config as managed.
+
+    Uses the same model/base_url logic as ``store()`` and
+    ``OrgStore._maybe_get_managed_llm_key_for_user``.
+
+    Returns ``None`` when the config is not a managed LiteLLM/OpenHands-provider
+    configuration (e.g. member/org BYOK pointing at a third-party base_url).
+    """
+    openhands_type = is_openhands_model(llm_model)
+    normalized_llm_base_url = llm_base_url.rstrip('/') if llm_base_url else None
+    normalized_managed_base_url = (
+        LITE_LLM_API_URL.rstrip('/') if LITE_LLM_API_URL else None
+    )
+    uses_openhands_provider_proxy = openhands_type and (
+        normalized_llm_base_url is None
+        or 'all-hands.dev' in normalized_llm_base_url.lower()
+    )
+    uses_managed_llm_key = (
+        normalized_managed_base_url is not None
+        and normalized_llm_base_url == normalized_managed_base_url
+    ) or uses_openhands_provider_proxy
+    if not uses_managed_llm_key:
+        return None
+    return ManagedLlmKeyConfig(openhands_type=openhands_type)
 
 
 @dataclass
@@ -83,21 +115,21 @@ class SaasSettingsStore(SettingsStore):
     effective_org_id: UUID | None = None
 
     def _resolve_org_id(self, user: User) -> UUID:
-        """Return the effective org id for this request, or the user's
-        current org id as a fallback. The caller still needs to verify
-        that the user is a member of the returned org (handled in load/
-        store by the existing org_members lookup).
+        """Return the effective org id for this request.
 
-        `user.current_org_id` is non-nullable on the ORM model, so the
-        result is always a UUID.
+        Falls back to the user's current org id. The caller still needs to verify
+        that the user is a member of the returned org (handled in load/store by
+        the existing org_members lookup).
+
+        `user.current_org_id` is non-nullable on the ORM model, so the result is
+        always a UUID.
         """
         return self.effective_org_id or user.current_org_id
 
     async def _get_user_settings_by_keycloak_id_async(
         self, keycloak_user_id: str, session=None
     ) -> UserSettings | None:
-        """
-        Get UserSettings by keycloak_user_id (async version).
+        """Get UserSettings by keycloak_user_id (async version).
 
         Args:
             keycloak_user_id: The keycloak user ID to search for
@@ -144,7 +176,16 @@ class SaasSettingsStore(SettingsStore):
 
     @staticmethod
     def _get_persisted_agent_settings(item: Settings) -> dict[str, Any]:
-        return item.agent_settings.model_dump(mode='json')
+        persisted = item.agent_settings.model_dump(
+            mode='json',
+            exclude={'llm': {'api_key'}},
+        )
+        persisted.pop('mcp_config', None)
+        return persisted
+
+    @staticmethod
+    def _get_persisted_mcp_config(item: Settings) -> dict[str, Any] | None:
+        return serialize_mcp_config(item.agent_settings.mcp_config)
 
     def _resolve_active_agent_profile(
         self,
@@ -305,6 +346,8 @@ class SaasSettingsStore(SettingsStore):
             return None
         org_agent_settings = OrgStore.get_agent_settings_from_org(org)
         member_agent_settings_diff = dict(org_member.agent_settings_diff)
+        member_agent_settings_diff.pop('mcp_config', None)
+        member_mcp_config = org_member.effective_mcp_config
 
         kwargs = {
             **{
@@ -334,6 +377,8 @@ class SaasSettingsStore(SettingsStore):
             org_agent_settings_dump,
             member_agent_settings_diff,
         )
+        if member_mcp_config is not None:
+            merged_agent_settings['mcp_config'] = member_mcp_config
         effective_llm_api_key = self._get_effective_llm_api_key(org, org_member)
         if effective_llm_api_key is not None:
             merged_agent_settings.setdefault('llm', {})['api_key'] = (
@@ -449,6 +494,7 @@ class SaasSettingsStore(SettingsStore):
                 kwargs['active_agent_profile_revision'] = resolved_revision
 
         settings = Settings(**kwargs)
+        settings._mcp_config_updated = False
         if resolution_requested:
             # Launch view (even when resolution fell back): never persistable.
             settings._resolved_view = True
@@ -577,6 +623,16 @@ class SaasSettingsStore(SettingsStore):
                 normalized_llm_base_url == normalized_managed_base_url
                 or (normalized_llm_base_url is None and is_openhands_model(llm_model))
             )
+            logger.info(
+                'saas_settings_store:store:managed_llm_config_decision',
+                extra={
+                    'user_id': self.user_id,
+                    'org_id': str(org_id),
+                    'model': llm_model,
+                    'base_url': llm_base_url or '',
+                    'uses_managed_llm_key': uses_managed_llm_key,
+                },
+            )
 
             if uses_managed_llm_key:
                 await self._ensure_api_key(
@@ -584,15 +640,11 @@ class SaasSettingsStore(SettingsStore):
                 )
 
             effective_agent_settings_diff = self._get_persisted_agent_settings(item)
-
-            # Keep mcp_config scoped to the acting member only.
-            # ``shared_agent_settings_diff`` is the slice safe for org-wide
-            # state; ``private_agent_settings_diff`` is applied below to the
-            # acting member's row only so other members don't inherit one
-            # user's MCP servers.
-            shared_agent_settings_diff, private_agent_settings_diff = (
-                _split_member_private_keys(effective_agent_settings_diff)
-            )
+            shared_agent_settings_diff = {
+                key: value
+                for key, value in effective_agent_settings_diff.items()
+                if key not in MEMBER_PRIVATE_AGENT_KEYS
+            }
 
             # Strip any pre-existing private keys from the org dump before
             # merging, so legacy values written by older code paths are
@@ -674,14 +726,15 @@ class SaasSettingsStore(SettingsStore):
                 ),
             )
 
-            # Member-private keys (mcp_config) live only on the acting
-            # member's row. Use the wholesale-replacement semantics so
-            # deletes stick (APP-1862).
-            if private_agent_settings_diff:
-                org_member.agent_settings_diff = deep_merge_with_wholesale_keys(
-                    dict(org_member.agent_settings_diff),
-                    private_agent_settings_diff,
-                )
+            member_mcp_config = org_member.effective_mcp_config
+            member_agent_settings_diff = dict(org_member.agent_settings_diff)
+            for private_key in MEMBER_PRIVATE_AGENT_KEYS:
+                member_agent_settings_diff.pop(private_key, None)
+            org_member.agent_settings_diff = member_agent_settings_diff
+            if item._mcp_config_updated:
+                org_member.mcp_config = self._get_persisted_mcp_config(item)
+            elif org_member.mcp_config is None and member_mcp_config is not None:
+                org_member.mcp_config = serialize_mcp_config(member_mcp_config)
 
             if uses_managed_llm_key and current_member_llm_api_key is not None:
                 # Managed/proxy key — store on this member but mark as org-managed
@@ -770,8 +823,8 @@ class SaasSettingsStore(SettingsStore):
                         normalized.append(mp.model_dump())
                 return normalized
             return []
-        except Exception as e:
-            logger.error(f'Error fetching org marketplaces: {e}')
+        except Exception:
+            logger.exception('Error fetching org marketplaces', stack_info=True)
             return []
 
     async def _ensure_api_key(
@@ -782,16 +835,42 @@ class SaasSettingsStore(SettingsStore):
         First checks if an existing key exists for the user and verifies it
         is valid in LiteLLM. If valid, reuses it. Otherwise, generates a new key.
         """
-
         llm_api_key = item.agent_settings.llm.api_key
+        logger.info(
+            'saas_settings_store:ensure_api_key:evaluate',
+            extra={
+                'user_id': self.user_id,
+                'org_id': org_id,
+                'openhands_type': openhands_type,
+                'has_api_key': bool(llm_api_key),
+            },
+        )
 
-        # First, check if our current key is valid
-        if llm_api_key and not await LiteLlmManager.verify_existing_key(
+        if not llm_api_key:
+            logger.info(
+                'saas_settings_store:ensure_api_key:skip_missing_api_key',
+                extra={'user_id': self.user_id, 'org_id': org_id},
+            )
+            return
+
+        existing_key_valid = await LiteLlmManager.verify_existing_key(
             llm_api_key.get_secret_value(),  # type: ignore[union-attr]
             self.user_id,
             org_id,
             openhands_type=openhands_type,
-        ):
+        )
+        logger.info(
+            'saas_settings_store:ensure_api_key:verify_existing_key',
+            extra={
+                'user_id': self.user_id,
+                'org_id': org_id,
+                'openhands_type': openhands_type,
+                'existing_key_valid': existing_key_valid,
+            },
+        )
+
+        # First, check if our current key is valid
+        if not existing_key_valid:
             # Both branches mint one managed key per (user, org) under the same
             # deterministic alias, deleting any prior key first — so switching
             # the default to/from an openhands/* model never orphans a key.
@@ -807,5 +886,140 @@ class SaasSettingsStore(SettingsStore):
             item.agent_settings.llm.api_key = SecretStr(generated_key)
             logger.info(
                 'saas_settings_store:store:generated_openhands_key',
-                extra={'user_id': self.user_id},
+                extra={
+                    'user_id': self.user_id,
+                    'org_id': org_id,
+                    'openhands_type': openhands_type,
+                },
+            )
+
+    async def get_current_managed_llm_key(self) -> str | None:
+        """Return the acting member's current managed key, if effective config uses it.
+
+        This is intentionally stricter than ``load()``'s effective-key resolution:
+        org-level keys and member BYOK/custom keys are treated as non-managed for
+        this helper because rotating the member managed key would not affect the
+        effective key used at runtime.
+        """
+        settings = await self.load()
+        if settings is None:
+            return None
+
+        llm = settings.agent_settings.llm
+        if managed_llm_key_config_from_model(llm.model, llm.base_url) is None:
+            return None
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.id == uuid.UUID(self.user_id))
+            )
+            user = result.scalars().first()
+            if user is None:
+                return None
+
+            org_id = self._resolve_org_id(user)
+            org = await session.get(Org, org_id)
+            if org is None or org._llm_api_key:
+                return None
+
+            org_member = next(
+                (om for om in user.org_members if om.org_id == org_id), None
+            )
+            if (
+                org_member is None
+                or org_member.has_custom_llm_api_key
+                or not org_member._llm_api_key
+            ):
+                return None
+            return org_member.llm_api_key.get_secret_value()
+
+    async def rotate_managed_llm_key(self) -> ManagedLlmKeyRotation:
+        """Force-rotate the managed LiteLLM/OpenHands key for this user/org.
+
+        Centralizes the managed-key lifecycle so callers (e.g. the API-key
+        refresh endpoint) don't re-implement it. The effective LLM config is
+        resolved through ``load()`` (org defaults merged with the member
+        diff, with org-default precedence), so non-managed configs — member
+        BYOK or org-level BYOK pointing at a third-party base_url — are
+        rejected before any key is generated.
+
+        The new key is generated under the same deterministic alias as
+        ``_ensure_api_key`` / ``OrgStore._maybe_get_managed_llm_key_for_user``
+        (deleting any prior alias first to avoid orphaned keys) and carries
+        ``{'type': 'openhands'}`` metadata when the effective model is an
+        ``openhands/*`` model, matching ``verify_existing_key``'s contract.
+
+        The replacement key is persisted on the acting member's row in the
+        same session used to load it, so a member that disappears mid-rotation
+        is reported explicitly (``MISSING_MEMBER``) rather than silently
+        swallowed. The previous key token is returned for best-effort cleanup
+        and is only exposed after a successful persist.
+        """
+        settings = await self.load()
+        if settings is None:
+            return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+        llm = settings.agent_settings.llm
+        config = managed_llm_key_config_from_model(llm.model, llm.base_url)
+        if config is None:
+            return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.NOT_MANAGED)
+
+        async with a_session_maker() as session:
+            result = await session.execute(
+                select(User)
+                .options(joinedload(User.org_members))
+                .filter(User.id == uuid.UUID(self.user_id))
+            )
+            user = result.scalars().first()
+            if user is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+            org_id = self._resolve_org_id(user)
+            org = await session.get(Org, org_id)
+            if org is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+            if org._llm_api_key:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.BYOK)
+
+            org_member = next(
+                (om for om in user.org_members if om.org_id == org_id), None
+            )
+            if org_member is None:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.MISSING_MEMBER)
+
+            if org_member.has_custom_llm_api_key:
+                return ManagedLlmKeyRotation(status=ManagedLlmKeyStatus.BYOK)
+
+            existing_key = org_member.llm_api_key if org_member._llm_api_key else None
+            old_key = existing_key.get_secret_value() if existing_key else None
+
+            org_id_str = str(org_id)
+            # One managed key per (user, org) under the deterministic alias;
+            # delete the alias first so rotation never orphans a prior key.
+            key_alias = get_openhands_cloud_key_alias(self.user_id, org_id_str)
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+            new_key = await LiteLlmManager.generate_key(
+                self.user_id,
+                org_id_str,
+                key_alias,
+                {'type': 'openhands'} if config.openhands_type else None,
+            )
+
+            # Persist on the same member row we loaded, in the same session,
+            # before exposing the old token for cleanup.
+            org_member.llm_api_key = SecretStr(new_key)
+            org_member.has_custom_llm_api_key = False
+            await session.commit()
+
+            logger.info(
+                'saas_settings_store:rotate_managed_llm_key:rotated',
+                extra={'user_id': self.user_id, 'org_id': org_id_str},
+            )
+            return ManagedLlmKeyRotation(
+                status=ManagedLlmKeyStatus.ROTATED,
+                old_key=old_key,
+                new_key=new_key,
+                openhands_type=config.openhands_type,
             )

@@ -38,7 +38,8 @@ export const useUnifiedResumeConversationSandbox = () => {
       providers?: Provider[];
     }) => resumeV1ConversationSandbox(variables.conversationId),
     retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
-    retryDelay: (_failureCount, error) => getRateLimitRetryDelayMs(error),
+    retryDelay: (failureCount, error) =>
+      getRateLimitRetryDelayMs(failureCount, error),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["user", "conversations"] });
       const previousConversations = queryClient.getQueryData([
