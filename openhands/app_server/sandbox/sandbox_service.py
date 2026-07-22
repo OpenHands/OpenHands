@@ -38,7 +38,7 @@ _CAPACITY_MARKERS = (
 
 
 def _is_capacity_detail(detail: str | None) -> bool:
-    return bool(detail) and any(m in detail for m in _CAPACITY_MARKERS)
+    return detail is not None and any(m in detail for m in _CAPACITY_MARKERS)
 
 
 def _capacity_error(detail: str | None) -> SandboxError:
