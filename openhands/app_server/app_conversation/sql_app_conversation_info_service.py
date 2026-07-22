@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import AsyncGenerator, cast
@@ -86,7 +87,7 @@ def _normalize_event_timestamp(value: datetime | None) -> datetime:
 
 
 def _combine_usage_metrics(
-    usage_to_metrics: dict[str, MetricsSnapshot],
+    usage_to_metrics: Mapping[str, MetricsSnapshot],
 ) -> tuple[float, TokenUsage | None]:
     """Sum cost and token usage across every usage bucket in the registry."""
     total_cost = 0.0
