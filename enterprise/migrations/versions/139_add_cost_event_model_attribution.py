@@ -1,7 +1,7 @@
 """Add model/usage attribution columns to conversation cost events.
 
-Revision ID: 138
-Revises: 137
+Revision ID: 139
+Revises: 138
 Create Date: 2026-07-22
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = '138'
-down_revision = '137'
+revision = '139'
+down_revision = '138'
 branch_labels = None
 depends_on = None
 
