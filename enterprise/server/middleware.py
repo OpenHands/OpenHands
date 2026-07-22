@@ -192,13 +192,15 @@ class SetAuthCookieMiddleware:
             return False
 
         parts = path.split('/')
+        is_credential_binding_request = (
+            len(parts) == 7 and request.method in {'GET', 'PUT'}
+        ) or (len(parts) == 8 and parts[7] == 'renew' and request.method == 'POST')
         if (
-            len(parts) == 7
+            is_credential_binding_request
             and parts[1:4] == ['api', 'internal', 'conversations']
             and parts[5] == 'credential-bindings'
             and bool(parts[4])
             and bool(parts[6])
-            and request.method in {'GET', 'PUT'}
         ):
             return False
 

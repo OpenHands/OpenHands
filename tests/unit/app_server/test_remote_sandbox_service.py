@@ -1291,15 +1291,38 @@ class TestGetSandboxBySessionApiKey:
         )
         remote_sandbox_service.user_context.get_user_id.return_value = 'test-user-123'
 
-        # Execute
+        with pytest.raises(Exception, match='Runtime error'):
+            await remote_sandbox_service.get_sandbox_by_session_api_key(session_api_key)
+
+    @pytest.mark.asyncio
+    async def test_get_sandbox_by_session_api_key_missing_runtime(
+        self, remote_sandbox_service
+    ):
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
+        session_api_key = 'test-session-key'
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash=_hash_session_api_key(session_api_key)
+        )
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = stored_sandbox
+        remote_sandbox_service.db_session.execute = AsyncMock(return_value=mock_result)
+        request = httpx.Request('GET', 'https://runtime.test/session')
+        response = httpx.Response(404, request=request)
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Runtime not found', request=request, response=response
+            )
+        )
+
         result = await remote_sandbox_service.get_sandbox_by_session_api_key(
             session_api_key
         )
 
-        # Verify - should still return sandbox info, just with None runtime
         assert result is not None
-        assert result.id == 'test-sandbox-123'
-        assert result.status == SandboxStatus.MISSING  # No runtime means MISSING
+        assert result.status == SandboxStatus.MISSING
 
 
 class TestUtilityFunctions:

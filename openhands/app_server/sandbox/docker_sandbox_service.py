@@ -356,10 +356,10 @@ class DockerSandboxService(SandboxService):
                     container_session_key = env_vars.get(SESSION_API_KEY_VARIABLE)
 
                     if container_session_key == session_api_key:
-                        return await self._container_to_checked_sandbox_info(container)
+                        return await self._container_to_sandbox_info(container)
 
             return None
-        except (NotFound, APIError):
+        except NotFound:
             return None
 
     async def get_sandbox_record_by_session_api_key(

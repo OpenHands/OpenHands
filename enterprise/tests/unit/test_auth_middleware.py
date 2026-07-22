@@ -161,9 +161,12 @@ async def test_middleware_no_auth_at_all(middleware, mock_request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('method', ('GET', 'PUT'))
+@pytest.mark.parametrize(
+    ('method', 'suffix'),
+    (('GET', ''), ('PUT', ''), ('POST', '/renew')),
+)
 async def test_middleware_defers_credential_binding_auth(
-    middleware, mock_request, mock_response, method
+    middleware, mock_request, mock_response, method, suffix
 ):
     mock_request.cookies = {}
     mock_request.headers = {'Authorization': 'Basic scoped-credential'}
@@ -173,7 +176,7 @@ async def test_middleware_defers_credential_binding_auth(
     mock_request.url.path = (
         '/api/internal/conversations/'
         '11111111-1111-1111-1111-111111111111/'
-        'credential-bindings/CODEX_AUTH_JSON'
+        f'credential-bindings/CODEX_AUTH_JSON{suffix}'
     )
     mock_call_next = AsyncMock(return_value=mock_response)
 

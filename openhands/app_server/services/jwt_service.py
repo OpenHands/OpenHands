@@ -105,7 +105,13 @@ class JwtService:
             jwt_payload, secret_key, algorithm='HS256', headers={'kid': key_id}
         )
 
-    def verify_jws_token(self, token: str, key_id: str | None = None) -> dict[str, Any]:
+    def verify_jws_token(
+        self,
+        token: str,
+        key_id: str | None = None,
+        *,
+        verify_expiration: bool = True,
+    ) -> dict[str, Any]:
         """Verify and decode a JWS token.
 
         Args:
@@ -139,7 +145,12 @@ class JwtService:
         secret_key = self._keys[key_id].key.get_secret_value()
 
         try:
-            payload = jwt.decode(token, secret_key, algorithms=['HS256'])
+            payload = jwt.decode(
+                token,
+                secret_key,
+                algorithms=['HS256'],
+                options={'verify_exp': verify_expiration},
+            )
             return payload
         except jwt.InvalidTokenError as e:
             raise jwt.InvalidTokenError('Token verification failed') from e

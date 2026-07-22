@@ -113,6 +113,28 @@ class FileSecretsStore(SecretsStore):
             custom_secrets=data.get('custom_secrets') or {},
         )
 
+    @staticmethod
+    def _raw_secret(data: dict[str, Any], name: str) -> tuple[dict[str, Any], str]:
+        custom_secrets = data.get('custom_secrets')
+        if not isinstance(custom_secrets, dict):
+            raise KeyError(name)
+        current = custom_secrets.get(name)
+        if not isinstance(current, dict):
+            raise KeyError(name)
+        value = current.get('secret')
+        if not isinstance(value, str):
+            raise KeyError(name)
+        return current, value
+
+    @staticmethod
+    def _raw_versions(data: dict[str, Any]) -> dict[str, Any]:
+        versions = data.get(_CREDENTIAL_VERSIONS_KEY)
+        if versions is None:
+            return {}
+        if not isinstance(versions, dict):
+            raise ValueError('Invalid credential versions')
+        return dict(versions)
+
     def _write(self, secrets: Secrets, versions: dict[str, str]) -> None:
         data = secrets.model_dump(
             mode='json',
@@ -189,6 +211,11 @@ class FileSecretsStore(SecretsStore):
                             versions[name] = secrets_module.token_urlsafe(24)
 
                 updated = secrets.model_copy(update={'custom_secrets': incoming})
+                if (
+                    _CODEX_AUTH_SECRET_NAME in updated.custom_secrets
+                    and _CODEX_AUTH_SECRET_NAME not in versions
+                ):
+                    versions[_CODEX_AUTH_SECRET_NAME] = secrets_module.token_urlsafe(24)
                 self._write(updated, versions)
                 for name in managed_names | set(versions):
                     stored = updated.custom_secrets.get(name)
@@ -208,24 +235,41 @@ class FileSecretsStore(SecretsStore):
         if not _supports_atomic_versioned_writes(self.file_store):
             raise NotImplementedError
 
-        def load_locked() -> tuple[str, str]:
+        def load_current() -> tuple[str, str]:
+            data = self._read_data()
+            _, value = self._raw_secret(data, name)
+            version = self._raw_versions(data).get(name)
+            if not isinstance(version, str) or not version:
+                raise NotImplementedError
+            self._loaded_credentials[name] = (value, version)
+            return value, version
+
+        return await call_sync_from_async(load_current)
+
+    async def ensure_versioned(
+        self,
+        name: str,
+        organization_id: UUID | None = None,
+    ) -> None:
+        del organization_id
+        if not _supports_atomic_versioned_writes(self.file_store):
+            raise NotImplementedError
+
+        def ensure_locked() -> None:
             with _file_lock(self.file_store, self.path):
                 data = self._read_data()
-                secrets = self._secrets(data)
-                current = secrets.custom_secrets.get(name)
-                if current is None:
-                    raise KeyError(name)
-                versions = self._versions(data)
+                _, value = self._raw_secret(data, name)
+                versions = self._raw_versions(data)
                 version = versions.get(name)
-                if version is None:
+                if not isinstance(version, str) or not version:
                     version = secrets_module.token_urlsafe(24)
                     versions[name] = version
-                    self._write(secrets, versions)
-                value = current.secret.get_secret_value()
+                    updated = dict(data)
+                    updated[_CREDENTIAL_VERSIONS_KEY] = versions
+                    self.file_store.write(self.path, json.dumps(updated))
                 self._loaded_credentials[name] = (value, version)
-                return value, version
 
-        return await call_sync_from_async(load_locked)
+        await call_sync_from_async(ensure_locked)
 
     async def replace_versioned(
         self,
@@ -241,21 +285,20 @@ class FileSecretsStore(SecretsStore):
         def replace_locked() -> str:
             with _file_lock(self.file_store, self.path):
                 data = self._read_data()
-                secrets = self._secrets(data)
-                current = secrets.custom_secrets.get(name)
-                if current is None:
-                    raise KeyError(name)
-                versions = self._versions(data)
+                current, _ = self._raw_secret(data, name)
+                versions = self._raw_versions(data)
                 if versions.get(name) != expected_version:
                     raise CredentialVersionConflict
-                custom_secrets = dict(secrets.custom_secrets)
-                custom_secrets[name] = current.model_copy(
-                    update={'secret': type(current.secret)(value)}
-                )
+                custom_secrets = dict(data['custom_secrets'])
+                custom_secrets[name] = {**current, 'secret': value}
                 successor = secrets_module.token_urlsafe(24)
                 versions[name] = successor
-                updated = secrets.model_copy(update={'custom_secrets': custom_secrets})
-                self._write(updated, versions)
+                updated = {
+                    **data,
+                    'custom_secrets': custom_secrets,
+                    _CREDENTIAL_VERSIONS_KEY: versions,
+                }
+                self.file_store.write(self.path, json.dumps(updated))
                 self._loaded_credentials[name] = (value, successor)
                 return successor
 
