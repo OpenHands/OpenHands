@@ -96,7 +96,6 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 )
 from openhands.app_server.secrets.credential_binding_models import (
     CODEX_AUTH_SECRET_NAME,
-    CREDENTIAL_BINDING_CAPABILITY,
     credential_binding_path,
     is_valid_codex_auth,
 )
@@ -2302,37 +2301,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not value or not is_valid_codex_auth(value):
             return request
 
-        headers = (
-            {'X-Session-API-Key': sandbox.session_api_key}
-            if sandbox.session_api_key
-            else {}
-        )
-        try:
-            response = await self.httpx_client.get(
-                f'{agent_server_url}/server_info',
-                headers=headers,
-                timeout=self.sandbox_startup_timeout,
-            )
-            response.raise_for_status()
-            capabilities = response.json().get('capabilities', [])
-        except Exception:
-            _logger.warning(
-                'Could not determine agent-server credential binding capabilities',
-                extra={'conversation_id': str(conversation_id)},
-                exc_info=True,
-            )
-            return request
-        if (
-            not isinstance(capabilities, list)
-            or CREDENTIAL_BINDING_CAPABILITY not in capabilities
-        ):
-            return request
         if not self.web_url or not sandbox.session_api_key:
             _logger.warning(
                 'Credential binding context is incomplete',
                 extra={'conversation_id': str(conversation_id)},
             )
             return request
+        headers = {'X-Session-API-Key': sandbox.session_api_key}
 
         try:
             secrets_store = await self.user_context.get_secrets_store()
@@ -2384,6 +2359,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 },
                 timeout=self.sandbox_startup_timeout,
             )
+            if activation_response.status_code == 404:
+                return request
             activation_response.raise_for_status()
         except KeyError as exc:
             _logger.warning(
