@@ -113,6 +113,7 @@ from openhands.app_server.settings.settings_models import (
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname,
     replace_localhost_hostname_for_docker,
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
@@ -156,6 +157,18 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+_CREDENTIAL_BINDING_TOKEN_LIFETIME = timedelta(days=14)
+
+
+def _resolve_web_url(
+    web_url: str | None,
+    sandbox_service: SandboxService,
+) -> str | None:
+    if not isinstance(sandbox_service, DockerSandboxService):
+        return web_url
+    if web_url is None:
+        return f'http://host.docker.internal:{sandbox_service.host_port}'
+    return replace_localhost_hostname(web_url)
 
 
 def _resolve_title_llm_profile(user: UserInfo) -> str | None:
@@ -2344,7 +2357,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'secret_name': CODEX_AUTH_SECRET_NAME,
                     'actions': ['load', 'replace'],
                 },
-                expires_in=self.access_token_hard_timeout or timedelta(days=14),
+                expires_in=_CREDENTIAL_BINDING_TOKEN_LIFETIME,
             )
             activation_response = await self.httpx_client.put(
                 f'{agent_server_url}/api/conversations/{conversation_id}'
@@ -3164,11 +3177,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 )
             config = get_global_config()
 
-            # If no web url has been set and we are using docker, we can use host.docker.internal
-            web_url = config.web_url
-            if web_url is None:
-                if isinstance(sandbox_service, DockerSandboxService):
-                    web_url = f'http://host.docker.internal:{sandbox_service.host_port}'
+            web_url = _resolve_web_url(config.web_url, sandbox_service)
 
             # Get app_mode for SaaS mode
             app_mode = None

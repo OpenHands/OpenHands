@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -8,7 +9,11 @@ from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from openhands.app_server.config import depends_jwt_service
+from openhands.app_server.config import (
+    depends_jwt_service,
+    get_app_conversation_info_service,
+    get_sandbox_service,
+)
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
 from openhands.app_server.secrets.credential_binding_models import (
     CREDENTIAL_BINDING_ROUTE,
@@ -20,11 +25,14 @@ from openhands.app_server.secrets.secrets_store import (
     CredentialVersionConflict,
     SecretsStore,
 )
+from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
+from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.user_auth.user_auth import get_for_user
 
 router = APIRouter(prefix=CREDENTIAL_BINDING_ROUTE_PREFIX)
 jwt_service_dependency = depends_jwt_service()
+_CONVERSATION_START_GRACE_SECONDS = 300
 
 
 class CredentialReplacement(BaseModel):
@@ -41,6 +49,7 @@ class CredentialBindingScope:
     conversation_id: UUID
     runtime_id: str
     secret_name: str
+    issued_at: int
 
 
 def _authorize(
@@ -70,6 +79,7 @@ def _authorize(
         runtime_id = claims['runtime_id']
         scoped_secret_name = claims['secret_name']
         actions = claims['actions']
+        issued_at = claims['iat']
     except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
@@ -89,6 +99,8 @@ def _authorize(
         or not all(isinstance(candidate, str) for candidate in actions)
         or set(actions) != {'load', 'replace'}
         or action not in actions
+        or not isinstance(issued_at, int)
+        or isinstance(issued_at, bool)
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -100,6 +112,7 @@ def _authorize(
         conversation_id=conversation_id,
         runtime_id=runtime_id,
         secret_name=secret_name,
+        issued_at=issued_at,
     )
 
 
@@ -112,6 +125,38 @@ async def _store(scope: CredentialBindingScope) -> SecretsStore:
             detail='Managed credential storage is unavailable',
         )
     return secrets_store
+
+
+async def _validate_active_binding(scope: CredentialBindingScope) -> None:
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+    async with (
+        get_app_conversation_info_service(state) as conversation_service,
+        get_sandbox_service(state) as sandbox_service,
+    ):
+        conversation = await conversation_service.get_app_conversation_info(
+            scope.conversation_id
+        )
+        sandbox = await sandbox_service.get_sandbox(scope.runtime_id)
+    if (
+        sandbox is None
+        or sandbox.created_by_user_id not in (None, scope.user_id)
+        or (
+            conversation is None
+            and time.time() - scope.issued_at > _CONVERSATION_START_GRACE_SECONDS
+        )
+        or (
+            conversation is not None
+            and (
+                conversation.sandbox_id != scope.runtime_id
+                or conversation.created_by_user_id not in (None, scope.user_id)
+            )
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail='Credential binding is no longer active',
+        )
 
 
 def _validate_value(secret_name: str, value: str) -> None:
@@ -144,6 +189,7 @@ async def load_credential(
         secret_name,
         'load',
     )
+    await _validate_active_binding(scope)
     store = await _store(scope)
     try:
         value, version = await store.load_versioned(
@@ -184,6 +230,7 @@ async def replace_credential(
         secret_name,
         'replace',
     )
+    await _validate_active_binding(scope)
     _validate_value(secret_name, replacement.value)
     store = await _store(scope)
     try:

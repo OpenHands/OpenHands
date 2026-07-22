@@ -1,12 +1,18 @@
+import time
+from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+)
 from openhands.app_server.secrets import credential_binding
 from openhands.app_server.secrets.credential_binding_models import (
     credential_binding_path,
@@ -47,6 +53,11 @@ def client(monkeypatch, jwt_service, store):
     user_auth.get_secrets_store.return_value = store
     get_for_user = AsyncMock(return_value=user_auth)
     monkeypatch.setattr(credential_binding, 'get_for_user', get_for_user)
+    monkeypatch.setattr(
+        credential_binding,
+        '_validate_active_binding',
+        AsyncMock(),
+    )
     app = FastAPI()
     app.include_router(credential_binding.router)
     app.dependency_overrides[credential_binding.jwt_service_dependency.dependency] = (
@@ -72,6 +83,62 @@ def _token(jwt_service: JwtService, **updates) -> str:
 
 def _path(conversation_id: UUID = _CONVERSATION_ID) -> str:
     return credential_binding_path(conversation_id, 'CODEX_AUTH_JSON')
+
+
+@pytest.mark.asyncio
+async def test_binding_requires_live_matching_conversation_and_runtime(monkeypatch):
+    conversation_service = AsyncMock()
+    conversation_service.get_app_conversation_info.return_value = AppConversationInfo(
+        id=_CONVERSATION_ID,
+        created_by_user_id='user-id',
+        sandbox_id='runtime-id',
+    )
+    sandbox = MagicMock()
+    sandbox.created_by_user_id = 'user-id'
+    sandbox_service = AsyncMock()
+    sandbox_service.get_sandbox.return_value = sandbox
+
+    @asynccontextmanager
+    async def conversation_context(state):
+        yield conversation_service
+
+    @asynccontextmanager
+    async def sandbox_context(state):
+        yield sandbox_service
+
+    monkeypatch.setattr(
+        credential_binding,
+        'get_app_conversation_info_service',
+        conversation_context,
+    )
+    monkeypatch.setattr(
+        credential_binding,
+        'get_sandbox_service',
+        sandbox_context,
+    )
+    scope = credential_binding.CredentialBindingScope(
+        user_id='user-id',
+        organization_id=_ORG_ID,
+        conversation_id=_CONVERSATION_ID,
+        runtime_id='runtime-id',
+        secret_name='CODEX_AUTH_JSON',
+        issued_at=int(time.time()),
+    )
+
+    await credential_binding._validate_active_binding(scope)
+    sandbox_service.get_sandbox.return_value = None
+    with pytest.raises(HTTPException) as exc_info:
+        await credential_binding._validate_active_binding(scope)
+
+    assert exc_info.value.status_code == 403
+
+    sandbox_service.get_sandbox.return_value = sandbox
+    conversation_service.get_app_conversation_info.return_value = None
+    expired_startup_scope = replace(scope, issued_at=scope.issued_at - 301)
+    with pytest.raises(HTTPException) as exc_info:
+        await credential_binding._validate_active_binding(expired_startup_scope)
+
+    assert exc_info.value.status_code == 403
 
 
 def test_load_uses_token_scope(client, jwt_service, store):

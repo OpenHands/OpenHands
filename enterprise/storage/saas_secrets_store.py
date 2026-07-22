@@ -24,7 +24,7 @@ from openhands.app_server.utils.logger import openhands_logger as logger
 
 
 def _credential_version(row: StoredCustomSecrets) -> str:
-    source = f"{row.id}\0{row.secret_value}"
+    source = f'{row.id}\0{row.secret_value}'
     return hashlib.sha256(source.encode()).hexdigest()
 
 
@@ -74,8 +74,8 @@ class SaasSecretsStore(SecretsStore):
             managed_rows = {}
             for secret in settings:
                 kwargs[secret.secret_name] = {
-                    "secret": secret.secret_value,
-                    "description": secret.description,
+                    'secret': secret.secret_value,
+                    'description': secret.description,
                 }
                 if self.is_managed_credential(secret.secret_name):
                     managed_rows[secret.secret_name] = secret
@@ -84,7 +84,7 @@ class SaasSecretsStore(SecretsStore):
             loaded_managed = {
                 name: (value, _credential_version(row))
                 for name, row in managed_rows.items()
-                if isinstance(value := kwargs.get(name, {}).get("secret"), str)
+                if isinstance(value := kwargs.get(name, {}).get('secret'), str)
             }
             if loaded_managed:
                 self._loaded_managed_credentials[org_id] = loaded_managed
@@ -96,17 +96,17 @@ class SaasSecretsStore(SecretsStore):
     async def store(self, item: Secrets):
         user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
-            raise ValueError(f"User not found: {self.user_id}")
+            raise ValueError(f'User not found: {self.user_id}')
         org_id = self.effective_org_id or user.current_org_id
-        kwargs = item.model_dump(context={"expose_secrets": True})
-        del kwargs["provider_tokens"]
-        secrets_json = kwargs.get("custom_secrets", {})
+        kwargs = item.model_dump(context={'expose_secrets': True})
+        del kwargs['provider_tokens']
+        secrets_json = kwargs.get('custom_secrets', {})
         submitted_managed = {
             name: value
             for name, info in secrets_json.items()
             if self.is_managed_credential(name)
             and isinstance(info, dict)
-            and isinstance(value := info.get("secret"), str)
+            and isinstance(value := info.get('secret'), str)
         }
         loaded_managed = dict(self._loaded_managed_credentials.get(org_id, {}))
         async with a_session_maker() as session:
@@ -137,7 +137,7 @@ class SaasSecretsStore(SecretsStore):
                 preserved_names.add(name)
                 secrets_json.pop(name, None)
                 if managed_rows.get(name) and isinstance(info, dict):
-                    description = info.get("description")
+                    description = info.get('description')
                     encrypted_description = (
                         self._jwt_svc.encrypt_value(description)
                         if description is not None
@@ -165,8 +165,8 @@ class SaasSecretsStore(SecretsStore):
             # Extract the secrets into tuples for insertion or updating
             secret_tuples = []
             for secret_name, secret_info in secrets_json.items():
-                secret_value = secret_info.get("secret")
-                description = secret_info.get("description")
+                secret_value = secret_info.get('secret')
+                description = secret_info.get('description')
 
                 secret_tuples.append((secret_name, secret_value, description))
 
@@ -190,7 +190,7 @@ class SaasSecretsStore(SecretsStore):
                     continue
                 submitted = submitted_managed.get(name)
                 if submitted is not None:
-                    cached[name] = (submitted, "")
+                    cached[name] = (submitted, '')
                 else:
                     cached.pop(name, None)
             if cached:
@@ -203,12 +203,7 @@ class SaasSecretsStore(SecretsStore):
         name: str,
         organization_id: UUID | None = None,
     ) -> tuple[str, str]:
-        org_id = organization_id or self.effective_org_id
-        if org_id is None:
-            user = await UserStore.get_user_by_id(self.user_id)
-            org_id = user.current_org_id if user else None
-        if org_id is None:
-            raise KeyError(name)
+        org_id = await self._require_organization_id(name, organization_id)
         async with a_session_maker() as session:
             result = await session.execute(self._versioned_query(name, org_id).limit(1))
             row = result.scalars().first()
@@ -225,22 +220,22 @@ class SaasSecretsStore(SecretsStore):
         value: str,
         organization_id: UUID | None = None,
     ) -> str:
-        org_id = organization_id or self.effective_org_id
-        if org_id is None:
-            user = await UserStore.get_user_by_id(self.user_id)
-            org_id = user.current_org_id if user else None
-        if org_id is None:
-            raise KeyError(name)
+        org_id = await self._require_organization_id(name, organization_id)
         async with a_session_maker() as session:
             result = await session.execute(
                 self._versioned_query(name, org_id).with_for_update()
             )
             rows = result.scalars().all()
             if not rows:
+                result = await session.execute(
+                    self._versioned_query(name, org_id).limit(1)
+                )
+                if result.scalars().first() is not None:
+                    raise CredentialVersionConflict
                 raise KeyError(name)
             if not hmac.compare_digest(
                 _credential_version(rows[0]).encode(),
-                expected_version.encode(errors="surrogatepass"),
+                expected_version.encode(errors='surrogatepass'),
             ):
                 raise CredentialVersionConflict
             encrypted = self._jwt_svc.encrypt_value(value)
@@ -248,6 +243,19 @@ class SaasSecretsStore(SecretsStore):
                 row.secret_value = encrypted
             await session.commit()
             return _credential_version(rows[0])
+
+    async def _require_organization_id(
+        self,
+        name: str,
+        organization_id: UUID | None,
+    ) -> UUID:
+        org_id = organization_id or self.effective_org_id
+        if org_id is None:
+            user = await UserStore.get_user_by_id(self.user_id)
+            org_id = user.current_org_id if user else None
+        if org_id is None:
+            raise KeyError(name)
+        return org_id
 
     def _versioned_query(self, name: str, organization_id: UUID):
         return (
@@ -300,7 +308,7 @@ class SaasSecretsStore(SecretsStore):
 
         TODO: This method should be replaced with dependency injection.
         """
-        logger.debug(f"saas_secrets_store.get_instance::{user_id}")
+        logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         from storage.encrypt_utils import get_jwt_service
 
         return SaasSecretsStore(

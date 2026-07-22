@@ -186,6 +186,30 @@ async def test_versioned_replace_requires_existing_secret(secrets_store):
         await secrets_store.replace_versioned(_MANAGED_NAME, 'stale', '{}', _ORG_ID)
 
 
+@pytest.mark.asyncio
+async def test_versioned_replace_reports_concurrent_reinsert(jwt_svc):
+    first_result = MagicMock()
+    first_result.scalars.return_value.all.return_value = []
+    second_result = MagicMock()
+    second_result.scalars.return_value.first.return_value = MagicMock()
+    session = AsyncMock()
+    session.execute.side_effect = [first_result, second_result]
+    session_maker = MagicMock()
+    session_maker.return_value.__aenter__ = AsyncMock(return_value=session)
+    session_maker.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('storage.saas_secrets_store.a_session_maker', session_maker):
+        with pytest.raises(CredentialVersionConflict):
+            await _store(jwt_svc).replace_versioned(
+                _MANAGED_NAME,
+                'stale',
+                '{}',
+                _ORG_ID,
+            )
+
+    assert session.execute.await_count == 2
+
+
 class TestSaasSecretsStore:
     @pytest.mark.asyncio
     @patch(

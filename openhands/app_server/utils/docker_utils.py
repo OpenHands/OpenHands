@@ -3,6 +3,16 @@ from urllib.parse import urlparse, urlunparse
 from openhands.app_server.utils.environment import is_running_in_docker
 
 
+def replace_localhost_hostname(
+    url: str, replacement: str = 'host.docker.internal'
+) -> str:
+    parsed = urlparse(url)
+    if parsed.hostname != 'localhost':
+        return url
+    netloc = parsed.netloc.replace('localhost', replacement, 1)
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
 def replace_localhost_hostname_for_docker(
     url: str, replacement: str = 'host.docker.internal'
 ) -> str:
@@ -24,9 +34,4 @@ def replace_localhost_hostname_for_docker(
     """
     if not is_running_in_docker():
         return url
-    parsed = urlparse(url)
-    if parsed.hostname == 'localhost':
-        # Replace only the hostname part, preserving port and everything else
-        netloc = parsed.netloc.replace('localhost', replacement, 1)
-        return urlunparse(parsed._replace(netloc=netloc))
-    return url
+    return replace_localhost_hostname(url, replacement)

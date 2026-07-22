@@ -228,9 +228,11 @@ async def test_stale_whole_save_preserves_rotation_and_other_edits(store):
 
     updated = dict(stale.custom_secrets)
     updated['OTHER'] = CustomSecret.from_value({'secret': 'new', 'description': ''})
-    await stale_store.store(
-        stale.model_copy(update={'custom_secrets': MappingProxyType(updated)})
+    stale_update = stale.model_copy(
+        update={'custom_secrets': MappingProxyType(updated)}
     )
+    await stale_store.store(stale_update)
+    await stale_store.store(stale_update)
 
     loaded = await store.load()
     assert loaded is not None
@@ -277,3 +279,52 @@ async def test_versioned_bindings_reject_store_without_cross_process_lock():
         await store.replace_versioned(_MANAGED_NAME, 'version', _ROTATED)
 
     file_store.read.assert_not_called()
+
+
+def test_remote_file_store_does_not_use_process_lock(monkeypatch):
+    file_store = MagicMock(spec=FileStore)
+    process_lock = MagicMock()
+    monkeypatch.setattr(file_secrets_store_module, '_process_lock', process_lock)
+
+    with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
+        pass
+
+    process_lock.__enter__.assert_not_called()
+
+
+def test_failed_file_lock_acquisition_closes_descriptor(monkeypatch):
+    file_store = MagicMock()
+    file_store.get_full_path.return_value = '/tmp/secrets.json.lock'
+    windows_lock = MagicMock()
+    windows_lock.LK_LOCK = 1
+    windows_lock.LK_UNLCK = 2
+    windows_lock.locking.side_effect = OSError('lock failed')
+    monkeypatch.setattr(file_secrets_store_module, 'fcntl', None)
+    monkeypatch.setattr(file_secrets_store_module, 'msvcrt', windows_lock)
+    monkeypatch.setattr(file_secrets_store_module.os, 'open', MagicMock(return_value=7))
+    monkeypatch.setattr(file_secrets_store_module.os, 'lseek', MagicMock())
+    close = MagicMock()
+    monkeypatch.setattr(file_secrets_store_module.os, 'close', close)
+
+    with pytest.raises(OSError, match='lock failed'):
+        with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
+            pass
+
+    windows_lock.locking.assert_called_once_with(7, windows_lock.LK_LOCK, 1)
+    close.assert_called_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_whole_save_preserves_unrecognized_top_level_data():
+    raw = {
+        'custom_secrets': {},
+        'future_top_level': {'enabled': True},
+    }
+    file_store = InMemoryFileStore(files={'secrets.json': json.dumps(raw)})
+    store = _store(file_store)
+
+    await store.store(_secrets(None, 'new'))
+
+    assert json.loads(file_store.read('secrets.json'))['future_top_level'] == {
+        'enabled': True
+    }

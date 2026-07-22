@@ -46,6 +46,9 @@ def _supports_atomic_versioned_writes(file_store: FileStore) -> bool:
 def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
     get_full_path = getattr(file_store, 'get_full_path', None)
     if not callable(get_full_path):
+        if not isinstance(file_store, InMemoryFileStore):
+            yield
+            return
         with _process_lock:
             yield
         return
@@ -53,20 +56,25 @@ def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
     lock_path = get_full_path(f'{path}.lock')
     os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    locked = False
     try:
         if fcntl is not None:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
+            locked = True
         elif msvcrt is not None:
             os.lseek(descriptor, 0, os.SEEK_SET)
             msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+            locked = True
         yield
     finally:
-        if fcntl is not None:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-        elif msvcrt is not None:
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-        os.close(descriptor)
+        try:
+            if locked and fcntl is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            elif locked and msvcrt is not None:
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        finally:
+            os.close(descriptor)
 
 
 @dataclass
@@ -141,13 +149,23 @@ class FileSecretsStore(SecretsStore):
             raise ValueError('Invalid credential versions')
         return dict(versions)
 
-    def _write(self, secrets: Secrets, versions: dict[str, str]) -> None:
-        data = secrets.model_dump(
-            mode='json',
-            context={'expose_secrets': True},
+    def _write(
+        self,
+        secrets: Secrets,
+        versions: dict[str, str],
+        original: dict[str, Any],
+    ) -> None:
+        data = dict(original)
+        data.update(
+            secrets.model_dump(
+                mode='json',
+                context={'expose_secrets': True},
+            )
         )
         if versions:
             data[_CREDENTIAL_VERSIONS_KEY] = versions
+        else:
+            data.pop(_CREDENTIAL_VERSIONS_KEY, None)
         self.file_store.write(self.path, json.dumps(data))
 
     async def load(self) -> Secrets | None:
@@ -182,6 +200,7 @@ class FileSecretsStore(SecretsStore):
                 current = self._secrets(data) if data else Secrets()
                 versions = self._versions(data)
                 incoming = dict(secrets.custom_secrets)
+                preserved_names = set()
                 managed_names = (
                     set(versions)
                     | set(self._loaded_credentials)
@@ -210,6 +229,7 @@ class FileSecretsStore(SecretsStore):
                         else None
                     )
                     if preserve:
+                        preserved_names.add(name)
                         if current_secret is None:
                             incoming.pop(name, None)
                         elif submitted is None:
@@ -228,8 +248,10 @@ class FileSecretsStore(SecretsStore):
                 for name in updated.custom_secrets:
                     if self.is_managed_credential(name) and name not in versions:
                         versions[name] = secrets_module.token_urlsafe(24)
-                self._write(updated, versions)
+                self._write(updated, versions, data)
                 for name in managed_names | set(versions):
+                    if name in preserved_names:
+                        continue
                     stored = updated.custom_secrets.get(name)
                     value = (
                         stored.secret.get_secret_value() if stored is not None else None
