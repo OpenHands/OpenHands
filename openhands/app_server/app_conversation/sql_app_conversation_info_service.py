@@ -203,8 +203,7 @@ class StoredConversationCostEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
-    # Attribution: which usage bucket / model incurred this delta. Nullable
-    # for rows written before the columns existed (treated as 'agent').
+    # Attribution is nullable for rows written before these columns existed.
     usage_id: Mapped[str | None] = mapped_column(String, nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -613,16 +612,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         usage_to_metrics: Mapping[str, MetricsSnapshot],
         event_timestamp: datetime,
     ) -> None:
-        """Write per-bucket cost/token deltas so spend stays attributable per model.
-
-        Prior totals come from the ledger itself. Rows with NULL usage_id
-        predate attribution: agent-only deltas from the original schema, or
-        COMBINED deltas from an interim combined-metrics build. Their COST sum
-        is drained against the largest apparent deltas first so pre-attribution
-        cost history is never re-recorded, whichever build wrote it. Tokens
-        need no drain: NULL rows carry no token data, so bucket-vs-prior
-        deltas keep ledger token totals equal to the persisted columns.
-        """
+        """Write per-bucket deltas without replaying legacy unattributed cost."""
         result = await self.db_session.execute(
             select(
                 StoredConversationCostEvent.usage_id,

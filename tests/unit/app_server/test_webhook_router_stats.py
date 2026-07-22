@@ -575,6 +575,15 @@ class TestUpdateConversationStatistics:
         assert stored.completion_tokens == 120
         assert stored.cache_read_tokens == 50
 
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        events = result.scalars().all()
+        assert sum(event.prompt_tokens or 0 for event in events) == 200
+        assert sum(event.completion_tokens or 0 for event in events) == 120
+
     @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(
         self, service, async_session, v1_conversation_metadata
