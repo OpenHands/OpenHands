@@ -567,20 +567,38 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         stored.accumulated_cost = accumulated_cost
         if agent_metrics is not None and agent_metrics.max_budget_per_task is not None:
             stored.max_budget_per_task = agent_metrics.max_budget_per_task
-        # Tokens need their own monotonic gate: for zero-cost models the cost
-        # guard never trips, so a stale snapshot could regress the totals.
-        if accumulated_token_usage is not None and (
-            accumulated_token_usage.prompt_tokens
-            + accumulated_token_usage.completion_tokens
-            >= (stored.prompt_tokens or 0) + (stored.completion_tokens or 0)
-        ):
-            stored.prompt_tokens = accumulated_token_usage.prompt_tokens
-            stored.completion_tokens = accumulated_token_usage.completion_tokens
-            stored.cache_read_tokens = accumulated_token_usage.cache_read_tokens
-            stored.cache_write_tokens = accumulated_token_usage.cache_write_tokens
-            stored.reasoning_tokens = accumulated_token_usage.reasoning_tokens
-            stored.context_window = accumulated_token_usage.context_window
-            stored.per_turn_token = accumulated_token_usage.per_turn_token
+        # Cumulative token counters are monotonic per field: for zero-cost
+        # models the cost guard never trips, and a partially stale snapshot
+        # must not regress any individual counter.
+        if accumulated_token_usage is not None:
+            stored.prompt_tokens = max(
+                accumulated_token_usage.prompt_tokens, stored.prompt_tokens or 0
+            )
+            stored.completion_tokens = max(
+                accumulated_token_usage.completion_tokens,
+                stored.completion_tokens or 0,
+            )
+            stored.cache_read_tokens = max(
+                accumulated_token_usage.cache_read_tokens,
+                stored.cache_read_tokens or 0,
+            )
+            stored.cache_write_tokens = max(
+                accumulated_token_usage.cache_write_tokens,
+                stored.cache_write_tokens or 0,
+            )
+            stored.reasoning_tokens = max(
+                accumulated_token_usage.reasoning_tokens,
+                stored.reasoning_tokens or 0,
+            )
+            # Gauges, not counters: only follow snapshots that are at least
+            # as fresh as the stored totals.
+            if (
+                accumulated_token_usage.prompt_tokens
+                + accumulated_token_usage.completion_tokens
+                >= (stored.prompt_tokens or 0) + (stored.completion_tokens or 0)
+            ):
+                stored.context_window = accumulated_token_usage.context_window
+                stored.per_turn_token = accumulated_token_usage.per_turn_token
 
         # Update last_updated_at timestamp
         stored.last_updated_at = utc_now()

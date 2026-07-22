@@ -357,6 +357,42 @@ class TestUpdateConversationStatistics:
         assert stored.completion_tokens == 20
 
     @pytest.mark.asyncio
+    async def test_update_statistics_mixed_counter_snapshot_stays_monotonic(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Each cumulative counter is monotonic even when others rise."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion, cache_read):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                            cache_read_tokens=cache_read,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(
+            conversation_id, stats(200, 20, 50)
+        )
+        # Same combined sum, but prompt and cache regress while completion rises.
+        await service.update_conversation_statistics(
+            conversation_id, stats(100, 120, 10)
+        )
+
+        await async_session.refresh(stored)
+        assert stored.prompt_tokens == 200
+        assert stored.completion_tokens == 120
+        assert stored.cache_read_tokens == 50
+
+    @pytest.mark.asyncio
     async def test_update_statistics_stale_snapshot_ignored(
         self, service, async_session, v1_conversation_metadata
     ):
