@@ -178,6 +178,32 @@ describe("useWorkspaceFileContent", () => {
     );
   });
 
+  it("opts out of the HTTP cache on the text fetch (no-store)", async () => {
+    // The agent-server workspace fileserver returns ETag / Last-Modified but
+    // no Cache-Control, so without an explicit cache directive the browser
+    // applies HTTP heuristic freshness and serves stale bytes for a long
+    // window whenever the fetch URL is unchanged. `cache: "no-store"` makes
+    // every fetch hit the network for fresh bytes; the React Query layer
+    // above absorbs the repeated-fetch cost.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("# Hello")),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_URL}docs/readme.md`,
+      expect.objectContaining({ cache: "no-store" }),
+    );
+  });
+
   it("does not fetch image bytes — image staticUrl is rendered directly", async () => {
     const { result } = renderHook(
       () => useWorkspaceFileContent("assets/logo.png"),
