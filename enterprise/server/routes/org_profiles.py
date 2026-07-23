@@ -15,7 +15,7 @@ from typing import Any, AsyncIterator
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import OrgNotFoundError
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from storage.agent_profile_resolution import (
     OrgLLMProfileMutator,
     load_agent_profiles,
+    load_llm_profiles,
 )
 from storage.database import a_session_maker
 from storage.org import Org
@@ -40,7 +41,6 @@ from openhands.app_server.settings.settings_models import (
     _load_persisted_agent_settings,
 )
 from openhands.app_server.utils.llm import MASKED_API_KEY, is_openhands_model
-from openhands.app_server.utils.logger import openhands_logger as logger
 from openhands.sdk.llm import LLM
 from openhands.sdk.profiles import (
     ProfileReferenced,
@@ -128,16 +128,7 @@ class RenameProfileRequest(BaseModel):
 
 def _load_profiles(org: Org) -> LLMProfiles:
     """Load LLMProfiles from org row, defaulting to empty if not set."""
-    if org.llm_profiles is None:
-        return LLMProfiles()
-    try:
-        return LLMProfiles.model_validate(org.llm_profiles)
-    except ValidationError as exc:
-        # Schema drift / partially-invalid stored profiles: degrade to empty
-        # rather than 500-ing. Other exceptions (DB decrypt failures, etc.)
-        # bubble up so they're surfaced instead of silently masked.
-        logger.warning('Failed to load org profiles for %s: %s', org.id, exc)
-        return LLMProfiles()
+    return load_llm_profiles(org)
 
 
 async def _get_org(org_id: UUID, user_id: str) -> Org:

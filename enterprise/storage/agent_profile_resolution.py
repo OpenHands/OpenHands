@@ -12,9 +12,11 @@ Used by the ``/api/agent-profiles`` router, the LLM-profile FK guard in
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
+from storage.encrypt_utils import decrypt_value
 
 from openhands.app_server.settings.agent_profiles import AgentProfiles
 from openhands.app_server.settings.llm_profiles import LLMProfiles
@@ -49,10 +51,52 @@ def load_llm_profiles(org: Org) -> LLMProfiles:
     if org.llm_profiles is None:
         return LLMProfiles()
     try:
-        return LLMProfiles.model_validate(org.llm_profiles)
+        return LLMProfiles.model_validate(
+            _decrypt_nested_llm_profile_api_keys(org.llm_profiles)
+        )
     except ValidationError as exc:
         logger.warning('Failed to load org LLM profiles for %s: %s', org.id, exc)
         return LLMProfiles()
+
+
+def _decrypt_nested_llm_profile_api_keys(raw: Any) -> Any:
+    """Decrypt legacy per-profile ``api_key`` leaves inside ``llm_profiles``.
+
+    Newer org rows are encrypted at the JSON-column boundary, but older saves
+    may still contain Fernet/JWE-encrypted strings under
+    ``profiles.<name>.api_key``. The resolver needs cleartext at load time,
+    while plain keys and masked/empty values must pass through unchanged.
+    """
+    if not isinstance(raw, dict):
+        return raw
+
+    normalized = deepcopy(raw)
+    profiles = normalized.get('profiles')
+    if not isinstance(profiles, dict):
+        return normalized
+
+    for profile in profiles.values():
+        if not isinstance(profile, dict) or profile.get('api_key') is None:
+            continue
+        api_key = profile['api_key']
+        if not _looks_like_encrypted_value(api_key):
+            continue
+        try:
+            profile['api_key'] = decrypt_value(api_key)
+        except Exception:
+            # Malformed legacy encrypted leaves should not brick profile load.
+            # Keep them intact and let model validation handle the rest without
+            # logging secret material.
+            profile['api_key'] = api_key
+
+    return normalized
+
+
+def _looks_like_encrypted_value(value: Any) -> bool:
+    raw = value.get_secret_value() if isinstance(value, SecretStr) else value
+    if not isinstance(raw, str) or not raw:
+        return False
+    return raw.startswith('gAAAA') or raw.count('.') == 4
 
 
 class OrgLLMProfileLoader:

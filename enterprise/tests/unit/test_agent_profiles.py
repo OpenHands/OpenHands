@@ -54,6 +54,7 @@ with patch('storage.database.a_session_maker'):
     )
     from storage.agent_profile_resolution import (
         load_agent_profiles,
+        load_llm_profiles,
         member_mcp_config,
     )
 
@@ -150,6 +151,58 @@ def test_load_agent_profiles_defaults_empty_and_degrades():
     # Garbage envelope degrades to empty rather than raising.
     org.agent_profiles = {'profiles': 'not-a-dict'}
     assert load_agent_profiles(org).list_summaries() == []
+
+
+def test_load_llm_profiles_decrypts_nested_legacy_api_keys():
+    org = MagicMock(spec=Org)
+    org.id = ORG_ID
+    org.llm_profiles = {
+        'profiles': {
+            'Default': {
+                'model': 'gpt-4o',
+                'api_key': 'gAAAA-encrypted-profile-key',
+            }
+        },
+        'active': 'Default',
+    }
+
+    with patch(
+        'storage.agent_profile_resolution.decrypt_value',
+        return_value='sk-decrypted-profile-key',
+        create=True,
+    ):
+        loaded = load_llm_profiles(org)
+
+    assert (
+        loaded.require('Default').api_key.get_secret_value()
+        == 'sk-decrypted-profile-key'
+    )
+
+
+def test_load_llm_profiles_keeps_plain_api_keys_when_decrypt_fails():
+    org = MagicMock(spec=Org)
+    org.id = ORG_ID
+    org.llm_profiles = {
+        'profiles': {
+            'Default': {
+                'model': 'gpt-4o',
+                'api_key': 'sk-plain-profile-key',
+            }
+        },
+        'active': 'Default',
+    }
+
+    with patch(
+        'storage.agent_profile_resolution.decrypt_value',
+        side_effect=ValueError('not encrypted'),
+        create=True,
+    ) as decrypt_value:
+        loaded = load_llm_profiles(org)
+
+    assert (
+        loaded.require('Default').api_key.get_secret_value() == 'sk-plain-profile-key'
+    )
+    decrypt_value.assert_not_called()
 
 
 def test_member_mcp_config_degrades_on_non_validation_error():
@@ -663,6 +716,33 @@ class TestResolveActiveAgentProfile:
         assert dump['agent_kind'] == 'openhands'
         # The resolved LLM came from the referenced org LLM profile.
         assert dump['llm']['model'] == 'gpt-4o'
+
+    def test_resolves_profile_with_legacy_encrypted_llm_api_key(self):
+        store = self._store()
+        org, pid = self._org_with(
+            OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default')
+        )
+        org.llm_profiles = {
+            'profiles': {
+                'Default': {
+                    'model': 'gpt-4o',
+                    'api_key': 'gAAAA-encrypted-profile-key',
+                }
+            },
+            'active': 'Default',
+        }
+        member = MagicMock(spec=OrgMember)
+        member.active_agent_profile_id = pid
+
+        with patch(
+            'storage.agent_profile_resolution.decrypt_value',
+            return_value='sk-decrypted-profile-key',
+        ):
+            result = store._resolve_active_agent_profile(org, member, {}, None)
+
+        assert result is not None
+        dump, _resolved_id, _revision = result
+        assert dump['llm']['api_key'] == 'sk-decrypted-profile-key'
 
     def test_resolve_canonicalizes_legacy_litellm_proxy_llm(self):
         """A profile referencing an org LLM profile with a legacy

@@ -84,6 +84,29 @@ class TestLoadProfiles:
         assert 'my-profile' in names
         assert 'backup' in names
 
+    def test_load_profiles_decrypts_nested_legacy_api_keys(self, sample_org):
+        """Test loading profiles decrypts older per-profile encrypted keys."""
+        sample_org.llm_profiles = {
+            'profiles': {
+                'Default': {
+                    'model': 'gpt-4o',
+                    'api_key': 'gAAAA-encrypted-profile-key',
+                }
+            },
+            'active': 'Default',
+        }
+
+        with patch(
+            'storage.agent_profile_resolution.decrypt_value',
+            return_value='sk-decrypted-profile-key',
+        ):
+            profiles = _load_profiles(sample_org)
+
+        assert (
+            profiles.require('Default').api_key.get_secret_value()
+            == 'sk-decrypted-profile-key'
+        )
+
     def test_load_profiles_invalid_data(self, sample_org):
         """Test loading profiles when org has invalid data."""
         sample_org.llm_profiles = {'invalid': 'data'}
