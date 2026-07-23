@@ -882,7 +882,8 @@ class TestLiveStatusAppConversationService:
             self.mock_user, None, self.conversation_id
         )
 
-        assert llm.model == 'sdk-model'
+        assert llm.model == 'litellm_proxy/sdk-model'
+        assert llm.model_canonical_name == 'sdk-model'
         assert llm.base_url == 'https://sdk-llm.example.com'
         assert llm.stream is True
 
