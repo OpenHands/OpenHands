@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -605,6 +606,113 @@ async def test_load_canonicalizes_legacy_litellm_proxy_llm_profiles(
     custom = loaded.llm_profiles.require('custom')
     assert custom.model == 'litellm_proxy/custom-alias'
     assert custom.base_url == LITE_LLM_API_URL
+
+
+@pytest.mark.asyncio
+async def test_load_derives_analytics_consent_from_tos(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+
+    with session_maker() as session:
+        user = (
+            session.execute(select(User).where(User.id == admin_user_id))
+            .scalars()
+            .first()
+        )
+        assert user is not None
+        user.user_consents_to_analytics = False
+        user.accepted_tos = datetime(2025, 1, 1)
+        session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.user_consents_to_analytics is True
+
+
+@pytest.mark.asyncio
+async def test_load_without_tos_is_not_consented_even_when_stored_preference_true(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+
+    with session_maker() as session:
+        user = (
+            session.execute(select(User).where(User.id == admin_user_id))
+            .scalars()
+            .first()
+        )
+        assert user is not None
+        user.user_consents_to_analytics = True
+        user.accepted_tos = None
+        session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await store.load()
+
+    assert loaded is not None
+    assert loaded.user_consents_to_analytics is False
+
+
+@pytest.mark.asyncio
+async def test_store_does_not_persist_analytics_consent_override(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.user import User
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+
+    with session_maker() as session:
+        user = (
+            session.execute(select(User).where(User.id == admin_user_id))
+            .scalars()
+            .first()
+        )
+        assert user is not None
+        user.user_consents_to_analytics = True
+        session.commit()
+
+    settings = _make_settings(
+        model='anthropic/claude-sonnet-4',
+        base_url='https://api.anthropic.com/v1',
+        api_key='external-api-key',
+    )
+    settings.user_consents_to_analytics = False
+
+    store = SaasSettingsStore(str(admin_user_id))
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await store.store(settings)
+
+    with session_maker() as session:
+        user = (
+            session.execute(select(User).where(User.id == admin_user_id))
+            .scalars()
+            .first()
+        )
+        assert user is not None
+        assert user.user_consents_to_analytics is True
 
 
 @pytest.mark.asyncio

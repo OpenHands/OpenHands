@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from openhands.app_server.app import app
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import UserGitInfo
@@ -222,6 +223,36 @@ async def test_settings_api_endpoints(test_client):
     response = test_client.get('/api/v1/settings')
     assert response.status_code == 200
     assert response.json()['agent_settings']['llm']['timeout'] == 123
+
+
+@pytest.mark.asyncio
+async def test_store_settings_rejects_cloud_analytics_consent_override(test_client):
+    with patch(
+        'openhands.app_server.settings.settings_router.server_config.app_mode',
+        AppMode.SAAS,
+    ):
+        response = test_client.post(
+            '/api/v1/settings', json={'user_consents_to_analytics': False}
+        )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        'error': 'Analytics consent is controlled by TOS in cloud mode.'
+    }
+
+
+@pytest.mark.asyncio
+async def test_store_settings_ignores_cloud_analytics_consent_true(test_client):
+    with patch(
+        'openhands.app_server.settings.settings_router.server_config.app_mode',
+        AppMode.SAAS,
+    ):
+        response = test_client.post(
+            '/api/v1/settings',
+            json={'language': 'fr', 'user_consents_to_analytics': True},
+        )
+
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

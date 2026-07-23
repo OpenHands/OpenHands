@@ -7,11 +7,13 @@ import pytest
 from openhands.analytics.analytics_context import (
     AnalyticsContext,
     resolve_analytics_context,
+    user_has_analytics_consent,
 )
 from openhands.analytics.user_provider import (
     AnalyticsUserProvider,
     DefaultAnalyticsUserProvider,
 )
+from openhands.app_server.config_api.config_models import AppMode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,6 +55,36 @@ class TestAnalyticsUserProvider:
         provider = DefaultAnalyticsUserProvider()
         result = await provider.get_user_by_id('any-user-id')
         assert result is None
+
+
+class TestUserHasAnalyticsConsent:
+    """Tests for app-mode-specific analytics consent resolution."""
+
+    def test_oss_uses_explicit_analytics_preference(self):
+        user = MagicMock()
+        user.user_consents_to_analytics = True
+        user.accepted_tos = None
+
+        with patch(
+            'openhands.app_server.shared.server_config.app_mode', AppMode.OPENHANDS
+        ):
+            assert user_has_analytics_consent(user) is True
+
+    def test_saas_uses_tos_acceptance_instead_of_stored_preference(self):
+        user = MagicMock()
+        user.user_consents_to_analytics = False
+        user.accepted_tos = object()
+
+        with patch('openhands.app_server.shared.server_config.app_mode', AppMode.SAAS):
+            assert user_has_analytics_consent(user) is True
+
+    def test_saas_without_tos_is_not_consented_even_when_preference_is_true(self):
+        user = MagicMock()
+        user.user_consents_to_analytics = True
+        user.accepted_tos = None
+
+        with patch('openhands.app_server.shared.server_config.app_mode', AppMode.SAAS):
+            assert user_has_analytics_consent(user) is False
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +136,14 @@ class TestResolveContext:
         """resolve_analytics_context with valid user_id returns AnalyticsContext with consented from user, org_id from user."""
         mock_user = MagicMock()
         mock_user.user_consents_to_analytics = True
+        mock_user.accepted_tos = object()
         mock_user.current_org_id = 'org-abc-123'
 
         provider = MockAnalyticsUserProvider(user=mock_user)
-        with _patch_user_provider(provider):
+        with (
+            _patch_user_provider(provider),
+            patch('openhands.app_server.shared.server_config.app_mode', AppMode.SAAS),
+        ):
             ctx = await resolve_analytics_context('user-42')
 
         assert ctx.user_id == 'user-42'

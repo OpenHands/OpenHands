@@ -30,6 +30,7 @@ def mock_user(user_id):
     user.id = uuid.UUID(user_id)
     user.language = 'en'
     user.user_consents_to_analytics = True
+    user.accepted_tos = object()
     user.enable_sound_notifications = False
     user.git_user_name = 'testuser'
     user.git_user_email = 'test@example.com'
@@ -108,11 +109,9 @@ async def test_update_user_app_settings_success(
     # Arrange
     mock_user.language = 'es'
     mock_user.user_consents_to_analytics = False
+    mock_user.accepted_tos = object()
 
-    update_data = UserAppSettingsUpdate(
-        language='es',
-        user_consents_to_analytics=False,
-    )
+    update_data = UserAppSettingsUpdate(language='es')
 
     mock_store.update_user_app_settings = AsyncMock(return_value=mock_user)
     service = UserAppSettingsService(store=mock_store, user_context=mock_user_context)
@@ -123,7 +122,7 @@ async def test_update_user_app_settings_success(
     # Assert
     assert isinstance(result, UserAppSettingsResponse)
     assert result.language == 'es'
-    assert result.user_consents_to_analytics is False
+    assert result.user_consents_to_analytics is True
     mock_store.update_user_app_settings.assert_called_once_with(
         user_id=user_id, update_data=update_data
     )

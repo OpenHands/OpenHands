@@ -40,6 +40,7 @@ function AppSettingsScreen() {
   const { data: config } = useConfig();
   const { data: sandboxSpecsPage, isLoading: sandboxSpecsLoading } =
     useSandboxSpecs();
+  const isSaasMode = config?.app_mode === "saas";
 
   const [languageInputHasChanged, setLanguageInputHasChanged] =
     React.useState(false);
@@ -84,8 +85,9 @@ function AppSettingsScreen() {
     )?.value;
     const language = languageValue || DEFAULT_SETTINGS.language;
 
-    const enableAnalytics =
-      formData.get("enable-analytics-switch")?.toString() === "on";
+    const enableAnalytics = isSaasMode
+      ? true
+      : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
 
@@ -120,45 +122,44 @@ function AppSettingsScreen() {
     const gitFullClone =
       formData.get("git-full-clone-switch")?.toString() === "on";
 
-    saveSettings(
-      {
-        language,
-        user_consents_to_analytics: enableAnalytics,
-        enable_sound_notifications: enableSoundNotifications,
-        enable_proactive_conversation_starters: enableProactiveConversations,
-        enable_solvability_analysis: enableSolvabilityAnalysis,
-        sandbox_grouping_strategy: sandboxGroupingStrategy,
-        default_sandbox_spec_id: defaultSandboxSpecId,
-        max_budget_per_task: maxBudgetPerTask,
-        git_user_name: gitUserName,
-        git_user_email: gitUserEmail,
-        git_full_clone: gitFullClone,
+    const settingsPayload = {
+      language,
+      enable_sound_notifications: enableSoundNotifications,
+      enable_proactive_conversation_starters: enableProactiveConversations,
+      enable_solvability_analysis: enableSolvabilityAnalysis,
+      sandbox_grouping_strategy: sandboxGroupingStrategy,
+      default_sandbox_spec_id: defaultSandboxSpecId,
+      max_budget_per_task: maxBudgetPerTask,
+      git_user_name: gitUserName,
+      git_user_email: gitUserEmail,
+      git_full_clone: gitFullClone,
+      ...(!isSaasMode && { user_consents_to_analytics: enableAnalytics }),
+    };
+
+    saveSettings(settingsPayload, {
+      onSuccess: () => {
+        handleCaptureConsent(posthog, enableAnalytics);
+        displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
       },
-      {
-        onSuccess: () => {
-          handleCaptureConsent(posthog, enableAnalytics);
-          displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-        },
-        onError: (error) => {
-          const errorMessage = retrieveAxiosErrorMessage(error);
-          displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
-        },
-        onSettled: () => {
-          setLanguageInputHasChanged(false);
-          setAnalyticsSwitchHasChanged(false);
-          setSoundNotificationsSwitchHasChanged(false);
-          setProactiveConversationsSwitchHasChanged(false);
-          setSandboxGroupingStrategyHasChanged(false);
-          setSelectedSandboxGroupingStrategy(null);
-          setSandboxSpecIdHasChanged(false);
-          setSelectedSandboxSpecId(undefined);
-          setMaxBudgetPerTaskHasChanged(false);
-          setGitUserNameHasChanged(false);
-          setGitUserEmailHasChanged(false);
-          setGitFullCloneHasChanged(false);
-        },
+      onError: (error) => {
+        const errorMessage = retrieveAxiosErrorMessage(error);
+        displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
       },
-    );
+      onSettled: () => {
+        setLanguageInputHasChanged(false);
+        setAnalyticsSwitchHasChanged(false);
+        setSoundNotificationsSwitchHasChanged(false);
+        setProactiveConversationsSwitchHasChanged(false);
+        setSandboxGroupingStrategyHasChanged(false);
+        setSelectedSandboxGroupingStrategy(null);
+        setSandboxSpecIdHasChanged(false);
+        setSelectedSandboxSpecId(undefined);
+        setMaxBudgetPerTaskHasChanged(false);
+        setGitUserNameHasChanged(false);
+        setGitUserEmailHasChanged(false);
+        setGitFullCloneHasChanged(false);
+      },
+    });
   };
 
   const checkIfLanguageInputHasChanged = (value: string) => {
@@ -269,9 +270,13 @@ function AppSettingsScreen() {
 
           <SettingsSwitch
             testId="enable-analytics-switch"
-            name="enable-analytics-switch"
-            defaultIsToggled={settings.user_consents_to_analytics ?? true}
-            onToggle={checkIfAnalyticsSwitchHasChanged}
+            name={isSaasMode ? undefined : "enable-analytics-switch"}
+            defaultIsToggled={
+              isSaasMode ? true : (settings.user_consents_to_analytics ?? true)
+            }
+            isToggled={isSaasMode ? true : undefined}
+            isDisabled={isSaasMode}
+            onToggle={isSaasMode ? undefined : checkIfAnalyticsSwitchHasChanged}
           >
             {t(I18nKey.ANALYTICS$SEND_ANONYMOUS_DATA)}
           </SettingsSwitch>

@@ -22,7 +22,7 @@ from storage.org import Org
 from storage.subscription_access import SubscriptionAccess
 from storage.user_store import UserStore
 
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, user_has_analytics_consent
 from openhands.app_server.config import get_global_config
 from openhands.app_server.user_auth import get_user_id
 
@@ -320,7 +320,7 @@ async def success_callback(session_id: str, request: Request):
 
                 ctx = AnalyticsContext(
                     user_id=billing_session.user_id,
-                    consented=user.user_consents_to_analytics is True,
+                    consented=user_has_analytics_consent(user),
                     org_id=str(user.current_org_id) if user.current_org_id else None,
                     user=user,
                 )

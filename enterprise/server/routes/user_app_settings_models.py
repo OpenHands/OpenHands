@@ -41,7 +41,7 @@ class UserAppSettingsResponse(BaseModel):
         """Create response from User entity."""
         return cls(
             language=user.language,
-            user_consents_to_analytics=user.user_consents_to_analytics,
+            user_consents_to_analytics=user.accepted_tos is not None,
             enable_sound_notifications=user.enable_sound_notifications,
             git_user_name=user.git_user_name,
             git_user_email=user.git_user_email,
@@ -53,7 +53,6 @@ class UserAppSettingsUpdate(BaseModel):
     """Request model for updating user app settings (partial update)."""
 
     language: str | None = None
-    user_consents_to_analytics: bool | None = None
     enable_sound_notifications: bool | None = None
     git_user_name: str | None = None
     git_user_email: EmailStr | None = None

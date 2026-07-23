@@ -4,7 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import AppSettingsScreen, { clientLoader } from "#/routes/app-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import OptionService from "#/api/option-service/option-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { createMockWebClientConfig } from "#/mocks/settings-handlers";
 import { AvailableLanguages } from "#/i18n";
 import * as CaptureConsent from "#/utils/handle-capture-consent";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
@@ -12,6 +14,10 @@ import { useSelectedOrganizationStore } from "#/stores/selected-organization-sto
 
 beforeEach(() => {
   useSelectedOrganizationStore.setState({ organizationId: "test-org-id" });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const renderAppSettingsScreen = () =>
@@ -74,6 +80,27 @@ describe("Content", () => {
     });
   });
 
+  it("should render the analytics toggle as checked and disabled in SaaS", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      user_consents_to_analytics: false,
+    });
+
+    renderAppSettingsScreen();
+
+    const analytics = await screen.findByTestId("enable-analytics-switch");
+    const submit = await screen.findByTestId("submit-button");
+
+    expect(analytics).toBeChecked();
+    expect(analytics).toBeDisabled();
+
+    await userEvent.click(analytics);
+    expect(submit).toBeDisabled();
+  });
+
   it("should render the language options", async () => {
     renderAppSettingsScreen();
 
@@ -88,10 +115,6 @@ describe("Content", () => {
 });
 
 describe("Form submission", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it("should submit the form with the correct values", async () => {
     const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
@@ -129,6 +152,33 @@ describe("Form submission", () => {
         language: "no",
         user_consents_to_analytics: true,
         enable_sound_notifications: true,
+      }),
+    );
+  });
+
+  it("should not submit analytics consent from SaaS app settings", async () => {
+    const saveSettingsSpy = vi.spyOn(SettingsService, "saveSettings");
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+      createMockWebClientConfig({ app_mode: "saas" }),
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      user_consents_to_analytics: false,
+    });
+
+    renderAppSettingsScreen();
+
+    const sound = await screen.findByTestId(
+      "enable-sound-notifications-switch",
+    );
+    await userEvent.click(sound);
+
+    const submit = await screen.findByTestId("submit-button");
+    await userEvent.click(submit);
+
+    expect(saveSettingsSpy).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        user_consents_to_analytics: expect.anything(),
       }),
     );
   });

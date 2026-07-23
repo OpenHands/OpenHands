@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from openhands.analytics import get_analytics_service
+from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderType,
@@ -36,6 +37,7 @@ from openhands.app_server.settings.settings_models import (
     Settings,
 )
 from openhands.app_server.settings.settings_store import SettingsStore
+from openhands.app_server.shared import server_config
 from openhands.app_server.user_auth import (
     get_provider_tokens,
     get_secrets_store,
@@ -60,6 +62,26 @@ from openhands.sdk.settings import (
 LITE_LLM_API_URL = os.environ.get(
     'LITE_LLM_API_URL', 'https://llm-proxy.app.all-hands.dev'
 )
+
+
+def _sanitize_cloud_analytics_consent_override(
+    payload: dict[str, Any],
+) -> JSONResponse | None:
+    """Reject attempts to override TOS-derived analytics consent in SaaS."""
+    if (
+        server_config.app_mode != AppMode.SAAS
+        or 'user_consents_to_analytics' not in payload
+    ):
+        return None
+
+    if payload['user_consents_to_analytics'] is not True:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={'error': 'Analytics consent is controlled by TOS in cloud mode.'},
+        )
+
+    payload.pop('user_consents_to_analytics', None)
+    return None
 
 
 def _get_instance_default_marketplaces() -> list[dict[str, Any]]:
@@ -260,6 +282,10 @@ async def store_settings(
                 'keys': legacy_nested_keys,
             },
         )
+
+    cloud_analytics_consent_error = _sanitize_cloud_analytics_consent_override(payload)
+    if cloud_analytics_consent_error is not None:
+        return cloud_analytics_consent_error
 
     try:
         existing_settings = await settings_store.load()

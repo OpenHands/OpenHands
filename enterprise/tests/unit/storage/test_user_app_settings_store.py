@@ -121,7 +121,6 @@ async def test_update_user_app_settings_success(async_session_maker):
 
         update_data = UserAppSettingsUpdate(
             language='es',
-            user_consents_to_analytics=True,
             enable_sound_notifications=True,
             git_user_name='newuser',
             git_user_email='new@example.com',
@@ -134,7 +133,7 @@ async def test_update_user_app_settings_success(async_session_maker):
     # Assert
     assert result is not None
     assert result.language == 'es'
-    assert result.user_consents_to_analytics is True
+    assert result.user_consents_to_analytics is False
     assert result.enable_sound_notifications is True
     assert result.git_user_name == 'newuser'
     assert result.git_user_email == 'new@example.com'

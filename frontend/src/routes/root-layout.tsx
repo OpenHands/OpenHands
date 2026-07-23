@@ -135,7 +135,7 @@ export default function MainApp() {
         },
       });
     }
-  }, [isOnIntermediatePage]);
+  }, [isOnIntermediatePage, migrateUserConsent]);
 
   React.useEffect(() => {
     if (settings?.is_new_user && config.data?.app_mode === "saas") {

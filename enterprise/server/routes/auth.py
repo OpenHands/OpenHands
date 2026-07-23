@@ -63,7 +63,11 @@ from storage.default_org_service import DefaultOrgBootstrapService
 from storage.user import User
 from storage.user_store import UserStore
 
-from openhands.analytics import get_analytics_service, resolve_analytics_context
+from openhands.analytics import (
+    get_analytics_service,
+    resolve_analytics_context,
+    user_has_analytics_consent,
+)
 from openhands.app_server.integrations.provider import (
     PROVIDER_TOKEN_TYPE,
     ProviderHandler,
@@ -475,7 +479,7 @@ async def keycloak_callback(
     logger.debug('keycloak_user_authenticated', extra={'user_id': user_id})
 
     # Server-side identity — defer to background to avoid blocking auth response
-    consented = user.user_consents_to_analytics is True
+    consented = user_has_analytics_consent(user)
     org_member_ids = [om.org_id for om in user.org_members] if user.org_members else []
 
     background_tasks.add_task(

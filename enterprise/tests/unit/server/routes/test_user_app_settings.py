@@ -138,7 +138,7 @@ async def test_update_user_app_settings_success(mock_app):
     # Arrange
     updated_response = UserAppSettingsResponse(
         language='es',
-        user_consents_to_analytics=False,
+        user_consents_to_analytics=True,
         enable_sound_notifications=True,
         git_user_name='newuser',
         git_user_email='new@example.com',
@@ -147,10 +147,11 @@ async def test_update_user_app_settings_success(mock_app):
         'language': 'es',
         'user_consents_to_analytics': False,
     }
+    update_mock = AsyncMock(return_value=updated_response)
 
     with patch(
         'server.routes.user_app_settings.UserAppSettingsService.update_user_app_settings',
-        AsyncMock(return_value=updated_response),
+        update_mock,
     ):
         client = TestClient(mock_app)
 
@@ -161,7 +162,9 @@ async def test_update_user_app_settings_success(mock_app):
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data['language'] == 'es'
-        assert data['user_consents_to_analytics'] is False
+        assert data['user_consents_to_analytics'] is True
+        update_arg = update_mock.call_args.args[0]
+        assert update_arg.model_dump(exclude_unset=True) == {'language': 'es'}
 
 
 @pytest.mark.asyncio

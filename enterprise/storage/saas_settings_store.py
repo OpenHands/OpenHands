@@ -410,12 +410,15 @@ class SaasSettingsStore(SettingsStore):
         # Apply default if sandbox_grouping_strategy is None in the database
         if kwargs.get('sandbox_grouping_strategy') is None:
             kwargs.pop('sandbox_grouping_strategy', None)
-        # Apply default if git_full_clone is None in the database (pre-existing rows)
+        # Apply defaults if nullable database columns are None in pre-existing rows
         if kwargs.get('git_full_clone') is None:
             kwargs.pop('git_full_clone', None)
+        if kwargs.get('enable_sound_notifications') is None:
+            kwargs.pop('enable_sound_notifications', None)
         # Apply default if registered_marketplaces is None in the database
         if kwargs.get('registered_marketplaces') is None:
             kwargs.pop('registered_marketplaces', None)
+        kwargs['user_consents_to_analytics'] = user.accepted_tos is not None
 
         # Load personal registered_marketplaces from user_settings table
         user_settings = await self._get_user_settings_by_keycloak_id_async(self.user_id)
@@ -674,6 +677,7 @@ class SaasSettingsStore(SettingsStore):
             kwargs = item.model_dump(context={'expose_secrets': True})
             kwargs.pop('agent_settings', None)
             kwargs.pop('conversation_settings', None)
+            kwargs.pop('user_consents_to_analytics', None)
 
             # Get or create user_settings for this user
             user_settings_result = await session.execute(

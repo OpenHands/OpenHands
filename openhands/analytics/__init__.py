@@ -18,6 +18,7 @@ Usage::
 from openhands.analytics.analytics_context import (
     AnalyticsContext,
     resolve_analytics_context,
+    user_has_analytics_consent,
 )
 from openhands.analytics.analytics_service import AnalyticsService
 from openhands.server.types import AppMode
@@ -56,6 +57,7 @@ def get_analytics_service() -> AnalyticsService | None:
 
 __all__ = [
     'AnalyticsContext',
+    'user_has_analytics_consent',
     'AnalyticsService',
     'get_analytics_service',
     'init_analytics_service',

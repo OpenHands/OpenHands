@@ -30,7 +30,7 @@ from storage.default_org_service import get_default_org_config
 from storage.org_store import OrgStore
 from storage.role_store import RoleStore
 
-from openhands.analytics import get_analytics_service
+from openhands.analytics import get_analytics_service, user_has_analytics_consent
 from openhands.app_server.user_auth import get_user_id
 from openhands.app_server.utils.logger import openhands_logger as logger
 
@@ -125,7 +125,7 @@ async def create_invitation(
                 user_obj = await UserStore.get_user_by_id(user_id)
                 ctx = AnalyticsContext(
                     user_id=user_id,
-                    consented=user_obj.user_consents_to_analytics is True
+                    consented=user_has_analytics_consent(user_obj)
                     if user_obj
                     else False,
                     org_id=str(org_id),
