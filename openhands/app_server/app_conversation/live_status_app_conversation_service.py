@@ -2527,13 +2527,24 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not isinstance(request_secrets, Mapping):
             return request, False
         source = request_secrets.get(CODEX_AUTH_SECRET_NAME)
+        agent_context = getattr(agent, 'agent_context', None)
+        agent_context_secrets = getattr(agent_context, 'secrets', None)
+        has_context_override = (
+            isinstance(agent_context_secrets, Mapping)
+            and CODEX_AUTH_SECRET_NAME in agent_context_secrets
+        )
         is_codex = (
             acp_server == 'codex'
             if acp_server is not None
             else agent.agent_kind == 'acp'
             and getattr(agent, 'acp_server', None) == 'codex'
         )
-        if not is_codex or api_codex_auth or not isinstance(source, StaticSecret):
+        if (
+            not is_codex
+            or api_codex_auth
+            or has_context_override
+            or not isinstance(source, StaticSecret)
+        ):
             return request, False
         value = source.get_value()
         if not value or not is_valid_codex_auth(value):

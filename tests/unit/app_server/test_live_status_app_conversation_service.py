@@ -5021,6 +5021,42 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_context_codex_auth_does_not_get_write_access(
+        self, service, tmp_path
+    ):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"stored"}}'))
+        user = self._make_acp_user(
+            acp_server='codex',
+            context_secrets={
+                'CODEX_AUTH_JSON': '{"tokens":{"refresh_token":"context"}}'
+            },
+        )
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.httpx_client.put = AsyncMock()
+
+        prepared, activated = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            start_task_id=uuid4(),
+            api_codex_auth=False,
+        )
+
+        assert not activated
+        assert prepared is request
+        service.httpx_client.put.assert_not_awaited()
+        service.jwt_service.create_jws_token.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_explicit_context_secret_preserved(self, service, tmp_path):
         """Explicit agent_context.secrets entries survive when secrets also present."""
         user = self._make_acp_user(context_secrets={'MY_TOKEN': 'explicit-override'})
