@@ -7,7 +7,6 @@ from openhands.app_server.integrations.provider import (
     ProviderType,
 )
 from openhands.app_server.integrations.service_types import UserGitInfo
-from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.user.user_models import (
     UserInfo,
@@ -86,9 +85,6 @@ class UserContext(ABC):
     @abstractmethod
     async def get_secrets(self) -> dict[str, SecretSource]:
         """Get custom secrets and github provider secrets for the conversation."""
-
-    async def get_secrets_store(self) -> SecretsStore:
-        raise NotImplementedError
 
     @abstractmethod
     async def get_mcp_api_key(self) -> str | None:

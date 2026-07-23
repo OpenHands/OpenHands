@@ -39,7 +39,6 @@ def jwt_service():
 @pytest.fixture
 def store():
     result = AsyncMock(spec=SecretsStore)
-    result.supports_versioned_credentials = True
     result.load_versioned.return_value = (
         '{"tokens":{"refresh_token":"r0"}}',
         'v0',
@@ -238,6 +237,17 @@ def test_load_uses_token_scope(client, jwt_service, store):
     assert response.headers['Cache-Control'] == 'no-store'
     get_for_user.assert_awaited_once_with('user-id')
     store.load_versioned.assert_awaited_once_with('CODEX_AUTH_JSON', _ORG_ID)
+
+
+def test_unsupported_store_is_unavailable(client, jwt_service, store):
+    test_client, _ = client
+    store.load_versioned.side_effect = NotImplementedError
+
+    response = test_client.get(
+        _path(), headers={'Authorization': f'Bearer {_token(jwt_service)}'}
+    )
+
+    assert response.status_code == 503
 
 
 def test_replace_uses_compare_and_swap(client, jwt_service, store):

@@ -5,7 +5,6 @@ from openhands.app_server.integrations.provider import (
     ProviderHandler,
 )
 from openhands.app_server.integrations.service_types import ProviderType, UserGitInfo
-from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user.user_models import UserInfo
 from openhands.app_server.user_auth.user_auth import UserAuth
@@ -109,9 +108,6 @@ class ResolverUserContext(UserContext):
                 converted_secrets[key] = secret_source
             return converted_secrets
         return {}
-
-    async def get_secrets_store(self) -> SecretsStore:
-        return await self.saas_user_auth.get_secrets_store()
 
     async def get_mcp_api_key(self) -> str | None:
         return await self.saas_user_auth.get_mcp_api_key()

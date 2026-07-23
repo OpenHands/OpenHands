@@ -31,15 +31,9 @@ def is_valid_codex_auth(value: str) -> bool:
     )
 
 
-_MANAGED_CREDENTIAL_VALIDATORS = {
-    CODEX_AUTH_SECRET_NAME: is_valid_codex_auth,
-}
-
-
 def is_runtime_managed_credential(name: str) -> bool:
-    return name in _MANAGED_CREDENTIAL_VALIDATORS
+    return name == CODEX_AUTH_SECRET_NAME
 
 
 def is_valid_runtime_managed_credential(name: str, value: str) -> bool:
-    validator = _MANAGED_CREDENTIAL_VALIDATORS.get(name)
-    return validator(value) if validator is not None else False
+    return name == CODEX_AUTH_SECRET_NAME and is_valid_codex_auth(value)

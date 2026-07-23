@@ -48,17 +48,6 @@ class SecretsStore(ABC):
     ) -> str:
         raise NotImplementedError
 
-    async def ensure_versioned(
-        self,
-        name: str,
-        organization_id: UUID | None = None,
-    ) -> None:
-        await self.load_versioned(name, organization_id)
-
-    @property
-    def supports_versioned_credentials(self) -> bool:
-        return False
-
     @classmethod
     @abstractmethod
     async def get_instance(cls, user_id: str | None) -> SecretsStore:

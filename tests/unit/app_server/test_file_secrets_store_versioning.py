@@ -11,21 +11,20 @@ from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.integrations.provider import CustomSecret
 from openhands.app_server.secrets import file_secrets_store as file_secrets_store_module
+from openhands.app_server.secrets.credential_binding_models import (
+    CODEX_AUTH_SECRET_NAME,
+)
 from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
 
 _ORIGINAL = '{"tokens":{"refresh_token":"r0"}}'
 _ROTATED = '{"tokens":{"refresh_token":"r1"}}'
-_MANAGED_NAME = 'MANAGED_AUTH'
-
-
-def _is_managed(name: str) -> bool:
-    return name == _MANAGED_NAME
+_MANAGED_NAME = CODEX_AUTH_SECRET_NAME
 
 
 def _store(file_store: FileStore) -> FileSecretsStore:
-    return FileSecretsStore(file_store, is_managed_credential=_is_managed)
+    return FileSecretsStore(file_store)
 
 
 class _ReadOnlyMemoryFileStore(InMemoryFileStore):
@@ -106,7 +105,7 @@ async def test_bootstrap_merges_version_into_raw_document():
     file_store = InMemoryFileStore(files={'secrets.json': json.dumps(raw)})
     store = _store(file_store)
 
-    await store.ensure_versioned(_MANAGED_NAME)
+    await store.load_versioned(_MANAGED_NAME)
     updated = json.loads(file_store.read('secrets.json'))
     version = updated.pop('_credential_versions')[_MANAGED_NAME]
 
@@ -129,7 +128,7 @@ async def test_bootstrap_is_stable_across_concurrent_stores(tmp_path):
     )
     stores = [_store(file_store) for _ in range(8)]
 
-    await asyncio.gather(*(store.ensure_versioned(_MANAGED_NAME) for store in stores))
+    await asyncio.gather(*(store.load_versioned(_MANAGED_NAME) for store in stores))
     versions = {(await store.load_versioned(_MANAGED_NAME))[1] for store in stores}
 
     assert len(versions) == 1
@@ -142,7 +141,7 @@ async def test_bootstrap_failure_leaves_raw_document_unchanged():
     store = _store(file_store)
 
     with pytest.raises(PermissionError):
-        await store.ensure_versioned(_MANAGED_NAME)
+        await store.load_versioned(_MANAGED_NAME)
 
     assert json.loads(file_store.read('secrets.json')) == raw
 
@@ -195,7 +194,6 @@ async def test_replace_preserves_unrecognized_file_data():
     }
     file_store = InMemoryFileStore(files={'secrets.json': json.dumps(raw)})
     store = _store(file_store)
-    await store.ensure_versioned(_MANAGED_NAME)
     _, version = await store.load_versioned(_MANAGED_NAME)
 
     await store.replace_versioned(_MANAGED_NAME, version, _ROTATED)
@@ -284,15 +282,29 @@ async def test_versioned_bindings_reject_store_without_cross_process_lock():
     file_store.read.assert_not_called()
 
 
-def test_remote_file_store_does_not_use_process_lock(monkeypatch):
+@pytest.mark.asyncio
+async def test_remote_file_store_keeps_unversioned_load_and_store():
+    original = _secrets(_ORIGINAL)
     file_store = MagicMock(spec=FileStore)
-    process_lock = MagicMock()
-    monkeypatch.setattr(file_secrets_store_module, '_process_lock', process_lock)
+    file_store.read.return_value = original.model_dump_json(
+        context={'expose_secrets': True}
+    )
+    store = _store(file_store)
 
-    with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
-        pass
+    loaded = await store.load()
 
-    process_lock.__enter__.assert_not_called()
+    assert loaded == original
+    assert store._loaded_credentials == {}
+
+    updated = _secrets(_ROTATED, 'other')
+    file_store.reset_mock()
+    await store.store(updated)
+
+    file_store.read.assert_not_called()
+    file_store.write.assert_called_once_with(
+        'secrets.json',
+        updated.model_dump_json(context={'expose_secrets': True}),
+    )
 
 
 def test_failed_file_lock_acquisition_closes_descriptor(monkeypatch):

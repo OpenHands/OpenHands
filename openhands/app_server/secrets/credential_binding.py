@@ -119,13 +119,7 @@ def _authorize(
 
 async def _store(scope: CredentialBindingScope) -> SecretsStore:
     user_auth = await get_for_user(scope.user_id)
-    secrets_store = await user_auth.get_secrets_store()
-    if not secrets_store.supports_versioned_credentials:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Managed credential storage is unavailable',
-        )
-    return secrets_store
+    return await user_auth.get_secrets_store()
 
 
 async def _validate_active_binding(scope: CredentialBindingScope) -> None:

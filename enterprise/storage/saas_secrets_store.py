@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -38,17 +37,9 @@ class SaasSecretsStore(SecretsStore):
     # (user_id, org_id), so the effective org must flow through here for
     # the right rows to be read/written.
     effective_org_id: UUID | None = None
-    is_managed_credential: Callable[[str], bool] = field(
-        default=is_runtime_managed_credential,
-        repr=False,
-    )
     _loaded_managed_credentials: dict[UUID | None, dict[str, tuple[str, str]]] = field(
         default_factory=dict, init=False, repr=False
     )
-
-    @property
-    def supports_versioned_credentials(self) -> bool:
-        return True
 
     async def load(self) -> Secrets | None:
         if not self.user_id:
@@ -77,7 +68,7 @@ class SaasSecretsStore(SecretsStore):
                     'secret': secret.secret_value,
                     'description': secret.description,
                 }
-                if self.is_managed_credential(secret.secret_name):
+                if is_runtime_managed_credential(secret.secret_name):
                     managed_rows[secret.secret_name] = secret
 
             self._decrypt_kwargs(kwargs)
@@ -104,7 +95,7 @@ class SaasSecretsStore(SecretsStore):
         submitted_managed = {
             name: value
             for name, info in secrets_json.items()
-            if self.is_managed_credential(name)
+            if is_runtime_managed_credential(name)
             and isinstance(info, dict)
             and isinstance(value := info.get('secret'), str)
         }
@@ -121,7 +112,7 @@ class SaasSecretsStore(SecretsStore):
             )
             managed_rows: dict[str, list[StoredCustomSecrets]] = {}
             for row in result.scalars().all():
-                if self.is_managed_credential(row.secret_name):
+                if is_runtime_managed_credential(row.secret_name):
                     managed_rows.setdefault(row.secret_name, []).append(row)
 
             preserved_names = set()

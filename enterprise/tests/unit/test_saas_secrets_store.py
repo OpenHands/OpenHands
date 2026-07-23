@@ -10,26 +10,21 @@ from storage.saas_secrets_store import SaasSecretsStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 
 from openhands.app_server.integrations.provider import CustomSecret
+from openhands.app_server.secrets.credential_binding_models import (
+    CODEX_AUTH_SECRET_NAME,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
 
-_MANAGED_NAME = 'MANAGED_AUTH'
+_MANAGED_NAME = CODEX_AUTH_SECRET_NAME
 _ORG_ID = UUID('a1111111-1111-1111-1111-111111111111')
 _OTHER_ORG_ID = UUID('b2222222-2222-2222-2222-222222222222')
 
 
-def _is_managed(name: str) -> bool:
-    return name == _MANAGED_NAME
-
-
 def _store(jwt_svc: JwtService) -> SaasSecretsStore:
-    return SaasSecretsStore(
-        'user-id',
-        jwt_svc,
-        is_managed_credential=_is_managed,
-    )
+    return SaasSecretsStore('user-id', jwt_svc)
 
 
 def _make_jwt_service() -> JwtService:

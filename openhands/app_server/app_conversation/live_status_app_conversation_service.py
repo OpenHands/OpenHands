@@ -160,7 +160,7 @@ _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
 _CREDENTIAL_BINDING_PROBE_CAPABILITY = 'credential_binding_readiness_probe_v1'
 
 
-def _resolve_web_url(
+def _resolve_credential_binding_url(
     web_url: str | None,
     sandbox_service: SandboxService,
 ) -> str | None:
@@ -2316,7 +2316,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not value or not is_valid_codex_auth(value):
             return request
 
-        if not self.web_url or not sandbox.session_api_key:
+        credential_binding_url = _resolve_credential_binding_url(
+            self.web_url,
+            self.sandbox_service,
+        )
+        if not credential_binding_url or not sandbox.session_api_key:
             _logger.warning(
                 'Credential binding context is incomplete',
                 extra={'conversation_id': str(conversation_id)},
@@ -2349,28 +2353,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return request
 
         try:
-            secrets_store = await self.user_context.get_secrets_store()
-        except Exception:
-            _logger.warning(
-                'Could not determine credential binding store capabilities',
-                extra={'conversation_id': str(conversation_id)},
-                exc_info=True,
-            )
-            return request
-        if not secrets_store.supports_versioned_credentials:
-            _logger.warning(
-                'Managed credential storage is unavailable',
-                extra={'conversation_id': str(conversation_id)},
-            )
-            return request
-
-        try:
             user_id = await self.user_context.get_user_id() or 'root'
             organization_id = await self.user_context.get_effective_org_id()
-            await secrets_store.ensure_versioned(
-                CODEX_AUTH_SECRET_NAME,
-                organization_id,
-            )
             token = self.jwt_service.create_jws_token(
                 payload={
                     'purpose': 'credential-binding',
@@ -2391,7 +2375,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 headers=headers,
                 json={
                     'url': (
-                        f'{self.web_url.rstrip("/")}'
+                        f'{credential_binding_url.rstrip("/")}'
                         f'{credential_binding_path(conversation_id, CODEX_AUTH_SECRET_NAME)}'
                     ),
                     'headers': {'Authorization': f'Bearer {token}'},
@@ -3197,7 +3181,9 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 )
             config = get_global_config()
 
-            web_url = _resolve_web_url(config.web_url, sandbox_service)
+            web_url = config.web_url
+            if web_url is None:
+                web_url = _resolve_credential_binding_url(web_url, sandbox_service)
 
             # Get app_mode for SaaS mode
             app_mode = None
