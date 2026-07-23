@@ -103,11 +103,11 @@ export function UsageDashboard() {
     (org) => org.id === organizationId,
   );
 
-  const totalConversations = usageStats?.agent_runs ?? 0;
+  const usageConversations = usageStats?.usage_conversation_count ?? 0;
   const activeConversations = stats?.active_conversations ?? 0;
   const avgCostPerConversation =
-    totalConversations > 0
-      ? (usageStats?.estimated_spend ?? 0) / totalConversations
+    usageConversations > 0
+      ? (usageStats?.estimated_spend ?? 0) / usageConversations
       : 0;
   const totalSpend = formatCost(usageStats?.estimated_spend ?? 0);
 
@@ -267,7 +267,7 @@ export function UsageDashboard() {
         {/* Overview Tab */}
         {activeTab === "overview" && (
           <OverviewTab
-            totalConversations={totalConversations}
+            usageConversations={usageConversations}
             activeConversations={activeConversations}
             avgCostPerConversation={avgCostPerConversation}
             totalSpend={totalSpend}

@@ -32,6 +32,7 @@ const createWrapper = () => {
 const mockUsageStats = {
   active_users: 0,
   agent_runs: 0,
+  usage_conversation_count: 0,
   total_tokens: 0,
   estimated_spend: 0,
   daily_usage: [],
