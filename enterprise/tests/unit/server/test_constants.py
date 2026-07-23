@@ -117,6 +117,29 @@ class TestDeploymentMode:
             # Default WEB_HOST is 'app.all-hands.dev' which should be 'cloud'
             assert constants_module.DEPLOYMENT_MODE == 'cloud'
 
+    @pytest.mark.parametrize(
+        'env',
+        [
+            {'WEB_HOST': ''},
+            {'WEB_HOST': '   '},
+            {'OH_DEPLOYMENT_MODE': 'self_hosted'},
+            {'OH_DEPLOYMENT_MODE': 'self_hosted', 'WEB_HOST': ''},
+            {'OH_DEPLOYMENT_MODE': 'self_hosted', 'WEB_HOST': '   '},
+        ],
+    )
+    def test_empty_self_hosted_web_host_fails_fast(self, env: dict[str, str]):
+        """Self-hosted mode must not silently build URLs like ``https://``."""
+        import importlib
+
+        import server.constants as constants_module
+
+        with patch.dict('os.environ', env, clear=True):
+            with pytest.raises(ValueError, match='WEB_HOST must be set'):
+                importlib.reload(constants_module)
+
+        with patch.dict('os.environ', {'WEB_HOST': 'app.all-hands.dev'}, clear=True):
+            importlib.reload(constants_module)
+
 
 class TestStagingAndFeatureEnvDetection:
     """IS_STAGING_ENV / IS_FEATURE_ENV must recognize both the legacy

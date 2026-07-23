@@ -1,8 +1,18 @@
 import os
 import re
 
+DEFAULT_WEB_HOST = 'app.all-hands.dev'
+_WEB_HOST_ENV = os.getenv('WEB_HOST')
+
+
 # Get the host from environment variable
-HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
+def _get_web_host() -> str:
+    if _WEB_HOST_ENV is None:
+        return DEFAULT_WEB_HOST
+    return _WEB_HOST_ENV.strip()
+
+
+HOST = _get_web_host()
 
 # Check if this is a feature environment
 # Feature environments have a host format like {some-text}.staging.all-hands.dev
@@ -55,6 +65,17 @@ def _get_deployment_mode() -> str:
 
 
 DEPLOYMENT_MODE = _get_deployment_mode()
+
+
+def _validate_self_hosted_web_host() -> None:
+    if DEPLOYMENT_MODE == 'self_hosted' and (_WEB_HOST_ENV is None or not HOST):
+        raise ValueError(
+            'WEB_HOST must be set to the public hostname this self-hosted '
+            'deployment is reached on.'
+        )
+
+
+_validate_self_hosted_web_host()
 
 # Role name constants
 ROLE_OWNER = 'owner'
@@ -119,7 +140,7 @@ SLACK_CLIENT_SECRET = os.environ.get('SLACK_CLIENT_SECRET', None)
 SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET', None)
 SLACK_WEBHOOKS_ENABLED = os.environ.get('SLACK_WEBHOOKS_ENABLED', '0') in ('1', 'true')
 
-WEB_HOST = os.getenv('WEB_HOST', 'app.all-hands.dev').strip()
+WEB_HOST = HOST
 PERMITTED_CORS_ORIGINS = [
     host.strip()
     for host in (os.getenv('PERMITTED_CORS_ORIGINS') or f'https://{WEB_HOST}').split(
