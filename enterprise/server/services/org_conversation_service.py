@@ -1132,7 +1132,7 @@ class OrgConversationService:
         team_usage = []
         for user_id in count_rows.keys() | team_tokens.keys():
             row = count_rows.get(user_id)
-            token_entry = team_tokens.get(user_id)
+            token_entry = team_tokens.get(user_id, (0, None, None))
             conv_count = int(row.conv_count or 0) if row is not None else 0
             pct = (conv_count / total_team_convs * 100) if total_team_convs > 0 else 0
             team_usage.append(
@@ -1143,7 +1143,7 @@ class OrgConversationService:
                         row.git_user_name if row is not None else token_entry[2]
                     ),
                     conversation_count=conv_count,
-                    total_tokens=token_entry[0] if token_entry else 0,
+                    total_tokens=token_entry[0],
                     percentage=round(pct, 1),
                 )
             )
