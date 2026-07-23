@@ -793,14 +793,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     conversation_id,
                 )
 
-            if existing_info.sandbox_id != sandbox.id:
-                existing_info = existing_info.model_copy(
-                    update={'sandbox_id': sandbox.id}
-                )
-                await self.app_conversation_info_service.save_app_conversation_info(
-                    existing_info
-                )
-
             activation_order = [
                 conversation_id
                 for conversation_id in managed_conversation_ids
@@ -828,6 +820,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     await self.app_conversation_start_task_service.save_app_conversation_start_task(
                         binding_task
                     )
+
+            if existing_info.sandbox_id != sandbox.id:
+                existing_info = existing_info.model_copy(
+                    update={'sandbox_id': sandbox.id}
+                )
+                await self.app_conversation_info_service.save_app_conversation_info(
+                    existing_info
+                )
 
             task.status = AppConversationStartTaskStatus.READY
             yield task
