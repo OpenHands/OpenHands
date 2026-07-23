@@ -913,7 +913,7 @@ class DailyUsageData(BaseModel):
 
     date: str  # ISO date string (YYYY-MM-DD)
     tokens: int = 0
-    conversations: int = 0
+    conversations: int = 0  # Conversations started
 
 
 class TeamUsageData(BaseModel):
@@ -975,7 +975,8 @@ class OrgUsageStats(BaseModel):
 
     # Top-level metrics
     active_users: int = 0  # Users with activity in last 7 days
-    agent_runs: int = 0  # Total conversations in last 7 days
+    agent_runs: int = 0  # Conversations started in last 7 days
+    usage_conversation_count: int = 0  # Conversations with usage in last 7 days
     total_tokens: int = 0  # Total tokens in last 7 days
     estimated_spend: float = 0.0  # Estimated cost in last 7 days
 
