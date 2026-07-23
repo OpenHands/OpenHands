@@ -6,6 +6,7 @@ from openhands.app_server.utils.llm import (
     _derive_verified_models,
     get_provider_api_base,
     is_openhands_model,
+    normalize_llm_model_for_runtime,
 )
 
 
@@ -107,6 +108,60 @@ class TestAssignProvider:
         monkeypatch.setattr(llm_utils, 'get_llm_provider', _boom)
 
         assert _assign_provider('whatever') == 'whatever'
+
+
+class TestNormalizeLlmModelForRuntime:
+    """Tests for runtime-only model routing."""
+
+    def test_custom_base_url_routes_opaque_model_through_proxy(self, monkeypatch):
+        """Opaque model ids use LiteLLM proxy routing without changing display id."""
+        monkeypatch.setattr(llm_utils, '_LITELLM_PROVIDERS', {'openai', 'anthropic'})
+        monkeypatch.setattr(llm_utils.litellm, 'model_list', [])
+        monkeypatch.setattr(llm_utils.litellm, 'model_cost', {})
+
+        runtime_model, canonical_name = normalize_llm_model_for_runtime(
+            'local/my-coder', 'https://gateway.example/v1'
+        )
+
+        assert runtime_model == 'litellm_proxy/local/my-coder'
+        assert canonical_name == 'local/my-coder'
+
+    def test_no_base_url_leaves_opaque_model_unchanged(self, monkeypatch):
+        """Provider inference should be left to the normal path without a custom URL."""
+        monkeypatch.setattr(llm_utils, '_LITELLM_PROVIDERS', {'openai', 'anthropic'})
+        monkeypatch.setattr(llm_utils.litellm, 'model_list', [])
+        monkeypatch.setattr(llm_utils.litellm, 'model_cost', {})
+
+        assert normalize_llm_model_for_runtime('local/my-coder', None) == (
+            'local/my-coder',
+            None,
+        )
+
+    def test_known_litellm_routes_are_not_rewritten(self, monkeypatch):
+        """Known LiteLLM provider routes already carry their adapter hint."""
+        monkeypatch.setattr(llm_utils, '_LITELLM_PROVIDERS', {'openai', 'anthropic'})
+        monkeypatch.setattr(llm_utils.litellm, 'model_list', ['gpt-4o'])
+        monkeypatch.setattr(llm_utils.litellm, 'model_cost', {})
+
+        assert normalize_llm_model_for_runtime(
+            'openai/custom-alias', 'https://gateway.example/v1'
+        ) == ('openai/custom-alias', None)
+        assert normalize_llm_model_for_runtime(
+            'gpt-4o', 'https://gateway.example/v1'
+        ) == ('gpt-4o', None)
+
+    def test_proxy_and_openhands_routes_are_not_rewritten(self, monkeypatch):
+        """Existing internal routes keep their original model ids."""
+        monkeypatch.setattr(llm_utils, '_LITELLM_PROVIDERS', {'openai', 'anthropic'})
+        monkeypatch.setattr(llm_utils.litellm, 'model_list', [])
+        monkeypatch.setattr(llm_utils.litellm, 'model_cost', {})
+
+        assert normalize_llm_model_for_runtime(
+            'litellm_proxy/local/my-coder', 'https://gateway.example/v1'
+        ) == ('litellm_proxy/local/my-coder', None)
+        assert normalize_llm_model_for_runtime(
+            'openhands/gpt-5', 'https://gateway.example/v1'
+        ) == ('openhands/gpt-5', None)
 
 
 class TestDeriveVerifiedModels:

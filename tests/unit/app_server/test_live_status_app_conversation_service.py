@@ -1007,6 +1007,30 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_routes_opaque_custom_endpoint_model(
+        self,
+    ):
+        """Opaque model ids on custom OpenAI-compatible endpoints need proxy routing.
+
+        A gateway may expose model ids such as ``local/my-coder``.  LiteLLM
+        cannot infer a provider from that id, but adding an ``openai/`` prefix
+        would change the model id that reaches the gateway.  Route through the
+        LiteLLM proxy adapter at runtime and keep the user's model as the
+        canonical name for capability lookups and display.
+        """
+        self.mock_user.llm_model = 'local/my-coder'
+        self.mock_user.llm_base_url = 'http://192.0.2.20:4000/v1'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, None, self.conversation_id
+        )
+
+        assert llm.model == 'litellm_proxy/local/my-coder'
+        assert llm.model_canonical_name == 'local/my-coder'
+        assert llm.base_url == 'http://192.0.2.20:4000/v1'
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_non_openhands_model_ignores_provider(self):
         """Non-openhands model ignores provider base URL and uses user base URL."""
         # Arrange

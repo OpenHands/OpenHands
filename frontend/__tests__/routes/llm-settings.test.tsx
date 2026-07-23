@@ -1893,10 +1893,17 @@ describe("LlmSettingsScreen", () => {
 
     await renderLlmSettingsScreen({ appMode: "oss" });
 
+    const customModelInput = await screen.findByTestId(
+      "llm-custom-model-input",
+    );
+    await userEvent.clear(customModelInput);
+    await userEvent.type(customModelInput, "local/my-coder");
+
     const baseUrlInput = await screen.findByTestId("base-url-input");
     await userEvent.type(baseUrlInput, "/extra");
 
     await waitFor(() => {
+      expect(customModelInput).toHaveValue("local/my-coder");
       expect(baseUrlInput).toHaveValue("https://custom.example/v1/extra");
       expect(screen.getByTestId("save-button")).not.toBeDisabled();
     });
@@ -1908,6 +1915,7 @@ describe("LlmSettingsScreen", () => {
         expect.objectContaining({
           agent_settings_diff: expect.objectContaining({
             llm: expect.objectContaining({
+              model: "local/my-coder",
               base_url: "https://custom.example/v1/extra",
             }),
           }),

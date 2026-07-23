@@ -66,6 +66,10 @@ _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
 DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
+_LITELLM_PROXY_PREFIX = 'litellm_proxy/'
+_LITELLM_PROVIDERS = {
+    getattr(provider, 'value', str(provider)) for provider in litellm.provider_list
+}
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +108,37 @@ class ModelsResponse(BaseModel):
 def is_openhands_model(model: str | None) -> bool:
     """Return True when the model uses the public OpenHands provider prefix."""
     return bool(model and model.startswith('openhands/'))
+
+
+def _is_known_litellm_route(model: str) -> bool:
+    if model in litellm.model_list or model in litellm.model_cost:
+        return True
+
+    provider, separator, _ = model.partition('/')
+    return bool(separator and provider in _LITELLM_PROVIDERS)
+
+
+def normalize_llm_model_for_runtime(
+    model: str, base_url: str | None
+) -> tuple[str, str | None]:
+    """Return the runtime model id and optional canonical model name.
+
+    Custom OpenAI-compatible gateways can expose opaque model ids such as
+    ``local/my-coder``. LiteLLM cannot infer a provider from those ids, but
+    prepending ``openai/`` would change the model sent to the gateway. When a
+    custom ``base_url`` is configured and the model is not a route LiteLLM
+    already understands, use the LiteLLM proxy adapter only at runtime while
+    preserving the user's model id as the canonical name.
+    """
+    if (
+        not base_url
+        or model.startswith(_LITELLM_PROXY_PREFIX)
+        or is_openhands_model(model)
+        or _is_known_litellm_route(model)
+    ):
+        return model, None
+
+    return f'{_LITELLM_PROXY_PREFIX}{model}', model
 
 
 # Canonical masked placeholder for LLM API keys. Matches pydantic's
