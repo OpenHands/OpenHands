@@ -28,7 +28,7 @@ export type AgentSpendRow = {
 };
 
 export function OverviewTab({
-  totalConversations,
+  usageConversations,
   activeConversations,
   avgCostPerConversation,
   totalSpend,
@@ -37,7 +37,7 @@ export function OverviewTab({
   agentSpendRows,
   agentSpendTotal,
 }: {
-  totalConversations: number;
+  usageConversations: number;
   activeConversations: number;
   avgCostPerConversation: number;
   totalSpend: string;
@@ -50,8 +50,8 @@ export function OverviewTab({
     <div className="space-y-6">
       <div className="grid grid-cols-4 gap-4">
         <KPICard
-          label="Total Conversations"
-          value={totalConversations.toLocaleString()}
+          label="Conversations With Usage"
+          value={usageConversations.toLocaleString()}
         />
         <KPICard
           label="Active Conversations"
@@ -72,7 +72,7 @@ export function OverviewTab({
           <div className="flex items-start justify-between mb-6">
             <div>
               <h2 className="text-lg font-medium text-white">
-                Conversations per day
+                Conversations started per day
               </h2>
               <p className="text-sm text-zinc-500">
                 {timeWindowLabel} · all users

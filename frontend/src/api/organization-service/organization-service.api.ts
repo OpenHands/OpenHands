@@ -583,6 +583,7 @@ interface AgentUsageData {
 interface OrgUsageStats {
   active_users: number;
   agent_runs: number;
+  usage_conversation_count: number;
   total_tokens: number;
   estimated_spend: number;
   daily_usage: DailyUsageData[];
