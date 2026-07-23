@@ -124,6 +124,11 @@ class SandboxService(ABC):
     async def get_sandbox(self, sandbox_id: str) -> SandboxInfo | None:
         """Get a single sandbox. Return None if the sandbox was not found."""
 
+    async def get_sandbox_for_authorization(
+        self, sandbox_id: str
+    ) -> SandboxInfo | None:
+        return await self.get_sandbox(sandbox_id)
+
     @abstractmethod
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str

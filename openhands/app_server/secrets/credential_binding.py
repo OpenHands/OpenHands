@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -9,9 +8,13 @@ from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartTaskStatus,
+)
 from openhands.app_server.config import (
     depends_jwt_service,
     get_app_conversation_info_service,
+    get_app_conversation_start_task_service,
     get_sandbox_service,
 )
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
@@ -33,7 +36,6 @@ from openhands.app_server.user_auth.user_auth import get_for_user
 
 router = APIRouter(prefix=CREDENTIAL_BINDING_ROUTE_PREFIX)
 jwt_service_dependency = depends_jwt_service()
-_CONVERSATION_START_GRACE_SECONDS = 300
 
 
 class CredentialReplacement(BaseModel):
@@ -49,8 +51,8 @@ class CredentialBindingScope:
     organization_id: UUID | None
     conversation_id: UUID
     runtime_id: str
+    start_task_id: UUID
     secret_name: str
-    issued_at: int
 
 
 def _authorize(
@@ -78,9 +80,12 @@ def _authorize(
             raise TypeError
         scoped_conversation_id = UUID(conversation_claim)
         runtime_id = claims['runtime_id']
+        start_task_claim = claims['start_task_id']
+        if not isinstance(start_task_claim, str):
+            raise TypeError
+        start_task_id = UUID(start_task_claim)
         scoped_secret_name = claims['secret_name']
         actions = claims['actions']
-        issued_at = claims['iat']
     except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
@@ -100,8 +105,6 @@ def _authorize(
         or not all(isinstance(candidate, str) for candidate in actions)
         or set(actions) != {'load', 'replace'}
         or action not in actions
-        or not isinstance(issued_at, int)
-        or isinstance(issued_at, bool)
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
@@ -112,8 +115,8 @@ def _authorize(
         organization_id=organization_id,
         conversation_id=conversation_id,
         runtime_id=runtime_id,
+        start_task_id=start_task_id,
         secret_name=secret_name,
-        issued_at=issued_at,
     )
 
 
@@ -127,28 +130,45 @@ async def _validate_active_binding(scope: CredentialBindingScope) -> None:
     setattr(state, USER_CONTEXT_ATTR, ADMIN)
     async with (
         get_app_conversation_info_service(state) as conversation_service,
+        get_app_conversation_start_task_service(state) as start_task_service,
         get_sandbox_service(state) as sandbox_service,
     ):
+        task_page = await start_task_service.search_app_conversation_start_tasks(
+            conversation_id__eq=scope.conversation_id, limit=1
+        )
+        task = task_page.items[0] if task_page.items else None
+        task_status = task.status if task is not None else None
+        if (
+            task is None
+            or task.id != scope.start_task_id
+            or task.app_conversation_id != scope.conversation_id
+            or task.sandbox_id != scope.runtime_id
+            or task.created_by_user_id not in (None, scope.user_id)
+            or task_status
+            not in (
+                AppConversationStartTaskStatus.STARTING_CONVERSATION,
+                AppConversationStartTaskStatus.READY,
+            )
+        ):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail='Credential binding is no longer active',
+            )
         conversation = await conversation_service.get_app_conversation_info(
             scope.conversation_id
         )
-        sandbox = await sandbox_service.get_sandbox(scope.runtime_id)
-    within_start_grace = (
-        time.time() - scope.issued_at <= _CONVERSATION_START_GRACE_SECONDS
-    )
+        sandbox = await sandbox_service.get_sandbox_for_authorization(scope.runtime_id)
     if (
         sandbox is None
         or sandbox.status != SandboxStatus.RUNNING
         or sandbox.created_by_user_id not in (None, scope.user_id)
-        or (conversation is None and not within_start_grace)
         or (
             conversation is not None
             and conversation.created_by_user_id not in (None, scope.user_id)
         )
         or (
-            conversation is not None
-            and conversation.sandbox_id != scope.runtime_id
-            and not within_start_grace
+            task_status == AppConversationStartTaskStatus.READY
+            and (conversation is None or conversation.sandbox_id != scope.runtime_id)
         )
     ):
         raise HTTPException(

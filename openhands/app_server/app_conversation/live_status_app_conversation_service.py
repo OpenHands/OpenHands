@@ -96,6 +96,7 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
 )
 from openhands.app_server.secrets.credential_binding_models import (
     CODEX_AUTH_SECRET_NAME,
+    CREDENTIAL_BINDING_PROBE_CAPABILITY,
     credential_binding_path,
     is_valid_codex_auth,
 )
@@ -157,7 +158,6 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
-_CREDENTIAL_BINDING_PROBE_CAPABILITY = 'credential_binding_readiness_probe_v1'
 
 
 def _resolve_credential_binding_url(
@@ -409,9 +409,28 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         # a pseudo-anonymous internal id. Falls back to ``user_id`` when no
         # email is available (e.g. OSS mode).
         laminar_user_id = await self.user_context.get_user_email() or user_id
+        existing_info = None
+        if request.conversation_id is not None:
+            existing_info = (
+                await self.app_conversation_info_service.get_app_conversation_info(
+                    request.conversation_id
+                )
+            )
+            if existing_info is None:
+                raise ValueError(f'Conversation not found: {request.conversation_id}')
+            request = request.model_copy(
+                update={
+                    'sandbox_id': request.sandbox_id or existing_info.sandbox_id,
+                    'selected_repository': existing_info.selected_repository,
+                    'selected_branch': existing_info.selected_branch,
+                    'git_provider': existing_info.git_provider,
+                    'trigger': existing_info.trigger,
+                    'llm_model': existing_info.llm_model,
+                }
+            )
 
         # Validate and inherit from parent conversation if provided
-        if request.parent_conversation_id:
+        if request.parent_conversation_id and existing_info is None:
             parent_info = (
                 await self.app_conversation_info_service.get_app_conversation_info(
                     request.parent_conversation_id
@@ -428,6 +447,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         task = AppConversationStartTask(
             created_by_user_id=user_id,
             request=request,
+            app_conversation_id=request.conversation_id,
         )
         yield task
 
@@ -507,20 +527,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     agent_profile_id=request.agent_profile_id,
                 )
             )
+
+            task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
+            task.app_conversation_id = conversation_id
+            task.agent_server_url = agent_server_url
+            yield task
+
             start_conversation_request = await self._prepare_credential_bindings(
                 start_conversation_request,
                 sandbox,
                 conversation_id,
                 agent_server_url,
+                start_task_id=task.id,
+                acp_server=existing_info.acp_server if existing_info else None,
                 api_codex_auth=bool(
                     request.secrets and CODEX_AUTH_SECRET_NAME in request.secrets
                 ),
             )
-
-            # update status
-            task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
-            task.agent_server_url = agent_server_url
-            yield task
 
             # Start conversation...
             body_json = start_conversation_request.model_dump(
@@ -621,46 +644,54 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             if request.selected_branch:
                 conversation_tags['selected_branch'] = request.selected_branch
 
-            app_conversation_info = AppConversationInfo(
-                id=info.id,
-                title=f'Conversation {info.id.hex[:5]}',
-                sandbox_id=sandbox.id,
-                created_by_user_id=user_id,
-                llm_model=llm_model,
-                agent_kind=agent_kind,
-                # Git parameters
-                selected_repository=request.selected_repository,
-                selected_branch=request.selected_branch,
-                git_provider=request.git_provider,
-                trigger=request.trigger,
-                pr_number=request.pr_number,
-                parent_conversation_id=request.parent_conversation_id,
-                tags=conversation_tags,
-            )
+            if existing_info is not None:
+                if info.id != existing_info.id:
+                    raise SandboxError('Resumed conversation ID did not match')
+                app_conversation_info = existing_info.model_copy(
+                    update={'sandbox_id': sandbox.id}
+                )
+            else:
+                app_conversation_info = AppConversationInfo(
+                    id=info.id,
+                    title=f'Conversation {info.id.hex[:5]}',
+                    sandbox_id=sandbox.id,
+                    created_by_user_id=user_id,
+                    llm_model=llm_model,
+                    agent_kind=agent_kind,
+                    # Git parameters
+                    selected_repository=request.selected_repository,
+                    selected_branch=request.selected_branch,
+                    git_provider=request.git_provider,
+                    trigger=request.trigger,
+                    pr_number=request.pr_number,
+                    parent_conversation_id=request.parent_conversation_id,
+                    tags=conversation_tags,
+                )
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
             )
 
-            # Setup default processors
-            processors = request.processors or []
+            if existing_info is None:
+                # Setup default processors
+                processors = request.processors or []
 
-            # Always ensure SetTitleCallbackProcessor is included
-            has_set_title_processor = any(
-                isinstance(processor, SetTitleCallbackProcessor)
-                for processor in processors
-            )
-            if not has_set_title_processor:
-                processors.append(SetTitleCallbackProcessor())
-
-            # Save processors
-            for processor in processors:
-                await self.event_callback_service.save_event_callback(
-                    EventCallback(
-                        conversation_id=info.id,
-                        event_kind=processor.get_event_kind(),
-                        processor=processor,
-                    )
+                # Always ensure SetTitleCallbackProcessor is included
+                has_set_title_processor = any(
+                    isinstance(processor, SetTitleCallbackProcessor)
+                    for processor in processors
                 )
+                if not has_set_title_processor:
+                    processors.append(SetTitleCallbackProcessor())
+
+                # Save processors
+                for processor in processors:
+                    await self.event_callback_service.save_event_callback(
+                        EventCallback(
+                            conversation_id=info.id,
+                            event_kind=processor.get_event_kind(),
+                            processor=processor,
+                        )
+                    )
 
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
@@ -2298,6 +2329,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         conversation_id: UUID,
         agent_server_url: str,
         *,
+        start_task_id: UUID,
+        acp_server: str | None = None,
         api_codex_auth: bool,
     ) -> StartConversationRequest:
         agent = request.agent
@@ -2305,12 +2338,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not isinstance(request_secrets, Mapping):
             return request
         source = request_secrets.get(CODEX_AUTH_SECRET_NAME)
-        if (
-            agent.agent_kind != 'acp'
-            or getattr(agent, 'acp_server', None) != 'codex'
-            or api_codex_auth
-            or not isinstance(source, StaticSecret)
-        ):
+        is_codex = (
+            acp_server == 'codex'
+            if acp_server is not None
+            else agent.agent_kind == 'acp'
+            and getattr(agent, 'acp_server', None) == 'codex'
+        )
+        if not is_codex or api_codex_auth or not isinstance(source, StaticSecret):
             return request
         value = source.get_value()
         if not value or not is_valid_codex_auth(value):
@@ -2348,7 +2382,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         if (
             not isinstance(capabilities, list)
-            or _CREDENTIAL_BINDING_PROBE_CAPABILITY not in capabilities
+            or CREDENTIAL_BINDING_PROBE_CAPABILITY not in capabilities
         ):
             return request
 
@@ -2364,6 +2398,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     ),
                     'conversation_id': str(conversation_id),
                     'runtime_id': sandbox.id,
+                    'start_task_id': str(start_task_id),
                     'secret_name': CODEX_AUTH_SECRET_NAME,
                     'actions': ['load', 'replace'],
                 },
@@ -2382,9 +2417,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 },
                 timeout=self.sandbox_startup_timeout,
             )
-            if activation_response.status_code == 404:
-                return request
             activation_response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if 400 <= exc.response.status_code < 500:
+                raise SandboxError(
+                    'Credential binding activation was rejected',
+                    status_code=exc.response.status_code,
+                ) from exc
+            _logger.warning(
+                'Could not activate agent-server credential binding',
+                extra={'conversation_id': str(conversation_id)},
+                exc_info=True,
+            )
+            return request
         except Exception:
             _logger.warning(
                 'Could not activate agent-server credential binding',

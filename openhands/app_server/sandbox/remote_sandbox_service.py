@@ -369,6 +369,28 @@ class RemoteSandboxService(SandboxService):
 
         return self._to_sandbox_info(stored_sandbox, runtime)
 
+    async def get_sandbox_for_authorization(
+        self, sandbox_id: str
+    ) -> SandboxInfo | None:
+        stored_sandbox = await self._get_stored_sandbox(sandbox_id)
+        if stored_sandbox is None:
+            return None
+        try:
+            runtime = await self._get_runtime(stored_sandbox.id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return self._to_sandbox_info(stored_sandbox, None)
+            raise SandboxError(
+                'Runtime status is temporarily unavailable',
+                status_code=503,
+            ) from exc
+        except Exception as exc:
+            raise SandboxError(
+                'Runtime status is temporarily unavailable',
+                status_code=503,
+            ) from exc
+        return self._to_sandbox_info(stored_sandbox, runtime)
+
     async def get_sandbox_by_session_api_key(
         self, session_api_key: str
     ) -> SandboxInfo | None:

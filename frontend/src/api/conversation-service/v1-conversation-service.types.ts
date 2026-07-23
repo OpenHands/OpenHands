@@ -55,6 +55,7 @@ export interface V1SendMessageRequest {
 
 export interface V1AppConversationStartRequest {
   sandbox_id?: string | null;
+  conversation_id?: string | null;
   initial_message?: V1SendMessageRequest | null;
   processors?: unknown[]; // EventCallbackProcessor - keeping as unknown for now
   llm_model?: string | null;

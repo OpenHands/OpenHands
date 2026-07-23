@@ -384,7 +384,7 @@ async def start_app_conversation(
         # Analytics: conversation created (V1)
         try:
             analytics = get_analytics_service()
-            if analytics:
+            if analytics and start_request.conversation_id is None:
                 user_id = await user_context.get_user_id()
                 if user_id:
                     ctx = await resolve_analytics_context(user_id)

@@ -19,12 +19,13 @@ from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.encryption_key import EncryptionKey
 
 _MANAGED_NAME = CODEX_AUTH_SECRET_NAME
+_USER_ID = UUID('c3333333-3333-3333-3333-333333333333')
 _ORG_ID = UUID('a1111111-1111-1111-1111-111111111111')
 _OTHER_ORG_ID = UUID('b2222222-2222-2222-2222-222222222222')
 
 
 def _store(jwt_svc: JwtService) -> SaasSecretsStore:
-    return SaasSecretsStore('user-id', jwt_svc)
+    return SaasSecretsStore(str(_USER_ID), jwt_svc)
 
 
 def _make_jwt_service() -> JwtService:
@@ -35,6 +36,16 @@ def _make_jwt_service() -> JwtService:
 @pytest.fixture
 def jwt_svc():
     return _make_jwt_service()
+
+
+@pytest.fixture(autouse=True)
+def mock_org_membership():
+    with patch(
+        'storage.saas_secrets_store.OrgMemberStore.get_org_member',
+        new_callable=AsyncMock,
+        return_value=MagicMock(),
+    ) as get_org_member:
+        yield get_org_member
 
 
 @pytest.fixture
@@ -67,7 +78,7 @@ async def _insert(
     async with async_session_maker() as session:
         session.add(
             StoredCustomSecrets(
-                keycloak_user_id='user-id',
+                keycloak_user_id=str(_USER_ID),
                 org_id=org_id,
                 secret_name=_MANAGED_NAME,
                 secret_value=jwt_svc.encrypt_value(value),
@@ -95,10 +106,26 @@ async def test_versioned_compare_and_swap(async_session_maker, jwt_svc, secrets_
         _MANAGED_NAME, version, rotated, _ORG_ID
     )
     assert successor != version
-    assert await secrets_store.load_versioned(_MANAGED_NAME, _ORG_ID) == (
+    second_runtime = _store(jwt_svc)
+    assert await second_runtime.load_versioned(_MANAGED_NAME, _ORG_ID) == (
         rotated,
         successor,
     )
+
+
+@pytest.mark.asyncio
+async def test_versioned_access_requires_current_membership(
+    async_session_maker,
+    jwt_svc,
+    secrets_store,
+    mock_org_membership,
+):
+    await _insert(async_session_maker, jwt_svc, '{}')
+    mock_org_membership.return_value = None
+
+    with pytest.raises(KeyError, match=_MANAGED_NAME):
+        await secrets_store.load_versioned(_MANAGED_NAME, _ORG_ID)
+    mock_org_membership.assert_awaited_once_with(_ORG_ID, _USER_ID)
 
 
 @pytest.mark.asyncio
@@ -120,7 +147,7 @@ async def test_versioned_delete_and_identical_recreate_changes_version(
     async with async_session_maker() as session:
         await session.execute(
             delete(StoredCustomSecrets).filter(
-                StoredCustomSecrets.keycloak_user_id == 'user-id',
+                StoredCustomSecrets.keycloak_user_id == str(_USER_ID),
                 StoredCustomSecrets.org_id == _ORG_ID,
                 StoredCustomSecrets.secret_name == _MANAGED_NAME,
             )
@@ -147,7 +174,7 @@ async def test_versioned_replace_converges_duplicate_rows(
     async with async_session_maker() as session:
         result = await session.execute(
             select(StoredCustomSecrets).filter(
-                StoredCustomSecrets.keycloak_user_id == 'user-id',
+                StoredCustomSecrets.keycloak_user_id == str(_USER_ID),
                 StoredCustomSecrets.org_id == _ORG_ID,
                 StoredCustomSecrets.secret_name == _MANAGED_NAME,
             )
@@ -542,7 +569,7 @@ class TestSaasSecretsStore:
         async with secrets_store.a_session_maker() as session:
             result = await session.execute(
                 select(StoredCustomSecrets)
-                .filter(StoredCustomSecrets.keycloak_user_id == 'user-id')
+                .filter(StoredCustomSecrets.keycloak_user_id == str(_USER_ID))
                 .filter(StoredCustomSecrets.org_id == mock_user.current_org_id)
             )
             stored = result.scalars().first()

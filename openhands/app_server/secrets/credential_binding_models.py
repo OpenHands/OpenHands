@@ -3,6 +3,7 @@ from uuid import UUID
 
 CREDENTIAL_BINDING_ROUTE_PREFIX = '/api/internal/conversations'
 CREDENTIAL_BINDING_ROUTE = '/{conversation_id}/credential-bindings/{secret_name}'
+CREDENTIAL_BINDING_PROBE_CAPABILITY = 'credential_binding_readiness_probe_v1'
 CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
 
 

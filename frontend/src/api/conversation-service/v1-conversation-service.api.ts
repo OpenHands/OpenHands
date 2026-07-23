@@ -108,6 +108,16 @@ class V1ConversationService {
     return data;
   }
 
+  static async resumeAppConversation(
+    conversationId: string,
+  ): Promise<V1AppConversationStartTask> {
+    const { data } = await openHands.post<V1AppConversationStartTask>(
+      "/api/v1/app-conversations",
+      { conversation_id: conversationId },
+    );
+    return data;
+  }
+
   /**
    * Get a start task by ID
    * Poll this endpoint until status is READY to get the app_conversation_id

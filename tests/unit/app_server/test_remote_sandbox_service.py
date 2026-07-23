@@ -1120,6 +1120,51 @@ class TestSandboxSearch:
         # Verify
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_authorization_lookup_preserves_missing_runtime(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox()
+        request = httpx.Request('GET', 'https://runtime.test/session')
+        response = httpx.Response(404, request=request)
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'missing',
+                request=request,
+                response=response,
+            )
+        )
+
+        result = await remote_sandbox_service.get_sandbox_for_authorization(
+            'test-sandbox-123'
+        )
+
+        assert result is not None
+        assert result.status == SandboxStatus.MISSING
+
+    @pytest.mark.asyncio
+    async def test_authorization_lookup_surfaces_transient_failure(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox()
+        request = httpx.Request('GET', 'https://runtime.test/session')
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.ReadTimeout('timeout', request=request)
+        )
+
+        with pytest.raises(SandboxError) as exc_info:
+            await remote_sandbox_service.get_sandbox_for_authorization(
+                'test-sandbox-123'
+            )
+
+        assert exc_info.value.status_code == 503
+
 
 class TestUserSecurity:
     """Test cases for user-scoped operations and security."""

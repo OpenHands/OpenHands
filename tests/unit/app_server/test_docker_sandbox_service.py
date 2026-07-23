@@ -863,19 +863,69 @@ class TestDockerSandboxService:
         # Verify cleanup was still called
         mock_cleanup.assert_called_once_with(2)
 
-    async def test_pause_sandbox_success(self, service):
-        """Test pausing a running sandbox."""
-        # Setup
-        mock_container = MagicMock()
-        mock_container.status = 'running'
-        service.docker_client.containers.get.return_value = mock_container
+    async def test_pause_sandbox_success(self, service, mock_running_container):
+        order = []
+        service.docker_client.containers.get.return_value = mock_running_container
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_readiness_probe_v1']
+        }
+        drain = MagicMock()
+        service.httpx_client.get.side_effect = lambda *args, **kwargs: (
+            order.append('server-info') or server_info
+        )
+        service.httpx_client.post.side_effect = lambda *args, **kwargs: (
+            order.append('drain') or drain
+        )
+        mock_running_container.pause.side_effect = lambda: order.append('pause')
 
-        # Execute
         result = await service.pause_sandbox('oh-test-abc123')
 
-        # Verify
         assert result is True
-        mock_container.pause.assert_called_once()
+        assert order == ['server-info', 'drain', 'pause']
+        service.httpx_client.post.assert_awaited_once_with(
+            'http://localhost:12345/api/conversations/prepare-for-sandbox-pause',
+            headers={'X-Session-API-Key': 'session_key_123'},
+        )
+
+    async def test_pause_sandbox_legacy_server_skips_drain(
+        self, service, mock_running_container
+    ):
+        service.docker_client.containers.get.return_value = mock_running_container
+        server_info = MagicMock()
+        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
+        service.httpx_client.get.return_value = server_info
+
+        result = await service.pause_sandbox('oh-test-abc123')
+
+        assert result is True
+        service.httpx_client.post.assert_not_awaited()
+        mock_running_container.pause.assert_called_once()
+
+    async def test_pause_sandbox_aborts_when_drain_fails(
+        self, service, mock_running_container
+    ):
+        service.docker_client.containers.get.return_value = mock_running_container
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_readiness_probe_v1']
+        }
+        service.httpx_client.get.return_value = server_info
+        request = httpx.Request('POST', 'http://agent-server')
+        response = httpx.Response(500, request=request)
+        drain = MagicMock()
+        drain.raise_for_status.side_effect = httpx.HTTPStatusError(
+            'failed',
+            request=request,
+            response=response,
+        )
+        service.httpx_client.post.return_value = drain
+
+        with pytest.raises(SandboxError) as exc_info:
+            await service.pause_sandbox('oh-test-abc123')
+
+        assert exc_info.value.status_code == 503
+        mock_running_container.pause.assert_not_called()
 
     async def test_pause_sandbox_not_running(self, service):
         """Test pausing a non-running sandbox."""

@@ -1,6 +1,4 @@
-import time
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
@@ -12,6 +10,10 @@ from pydantic import SecretStr
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
+    AppConversationStartRequest,
+    AppConversationStartTask,
+    AppConversationStartTaskPage,
+    AppConversationStartTaskStatus,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.secrets import credential_binding
@@ -27,6 +29,7 @@ from openhands.app_server.utils.encryption_key import EncryptionKey
 
 _CONVERSATION_ID = UUID('11111111-1111-1111-1111-111111111111')
 _ORG_ID = UUID('22222222-2222-2222-2222-222222222222')
+_START_TASK_ID = UUID('33333333-3333-3333-3333-333333333333')
 
 
 @pytest.fixture
@@ -74,6 +77,7 @@ def _token(jwt_service: JwtService, **updates) -> str:
         'organization_id': str(_ORG_ID),
         'conversation_id': str(_CONVERSATION_ID),
         'runtime_id': 'runtime-id',
+        'start_task_id': str(_START_TASK_ID),
         'secret_name': 'CODEX_AUTH_JSON',
         'actions': ['load', 'replace'],
     }
@@ -83,6 +87,22 @@ def _token(jwt_service: JwtService, **updates) -> str:
 
 def _path(conversation_id: UUID = _CONVERSATION_ID) -> str:
     return credential_binding_path(conversation_id, 'CODEX_AUTH_JSON')
+
+
+def _start_task(
+    *,
+    task_id: UUID = _START_TASK_ID,
+    status: AppConversationStartTaskStatus = AppConversationStartTaskStatus.READY,
+    sandbox_id: str = 'runtime-id',
+) -> AppConversationStartTask:
+    return AppConversationStartTask(
+        id=task_id,
+        created_by_user_id='user-id',
+        status=status,
+        app_conversation_id=_CONVERSATION_ID,
+        sandbox_id=sandbox_id,
+        request=AppConversationStartRequest(conversation_id=_CONVERSATION_ID),
+    )
 
 
 @pytest.mark.asyncio
@@ -97,11 +117,20 @@ async def test_binding_requires_live_matching_conversation_and_runtime(monkeypat
     sandbox.created_by_user_id = 'user-id'
     sandbox.status = SandboxStatus.RUNNING
     sandbox_service = AsyncMock()
-    sandbox_service.get_sandbox.return_value = sandbox
+    sandbox_service.get_sandbox_for_authorization.return_value = sandbox
+    start_task = _start_task()
+    start_task_service = AsyncMock()
+    start_task_service.search_app_conversation_start_tasks.return_value = (
+        AppConversationStartTaskPage(items=[start_task])
+    )
 
     @asynccontextmanager
     async def conversation_context(state):
         yield conversation_service
+
+    @asynccontextmanager
+    async def start_task_context(state):
+        yield start_task_service
 
     @asynccontextmanager
     async def sandbox_context(state):
@@ -114,6 +143,11 @@ async def test_binding_requires_live_matching_conversation_and_runtime(monkeypat
     )
     monkeypatch.setattr(
         credential_binding,
+        'get_app_conversation_start_task_service',
+        start_task_context,
+    )
+    monkeypatch.setattr(
+        credential_binding,
         'get_sandbox_service',
         sandbox_context,
     )
@@ -122,33 +156,47 @@ async def test_binding_requires_live_matching_conversation_and_runtime(monkeypat
         organization_id=_ORG_ID,
         conversation_id=_CONVERSATION_ID,
         runtime_id='runtime-id',
+        start_task_id=_START_TASK_ID,
         secret_name='CODEX_AUTH_JSON',
-        issued_at=int(time.time()),
     )
 
     await credential_binding._validate_active_binding(scope)
-    sandbox_service.get_sandbox.return_value = None
+    sandbox_service.get_sandbox_for_authorization.return_value = None
     with pytest.raises(HTTPException) as exc_info:
         await credential_binding._validate_active_binding(scope)
 
     assert exc_info.value.status_code == 403
 
-    sandbox_service.get_sandbox.return_value = sandbox
+    sandbox_service.get_sandbox_for_authorization.return_value = sandbox
     conversation_service.get_app_conversation_info.return_value = AppConversationInfo(
         id=_CONVERSATION_ID,
         created_by_user_id='user-id',
         sandbox_id='previous-runtime-id',
     )
+    start_task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
     await credential_binding._validate_active_binding(scope)
-    expired_startup_scope = replace(scope, issued_at=scope.issued_at - 301)
+
+    start_task.status = AppConversationStartTaskStatus.READY
     with pytest.raises(HTTPException) as exc_info:
-        await credential_binding._validate_active_binding(expired_startup_scope)
+        await credential_binding._validate_active_binding(scope)
 
     assert exc_info.value.status_code == 403
 
     conversation_service.get_app_conversation_info.return_value = None
+    start_task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
+    await credential_binding._validate_active_binding(scope)
+
+    start_task.status = AppConversationStartTaskStatus.READY
     with pytest.raises(HTTPException) as exc_info:
-        await credential_binding._validate_active_binding(expired_startup_scope)
+        await credential_binding._validate_active_binding(scope)
+
+    assert exc_info.value.status_code == 403
+
+    start_task_service.search_app_conversation_start_tasks.return_value = (
+        AppConversationStartTaskPage(items=[_start_task(task_id=UUID(int=4))])
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        await credential_binding._validate_active_binding(scope)
 
     assert exc_info.value.status_code == 403
 
@@ -175,11 +223,19 @@ def test_endpoint_enforces_active_binding(
     sandbox.created_by_user_id = 'user-id'
     sandbox.status = SandboxStatus.RUNNING
     sandbox_service = AsyncMock()
-    sandbox_service.get_sandbox.return_value = sandbox
+    sandbox_service.get_sandbox_for_authorization.return_value = sandbox
+    start_task_service = AsyncMock()
+    start_task_service.search_app_conversation_start_tasks.return_value = (
+        AppConversationStartTaskPage(items=[_start_task()])
+    )
 
     @asynccontextmanager
     async def conversation_context(state):
         yield conversation_service
+
+    @asynccontextmanager
+    async def start_task_context(state):
+        yield start_task_service
 
     @asynccontextmanager
     async def sandbox_context(state):
@@ -189,6 +245,11 @@ def test_endpoint_enforces_active_binding(
         credential_binding,
         'get_app_conversation_info_service',
         conversation_context,
+    )
+    monkeypatch.setattr(
+        credential_binding,
+        'get_app_conversation_start_task_service',
+        start_task_context,
     )
     monkeypatch.setattr(
         credential_binding,

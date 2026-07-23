@@ -156,7 +156,11 @@ async def test_replace_is_compare_and_swap(store):
     successor = await store.replace_versioned(_MANAGED_NAME, version, _ROTATED)
 
     assert successor != version
-    assert await store.load_versioned(_MANAGED_NAME) == (_ROTATED, successor)
+    second_runtime = _store(store.file_store)
+    assert await second_runtime.load_versioned(_MANAGED_NAME) == (
+        _ROTATED,
+        successor,
+    )
 
 
 @pytest.mark.asyncio

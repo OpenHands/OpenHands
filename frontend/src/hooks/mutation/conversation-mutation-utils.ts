@@ -69,12 +69,10 @@ export const askV1Agent = async (
 };
 
 /**
- * Resumes a V1 conversation sandbox by fetching the sandbox_id and resuming it
+ * Resume a V1 app conversation.
  */
-export const resumeV1ConversationSandbox = async (conversationId: string) => {
-  const { sandboxId } = await fetchV1ConversationData(conversationId);
-  return SandboxService.resumeSandbox(sandboxId);
-};
+export const resumeV1ConversationSandbox = async (conversationId: string) =>
+  V1ConversationService.resumeAppConversation(conversationId);
 
 /**
  * Resume a V1 conversation by fetching the conversation data and resuming it

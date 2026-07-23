@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from pydantic import SecretStr
 
@@ -2555,6 +2556,34 @@ class TestLiveStatusAppConversationService:
         )
         assert saved_info.id == conversation_id
 
+    @pytest.mark.asyncio
+    async def test_resume_persists_new_task_before_sandbox_start(self):
+        conversation_id = uuid4()
+        existing = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id='test_user_123',
+            sandbox_id='sandbox-1',
+            selected_repository='OpenHands/OpenHands',
+        )
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=existing
+        )
+        self.mock_app_conversation_start_task_service.save_app_conversation_start_task = AsyncMock()
+        stream = self.service.start_app_conversation(
+            AppConversationStartRequest(conversation_id=conversation_id)
+        )
+
+        task = await anext(stream)
+
+        assert task.app_conversation_id == conversation_id
+        assert task.request.sandbox_id == 'sandbox-1'
+        self.mock_app_conversation_start_task_service.save_app_conversation_start_task.assert_awaited_once_with(
+            task
+        )
+        self.mock_sandbox_service.resume_sandbox.assert_not_called()
+        await stream.aclose()
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
     )
@@ -4405,13 +4434,15 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.secrets.get('GITHUB_TOKEN') is lookup
 
     @pytest.mark.asyncio
-    async def test_codex_binding_activation_strips_plaintext(self, service, tmp_path):
+    async def test_persisted_codex_binding_activation_strips_plaintext(
+        self, service, tmp_path
+    ):
         org_id = UUID('11111111-1111-1111-1111-111111111111')
         source = StaticSecret(
             value=SecretStr('{"auth_mode":"chatgpt","tokens":{"refresh_token":"r0"}}'),
             description='Codex login',
         )
-        user = self._make_acp_user(acp_server='codex')
+        user = self._make_acp_user(acp_server='claude-code')
         service.web_url = 'http://localhost:3000/'
         sandbox_service = Mock(spec=DockerSandboxService)
         sandbox_service.host_port = 3000
@@ -4431,14 +4462,20 @@ class TestBuildAcpStartConversationRequestSecrets:
             tmp_path,
             secrets={'CODEX_AUTH_JSON': source},
         )
+        request = request.model_copy(
+            update={'agent': Agent(llm=LLM(model='test-model'), tools=[])}
+        )
         sandbox = Mock(spec=SandboxInfo)
         sandbox.id = 'sandbox-1'
         sandbox.session_api_key = 'session-key'
+        start_task_id = uuid4()
         prepared = await service._prepare_credential_bindings(
             request,
             sandbox,
             request.conversation_id,
             'http://agent-server',
+            start_task_id=start_task_id,
+            acp_server='codex',
             api_codex_auth=False,
         )
 
@@ -4468,6 +4505,7 @@ class TestBuildAcpStartConversationRequestSecrets:
                 'organization_id': str(org_id),
                 'conversation_id': str(request.conversation_id),
                 'runtime_id': 'sandbox-1',
+                'start_task_id': str(start_task_id),
                 'secret_name': 'CODEX_AUTH_JSON',
                 'actions': ['load', 'replace'],
             },
@@ -4500,6 +4538,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             sandbox,
             request.conversation_id,
             'http://agent-server',
+            start_task_id=uuid4(),
             api_codex_auth=False,
         )
 
@@ -4527,6 +4566,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             sandbox,
             request.conversation_id,
             'http://agent-server',
+            start_task_id=uuid4(),
             api_codex_auth=False,
         )
 
@@ -4558,10 +4598,46 @@ class TestBuildAcpStartConversationRequestSecrets:
             sandbox,
             request.conversation_id,
             'http://agent-server',
+            start_task_id=uuid4(),
             api_codex_auth=False,
         )
 
         assert prepared.secrets['CODEX_AUTH_JSON'] is source
+
+    @pytest.mark.asyncio
+    async def test_terminal_binding_failure_aborts_start(self, service, tmp_path):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        service.web_url = 'https://cloud.example.com'
+        service.user_context.get_user_id = AsyncMock(return_value='user1')
+        service.user_context.get_effective_org_id = AsyncMock(return_value=None)
+        service.jwt_service.create_jws_token.return_value = 'scoped-token'
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        activation = httpx.Response(
+            422,
+            request=httpx.Request('PUT', 'http://agent-server'),
+        )
+        service.httpx_client.put = AsyncMock(return_value=activation)
+
+        with pytest.raises(SandboxError) as exc_info:
+            await service._prepare_credential_bindings(
+                request,
+                sandbox,
+                request.conversation_id,
+                'http://agent-server',
+                start_task_id=uuid4(),
+                api_codex_auth=False,
+            )
+
+        assert exc_info.value.status_code == 422
 
     @pytest.mark.asyncio
     async def test_api_codex_auth_does_not_get_write_access(self, service, tmp_path):
@@ -4595,6 +4671,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             sandbox,
             request.conversation_id,
             'http://agent-server',
+            start_task_id=uuid4(),
             api_codex_auth=True,
         )
         assert prepared is request

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 from storage.database import a_session_maker
+from storage.org_member_store import OrgMemberStore
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.user_store import UserStore
 
@@ -245,6 +246,12 @@ class SaasSecretsStore(SecretsStore):
             user = await UserStore.get_user_by_id(self.user_id)
             org_id = user.current_org_id if user else None
         if org_id is None:
+            raise KeyError(name)
+        try:
+            user_id = UUID(self.user_id)
+        except ValueError as exc:
+            raise KeyError(name) from exc
+        if await OrgMemberStore.get_org_member(org_id, user_id) is None:
             raise KeyError(name)
         return org_id
 
