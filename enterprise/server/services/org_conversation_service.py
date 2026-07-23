@@ -695,6 +695,310 @@ class OrgConversationService:
             )
         return model_usage
 
+    async def _get_usage_totals(
+        self, base_filter: list, cutoff: datetime
+    ) -> tuple[float, int, int]:
+        """Windowed (cost, prompt, completion) totals from the ledger, plus a
+        legacy created_at fallback for conversations with no ledger rows."""
+        ledger_query = (
+            select(
+                func.coalesce(func.sum(StoredConversationCostEvent.cost_delta), 0),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(StoredConversationCostEvent.completion_tokens, 0)
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+        )
+        result = await self.db_session.execute(ledger_query)
+        ledger_cost, ledger_prompt, ledger_completion = result.one()
+
+        legacy_query = (
+            select(
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
+                func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
+                func.coalesce(
+                    func.sum(StoredConversationMetadata.completion_tokens), 0
+                ),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+        )
+        result = await self.db_session.execute(legacy_query)
+        legacy_cost, legacy_prompt, legacy_completion = result.one()
+
+        return (
+            float(ledger_cost or 0) + float(legacy_cost or 0),
+            int(ledger_prompt or 0) + int(legacy_prompt or 0),
+            int(ledger_completion or 0) + int(legacy_completion or 0),
+        )
+
+    async def _get_daily_token_usage(
+        self, base_filter: list, cutoff: datetime
+    ) -> dict[str, int]:
+        """Tokens per ISO day on spend time; legacy fallback by created_at."""
+        from sqlalchemy import Date, cast
+
+        tokens: dict[str, int] = {}
+
+        ledger_day = cast(StoredConversationCostEvent.occurred_at, Date)
+        ledger_query = (
+            select(
+                ledger_day.label('day'),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
+                        + func.coalesce(
+                            StoredConversationCostEvent.completion_tokens, 0
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+            .group_by(ledger_day)
+        )
+        result = await self.db_session.execute(ledger_query)
+        for row in result.all():
+            key = str(row[0])[:10]
+            tokens[key] = tokens.get(key, 0) + int(row[1] or 0)
+
+        legacy_day = cast(StoredConversationMetadata.created_at, Date)
+        legacy_query = (
+            select(
+                legacy_day.label('day'),
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+            .group_by(legacy_day)
+        )
+        result = await self.db_session.execute(legacy_query)
+        for row in result.all():
+            key = str(row[0])[:10]
+            tokens[key] = tokens.get(key, 0) + int(row[1] or 0)
+
+        return tokens
+
+    async def _get_team_token_usage(
+        self, base_filter: list, cutoff: datetime
+    ) -> dict[str, tuple[int, str | None, str | None]]:
+        """Per-user (tokens, email, git_user_name) on spend time; legacy
+        fallback for conversations with no ledger rows."""
+        merged: dict[str, list] = {}
+
+        ledger_query = (
+            select(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(StoredConversationCostEvent.prompt_tokens, 0)
+                        + func.coalesce(
+                            StoredConversationCostEvent.completion_tokens, 0
+                        )
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(*base_filter)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+            .group_by(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+            )
+        )
+        legacy_query = (
+            select(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+                func.coalesce(
+                    func.sum(
+                        StoredConversationMetadata.prompt_tokens
+                        + StoredConversationMetadata.completion_tokens
+                    ),
+                    0,
+                ),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .outerjoin(User, StoredConversationMetadataSaas.user_id == User.id)
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+            .group_by(
+                StoredConversationMetadataSaas.user_id,
+                User.email,
+                User.git_user_name,
+            )
+        )
+        for query in (ledger_query, legacy_query):
+            result = await self.db_session.execute(query)
+            for row in result.all():
+                entry = merged.setdefault(str(row[0]), [0, row[1], row[2]])
+                entry[0] += int(row[3] or 0)
+
+        return {key: (val[0], val[1], val[2]) for key, val in merged.items()}
+
+    async def _get_agent_cost_usage(
+        self, base_filter: list, cutoff: datetime
+    ) -> dict[str, float]:
+        """Cost per agent label on spend time; legacy fallback for
+        conversations with no ledger rows."""
+        costs: dict[str, float] = {}
+
+        model_label = func.coalesce(
+            StoredConversationCostEvent.llm_model,
+            StoredConversationMetadata.llm_model,
+        )
+        ledger_query = (
+            select(
+                StoredConversationMetadata.agent_kind,
+                model_label.label('llm_model'),
+                func.coalesce(func.sum(StoredConversationCostEvent.cost_delta), 0),
+            )
+            .select_from(StoredConversationCostEvent)
+            .join(
+                StoredConversationMetadata,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationCostEvent.conversation_id,
+            )
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationCostEvent.occurred_at >= cutoff)
+            .group_by(StoredConversationMetadata.agent_kind, model_label)
+        )
+        legacy_query = (
+            select(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
+            )
+            .select_from(StoredConversationMetadata)
+            .join(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(*base_filter)
+            .where(StoredConversationMetadata.created_at >= cutoff)
+            .where(
+                ~select(StoredConversationCostEvent.id)
+                .where(
+                    StoredConversationCostEvent.conversation_id
+                    == StoredConversationMetadata.conversation_id
+                )
+                .exists()
+            )
+            .group_by(
+                StoredConversationMetadata.agent_kind,
+                StoredConversationMetadata.llm_model,
+            )
+        )
+        for query in (ledger_query, legacy_query):
+            result = await self.db_session.execute(query)
+            for row in result.all():
+                label = _format_agent_label(row[0], row[1])
+                costs[label] = costs.get(label, 0.0) + float(row[2] or 0.0)
+
+        return costs
+
     async def get_usage_stats(
         self,
         org_id: UUID,
@@ -748,41 +1052,22 @@ class OrgConversationService:
         result = await self.db_session.execute(agent_runs_query)
         agent_runs = result.scalar() or 0
 
-        # 3. Total tokens and cost in time window
-        totals_query = (
-            select(
-                func.coalesce(func.sum(StoredConversationMetadata.accumulated_cost), 0),
-                func.coalesce(func.sum(StoredConversationMetadata.prompt_tokens), 0),
-                func.coalesce(
-                    func.sum(StoredConversationMetadata.completion_tokens), 0
-                ),
-            )
-            .select_from(StoredConversationMetadata)
-            .join(
-                StoredConversationMetadataSaas,
-                StoredConversationMetadata.conversation_id
-                == StoredConversationMetadataSaas.conversation_id,
-            )
-            .where(*base_filter)
-            .where(StoredConversationMetadata.created_at >= cutoff)
-        )
-        result = await self.db_session.execute(totals_query)
-        total_cost, total_prompt_tokens, total_completion_tokens = result.one()
+        # 3. Total tokens and cost — spend-time (ledger) so the headline
+        # agrees with the model table; legacy fallback for no-ledger rows.
+        (
+            total_cost,
+            total_prompt_tokens,
+            total_completion_tokens,
+        ) = await self._get_usage_totals(base_filter, cutoff)
 
-        # 4. Daily usage breakdown (single query instead of N queries)
+        # 4. Daily usage breakdown: conversation counts stay on created_at
+        # ("runs started that day"); tokens follow spend time via the ledger.
         from sqlalchemy import Date, cast
 
         daily_query = (
             select(
                 cast(StoredConversationMetadata.created_at, Date).label('day'),
                 func.count(StoredConversationMetadata.conversation_id),
-                func.coalesce(
-                    func.sum(
-                        StoredConversationMetadata.prompt_tokens
-                        + StoredConversationMetadata.completion_tokens
-                    ),
-                    0,
-                ),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -793,13 +1078,10 @@ class OrgConversationService:
             .where(*base_filter)
             .where(StoredConversationMetadata.created_at >= cutoff)
             .group_by(cast(StoredConversationMetadata.created_at, Date))
-            .order_by(cast(StoredConversationMetadata.created_at, Date).asc())
         )
         result = await self.db_session.execute(daily_query)
-        daily_rows = result.all()
-
-        # Build a map of date -> (conv_count, token_count)
-        daily_map = {row[0]: (row[1], row[2]) for row in daily_rows}
+        count_map = {str(row[0])[:10]: int(row[1] or 0) for row in result.all()}
+        daily_tokens = await self._get_daily_token_usage(base_filter, cutoff)
 
         # Generate entries for all days in range (including days with no data)
         daily_usage = []
@@ -807,17 +1089,17 @@ class OrgConversationService:
             day_start = (now - timedelta(days=i)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
-            day_date = day_start.date() if hasattr(day_start, 'date') else day_start
-            conv_count, token_count = daily_map.get(day_date, (0, 0))
+            day_key = day_start.strftime('%Y-%m-%d')
             daily_usage.append(
                 DailyUsageData(
-                    date=day_start.strftime('%Y-%m-%d'),
-                    tokens=int(token_count or 0),
-                    conversations=int(conv_count or 0),
+                    date=day_key,
+                    tokens=daily_tokens.get(day_key, 0),
+                    conversations=count_map.get(day_key, 0),
                 )
             )
 
-        # 5. Team usage (by user)
+        # 5. Team usage: conversation counts stay on created_at; tokens
+        # follow spend time via the ledger.
         team_query = (
             select(
                 StoredConversationMetadataSaas.user_id,
@@ -826,13 +1108,6 @@ class OrgConversationService:
                 func.count(StoredConversationMetadata.conversation_id).label(
                     'conv_count'
                 ),
-                func.coalesce(
-                    func.sum(
-                        StoredConversationMetadata.prompt_tokens
-                        + StoredConversationMetadata.completion_tokens
-                    ),
-                    0,
-                ).label('token_count'),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -848,31 +1123,36 @@ class OrgConversationService:
                 User.email,
                 User.git_user_name,
             )
-            .order_by(func.count(StoredConversationMetadata.conversation_id).desc())
         )
         result = await self.db_session.execute(team_query)
-        team_rows = result.all()
+        count_rows = {str(row.user_id): row for row in result.all()}
+        team_tokens = await self._get_team_token_usage(base_filter, cutoff)
 
-        # Calculate percentages
-        total_team_convs = sum(row.conv_count or 0 for row in team_rows)
+        total_team_convs = sum(int(row.conv_count or 0) for row in count_rows.values())
         team_usage = []
-        for row in team_rows:
-            pct = (
-                (row.conv_count / total_team_convs * 100) if total_team_convs > 0 else 0
-            )
+        for user_id in count_rows.keys() | team_tokens.keys():
+            row = count_rows.get(user_id)
+            token_entry = team_tokens.get(user_id)
+            conv_count = int(row.conv_count or 0) if row is not None else 0
+            pct = (conv_count / total_team_convs * 100) if total_team_convs > 0 else 0
             team_usage.append(
                 TeamUsageData(
-                    user_id=str(row.user_id),
-                    user_email=row.email,
-                    user_name=row.git_user_name,
-                    conversation_count=int(row.conv_count or 0),
-                    total_tokens=int(row.token_count or 0),
+                    user_id=user_id,
+                    user_email=row.email if row is not None else token_entry[1],
+                    user_name=(
+                        row.git_user_name if row is not None else token_entry[2]
+                    ),
+                    conversation_count=conv_count,
+                    total_tokens=token_entry[0] if token_entry else 0,
                     percentage=round(pct, 1),
                 )
             )
+        team_usage.sort(key=lambda item: item.conversation_count, reverse=True)
 
         model_usage = await self._get_model_usage(base_filter, cutoff)
 
+        # Agent usage: conversation counts stay on created_at; cost follows
+        # spend time via the ledger.
         agent_query = (
             select(
                 StoredConversationMetadata.agent_kind,
@@ -880,9 +1160,6 @@ class OrgConversationService:
                 func.count(StoredConversationMetadata.conversation_id).label(
                     'conv_count'
                 ),
-                func.coalesce(
-                    func.sum(StoredConversationMetadata.accumulated_cost), 0
-                ).label('total_cost'),
             )
             .select_from(StoredConversationMetadata)
             .join(
@@ -896,30 +1173,21 @@ class OrgConversationService:
                 StoredConversationMetadata.agent_kind,
                 StoredConversationMetadata.llm_model,
             )
-            .order_by(
-                func.coalesce(
-                    func.sum(StoredConversationMetadata.accumulated_cost), 0
-                ).desc()
-            )
         )
         result = await self.db_session.execute(agent_query)
-        agent_rows = result.all()
         agent_counts: dict[str, int] = {}
-        agent_costs: dict[str, float] = {}
-        for row in agent_rows:
+        for row in result.all():
             label = _format_agent_label(row.agent_kind, row.llm_model)
             agent_counts[label] = agent_counts.get(label, 0) + int(row.conv_count or 0)
-            agent_costs[label] = agent_costs.get(label, 0.0) + float(
-                row.total_cost or 0.0
-            )
+        agent_costs = await self._get_agent_cost_usage(base_filter, cutoff)
 
         agent_usage = [
             AgentUsageData(
                 agent_name=label,
-                conversation_count=agent_counts[label],
-                total_cost=agent_costs[label],
+                conversation_count=agent_counts.get(label, 0),
+                total_cost=agent_costs.get(label, 0.0),
             )
-            for label in agent_counts
+            for label in agent_counts.keys() | agent_costs.keys()
         ]
         agent_usage.sort(key=lambda item: item.total_cost, reverse=True)
 
