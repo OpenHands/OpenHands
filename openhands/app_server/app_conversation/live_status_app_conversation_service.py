@@ -209,6 +209,12 @@ The selected repository was cloned as a shallow clone. Git history may be incomp
 </GIT_WORKSPACE_CONTEXT>"""
 
 
+def _exception_detail(exc: Exception) -> str:
+    """HTTPException.__str__ prepends '<status>: '; prefer its clean .detail."""
+    detail = getattr(exc, 'detail', None)
+    return detail if isinstance(detail, str) else str(exc)
+
+
 def append_system_context(existing: str | None, block: str) -> str:
     if not existing:
         return block
@@ -629,7 +635,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         except Exception as exc:
             _logger.exception('Error starting conversation', stack_info=True)
             task.status = AppConversationStartTaskStatus.ERROR
-            task.detail = redact_text_secrets(redact_api_key_literals(str(exc)))
+            task.detail = redact_text_secrets(
+                redact_api_key_literals(_exception_detail(exc))
+            )
             yield task
 
     async def _build_app_conversations(
