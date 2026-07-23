@@ -56,6 +56,13 @@ class SpecifyUserContext(UserContext):
         return None
 
 
+@dataclass(frozen=True)
+class SandboxUserContext(SpecifyUserContext):
+    """User context scoped to an authenticated sandbox."""
+
+    sandbox_id: str
+
+
 USER_CONTEXT_ATTR = 'user_context'
 ADMIN = SpecifyUserContext(user_id=None)
 
