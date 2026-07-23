@@ -848,8 +848,25 @@ class SaasSettingsStore(SettingsStore):
 
         if not llm_api_key:
             logger.info(
-                'saas_settings_store:ensure_api_key:skip_missing_api_key',
+                'saas_settings_store:ensure_api_key:missing_api_key',
                 extra={'user_id': self.user_id, 'org_id': org_id},
+            )
+            key_alias = get_openhands_cloud_key_alias(self.user_id, org_id)
+            await LiteLlmManager.delete_key_by_alias(key_alias=key_alias)
+            generated_key = await LiteLlmManager.generate_key(
+                self.user_id,
+                org_id,
+                key_alias,
+                {'type': 'openhands'} if openhands_type else None,
+            )
+            item.agent_settings.llm.api_key = SecretStr(generated_key)
+            logger.info(
+                'saas_settings_store:store:generated_openhands_key',
+                extra={
+                    'user_id': self.user_id,
+                    'org_id': org_id,
+                    'openhands_type': openhands_type,
+                },
             )
             return
 

@@ -32,8 +32,10 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.live_status_app_conversation_service import (
     LiveStatusAppConversationService,
+    _exception_detail,
     effective_disabled_skills,
 )
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
 from openhands.app_server.sandbox.sandbox_models import (
@@ -4501,3 +4503,12 @@ class TestBuildAcpStartConversationRequestSecrets:
             'conversation_id': str(request.conversation_id),
             'agent_kind': 'acp',
         }
+
+
+def test_exception_detail_strips_http_status_prefix():
+    """SandboxError.__str__ carries a '500: ' prefix; task.detail should not."""
+    assert (
+        _exception_detail(SandboxError('The system is at capacity right now.'))
+        == 'The system is at capacity right now.'
+    )
+    assert _exception_detail(ValueError('boom')) == 'boom'

@@ -2521,7 +2521,7 @@ class TestGetAllKeysForUser:
                 result = await LiteLlmManager._get_all_keys_for_user(
                     mock_client, 'test-user-id'
                 )
-                assert result == []
+                assert result is None
                 mock_client.get.assert_not_called()
 
     @pytest.mark.asyncio
@@ -2587,7 +2587,7 @@ class TestGetAllKeysForUser:
 
     @pytest.mark.asyncio
     async def test_get_all_keys_api_error(self):
-        """Test _get_all_keys_for_user handles API errors gracefully."""
+        """Test _get_all_keys_for_user skips invalidation on API errors."""
         mock_client = AsyncMock(spec=httpx.AsyncClient)
         mock_client.get.side_effect = Exception('API Error')
 
@@ -2596,7 +2596,7 @@ class TestGetAllKeysForUser:
                 result = await LiteLlmManager._get_all_keys_for_user(
                     mock_client, 'test-user-id'
                 )
-                assert result == []
+                assert result is None
 
 
 class TestVerifyExistingKey:
@@ -2766,6 +2766,25 @@ class TestVerifyExistingKey:
                 openhands_type=True,
             )
             assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_existing_key_skips_on_litellm_error(self):
+        """Test _verify_existing_key preserves key when LiteLLM lookup fails."""
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+
+        with patch.object(
+            LiteLlmManager, '_get_all_keys_for_user', new_callable=AsyncMock
+        ) as mock_get_keys:
+            mock_get_keys.return_value = None
+
+            result = await LiteLlmManager._verify_existing_key(
+                mock_client,
+                'some-key-value',
+                'test-user-id',
+                'test-org',
+                openhands_type=True,
+            )
+            assert result is True
 
     @pytest.mark.asyncio
     async def test_verify_existing_key_handles_none_key_name(self):

@@ -439,6 +439,7 @@ LOQUACIOUS_LOGGERS = [
     'aiosqlite',
     'alembic.runtime.plugins',
     'sqlalchemy.orm.mapper.Mapper',
+    'lmnr',
 ]
 
 for logger_name in LOQUACIOUS_LOGGERS:

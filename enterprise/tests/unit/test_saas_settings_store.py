@@ -662,6 +662,61 @@ async def test_store_updates_org_defaults_and_all_members_for_shared_keys(
 
 
 @pytest.mark.asyncio
+async def test_store_clears_member_custom_key_when_switching_to_managed_profile(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select, update
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    org_id = fixture['org_id']
+    decrypt_value = fixture['decrypt_value']
+
+    async with async_session_maker() as session:
+        await session.execute(
+            update(OrgMember)
+            .where(OrgMember.org_id == org_id, OrgMember.user_id == admin_user_id)
+            .values(has_custom_llm_api_key=True)
+        )
+        await session.commit()
+
+    store = SaasSettingsStore(str(admin_user_id))
+    settings = _make_settings(model='openhands/claude-opus-4-5-20251101')
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch(
+            'storage.saas_settings_store.LiteLlmManager.delete_key_by_alias',
+            new_callable=AsyncMock,
+        ) as mock_delete,
+        patch(
+            'storage.saas_settings_store.LiteLlmManager.generate_key',
+            new_callable=AsyncMock,
+            return_value='sk-managed-key',
+        ) as mock_generate,
+    ):
+        await store.store(settings)
+
+    with session_maker() as session:
+        member = (
+            session.execute(
+                select(OrgMember).where(
+                    OrgMember.org_id == org_id, OrgMember.user_id == admin_user_id
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert member is not None
+        assert member.has_custom_llm_api_key is False
+        assert decrypt_value(member._llm_api_key) == 'sk-managed-key'
+
+    mock_delete.assert_awaited_once()
+    mock_generate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_store_rejects_resolved_profile_settings_view(
     session_maker, async_session_maker, org_with_multiple_members_fixture
 ):

@@ -42,14 +42,25 @@ export function showChatError({
  * Provider-side errors can also mention "credits"; those should stay as raw
  * provider errors instead of being rewritten as OpenHands billing failures.
  */
-export function isBudgetOrCreditError(errorMessage: string): boolean {
+export type BudgetErrorType = "budget" | "credit" | null;
+
+export function classifyBudgetOrCreditError(
+  errorMessage: string,
+): BudgetErrorType {
   const lowerCaseError = errorMessage.toLowerCase();
-  const isBudgetLimitError =
-    lowerCaseError.includes("budget") &&
-    /(exceed|exceeded|limit|max budget|spent)/.test(lowerCaseError);
   const isOpenHandsCreditError =
     /openhands\s+credits?/.test(lowerCaseError) ||
     lowerCaseError.includes("credit limit reached");
+  if (isOpenHandsCreditError) {
+    return "credit";
+  }
 
-  return isBudgetLimitError || isOpenHandsCreditError;
+  const isBudgetLimitError =
+    lowerCaseError.includes("budget") &&
+    /(exceed|exceeded|limit|max budget|spent)/.test(lowerCaseError);
+  if (isBudgetLimitError) {
+    return "budget";
+  }
+
+  return null;
 }

@@ -12902,6 +12902,23 @@
     "uk": "У вас закінчилися кредити OpenHands. <a>Додати кошти</a>",
     "ca": "No teniu crèdits d'OpenHands. <a>Afegiu fons</a>"
   },
+  "STATUS$ERROR_BUDGET_LIMIT_REACHED": {
+    "en": "The organization's budget or the budget associated with your user account has been reached. Please contact your OpenHands Enterprise administrator to request an override.",
+    "ja": "組織の予算、またはあなたのユーザーアカウントに関連付けられた予算に達しました。オーバーライドを依頼するには OpenHands Enterprise 管理者に連絡してください。",
+    "zh-CN": "组织预算或与您的用户账户关联的预算已达到上限。请联系您的 OpenHands Enterprise 管理员申请超额额度。",
+    "zh-TW": "組織預算或與您的使用者帳戶關聯的預算已達上限。請聯絡您的 OpenHands Enterprise 管理員申請覆寫。",
+    "ko-KR": "조직 예산 또는 사용자 계정에 연결된 예산 한도에 도달했습니다. 예산 상향(override)을 요청하려면 OpenHands Enterprise 관리자에게 문의하세요.",
+    "no": "Organisasjonens budsjett eller budsjettet knyttet til brukerkontoen din er nådd. Kontakt OpenHands Enterprise-administratoren for å be om en overstyring.",
+    "it": "È stato raggiunto il budget dell'organizzazione o quello associato al tuo account utente. Contatta l'amministratore OpenHands Enterprise per richiedere un override.",
+    "pt": "O orçamento da organização ou o orçamento associado à sua conta de usuário foi atingido. Entre em contato com o administrador do OpenHands Enterprise para solicitar uma exceção.",
+    "es": "Se alcanzó el presupuesto de la organización o el presupuesto asociado a tu cuenta de usuario. Ponte en contacto con el administrador de OpenHands Enterprise para solicitar una excepción.",
+    "ar": "تم الوصول إلى ميزانية المؤسسة أو الميزانية المرتبطة بحساب المستخدم الخاص بك. يرجى التواصل مع مسؤول OpenHands Enterprise لطلب استثناء.",
+    "fr": "Le budget de l’organisation ou celui associé à votre compte utilisateur a été atteint. Veuillez contacter l’administrateur OpenHands Enterprise pour demander une dérogation.",
+    "tr": "Kuruluşun bütçesine veya kullanıcı hesabınızla ilişkili bütçeye ulaşıldı. İstisna (override) istemek için OpenHands Enterprise yöneticinizle iletişime geçin.",
+    "de": "Das Budget der Organisation oder das mit Ihrem Benutzerkonto verknüpfte Budget wurde erreicht. Bitte wenden Sie sich an Ihren OpenHands Enterprise-Administrator, um eine Ausnahme zu beantragen.",
+    "uk": "Досягнуто бюджету організації або бюджету, пов’язаного з вашим обліковим записом. Будь ласка, зверніться до адміністратора OpenHands Enterprise, щоб запросити виняток.",
+    "ca": "S'ha assolit el pressupost de l'organització o el pressupost associat al vostre compte d'usuari. Poseu-vos en contacte amb l'administrador d'OpenHands Enterprise per sol·licitar una excepció."
+  },
   "STATUS$ERROR_LLM_CONTENT_POLICY_VIOLATION": {
     "en": "Content policy violation. The output was blocked by content filtering policy.",
     "ja": "コンテンツポリシー違反。出力はコンテンツフィルタリングポリシーによってブロックされました。",

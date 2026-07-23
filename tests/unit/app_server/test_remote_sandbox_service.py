@@ -445,6 +445,34 @@ class TestSandboxInfoConversion:
         assert sandbox_info.exposed_urls is None
 
     @pytest.mark.asyncio
+    async def test_to_sandbox_info_carries_status_detail(self, remote_sandbox_service):
+        """status_detail from the runtime payload flows onto SandboxInfo."""
+        runtime_data = create_runtime_data(status='starting')
+        runtime_data['status_detail'] = (
+            '0/1 nodes are available: 1 Insufficient smarter-devices/kvm.'
+        )
+        sandbox_info = remote_sandbox_service._to_sandbox_info(
+            create_stored_sandbox(), runtime_data
+        )
+        assert sandbox_info.status_detail == (
+            '0/1 nodes are available: 1 Insufficient smarter-devices/kvm.'
+        )
+
+    @pytest.mark.asyncio
+    async def test_to_sandbox_info_status_detail_defaults_none(
+        self, remote_sandbox_service
+    ):
+        """Absent status_detail (and no runtime) -> None, no crash."""
+        stored = create_stored_sandbox()
+        assert (
+            remote_sandbox_service._to_sandbox_info(stored, None).status_detail is None
+        )
+        running = remote_sandbox_service._to_sandbox_info(
+            stored, create_runtime_data(status='running')
+        )
+        assert running.status_detail is None
+
+    @pytest.mark.asyncio
     async def test_to_sandbox_info_loads_runtime_when_none_provided(
         self, remote_sandbox_service
     ):
