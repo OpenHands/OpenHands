@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { SandboxService } from "#/api/sandbox-service/sandbox-service.api";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
-import { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
+import {
+  V1AppConversation,
+  V1AppConversationStartTask,
+} from "#/api/conversation-service/v1-conversation-service.types";
 import { useUnifiedResumeConversationSandbox } from "#/hooks/mutation/use-unified-start-conversation";
 
 // Mock the error message store
@@ -40,6 +42,19 @@ describe("useUnifiedResumeConversationSandbox", () => {
     updated_at: new Date().toISOString(),
   });
 
+  const createStartTask = (): V1AppConversationStartTask => ({
+    id: "test-task-id",
+    created_by_user_id: null,
+    status: "WORKING",
+    detail: null,
+    app_conversation_id: "test-conv-id",
+    sandbox_id: "test-sandbox-id",
+    agent_server_url: null,
+    request: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -68,7 +83,7 @@ describe("useUnifiedResumeConversationSandbox", () => {
 
     vi.spyOn(
       V1ConversationService,
-      "batchGetAppConversations",
+      "resumeAppConversation",
     ).mockImplementation(() => new Promise(() => {}));
 
     const { result } = renderHook(() => useUnifiedResumeConversationSandbox(), {
@@ -101,14 +116,12 @@ describe("useUnifiedResumeConversationSandbox", () => {
         headers: { "retry-after": "0" },
       },
     } as unknown as AxiosError;
-    const batchGetAppConversations = vi
-      .spyOn(V1ConversationService, "batchGetAppConversations")
+    const startTask = createStartTask();
+    const resumeAppConversation = vi
+      .spyOn(V1ConversationService, "resumeAppConversation")
       .mockRejectedValueOnce(rateLimitError)
       .mockRejectedValueOnce(rateLimitError)
-      .mockResolvedValueOnce([createConversation()]);
-    vi.spyOn(SandboxService, "resumeSandbox").mockResolvedValue({
-      success: true,
-    });
+      .mockResolvedValueOnce(startTask);
 
     const { result } = renderHook(() => useUnifiedResumeConversationSandbox(), {
       wrapper,
@@ -121,34 +134,29 @@ describe("useUnifiedResumeConversationSandbox", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(batchGetAppConversations).toHaveBeenCalledTimes(1);
+    expect(resumeAppConversation).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
-    expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+    expect(resumeAppConversation).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1999);
     });
-    expect(batchGetAppConversations).toHaveBeenCalledTimes(2);
+    expect(resumeAppConversation).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
-    await expect(resume).resolves.toEqual({ success: true });
-    expect(batchGetAppConversations).toHaveBeenCalledTimes(3);
+    await expect(resume).resolves.toEqual(startTask);
+    expect(resumeAppConversation).toHaveBeenCalledTimes(3);
   });
 
   it("invalidates sandbox and vscode_url queries on settled", async () => {
-    // Mock the API calls in the mutation chain
-    vi.spyOn(
-      V1ConversationService,
-      "batchGetAppConversations",
-    ).mockResolvedValue([createConversation()]);
-    vi.spyOn(SandboxService, "resumeSandbox").mockResolvedValue({
-      success: true,
-    });
+    vi.spyOn(V1ConversationService, "resumeAppConversation").mockResolvedValue(
+      createStartTask(),
+    );
 
     // Pre-populate query cache with stale sandbox data
     queryClient.setQueryData(
