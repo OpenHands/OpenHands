@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import httpx
@@ -24,6 +25,7 @@ from integrations.utils import (
 from integrations.v1_utils import get_saas_user_auth
 from jinja2 import Environment, FileSystemLoader
 from server.constants import SLACK_CLIENT_ID
+from slack_sdk.errors import SlackApiError
 from slack_sdk.oauth import AuthorizeUrlGenerator
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy import select
@@ -53,7 +55,9 @@ authorize_url_generator = AuthorizeUrlGenerator(
         'chat:write',
         'users:read',
         'files:read',
+        'channels:read',
         'channels:history',
+        'groups:read',
         'groups:history',
         'mpim:history',
         'im:history',
@@ -703,26 +707,70 @@ class SlackManager(Manager[SlackViewInterface]):
                 thread_ts=slack_view.message_ts,
             )
 
-    async def _try_verify_inferred_repo(
+    def _parse_channel_default_repo(self, purpose: str | None) -> str | None:
+        """Extract a ``repo:owner/name`` default from a Slack channel purpose."""
+        if not purpose:
+            return None
+
+        match = re.search(
+            r'(?:^|\s)repo:([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)'
+            r'(?=\s|$|[^\w./-])',
+            purpose,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+
+        return match.group(1).rstrip('.,;:!?')
+
+    async def _get_channel_purpose(
         self, slack_view: SlackNewConversationView
+    ) -> str | None:
+        """Fetch the Slack channel purpose, returning None when unavailable."""
+        client = AsyncWebClient(token=slack_view.bot_access_token)
+        try:
+            result = await client.conversations_info(channel=slack_view.channel_id)
+        except SlackApiError as e:
+            error = e.response.get('error') if e.response else None
+            log_context = {
+                'channel_id': slack_view.channel_id,
+                'slack_user_id': slack_view.slack_user_id,
+                'error': error,
+            }
+            if error == 'missing_scope':
+                logger.info('slack_channel_purpose_missing_scope', extra=log_context)
+            else:
+                logger.warning('slack_channel_purpose_lookup_failed', extra=log_context)
+            return None
+        except Exception as e:
+            logger.warning(
+                'slack_channel_purpose_lookup_failed',
+                extra={
+                    'channel_id': slack_view.channel_id,
+                    'slack_user_id': slack_view.slack_user_id,
+                    'error': str(e),
+                },
+            )
+            return None
+
+        channel = result.get('channel') or {}
+        purpose = channel.get('purpose') or {}
+        value = purpose.get('value')
+        return value if isinstance(value, str) else None
+
+    async def _verify_repo_for_slack_view(
+        self,
+        slack_view: SlackNewConversationView,
+        repo_name: str,
+        *,
+        source: str,
     ) -> bool:
-        """Try to infer and verify a repository from the user's message.
-
-        Returns:
-            True if a valid repo was found and verified, False otherwise
-        """
+        """Verify repository access and set it on the Slack view."""
         user = slack_view.slack_to_openhands_user
-        inferred_repos = infer_repo_from_message(slack_view.user_msg)
-
-        if len(inferred_repos) != 1:
-            return False
-
-        inferred_repo = inferred_repos[0]
         user_id: str | None = await slack_view.saas_user_auth.get_user_id()
-        # Fixes #14655
         logger.info(
-            f'[Slack] Verifying inferred repo "{inferred_repo}" '
-            f'for user {user.slack_display_name} (id={user_id})'
+            f'[Slack] Verifying {source} repo "{repo_name}" for user '
+            f'{user.slack_display_name} (id={user_id})'
         )
 
         try:
@@ -737,15 +785,46 @@ class SlackManager(Manager[SlackViewInterface]):
                 external_auth_token=access_token,
                 external_auth_id=user_id,
             )
-            repo = await provider_handler.verify_repo_provider(inferred_repo)
+            repo = await provider_handler.verify_repo_provider(repo_name)
             slack_view.selected_repo = repo.full_name
             return True
         except (AuthenticationError, ProviderTimeoutError) as e:
             logger.info(
-                f'[Slack] Could not verify repo "{inferred_repo}": {e}. '
+                f'[Slack] Could not verify {source} repo "{repo_name}": {e}. '
                 f'Showing repository selector.'
             )
             return False
+
+    async def _try_verify_inferred_repo(
+        self, slack_view: SlackNewConversationView
+    ) -> bool:
+        """Try to infer and verify a repository from the user's message.
+
+        Returns:
+            True if a valid repo was found and verified, False otherwise
+        """
+        inferred_repos = infer_repo_from_message(slack_view.user_msg)
+
+        if len(inferred_repos) != 1:
+            return False
+
+        # Fixes #14655
+        return await self._verify_repo_for_slack_view(
+            slack_view, inferred_repos[0], source='inferred'
+        )
+
+    async def _try_verify_channel_default_repo(
+        self, slack_view: SlackNewConversationView
+    ) -> bool:
+        """Try to verify a default repo from the Slack channel purpose."""
+        purpose = await self._get_channel_purpose(slack_view)
+        default_repo = self._parse_channel_default_repo(purpose)
+        if not default_repo:
+            return False
+
+        return await self._verify_repo_for_slack_view(
+            slack_view, default_repo, source='channel default'
+        )
 
     async def _show_repo_selection_form(
         self, slack_view: SlackNewConversationView
@@ -805,6 +884,10 @@ class SlackManager(Manager[SlackViewInterface]):
         # For new conversations, try to infer/verify repo or show selection form
         if isinstance(slack_view, SlackNewConversationView):
             if await self._try_verify_inferred_repo(slack_view):
+                return True
+            if not infer_repo_from_message(
+                slack_view.user_msg
+            ) and await self._try_verify_channel_default_repo(slack_view):
                 return True
             await self._show_repo_selection_form(slack_view)
 

@@ -308,7 +308,10 @@ class SlackNewConversationView(SlackViewInterface):
     def get_response_msg(self) -> str:
         user_info: SlackUser = self.slack_to_openhands_user
         conversation_link = CONVERSATION_URL.format(self.conversation_id)
-        return f"I'm on it! {user_info.slack_display_name} can [track my progress here]({conversation_link})."
+        repo_text = (
+            f' Working on **{self.selected_repo}**.' if self.selected_repo else ''
+        )
+        return f"I'm on it!{repo_text} {user_info.slack_display_name} can [track my progress here]({conversation_link})."
 
 
 @dataclass
@@ -469,7 +472,10 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
     def get_response_msg(self):
         user_info: SlackUser = self.slack_to_openhands_user
         conversation_link = CONVERSATION_URL.format(self.conversation_id)
-        return f"I'm on it! {user_info.slack_display_name} can [continue tracking my progress here]({conversation_link})."
+        repo_text = (
+            f' Working on **{self.selected_repo}**.' if self.selected_repo else ''
+        )
+        return f"I'm on it!{repo_text} {user_info.slack_display_name} can [continue tracking my progress here]({conversation_link})."
 
 
 class SlackFactory:

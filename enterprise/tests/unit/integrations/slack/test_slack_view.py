@@ -143,6 +143,26 @@ def test_format_slack_message_context_ignores_historical_attachments(
     mock_collect_attachment_content.assert_not_called()
 
 
+def test_new_conversation_response_includes_selected_repo(slack_new_conversation_view):
+    slack_new_conversation_view.conversation_id = 'conv-123'
+
+    response = slack_new_conversation_view.get_response_msg()
+
+    assert 'Working on **owner/repo**.' in response
+    assert 'Test User can [track my progress here]' in response
+
+
+def test_update_conversation_response_includes_selected_repo(
+    slack_update_conversation_view_v1,
+):
+    slack_update_conversation_view_v1.selected_repo = 'owner/repo'
+
+    response = slack_update_conversation_view_v1.get_response_msg()
+
+    assert 'Working on **owner/repo**.' in response
+    assert 'Test User can [continue tracking my progress here]' in response
+
+
 # Test: V1 Conversation Creation
 # ---------------------------------------------------------------------------
 

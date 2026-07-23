@@ -17,6 +17,10 @@ def test_slack_authorize_urls_request_files_read_scope():
 
     assert 'files:read' in authorize_url_generator.scopes
     assert 'files:read' in install_authorize_url_generator.scopes
+    assert 'channels:read' in authorize_url_generator.scopes
+    assert 'channels:read' in install_authorize_url_generator.scopes
+    assert 'groups:read' in authorize_url_generator.scopes
+    assert 'groups:read' in install_authorize_url_generator.scopes
 
 
 def _mock_download(mock_client_cls: MagicMock, content: bytes) -> MagicMock:

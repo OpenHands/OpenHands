@@ -90,6 +90,21 @@ def test_infer_repo_from_message(message, expected):
 class TestRepoVerificationHandling:
     """Test repo verification handling for Slack integration."""
 
+    def test_parse_channel_default_repo_from_purpose(self, slack_manager):
+        assert (
+            slack_manager._parse_channel_default_repo(
+                'Production support. repo:OpenHands/OpenHands'
+            )
+            == 'OpenHands/OpenHands'
+        )
+        assert (
+            slack_manager._parse_channel_default_repo(
+                'Default: repo:my-org/my.repo-name; ask here for help'
+            )
+            == 'my-org/my.repo-name'
+        )
+        assert slack_manager._parse_channel_default_repo('No default repo here') is None
+
     @patch('integrations.slack.slack_manager.get_redis_client_async')
     @patch('integrations.slack.slack_manager.ProviderHandler')
     @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
@@ -337,6 +352,61 @@ class TestRepoVerificationHandling:
 
         # Verify: selected_repo was set
         assert slack_new_conversation_view.selected_repo == 'OpenHands/OpenHands'
+
+    @patch('integrations.slack.slack_manager.get_redis_client_async')
+    @patch('integrations.slack.slack_manager.AsyncWebClient')
+    @patch('integrations.slack.slack_manager.ProviderHandler')
+    @patch.object(SlackManager, 'send_message', new_callable=AsyncMock)
+    async def test_channel_default_repo_starts_job_when_message_has_no_repo(
+        self,
+        mock_send_message,
+        mock_provider_handler_class,
+        mock_async_web_client_class,
+        mock_get_redis_client_async,
+        slack_manager,
+        slack_new_conversation_view,
+    ):
+        """Use channel purpose repo default only when the user did not mention one."""
+        mock_redis = AsyncMock()
+        mock_get_redis_client_async.return_value = mock_redis
+        slack_new_conversation_view.user_msg = 'Please investigate the failing build'
+
+        mock_slack_client = MagicMock()
+        mock_slack_client.conversations_info = AsyncMock(
+            return_value={
+                'channel': {
+                    'purpose': {
+                        'value': 'Build support channel repo:OpenHands/OpenHands'
+                    }
+                }
+            }
+        )
+        mock_async_web_client_class.return_value = mock_slack_client
+
+        mock_repo = Repository(
+            id='123',
+            full_name='OpenHands/OpenHands',
+            git_provider=ProviderType.GITHUB,
+            is_public=True,
+        )
+        mock_provider_handler = MagicMock()
+        mock_provider_handler.verify_repo_provider = AsyncMock(return_value=mock_repo)
+        mock_provider_handler_class.return_value = mock_provider_handler
+
+        result = await slack_manager.is_job_requested(
+            MagicMock(), slack_new_conversation_view
+        )
+
+        assert result is True
+        assert slack_new_conversation_view.selected_repo == 'OpenHands/OpenHands'
+        mock_slack_client.conversations_info.assert_awaited_once_with(
+            channel='C1234567890'
+        )
+        mock_provider_handler.verify_repo_provider.assert_awaited_once_with(
+            'OpenHands/OpenHands'
+        )
+        mock_send_message.assert_not_called()
+        mock_redis.set.assert_not_called()
 
 
 class TestBuildRepoOptions:

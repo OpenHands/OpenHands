@@ -50,6 +50,11 @@ sequenceDiagram
 | **Jira** | Issue created/updated | Update ticket, add comments |
 | **Linear** | Issue created | Update status, add comments |
 
+Slack channels can define a default repository by adding
+`repo:owner/repository` to the channel description. When a user mentions
+OpenHands without an explicit repository in the message, Slack requests use
+that channel default before falling back to the repository selector.
+
 ### Integration Components
 
 | Component | Purpose | Location |
