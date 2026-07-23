@@ -1,4 +1,5 @@
 import warnings
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -66,6 +67,9 @@ _BARE_ANTHROPIC_MODELS: set[str] = set(_SDK_ANTHROPIC)
 _BARE_MISTRAL_MODELS: set[str] = set(_SDK_MISTRAL)
 
 DEFAULT_OPENHANDS_MODEL = 'openhands/minimax-m2.7'
+_OPENAI_PREFIX = 'openai/'
+_LITELLM_PROXY_PREFIX = 'litellm_proxy/'
+_OPENAI_API_HOSTS = {'api.openai.com'}
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +108,49 @@ class ModelsResponse(BaseModel):
 def is_openhands_model(model: str | None) -> bool:
     """Return True when the model uses the public OpenHands provider prefix."""
     return bool(model and model.startswith('openhands/'))
+
+
+def _is_official_openai_base_url(base_url: str | None) -> bool:
+    if not base_url:
+        return False
+    try:
+        return (urlparse(base_url).hostname or '').lower() in _OPENAI_API_HOSTS
+    except ValueError:
+        return False
+
+
+def _is_known_openai_model(model: str) -> bool:
+    bare_model = model.removeprefix(_OPENAI_PREFIX)
+    return (
+        bare_model in litellm.open_ai_chat_completion_models
+        or bare_model in litellm.open_ai_text_completion_models
+        or bare_model in litellm.open_ai_embedding_models
+        or bare_model in litellm.openai_image_generation_models
+        or bare_model in litellm.openai_video_generation_models
+        or bare_model in litellm.model_cost
+        or bare_model in litellm.model_list
+    )
+
+
+def normalize_llm_model_for_runtime(
+    model: str, base_url: str | None
+) -> tuple[str, str | None]:
+    """Return the runtime model id and optional canonical model name.
+
+    Unknown ``openai/*`` aliases on custom OpenAI-compatible endpoints need the
+    full provider/model id in the request body. LiteLLM strips the ``openai/``
+    prefix when it routes through the direct OpenAI provider, so route only
+    those unknown custom aliases through ``litellm_proxy``. Known OpenAI models
+    keep the existing direct-provider behavior for compatibility.
+    """
+    if (
+        model.startswith(_OPENAI_PREFIX)
+        and base_url
+        and not _is_official_openai_base_url(base_url)
+        and not _is_known_openai_model(model)
+    ):
+        return f'{_LITELLM_PROXY_PREFIX}{model}', model
+    return model, None
 
 
 # Canonical masked placeholder for LLM API keys. Matches pydantic's

@@ -1007,6 +1007,44 @@ class TestLiveStatusAppConversationService:
         assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_preserves_unknown_openai_prefix_for_custom_base_url(
+        self,
+    ):
+        """Custom OpenAI-compatible aliases may need the full provider/model id.
+
+        LiteLLM strips ``openai/`` from the request body when it routes through
+        the direct OpenAI provider.  For unknown model aliases on a custom
+        OpenAI-compatible endpoint, route through ``litellm_proxy`` so the
+        gateway receives the exact model id the user configured.
+        """
+        self.mock_user.llm_base_url = 'http://192.0.2.10:8088/v1'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, 'openai/hybrid-auto-router', self.conversation_id
+        )
+
+        assert llm.model == 'litellm_proxy/openai/hybrid-auto-router'
+        assert llm.model_canonical_name == 'openai/hybrid-auto-router'
+        assert llm.base_url == 'http://192.0.2.10:8088/v1'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_keeps_known_openai_model_with_custom_base_url(
+        self,
+    ):
+        """Known OpenAI model names keep the existing direct-provider routing."""
+        self.mock_user.llm_base_url = 'https://custom-openai.example.com/v1'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, 'openai/gpt-4o', self.conversation_id
+        )
+
+        assert llm.model == 'openai/gpt-4o'
+        assert llm.model_canonical_name is None
+        assert llm.base_url == 'https://custom-openai.example.com/v1'
+
+    @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_non_openhands_model_ignores_provider(self):
         """Non-openhands model ignores provider base URL and uses user base URL."""
         # Arrange

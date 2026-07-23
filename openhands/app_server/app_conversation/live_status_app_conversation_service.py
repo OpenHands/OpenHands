@@ -112,6 +112,7 @@ from openhands.app_server.utils.docker_utils import (
 )
 from openhands.app_server.utils.git import ensure_valid_git_branch_name
 from openhands.app_server.utils.import_utils import get_impl
+from openhands.app_server.utils.llm import normalize_llm_model_for_runtime
 from openhands.app_server.utils.llm_metadata import (
     get_llm_metadata,
     should_set_litellm_extra_body,
@@ -1252,11 +1253,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             user.agent_settings.llm.base_url,
             provider_base_url=self.openhands_provider_base_url,
         )
+        runtime_model, model_canonical_name = normalize_llm_model_for_runtime(
+            model, base_url
+        )
 
         return user.agent_settings.llm.model_copy(
             update={
-                'model': model,
+                'model': runtime_model,
                 'base_url': base_url,
+                'model_canonical_name': model_canonical_name
+                or user.agent_settings.llm.model_canonical_name,
                 'api_key': user.agent_settings.llm.api_key,
                 'usage_id': 'agent',
                 # Force streaming on (the SDK LLM defaults stream=False).
