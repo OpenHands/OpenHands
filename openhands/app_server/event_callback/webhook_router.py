@@ -37,6 +37,7 @@ from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
     depends_jwt_service,
+    get_app_conversation_info_service,
     get_app_conversation_service,
     get_event_callback_service,
     get_global_config,
@@ -64,6 +65,7 @@ from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.specifiy_user_context import (
     ADMIN,
     USER_CONTEXT_ATTR,
+    SandboxUserContext,
     SpecifyUserContext,
 )
 from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
@@ -279,13 +281,16 @@ async def valid_sandbox(
                 status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
             )
 
-        # In SAAS Mode there is always a user, so we set the owner of the sandbox
-        # as the current user (Validated by the session_api_key they provided)
+        # Scope webhook services to the authenticated sandbox, independent of the
+        # owner's currently selected organization.
         if sandbox_record.created_by_user_id:
             setattr(
                 request.state,
                 USER_CONTEXT_ATTR,
-                SpecifyUserContext(sandbox_record.created_by_user_id),
+                SandboxUserContext(
+                    user_id=sandbox_record.created_by_user_id,
+                    sandbox_id=sandbox_record.id,
+                ),
             )
         elif app_mode == AppMode.SAAS:
             _logger.error(
@@ -301,11 +306,11 @@ async def valid_sandbox(
 async def valid_conversation(
     conversation_id: UUID,
     sandbox_record: SandboxRecord = Depends(valid_sandbox),
-    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
-    app_conversation_info = (
-        await app_conversation_info_service.get_app_conversation_info(conversation_id)
-    )
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+    async with get_app_conversation_info_service(state) as service:
+        app_conversation_info = await service.get_app_conversation_info(conversation_id)
     if not app_conversation_info:
         # Conversation does not yet exist - create a stub
         return AppConversationInfo(
@@ -314,8 +319,10 @@ async def valid_conversation(
             created_by_user_id=sandbox_record.created_by_user_id,
         )
 
-    # Sanity check - Make sure that the conversation and sandbox were created by the same user
-    if app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id:
+    if (
+        app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id
+        or app_conversation_info.sandbox_id != sandbox_record.id
+    ):
         raise AuthError()
 
     return app_conversation_info
@@ -363,7 +370,8 @@ async def on_conversation_update(
     accepted on this single endpoint.
     """
     existing = await valid_conversation(
-        conversation_info.id, sandbox_record, app_conversation_info_service
+        conversation_info.id,
+        sandbox_record,
     )
 
     # If the conversation is being deleted, no action is required...
@@ -493,7 +501,10 @@ async def _sync_live_conversation_stats(
     setattr(
         state,
         USER_CONTEXT_ATTR,
-        SpecifyUserContext(app_conversation_info.created_by_user_id),
+        SandboxUserContext(
+            user_id=app_conversation_info.created_by_user_id,
+            sandbox_id=app_conversation_info.sandbox_id,
+        ),
     )
     async with get_app_conversation_service(state) as app_conversation_service:
         conversation = await app_conversation_service.get_app_conversation(

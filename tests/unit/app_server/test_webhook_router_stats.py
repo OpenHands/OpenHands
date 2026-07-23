@@ -23,7 +23,11 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     StoredConversationCostEvent,
     StoredConversationMetadata,
 )
-from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
+from openhands.app_server.user.specifiy_user_context import (
+    USER_CONTEXT_ATTR,
+    SandboxUserContext,
+    SpecifyUserContext,
+)
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -810,7 +814,7 @@ class TestRunEndLiveStatsPull:
         with (
             patch.object(
                 webhook_router, 'get_app_conversation_service', return_value=service_ctx
-            ),
+            ) as mock_get_app_conversation_service,
             patch.object(
                 webhook_router,
                 'replace_localhost_hostname_for_docker',
@@ -835,6 +839,12 @@ class TestRunEndLiveStatsPull:
         # URL was normalized for docker-local sandboxes and used for the GET
         mock_normalize.assert_called_once_with(
             'http://localhost:12345/api/conversations/abc'
+        )
+        service_state = mock_get_app_conversation_service.call_args.args[0]
+        service_user_context = getattr(service_state, USER_CONTEXT_ATTR)
+        assert service_user_context == SandboxUserContext(
+            user_id=mock_info.created_by_user_id,
+            sandbox_id=mock_info.sandbox_id,
         )
         http_client.get.assert_awaited_once()
         assert http_client.get.await_args.args[0] == (
