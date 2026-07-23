@@ -24,7 +24,7 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
 )
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.specifiy_user_context import ADMIN
+from openhands.app_server.user.specifiy_user_context import ADMIN, SandboxUserContext
 
 
 class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
@@ -49,11 +49,12 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         return result.scalars().first()
 
     async def _apply_user_and_org_filter(self, query):
-        """Apply user_id and org_id filters to ensure conversation isolation.
+        """Apply tenant filters to ensure conversation isolation.
 
         Filters conversations by:
         - user_id: Only show conversations belonging to the current user
-        - org_id: Only show conversations belonging to the request's
+        - sandbox_id: Authenticated sandbox webhooks stay within that sandbox
+        - org_id: Other requests use the request's
           *effective* organization (honors ``X-Org-Id`` and API-key org
           binding; falls back to ``user.current_org_id``).
 
@@ -79,6 +80,11 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
+
+        if isinstance(self.user_context, SandboxUserContext):
+            return query.where(
+                StoredConversationMetadata.sandbox_id == self.user_context.sandbox_id
+            )
 
         # Filter by the *effective* organization id (X-Org-Id override or
         # API-key binding take precedence over user.current_org_id).
@@ -354,6 +360,37 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         self, info: AppConversationInfo
     ) -> AppConversationInfo:
         """Save conversation info and create/update SAAS metadata with user_id and org_id."""
+        if isinstance(self.user_context, SandboxUserContext):
+            user_id_str = await self.user_context.get_user_id()
+            if not user_id_str:
+                raise AuthError('Sandbox owner required')
+            if (
+                info.sandbox_id != self.user_context.sandbox_id
+                or info.created_by_user_id != user_id_str
+            ):
+                raise AuthError()
+            existing_query = (
+                select(
+                    StoredConversationMetadata.sandbox_id,
+                    StoredConversationMetadataSaas.user_id,
+                )
+                .outerjoin(
+                    StoredConversationMetadataSaas,
+                    StoredConversationMetadata.conversation_id
+                    == StoredConversationMetadataSaas.conversation_id,
+                )
+                .where(
+                    StoredConversationMetadata.conversation_id == str(info.id),
+                    StoredConversationMetadata.conversation_version == 'V1',
+                )
+            )
+            existing = (await self.db_session.execute(existing_query)).first()
+            if existing and (
+                existing.sandbox_id != self.user_context.sandbox_id
+                or existing.user_id != UUID(user_id_str)
+            ):
+                raise AuthError()
+
         # Save the base conversation metadata
         await super().save_app_conversation_info(info)
 
