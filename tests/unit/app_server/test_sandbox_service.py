@@ -13,13 +13,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxPage,
     SandboxRecord,
     SandboxStatus,
 )
-from openhands.app_server.sandbox.sandbox_service import SandboxService
+from openhands.app_server.sandbox.sandbox_service import (
+    SandboxService,
+    _classify_start_failure,
+    _start_failure_error,
+)
 
 
 class MockSandboxService(SandboxService):
@@ -90,6 +95,201 @@ def create_sandbox_info(
 def mock_sandbox_service():
     """Fixture providing a mock sandbox service."""
     return MockSandboxService()
+
+
+class TestWaitForSandboxRunning:
+    """wait_for_sandbox_running maps runtime status_detail to user-safe errors.
+
+    Raw status_detail is logged, not surfaced: only classified/generic text
+    reaches the user, so internal infra details (registry hosts, secret names,
+    node taints/labels, cluster size, ...) can't leak.
+    """
+
+    def _sandbox(self, status, detail):
+        return SandboxInfo(
+            id='sb1',
+            created_by_user_id=None,
+            sandbox_spec_id='test-spec',
+            status=status,
+            session_api_key=None,
+            created_at=datetime.now(timezone.utc),
+            status_detail=detail,
+        )
+
+    def _patch_timeout(self, monkeypatch):
+        calls = {'n': 0}
+
+        def fake_time():
+            calls['n'] += 1
+            return 1000.0 if calls['n'] <= 3 else 2000.0
+
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.time.time', fake_time
+        )
+        monkeypatch.setattr(
+            'openhands.app_server.sandbox.sandbox_service.asyncio.sleep', AsyncMock()
+        )
+
+    @pytest.mark.asyncio
+    async def test_capacity_error_state_is_friendly_and_trimmed(
+        self, mock_sandbox_service
+    ):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            '0/1 nodes are available: 1 Insufficient ephemeral-storage. '
+            'preemption: 0/1 nodes are available.',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'at capacity' in msg
+        assert 'insufficient ephemeral-storage' in msg
+        # reference id lets an owner find the raw reason in the logs
+        assert 'reference: sb1' in msg
+        # node counts / preemption noise are not leaked
+        assert '0/1 nodes' not in msg
+        assert 'preemption' not in msg
+        assert 'entered error state' not in msg
+
+    @pytest.mark.asyncio
+    async def test_capacity_at_timeout_is_retryable(
+        self, mock_sandbox_service, monkeypatch
+    ):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.STARTING, '0/1 nodes are available: 1 Insufficient cpu.'
+        )
+        self._patch_timeout(monkeypatch)
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=1)
+        msg = str(ei.value)
+        assert 'at capacity' in msg and 'try again' in msg
+        assert 'insufficient cpu' in msg
+        assert 'failed to start within' not in msg
+        assert mock_sandbox_service.get_sandbox_mock.call_count > 1
+
+    @pytest.mark.asyncio
+    async def test_image_pull_detail_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            'ImagePullBackOff: Back-off pulling image '
+            '"registry.internal.corp/team/secret-project:tag"',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'could not be pulled' in msg
+        assert 'registry.internal.corp' not in msg
+        assert 'secret-project' not in msg
+
+    @pytest.mark.asyncio
+    async def test_config_error_detail_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            "CreateContainerConfigError: couldn't find key db-password "
+            'in secret "prod-db-creds"',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'configuration issue' in msg
+        assert 'prod-db-creds' not in msg
+        assert 'db-password' not in msg
+
+    @pytest.mark.asyncio
+    async def test_container_create_error_is_distinct_and_redacted(
+        self, mock_sandbox_service
+    ):
+        # CreateContainerError is broader than a missing secret: don't mislabel
+        # it as a config issue, and don't leak the path.
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            'CreateContainerError: failed to mount /var/secrets/prod-token',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'could not be created' in msg
+        assert 'configuration issue' not in msg
+        assert 'prod-token' not in msg
+
+    @pytest.mark.asyncio
+    async def test_scheduling_constraint_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            'node(s) had untolerated taint {dedicated: internal-gpu-pool}',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'could not be scheduled' in msg
+        assert 'internal-gpu-pool' not in msg
+        assert 'dedicated' not in msg
+        # deterministic placement failure -> no misleading 'try again'
+        assert 'try again' not in msg
+
+    @pytest.mark.asyncio
+    async def test_device_resource_shortage_is_redacted(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR,
+            '0/3 nodes are available: 3 Insufficient smarter-devices/kvm.',
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'device or resource' in msg
+        # the device-plugin name must not leak
+        assert 'smarter-devices' not in msg
+        assert 'kvm' not in msg
+
+    @pytest.mark.asyncio
+    async def test_unrecognized_detail_is_generic(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, 'the sandbox imploded for reasons unknown'
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        msg = str(ei.value)
+        assert 'unexpected reason' in msg
+        assert 'imploded' not in msg
+
+    @pytest.mark.asyncio
+    async def test_no_detail_is_generic(self, mock_sandbox_service):
+        mock_sandbox_service.get_sandbox_mock.return_value = self._sandbox(
+            SandboxStatus.ERROR, None
+        )
+        with pytest.raises(SandboxError) as ei:
+            await mock_sandbox_service.wait_for_sandbox_running('sb1', timeout=5)
+        assert 'failed to start' in str(ei.value)
+
+
+def test_classify_start_failure_maps_each_class():
+    assert 'at capacity' in _classify_start_failure('x Insufficient memory y')
+    assert 'insufficient memory' in _classify_start_failure('x Insufficient memory y')
+    assert 'could not be pulled' in _classify_start_failure('ImagePullBackOff: x')
+    assert 'configuration issue' in _classify_start_failure(
+        'CreateContainerConfigError: x'
+    )
+    assert 'could not be created' in _classify_start_failure('CreateContainerError: x')
+    assert 'could not be scheduled' in _classify_start_failure(
+        "0/2 nodes: 2 node(s) didn't match Pod's node affinity/selector."
+    )
+    assert 'device or resource' in _classify_start_failure(
+        '0/1 nodes: 1 Insufficient nvidia.com/gpu.'
+    )
+    # unrecognized / empty -> None so the caller uses a generic message
+    assert _classify_start_failure('some novel reason') is None
+    assert _classify_start_failure(None) is None
+    assert _classify_start_failure('') is None
+
+
+def test_start_failure_error_appends_reference():
+    err = _start_failure_error('sb-xyz', 'ImagePullBackOff: secret/path')
+    assert 'could not be pulled' in str(err)
+    assert '(reference: sb-xyz)' in str(err)
+    # unknown detail still gets the generic message + the reference id
+    generic = _start_failure_error('sb-xyz', 'mystery')
+    assert 'unexpected reason' in str(generic)
+    assert '(reference: sb-xyz)' in str(generic)
 
 
 class TestCleanupOldSandboxes:
