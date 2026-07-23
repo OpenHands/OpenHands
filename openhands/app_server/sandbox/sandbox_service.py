@@ -78,7 +78,7 @@ def _classify_start_failure(detail: str | None) -> str | None:
         )
     if 'CreateContainerError' in detail:
         return (
-            'The sandbox container could not be created. This is often an '
+            'The sandbox container could not be created, possibly due to an '
             'invalid mount, device, or startup command.'
         )
     resource = next((m for m in _CAPACITY_MARKERS if m in detail), None)
