@@ -384,7 +384,7 @@ async def start_app_conversation(
         # Analytics: conversation created (V1)
         try:
             analytics = get_analytics_service()
-            if analytics and start_request.conversation_id is None:
+            if analytics and result.app_conversation_id is None:
                 user_id = await user_context.get_user_id()
                 if user_id:
                     ctx = await resolve_analytics_context(user_id)
@@ -432,7 +432,7 @@ async def update_app_conversation(
     responses={
         404: {'description': 'Conversation or sandbox not found'},
         409: {
-            'description': 'Sandbox is not running. Resume it first via POST /sandboxes/{id}/resume'
+            'description': 'Sandbox is not running. Resume the app conversation first.'
         },
         410: {'description': 'Conversation is archived (sandbox no longer exists)'},
         503: {'description': 'Sandbox is in error state or agent server unavailable'},
@@ -473,7 +473,7 @@ async def send_message_to_conversation(
     **Prerequisites:**
 
     - The sandbox must be in RUNNING state
-    - If the sandbox is PAUSED, call `POST /api/v1/sandboxes/{sandbox_id}/resume` first
+    - If the sandbox is PAUSED, resume it through `POST /api/v1/app-conversations`
     - If the sandbox is STARTING, wait for it to reach RUNNING state
 
     **Error responses:**
@@ -525,7 +525,8 @@ async def send_message_to_conversation(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f'Sandbox is {sandbox.status.value}. '
-                f'Use POST /api/v1/sandboxes/{sandbox.id}/resume to resume it first.'
+                'Use POST /api/v1/app-conversations with conversation_id '
+                'to resume it first.'
             ),
         )
 

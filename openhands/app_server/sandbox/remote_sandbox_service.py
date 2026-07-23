@@ -591,11 +591,17 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
 
-            # Security: Invalidate the session API key hash to prevent
-            # leaked keys from being used while the sandbox is paused.
-            stored_sandbox.session_api_key_hash = None
-
             runtime_data = await self._get_runtime(sandbox_id)
+            sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
+            try:
+                await self._prepare_for_pause(sandbox, self.httpx_client)
+            except (httpx.HTTPError, ValueError, SandboxError) as exc:
+                raise SandboxError(
+                    'Agent Server did not complete its pause barrier',
+                    status_code=503,
+                ) from exc
+
+            stored_sandbox.session_api_key_hash = None
             response = await self._send_runtime_api_request(
                 'POST',
                 '/pause',
@@ -606,6 +612,9 @@ class RemoteSandboxService(SandboxService):
             response.raise_for_status()
             return True
 
+        except SandboxError:
+            _logger.exception(f'Error pausing sandbox {sandbox_id}', stack_info=True)
+            raise
         except httpx.HTTPError:
             _logger.exception(f'Error pausing sandbox {sandbox_id}', stack_info=True)
             return False

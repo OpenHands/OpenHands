@@ -868,9 +868,10 @@ class TestDockerSandboxService:
         service.docker_client.containers.get.return_value = mock_running_container
         server_info = MagicMock()
         server_info.json.return_value = {
-            'capabilities': ['credential_binding_readiness_probe_v1']
+            'capabilities': ['credential_binding_activation_guard_v1']
         }
         drain = MagicMock()
+        drain.status_code = 204
         service.httpx_client.get.side_effect = lambda *args, **kwargs: (
             order.append('server-info') or server_info
         )
@@ -908,7 +909,7 @@ class TestDockerSandboxService:
         service.docker_client.containers.get.return_value = mock_running_container
         server_info = MagicMock()
         server_info.json.return_value = {
-            'capabilities': ['credential_binding_readiness_probe_v1']
+            'capabilities': ['credential_binding_activation_guard_v1']
         }
         service.httpx_client.get.return_value = server_info
         request = httpx.Request('POST', 'http://agent-server')

@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_VALUE,
     ConversationTrigger,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
@@ -197,6 +199,24 @@ def test_merge_conversation_tags_with_both_none():
     merged_tags = merge_conversation_tags(None, None)
 
     assert merged_tags == {}
+
+
+@pytest.mark.parametrize(
+    'incoming_tags',
+    [
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: CODEX_CREDENTIAL_BINDING_TAG_VALUE},
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: '0'},
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: ''},
+        {},
+    ],
+)
+def test_merge_conversation_tags_reserves_credential_binding_provenance(
+    incoming_tags,
+):
+    existing = {CODEX_CREDENTIAL_BINDING_TAG_KEY: CODEX_CREDENTIAL_BINDING_TAG_VALUE}
+
+    assert merge_conversation_tags(existing, incoming_tags) == existing
+    assert merge_conversation_tags({}, incoming_tags) == {}
 
 
 # ---------------------------------------------------------------------------

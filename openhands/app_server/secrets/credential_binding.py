@@ -221,8 +221,8 @@ async def load_credential(
         ) from exc
     except NotImplementedError as exc:
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Credential binding is unavailable',
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail='Credential binding is unsupported',
         ) from exc
     _validate_value(secret_name, value)
     return JSONResponse(
@@ -270,8 +270,8 @@ async def replace_credential(
         ) from exc
     except NotImplementedError as exc:
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail='Credential binding is unavailable',
+            status.HTTP_501_NOT_IMPLEMENTED,
+            detail='Credential binding is unsupported',
         ) from exc
     return JSONResponse(
         {'version': version},

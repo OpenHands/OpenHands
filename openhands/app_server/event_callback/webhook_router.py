@@ -30,6 +30,7 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -126,7 +127,11 @@ def merge_conversation_tags(
         Merged tags dict (empty dict if both inputs are None/empty)
     """
     existing = existing_tags or {}
-    incoming = incoming_tags or {}
+    incoming = {
+        key: value
+        for key, value in (incoming_tags or {}).items()
+        if key != CODEX_CREDENTIAL_BINDING_TAG_KEY
+    }
     return {**existing, **incoming}
 
 

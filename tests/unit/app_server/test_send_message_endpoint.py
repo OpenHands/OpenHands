@@ -260,8 +260,7 @@ class TestSendMessageToConversation:
     async def test_returns_409_for_paused_sandbox(self):
         """Test that 409 is returned when sandbox is PAUSED.
 
-        The endpoint does not auto-resume sandboxes. Callers must resume
-        the sandbox first via POST /api/v1/sandboxes/{id}/resume.
+        The endpoint does not auto-resume sandboxes.
 
         Arrange: Create conversation with PAUSED sandbox
         Act: Call send_message_to_conversation
@@ -292,7 +291,7 @@ class TestSendMessageToConversation:
 
         assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert 'paused' in exc_info.value.detail.lower()
-        assert '/resume' in exc_info.value.detail.lower()
+        assert '/app-conversations' in exc_info.value.detail.lower()
 
     async def test_returns_409_for_starting_sandbox(self):
         """Test that 409 is returned when sandbox is STARTING.

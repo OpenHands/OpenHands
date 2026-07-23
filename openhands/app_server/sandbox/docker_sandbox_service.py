@@ -37,9 +37,6 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     resolve_sandbox_spec,
 )
-from openhands.app_server.secrets.credential_binding_models import (
-    CREDENTIAL_BINDING_PROBE_CAPABILITY,
-)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
@@ -537,41 +534,11 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return False
 
-    async def _prepare_for_pause(self, container) -> None:
+    async def _prepare_container_for_pause(self, container) -> None:
         sandbox = await self._container_to_sandbox_info(container)
-        if sandbox is None or not sandbox.session_api_key or not sandbox.exposed_urls:
+        if sandbox is None:
             return
-        agent_server_url = next(
-            (
-                exposed_url.url
-                for exposed_url in sandbox.exposed_urls
-                if exposed_url.name == AGENT_SERVER
-            ),
-            None,
-        )
-        if agent_server_url is None:
-            return
-        agent_server_url = replace_localhost_hostname_for_docker(agent_server_url)
-        headers = {'X-Session-API-Key': sandbox.session_api_key}
-        server_info_response = await self.httpx_client.get(
-            f'{agent_server_url}/server_info',
-            headers=headers,
-        )
-        server_info_response.raise_for_status()
-        server_info = server_info_response.json()
-        if not isinstance(server_info, dict):
-            raise ValueError('Invalid Agent Server metadata')
-        capabilities = server_info.get('capabilities')
-        if (
-            not isinstance(capabilities, list)
-            or CREDENTIAL_BINDING_PROBE_CAPABILITY not in capabilities
-        ):
-            return
-        response = await self.httpx_client.post(
-            f'{agent_server_url}/api/conversations/prepare-for-sandbox-pause',
-            headers=headers,
-        )
-        response.raise_for_status()
+        await super()._prepare_for_pause(sandbox, self.httpx_client)
 
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Pause a running sandbox."""
@@ -581,13 +548,13 @@ class DockerSandboxService(SandboxService):
             container = self.docker_client.containers.get(sandbox_id)
 
             if container.status == 'running':
-                await self._prepare_for_pause(container)
+                await self._prepare_container_for_pause(container)
                 container.pause()
 
             return True
         except (NotFound, APIError):
             return False
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError, SandboxError) as exc:
             raise SandboxError(
                 'Agent Server did not complete its pause barrier',
                 status_code=503,

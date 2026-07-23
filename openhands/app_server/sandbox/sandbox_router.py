@@ -7,7 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.security import APIKeyHeader
 
 from openhands.agent_server.models import Success
-from openhands.app_server.config import depends_sandbox_service, depends_user_context
+from openhands.app_server.app_conversation.app_conversation_info_service import (
+    AppConversationInfoService,
+)
+from openhands.app_server.app_conversation.app_conversation_models import (
+    has_managed_codex_credential,
+)
+from openhands.app_server.config import (
+    depends_app_conversation_info_service,
+    depends_sandbox_service,
+)
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
     SandboxPage,
@@ -19,7 +28,6 @@ from openhands.app_server.sandbox.sandbox_service import (
 )
 from openhands.app_server.sandbox.session_auth import validate_session_key
 from openhands.app_server.user.auth_user_context import AuthUserContext
-from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
 )
@@ -33,7 +41,7 @@ router = APIRouter(
     prefix='/sandboxes', tags=['Sandbox'], dependencies=get_dependencies()
 )
 sandbox_service_dependency = depends_sandbox_service()
-user_context_dependency = depends_user_context()
+app_conversation_info_service_dependency = depends_app_conversation_info_service()
 
 # Read methods
 
@@ -95,9 +103,31 @@ async def pause_sandbox(
 @router.post('/{sandbox_id}/resume', responses={404: {'description': 'Item not found'}})
 async def resume_sandbox(
     sandbox_id: str,
-    user_context: UserContext = user_context_dependency,
     sandbox_service: SandboxService = sandbox_service_dependency,
+    app_conversation_info_service: AppConversationInfoService = (
+        app_conversation_info_service_dependency
+    ),
 ) -> Success:
+    page_id = None
+    while True:
+        page = await app_conversation_info_service.search_app_conversation_info(
+            sandbox_id__eq=sandbox_id,
+            page_id=page_id,
+            limit=100,
+            include_sub_conversations=True,
+        )
+        if any(has_managed_codex_credential(info.tags) for info in page.items):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=(
+                    'Resume this sandbox through POST /api/v1/app-conversations '
+                    'with conversation_id'
+                ),
+            )
+        if page.next_page_id is None:
+            break
+        page_id = page.next_page_id
+
     exists = await sandbox_service.resume_sandbox(sandbox_id)
     if not exists:
         raise HTTPException(status.HTTP_404_NOT_FOUND)

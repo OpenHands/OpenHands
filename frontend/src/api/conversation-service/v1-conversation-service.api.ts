@@ -19,6 +19,9 @@ import type {
   PluginSpec,
 } from "./v1-conversation-service.types";
 
+const RESUME_POLL_INTERVAL_MS = 1000;
+const RESUME_MAX_POLL_ATTEMPTS = 180;
+
 class V1ConversationService {
   /**
    * Build the full URL for V1 runtime-specific endpoints
@@ -111,11 +114,29 @@ class V1ConversationService {
   static async resumeAppConversation(
     conversationId: string,
   ): Promise<V1AppConversationStartTask> {
-    const { data } = await openHands.post<V1AppConversationStartTask>(
-      "/api/v1/app-conversations",
-      { conversation_id: conversationId },
-    );
-    return data;
+    const { data: initialTask } =
+      await openHands.post<V1AppConversationStartTask>(
+        "/api/v1/app-conversations",
+        { conversation_id: conversationId },
+      );
+    return this.waitForResumeTask(initialTask, RESUME_MAX_POLL_ATTEMPTS);
+  }
+
+  private static async waitForResumeTask(
+    task: V1AppConversationStartTask,
+    attemptsRemaining: number,
+  ): Promise<V1AppConversationStartTask> {
+    if (task.status === "READY" && task.app_conversation_id) {
+      return task;
+    }
+    if (task.status === "ERROR" || attemptsRemaining === 0) {
+      throw new Error(task.detail || "Failed to resume conversation");
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, RESUME_POLL_INTERVAL_MS);
+    });
+    const nextTask = (await this.getStartTask(task.id)) ?? task;
+    return this.waitForResumeTask(nextTask, attemptsRemaining - 1);
   }
 
   /**

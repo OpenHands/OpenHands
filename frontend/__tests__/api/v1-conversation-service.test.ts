@@ -2,14 +2,91 @@ import { describe, expect, it, vi, beforeEach, afterEach, Mock } from "vitest";
 import axios from "axios";
 import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }));
+const { mockGet, mockPost } = vi.hoisted(() => ({
+  mockGet: vi.fn(),
+  mockPost: vi.fn(),
+}));
 vi.mock("#/api/open-hands-axios", () => ({
-  openHands: { get: mockGet },
+  openHands: { get: mockGet, post: mockPost },
 }));
 
 vi.mock("axios");
 
 describe("V1ConversationService", () => {
+  describe("resumeAppConversation", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.clearAllMocks();
+    });
+
+    it("polls the resume task until it is ready", async () => {
+      vi.useFakeTimers();
+      mockPost.mockResolvedValue({
+        data: {
+          id: "task-id",
+          status: "WORKING",
+          app_conversation_id: "conv-123",
+        },
+      });
+      mockGet
+        .mockResolvedValueOnce({
+          data: [
+            {
+              id: "task-id",
+              status: "STARTING_CONVERSATION",
+              app_conversation_id: "conv-123",
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              id: "task-id",
+              status: "READY",
+              app_conversation_id: "conv-123",
+            },
+          ],
+        });
+
+      const resume = V1ConversationService.resumeAppConversation("conv-123");
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      await expect(resume).resolves.toMatchObject({ status: "READY" });
+      expect(mockGet).toHaveBeenCalledTimes(2);
+    });
+
+    it("surfaces the resume task error", async () => {
+      vi.useFakeTimers();
+      mockPost.mockResolvedValue({
+        data: {
+          id: "task-id",
+          status: "WORKING",
+          app_conversation_id: "conv-123",
+        },
+      });
+      mockGet.mockResolvedValue({
+        data: [
+          {
+            id: "task-id",
+            status: "ERROR",
+            detail: "Credential binding activation failed",
+            app_conversation_id: "conv-123",
+          },
+        ],
+      });
+
+      const resume = V1ConversationService.resumeAppConversation("conv-123");
+      const rejection = expect(resume).rejects.toThrow(
+        "Credential binding activation failed",
+      );
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await rejection;
+    });
+  });
+
   describe("readConversationFile", () => {
     it("uses default plan path when filePath is not provided", async () => {
       // Arrange
@@ -40,9 +117,12 @@ describe("V1ConversationService", () => {
 
     it("uses query params for file upload path", async () => {
       // Arrange
-      const conversationUrl = "http://localhost:54928/api/conversations/conv-123";
+      const conversationUrl =
+        "http://localhost:54928/api/conversations/conv-123";
       const sessionApiKey = "test-api-key";
-      const file = new File(["test content"], "test.txt", { type: "text/plain" });
+      const file = new File(["test content"], "test.txt", {
+        type: "text/plain",
+      });
       const uploadPath = "/workspace/custom/path.txt";
 
       // Act
@@ -67,9 +147,12 @@ describe("V1ConversationService", () => {
 
     it("uses default workspace path when no path provided", async () => {
       // Arrange
-      const conversationUrl = "http://localhost:54928/api/conversations/conv-123";
+      const conversationUrl =
+        "http://localhost:54928/api/conversations/conv-123";
       const sessionApiKey = "test-api-key";
-      const file = new File(["test content"], "myfile.txt", { type: "text/plain" });
+      const file = new File(["test content"], "myfile.txt", {
+        type: "text/plain",
+      });
 
       // Act
       await V1ConversationService.uploadFile(
@@ -88,9 +171,12 @@ describe("V1ConversationService", () => {
 
     it("sends file as FormData with correct headers", async () => {
       // Arrange
-      const conversationUrl = "http://localhost:54928/api/conversations/conv-123";
+      const conversationUrl =
+        "http://localhost:54928/api/conversations/conv-123";
       const sessionApiKey = "test-api-key";
-      const file = new File(["test content"], "test.txt", { type: "text/plain" });
+      const file = new File(["test content"], "test.txt", {
+        type: "text/plain",
+      });
 
       // Act
       await V1ConversationService.uploadFile(

@@ -45,6 +45,14 @@ ARCHIVE_WORKSPACE_PATH_TAG_KEY = 'archiveworkspacepath'
 # tag-key rule forbids underscores, hence the squashed keys.
 AGENT_PROFILE_ID_TAG_KEY = 'agentprofileid'
 AGENT_PROFILE_REVISION_TAG_KEY = 'agentprofilerevision'
+CODEX_CREDENTIAL_BINDING_TAG_KEY = 'codexcredentialbinding'
+CODEX_CREDENTIAL_BINDING_TAG_VALUE = '1'
+
+
+def has_managed_codex_credential(tags: dict[str, str]) -> bool:
+    return (
+        tags.get(CODEX_CREDENTIAL_BINDING_TAG_KEY) == CODEX_CREDENTIAL_BINDING_TAG_VALUE
+    )
 
 
 class ConversationTrigger(Enum):

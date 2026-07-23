@@ -8,7 +8,7 @@ import types
 import zipfile
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, call, patch
 from uuid import UUID, uuid4
 
 import httpx
@@ -21,9 +21,12 @@ from openhands.agent_server.models import (
     TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_VALUE,
     AgentType,
     AppConversationInfo,
     AppConversationStartRequest,
+    AppConversationStartTaskStatus,
     ConversationTrigger,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
@@ -2584,6 +2587,199 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox_service.resume_sandbox.assert_not_called()
         await stream.aclose()
 
+    @pytest.mark.asyncio
+    async def test_preassigned_new_conversation_id_starts_fresh(self):
+        conversation_id = uuid4()
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=None
+        )
+        self.mock_app_conversation_start_task_service.save_app_conversation_start_task = AsyncMock()
+
+        stream = self.service.start_app_conversation(
+            AppConversationStartRequest(conversation_id=conversation_id)
+        )
+        task = await anext(stream)
+
+        assert task.app_conversation_id is None
+        assert task.request.conversation_id == conversation_id
+        await stream.aclose()
+
+    @pytest.mark.asyncio
+    async def test_unmanaged_resume_only_checks_cold_conversation(self):
+        conversation_id = uuid4()
+        existing = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id='test_user_123',
+            sandbox_id='sandbox-1',
+        )
+        sandbox = SandboxInfo(
+            id='sandbox-1',
+            created_by_user_id='test_user_123',
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://agent-server', port=8000)
+            ],
+        )
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=existing
+        )
+        self.service._get_sandbox_conversations = AsyncMock(return_value=[existing])
+        self.mock_sandbox_service.get_sandbox = AsyncMock(return_value=sandbox)
+        self.service._activate_credential_binding = AsyncMock()
+        self.service._seed_sandbox_profiles = AsyncMock()
+        self.service.run_setup_scripts = Mock()
+        self.service._build_start_conversation_request_for_user = AsyncMock()
+        self.service._process_pending_messages = AsyncMock()
+
+        async def wait_for_sandbox(task):
+            task.sandbox_id = sandbox.id
+            task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
+            yield task
+
+        self.service._wait_for_sandbox_start = wait_for_sandbox
+        response = Mock()
+        response.raise_for_status = Mock()
+        response.json.return_value = {'id': str(conversation_id)}
+        self.mock_httpx_client.get = AsyncMock(return_value=response)
+        self.mock_httpx_client.post = AsyncMock()
+
+        statuses = []
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.ConversationInfo'
+        ) as conversation_info:
+            conversation_info.model_validate.return_value = SimpleNamespace(
+                id=conversation_id
+            )
+            async for task in self.service._start_app_conversation(
+                AppConversationStartRequest(conversation_id=conversation_id)
+            ):
+                statuses.append(task.status)
+
+        assert statuses == [
+            AppConversationStartTaskStatus.WORKING,
+            AppConversationStartTaskStatus.WAITING_FOR_SANDBOX,
+            AppConversationStartTaskStatus.STARTING_CONVERSATION,
+            AppConversationStartTaskStatus.READY,
+        ]
+        self.mock_httpx_client.get.assert_awaited_once_with(
+            f'http://agent-server/api/conversations/{conversation_id}',
+            headers={'X-Session-API-Key': 'session-key'},
+            timeout=30,
+        )
+        self.mock_httpx_client.post.assert_not_awaited()
+        self.service._activate_credential_binding.assert_not_awaited()
+        self.service._seed_sandbox_profiles.assert_not_awaited()
+        self.service.run_setup_scripts.assert_not_called()
+        self.service._build_start_conversation_request_for_user.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_resume_reactivates_every_managed_conversation_in_sandbox(self):
+        primary_id = uuid4()
+        sibling_id = uuid4()
+        managed_tags = {
+            CODEX_CREDENTIAL_BINDING_TAG_KEY: CODEX_CREDENTIAL_BINDING_TAG_VALUE
+        }
+        primary = AppConversationInfo(
+            id=primary_id,
+            created_by_user_id='test_user_123',
+            sandbox_id='sandbox-1',
+            tags=managed_tags,
+        )
+        sibling = AppConversationInfo(
+            id=sibling_id,
+            created_by_user_id='test_user_123',
+            sandbox_id='sandbox-1',
+            tags=managed_tags,
+        )
+        sandbox = SandboxInfo(
+            id='sandbox-1',
+            created_by_user_id='test_user_123',
+            sandbox_spec_id='spec',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+            exposed_urls=[
+                ExposedUrl(name=AGENT_SERVER, url='http://agent-server', port=8000)
+            ],
+        )
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=primary
+        )
+        self.service._get_sandbox_conversations = AsyncMock(
+            return_value=[primary, sibling]
+        )
+        self.mock_sandbox_service.get_sandbox = AsyncMock(return_value=sandbox)
+        self.service._get_cold_conversation = AsyncMock()
+        self.service._activate_credential_binding = AsyncMock(return_value=True)
+        self.service._process_pending_messages = AsyncMock()
+        saved_tasks = []
+
+        async def save_task(task):
+            saved_tasks.append(
+                (task.id, task.app_conversation_id, task.status, task.detail)
+            )
+            return task
+
+        self.mock_app_conversation_start_task_service.save_app_conversation_start_task = AsyncMock(
+            side_effect=save_task
+        )
+
+        async def wait_for_sandbox(task):
+            assert saved_tasks[0][1:] == (
+                sibling_id,
+                AppConversationStartTaskStatus.WORKING,
+                None,
+            )
+            task.sandbox_id = sandbox.id
+            task.status = AppConversationStartTaskStatus.WAITING_FOR_SANDBOX
+            yield task
+
+        self.service._wait_for_sandbox_start = wait_for_sandbox
+
+        yielded_tasks = []
+        async for task in self.service._start_app_conversation(
+            AppConversationStartRequest(conversation_id=primary_id)
+        ):
+            yielded_tasks.append((task.id, task.status))
+
+        primary_task_id = yielded_tasks[0][0]
+        sibling_task_ids = {
+            task_id
+            for task_id, conversation_id, _, _ in saved_tasks
+            if conversation_id == sibling_id
+        }
+        assert len(sibling_task_ids) == 1
+        sibling_task_id = sibling_task_ids.pop()
+        assert sibling_task_id != primary_task_id
+        assert [
+            status
+            for _, conversation_id, status, _ in saved_tasks
+            if conversation_id == sibling_id
+        ] == [
+            AppConversationStartTaskStatus.WORKING,
+            AppConversationStartTaskStatus.STARTING_CONVERSATION,
+            AppConversationStartTaskStatus.READY,
+        ]
+        assert self.service._get_cold_conversation.await_args_list == [
+            call(sandbox, 'http://agent-server', primary_id),
+            call(sandbox, 'http://agent-server', sibling_id),
+        ]
+        assert [
+            call_args.args[1]
+            for call_args in self.service._activate_credential_binding.await_args_list
+        ] == [sibling_id, primary_id]
+        assert [
+            call_args.kwargs
+            for call_args in self.service._activate_credential_binding.await_args_list
+        ] == [
+            {'start_task_id': sibling_task_id, 'required': True},
+            {'start_task_id': primary_task_id, 'required': True},
+        ]
+
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
     )
@@ -2739,6 +2935,9 @@ class TestLiveStatusAppConversationService:
         self.service._build_start_conversation_request_for_user = AsyncMock(
             return_value=mock_start_request
         )
+        self.service._prepare_credential_bindings = AsyncMock(
+            return_value=(mock_start_request, True)
+        )
 
         mock_conversation_info = Mock()
         mock_conversation_info.id = conversation_id
@@ -2764,6 +2963,10 @@ class TestLiveStatusAppConversationService:
         assert saved_info.llm_model == 'gpt-5.5/high'
         assert saved_info.agent_kind == 'acp'
         assert saved_info.tags.get('acpserver') == 'codex'
+        assert (
+            saved_info.tags[CODEX_CREDENTIAL_BINDING_TAG_KEY]
+            == CODEX_CREDENTIAL_BINDING_TAG_VALUE
+        )
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_custom_remote_servers(self):
@@ -4313,7 +4516,10 @@ class TestBuildAcpStartConversationRequestSecrets:
         server_info = Mock()
         server_info.raise_for_status = Mock()
         server_info.json.return_value = {
-            'capabilities': ['credential_binding_readiness_probe_v1']
+            'capabilities': [
+                'credential_binding_readiness_probe_v1',
+                'credential_binding_activation_guard_v1',
+            ]
         }
         service.httpx_client.get = AsyncMock(return_value=server_info)
         return service
@@ -4453,7 +4659,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.user_context.get_effective_org_id = AsyncMock(return_value=org_id)
         service.jwt_service.create_jws_token.return_value = 'scoped-token'
         activated = Mock()
-        activated.raise_for_status = Mock()
+        activated.status_code = 204
         service.httpx_client.put = AsyncMock(return_value=activated)
 
         request = await self._call_build(
@@ -4469,7 +4675,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.id = 'sandbox-1'
         sandbox.session_api_key = 'session-key'
         start_task_id = uuid4()
-        prepared = await service._prepare_credential_bindings(
+        prepared, activated = await service._prepare_credential_bindings(
             request,
             sandbox,
             request.conversation_id,
@@ -4479,6 +4685,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             api_codex_auth=False,
         )
 
+        assert activated
         assert 'CODEX_AUTH_JSON' not in prepared.secrets
         service.httpx_client.get.assert_awaited_once_with(
             'http://agent-server/server_info',
@@ -4514,7 +4721,13 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert service.web_url == 'http://localhost:3000/'
 
     @pytest.mark.asyncio
-    async def test_legacy_agent_server_keeps_plaintext(self, service, tmp_path):
+    @pytest.mark.parametrize(
+        'server_info_body',
+        [{}, {'capabilities': ['credential_binding_v1']}],
+    )
+    async def test_legacy_agent_server_keeps_plaintext(
+        self, service, tmp_path, server_info_body
+    ):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
         request = await self._call_build(
@@ -4529,11 +4742,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.web_url = 'https://cloud.example.com'
         server_info = Mock()
         server_info.raise_for_status = Mock()
-        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
+        server_info.json.return_value = server_info_body
         service.httpx_client.get = AsyncMock(return_value=server_info)
         service.httpx_client.put = AsyncMock()
 
-        prepared = await service._prepare_credential_bindings(
+        prepared, activated = await service._prepare_credential_bindings(
             request,
             sandbox,
             request.conversation_id,
@@ -4542,9 +4755,109 @@ class TestBuildAcpStartConversationRequestSecrets:
             api_codex_auth=False,
         )
 
+        assert not activated
         assert prepared.secrets['CODEX_AUTH_JSON'] is source
         service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_unsupported_binding_source_keeps_plaintext(self, service, tmp_path):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        service.web_url = 'https://cloud.example.com'
+        service.user_context.get_user_id = AsyncMock(return_value='user1')
+        service.user_context.get_effective_org_id = AsyncMock(return_value=None)
+        service.jwt_service.create_jws_token.return_value = 'scoped-token'
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.httpx_client.put = AsyncMock(
+            return_value=SimpleNamespace(status_code=501)
+        )
+
+        prepared, activated = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            start_task_id=uuid4(),
+            api_codex_auth=False,
+        )
+
+        assert not activated
+        assert prepared.secrets['CODEX_AUTH_JSON'] is source
+
+    @pytest.mark.asyncio
+    async def test_marked_resume_rejects_capability_downgrade(self, service):
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.web_url = 'https://cloud.example.com'
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_readiness_probe_v1']
+        }
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+
+        with pytest.raises(SandboxError, match='no longer supports'):
+            await service._activate_credential_binding(
+                sandbox,
+                uuid4(),
+                'http://agent-server',
+                start_task_id=uuid4(),
+                required=True,
+            )
+
+    @pytest.mark.asyncio
+    async def test_binding_activation_requires_exact_no_content(self, service):
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.web_url = 'https://cloud.example.com'
+        service.user_context.get_user_id = AsyncMock(return_value='user1')
+        service.user_context.get_effective_org_id = AsyncMock(return_value=None)
+        service.jwt_service.create_jws_token.return_value = 'scoped-token'
+        service.httpx_client.put = AsyncMock(
+            return_value=SimpleNamespace(status_code=200)
+        )
+
+        with pytest.raises(SandboxError) as exc_info:
+            await service._activate_credential_binding(
+                sandbox,
+                uuid4(),
+                'http://agent-server',
+                start_task_id=uuid4(),
+                required=False,
+            )
+
+        assert exc_info.value.status_code == 502
+
+    @pytest.mark.asyncio
+    async def test_malformed_binding_capabilities_abort_start(self, service):
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.web_url = 'https://cloud.example.com'
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {'capabilities': 'managed'}
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+
+        with pytest.raises(SandboxError, match='invalid credential binding metadata'):
+            await service._activate_credential_binding(
+                sandbox,
+                uuid4(),
+                'http://agent-server',
+                start_task_id=uuid4(),
+                required=False,
+            )
 
     @pytest.mark.asyncio
     async def test_incomplete_binding_context_keeps_plaintext(self, service, tmp_path):
@@ -4561,7 +4874,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.session_api_key = None
         service.httpx_client.put = AsyncMock()
 
-        prepared = await service._prepare_credential_bindings(
+        prepared, activated = await service._prepare_credential_bindings(
             request,
             sandbox,
             request.conversation_id,
@@ -4570,12 +4883,13 @@ class TestBuildAcpStartConversationRequestSecrets:
             api_codex_auth=False,
         )
 
+        assert not activated
         assert prepared.secrets['CODEX_AUTH_JSON'] is source
         service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_binding_activation_failure_keeps_plaintext(self, service, tmp_path):
+    async def test_binding_activation_failure_aborts_start(self, service, tmp_path):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
         user = self._make_acp_user(acp_server='codex')
         service.web_url = 'https://cloud.example.com'
@@ -4593,16 +4907,43 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.session_api_key = 'session-key'
         service.httpx_client.put = AsyncMock(side_effect=RuntimeError('unavailable'))
 
-        prepared = await service._prepare_credential_bindings(
-            request,
-            sandbox,
-            request.conversation_id,
-            'http://agent-server',
-            start_task_id=uuid4(),
-            api_codex_auth=False,
-        )
+        with pytest.raises(SandboxError, match='activation failed'):
+            await service._prepare_credential_bindings(
+                request,
+                sandbox,
+                request.conversation_id,
+                'http://agent-server',
+                start_task_id=uuid4(),
+                api_codex_auth=False,
+            )
 
-        assert prepared.secrets['CODEX_AUTH_JSON'] is source
+    @pytest.mark.asyncio
+    async def test_binding_capability_probe_failure_aborts_start(
+        self, service, tmp_path
+    ):
+        source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
+        user = self._make_acp_user(acp_server='codex')
+        service.web_url = 'https://cloud.example.com'
+        request = await self._call_build(
+            service,
+            user,
+            tmp_path,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+        sandbox = Mock(spec=SandboxInfo)
+        sandbox.id = 'sandbox-1'
+        sandbox.session_api_key = 'session-key'
+        service.httpx_client.get = AsyncMock(side_effect=RuntimeError('unavailable'))
+
+        with pytest.raises(SandboxError, match='Could not verify'):
+            await service._prepare_credential_bindings(
+                request,
+                sandbox,
+                request.conversation_id,
+                'http://agent-server',
+                start_task_id=uuid4(),
+                api_codex_auth=False,
+            )
 
     @pytest.mark.asyncio
     async def test_terminal_binding_failure_aborts_start(self, service, tmp_path):
@@ -4666,7 +5007,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.id = 'sandbox-1'
         sandbox.session_api_key = 'session-key'
         service.httpx_client.put = AsyncMock()
-        prepared = await service._prepare_credential_bindings(
+        prepared, activated = await service._prepare_credential_bindings(
             request,
             sandbox,
             request.conversation_id,
@@ -4674,6 +5015,7 @@ class TestBuildAcpStartConversationRequestSecrets:
             start_task_id=uuid4(),
             api_codex_auth=True,
         )
+        assert not activated
         assert prepared is request
         service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()

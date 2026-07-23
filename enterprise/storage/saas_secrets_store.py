@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -225,10 +224,7 @@ class SaasSecretsStore(SecretsStore):
                 if result.scalars().first() is not None:
                     raise CredentialVersionConflict
                 raise KeyError(name)
-            if not hmac.compare_digest(
-                _credential_version(rows[0]).encode(),
-                expected_version.encode(errors='surrogatepass'),
-            ):
+            if _credential_version(rows[0]) != expected_version:
                 raise CredentialVersionConflict
             encrypted = self._jwt_svc.encrypt_value(value)
             for row in rows:

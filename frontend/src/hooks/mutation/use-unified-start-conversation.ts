@@ -8,7 +8,6 @@ import {
 } from "#/utils/rate-limit-retry";
 import {
   resumeV1ConversationSandbox,
-  updateConversationSandboxStatusInCache,
   invalidateConversationQueries,
 } from "./conversation-mutation-utils";
 
@@ -84,15 +83,8 @@ export const useUnifiedResumeConversationSandbox = () => {
     onSettled: (_, __, variables) => {
       invalidateConversationQueries(queryClient, variables.conversationId);
     },
-    onSuccess: (_, variables) => {
-      // Clear error messages when starting/resuming conversation
+    onSuccess: () => {
       removeErrorMessage();
-
-      updateConversationSandboxStatusInCache(
-        queryClient,
-        variables.conversationId,
-        "STARTING",
-      );
     },
   });
 };

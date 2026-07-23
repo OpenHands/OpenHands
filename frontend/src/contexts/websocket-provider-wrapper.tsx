@@ -41,19 +41,23 @@ export function WebSocketProviderWrapper({
     !isTaskConversationId(conversationId) && isFetched && !!conversation;
   // Recovery for V1 conversations - handles page refresh and tab focus
   // Does NOT resume on WebSocket disconnect (server pauses after 20 min inactivity)
-  useSandboxRecovery({
+  const { isResuming } = useSandboxRecovery({
     conversationId,
     sandboxStatus: conversation?.sandbox_status,
     refetchConversation: isConversationReady ? refetchConversation : undefined,
   });
+  const runtimeReady =
+    conversation?.sandbox_status === "RUNNING" && !isResuming;
 
   return (
     <ConversationWebSocketProvider
       conversationId={conversationId}
-      conversationUrl={conversation?.conversation_url}
-      sessionApiKey={conversation?.session_api_key}
-      subConversationIds={conversation?.sub_conversation_ids}
-      subConversations={filteredSubConversations}
+      conversationUrl={runtimeReady ? conversation.conversation_url : undefined}
+      sessionApiKey={runtimeReady ? conversation.session_api_key : undefined}
+      subConversationIds={
+        runtimeReady ? conversation.sub_conversation_ids : undefined
+      }
+      subConversations={runtimeReady ? filteredSubConversations : undefined}
     >
       {children}
     </ConversationWebSocketProvider>

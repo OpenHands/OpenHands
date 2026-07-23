@@ -13,6 +13,9 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxRecord,
     SandboxStatus,
 )
+from openhands.app_server.secrets.credential_binding_models import (
+    CREDENTIAL_BINDING_GUARD_CAPABILITY,
+)
 from openhands.app_server.services.injector import Injector
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
@@ -284,6 +287,40 @@ class SandboxService(ABC):
                 return replace_localhost_hostname_for_docker(exposed_url.url)
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')
+
+    async def _prepare_for_pause(
+        self,
+        sandbox: SandboxInfo,
+        httpx_client: httpx.AsyncClient,
+    ) -> None:
+        if not sandbox.session_api_key or not sandbox.exposed_urls:
+            return
+        agent_server_url = self._get_agent_server_url(sandbox)
+        headers = {'X-Session-API-Key': sandbox.session_api_key}
+        server_info_response = await httpx_client.get(
+            f'{agent_server_url}/server_info',
+            headers=headers,
+        )
+        server_info_response.raise_for_status()
+        server_info = server_info_response.json()
+        if not isinstance(server_info, dict):
+            raise ValueError('Invalid Agent Server metadata')
+        if 'capabilities' not in server_info:
+            return
+        capabilities = server_info['capabilities']
+        if not isinstance(capabilities, list) or not all(
+            isinstance(capability, str) for capability in capabilities
+        ):
+            raise ValueError('Invalid Agent Server capabilities')
+        if CREDENTIAL_BINDING_GUARD_CAPABILITY not in capabilities:
+            return
+        response = await httpx_client.post(
+            f'{agent_server_url}/api/conversations/prepare-for-sandbox-pause',
+            headers=headers,
+        )
+        response.raise_for_status()
+        if response.status_code != 204:
+            raise ValueError('Invalid Agent Server pause barrier response')
 
     @abstractmethod
     async def pause_sandbox(self, sandbox_id: str) -> bool:

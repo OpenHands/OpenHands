@@ -517,6 +517,42 @@ describe("useSandboxRecovery", () => {
       expect(vi.mocked(customToastHandlers.displayErrorToast)).toHaveBeenCalled();
     });
 
+    it("should keep the socket gated and retry after a failed recovery", async () => {
+      const mockRefetch = vi.fn().mockResolvedValue({
+        data: { sandbox_status: "RUNNING" },
+      });
+      const { result } = renderHook(
+        () =>
+          useSandboxRecovery({
+            conversationId: "conv-123",
+            sandboxStatus: "PAUSED",
+            refetchConversation: mockRefetch,
+          }),
+        { wrapper: createWrapper() },
+      );
+      const firstOptions = mockMutate.mock.calls[0][1];
+
+      act(() => {
+        firstOptions.onError(new Error("Resume failed"));
+      });
+
+      expect(result.current.isResuming).toBe(true);
+      mockMutate.mockClear();
+
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      const retryOptions = mockMutate.mock.calls[0][1];
+
+      act(() => {
+        retryOptions.onSuccess();
+      });
+
+      expect(result.current.isResuming).toBe(false);
+    });
+
     it("should NOT call resumeSandbox when isPending is true", () => {
       vi.mocked(useUnifiedResumeConversationSandbox).mockReturnValue({
         mutate: mockMutate,

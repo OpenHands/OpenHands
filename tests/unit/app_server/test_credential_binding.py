@@ -300,7 +300,7 @@ def test_load_uses_token_scope(client, jwt_service, store):
     store.load_versioned.assert_awaited_once_with('CODEX_AUTH_JSON', _ORG_ID)
 
 
-def test_unsupported_store_is_unavailable(client, jwt_service, store):
+def test_unsupported_store_is_distinct(client, jwt_service, store):
     test_client, _ = client
     store.load_versioned.side_effect = NotImplementedError
 
@@ -308,7 +308,7 @@ def test_unsupported_store_is_unavailable(client, jwt_service, store):
         _path(), headers={'Authorization': f'Bearer {_token(jwt_service)}'}
     )
 
-    assert response.status_code == 503
+    assert response.status_code == 501
 
 
 def test_replace_uses_compare_and_swap(client, jwt_service, store):

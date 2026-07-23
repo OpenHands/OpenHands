@@ -47,6 +47,7 @@ export function useSandboxRecovery({
 }: UseSandboxRecoveryOptions) {
   const { t } = useTranslation();
   const { providers } = useUserProviders();
+  const [recoveryFailed, setRecoveryFailed] = React.useState(false);
   const { mutate: resumeSandbox, isPending: isResuming } =
     useUnifiedResumeConversationSandbox();
 
@@ -56,19 +57,22 @@ export function useSandboxRecovery({
   const attemptRecovery = React.useCallback(
     (statusOverride?: V1SandboxStatus) => {
       const status = statusOverride ?? sandboxStatus;
-      /**
-       * Only recover if sandbox is paused
-       */
-      if (!conversationId || status !== "PAUSED" || isResuming) {
+      if (
+        !conversationId ||
+        (status !== "PAUSED" && !recoveryFailed) ||
+        isResuming
+      ) {
         return;
       }
       resumeSandbox(
         { conversationId, providers },
         {
           onSuccess: () => {
+            setRecoveryFailed(false);
             onSuccess?.();
           },
           onError: (error) => {
+            setRecoveryFailed(true);
             displayErrorToast(
               t(I18nKey.CONVERSATION$FAILED_TO_START_WITH_ERROR, {
                 error: error.message,
@@ -82,6 +86,7 @@ export function useSandboxRecovery({
     [
       conversationId,
       sandboxStatus,
+      recoveryFailed,
       isResuming,
       providers,
       resumeSandbox,
@@ -92,6 +97,10 @@ export function useSandboxRecovery({
   );
 
   // Handle page refresh (initial load) and conversation navigation
+  React.useEffect(() => {
+    setRecoveryFailed(false);
+  }, [conversationId]);
+
   React.useEffect(() => {
     if (!conversationId || !sandboxStatus) return;
 
@@ -129,5 +138,5 @@ export function useSandboxRecovery({
     onVisible: handleVisible,
   });
 
-  return { isResuming };
+  return { isResuming: isResuming || recoveryFailed };
 }
