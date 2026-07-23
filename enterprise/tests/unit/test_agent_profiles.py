@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
@@ -537,7 +537,32 @@ async def _set_agent_profiles(async_session_maker, org_id, agent_profiles):
         await session.commit()
 
 
+async def _set_title_llm_profile(async_session_maker, org_id, name):
+    async with async_session_maker() as session:
+        await session.execute(
+            update(OrgMember)
+            .where(
+                OrgMember.org_id == org_id,
+                OrgMember.user_id == USER_ID,
+            )
+            .values(title_llm_profile=name)
+        )
+        await session.commit()
+
+
 class TestLLMProfileFKGuard:
+    @pytest.mark.asyncio
+    async def test_delete_clears_member_title_profile_pointer(
+        self, async_session_maker, patch_org_profile_routes
+    ):
+        org_id = patch_org_profile_routes
+        await _set_title_llm_profile(async_session_maker, org_id, 'Default')
+
+        await delete_profile(org_id=org_id, name='Default', user_id=str(USER_ID))
+
+        member = await _read_member(async_session_maker, org_id, USER_ID)
+        assert member.title_llm_profile is None
+
     @pytest.mark.asyncio
     async def test_delete_blocked_by_referencing_agent_profile(
         self, async_session_maker, patch_org_profile_routes
@@ -565,6 +590,7 @@ class TestLLMProfileFKGuard:
             ap, OpenHandsAgentProfile(name='reviewer', llm_profile_ref='Default')
         )
         await _set_agent_profiles(async_session_maker, org_id, ap)
+        await _set_title_llm_profile(async_session_maker, org_id, 'Default')
 
         await rename_profile(
             org_id=org_id,
@@ -582,6 +608,8 @@ class TestLLMProfileFKGuard:
             reloaded = load_agent_profiles(org)
             assert reloaded.load('reviewer').llm_profile_ref == 'Default-v2'
             assert 'Default-v2' in (org.llm_profiles or {}).get('profiles', {})
+        member = await _read_member(async_session_maker, org_id, USER_ID)
+        assert member.title_llm_profile == 'Default-v2'
 
 
 # ── SaasSettingsStore resolution + provenance ──────────────────────────────

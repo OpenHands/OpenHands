@@ -686,6 +686,8 @@ async def rename_profile(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(exc)
             ) from exc
+        if settings.title_llm_profile == name:
+            settings.title_llm_profile = request.new_name
         await settings_store.store(settings)
 
     return ProfileMutationResponse(

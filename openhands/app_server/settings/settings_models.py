@@ -685,6 +685,7 @@ class Settings(BaseModel):
     email_verified: bool | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
+    title_llm_profile: str | None = None
     git_full_clone: bool = False
     v1_enabled: bool = True
     agent_settings: AgentSettingsConfig = Field(default_factory=default_agent_settings)
@@ -968,6 +969,8 @@ class Settings(BaseModel):
         was_active = self.llm_profiles.active == name
         if not self.llm_profiles.delete(name):
             return False
+        if self.title_llm_profile == name:
+            self.title_llm_profile = None
         if was_active and self.llm_profiles.profiles:
             fallback = next(iter(self.llm_profiles.profiles))
             self.switch_to_profile(fallback)

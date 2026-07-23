@@ -366,6 +366,7 @@ class SaasSettingsStore(SettingsStore):
                 if (normalized := c.name.lstrip('_')) in Settings.model_fields
             },
         }
+        kwargs['title_llm_profile'] = org_member.title_llm_profile
         # Drop member-private keys from the org dump before merging so
         # legacy org-level values (older code paths broadcast mcp_config)
         # can no longer leak one member's private config to another. Each
@@ -731,6 +732,7 @@ class SaasSettingsStore(SettingsStore):
             for private_key in MEMBER_PRIVATE_AGENT_KEYS:
                 member_agent_settings_diff.pop(private_key, None)
             org_member.agent_settings_diff = member_agent_settings_diff
+            org_member.title_llm_profile = item.title_llm_profile
             if item._mcp_config_updated:
                 org_member.mcp_config = self._get_persisted_mcp_config(item)
             elif org_member.mcp_config is None and member_mcp_config is not None:

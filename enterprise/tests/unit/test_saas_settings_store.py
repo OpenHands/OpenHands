@@ -62,6 +62,51 @@ def _make_settings(
     return s
 
 
+@pytest.mark.asyncio
+async def test_title_llm_profile_is_scoped_to_org_membership(
+    session_maker, async_session_maker, org_with_multiple_members_fixture
+):
+    from sqlalchemy import select
+    from storage.org_member import OrgMember
+
+    fixture = org_with_multiple_members_fixture
+    admin_user_id = fixture['admin_user_id']
+    member_user_id = fixture['member1_user_id']
+    org_id = fixture['org_id']
+    settings = _make_settings(
+        model='openai/gpt-4o',
+        base_url='https://api.openai.com/v1',
+        api_key='test-key',
+    )
+    settings.title_llm_profile = 'Titles'
+
+    with patch('storage.saas_settings_store.a_session_maker', async_session_maker):
+        await SaasSettingsStore(str(admin_user_id)).store(settings)
+
+    with session_maker() as session:
+        members = {
+            member.user_id: member.title_llm_profile
+            for member in session.execute(
+                select(OrgMember).where(OrgMember.org_id == org_id)
+            )
+            .scalars()
+            .all()
+        }
+
+    assert members[admin_user_id] == 'Titles'
+    assert members[member_user_id] is None
+
+    with (
+        patch('storage.saas_settings_store.a_session_maker', async_session_maker),
+        patch('storage.user_store.a_session_maker', async_session_maker),
+        patch('storage.org_store.a_session_maker', async_session_maker),
+    ):
+        loaded = await SaasSettingsStore(str(admin_user_id)).load()
+
+    assert loaded is not None
+    assert loaded.title_llm_profile == 'Titles'
+
+
 # Mock the database module before importing
 with patch('storage.database.a_session_maker'):
     from server.constants import (

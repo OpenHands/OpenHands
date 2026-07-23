@@ -153,6 +153,21 @@ _logger = logging.getLogger(__name__)
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
 
 
+def _resolve_title_llm_profile(user: UserInfo) -> str | None:
+    preference = getattr(user, 'title_llm_profile', None)
+    if (
+        preference
+        and PROFILE_NAME_REGEX.match(preference)
+        and user.llm_profiles.has(preference)
+    ):
+        return preference
+
+    active = user.llm_profiles.active
+    if active and PROFILE_NAME_REGEX.match(active) and user.llm_profiles.has(active):
+        return active
+    return None
+
+
 class _StreamingZipBuffer(io.RawIOBase):
     """Small non-seekable writer used by zipfile to emit chunks incrementally.
 
@@ -2156,6 +2171,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             observability_metadata, resolved_observability_metadata
         )
         create_kwargs: dict[str, Any] = {'agent': agent, 'user_id': laminar_user_id}
+        title_llm_profile = _resolve_title_llm_profile(user)
+        if title_llm_profile:
+            create_kwargs['title_llm_profile'] = title_llm_profile
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
         if observability_tags:
@@ -2428,6 +2446,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             'user_id': laminar_user_id,
             'secrets': secrets,
         }
+        title_llm_profile = _resolve_title_llm_profile(user)
+        if title_llm_profile:
+            create_kwargs['title_llm_profile'] = title_llm_profile
         if observability_metadata:
             create_kwargs['observability_metadata'] = observability_metadata
         if observability_tags:

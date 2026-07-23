@@ -18,7 +18,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, Field, ValidationError
 from server.constants import LITE_LLM_API_URL
 from server.routes.org_models import OrgNotFoundError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.agent_profile_resolution import (
     OrgLLMProfileMutator,
@@ -279,7 +279,7 @@ async def delete_profile(
     makes the referrer check and the delete atomic.
     """
     async with _org_profiles_transaction(org_id, user_id) as (
-        _session,
+        session,
         org,
         profiles,
     ):
@@ -295,6 +295,14 @@ async def delete_profile(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(exc)
             ) from exc
+        await session.execute(
+            update(OrgMember)
+            .where(
+                OrgMember.org_id == org_id,
+                OrgMember.title_llm_profile == name,
+            )
+            .values(title_llm_profile=None)
+        )
 
     return ProfileMutationResponse(name=name, message=f"Profile '{name}' deleted")
 
@@ -405,7 +413,7 @@ async def rename_profile(
     written back in the same transaction.
     """
     async with _org_profiles_transaction(org_id, user_id) as (
-        _session,
+        session,
         org,
         profiles,
     ):
@@ -441,6 +449,14 @@ async def rename_profile(
         after = agent_profiles.model_dump(mode='json', context={'expose_secrets': True})
         if after != before:
             org.agent_profiles = after
+        await session.execute(
+            update(OrgMember)
+            .where(
+                OrgMember.org_id == org_id,
+                OrgMember.title_llm_profile == name,
+            )
+            .values(title_llm_profile=request.new_name)
+        )
 
     return ProfileMutationResponse(
         name=request.new_name,

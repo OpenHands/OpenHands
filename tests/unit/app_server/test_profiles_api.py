@@ -618,6 +618,7 @@ async def test_save_profile_rejects_unknown_llm_field(test_client, settings_stor
 async def test_delete_profile_removes_it(test_client, settings_store):
     settings = _base_settings()
     settings.llm_profiles.save('p', LLM(model='openai/gpt-4o'))
+    settings.title_llm_profile = 'p'
     await _seed(settings_store, settings)
 
     response = test_client.delete('/api/v1/settings/profiles/p')
@@ -625,6 +626,7 @@ async def test_delete_profile_removes_it(test_client, settings_store):
     assert response.status_code == 200
     stored = await settings_store.load()
     assert not stored.llm_profiles.has('p')
+    assert stored.title_llm_profile is None
 
 
 @pytest.mark.asyncio
@@ -726,6 +728,7 @@ async def test_rename_profile_renames_and_preserves_api_key(
         'old',
         LLM(model='openai/gpt-4o', api_key=SecretStr('sk-keep')),
     )
+    settings.title_llm_profile = 'old'
     await _seed(settings_store, settings)
 
     response = test_client.post(
@@ -742,6 +745,7 @@ async def test_rename_profile_renames_and_preserves_api_key(
     renamed = stored.llm_profiles.get('new')
     assert renamed is not None
     assert renamed.api_key.get_secret_value() == 'sk-keep'
+    assert stored.title_llm_profile == 'new'
 
 
 @pytest.mark.asyncio

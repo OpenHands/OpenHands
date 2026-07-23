@@ -808,6 +808,7 @@ def test_settings_update_batch():
     settings.update(
         {
             'language': 'fr',
+            'title_llm_profile': 'Titles',
             'agent_settings_diff': {
                 'agent': 'TestAgent',
                 'llm': {'model': 'new-model', 'api_key': 'new-key'},
@@ -818,6 +819,7 @@ def test_settings_update_batch():
         }
     )
     assert settings.language == 'fr'
+    assert settings.title_llm_profile == 'Titles'
     assert settings.agent_settings.agent == 'TestAgent'
     assert settings.agent_settings.llm.model == 'new-model'
     assert settings.agent_settings.llm.api_key.get_secret_value() == 'new-key'
@@ -923,7 +925,7 @@ def test_delete_inactive_profile_does_not_touch_active():
 
 
 def test_delete_only_profile_clears_active():
-    settings = Settings()
+    settings = Settings(title_llm_profile='only')
     settings.llm_profiles.save('only', LLM(model='openai/gpt-4o'))
     settings.switch_to_profile('only')
 
@@ -931,6 +933,7 @@ def test_delete_only_profile_clears_active():
 
     assert settings.llm_profiles.profiles == {}
     assert settings.llm_profiles.active is None
+    assert settings.title_llm_profile is None
 
 
 def test_delete_missing_profile_returns_false():
