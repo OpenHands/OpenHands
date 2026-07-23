@@ -93,6 +93,11 @@ class TestReplaceLocalhostHostnameForDocker:
         )
         assert result == 'https://admin:secret@host.docker.internal:443/admin'
 
+        result = replace_localhost_hostname_for_docker(
+            'http://user:localhostpw@Localhost:8080/path'
+        )
+        assert result == 'http://user:localhostpw@host.docker.internal:8080/path'
+
     @patch(
         'openhands.app_server.utils.docker_utils.is_running_in_docker',
         return_value=True,

@@ -67,38 +67,26 @@ class JwtService:
         payload: dict[str, Any],
         key_id: str | None = None,
         expires_in: timedelta | None = None,
+        *,
+        include_expiration: bool = True,
     ) -> str:
-        """Create a JWS (JSON Web Signature) token.
-
-        Args:
-            payload: The JWT payload
-            key_id: The key ID to use for signing. If None, uses the newest key.
-            expires_in: Token expiration time. If None, defaults to 1 hour.
-
-        Returns:
-            The signed JWS token
-
-        Raises:
-            ValueError: If key_id is invalid
-        """
+        """Create a signed token."""
         if key_id is None:
             key_id = self._default_key_id
 
         if key_id not in self._keys:
             raise ValueError(f"Key ID '{key_id}' not found")
 
-        # Add standard JWT claims
         now = utc_now()
-        if expires_in is None:
-            expires_in = timedelta(hours=1)
-
         jwt_payload = {
             **payload,
             'iat': int(now.timestamp()),
-            'exp': int((now + expires_in).timestamp()),
         }
+        if include_expiration:
+            if expires_in is None:
+                expires_in = timedelta(hours=1)
+            jwt_payload['exp'] = int((now + expires_in).timestamp())
 
-        # Use the raw key for JWT signing with key_id in header
         secret_key = self._keys[key_id].key.get_secret_value()
 
         return jwt.encode(

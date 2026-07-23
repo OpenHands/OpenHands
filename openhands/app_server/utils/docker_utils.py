@@ -9,7 +9,13 @@ def replace_localhost_hostname(
     parsed = urlparse(url)
     if parsed.hostname != 'localhost':
         return url
-    netloc = parsed.netloc.replace('localhost', replacement, 1)
+    userinfo, separator, host_and_port = parsed.netloc.rpartition('@')
+    if not separator:
+        host_and_port = parsed.netloc
+    _, port_separator, port = host_and_port.partition(':')
+    netloc = f'{replacement}{port_separator}{port}'
+    if separator:
+        netloc = f'{userinfo}@{netloc}'
     return urlunparse(parsed._replace(netloc=netloc))
 
 

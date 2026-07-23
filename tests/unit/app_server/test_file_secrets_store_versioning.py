@@ -1,7 +1,8 @@
 import asyncio
+import errno
 import json
 from types import MappingProxyType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -61,15 +62,17 @@ async def test_store_initializes_persistent_opaque_version(store):
 
 
 @pytest.mark.asyncio
-async def test_load_versioned_never_writes_missing_version():
+async def test_load_versioned_bootstraps_missing_version():
     raw = {'custom_secrets': {_MANAGED_NAME: {'secret': _ORIGINAL, 'description': ''}}}
-    file_store = _ReadOnlyMemoryFileStore(files={'secrets.json': json.dumps(raw)})
+    file_store = InMemoryFileStore(files={'secrets.json': json.dumps(raw)})
     store = _store(file_store)
 
-    with pytest.raises(NotImplementedError):
-        await store.load_versioned(_MANAGED_NAME)
+    value, version = await store.load_versioned(_MANAGED_NAME)
 
-    assert json.loads(file_store.read('secrets.json')) == raw
+    assert value == _ORIGINAL
+    assert json.loads(file_store.read('secrets.json'))['_credential_versions'] == {
+        _MANAGED_NAME: version
+    }
 
 
 @pytest.mark.asyncio
@@ -314,6 +317,37 @@ def test_failed_file_lock_acquisition_closes_descriptor(monkeypatch):
     close.assert_called_once_with(7)
 
 
+def test_windows_file_lock_waits_for_contention(monkeypatch):
+    file_store = MagicMock()
+    file_store.get_full_path.return_value = '/tmp/secrets.json.lock'
+    windows_lock = MagicMock()
+    windows_lock.LK_LOCK = 1
+    windows_lock.LK_UNLCK = 2
+    windows_lock.locking.side_effect = [
+        OSError(errno.EACCES, 'busy'),
+        None,
+        None,
+    ]
+    monkeypatch.setattr(file_secrets_store_module, 'fcntl', None)
+    monkeypatch.setattr(file_secrets_store_module, 'msvcrt', windows_lock)
+    monkeypatch.setattr(file_secrets_store_module.os, 'open', MagicMock(return_value=7))
+    monkeypatch.setattr(file_secrets_store_module.os, 'lseek', MagicMock())
+    close = MagicMock()
+    monkeypatch.setattr(file_secrets_store_module.os, 'close', close)
+
+    with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
+        pass
+
+    windows_lock.locking.assert_has_calls(
+        [
+            call(7, windows_lock.LK_LOCK, 1),
+            call(7, windows_lock.LK_LOCK, 1),
+            call(7, windows_lock.LK_UNLCK, 1),
+        ]
+    )
+    close.assert_called_once_with(7)
+
+
 @pytest.mark.asyncio
 async def test_whole_save_preserves_unrecognized_top_level_data():
     raw = {
@@ -328,3 +362,16 @@ async def test_whole_save_preserves_unrecognized_top_level_data():
     assert json.loads(file_store.read('secrets.json'))['future_top_level'] == {
         'enabled': True
     }
+
+
+@pytest.mark.asyncio
+async def test_whole_save_recovers_corrupt_file():
+    file_store = InMemoryFileStore(files={'secrets.json': '{'})
+    store = _store(file_store)
+
+    await store.store(_secrets(_ORIGINAL, 'new'))
+
+    loaded = await store.load()
+    assert loaded is not None
+    assert loaded.custom_secrets[_MANAGED_NAME].secret.get_secret_value() == _ORIGINAL
+    assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'

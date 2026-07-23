@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import importlib
 import json
 import os
@@ -63,7 +64,13 @@ def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
             locked = True
         elif msvcrt is not None:
             os.lseek(descriptor, 0, os.SEEK_SET)
-            msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+            while True:
+                try:
+                    msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
             locked = True
         yield
     finally:
@@ -196,8 +203,12 @@ class FileSecretsStore(SecretsStore):
     async def store(self, secrets: Secrets) -> None:
         def store_locked() -> None:
             with _file_lock(self.file_store, self.path):
-                data = self._read_data()
-                current = self._secrets(data) if data else Secrets()
+                try:
+                    data = self._read_data()
+                    current = self._secrets(data) if data else Secrets()
+                except (AttributeError, TypeError, ValueError):
+                    data = {}
+                    current = Secrets()
                 versions = self._versions(data)
                 incoming = dict(secrets.custom_secrets)
                 preserved_names = set()
@@ -274,7 +285,17 @@ class FileSecretsStore(SecretsStore):
             _, value = self._raw_secret(data, name)
             version = self._raw_versions(data).get(name)
             if not isinstance(version, str) or not version:
-                raise NotImplementedError
+                with _file_lock(self.file_store, self.path):
+                    data = self._read_data()
+                    _, value = self._raw_secret(data, name)
+                    versions = self._raw_versions(data)
+                    version = versions.get(name)
+                    if not isinstance(version, str) or not version:
+                        version = secrets_module.token_urlsafe(24)
+                        versions[name] = version
+                        updated = dict(data)
+                        updated[_CREDENTIAL_VERSIONS_KEY] = versions
+                        self.file_store.write(self.path, json.dumps(updated))
             self._loaded_credentials[name] = (value, version)
             return value, version
 

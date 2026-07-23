@@ -157,7 +157,7 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
-_CREDENTIAL_BINDING_TOKEN_LIFETIME = timedelta(days=14)
+_CREDENTIAL_BINDING_PROBE_CAPABILITY = 'credential_binding_readiness_probe_v1'
 
 
 def _resolve_web_url(
@@ -166,6 +166,8 @@ def _resolve_web_url(
 ) -> str | None:
     if not isinstance(sandbox_service, DockerSandboxService):
         return web_url
+    if sandbox_service.use_host_network:
+        return web_url or f'http://localhost:{sandbox_service.host_port}'
     if web_url is None:
         return f'http://host.docker.internal:{sandbox_service.host_port}'
     return replace_localhost_hostname(web_url)
@@ -2323,6 +2325,30 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         headers = {'X-Session-API-Key': sandbox.session_api_key}
 
         try:
+            server_info_response = await self.httpx_client.get(
+                f'{agent_server_url}/server_info',
+                headers=headers,
+                timeout=self.sandbox_startup_timeout,
+            )
+            server_info_response.raise_for_status()
+            server_info = server_info_response.json()
+        except Exception:
+            _logger.warning(
+                'Could not inspect agent-server credential binding capabilities',
+                extra={'conversation_id': str(conversation_id)},
+                exc_info=True,
+            )
+            return request
+        capabilities = (
+            server_info.get('capabilities') if isinstance(server_info, dict) else None
+        )
+        if (
+            not isinstance(capabilities, list)
+            or _CREDENTIAL_BINDING_PROBE_CAPABILITY not in capabilities
+        ):
+            return request
+
+        try:
             secrets_store = await self.user_context.get_secrets_store()
         except Exception:
             _logger.warning(
@@ -2357,7 +2383,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'secret_name': CODEX_AUTH_SECRET_NAME,
                     'actions': ['load', 'replace'],
                 },
-                expires_in=_CREDENTIAL_BINDING_TOKEN_LIFETIME,
+                include_expiration=False,
             )
             activation_response = await self.httpx_client.put(
                 f'{agent_server_url}/api/conversations/{conversation_id}'
@@ -2375,12 +2401,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             if activation_response.status_code == 404:
                 return request
             activation_response.raise_for_status()
-        except KeyError as exc:
-            _logger.warning(
-                'Credential binding source disappeared before activation',
-                extra={'conversation_id': str(conversation_id)},
-            )
-            raise RuntimeError('Credential binding source is missing') from exc
         except Exception:
             _logger.warning(
                 'Could not activate agent-server credential binding',

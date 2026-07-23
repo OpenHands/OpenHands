@@ -116,7 +116,7 @@ class SaasSecretsStore(SecretsStore):
                     StoredCustomSecrets.keycloak_user_id == self.user_id,
                     StoredCustomSecrets.org_id == org_id,
                 )
-                .order_by(StoredCustomSecrets.id)
+                .order_by(StoredCustomSecrets.id.desc())
                 .with_for_update()
             )
             managed_rows: dict[str, list[StoredCustomSecrets]] = {}

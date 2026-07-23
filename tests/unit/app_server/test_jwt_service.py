@@ -141,6 +141,17 @@ class TestJwtService:
         # Allow for small timing differences
         assert abs(actual_duration - expires_in.total_seconds()) < 1
 
+    def test_jws_token_without_expiration(self, jwt_service):
+        token = jwt_service.create_jws_token(
+            {'user_id': '789'},
+            include_expiration=False,
+        )
+
+        decoded_payload = jwt_service.verify_jws_token(token)
+
+        assert 'iat' in decoded_payload
+        assert 'exp' not in decoded_payload
+
     def test_jws_token_invalid_key_id(self, jwt_service):
         """Test JWS token creation fails with invalid key ID."""
         payload = {'user_id': '123'}

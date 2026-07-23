@@ -13,6 +13,7 @@ from pydantic import SecretStr
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.secrets import credential_binding
 from openhands.app_server.secrets.credential_binding_models import (
     credential_binding_path,
@@ -95,6 +96,7 @@ async def test_binding_requires_live_matching_conversation_and_runtime(monkeypat
     )
     sandbox = MagicMock()
     sandbox.created_by_user_id = 'user-id'
+    sandbox.status = SandboxStatus.RUNNING
     sandbox_service = AsyncMock()
     sandbox_service.get_sandbox.return_value = sandbox
 
@@ -133,12 +135,92 @@ async def test_binding_requires_live_matching_conversation_and_runtime(monkeypat
     assert exc_info.value.status_code == 403
 
     sandbox_service.get_sandbox.return_value = sandbox
-    conversation_service.get_app_conversation_info.return_value = None
+    conversation_service.get_app_conversation_info.return_value = AppConversationInfo(
+        id=_CONVERSATION_ID,
+        created_by_user_id='user-id',
+        sandbox_id='previous-runtime-id',
+    )
+    await credential_binding._validate_active_binding(scope)
     expired_startup_scope = replace(scope, issued_at=scope.issued_at - 301)
     with pytest.raises(HTTPException) as exc_info:
         await credential_binding._validate_active_binding(expired_startup_scope)
 
     assert exc_info.value.status_code == 403
+
+    conversation_service.get_app_conversation_info.return_value = None
+    with pytest.raises(HTTPException) as exc_info:
+        await credential_binding._validate_active_binding(expired_startup_scope)
+
+    assert exc_info.value.status_code == 403
+
+
+def test_endpoint_enforces_active_binding(
+    monkeypatch,
+    jwt_service,
+    store,
+):
+    user_auth = AsyncMock()
+    user_auth.get_secrets_store.return_value = store
+    monkeypatch.setattr(
+        credential_binding,
+        'get_for_user',
+        AsyncMock(return_value=user_auth),
+    )
+    conversation_service = AsyncMock()
+    conversation_service.get_app_conversation_info.return_value = AppConversationInfo(
+        id=_CONVERSATION_ID,
+        created_by_user_id='user-id',
+        sandbox_id='runtime-id',
+    )
+    sandbox = MagicMock()
+    sandbox.created_by_user_id = 'user-id'
+    sandbox.status = SandboxStatus.RUNNING
+    sandbox_service = AsyncMock()
+    sandbox_service.get_sandbox.return_value = sandbox
+
+    @asynccontextmanager
+    async def conversation_context(state):
+        yield conversation_service
+
+    @asynccontextmanager
+    async def sandbox_context(state):
+        yield sandbox_service
+
+    monkeypatch.setattr(
+        credential_binding,
+        'get_app_conversation_info_service',
+        conversation_context,
+    )
+    monkeypatch.setattr(
+        credential_binding,
+        'get_sandbox_service',
+        sandbox_context,
+    )
+    app = FastAPI()
+    app.include_router(credential_binding.router)
+    app.dependency_overrides[credential_binding.jwt_service_dependency.dependency] = (
+        lambda: jwt_service
+    )
+
+    with TestClient(app) as test_client:
+        headers = {'Authorization': f'Bearer {_token(jwt_service)}'}
+        assert test_client.get(_path(), headers=headers).status_code == 200
+        sandbox.status = SandboxStatus.PAUSED
+        assert test_client.get(_path(), headers=headers).status_code == 403
+        assert (
+            test_client.put(
+                _path(),
+                headers=headers,
+                json={
+                    'expected_version': 'v0',
+                    'value': '{"tokens":{"refresh_token":"r1"}}',
+                },
+            ).status_code
+            == 403
+        )
+
+    store.load_versioned.assert_awaited_once()
+    store.replace_versioned.assert_not_awaited()
 
 
 def test_load_uses_token_scope(client, jwt_service, store):

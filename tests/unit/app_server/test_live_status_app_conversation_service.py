@@ -75,10 +75,23 @@ def _async_iter(items):
 def test_docker_web_url_is_reachable_from_sandbox():
     sandbox_service = Mock(spec=DockerSandboxService)
     sandbox_service.host_port = 3000
+    sandbox_service.use_host_network = False
 
     assert _resolve_web_url('http://localhost:3000', sandbox_service) == (
         'http://host.docker.internal:3000'
     )
+
+
+def test_host_network_web_url_keeps_localhost():
+    sandbox_service = Mock(spec=DockerSandboxService)
+    sandbox_service.host_port = 3000
+    sandbox_service.use_host_network = True
+
+    assert (
+        _resolve_web_url('http://localhost:3000', sandbox_service)
+        == 'http://localhost:3000'
+    )
+    assert _resolve_web_url(None, sandbox_service) == 'http://localhost:3000'
 
 
 class _FakeExportLock:
@@ -4248,7 +4261,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         secrets_store = Mock(spec=SecretsStore)
         secrets_store.supports_versioned_credentials = True
         mock_user_context.get_secrets_store = AsyncMock(return_value=secrets_store)
-        return LiveStatusAppConversationService(
+        service = LiveStatusAppConversationService(
             init_git_in_empty_workspace=True,
             user_context=mock_user_context,
             app_conversation_info_service=Mock(),
@@ -4268,6 +4281,13 @@ class TestBuildAcpStartConversationRequestSecrets:
             access_token_hard_timeout=None,
             app_mode='test',
         )
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_readiness_probe_v1']
+        }
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+        return service
 
     def _make_acp_user(
         self, acp_server='claude-code', context_secrets=None, api_key=None
@@ -4419,7 +4439,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert 'CODEX_AUTH_JSON' not in prepared.secrets
-        service.httpx_client.get.assert_not_called()
+        service.httpx_client.get.assert_awaited_once_with(
+            'http://agent-server/server_info',
+            headers={'X-Session-API-Key': 'session-key'},
+            timeout=30,
+        )
         service.httpx_client.put.assert_awaited_once_with(
             f'http://agent-server/api/conversations/{request.conversation_id}'
             '/credential-bindings/CODEX_AUTH_JSON',
@@ -4443,7 +4467,7 @@ class TestBuildAcpStartConversationRequestSecrets:
                 'secret_name': 'CODEX_AUTH_JSON',
                 'actions': ['load', 'replace'],
             },
-            expires_in=timedelta(days=14),
+            include_expiration=False,
         )
 
     @pytest.mark.asyncio
@@ -4460,8 +4484,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.id = 'sandbox-1'
         sandbox.session_api_key = 'session-key'
         service.web_url = 'https://cloud.example.com'
-        not_found = Mock(status_code=404)
-        service.httpx_client.put = AsyncMock(return_value=not_found)
+        server_info = Mock()
+        server_info.raise_for_status = Mock()
+        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
+        service.httpx_client.get = AsyncMock(return_value=server_info)
+        service.httpx_client.put = AsyncMock()
 
         prepared = await service._prepare_credential_bindings(
             request,
@@ -4472,7 +4499,8 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert prepared.secrets['CODEX_AUTH_JSON'] is source
-        service.httpx_client.put.assert_awaited_once()
+        service.httpx_client.put.assert_not_awaited()
+        service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_incomplete_binding_context_keeps_plaintext(self, service, tmp_path):
@@ -4563,7 +4591,7 @@ class TestBuildAcpStartConversationRequestSecrets:
         service.jwt_service.create_jws_token.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_binding_source_deleted_before_bootstrap_aborts_start(
+    async def test_binding_source_deleted_before_bootstrap_keeps_plaintext(
         self, service, tmp_path
     ):
         source = StaticSecret(value=SecretStr('{"tokens":{"refresh_token":"r0"}}'))
@@ -4582,15 +4610,15 @@ class TestBuildAcpStartConversationRequestSecrets:
         sandbox.session_api_key = 'session-key'
         service.httpx_client.put = AsyncMock()
 
-        with pytest.raises(RuntimeError, match='Credential binding source is missing'):
-            await service._prepare_credential_bindings(
-                request,
-                sandbox,
-                request.conversation_id,
-                'http://agent-server',
-                api_codex_auth=False,
-            )
+        prepared = await service._prepare_credential_bindings(
+            request,
+            sandbox,
+            request.conversation_id,
+            'http://agent-server',
+            api_codex_auth=False,
+        )
 
+        assert prepared.secrets['CODEX_AUTH_JSON'] is source
         service.httpx_client.put.assert_not_awaited()
         service.jwt_service.create_jws_token.assert_not_called()
 

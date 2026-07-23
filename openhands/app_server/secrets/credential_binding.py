@@ -15,6 +15,7 @@ from openhands.app_server.config import (
     get_sandbox_service,
 )
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
+from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.secrets.credential_binding_models import (
     CREDENTIAL_BINDING_ROUTE,
     CREDENTIAL_BINDING_ROUTE_PREFIX,
@@ -138,19 +139,22 @@ async def _validate_active_binding(scope: CredentialBindingScope) -> None:
             scope.conversation_id
         )
         sandbox = await sandbox_service.get_sandbox(scope.runtime_id)
+    within_start_grace = (
+        time.time() - scope.issued_at <= _CONVERSATION_START_GRACE_SECONDS
+    )
     if (
         sandbox is None
+        or sandbox.status != SandboxStatus.RUNNING
         or sandbox.created_by_user_id not in (None, scope.user_id)
+        or (conversation is None and not within_start_grace)
         or (
-            conversation is None
-            and time.time() - scope.issued_at > _CONVERSATION_START_GRACE_SECONDS
+            conversation is not None
+            and conversation.created_by_user_id not in (None, scope.user_id)
         )
         or (
             conversation is not None
-            and (
-                conversation.sandbox_id != scope.runtime_id
-                or conversation.created_by_user_id not in (None, scope.user_id)
-            )
+            and conversation.sandbox_id != scope.runtime_id
+            and not within_start_grace
         )
     ):
         raise HTTPException(
