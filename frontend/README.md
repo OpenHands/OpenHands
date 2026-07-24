@@ -6,7 +6,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 
 ## Tech Stack
 
-- Remix SPA Mode (React + Vite + React Router)
+- React Router v7 SPA Mode (React + Vite)
 - TypeScript
 - Redux
 - TanStack Query
@@ -133,7 +133,7 @@ components
 
 - Real-time updates with WebSockets
 - Internationalization
-- Router data loading with Remix
+- Router data loading with React Router v7
 - User authentication with GitHub OAuth (if saas mode is enabled)
 
 ## Testing
