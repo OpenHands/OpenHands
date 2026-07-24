@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -132,6 +133,148 @@ async def test_set_title_callback_processor_fetches_title_from_conversation():
 
     assert callback.status == EventCallbackStatus.DISABLED
     event_callback_service.save_event_callback.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_releases_db_context_before_polling():
+    conversation_id = uuid4()
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key='test-session-key',
+    )
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+    httpx_client = _FakeHttpxClient(titles=[None])
+    open_db_contexts = 0
+
+    @asynccontextmanager
+    async def tracked_db_ctx(obj):
+        nonlocal open_db_contexts
+        open_db_contexts += 1
+        try:
+            yield obj
+        finally:
+            open_db_contexts -= 1
+
+    async def poll_for_title(*_args):
+        assert open_db_contexts == 0
+        return None
+
+    callback = EventCallback(
+        conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+    )
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+    )
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            side_effect=lambda _state: tracked_db_ctx(app_conversation_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            side_effect=lambda _state: tracked_db_ctx(app_conversation_info_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            side_effect=lambda _state: tracked_db_ctx(event_callback_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_httpx_client',
+            side_effect=lambda _state: _ctx(httpx_client),
+        ),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor._poll_for_title',
+            side_effect=poll_for_title,
+        ),
+    ):
+        result = await SetTitleCallbackProcessor()(conversation_id, callback, event)
+
+    assert result is None
+    assert open_db_contexts == 0
+
+
+@pytest.mark.asyncio
+async def test_set_title_callback_processor_deduplicates_concurrent_polls():
+    conversation_id = uuid4()
+    conversation_url = f'http://localhost:8000/api/conversations/{conversation_id.hex}'
+    app_conversation = AppConversation(
+        id=conversation_id,
+        created_by_user_id='user',
+        sandbox_id='sandbox',
+        title=f'Conversation {conversation_id.hex[:5]}',
+        conversation_url=conversation_url,
+        session_api_key='test-session-key',
+    )
+    app_conversation_service = AsyncMock()
+    app_conversation_service.get_app_conversation.return_value = app_conversation
+    app_conversation_info_service = AsyncMock()
+    event_callback_service = AsyncMock()
+    httpx_client = _FakeHttpxClient(titles=[None])
+    poll_started = asyncio.Event()
+    finish_poll = asyncio.Event()
+
+    async def poll_for_title(*_args):
+        poll_started.set()
+        await finish_poll.wait()
+        return None
+
+    def make_callback():
+        return EventCallback(
+            conversation_id=conversation_id, processor=SetTitleCallbackProcessor()
+        )
+
+    event = MessageEvent(
+        source='user',
+        llm_message=Message(role='user', content=[TextContent(text='hi')]),
+    )
+    processor = SetTitleCallbackProcessor()
+
+    with (
+        patch(
+            'openhands.app_server.config.get_app_conversation_service',
+            side_effect=lambda _state: _ctx(app_conversation_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_app_conversation_info_service',
+            side_effect=lambda _state: _ctx(app_conversation_info_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_event_callback_service',
+            side_effect=lambda _state: _ctx(event_callback_service),
+        ),
+        patch(
+            'openhands.app_server.config.get_httpx_client',
+            side_effect=lambda _state: _ctx(httpx_client),
+        ),
+        patch(
+            'openhands.app_server.event_callback.'
+            'set_title_callback_processor._poll_for_title',
+            side_effect=poll_for_title,
+        ) as poll_mock,
+    ):
+        first = asyncio.create_task(processor(conversation_id, make_callback(), event))
+        await poll_started.wait()
+        second_result = await asyncio.wait_for(
+            processor(conversation_id, make_callback(), event),
+            timeout=0.1,
+        )
+        finish_poll.set()
+        first_result = await first
+
+    assert first_result is None
+    assert second_result is None
+    poll_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

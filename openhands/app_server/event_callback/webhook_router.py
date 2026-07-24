@@ -82,8 +82,10 @@ from openhands.sdk.settings.acp_providers import detect_acp_provider_by_command
 from openhands.sdk.tool.builtins import SwitchLLMObservation
 
 router = APIRouter(prefix='/webhooks', tags=['Webhooks'])
-event_service_dependency = depends_event_service()
-app_conversation_info_service_dependency = depends_app_conversation_info_service()
+event_service_dependency = depends_event_service(scope='function')
+app_conversation_info_service_dependency = depends_app_conversation_info_service(
+    scope='function'
+)
 jwt_dependency = depends_jwt_service()
 app_mode = get_global_config().app_mode
 _logger = logging.getLogger(__name__)

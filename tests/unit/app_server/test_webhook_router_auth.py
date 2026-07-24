@@ -13,11 +13,13 @@ from fastapi.testclient import TestClient
 
 from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.event_callback.webhook_router import (
-    router as webhook_router,
-)
-from openhands.app_server.event_callback.webhook_router import (
+    app_conversation_info_service_dependency,
+    event_service_dependency,
     valid_conversation,
     valid_sandbox,
+)
+from openhands.app_server.event_callback.webhook_router import (
+    router as webhook_router,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.user.specifiy_user_context import (
@@ -52,6 +54,11 @@ def create_mock_request():
     request = MagicMock()
     request.state = MockRequestState()
     return request
+
+
+def test_webhook_db_dependencies_close_before_background_tasks():
+    assert app_conversation_info_service_dependency.scope == 'function'
+    assert event_service_dependency.scope == 'function'
 
 
 def create_sandbox_service_context_manager(sandbox_service):
