@@ -282,6 +282,7 @@ def _coerce_dict_secrets(d: dict[str, Any]) -> dict[str, Any]:
 
 _MISSING_SECRET = object()
 _MCP_SECRET_FIELDS = ('headers', 'env', 'auth')
+_MCP_CONFIG_MIGRATION_SCHEMA_VERSION = 4
 
 
 def _is_redacted_mcp_secret(value: object) -> bool:
@@ -494,6 +495,16 @@ def _mcp_server_map(value: Any) -> dict[str, Any] | None:
     return servers if isinstance(servers, dict) else None
 
 
+def _normalize_mcp_config(value: Any) -> dict[str, MCPServer]:
+    settings = validate_agent_settings(
+        {
+            'schema_version': _MCP_CONFIG_MIGRATION_SCHEMA_VERSION,
+            'mcp_config': {} if value is None else value,
+        }
+    )
+    return settings.mcp_config
+
+
 def _mcp_endpoint_identity(server: Mapping[str, Any]) -> tuple[Any, ...] | None:
     url = server.get('url')
     if isinstance(url, str) and url:
@@ -555,9 +566,13 @@ def _preserve_redacted_mcp_secrets(
     if incoming_servers is None:
         return incoming_value
 
-    existing = existing or {}
     existing_dump = dump_mcp_config(
-        existing,
+        _normalize_mcp_config(
+            dump_mcp_config(
+                existing or {},
+                context={'expose_secrets': 'plaintext'},
+            )
+        ),
         context={'expose_secrets': 'plaintext'},
     )
     for name, incoming_server in incoming_servers.items():
@@ -823,9 +838,11 @@ class Settings(BaseModel):
             # hold it back from the variant-aware merge and apply it after.
             replace_mcp_config = 'mcp_config' in agent_update
             mcp_config = (
-                _preserve_redacted_mcp_secrets(
-                    coerced.pop('mcp_config', None),
-                    self.agent_settings.mcp_config,
+                _normalize_mcp_config(
+                    _preserve_redacted_mcp_secrets(
+                        coerced.pop('mcp_config', None),
+                        self.agent_settings.mcp_config,
+                    )
                 )
                 if replace_mcp_config
                 else None
