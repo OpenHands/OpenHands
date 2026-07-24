@@ -8,7 +8,7 @@ This is the frontend of the OpenHands project. It is a React application that pr
 
 - Remix SPA Mode (React + Vite + React Router)
 - TypeScript
-- Redux
+- Zustand
 - TanStack Query
 - Tailwind CSS
 - i18next
@@ -110,7 +110,7 @@ frontend
 │   ├── mocks # MSW mocks for development
 │   ├── routes # React Router file-based routes
 │   ├── services
-│   ├── state # Redux state management
+│   ├── stores # Zustand state management
 │   ├── types
 │   ├── utils # Utility/helper functions
 │   └── root.tsx # Entry point
@@ -163,7 +163,7 @@ npm run test:coverage
 
 1. **Component Testing**
    - Test components in isolation
-   - Use our custom [`renderWithProviders()`](https://github.com/OpenHands/OpenHands/blob/ce26f1c6d3feec3eedf36f823dee732b5a61e517/frontend/test-utils.tsx#L56-L85) that wraps the components we want to test in our providers. It is especially useful for components that use Redux
+   - Use our custom [`renderWithProviders()`](https://github.com/OpenHands/OpenHands/blob/main/frontend/test-utils.tsx#L65-L83) that wraps the components we want to test in our QueryClient and i18next providers. It is especially useful for components that use TanStack Query or i18next
    - Use `render()` from React Testing Library to render components
    - Prefer querying elements by role, label, or test ID over CSS selectors
    - Test both rendering and interaction scenarios
@@ -176,7 +176,7 @@ npm run test:coverage
 3. **Mocking**
    - We test components that make network requests by mocking those requests with Mock Service Worker (MSW)
    - Use `vi.fn()` to create mock functions for callbacks and event handlers
-   - Mock external dependencies and API calls (more info)[https://mswjs.io/docs/getting-started]
+   - Mock external dependencies and API calls ([more info](https://mswjs.io/docs/getting-started))
    - Verify mock function calls using `.toHaveBeenCalledWith()`, `.toHaveBeenCalledTimes()`
 
 4. **Accessibility Testing**
