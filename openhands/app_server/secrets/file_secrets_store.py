@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-import errno
-import importlib
 import json
-import os
 import secrets as secrets_module
-import sys
-import threading
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 from uuid import UUID
 
 from openhands.app_server.file_store.files import FileStore
-from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.secrets.credential_binding_models import (
     is_runtime_managed_credential,
 )
@@ -25,73 +18,58 @@ from openhands.app_server.secrets.secrets_store import (
 )
 from openhands.app_server.utils.async_utils import call_sync_from_async
 
-fcntl: Any = None
-msvcrt: Any = None
-if sys.platform == 'win32':
-    msvcrt = importlib.import_module('msvcrt')
-else:
-    fcntl = importlib.import_module('fcntl')
-
-
 _CREDENTIAL_VERSIONS_KEY = '_credential_versions'
-_process_lock = threading.RLock()
 
 
-def _supports_atomic_versioned_writes(file_store: FileStore) -> bool:
-    return isinstance(file_store, InMemoryFileStore) or callable(
-        getattr(file_store, 'get_full_path', None)
+@dataclass(frozen=True)
+class Unloaded:
+    pass
+
+
+@dataclass(frozen=True)
+class Loaded:
+    value: str | None
+    version: str | None
+
+
+ManagedBaseline = Unloaded | Loaded
+_UNLOADED = Unloaded()
+
+
+class _ManagedSaveDecision(Enum):
+    PRESERVE = 'preserve'
+    EDIT = 'edit'
+    DELETE = 'delete'
+
+
+def _managed_save_decision(
+    baseline: ManagedBaseline,
+    submitted_value: str | None,
+) -> _ManagedSaveDecision:
+    if isinstance(baseline, Unloaded):
+        return (
+            _ManagedSaveDecision.PRESERVE
+            if submitted_value is None
+            else _ManagedSaveDecision.EDIT
+        )
+    if submitted_value == baseline.value:
+        return _ManagedSaveDecision.PRESERVE
+    return (
+        _ManagedSaveDecision.DELETE
+        if submitted_value is None
+        else _ManagedSaveDecision.EDIT
     )
-
-
-@contextmanager
-def _file_lock(file_store: FileStore, path: str) -> Iterator[None]:
-    if isinstance(file_store, InMemoryFileStore):
-        with _process_lock:
-            yield
-        return
-
-    get_full_path = getattr(file_store, 'get_full_path', None)
-    assert callable(get_full_path)
-    lock_path = get_full_path(f'{path}.lock')
-    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-    locked = False
-    try:
-        if fcntl is not None:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            locked = True
-        elif msvcrt is not None:
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            while True:
-                try:
-                    msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
-                    break
-                except OSError as exc:
-                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
-                        raise
-            locked = True
-        yield
-    finally:
-        try:
-            if locked and fcntl is not None:
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-            elif locked and msvcrt is not None:
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-        finally:
-            os.close(descriptor)
 
 
 @dataclass
 class FileSecretsStore(SecretsStore):
     file_store: FileStore
     path: str = 'secrets.json'
-    _loaded_credentials: dict[str, tuple[str | None, str | None]] = field(
+    _managed_baselines: dict[str, ManagedBaseline] = field(
         default_factory=dict,
         init=False,
         repr=False,
     )
-    """Track managed values last observed by this instance to preserve stale saves."""
 
     def _read_data(self) -> dict[str, Any]:
         try:
@@ -160,117 +138,127 @@ class FileSecretsStore(SecretsStore):
                 context={'expose_secrets': True},
             )
         )
-        if versions:
-            data[_CREDENTIAL_VERSIONS_KEY] = versions
+        raw_versions = original.get(_CREDENTIAL_VERSIONS_KEY)
+        merged_versions = dict(raw_versions) if isinstance(raw_versions, dict) else {}
+        for name, version in tuple(merged_versions.items()):
+            if isinstance(version, str) and version and name not in versions:
+                merged_versions.pop(name)
+        merged_versions.update(versions)
+        if merged_versions:
+            data[_CREDENTIAL_VERSIONS_KEY] = merged_versions
         else:
             data.pop(_CREDENTIAL_VERSIONS_KEY, None)
         self.file_store.write(self.path, json.dumps(data))
 
     async def load(self) -> Secrets | None:
-        if not _supports_atomic_versioned_writes(self.file_store):
+        if not self.file_store.supports_locked_update:
             data = await call_sync_from_async(self._read_data)
             return self._secrets(data) if data else None
 
         def load_locked() -> Secrets | None:
-            with _file_lock(self.file_store, self.path):
-                data = self._read_data()
-                if not data:
-                    return None
-                secrets = self._secrets(data)
-                versions = self._versions(data)
-                managed_names = set(versions) | {
-                    name
-                    for name in secrets.custom_secrets
-                    if is_runtime_managed_credential(name)
-                }
-                for name in managed_names:
-                    current = secrets.custom_secrets.get(name)
-                    value = (
-                        current.secret.get_secret_value()
-                        if current is not None
-                        else None
-                    )
-                    self._loaded_credentials[name] = (value, versions.get(name))
-                return secrets
+            data = self._read_data()
+            if not data:
+                self._managed_baselines = {}
+                return None
+            secrets = self._secrets(data)
+            versions = self._versions(data)
+            managed_names = set(versions) | {
+                name
+                for name in secrets.custom_secrets
+                if is_runtime_managed_credential(name)
+            }
+            baselines: dict[str, ManagedBaseline] = {}
+            for name in managed_names:
+                current = secrets.custom_secrets.get(name)
+                value = (
+                    current.secret.get_secret_value() if current is not None else None
+                )
+                baselines[name] = Loaded(value, versions.get(name))
+            self._managed_baselines = baselines
+            return secrets
 
-        return await call_sync_from_async(load_locked)
+        return await call_sync_from_async(
+            self.file_store.locked_update,
+            self.path,
+            load_locked,
+        )
 
     async def store(self, secrets: Secrets) -> None:
-        """Persist secrets; without a baseline, submitted managed values are edits."""
-        if not _supports_atomic_versioned_writes(self.file_store):
+        if not self.file_store.supports_locked_update:
             json_str = secrets.model_dump_json(context={'expose_secrets': True})
             await call_sync_from_async(self.file_store.write, self.path, json_str)
             return
 
         def store_locked() -> None:
-            with _file_lock(self.file_store, self.path):
-                try:
-                    data = self._read_data()
-                    current = self._secrets(data) if data else Secrets()
-                except (AttributeError, TypeError, ValueError):
-                    data = {}
-                    current = Secrets()
-                versions = self._versions(data)
-                incoming = dict(secrets.custom_secrets)
-                preserved_names = set()
-                managed_names = (
-                    set(versions)
-                    | set(self._loaded_credentials)
-                    | {
-                        name
-                        for name in current.custom_secrets
-                        if is_runtime_managed_credential(name)
-                    }
+            try:
+                data = self._read_data()
+                current = self._secrets(data) if data else Secrets()
+            except (AttributeError, TypeError, ValueError):
+                data = {}
+                current = Secrets()
+            versions = self._versions(data)
+            incoming = dict(secrets.custom_secrets)
+            preserved_names = set()
+            managed_names = (
+                set(versions)
+                | set(self._managed_baselines)
+                | {
+                    name
+                    for name in current.custom_secrets
+                    if is_runtime_managed_credential(name)
+                }
+            )
+
+            for name in managed_names:
+                submitted = incoming.get(name)
+                submitted_value = (
+                    submitted.secret.get_secret_value()
+                    if submitted is not None
+                    else None
                 )
-
-                for name in managed_names:
-                    submitted = incoming.get(name)
-                    submitted_value = (
-                        submitted.secret.get_secret_value()
-                        if submitted is not None
-                        else None
-                    )
-                    loaded = self._loaded_credentials.get(name)
-                    preserve = loaded is None and submitted is None
-                    if loaded is not None and submitted_value == loaded[0]:
-                        preserve = True
-                    current_secret = current.custom_secrets.get(name)
-                    current_value = (
-                        current_secret.secret.get_secret_value()
-                        if current_secret is not None
-                        else None
-                    )
-                    if preserve:
-                        preserved_names.add(name)
-                        if current_secret is None:
-                            incoming.pop(name, None)
-                        elif submitted is None:
-                            incoming[name] = current_secret
-                        else:
-                            incoming[name] = submitted.model_copy(
-                                update={'secret': current_secret.secret}
-                            )
-                    elif submitted_value != current_value:
-                        if submitted is None:
-                            versions.pop(name, None)
-                        else:
-                            versions[name] = secrets_module.token_urlsafe(24)
-
-                updated = secrets.model_copy(update={'custom_secrets': incoming})
-                for name in updated.custom_secrets:
-                    if is_runtime_managed_credential(name) and name not in versions:
+                decision = _managed_save_decision(
+                    self._managed_baselines.get(name, _UNLOADED),
+                    submitted_value,
+                )
+                current_secret = current.custom_secrets.get(name)
+                current_value = (
+                    current_secret.secret.get_secret_value()
+                    if current_secret is not None
+                    else None
+                )
+                if decision == _ManagedSaveDecision.PRESERVE:
+                    preserved_names.add(name)
+                    if current_secret is None:
+                        incoming.pop(name, None)
+                    elif submitted is None:
+                        incoming[name] = current_secret
+                    else:
+                        incoming[name] = submitted.model_copy(
+                            update={'secret': current_secret.secret}
+                        )
+                elif submitted_value != current_value:
+                    if decision == _ManagedSaveDecision.DELETE:
+                        versions.pop(name, None)
+                    else:
                         versions[name] = secrets_module.token_urlsafe(24)
-                self._write(updated, versions, data)
-                for name in managed_names | set(versions):
-                    if name in preserved_names:
-                        continue
-                    stored = updated.custom_secrets.get(name)
-                    value = (
-                        stored.secret.get_secret_value() if stored is not None else None
-                    )
-                    self._loaded_credentials[name] = (value, versions.get(name))
 
-        await call_sync_from_async(store_locked)
+            updated = secrets.model_copy(update={'custom_secrets': incoming})
+            for name in updated.custom_secrets:
+                if is_runtime_managed_credential(name) and name not in versions:
+                    versions[name] = secrets_module.token_urlsafe(24)
+            self._write(updated, versions, data)
+            for name in managed_names | set(versions):
+                if name in preserved_names:
+                    continue
+                stored = updated.custom_secrets.get(name)
+                value = stored.secret.get_secret_value() if stored is not None else None
+                self._managed_baselines[name] = Loaded(value, versions.get(name))
+
+        await call_sync_from_async(
+            self.file_store.locked_update,
+            self.path,
+            store_locked,
+        )
 
     async def load_versioned(
         self,
@@ -278,7 +266,7 @@ class FileSecretsStore(SecretsStore):
         organization_id: UUID | None = None,
     ) -> tuple[str, str]:
         del organization_id
-        if not _supports_atomic_versioned_writes(self.file_store):
+        if not self.file_store.supports_locked_update:
             raise NotImplementedError
 
         def load_current() -> tuple[str, str]:
@@ -286,7 +274,8 @@ class FileSecretsStore(SecretsStore):
             _, value = self._raw_secret(data, name)
             version = self._raw_versions(data).get(name)
             if not isinstance(version, str) or not version:
-                with _file_lock(self.file_store, self.path):
+
+                def bootstrap_version() -> tuple[str, str]:
                     data = self._read_data()
                     _, value = self._raw_secret(data, name)
                     versions = self._raw_versions(data)
@@ -297,7 +286,9 @@ class FileSecretsStore(SecretsStore):
                         updated = dict(data)
                         updated[_CREDENTIAL_VERSIONS_KEY] = versions
                         self.file_store.write(self.path, json.dumps(updated))
-            self._loaded_credentials[name] = (value, version)
+                    return value, version
+
+                return self.file_store.locked_update(self.path, bootstrap_version)
             return value, version
 
         return await call_sync_from_async(load_current)
@@ -310,30 +301,32 @@ class FileSecretsStore(SecretsStore):
         organization_id: UUID | None = None,
     ) -> str:
         del organization_id
-        if not _supports_atomic_versioned_writes(self.file_store):
+        if not self.file_store.supports_locked_update:
             raise NotImplementedError
 
         def replace_locked() -> str:
-            with _file_lock(self.file_store, self.path):
-                data = self._read_data()
-                current, _ = self._raw_secret(data, name)
-                versions = self._raw_versions(data)
-                if versions.get(name) != expected_version:
-                    raise CredentialVersionConflict
-                custom_secrets = dict(data['custom_secrets'])
-                custom_secrets[name] = {**current, 'secret': value}
-                successor = secrets_module.token_urlsafe(24)
-                versions[name] = successor
-                updated = {
-                    **data,
-                    'custom_secrets': custom_secrets,
-                    _CREDENTIAL_VERSIONS_KEY: versions,
-                }
-                self.file_store.write(self.path, json.dumps(updated))
-                self._loaded_credentials[name] = (value, successor)
-                return successor
+            data = self._read_data()
+            current, _ = self._raw_secret(data, name)
+            versions = self._raw_versions(data)
+            if versions.get(name) != expected_version:
+                raise CredentialVersionConflict
+            custom_secrets = dict(data['custom_secrets'])
+            custom_secrets[name] = {**current, 'secret': value}
+            successor = secrets_module.token_urlsafe(24)
+            versions[name] = successor
+            updated = {
+                **data,
+                'custom_secrets': custom_secrets,
+                _CREDENTIAL_VERSIONS_KEY: versions,
+            }
+            self.file_store.write(self.path, json.dumps(updated))
+            return successor
 
-        return await call_sync_from_async(replace_locked)
+        return await call_sync_from_async(
+            self.file_store.locked_update,
+            self.path,
+            replace_locked,
+        )
 
     @classmethod
     async def get_instance(cls, user_id: str | None) -> FileSecretsStore:

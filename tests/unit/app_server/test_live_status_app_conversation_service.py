@@ -4625,9 +4625,13 @@ class TestBuildAcpStartConversationRequestSecrets:
         assert request.title_llm_profile == 'Titles'
 
     @pytest.mark.asyncio
-    async def test_lookup_secret_forwarded_as_source(self, service, tmp_path):
-        """LookupSecrets from user_context are forwarded as-is."""
-        lookup = LookupSecret(url='https://example.com/token', headers={})
+    async def test_lookup_secret_auth_headers_survive_request_round_trip(
+        self, service, tmp_path
+    ):
+        lookup = LookupSecret(
+            url='https://example.com/token',
+            headers={'X-Access-Token': 'scoped-token'},
+        )
         user = self._make_acp_user()
 
         request = await self._call_build(
@@ -4638,6 +4642,11 @@ class TestBuildAcpStartConversationRequestSecrets:
         )
 
         assert request.secrets.get('GITHUB_TOKEN') is lookup
+        body = request.model_dump(mode='json', context={'expose_secrets': True})
+        restored = StartConversationRequest.model_validate_json(json.dumps(body))
+        restored_lookup = restored.secrets['GITHUB_TOKEN']
+        assert isinstance(restored_lookup, LookupSecret)
+        assert restored_lookup.headers == {'X-Access-Token': 'scoped-token'}
 
     @pytest.mark.asyncio
     async def test_persisted_codex_binding_activation_strips_plaintext(

@@ -552,7 +552,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 ),
             )
 
-            # Start conversation...
+            # Explicit exposure preserves LookupSecret auth headers on this trusted hop.
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
             )
@@ -2732,7 +2732,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
         )
-        # Keep provider tokens static; LookupSecret auth headers may be redacted.
         if provider_tokens:
             for provider_type, provider_token in provider_tokens.items():
                 if not provider_token.token:

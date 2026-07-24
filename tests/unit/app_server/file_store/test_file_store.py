@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import logging
 import shutil
 import tempfile
@@ -8,11 +9,13 @@ from abc import ABC
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 import botocore.exceptions
+import pytest
 from google.api_core.exceptions import NotFound
 
+from openhands.app_server.file_store import local as local_file_store_module
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.google_cloud import GoogleCloudFileStore
 from openhands.app_server.file_store.local import LocalFileStore
@@ -267,6 +270,9 @@ class TestLocalFileStore(TestCase, _StorageTest):
                 f'Failed to remove temporary directory {self.temp_dir}: {e}'
             )
 
+    def test_supports_locked_update(self):
+        self.assertTrue(self.store.supports_locked_update)
+
     def test_concurrent_writes_no_corruption(self):
         """Test that concurrent writes don't corrupt file content.
 
@@ -323,6 +329,13 @@ class TestInMemoryFileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = InMemoryFileStore()
 
+    def test_locked_update(self):
+        update = MagicMock(return_value='updated')
+
+        self.assertTrue(self.store.supports_locked_update)
+        self.assertEqual(self.store.locked_update('state', update), 'updated')
+        update.assert_called_once_with()
+
 
 @patch(
     'openhands.app_server.file_store.google_cloud.storage.Client',
@@ -332,8 +345,85 @@ class TestGoogleCloudFileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = GoogleCloudFileStore(bucket_name='dear-liza')
 
+    def test_locked_update_is_unsupported(self):
+        update = MagicMock()
+
+        self.assertFalse(self.store.supports_locked_update)
+        with self.assertRaises(NotImplementedError):
+            self.store.locked_update('state', update)
+        update.assert_not_called()
+
 
 @patch('boto3.client', lambda service, **kwargs: _MockS3Client())
 class TestS3FileStore(TestCase, _StorageTest):
     def setUp(self):
         self.store = S3FileStore(bucket_name='dear-liza')
+
+    def test_locked_update_is_unsupported(self):
+        update = MagicMock()
+
+        self.assertFalse(self.store.supports_locked_update)
+        with self.assertRaises(NotImplementedError):
+            self.store.locked_update('state', update)
+        update.assert_not_called()
+
+
+def test_local_locked_update_runs_callback(tmp_path):
+    store = LocalFileStore(root=str(tmp_path))
+    update = MagicMock(return_value='updated')
+
+    assert store.locked_update('state', update) == 'updated'
+    update.assert_called_once_with()
+
+
+def test_failed_local_lock_acquisition_closes_descriptor(tmp_path, monkeypatch):
+    store = LocalFileStore(root=str(tmp_path))
+    windows_lock = MagicMock()
+    windows_lock.LK_LOCK = 1
+    windows_lock.LK_UNLCK = 2
+    windows_lock.locking.side_effect = OSError('lock failed')
+    monkeypatch.setattr(local_file_store_module, 'fcntl', None)
+    monkeypatch.setattr(local_file_store_module, 'msvcrt', windows_lock)
+    monkeypatch.setattr(local_file_store_module.os, 'open', MagicMock(return_value=7))
+    monkeypatch.setattr(local_file_store_module.os, 'lseek', MagicMock())
+    close = MagicMock()
+    monkeypatch.setattr(local_file_store_module.os, 'close', close)
+    update = MagicMock()
+
+    with pytest.raises(OSError, match='lock failed'):
+        store.locked_update('secrets.json', update)
+
+    windows_lock.locking.assert_called_once_with(7, windows_lock.LK_LOCK, 1)
+    close.assert_called_once_with(7)
+    update.assert_not_called()
+
+
+def test_local_windows_lock_waits_for_contention(tmp_path, monkeypatch):
+    store = LocalFileStore(root=str(tmp_path))
+    windows_lock = MagicMock()
+    windows_lock.LK_LOCK = 1
+    windows_lock.LK_UNLCK = 2
+    windows_lock.locking.side_effect = [
+        OSError(errno.EACCES, 'busy'),
+        None,
+        None,
+    ]
+    monkeypatch.setattr(local_file_store_module, 'fcntl', None)
+    monkeypatch.setattr(local_file_store_module, 'msvcrt', windows_lock)
+    monkeypatch.setattr(local_file_store_module.os, 'open', MagicMock(return_value=7))
+    monkeypatch.setattr(local_file_store_module.os, 'lseek', MagicMock())
+    close = MagicMock()
+    monkeypatch.setattr(local_file_store_module.os, 'close', close)
+    update = MagicMock(return_value='updated')
+
+    assert store.locked_update('secrets.json', update) == 'updated'
+
+    windows_lock.locking.assert_has_calls(
+        [
+            call(7, windows_lock.LK_LOCK, 1),
+            call(7, windows_lock.LK_LOCK, 1),
+            call(7, windows_lock.LK_UNLCK, 1),
+        ]
+    )
+    close.assert_called_once_with(7)
+    update.assert_called_once_with()

@@ -1,9 +1,14 @@
 import os
+import threading
+from collections.abc import Callable
+from typing import TypeVar
 
-from pydantic import Field
+from pydantic import Field, PrivateAttr
 
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+_T = TypeVar('_T')
 
 
 class InMemoryFileStore(FileStore):
@@ -12,6 +17,15 @@ class InMemoryFileStore(FileStore):
     # it cannot round-trip a binary archive. Not a valid RUNTIME_FILE_ARCHIVE
     # store — see workspace_archive._archive_store_type.
     files: dict[str, str] = Field(default_factory=dict)
+    _update_lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
+
+    @property
+    def supports_locked_update(self) -> bool:
+        return True
+
+    def locked_update(self, path: str, update: Callable[[], _T]) -> _T:
+        with self._update_lock:
+            return update()
 
     def write(self, path: str, contents: str | bytes) -> None:
         if isinstance(contents, bytes):

@@ -1,20 +1,25 @@
 import asyncio
-import errno
 import json
 from types import MappingProxyType
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
+from openhands.app_server.file_store import local as local_file_store_module
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.file_store.local import LocalFileStore
 from openhands.app_server.file_store.memory import InMemoryFileStore
 from openhands.app_server.integrations.provider import CustomSecret
-from openhands.app_server.secrets import file_secrets_store as file_secrets_store_module
 from openhands.app_server.secrets.credential_binding_models import (
     CODEX_AUTH_SECRET_NAME,
 )
-from openhands.app_server.secrets.file_secrets_store import FileSecretsStore
+from openhands.app_server.secrets.file_secrets_store import (
+    FileSecretsStore,
+    Loaded,
+    Unloaded,
+    _managed_save_decision,
+    _ManagedSaveDecision,
+)
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import CredentialVersionConflict
 
@@ -41,6 +46,20 @@ def _secrets(managed: str | None, other: str | None = None) -> Secrets:
     if other is not None:
         values['OTHER'] = CustomSecret.from_value({'secret': other, 'description': ''})
     return Secrets(custom_secrets=MappingProxyType(values))
+
+
+@pytest.mark.parametrize(
+    ('baseline', 'submitted', 'expected'),
+    [
+        (Unloaded(), None, _ManagedSaveDecision.PRESERVE),
+        (Unloaded(), _ORIGINAL, _ManagedSaveDecision.EDIT),
+        (Loaded(_ORIGINAL, 'v0'), _ORIGINAL, _ManagedSaveDecision.PRESERVE),
+        (Loaded(_ORIGINAL, 'v0'), _ROTATED, _ManagedSaveDecision.EDIT),
+        (Loaded(_ORIGINAL, 'v0'), None, _ManagedSaveDecision.DELETE),
+    ],
+)
+def test_managed_save_decision(baseline, submitted, expected):
+    assert _managed_save_decision(baseline, submitted) == expected
 
 
 @pytest.fixture
@@ -81,7 +100,7 @@ async def test_load_versioned_does_not_open_lock_file(store, monkeypatch):
     def fail_open(*args, **kwargs):
         raise AssertionError('load attempted to open a write lock')
 
-    monkeypatch.setattr(file_secrets_store_module.os, 'open', fail_open)
+    monkeypatch.setattr(local_file_store_module.os, 'open', fail_open)
 
     assert (await store.load_versioned(_MANAGED_NAME))[0] == _ORIGINAL
 
@@ -247,6 +266,23 @@ async def test_stale_whole_save_preserves_rotation_and_other_edits(store):
 
 
 @pytest.mark.asyncio
+async def test_versioned_replace_does_not_rebase_whole_save(store):
+    await store.store(_secrets(_ORIGINAL))
+    stale = await store.load()
+    assert stale is not None
+    _, version = await store.load_versioned(_MANAGED_NAME)
+
+    successor = await store.replace_versioned(
+        _MANAGED_NAME,
+        version,
+        _ROTATED,
+    )
+    await store.store(stale)
+
+    assert await store.load_versioned(_MANAGED_NAME) == (_ROTATED, successor)
+
+
+@pytest.mark.asyncio
 async def test_stale_whole_save_preserves_deletion(store):
     await store.store(_secrets(_ORIGINAL, 'old'))
     stale_store = _store(store.file_store)
@@ -275,6 +311,7 @@ async def test_stale_whole_save_preserves_deletion(store):
 @pytest.mark.asyncio
 async def test_versioned_bindings_reject_store_without_cross_process_lock():
     file_store = MagicMock(spec=FileStore)
+    file_store.supports_locked_update = False
     file_store.read.side_effect = FileNotFoundError
     store = _store(file_store)
 
@@ -290,6 +327,7 @@ async def test_versioned_bindings_reject_store_without_cross_process_lock():
 async def test_remote_file_store_keeps_unversioned_load_and_store():
     original = _secrets(_ORIGINAL)
     file_store = MagicMock(spec=FileStore)
+    file_store.supports_locked_update = False
     file_store.read.return_value = original.model_dump_json(
         context={'expose_secrets': True}
     )
@@ -298,7 +336,7 @@ async def test_remote_file_store_keeps_unversioned_load_and_store():
     loaded = await store.load()
 
     assert loaded == original
-    assert store._loaded_credentials == {}
+    assert store._managed_baselines == {}
 
     updated = _secrets(_ROTATED, 'other')
     file_store.reset_mock()
@@ -309,59 +347,6 @@ async def test_remote_file_store_keeps_unversioned_load_and_store():
         'secrets.json',
         updated.model_dump_json(context={'expose_secrets': True}),
     )
-
-
-def test_failed_file_lock_acquisition_closes_descriptor(monkeypatch):
-    file_store = MagicMock()
-    file_store.get_full_path.return_value = '/tmp/secrets.json.lock'
-    windows_lock = MagicMock()
-    windows_lock.LK_LOCK = 1
-    windows_lock.LK_UNLCK = 2
-    windows_lock.locking.side_effect = OSError('lock failed')
-    monkeypatch.setattr(file_secrets_store_module, 'fcntl', None)
-    monkeypatch.setattr(file_secrets_store_module, 'msvcrt', windows_lock)
-    monkeypatch.setattr(file_secrets_store_module.os, 'open', MagicMock(return_value=7))
-    monkeypatch.setattr(file_secrets_store_module.os, 'lseek', MagicMock())
-    close = MagicMock()
-    monkeypatch.setattr(file_secrets_store_module.os, 'close', close)
-
-    with pytest.raises(OSError, match='lock failed'):
-        with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
-            pass
-
-    windows_lock.locking.assert_called_once_with(7, windows_lock.LK_LOCK, 1)
-    close.assert_called_once_with(7)
-
-
-def test_windows_file_lock_waits_for_contention(monkeypatch):
-    file_store = MagicMock()
-    file_store.get_full_path.return_value = '/tmp/secrets.json.lock'
-    windows_lock = MagicMock()
-    windows_lock.LK_LOCK = 1
-    windows_lock.LK_UNLCK = 2
-    windows_lock.locking.side_effect = [
-        OSError(errno.EACCES, 'busy'),
-        None,
-        None,
-    ]
-    monkeypatch.setattr(file_secrets_store_module, 'fcntl', None)
-    monkeypatch.setattr(file_secrets_store_module, 'msvcrt', windows_lock)
-    monkeypatch.setattr(file_secrets_store_module.os, 'open', MagicMock(return_value=7))
-    monkeypatch.setattr(file_secrets_store_module.os, 'lseek', MagicMock())
-    close = MagicMock()
-    monkeypatch.setattr(file_secrets_store_module.os, 'close', close)
-
-    with file_secrets_store_module._file_lock(file_store, 'secrets.json'):
-        pass
-
-    windows_lock.locking.assert_has_calls(
-        [
-            call(7, windows_lock.LK_LOCK, 1),
-            call(7, windows_lock.LK_LOCK, 1),
-            call(7, windows_lock.LK_UNLCK, 1),
-        ]
-    )
-    close.assert_called_once_with(7)
 
 
 @pytest.mark.asyncio
@@ -378,6 +363,28 @@ async def test_whole_save_preserves_unrecognized_top_level_data():
     assert json.loads(file_store.read('secrets.json'))['future_top_level'] == {
         'enabled': True
     }
+
+
+@pytest.mark.asyncio
+async def test_whole_save_preserves_unrecognized_version_metadata():
+    raw = {
+        'custom_secrets': {_MANAGED_NAME: {'secret': _ORIGINAL, 'description': ''}},
+        '_credential_versions': {
+            _MANAGED_NAME: 'v0',
+            'future': {'scheme': 'v2'},
+        },
+    }
+    file_store = InMemoryFileStore(files={'secrets.json': json.dumps(raw)})
+    store = _store(file_store)
+    loaded = await store.load()
+    assert loaded is not None
+
+    await store.store(loaded)
+
+    assert (
+        json.loads(file_store.read('secrets.json'))['_credential_versions']
+        == raw['_credential_versions']
+    )
 
 
 @pytest.mark.asyncio

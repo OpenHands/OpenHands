@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from typing import TypeVar
 
 from pydantic import ConfigDict
 
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
+
+_T = TypeVar('_T')
 
 
 class FileStore(DiscriminatedUnionMixin, ABC):
@@ -40,3 +44,10 @@ class FileStore(DiscriminatedUnionMixin, ABC):
     @abstractmethod
     def delete(self, path: str) -> None:
         pass
+
+    @property
+    def supports_locked_update(self) -> bool:
+        return False
+
+    def locked_update(self, path: str, update: Callable[[], _T]) -> _T:
+        raise NotImplementedError
