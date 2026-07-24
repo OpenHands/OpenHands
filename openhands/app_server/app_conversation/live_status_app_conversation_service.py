@@ -2643,6 +2643,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     'secret_name': CODEX_AUTH_SECRET_NAME,
                     'actions': ['load', 'replace'],
                 },
+                # Fixed expiry would break long-running conversations.
                 include_expiration=False,
             )
             activation_response = await self.httpx_client.put(

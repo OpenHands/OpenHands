@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeGuard
 from uuid import UUID
 
 import jwt
 from fastapi import APIRouter, Header, HTTPException, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+    AppConversationStartTask,
     AppConversationStartTaskStatus,
 )
 from openhands.app_server.config import (
@@ -18,7 +21,7 @@ from openhands.app_server.config import (
     get_sandbox_service,
 )
 from openhands.app_server.constants import MAX_API_SECRET_VALUE_LENGTH
-from openhands.app_server.sandbox.sandbox_models import SandboxStatus
+from openhands.app_server.sandbox.sandbox_models import SandboxInfo, SandboxStatus
 from openhands.app_server.secrets.credential_binding_models import (
     CREDENTIAL_BINDING_ROUTE,
     CREDENTIAL_BINDING_ROUTE_PREFIX,
@@ -45,6 +48,35 @@ class CredentialReplacement(BaseModel):
     value: str = Field(max_length=MAX_API_SECRET_VALUE_LENGTH)
 
 
+class CredentialBindingClaims(BaseModel):
+    model_config = ConfigDict(extra='ignore', strict=True)
+
+    purpose: str
+    user_id: str
+    organization_id: UUID | None
+    conversation_id: UUID
+    runtime_id: str
+    start_task_id: UUID
+    secret_name: str
+    actions: list[str]
+
+    @field_validator('organization_id', mode='before')
+    @classmethod
+    def parse_optional_uuid_claim(cls, value: object) -> UUID | None:
+        if value is None or value == '':
+            return None
+        if not isinstance(value, str):
+            raise ValueError
+        return UUID(value)
+
+    @field_validator('conversation_id', 'start_task_id', mode='before')
+    @classmethod
+    def parse_uuid_claim(cls, value: object) -> UUID:
+        if not isinstance(value, str):
+            raise ValueError
+        return UUID(value)
+
+
 @dataclass(frozen=True)
 class CredentialBindingScope:
     user_id: str
@@ -53,6 +85,24 @@ class CredentialBindingScope:
     runtime_id: str
     start_task_id: UUID
     secret_name: str
+
+
+def _claims_match_scope(
+    claims: CredentialBindingClaims,
+    conversation_id: UUID,
+    secret_name: str,
+    action: str,
+) -> bool:
+    return (
+        claims.purpose == 'credential-binding'
+        and bool(claims.user_id)
+        and bool(claims.runtime_id)
+        and claims.conversation_id == conversation_id
+        and claims.secret_name == secret_name
+        and len(claims.actions) == 2
+        and set(claims.actions) == {'load', 'replace'}
+        and action in claims.actions
+    )
 
 
 def _authorize(
@@ -69,53 +119,25 @@ def _authorize(
             detail='Credential binding token is required',
         )
     try:
-        claims = jwt_service.verify_jws_token(token)
-        user_id = claims['user_id']
-        organization_claim = claims['organization_id']
-        if organization_claim is not None and not isinstance(organization_claim, str):
-            raise TypeError
-        organization_id = UUID(organization_claim) if organization_claim else None
-        conversation_claim = claims['conversation_id']
-        if not isinstance(conversation_claim, str):
-            raise TypeError
-        scoped_conversation_id = UUID(conversation_claim)
-        runtime_id = claims['runtime_id']
-        start_task_claim = claims['start_task_id']
-        if not isinstance(start_task_claim, str):
-            raise TypeError
-        start_task_id = UUID(start_task_claim)
-        scoped_secret_name = claims['secret_name']
-        actions = claims['actions']
-    except (KeyError, TypeError, ValueError, jwt.InvalidTokenError) as exc:
+        claims = CredentialBindingClaims.model_validate(
+            jwt_service.verify_jws_token(token)
+        )
+    except (TypeError, ValueError, jwt.InvalidTokenError) as exc:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail='Invalid credential binding token',
         ) from exc
-    if (
-        claims.get('purpose') != 'credential-binding'
-        or not isinstance(user_id, str)
-        or not user_id
-        or not isinstance(runtime_id, str)
-        or not runtime_id
-        or scoped_conversation_id != conversation_id
-        or not isinstance(scoped_secret_name, str)
-        or scoped_secret_name != secret_name
-        or not isinstance(actions, list)
-        or len(actions) != 2
-        or not all(isinstance(candidate, str) for candidate in actions)
-        or set(actions) != {'load', 'replace'}
-        or action not in actions
-    ):
+    if not _claims_match_scope(claims, conversation_id, secret_name, action):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail='Credential binding token scope mismatch',
         )
     return CredentialBindingScope(
-        user_id=user_id,
-        organization_id=organization_id,
+        user_id=claims.user_id,
+        organization_id=claims.organization_id,
         conversation_id=conversation_id,
-        runtime_id=runtime_id,
-        start_task_id=start_task_id,
+        runtime_id=claims.runtime_id,
+        start_task_id=claims.start_task_id,
         secret_name=secret_name,
     )
 
@@ -123,6 +145,50 @@ def _authorize(
 async def _store(scope: CredentialBindingScope) -> SecretsStore:
     user_auth = await get_for_user(scope.user_id)
     return await user_auth.get_secrets_store()
+
+
+def _is_current_start_task(
+    task: AppConversationStartTask | None,
+    scope: CredentialBindingScope,
+) -> TypeGuard[AppConversationStartTask]:
+    return (
+        task is not None
+        and task.id == scope.start_task_id
+        and task.app_conversation_id == scope.conversation_id
+        and task.sandbox_id == scope.runtime_id
+        and task.created_by_user_id in (None, scope.user_id)
+        and task.status
+        in (
+            AppConversationStartTaskStatus.STARTING_CONVERSATION,
+            AppConversationStartTaskStatus.READY,
+        )
+    )
+
+
+def _is_live_owned_runtime(
+    sandbox: SandboxInfo | None,
+    scope: CredentialBindingScope,
+) -> bool:
+    return (
+        sandbox is not None
+        and sandbox.status == SandboxStatus.RUNNING
+        and sandbox.created_by_user_id in (None, scope.user_id)
+    )
+
+
+def _is_valid_conversation_mapping(
+    conversation: AppConversationInfo | None,
+    task_status: AppConversationStartTaskStatus,
+    scope: CredentialBindingScope,
+) -> bool:
+    if conversation is not None and conversation.created_by_user_id not in (
+        None,
+        scope.user_id,
+    ):
+        return False
+    return task_status != AppConversationStartTaskStatus.READY or (
+        conversation is not None and conversation.sandbox_id == scope.runtime_id
+    )
 
 
 async def _validate_active_binding(scope: CredentialBindingScope) -> None:
@@ -137,19 +203,7 @@ async def _validate_active_binding(scope: CredentialBindingScope) -> None:
             conversation_id__eq=scope.conversation_id, limit=1
         )
         task = task_page.items[0] if task_page.items else None
-        task_status = task.status if task is not None else None
-        if (
-            task is None
-            or task.id != scope.start_task_id
-            or task.app_conversation_id != scope.conversation_id
-            or task.sandbox_id != scope.runtime_id
-            or task.created_by_user_id not in (None, scope.user_id)
-            or task_status
-            not in (
-                AppConversationStartTaskStatus.STARTING_CONVERSATION,
-                AppConversationStartTaskStatus.READY,
-            )
-        ):
+        if not _is_current_start_task(task, scope):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 detail='Credential binding is no longer active',
@@ -158,18 +212,8 @@ async def _validate_active_binding(scope: CredentialBindingScope) -> None:
             scope.conversation_id
         )
         sandbox = await sandbox_service.get_sandbox_for_authorization(scope.runtime_id)
-    if (
-        sandbox is None
-        or sandbox.status != SandboxStatus.RUNNING
-        or sandbox.created_by_user_id not in (None, scope.user_id)
-        or (
-            conversation is not None
-            and conversation.created_by_user_id not in (None, scope.user_id)
-        )
-        or (
-            task_status == AppConversationStartTaskStatus.READY
-            and (conversation is None or conversation.sandbox_id != scope.runtime_id)
-        )
+    if not _is_live_owned_runtime(sandbox, scope) or not _is_valid_conversation_mapping(
+        conversation, task.status, scope
     ):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
