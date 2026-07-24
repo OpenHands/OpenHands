@@ -2696,7 +2696,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> StartConversationRequest:
         """Build a StartConversationRequest for ACP agent conversations.
 
-        User secrets flow through ``request.secrets``.
+        User secrets use ``request.secrets`` to avoid ``AgentContext`` reserialization.
 
         Args:
             sandbox: Sandbox information
@@ -2732,6 +2732,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             PROVIDER_TOKEN_TYPE | None,
             await self.user_context.get_provider_tokens(),
         )
+        # Keep provider tokens static; LookupSecret auth headers may be redacted.
         if provider_tokens:
             for provider_type, provider_token in provider_tokens.items():
                 if not provider_token.token:

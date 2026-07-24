@@ -70,7 +70,7 @@ class JwtService:
         *,
         include_expiration: bool = True,
     ) -> str:
-        """Create a signed token."""
+        """Create a signed token, defaulting expiry to one hour when included."""
         if key_id is None:
             key_id = self._default_key_id
 

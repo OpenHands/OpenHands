@@ -91,6 +91,7 @@ class FileSecretsStore(SecretsStore):
         init=False,
         repr=False,
     )
+    """Track managed values last observed by this instance to preserve stale saves."""
 
     def _read_data(self) -> dict[str, Any]:
         try:
@@ -195,6 +196,7 @@ class FileSecretsStore(SecretsStore):
         return await call_sync_from_async(load_locked)
 
     async def store(self, secrets: Secrets) -> None:
+        """Persist secrets; without a baseline, submitted managed values are edits."""
         if not _supports_atomic_versioned_writes(self.file_store):
             json_str = secrets.model_dump_json(context={'expose_secrets': True})
             await call_sync_from_async(self.file_store.write, self.path, json_str)
