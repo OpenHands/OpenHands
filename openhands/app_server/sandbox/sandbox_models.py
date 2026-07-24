@@ -69,6 +69,13 @@ class SandboxInfo(BaseModel):
         ),
     )
     created_at: datetime = Field(default_factory=utc_now)
+    status_detail: str | None = Field(
+        default=None,
+        description=(
+            'Last pod/scheduling reason from the runtime (e.g. insufficient kvm, '
+            'ImagePullBackOff), surfaced when a sandbox is stuck or errored.'
+        ),
+    )
 
 
 class SandboxPage(BaseModel):

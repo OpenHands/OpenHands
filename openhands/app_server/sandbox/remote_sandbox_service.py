@@ -205,6 +205,7 @@ class RemoteSandboxService(SandboxService):
             session_api_key=session_api_key,
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
+            status_detail=runtime.get('status_detail') if runtime else None,
         )
 
     def _get_sandbox_status_from_runtime(

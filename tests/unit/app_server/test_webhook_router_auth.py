@@ -22,7 +22,7 @@ from openhands.app_server.event_callback.webhook_router import (
 from openhands.app_server.sandbox.sandbox_models import SandboxRecord
 from openhands.app_server.user.specifiy_user_context import (
     USER_CONTEXT_ATTR,
-    SpecifyUserContext,
+    SandboxUserContext,
 )
 
 
@@ -62,6 +62,17 @@ def create_sandbox_service_context_manager(sandbox_service):
         yield sandbox_service
 
     return _context_manager
+
+
+async def call_valid_conversation(conversation_id, sandbox_record, service):
+    with patch(
+        'openhands.app_server.event_callback.webhook_router.get_app_conversation_info_service',
+        create_sandbox_service_context_manager(service),
+    ):
+        return await valid_conversation(
+            conversation_id=conversation_id,
+            sandbox_record=sandbox_record,
+        )
 
 
 class TestValidSandbox:
@@ -104,8 +115,9 @@ class TestValidSandbox:
         # Verify user_context is set correctly on request.state
         assert USER_CONTEXT_ATTR in mock_request.state._attributes
         user_context = mock_request.state._attributes[USER_CONTEXT_ATTR]
-        assert isinstance(user_context, SpecifyUserContext)
+        assert isinstance(user_context, SandboxUserContext)
         assert user_context.user_id == user_id
+        assert user_context.sandbox_id == expected_sandbox.id
 
     @pytest.mark.asyncio
     async def test_valid_sandbox_sets_user_context_to_sandbox_owner(self):
@@ -138,8 +150,9 @@ class TestValidSandbox:
         # Assert - user_context should be set to the sandbox owner
         assert USER_CONTEXT_ATTR in mock_request.state._attributes
         user_context = mock_request.state._attributes[USER_CONTEXT_ATTR]
-        assert isinstance(user_context, SpecifyUserContext)
+        assert isinstance(user_context, SandboxUserContext)
         assert user_context.user_id == sandbox_owner_id
+        assert user_context.sandbox_id == expected_sandbox.id
 
     @pytest.mark.asyncio
     async def test_valid_sandbox_no_user_context_when_no_user_id(self):
@@ -289,15 +302,16 @@ class TestValidConversation:
 
         expected_info = MagicMock()
         expected_info.created_by_user_id = 'user-123'
+        expected_info.sandbox_id = sandbox_record.id
 
         mock_service = AsyncMock()
         mock_service.get_app_conversation_info = AsyncMock(return_value=expected_info)
 
         # Act
-        result = await valid_conversation(
-            conversation_id=conversation_id,
-            sandbox_record=sandbox_record,
-            app_conversation_info_service=mock_service,
+        result = await call_valid_conversation(
+            conversation_id,
+            sandbox_record,
+            mock_service,
         )
 
         # Assert
@@ -317,10 +331,10 @@ class TestValidConversation:
         mock_service.get_app_conversation_info = AsyncMock(return_value=None)
 
         # Act
-        result = await valid_conversation(
-            conversation_id=conversation_id,
-            sandbox_record=sandbox_record,
-            app_conversation_info_service=mock_service,
+        result = await call_valid_conversation(
+            conversation_id,
+            sandbox_record,
+            mock_service,
         )
 
         # Assert
@@ -341,6 +355,7 @@ class TestValidConversation:
         # Conversation created by different user
         different_user_info = MagicMock()
         different_user_info.created_by_user_id = 'different-user-id'
+        different_user_info.sandbox_id = sandbox_record.id
 
         mock_service = AsyncMock()
         mock_service.get_app_conversation_info = AsyncMock(
@@ -351,10 +366,10 @@ class TestValidConversation:
         from openhands.app_server.errors import AuthError
 
         with pytest.raises(AuthError):
-            await valid_conversation(
-                conversation_id=conversation_id,
-                sandbox_record=sandbox_record,
-                app_conversation_info_service=mock_service,
+            await call_valid_conversation(
+                conversation_id,
+                sandbox_record,
+                mock_service,
             )
 
     @pytest.mark.asyncio
@@ -371,19 +386,46 @@ class TestValidConversation:
         # Conversation created by same user
         same_user_info = MagicMock()
         same_user_info.created_by_user_id = user_id
+        same_user_info.sandbox_id = sandbox_record.id
 
         mock_service = AsyncMock()
         mock_service.get_app_conversation_info = AsyncMock(return_value=same_user_info)
 
         # Act
-        result = await valid_conversation(
-            conversation_id=conversation_id,
-            sandbox_record=sandbox_record,
-            app_conversation_info_service=mock_service,
+        result = await call_valid_conversation(
+            conversation_id,
+            sandbox_record,
+            mock_service,
         )
 
         # Assert
         assert result == same_user_info
+
+    @pytest.mark.asyncio
+    async def test_valid_conversation_different_sandbox_raises_auth_error(self):
+        """A sandbox key cannot authorize another sandbox's conversation."""
+        conversation_id = uuid4()
+        sandbox_record = SandboxRecord(
+            id='sandbox-123',
+            created_by_user_id='user-123',
+        )
+        other_sandbox_info = MagicMock()
+        other_sandbox_info.created_by_user_id = sandbox_record.created_by_user_id
+        other_sandbox_info.sandbox_id = 'sandbox-456'
+
+        mock_service = AsyncMock()
+        mock_service.get_app_conversation_info = AsyncMock(
+            return_value=other_sandbox_info
+        )
+
+        from openhands.app_server.errors import AuthError
+
+        with pytest.raises(AuthError):
+            await call_valid_conversation(
+                conversation_id,
+                sandbox_record,
+                mock_service,
+            )
 
 
 class TestWebhookAuthenticationIntegration:
@@ -406,6 +448,7 @@ class TestWebhookAuthenticationIntegration:
 
         conversation_info = MagicMock()
         conversation_info.created_by_user_id = 'user-123'
+        conversation_info.sandbox_id = sandbox_record.id
 
         mock_conversation_service = AsyncMock()
         mock_conversation_service.get_app_conversation_info = AsyncMock(
@@ -425,10 +468,10 @@ class TestWebhookAuthenticationIntegration:
             )
 
         # Then call valid_conversation
-        conversation_result = await valid_conversation(
-            conversation_id=uuid4(),
-            sandbox_record=sandbox_result,
-            app_conversation_info_service=mock_conversation_service,
+        conversation_result = await call_valid_conversation(
+            uuid4(),
+            sandbox_result,
+            mock_conversation_service,
         )
 
         # Assert
@@ -478,6 +521,7 @@ class TestWebhookAuthenticationIntegration:
         # Conversation created by different user
         different_user_info = MagicMock()
         different_user_info.created_by_user_id = 'different-user'
+        different_user_info.sandbox_id = sandbox_record.id
 
         mock_conversation_service = AsyncMock()
         mock_conversation_service.get_app_conversation_info = AsyncMock(
@@ -500,10 +544,10 @@ class TestWebhookAuthenticationIntegration:
         from openhands.app_server.errors import AuthError
 
         with pytest.raises(AuthError):
-            await valid_conversation(
-                conversation_id=uuid4(),
-                sandbox_record=sandbox_result,
-                app_conversation_info_service=mock_conversation_service,
+            await call_valid_conversation(
+                uuid4(),
+                sandbox_result,
+                mock_conversation_service,
             )
 
 

@@ -23,7 +23,11 @@ from openhands.app_server.app_conversation.sql_app_conversation_info_service imp
     StoredConversationCostEvent,
     StoredConversationMetadata,
 )
-from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
+from openhands.app_server.user.specifiy_user_context import (
+    USER_CONTEXT_ATTR,
+    SandboxUserContext,
+    SpecifyUserContext,
+)
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk import ConversationStats
 from openhands.sdk.event import ConversationStateUpdateEvent
@@ -236,8 +240,14 @@ class TestUpdateConversationStatistics:
         """Test that cost deltas are recorded for stats updates."""
         conversation_id, stored = v1_conversation_metadata
 
-        stored.accumulated_cost = 0.01
-        await async_session.commit()
+        await service.update_conversation_statistics(
+            conversation_id,
+            ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(model_name='test-model', accumulated_cost=0.01)
+                }
+            ),
+        )
 
         event_timestamp = datetime(2025, 1, 15, tzinfo=timezone.utc)
         agent_metrics = Metrics(
@@ -251,11 +261,11 @@ class TestUpdateConversationStatistics:
         )
 
         result = await async_session.execute(
-            select(StoredConversationCostEvent).where(
-                StoredConversationCostEvent.conversation_id == str(conversation_id)
-            )
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
         )
-        cost_event = result.scalar_one()
+        cost_event = result.scalars().all()[-1]
         assert cost_event.cost_delta == pytest.approx(0.04)
         occurred_at = cost_event.occurred_at
         if occurred_at.tzinfo is None:
@@ -263,12 +273,11 @@ class TestUpdateConversationStatistics:
         assert occurred_at == event_timestamp
 
     @pytest.mark.asyncio
-    async def test_update_statistics_no_agent_metrics(
-        self, service, v1_conversation_metadata
+    async def test_update_statistics_non_agent_bucket_counted(
+        self, service, async_session, v1_conversation_metadata
     ):
-        """Test that update is skipped when no agent metrics are present."""
+        """Spend outside the "agent" bucket (ACP, switched LLMs) is persisted."""
         conversation_id, stored = v1_conversation_metadata
-        original_cost = stored.accumulated_cost
 
         condenser_metrics = Metrics(
             model_name='test-model',
@@ -278,8 +287,339 @@ class TestUpdateConversationStatistics:
 
         await service.update_conversation_statistics(conversation_id, stats)
 
-        # Verify no update occurred
-        assert stored.accumulated_cost == original_cost
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.1)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_combines_switch_buckets(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """A mid-conversation LLM switch accrues under "profile:*"; totals combine."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.0824
+        await async_session.commit()
+
+        agent_metrics = Metrics(
+            model_name='gpt-5.5',
+            accumulated_cost=0.0824,
+            accumulated_token_usage=TokenUsage(
+                model='gpt-5.5', prompt_tokens=100, completion_tokens=10
+            ),
+        )
+        profile_metrics = Metrics(
+            model_name='claude-opus-4-8',
+            accumulated_cost=0.1741,
+            accumulated_token_usage=TokenUsage(
+                model='claude-opus-4-8', prompt_tokens=200, completion_tokens=20
+            ),
+        )
+        stats = ConversationStats(
+            usage_to_metrics={
+                'agent': agent_metrics,
+                'profile:opus-repro:abc123': profile_metrics,
+            }
+        )
+
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.2565)
+        assert stored.prompt_tokens == 300
+        assert stored.completion_tokens == 30
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
+        )
+        events = result.scalars().all()
+        # The ledger self-heals the pre-seeded agent spend, then records opus.
+        assert [(e.usage_id, e.llm_model) for e in events] == [
+            ('agent', 'gpt-5.5'),
+            ('profile:opus-repro:abc123', 'claude-opus-4-8'),
+        ]
+        assert events[1].cost_delta == pytest.approx(0.1741)
+        assert events[1].prompt_tokens == 200
+        assert events[1].completion_tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_bucket_attribution_across_turns(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Each bucket's spend lands in its own ledger rows, per model."""
+        conversation_id, stored = v1_conversation_metadata
+
+        agent_turn1 = Metrics(model_name='gpt-5.5', accumulated_cost=0.08)
+        await service.update_conversation_statistics(
+            conversation_id, ConversationStats(usage_to_metrics={'agent': agent_turn1})
+        )
+
+        agent_turn2 = Metrics(model_name='gpt-5.5', accumulated_cost=0.08)
+        profile_turn2 = Metrics(model_name='claude-opus-4-8', accumulated_cost=0.17)
+        await service.update_conversation_statistics(
+            conversation_id,
+            ConversationStats(
+                usage_to_metrics={
+                    'agent': agent_turn2,
+                    'profile:opus:xyz': profile_turn2,
+                }
+            ),
+        )
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.25)
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
+        )
+        events = result.scalars().all()
+        assert [(e.usage_id, e.llm_model) for e in events] == [
+            ('agent', 'gpt-5.5'),
+            ('profile:opus:xyz', 'claude-opus-4-8'),
+        ]
+        assert events[0].cost_delta == pytest.approx(0.08)
+        assert events[1].cost_delta == pytest.approx(0.17)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_transition_from_combined_null_events(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Pre-attribution NULL rows (incl. interim combined deltas) drain, not double-count."""
+        conversation_id, stored = v1_conversation_metadata
+
+        # Pre-migration state: cost history in a NULL row (no token data),
+        # token history only in the columns.
+        stored.accumulated_cost = 0.30
+        stored.prompt_tokens = 100
+        stored.completion_tokens = 10
+        async_session.add(
+            StoredConversationCostEvent(
+                conversation_id=str(conversation_id),
+                cost_delta=0.30,
+                occurred_at=datetime(2025, 1, 10, tzinfo=timezone.utc),
+            )
+        )
+        await async_session.commit()
+
+        stats = ConversationStats(
+            usage_to_metrics={
+                'agent': Metrics(
+                    model_name='gpt-5.5',
+                    accumulated_cost=0.12,
+                    accumulated_token_usage=TokenUsage(
+                        model='gpt-5.5', prompt_tokens=150, completion_tokens=15
+                    ),
+                ),
+                'profile:opus:x1': Metrics(
+                    model_name='claude-opus-4-8', accumulated_cost=0.25
+                ),
+            }
+        )
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.37)
+        assert stored.prompt_tokens == 150
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        events = result.scalars().all()
+        # Ledger cost tracks the combined column: 0.30 legacy + 0.07 new.
+        assert sum(e.cost_delta for e in events) == pytest.approx(0.37)
+        new_events = [e for e in events if e.usage_id is not None]
+        assert sum(e.cost_delta for e in new_events) == pytest.approx(0.07)
+        # Token history was never ledgered, so the ledger absorbs the full
+        # cumulative totals rather than discarding the unledgered baseline.
+        assert sum(e.prompt_tokens or 0 for e in events) == 150
+        assert sum(e.completion_tokens or 0 for e in events) == 15
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_token_only_growth_recorded(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Zero-cost models still get token deltas in the ledger."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(conversation_id, stats(100, 10))
+        await service.update_conversation_statistics(conversation_id, stats(300, 30))
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent)
+            .where(StoredConversationCostEvent.conversation_id == str(conversation_id))
+            .order_by(StoredConversationCostEvent.id)
+        )
+        events = result.scalars().all()
+        assert [(e.prompt_tokens, e.completion_tokens) for e in events] == [
+            (100, 10),
+            (200, 20),
+        ]
+        assert all(e.cost_delta == 0 for e in events)
+        assert all(e.llm_model == 'custom-llm' for e in events)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_zero_cost_stale_tokens_ignored(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Equal-cost out-of-order snapshots must not regress token totals."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(conversation_id, stats(200, 20))
+        # Stale snapshot with the same (zero) cost but older token counts.
+        await service.update_conversation_statistics(conversation_id, stats(100, 10))
+
+        await async_session.refresh(stored)
+        assert stored.prompt_tokens == 200
+        assert stored.completion_tokens == 20
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_acp_managed_bucket_persisted(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """ACP agents accrue under 'acp-managed'; cost must persist and ledger."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stats = ConversationStats(
+            usage_to_metrics={
+                'acp-managed': Metrics(
+                    model_name='claude-opus-4-8',
+                    accumulated_cost=0.42,
+                    accumulated_token_usage=TokenUsage(
+                        model='claude-opus-4-8',
+                        prompt_tokens=500,
+                        completion_tokens=50,
+                    ),
+                )
+            }
+        )
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.42)
+        assert stored.prompt_tokens == 500
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        event = result.scalar_one()
+        assert event.usage_id == 'acp-managed'
+        assert event.llm_model == 'claude-opus-4-8'
+        assert event.cost_delta == pytest.approx(0.42)
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_mixed_counter_snapshot_stays_monotonic(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """Each cumulative counter is monotonic even when others rise."""
+        conversation_id, stored = v1_conversation_metadata
+
+        def stats(prompt, completion, cache_read):
+            return ConversationStats(
+                usage_to_metrics={
+                    'agent': Metrics(
+                        model_name='custom-llm',
+                        accumulated_cost=0.0,
+                        accumulated_token_usage=TokenUsage(
+                            model='custom-llm',
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                            cache_read_tokens=cache_read,
+                        ),
+                    )
+                }
+            )
+
+        await service.update_conversation_statistics(
+            conversation_id, stats(200, 20, 50)
+        )
+        # Same combined sum, but prompt and cache regress while completion rises.
+        await service.update_conversation_statistics(
+            conversation_id, stats(100, 120, 10)
+        )
+
+        await async_session.refresh(stored)
+        assert stored.prompt_tokens == 200
+        assert stored.completion_tokens == 120
+        assert stored.cache_read_tokens == 50
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        events = result.scalars().all()
+        assert sum(event.prompt_tokens or 0 for event in events) == 200
+        assert sum(event.completion_tokens or 0 for event in events) == 120
+
+    @pytest.mark.asyncio
+    async def test_update_statistics_stale_snapshot_ignored(
+        self, service, async_session, v1_conversation_metadata
+    ):
+        """A snapshot below the stored total never regresses it."""
+        conversation_id, stored = v1_conversation_metadata
+
+        stored.accumulated_cost = 0.5
+        stored.prompt_tokens = 1000
+        await async_session.commit()
+
+        agent_metrics = Metrics(
+            model_name='test-model',
+            accumulated_cost=0.3,
+            accumulated_token_usage=TokenUsage(
+                model='test-model', prompt_tokens=50, completion_tokens=5
+            ),
+        )
+        stats = ConversationStats(usage_to_metrics={'agent': agent_metrics})
+
+        await service.update_conversation_statistics(conversation_id, stats)
+
+        await async_session.refresh(stored)
+        assert stored.accumulated_cost == pytest.approx(0.5)
+        assert stored.prompt_tokens == 1000
+
+        result = await async_session.execute(
+            select(StoredConversationCostEvent).where(
+                StoredConversationCostEvent.conversation_id == str(conversation_id)
+            )
+        )
+        assert result.scalars().all() == []
 
     @pytest.mark.asyncio
     async def test_update_statistics_conversation_not_found(self, service):
@@ -609,3 +949,131 @@ class TestOnEventStatsProcessing:
 
         # Verify stats update was NOT called
         mock_app_conversation_info_service.update_conversation_statistics.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for the run-end live-stats pull
+# ---------------------------------------------------------------------------
+
+
+class TestRunEndLiveStatsPull:
+    """Run-end statuses trigger a pull of combined stats from the agent-server."""
+
+    @pytest.mark.asyncio
+    async def test_on_event_pulls_live_stats_at_run_end(self):
+        from types import SimpleNamespace
+
+        from openhands.app_server.event_callback import webhook_router
+        from openhands.app_server.event_callback.webhook_router import on_event
+
+        conversation_id = uuid4()
+        events = [
+            ConversationStateUpdateEvent(key='execution_status', value='finished')
+        ]
+        mock_info = AppConversationInfo(
+            id=conversation_id, sandbox_id='sb1', created_by_user_id='user_123'
+        )
+        mock_info_service = AsyncMock()
+        mock_event_service = AsyncMock()
+
+        conversation = SimpleNamespace(
+            conversation_url='http://localhost:12345/api/conversations/abc',
+            session_api_key='key123',
+        )
+        app_conv_service = AsyncMock()
+        app_conv_service.get_app_conversation.return_value = conversation
+        service_ctx = MagicMock()
+        service_ctx.__aenter__ = AsyncMock(return_value=app_conv_service)
+        service_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        pulled_stats = ConversationStats.model_validate(
+            {
+                'usage_to_metrics': {
+                    'agent': {'accumulated_cost': 0.1},
+                    'profile:opus:x1': {'accumulated_cost': 0.2},
+                }
+            }
+        )
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {'stats': 'raw'}
+        http_client = AsyncMock()
+        http_client.get.return_value = response
+        client_ctx = MagicMock()
+        client_ctx.__aenter__ = AsyncMock(return_value=http_client)
+        client_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(
+                webhook_router, 'get_app_conversation_service', return_value=service_ctx
+            ) as mock_get_app_conversation_service,
+            patch.object(
+                webhook_router,
+                'replace_localhost_hostname_for_docker',
+                side_effect=lambda url: url.replace('localhost', 'docker-host'),
+            ) as mock_normalize,
+            patch.object(webhook_router.httpx, 'AsyncClient', return_value=client_ctx),
+            patch.object(webhook_router, 'ConversationInfo') as mock_ci,
+            patch(
+                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
+            ),
+        ):
+            mock_ci.model_validate.return_value = SimpleNamespace(stats=pulled_stats)
+            await on_event(
+                background_tasks=BackgroundTasks(),
+                events=events,
+                conversation_id=conversation_id,
+                app_conversation_info=mock_info,
+                app_conversation_info_service=mock_info_service,
+                event_service=mock_event_service,
+            )
+
+        # URL was normalized for docker-local sandboxes and used for the GET
+        mock_normalize.assert_called_once_with(
+            'http://localhost:12345/api/conversations/abc'
+        )
+        service_state = mock_get_app_conversation_service.call_args.args[0]
+        service_user_context = getattr(service_state, USER_CONTEXT_ATTR)
+        assert service_user_context == SandboxUserContext(
+            user_id=mock_info.created_by_user_id,
+            sandbox_id=mock_info.sandbox_id,
+        )
+        http_client.get.assert_awaited_once()
+        assert http_client.get.await_args.args[0] == (
+            'http://docker-host:12345/api/conversations/abc'
+        )
+        assert http_client.get.await_args.kwargs['headers'] == {
+            'X-Session-API-Key': 'key123'
+        }
+        # Pulled combined stats were persisted
+        mock_info_service.update_conversation_statistics.assert_awaited_once_with(
+            conversation_id, pulled_stats
+        )
+
+    @pytest.mark.asyncio
+    async def test_on_event_no_pull_while_running(self):
+        from openhands.app_server.event_callback import webhook_router
+        from openhands.app_server.event_callback.webhook_router import on_event
+
+        conversation_id = uuid4()
+        events = [ConversationStateUpdateEvent(key='execution_status', value='running')]
+        mock_info = AppConversationInfo(
+            id=conversation_id, sandbox_id='sb1', created_by_user_id='user_123'
+        )
+        mock_info_service = AsyncMock()
+
+        with (
+            patch.object(webhook_router, 'get_app_conversation_service') as mock_svc,
+            patch(
+                'openhands.app_server.event_callback.webhook_router._run_callbacks_in_bg_and_close'
+            ),
+        ):
+            await on_event(
+                background_tasks=BackgroundTasks(),
+                events=events,
+                conversation_id=conversation_id,
+                app_conversation_info=mock_info,
+                app_conversation_info_service=mock_info_service,
+                event_service=AsyncMock(),
+            )
+        mock_svc.assert_not_called()

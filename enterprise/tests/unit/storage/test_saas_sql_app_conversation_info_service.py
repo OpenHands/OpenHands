@@ -24,8 +24,18 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     ConversationTrigger,
 )
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationCostEvent,
+    StoredConversationMetadata,
+)
+from openhands.app_server.errors import AuthError
 from openhands.app_server.integrations.service_types import ProviderType
-from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
+from openhands.app_server.user.specifiy_user_context import (
+    SandboxUserContext,
+    SpecifyUserContext,
+)
+from openhands.sdk import ConversationStats
+from openhands.sdk.llm import Metrics, TokenUsage
 
 # Test UUIDs
 USER1_ID = UUID('a1111111-1111-1111-1111-111111111111')
@@ -443,6 +453,107 @@ class TestSaasSQLAppConversationInfoService:
         )
         assert len(page_back_in_org1.items) == 1
         assert page_back_in_org1.items[0].title == 'Conversation in Org 1'
+
+    @pytest.mark.asyncio
+    async def test_sandbox_context_updates_conversation_after_org_switch(
+        self,
+        async_session_with_users: AsyncSession,
+    ):
+        owner_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SpecifyUserContext(user_id=str(USER1_ID)),
+        )
+        conversation = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='authenticated-sandbox',
+            title='Org 1 conversation',
+        )
+        other_conversation = AppConversationInfo(
+            id=uuid4(),
+            created_by_user_id=str(USER1_ID),
+            sandbox_id='other-sandbox',
+            title='Other sandbox conversation',
+        )
+        await owner_service.save_app_conversation_info(conversation)
+        await owner_service.save_app_conversation_info(other_conversation)
+
+        user = await async_session_with_users.get(User, USER1_ID)
+        assert user is not None
+        user.current_org_id = ORG2_ID
+        await async_session_with_users.commit()
+        async_session_with_users.expire_all()
+
+        webhook_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SandboxUserContext(
+                user_id=str(USER1_ID),
+                sandbox_id=conversation.sandbox_id,
+            ),
+        )
+        assert (
+            await webhook_service.get_app_conversation_info(conversation.id)
+        ) is not None
+        assert (
+            await webhook_service.get_app_conversation_info(other_conversation.id)
+        ) is None
+
+        stats = ConversationStats(
+            usage_to_metrics={
+                'agent': Metrics(
+                    accumulated_cost=0.75,
+                    accumulated_token_usage=TokenUsage(
+                        prompt_tokens=100,
+                        completion_tokens=20,
+                    ),
+                )
+            }
+        )
+        await webhook_service.update_conversation_statistics(conversation.id, stats)
+        await webhook_service.update_execution_status(conversation.id, 'finished')
+
+        stored = await async_session_with_users.get(
+            StoredConversationMetadata, str(conversation.id)
+        )
+        assert stored is not None
+        assert stored.accumulated_cost == 0.75
+        assert stored.prompt_tokens == 100
+        assert stored.completion_tokens == 20
+        assert stored.execution_status == 'finished'
+
+        cost_events = (
+            await async_session_with_users.scalars(
+                select(StoredConversationCostEvent).where(
+                    StoredConversationCostEvent.conversation_id == str(conversation.id)
+                )
+            )
+        ).all()
+        assert [event.cost_delta for event in cost_events] == [0.75]
+
+        wrong_owner_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SandboxUserContext(
+                user_id=str(USER2_ID),
+                sandbox_id=conversation.sandbox_id,
+            ),
+        )
+        assert (
+            await wrong_owner_service.get_app_conversation_info(conversation.id)
+        ) is None
+
+        wrong_sandbox_service = SaasSQLAppConversationInfoService(
+            db_session=async_session_with_users,
+            user_context=SandboxUserContext(
+                user_id=str(USER1_ID),
+                sandbox_id=other_conversation.sandbox_id,
+            ),
+        )
+        with pytest.raises(AuthError):
+            await wrong_sandbox_service.save_app_conversation_info(
+                conversation.model_copy(update={'title': 'Overwritten'})
+            )
+        await async_session_with_users.refresh(stored)
+        assert stored.title == conversation.title
 
     @pytest.mark.asyncio
     async def test_count_respects_org_isolation(

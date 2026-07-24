@@ -7,6 +7,7 @@ import pkgutil
 from typing import Any
 from uuid import UUID
 
+import httpx
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -36,6 +37,8 @@ from openhands.app_server.config import (
     depends_app_conversation_info_service,
     depends_event_service,
     depends_jwt_service,
+    get_app_conversation_info_service,
+    get_app_conversation_service,
     get_event_callback_service,
     get_global_config,
     get_sandbox_service,
@@ -62,11 +65,15 @@ from openhands.app_server.user.auth_user_context import AuthUserContext
 from openhands.app_server.user.specifiy_user_context import (
     ADMIN,
     USER_CONTEXT_ATTR,
+    SandboxUserContext,
     SpecifyUserContext,
 )
 from openhands.app_server.user_auth.default_user_auth import DefaultUserAuth
 from openhands.app_server.user_auth.user_auth import (
     get_for_user as get_user_auth_for_user,
+)
+from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname_for_docker,
 )
 from openhands.sdk import ConversationExecutionStatus, Event
 from openhands.sdk.event import ConversationStateUpdateEvent, ObservationEvent
@@ -274,13 +281,16 @@ async def valid_sandbox(
                 status.HTTP_401_UNAUTHORIZED, detail='Invalid session API key'
             )
 
-        # In SAAS Mode there is always a user, so we set the owner of the sandbox
-        # as the current user (Validated by the session_api_key they provided)
+        # Scope webhook services to the authenticated sandbox, independent of the
+        # owner's currently selected organization.
         if sandbox_record.created_by_user_id:
             setattr(
                 request.state,
                 USER_CONTEXT_ATTR,
-                SpecifyUserContext(sandbox_record.created_by_user_id),
+                SandboxUserContext(
+                    user_id=sandbox_record.created_by_user_id,
+                    sandbox_id=sandbox_record.id,
+                ),
             )
         elif app_mode == AppMode.SAAS:
             _logger.error(
@@ -296,11 +306,11 @@ async def valid_sandbox(
 async def valid_conversation(
     conversation_id: UUID,
     sandbox_record: SandboxRecord = Depends(valid_sandbox),
-    app_conversation_info_service: AppConversationInfoService = app_conversation_info_service_dependency,
 ) -> AppConversationInfo:
-    app_conversation_info = (
-        await app_conversation_info_service.get_app_conversation_info(conversation_id)
-    )
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+    async with get_app_conversation_info_service(state) as service:
+        app_conversation_info = await service.get_app_conversation_info(conversation_id)
     if not app_conversation_info:
         # Conversation does not yet exist - create a stub
         return AppConversationInfo(
@@ -309,8 +319,10 @@ async def valid_conversation(
             created_by_user_id=sandbox_record.created_by_user_id,
         )
 
-    # Sanity check - Make sure that the conversation and sandbox were created by the same user
-    if app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id:
+    if (
+        app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id
+        or app_conversation_info.sandbox_id != sandbox_record.id
+    ):
         raise AuthError()
 
     return app_conversation_info
@@ -358,7 +370,8 @@ async def on_conversation_update(
     accepted on this single endpoint.
     """
     existing = await valid_conversation(
-        conversation_info.id, sandbox_record, app_conversation_info_service
+        conversation_info.id,
+        sandbox_record,
     )
 
     # If the conversation is being deleted, no action is required...
@@ -465,6 +478,58 @@ async def on_conversation_update(
     return Success()
 
 
+_LIVE_STATS_PULL_STATUSES = {
+    ConversationExecutionStatus.FINISHED,
+    ConversationExecutionStatus.IDLE,
+    ConversationExecutionStatus.ERROR,
+    ConversationExecutionStatus.STUCK,
+}
+
+
+async def _sync_live_conversation_stats(
+    conversation_id: UUID,
+    app_conversation_info: AppConversationInfo,
+    app_conversation_info_service: AppConversationInfoService,
+) -> None:
+    """Pull the registry's combined stats from the agent-server at run end.
+
+    Switched-in LLMs and ACP agents never attach a stats callback, so their
+    spend emits no stats events; without this pull the persisted totals
+    under-report whatever ran outside the startup-wired LLMs.
+    """
+    state = InjectorState()
+    setattr(
+        state,
+        USER_CONTEXT_ATTR,
+        SandboxUserContext(
+            user_id=app_conversation_info.created_by_user_id,
+            sandbox_id=app_conversation_info.sandbox_id,
+        ),
+    )
+    async with get_app_conversation_service(state) as app_conversation_service:
+        conversation = await app_conversation_service.get_app_conversation(
+            conversation_id
+        )
+    if conversation is None or not conversation.conversation_url:
+        return
+    # Local-docker sandboxes advertise localhost URLs; normalize like the
+    # title processor so the pull reaches the host, not this container.
+    conversation_url = replace_localhost_hostname_for_docker(
+        conversation.conversation_url
+    )
+    headers = {}
+    if conversation.session_api_key:
+        headers['X-Session-API-Key'] = conversation.session_api_key
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(conversation_url, headers=headers)
+        response.raise_for_status()
+        info = ConversationInfo.model_validate(response.json())
+    if info.stats and info.stats.usage_to_metrics:
+        await app_conversation_info_service.update_conversation_statistics(
+            conversation_id, info.stats
+        )
+
+
 @router.post('/events/{conversation_id}')
 async def on_event(
     background_tasks: BackgroundTasks,
@@ -513,6 +578,7 @@ async def on_event(
 
         # Analytics: conversation terminal state detection
         # Also persist execution status to database for dashboard queries
+        run_ended = False
         for event in events:
             if not isinstance(event, ConversationStateUpdateEvent):
                 continue
@@ -524,6 +590,8 @@ async def on_event(
                 await app_conversation_info_service.update_execution_status(
                     conversation_id, exec_status.value
                 )
+                if exec_status in _LIVE_STATS_PULL_STATUSES:
+                    run_ended = True
                 if exec_status.is_terminal():
                     await _track_conversation_terminal(
                         conversation_id, app_conversation_info, events, exec_status
@@ -532,6 +600,16 @@ async def on_event(
                 _logger.exception(
                     'analytics:conversation_terminal:failed', stack_info=True
                 )
+
+        if run_ended:
+            try:
+                await _sync_live_conversation_stats(
+                    conversation_id,
+                    app_conversation_info,
+                    app_conversation_info_service,
+                )
+            except Exception:
+                _logger.warning('live_stats_pull_failed', exc_info=True)
 
         background_tasks.add_task(
             _run_callbacks_in_bg_and_close,

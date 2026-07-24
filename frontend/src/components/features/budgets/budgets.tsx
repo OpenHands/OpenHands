@@ -155,6 +155,9 @@ export function Budgets() {
   const cycleLabel = budgetData?.cycle_start_at
     ? new Date(budgetData.cycle_start_at).toLocaleDateString("en-US", {
         month: "long",
+        // Cycle boundaries are UTC midnights; local rendering shifts the
+        // month for viewers west of UTC (July cycle labeled "June").
+        timeZone: "UTC",
       })
     : "this cycle";
   const defaultUserLimit = budgetData?.default_user_monthly_limit ?? null;

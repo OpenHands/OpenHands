@@ -33,6 +33,9 @@ export const formatShortDate = (dateStr: string) => {
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    // Date-only strings parse as UTC midnight; local rendering shifts
+    // every label a day back for viewers west of UTC.
+    timeZone: "UTC",
   });
 };
 
