@@ -317,6 +317,7 @@ class SandboxService(ABC):
         response = await httpx_client.post(
             f'{agent_server_url}/api/conversations/prepare-for-sandbox-pause',
             headers=headers,
+            timeout=30.0,
         )
         response.raise_for_status()
         if response.status_code != 204:

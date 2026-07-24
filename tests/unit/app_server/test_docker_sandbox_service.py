@@ -887,6 +887,7 @@ class TestDockerSandboxService:
         service.httpx_client.post.assert_awaited_once_with(
             'http://localhost:12345/api/conversations/prepare-for-sandbox-pause',
             headers={'X-Session-API-Key': 'session_key_123'},
+            timeout=30.0,
         )
 
     async def test_pause_sandbox_legacy_server_skips_drain(

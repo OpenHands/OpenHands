@@ -723,6 +723,7 @@ class TestSandboxLifecycle:
         remote_sandbox_service.httpx_client.post.assert_awaited_once_with(
             'https://sandbox.example.com/api/conversations/prepare-for-sandbox-pause',
             headers={'X-Session-API-Key': 'test-session-key'},
+            timeout=30.0,
         )
 
     @pytest.mark.asyncio
