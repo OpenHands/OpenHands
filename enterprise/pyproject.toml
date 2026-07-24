@@ -36,7 +36,7 @@ sqlalchemy = { extras = [ "asyncio" ], version = "2.0.48" }
 resend = "2.27.0"
 tenacity = "9.1.4"
 slack-sdk = "3.41.0"
-ddtrace = "3.13.0"                                          #pin to avoid yanked version 3.12.4
+ddtrace = "4.8.2"                                          #pin to avoid yanked version 3.12.4
 posthog = "7.9.12"
 limits = "5.8.0"
 coredis = "4.24.0"
