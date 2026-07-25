@@ -60,8 +60,8 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
         Prefers the X-Org-Id / API-key-bound org, falling back to the
         user's persisted current_org_id when no SAAS auth is present.
         """
-        user_auth = getattr(self.user_context, "user_auth", None)
-        if user_auth is not None and hasattr(user_auth, "get_effective_org_id"):
+        user_auth = getattr(self.user_context, 'user_auth', None)
+        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
             return await user_auth.get_effective_org_id()
         user = await self._get_current_user()
         return user.current_org_id if user else None
@@ -86,42 +86,42 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
 
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
-            raise AuthError("User authentication required")
+            raise AuthError('User authentication required')
 
         user_id_uuid = UUID(user_id_str)
 
-        if conversation_id.startswith("task-"):
+        if conversation_id.startswith('task-'):
             try:
-                task_id = UUID(conversation_id.removeprefix("task-"))
+                task_id = UUID(conversation_id.removeprefix('task-'))
             except ValueError as exc:
-                raise AuthError("Invalid conversation task ID") from exc
-            result = await self.db_session.execute(
+                raise AuthError('Invalid conversation task ID') from exc
+            task_result = await self.db_session.execute(
                 select(StoredAppConversationStartTask.app_conversation_id).where(
                     StoredAppConversationStartTask.id == task_id
                 )
             )
-            app_conversation_id = result.scalar_one_or_none()
+            app_conversation_id = task_result.scalar_one_or_none()
             if app_conversation_id is None:
-                raise AuthError("Conversation task is not available")
+                raise AuthError('Conversation task is not available')
             conversation_id = str(app_conversation_id)
         else:
             try:
                 conversation_id = str(UUID(conversation_id))
             except ValueError as exc:
-                raise AuthError("Invalid conversation ID") from exc
+                raise AuthError('Invalid conversation ID') from exc
 
         query = select(StoredConversationMetadataSaas).where(
             StoredConversationMetadataSaas.conversation_id == conversation_id
         )
-        result = await self.db_session.execute(query)
-        saas_metadata = result.scalar_one_or_none()
+        metadata_result = await self.db_session.execute(query)
+        saas_metadata = metadata_result.scalar_one_or_none()
 
         if saas_metadata is None:
-            raise AuthError("You do not have access to this conversation")
+            raise AuthError('You do not have access to this conversation')
 
         # Verify user ownership
         if saas_metadata.user_id != user_id_uuid:
-            raise AuthError("You do not have access to this conversation")
+            raise AuthError('You do not have access to this conversation')
 
         # Verify the conversation belongs to the request's *effective*
         # organization (honors X-Org-Id / API-key binding) rather than
@@ -130,13 +130,13 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
         # orgs.
         effective_org_id = await self._get_effective_org_id()
         if effective_org_id is None or saas_metadata.org_id != effective_org_id:
-            raise AuthError("Conversation belongs to a different organization")
+            raise AuthError('Conversation belongs to a different organization')
 
     async def add_message(
         self,
         conversation_id: str,
         content: list[TextContent | ImageContent],
-        role: str = "user",
+        role: str = 'user',
     ) -> PendingMessageResponse:
         """Queue a message with ownership validation.
 

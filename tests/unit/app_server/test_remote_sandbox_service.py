@@ -2959,7 +2959,7 @@ class TestDeleteSandboxKeyHandling:
     def service_with_real_db(
         self, mock_sandbox_spec_service, mock_user_context, real_session
     ):
-        return RemoteSandboxService(
+        service = RemoteSandboxService(
             sandbox_spec_service=mock_sandbox_spec_service,
             api_url='https://api.example.com',
             api_key='test-api-key',
@@ -2972,6 +2972,8 @@ class TestDeleteSandboxKeyHandling:
             httpx_client=AsyncMock(spec=httpx.AsyncClient),
             db_session=real_session,
         )
+        service._requires_credential_pause_barrier = AsyncMock(return_value=False)
+        return service
 
     @pytest.mark.asyncio
     async def test_session_key_invalidated_and_survives_rollback(

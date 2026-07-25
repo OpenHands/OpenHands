@@ -1,16 +1,18 @@
 """Enterprise injector for SQLAppConversationInfoService with SAAS filtering."""
 
 from datetime import datetime
-from typing import AsyncGenerator
+from typing import AsyncGenerator, cast
 from uuid import UUID, uuid4
 
 from fastapi import Request
 from sqlalchemy import ColumnElement, delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
 
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
@@ -23,12 +25,11 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     has_managed_codex_credential,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
-    APP_CONVERSATION_RESERVATION_TTL,
     APP_CONVERSATION_RESERVATION_TOKEN_KEY,
+    APP_CONVERSATION_RESERVATION_TTL,
     APP_CONVERSATION_RESERVATION_VERSION,
     SQLAppConversationInfoService,
 )
-from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, SandboxUserContext
@@ -83,7 +84,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError("User authentication required")
+            raise AuthError('User authentication required')
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -110,14 +111,14 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user.current_org_id) when the user is authenticated via SAAS auth,
         otherwise falls back to the user's persisted current_org_id.
         """
-        get_effective_org_id = getattr(self.user_context, "get_effective_org_id", None)
+        get_effective_org_id = getattr(self.user_context, 'get_effective_org_id', None)
         if callable(get_effective_org_id):
             effective_org_id = await get_effective_org_id()
             if effective_org_id is not None:
                 return effective_org_id
         else:
-            user_auth = getattr(self.user_context, "user_auth", None)
-            get_effective_org_id = getattr(user_auth, "get_effective_org_id", None)
+            user_auth = getattr(self.user_context, 'user_auth', None)
+            get_effective_org_id = getattr(user_auth, 'get_effective_org_id', None)
             if callable(get_effective_org_id):
                 effective_org_id = await get_effective_org_id()
                 if effective_org_id is not None:
@@ -133,7 +134,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -146,7 +147,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -161,14 +162,14 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 == StoredConversationMetadataSaas.conversation_id,
             )
             .where(
-                StoredConversationMetadata.conversation_version == "V1",
+                StoredConversationMetadata.conversation_version == 'V1',
                 StoredConversationMetadata.sandbox_id == sandbox_id,
             )
         )
         if self.user_context != ADMIN:
             user_id_str = await self.user_context.get_user_id()
             if not user_id_str:
-                raise AuthError("User authentication required")
+                raise AuthError('User authentication required')
             query = query.where(
                 StoredConversationMetadataSaas.user_id == UUID(user_id_str)
             )
@@ -287,7 +288,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == "V1")
+            .where(StoredConversationMetadata.conversation_version == 'V1')
         )
 
         # Apply user and organization filtering
@@ -322,7 +323,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f"%{title__contains}%")
+                StoredConversationMetadata.title.like(f'%{title__contains}%')
             )
 
         if created_at__gte is not None:
@@ -438,19 +439,22 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         cutoff = utc_now() - APP_CONVERSATION_RESERVATION_TTL
         now = utc_now()
-        result = await self.db_session.execute(
-            update(StoredConversationMetadata)
-            .where(
-                StoredConversationMetadata.conversation_id == str(conversation_id),
-                StoredConversationMetadata.conversation_version
-                == APP_CONVERSATION_RESERVATION_VERSION,
-                StoredConversationMetadata.last_updated_at < cutoff,
-            )
-            .values(
-                tags={APP_CONVERSATION_RESERVATION_TOKEN_KEY: token},
-                last_updated_at=now,
-                created_at=now,
-            )
+        result = cast(
+            CursorResult,
+            await self.db_session.execute(
+                update(StoredConversationMetadata)
+                .where(
+                    StoredConversationMetadata.conversation_id == str(conversation_id),
+                    StoredConversationMetadata.conversation_version
+                    == APP_CONVERSATION_RESERVATION_VERSION,
+                    StoredConversationMetadata.last_updated_at < cutoff,
+                )
+                .values(
+                    tags={APP_CONVERSATION_RESERVATION_TOKEN_KEY: token},
+                    last_updated_at=now,
+                    created_at=now,
+                )
+            ),
         )
         if not result.rowcount:
             await self.db_session.rollback()
@@ -612,9 +616,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         if isinstance(self.user_context, SandboxUserContext):
             if not user_id_str:
-                raise AuthError("Sandbox owner required")
+                raise AuthError('Sandbox owner required')
             if existing is not None and existing.user_id is None:
-                raise AuthError("Conversation organization is unavailable")
+                raise AuthError('Conversation organization is unavailable')
             if (
                 info.sandbox_id != self.user_context.sandbox_id
                 or info.created_by_user_id != user_id_str

@@ -3,13 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from server.utils.saas_pending_message_injector import SaasSQLPendingMessageService
 
 from openhands.app_server.errors import AuthError
-from server.utils.saas_pending_message_injector import SaasSQLPendingMessageService
 
 
 @pytest.mark.parametrize(
-    "conversation_alias",
+    'conversation_alias',
     [
         lambda conversation_id: conversation_id.hex,
         lambda conversation_id: str(conversation_id).upper(),
@@ -57,8 +57,8 @@ async def test_task_alias_enforces_effective_organization():
     user_context.user_auth.get_effective_org_id = AsyncMock(return_value=uuid4())
     service = SaasSQLPendingMessageService(session, user_context)
 
-    with pytest.raises(AuthError, match="different organization"):
-        await service._validate_conversation_ownership(f"task-{task_id.hex}")
+    with pytest.raises(AuthError, match='different organization'):
+        await service._validate_conversation_ownership(f'task-{task_id.hex}')
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_task_alias_accepts_matching_organization():
     )
     service = SaasSQLPendingMessageService(session, user_context)
 
-    await service._validate_conversation_ownership(f"task-{task_id.hex}")
+    await service._validate_conversation_ownership(f'task-{task_id.hex}')
 
 
 @pytest.mark.asyncio
@@ -96,5 +96,5 @@ async def test_unmapped_task_alias_is_denied():
     user_context.get_user_id = AsyncMock(return_value=str(uuid4()))
     service = SaasSQLPendingMessageService(session, user_context)
 
-    with pytest.raises(AuthError, match="not available"):
-        await service._validate_conversation_ownership(f"task-{uuid4().hex}")
+    with pytest.raises(AuthError, match='not available'):
+        await service._validate_conversation_ownership(f'task-{uuid4().hex}')
