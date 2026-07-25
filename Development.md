@@ -26,7 +26,7 @@ Select your operating system to see the specific setup instructions:
 You'll need the following installed:
 
 - **Python 3.12** — `brew install python@3.12` (see the [official Homebrew Python docs](https://docs.brew.sh/Homebrew-and-Python) for details). Make sure `python3.12` is available in your PATH (the `make build` step will verify this).
-- **Node.js >= 22** — `brew install node`
+- **Node.js 22.12.x or later** — `brew install node` (matches the `frontend/package.json` `engines.node` requirement)
 - **Poetry >= 1.8** — `brew install poetry`
 - **Docker Desktop** — `brew install --cask docker`
   - After installing, open Docker Desktop → **Settings → Advanced** → Enable **"Allow the default Docker socket to be used"**

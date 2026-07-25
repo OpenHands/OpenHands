@@ -19,7 +19,7 @@ We believe in the power of open source to democratize access to cutting-edge AI 
 
 ### Set Up Your Development Environment
 
-- **Requirements**: Linux/Mac/WSL, Docker, Python 3.12, Node.js 22+, Poetry 1.8+
+- **Requirements**: Linux/Mac/WSL, Docker, Python 3.12, Node.js 22.12+, Poetry 1.8+
 - **Quick setup**: `make build`
 - **Run locally**: `make run`
 - **LLM setup (V1 web app)**: configure your model and API key in the Settings UI after the app starts
