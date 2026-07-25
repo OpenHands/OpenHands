@@ -108,7 +108,10 @@ function makeSandbox(
 
 function createWrapper() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    // `retry` is overridden per-query by the hook's own `retry: 3`, so error
+    // paths do retry here; `retryDelay: 0` keeps them from spending the
+    // default exponential backoff before the query settles.
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   });
   return ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
@@ -172,6 +175,10 @@ describe("useUnifiedVSCodeUrl", () => {
     // Assert
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.url).toBeNull();
+    // Cloud is deliberately excluded from `isUnavailable`: a sandbox that is
+    // still STARTING will populate exposed_urls shortly, so the control stays
+    // visible. Only self-hosted backends can report a final "no editor".
+    expect(result.current.isUnavailable).toBe(false);
   });
 
   it("falls through to AgentServerConversationService.getVSCodeUrl in local mode", async () => {
@@ -199,5 +206,54 @@ describe("useUnifiedVSCodeUrl", () => {
     );
     expect(batchGetCloudSandboxes).not.toHaveBeenCalled();
     expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    // A backend that hands back a usable URL is available, so consumers
+    // render the control.
+    expect(result.current.isUnavailable).toBe(false);
+  });
+
+  it("reports isUnavailable in local mode when the backend has VSCode disabled", async () => {
+    // Arrange — `enable_vscode: false` makes agent-server answer
+    // `GET /vscode/url` with 503, so both resolvers reject and the query
+    // settles in `error` with no data. This is a permanent property of the
+    // deployment, not a transient failure, so consumers must be able to
+    // drop the control rather than offer a click that cannot do anything.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockRejectedValue(
+      new Error("Request failed with status code 503"),
+    );
+    vi.mocked(ConversationService.getVSCodeUrl).mockRejectedValue(
+      new Error("Request failed with status code 503"),
+    );
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.isUnavailable).toBe(true);
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("reports isUnavailable in local mode when the backend reports no URL", async () => {
+    // Arrange — the request succeeds but carries no URL (VSCode enabled and
+    // yet nothing to point at, e.g. no connection token). Distinct code path
+    // from the 503 above: this settles in `success`, so `isError` alone
+    // would miss it.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
+      vscode_url: null,
+    });
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.url).toBeNull();
+    expect(result.current.isUnavailable).toBe(true);
   });
 });

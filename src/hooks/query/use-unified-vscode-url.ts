@@ -68,6 +68,9 @@ export const useUnifiedVSCodeUrl = () => {
   let status: typeof localQuery.status;
   let error: unknown;
   let refetch: () => Promise<{ data: VSCodeUrlResult | undefined }>;
+  // True once we know there is nothing to open, so callers can render nothing
+  // instead of a control whose activation is a no-op.
+  let isUnavailable: boolean;
 
   if (isCloud) {
     const sandbox = cloudSandboxQuery.data;
@@ -94,6 +97,10 @@ export const useUnifiedVSCodeUrl = () => {
           : undefined,
       };
     };
+    // Cloud behavior is deliberately unchanged: a sandbox with no VSCODE
+    // entry in `exposed_urls` still surfaces the control. Narrowing this
+    // change to self-hosted keeps its blast radius off the cloud path.
+    isUnavailable = false;
   } else {
     data = localQuery.data;
     isLoading = localQuery.isLoading;
@@ -105,6 +112,12 @@ export const useUnifiedVSCodeUrl = () => {
       const result = await localQuery.refetch();
       return { data: result.data };
     };
+    // Two ways a self-hosted backend has no editor to offer, both final
+    // rather than transient (the query already retries three times):
+    //   - `enable_vscode: false` — `GET /vscode/url` answers 503, so the
+    //     query settles in `error` with no data at all.
+    //   - the server reports no URL — settles successfully with `url: null`.
+    isUnavailable = isError || (isSuccess && !localQuery.data?.url);
   }
 
   // Derive the i18n'd "URL unavailable" message outside `queryFn` so the
@@ -118,6 +131,7 @@ export const useUnifiedVSCodeUrl = () => {
     isLoading,
     isError,
     isSuccess,
+    isUnavailable,
     status,
     refetch,
   };
