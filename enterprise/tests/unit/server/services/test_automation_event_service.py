@@ -14,7 +14,6 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from openhands.app_server.integrations.service_types import ProviderType
 
 REDIS_PATCH = 'server.services.automation_event_service.get_redis_client_async'
@@ -461,6 +460,97 @@ class TestForwardEvent:
             payload = call_args[0][2]
             assert payload['organization']['git_org'] == 'testuser'
             assert payload['organization']['openhands_org_id'] == keycloak_id
+
+    @pytest.mark.asyncio
+    async def test_forward_event_skips_unrequested_github_event(
+        self, mock_token_manager, github_org_payload
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_types',
+                new_callable=AsyncMock,
+                return_value={'push'},
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+            ) as mock_resolver,
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=github_org_payload,
+                installation_id=99999,
+                event_type='workflow_job',
+            )
+
+            mock_resolver.assert_not_called()
+            mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_forward_event_allows_requested_github_event(
+        self, mock_token_manager, github_org_payload, mock_org_git_claim
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_types',
+                new_callable=AsyncMock,
+                return_value={'pull_request'},
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ),
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=github_org_payload,
+                installation_id=99999,
+                event_type='pull_request',
+            )
+
+            mock_send.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_requested_event_types_falls_back_to_defaults(
+        self, mock_token_manager
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        with patch.object(
+            AutomationEventService,
+            '_fetch_requested_event_types',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            event_types = await service._get_requested_event_types('github')
+
+        assert 'pull_request' in event_types
+        assert 'workflow_job' not in event_types
 
     @pytest.mark.asyncio
     async def test_forward_event_no_owner_in_payload(self, mock_token_manager):
