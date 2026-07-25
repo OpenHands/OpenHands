@@ -536,7 +536,7 @@ class TestForwardEvent:
             mock_send.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_requested_event_types_falls_back_to_defaults(
+    async def test_get_requested_event_types_returns_none_without_server_truth(
         self, mock_token_manager
     ):
         from server.services.automation_event_service import AutomationEventService
@@ -550,8 +550,46 @@ class TestForwardEvent:
             service = AutomationEventService(mock_token_manager)
             event_types = await service._get_requested_event_types('github')
 
-        assert 'pull_request' in event_types
-        assert 'workflow_job' not in event_types
+        assert event_types is None
+
+    @pytest.mark.asyncio
+    async def test_forward_event_allows_when_requested_types_unavailable(
+        self, mock_token_manager, github_org_payload, mock_org_git_claim
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_types',
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ),
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=github_org_payload,
+                installation_id=99999,
+                event_type='workflow_job',
+            )
+
+            mock_send.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_forward_event_no_owner_in_payload(self, mock_token_manager):

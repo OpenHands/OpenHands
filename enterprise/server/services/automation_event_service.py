@@ -54,17 +54,6 @@ REQUESTED_EVENT_TYPES_CACHE_TTL_SECONDS = int(
 REQUESTED_EVENT_TYPES_REFRESH_EVENT_COUNT = int(
     os.environ.get('AUTOMATION_REQUESTED_EVENT_TYPES_REFRESH_EVENT_COUNT', '1000')
 )
-DEFAULT_REQUESTED_EVENT_TYPES_BY_SOURCE = {
-    ProviderType.GITHUB.value: {
-        'issue_comment',
-        'issues',
-        'pull_request',
-        'pull_request_review',
-        'push',
-        'release',
-    }
-}
-
 # Cache key prefixes (provider is appended dynamically)
 ORG_CLAIM_CACHE_PREFIX = 'automation:org_claim'
 USER_ID_CACHE_PREFIX = 'automation:idp_to_kc_user'
@@ -228,10 +217,14 @@ class AutomationEventService:
             return True
 
         source = provider.value
-        if source not in DEFAULT_REQUESTED_EVENT_TYPES_BY_SOURCE:
+        requested_event_types = await self._get_requested_event_types(source)
+        if requested_event_types is None:
+            logger.warning(
+                f'[AutomationEventService] Forwarding {source} event type '
+                f'{event_type}: requested event types unavailable'
+            )
             return True
 
-        requested_event_types = await self._get_requested_event_types(source)
         if event_type in requested_event_types:
             return True
 
@@ -241,7 +234,7 @@ class AutomationEventService:
         )
         return False
 
-    async def _get_requested_event_types(self, source: str) -> set[str]:
+    async def _get_requested_event_types(self, source: str) -> set[str] | None:
         now = time.monotonic()
         entry = self._requested_event_types_cache.get(source)
         if entry is not None and self._is_requested_event_types_cache_fresh(entry, now):
@@ -266,7 +259,7 @@ class AutomationEventService:
 
             if entry is not None:
                 return entry.event_types
-            return set(DEFAULT_REQUESTED_EVENT_TYPES_BY_SOURCE.get(source, set()))
+            return None
 
     @staticmethod
     def _is_requested_event_types_cache_fresh(
