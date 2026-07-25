@@ -510,7 +510,7 @@ describe("ConversationTabs localStorage behavior", () => {
       mockConversationId = REAL_CONVERSATION_ID;
     });
 
-    it("should hide the vscode link when the active backend is local", () => {
+    it("should show the vscode link when the active backend is local", () => {
       // Arrange
       seedActiveBackend({
         id: "local-test",
@@ -525,10 +525,10 @@ describe("ConversationTabs localStorage behavior", () => {
         wrapper: createWrapper(REAL_CONVERSATION_ID),
       });
 
-      // Assert
-      expect(
-        screen.queryByTestId("drawer-vscode-link"),
-      ).not.toBeInTheDocument();
+      // Assert — self-hosted backends serve VSCode too; the URL comes from
+      // the agent server's /api/vscode/url via useUnifiedVSCodeUrl's local
+      // branch, rather than from cloud `exposed_urls`.
+      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
     });
 
     it("should show the vscode link when the active backend is cloud", () => {

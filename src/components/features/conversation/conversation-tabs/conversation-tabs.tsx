@@ -336,16 +336,10 @@ export function ConversationTabs({
               </div>
             </div>
           </div>
-          {/* Keep the ref'd wrapper mounted on local backends too — the
-              overflow measurement effect above bails if it's missing. */}
-          <div
-            ref={vscodeButtonRef}
-            className={cn(
-              "ml-auto shrink-0",
-              backend.kind === "cloud" && "pr-1",
-            )}
-          >
-            {backend.kind === "cloud" && <DrawerVSCodeLink />}
+          {/* The ref'd wrapper must stay mounted — the overflow measurement
+              effect above bails if it's missing. */}
+          <div ref={vscodeButtonRef} className="ml-auto shrink-0 pr-1">
+            <DrawerVSCodeLink />
           </div>
         </div>
       </div>
