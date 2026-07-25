@@ -29,9 +29,6 @@ from typing import Any
 from uuid import UUID
 
 import aiohttp
-from openhands.app_server.integrations.provider import ProviderType
-from openhands.app_server.utils.logger import openhands_logger as logger
-
 from integrations.resolver_org_router import resolve_org_for_repo
 from server.auth.constants import (
     AUTOMATION_SERVICE_TIMEOUT,
@@ -42,6 +39,9 @@ from server.auth.token_manager import TokenManager
 from storage.default_org_service import get_default_org_config
 from storage.org_store import OrgStore
 from storage.redis import get_redis_client_async
+
+from openhands.app_server.integrations.provider import ProviderType
+from openhands.app_server.utils.logger import openhands_logger as logger
 
 # Cache TTL constants
 ORG_CLAIM_CACHE_TTL_SECONDS = 3600  # 1 hour for org claims (rarely change)
@@ -104,9 +104,7 @@ class AutomationEventService:
         from server.auth.constants import AUTOMATION_EVENT_FORWARDING_ENABLED
 
         self.token_manager = token_manager
-        self._requested_event_types_cache: dict[
-            str, RequestedEventTypesCacheEntry
-        ] = {}
+        self._requested_event_types_cache: dict[str, RequestedEventTypesCacheEntry] = {}
         self._requested_event_types_lock = asyncio.Lock()
 
         # Fail fast if forwarding is enabled but misconfigured
