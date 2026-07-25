@@ -227,48 +227,28 @@ class AutomationEventService:
     ) -> bool:
         """Return whether this provider event should be forwarded."""
         source = provider.value
-        payload_action = payload.get('action')
-        repository_full_name = payload.get('repository', {}).get('full_name')
         metadata = await self._get_requested_event_metadata(source)
         if metadata is None:
             logger.warning(
                 f'[AutomationEventService] Forwarding {source} event: requested '
-                f'event metadata unavailable (header_event_type={event_type}, '
-                f'payload_action={payload_action}, repository={repository_full_name})'
+                f'event metadata unavailable'
             )
             return True
 
-        requested_event_types = sorted(metadata.event_types)
-        detection_rule_types = [
-            rule.event_type for rule in metadata.event_detection_rules
-        ]
         detected_event_type = self._detect_source_event_type(source, payload, metadata)
         if detected_event_type is None:
-            logger.info(
-                f'[AutomationEventService] Skipping {source} event: no automation '
-                f'detection rule matched (header_event_type={event_type}, '
-                f'payload_action={payload_action}, repository={repository_full_name}, '
-                f'requested_event_types={requested_event_types}, '
-                f'detection_rule_types={detection_rule_types})'
+            logger.debug(
+                f'[AutomationEventService] Skipping {source} event type '
+                f'{event_type}: no automation detection rule matched'
             )
             return False
 
         if detected_event_type in metadata.event_types:
-            logger.info(
-                f'[AutomationEventService] Forwarding {source} event: requested '
-                f'event type matched (header_event_type={event_type}, '
-                f'payload_action={payload_action}, repository={repository_full_name}, '
-                f'detected_event_type={detected_event_type}, '
-                f'requested_event_types={requested_event_types})'
-            )
             return True
 
-        logger.info(
-            f'[AutomationEventService] Skipping {source} event: detected event type '
-            f'not requested (header_event_type={event_type}, '
-            f'payload_action={payload_action}, repository={repository_full_name}, '
-            f'detected_event_type={detected_event_type}, '
-            f'requested_event_types={requested_event_types})'
+        logger.debug(
+            f'[AutomationEventService] Skipping {source} event type '
+            f'{detected_event_type}: not requested by automation service'
         )
         return False
 
@@ -409,8 +389,8 @@ class AutomationEventService:
                         item for item in event_types if isinstance(item, str)
                     }
                     logger.info(
-                        f'[AutomationEventService] Fetched requested event metadata '
-                        f'for {source}: requested_event_types='
+                        f'[AutomationEventService] Refreshed event forwarding '
+                        f'metadata for {source}: requested_event_types='
                         f'{sorted(requested_event_types)}, detection_rule_types='
                         f'{[rule.event_type for rule in rules]}'
                     )
