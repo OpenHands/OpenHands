@@ -59,6 +59,10 @@ export const useUnifiedVSCodeUrl = () => {
     enabled: !isCloud && runtimeIsReady && !!conversationId,
     refetchOnMount: true,
     retry: 3,
+    // `enable_vscode: false` answers 503, which is a deployment setting rather
+    // than a failure the user should see a toast about. The correct response is
+    // to offer no button (see `isUnavailable`), so suppress the global handler.
+    meta: { disableToast: true },
   });
 
   let data: VSCodeUrlResult | undefined;
