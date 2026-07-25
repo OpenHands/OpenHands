@@ -5,19 +5,34 @@ covering message queuing, retrieval, counting, deletion, and
 conversation_id updates using SQLite as a mock database.
 """
 
+import asyncio
+from datetime import timedelta
 from typing import AsyncGenerator
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from openhands.agent_server.models import TextContent
+from openhands.agent_server.models import TextContent, utc_now
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationStartRequest,
+    AppConversationStartTask,
+    AppConversationStartTaskStatus,
+)
+from openhands.app_server.app_conversation.sql_app_conversation_start_task_service import (
+    StoredAppConversationStartTask,
+)
+from openhands.app_server.pending_messages import pending_message_service
 from openhands.app_server.pending_messages.pending_message_models import (
     PendingMessageResponse,
 )
 from openhands.app_server.pending_messages.pending_message_service import (
+    PendingMessageLimitExceeded,
+    PendingMessageUnavailable,
     SQLPendingMessageService,
+    StoredPendingMessage,
 )
 from openhands.app_server.utils.sql_utils import Base
 
@@ -229,6 +244,25 @@ class TestSQLPendingMessageService:
         assert deleted_count == 0
 
     @pytest.mark.asyncio
+    async def test_delete_messages_removes_only_selected_messages(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = f'task-{uuid4().hex}'
+        responses = [
+            await service.add_message(conversation_id, sample_content) for _ in range(3)
+        ]
+
+        deleted_count = await service.delete_messages(
+            [responses[0].id, responses[1].id]
+        )
+
+        assert deleted_count == 2
+        remaining = await service.get_pending_messages(conversation_id)
+        assert [message.id for message in remaining] == [responses[2].id]
+
+    @pytest.mark.asyncio
     async def test_update_conversation_id_updates_all_matching_messages(
         self,
         service: SQLPendingMessageService,
@@ -307,3 +341,293 @@ class TestSQLPendingMessageService:
         assert len(messages2) == 1
         assert messages1[0].content[0].text == 'Conv1 msg'
         assert messages2[0].content[0].text == 'Conv2 msg'
+
+    @pytest.mark.asyncio
+    async def test_add_message_redirects_after_task_is_ready(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.READY,
+            app_conversation_id=conversation_id,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await async_session.commit()
+
+        response = await service.add_message(
+            f'task-{task.id.hex}',
+            sample_content,
+        )
+
+        assert response.queued is False
+        assert response.conversation_id == str(conversation_id)
+        assert await service.count_pending_messages(f'task-{task.id.hex}') == 0
+
+    @pytest.mark.asyncio
+    async def test_delivery_cutover_migrates_queue_and_publishes_ready(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await async_session.commit()
+        queued = await service.add_message(f'task-{task.id.hex}', sample_content)
+
+        messages = await service.begin_message_delivery_cutover(
+            task.id,
+            conversation_id,
+        )
+        result = await service.finish_message_delivery_cutover(
+            task.id, [queued.id], True
+        )
+
+        assert [message.id for message in messages] == [queued.id]
+        assert messages[0].conversation_id == str(conversation_id)
+        assert result == 1
+        stored_task = await async_session.get(StoredAppConversationStartTask, task.id)
+        assert stored_task is not None
+        assert stored_task.status == AppConversationStartTaskStatus.READY
+        assert stored_task.app_conversation_id == conversation_id
+        assert await service.get_pending_messages(str(conversation_id)) == []
+
+    @pytest.mark.asyncio
+    async def test_delivery_cutover_failure_retains_undelivered_tail(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await async_session.commit()
+        first = await service.add_message(f'task-{task.id.hex}', sample_content)
+        second = await service.add_message(f'task-{task.id.hex}', sample_content)
+
+        await service.begin_message_delivery_cutover(task.id, conversation_id)
+        result = await service.finish_message_delivery_cutover(
+            task.id,
+            [first.id],
+            False,
+        )
+
+        remaining = await service.get_pending_messages(str(conversation_id))
+        assert [message.id for message in remaining] == [second.id]
+        assert result == 1
+        stored_task = await async_session.get(StoredAppConversationStartTask, task.id)
+        assert stored_task is not None
+        assert (
+            stored_task.status == AppConversationStartTaskStatus.STARTING_CONVERSATION
+        )
+
+    @pytest.mark.asyncio
+    async def test_delivery_cutover_rejects_non_prefix_deletion(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await async_session.commit()
+        first = await service.add_message(f'task-{task.id.hex}', sample_content)
+        second = await service.add_message(f'task-{task.id.hex}', sample_content)
+
+        await service.begin_message_delivery_cutover(task.id, conversation_id)
+        with pytest.raises(PendingMessageUnavailable):
+            await service.finish_message_delivery_cutover(task.id, [second.id], False)
+
+        messages = await service.get_pending_messages(f'task-{task.id.hex}')
+        assert [message.id for message in messages] == [first.id, second.id]
+
+    @pytest.mark.asyncio
+    async def test_delivery_cutover_rejects_stale_task(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+    ):
+        conversation_id = uuid4()
+        older = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+            app_conversation_id=conversation_id,
+        )
+        newer = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+            app_conversation_id=conversation_id,
+            created_at=older.created_at + timedelta(microseconds=1),
+        )
+        async_session.add_all(
+            [
+                StoredAppConversationStartTask(**older.model_dump()),
+                StoredAppConversationStartTask(**newer.model_dump()),
+            ]
+        )
+        await async_session.commit()
+
+        with pytest.raises(PendingMessageUnavailable):
+            await service.begin_message_delivery_cutover(
+                older.id,
+                conversation_id,
+            )
+
+    @pytest.mark.asyncio
+    async def test_delivery_cutover_rolls_back_on_cancellation(self):
+        db_session = Mock(spec=AsyncSession)
+        db_session.execute = AsyncMock(side_effect=asyncio.CancelledError)
+        db_session.rollback = AsyncMock()
+        service = SQLPendingMessageService(db_session=db_session)
+        service._lock_canonical_conversation = AsyncMock()
+
+        with pytest.raises(asyncio.CancelledError):
+            await service.begin_message_delivery_cutover(uuid4(), uuid4())
+
+        db_session.rollback.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_add_message_normalizes_uuid_alias(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await async_session.commit()
+
+        queued = await service.add_message(
+            f'task-{str(task.id).upper()}',
+            sample_content,
+        )
+        messages = await service.get_pending_messages(f'task-{task.id.hex}')
+
+        assert [message.id for message in messages] == [queued.id]
+        assert messages[0].conversation_id == f'task-{task.id.hex}'
+
+    @pytest.mark.asyncio
+    async def test_add_message_counts_legacy_task_alias(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        async_session.add(StoredAppConversationStartTask(**task.model_dump()))
+        async_session.add(
+            StoredPendingMessage(
+                id=str(uuid4()),
+                conversation_id=f'task-{task.id}',
+                role='user',
+                content=[item.model_dump() for item in sample_content],
+                created_at=utc_now(),
+            )
+        )
+        await async_session.commit()
+
+        queued = await service.add_message(f'task-{task.id.hex}', sample_content)
+
+        assert queued.position == 2
+        assert await service.count_pending_messages(f'task-{task.id.hex}') == 2
+
+    @pytest.mark.asyncio
+    async def test_add_message_rejects_unknown_canonical_conversation(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        with pytest.raises(PendingMessageUnavailable):
+            await service.add_message(str(uuid4()), sample_content)
+
+    @pytest.mark.asyncio
+    async def test_add_message_enforces_limit_atomically(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = f'task-{uuid4().hex}'
+        for _ in range(10):
+            await service.add_message(conversation_id, sample_content)
+
+        with pytest.raises(PendingMessageLimitExceeded):
+            await service.add_message(conversation_id, sample_content)
+
+    @pytest.mark.asyncio
+    async def test_get_pending_messages_breaks_timestamp_ties_by_id(
+        self,
+        service: SQLPendingMessageService,
+        async_session: AsyncSession,
+        sample_content: list[TextContent],
+    ):
+        conversation_id = str(uuid4())
+        created_at = utc_now()
+        content = [item.model_dump() for item in sample_content]
+        async_session.add_all(
+            [
+                StoredPendingMessage(
+                    id=message_id,
+                    conversation_id=conversation_id,
+                    role='user',
+                    content=content,
+                    created_at=created_at,
+                )
+                for message_id in ('b', 'a')
+            ]
+        )
+        await async_session.commit()
+
+        messages = await service.get_pending_messages(conversation_id)
+
+        assert [message.id for message in messages] == ['a', 'b']
+
+    @pytest.mark.asyncio
+    async def test_add_message_assigns_monotonic_timestamps(
+        self,
+        service: SQLPendingMessageService,
+        sample_content: list[TextContent],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        conversation_id = f'task-{uuid4().hex}'
+        created_at = utc_now()
+        monkeypatch.setattr(
+            pending_message_service,
+            'utc_now',
+            lambda: created_at,
+        )
+
+        await service.add_message(conversation_id, sample_content)
+        await service.add_message(conversation_id, sample_content)
+
+        messages = await service.get_pending_messages(conversation_id)
+        assert messages[0].created_at < messages[1].created_at

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import AsyncGenerator, cast
 from uuid import UUID
 
@@ -39,6 +39,9 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 from openhands.app_server.app_conversation.app_conversation_start_task_service import (
     AppConversationStartTaskService,
     AppConversationStartTaskServiceInjector,
+)
+from openhands.app_server.app_conversation.sql_app_conversation_lock import (
+    lock_app_conversation,
 )
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.utils.sql_utils import (
@@ -116,13 +119,27 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
 
         # Add sort order
         if sort_order == AppConversationStartTaskSortOrder.CREATED_AT:
-            query = query.order_by(StoredAppConversationStartTask.created_at)
+            query = query.order_by(
+                StoredAppConversationStartTask.created_at,
+                StoredAppConversationStartTask.id,
+            )
         elif sort_order == AppConversationStartTaskSortOrder.CREATED_AT_DESC:
-            query = query.order_by(StoredAppConversationStartTask.created_at.desc())
+            query = query.order_by(
+                StoredAppConversationStartTask.created_at.desc(),
+                StoredAppConversationStartTask.id.desc(),
+            )
         elif sort_order == AppConversationStartTaskSortOrder.UPDATED_AT:
-            query = query.order_by(StoredAppConversationStartTask.updated_at)
+            query = query.order_by(
+                StoredAppConversationStartTask.updated_at,
+                StoredAppConversationStartTask.created_at,
+                StoredAppConversationStartTask.id,
+            )
         elif sort_order == AppConversationStartTaskSortOrder.UPDATED_AT_DESC:
-            query = query.order_by(StoredAppConversationStartTask.updated_at.desc())
+            query = query.order_by(
+                StoredAppConversationStartTask.updated_at.desc(),
+                StoredAppConversationStartTask.created_at.desc(),
+                StoredAppConversationStartTask.id.desc(),
+            )
 
         # Apply pagination
         if page_id is not None:
@@ -138,7 +155,9 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         # Apply limit and get one extra to check if there are more results
         query = query.limit(limit + 1)
 
-        result = await self.session.execute(query)
+        result = await self.session.execute(
+            query.execution_options(populate_existing=True)
+        )
         rows = result.scalars().all()
 
         # Check if there are more results
@@ -226,7 +245,9 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
                 StoredAppConversationStartTask.created_by_user_id == self.user_id
             )
 
-        result = await self.session.execute(query)
+        result = await self.session.execute(
+            query.execution_options(populate_existing=True)
+        )
         stored_task = result.scalar_one_or_none()
         if stored_task:
             return AppConversationStartTask.model_validate(row2dict(stored_task))
@@ -235,13 +256,34 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
     async def save_app_conversation_start_task(
         self, task: AppConversationStartTask
     ) -> AppConversationStartTask:
+        if task.app_conversation_id is not None:
+            await lock_app_conversation(self.session, task.app_conversation_id)
+        query = select(StoredAppConversationStartTask).where(
+            StoredAppConversationStartTask.id == task.id
+        )
+        result = await self.session.execute(query)
+        existing = result.scalar_one_or_none()
         if self.user_id:
-            query = select(StoredAppConversationStartTask).where(
-                StoredAppConversationStartTask.id == task.id
-            )
-            result = await self.session.execute(query)
-            existing = result.scalar_one_or_none()
             assert existing is None or existing.created_by_user_id == self.user_id
+        if task.app_conversation_id is not None and (
+            existing is None or existing.app_conversation_id is None
+        ):
+            latest_created_at = (
+                await self.session.execute(
+                    select(func.max(StoredAppConversationStartTask.created_at)).where(
+                        StoredAppConversationStartTask.app_conversation_id
+                        == task.app_conversation_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if latest_created_at is not None:
+                if latest_created_at.tzinfo is None:
+                    latest_created_at = latest_created_at.replace(tzinfo=UTC)
+                task_created_at = task.created_at
+                if task_created_at.tzinfo is None:
+                    task_created_at = task_created_at.replace(tzinfo=UTC)
+                if task_created_at <= latest_created_at:
+                    task.created_at = latest_created_at + timedelta(microseconds=1)
         task.updated_at = utc_now()
         await self.session.merge(StoredAppConversationStartTask(**task.model_dump()))
         await self.session.commit()

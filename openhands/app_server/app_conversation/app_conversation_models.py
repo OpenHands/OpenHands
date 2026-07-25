@@ -313,12 +313,7 @@ class AppConversationStartTaskSortOrder(Enum):
 
 
 class AppConversationStartTask(OpenHandsModel):
-    """Object describing the start process for an app conversation.
-
-    Because starting an app conversation can be slow (And can involve starting a sandbox),
-    we kick off a background task for it. Once the conversation is started, the app_conversation_id
-    is populated.
-    """
+    """Describe asynchronous conversation start progress."""
 
     id: OpenHandsUUID = Field(default_factory=uuid4)
     created_by_user_id: str | None

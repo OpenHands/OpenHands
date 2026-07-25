@@ -9,10 +9,12 @@ import httpx
 import psutil
 import pytest
 
+from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.process_sandbox_service import (
     ProcessInfo,
     ProcessSandboxService,
     ProcessSandboxServiceInjector,
+    _processes,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 
@@ -55,7 +57,7 @@ def temp_dir():
 @pytest.fixture
 def process_sandbox_service(mock_httpx_client, temp_dir):
     """Create a ProcessSandboxService instance for testing."""
-    return ProcessSandboxService(
+    service = ProcessSandboxService(
         user_id='test-user-id',
         sandbox_spec_service=MockSandboxSpecService(),
         base_working_dir=temp_dir,
@@ -65,6 +67,8 @@ def process_sandbox_service(mock_httpx_client, temp_dir):
         health_check_path='/alive',
         httpx_client=mock_httpx_client,
     )
+    service._requires_credential_pause_barrier = AsyncMock(return_value=False)
+    return service
 
 
 class TestProcessSandboxService:
@@ -178,6 +182,150 @@ class TestProcessSandboxService:
         """Test pausing a sandbox that doesn't exist."""
         result = await process_sandbox_service.pause_sandbox('nonexistent')
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_nonmanaged_skips_agent_server(
+        self, process_sandbox_service, monkeypatch
+    ):
+        process_info = ProcessInfo(
+            pid=1234,
+            port=9000,
+            user_id='test-user-id',
+            working_dir='/tmp/test',
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+        monkeypatch.setitem(_processes, 'sandbox', process_info)
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.return_value = psutil.STATUS_RUNNING
+
+        with patch('psutil.Process', return_value=process):
+            result = await process_sandbox_service.pause_sandbox('sandbox')
+
+        assert result is True
+        process_sandbox_service.httpx_client.get.assert_not_awaited()
+        process_sandbox_service.httpx_client.post.assert_not_awaited()
+        process.suspend.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_managed_runs_barrier_before_suspend(
+        self, process_sandbox_service, monkeypatch
+    ):
+        process_info = ProcessInfo(
+            pid=1234,
+            port=9000,
+            user_id='test-user-id',
+            working_dir='/tmp/test',
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+        monkeypatch.setitem(_processes, 'sandbox', process_info)
+        process_sandbox_service._requires_credential_pause_barrier.return_value = True
+        order = []
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.return_value = psutil.STATUS_RUNNING
+        process.suspend.side_effect = lambda: order.append('suspend')
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_activation_guard_v1']
+        }
+        process_sandbox_service.httpx_client.get.side_effect = (
+            lambda *args, **kwargs: order.append('server-info') or server_info
+        )
+        drain = MagicMock()
+        drain.status_code = 204
+        process_sandbox_service.httpx_client.post.side_effect = (
+            lambda *args, **kwargs: order.append('drain') or drain
+        )
+
+        with patch('psutil.Process', return_value=process):
+            result = await process_sandbox_service.pause_sandbox('sandbox')
+
+        assert result is True
+        assert order == ['server-info', 'drain', 'suspend']
+        process_sandbox_service.httpx_client.get.assert_awaited_once_with(
+            'http://localhost:9000/server_info',
+            headers={'X-Session-API-Key': 'test-key'},
+            timeout=30.0,
+        )
+        process_sandbox_service.httpx_client.post.assert_awaited_once_with(
+            'http://localhost:9000/api/conversations/prepare-for-sandbox-pause',
+            headers={'X-Session-API-Key': 'test-key'},
+            timeout=30.0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_managed_aborts_when_barrier_fails(
+        self, process_sandbox_service, monkeypatch
+    ):
+        process_info = ProcessInfo(
+            pid=1234,
+            port=9000,
+            user_id='test-user-id',
+            working_dir='/tmp/test',
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+        monkeypatch.setitem(_processes, 'sandbox', process_info)
+        process_sandbox_service._requires_credential_pause_barrier.return_value = True
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.return_value = psutil.STATUS_RUNNING
+        process_sandbox_service.httpx_client.get.side_effect = httpx.ConnectError(
+            'unavailable'
+        )
+
+        with (
+            patch('psutil.Process', return_value=process),
+            pytest.raises(SandboxError) as exc_info,
+        ):
+            await process_sandbox_service.pause_sandbox('sandbox')
+
+        assert exc_info.value.status_code == 503
+        process.suspend.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_running_managed_sandbox_drains_before_terminate(
+        self, process_sandbox_service, monkeypatch, temp_dir
+    ):
+        process_info = ProcessInfo(
+            pid=1234,
+            port=9000,
+            user_id='test-user-id',
+            working_dir=temp_dir,
+            session_api_key='test-key',
+            created_at=datetime.now(),
+            sandbox_spec_id='test-spec',
+        )
+        monkeypatch.setitem(_processes, 'sandbox', process_info)
+        process_sandbox_service._requires_credential_pause_barrier.return_value = True
+        order = []
+        process = MagicMock()
+        process.is_running.return_value = True
+        process.status.return_value = psutil.STATUS_RUNNING
+        process.terminate.side_effect = lambda: order.append('terminate')
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_activation_guard_v1']
+        }
+        process_sandbox_service.httpx_client.get.side_effect = (
+            lambda *args, **kwargs: order.append('server-info') or server_info
+        )
+        drain = MagicMock(status_code=204)
+        process_sandbox_service.httpx_client.post.side_effect = (
+            lambda *args, **kwargs: order.append('drain') or drain
+        )
+
+        with patch('psutil.Process', return_value=process):
+            result = await process_sandbox_service.delete_sandbox('sandbox')
+
+        assert result is True
+        assert order == ['server-info', 'drain', 'terminate']
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_not_found(self, process_sandbox_service):

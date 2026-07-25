@@ -81,7 +81,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         { wrapper: createWrapper() },
       );
@@ -117,7 +117,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: undefined,
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -143,7 +143,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         { wrapper: createWrapper() },
       );
@@ -161,7 +161,7 @@ describe("useSandboxRecovery", () => {
         ({ conversationId }) =>
           useSandboxRecovery({
             conversationId,
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         {
           wrapper: createWrapper(),
@@ -323,7 +323,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -386,7 +386,9 @@ describe("useSandboxRecovery", () => {
     });
 
     it("should handle refetch errors gracefully without crashing", async () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
 
       const mockRefetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
@@ -456,7 +458,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -514,10 +516,12 @@ describe("useSandboxRecovery", () => {
 
       expect(onError).toHaveBeenCalledTimes(1);
       expect(onError).toHaveBeenCalledWith(testError);
-      expect(vi.mocked(customToastHandlers.displayErrorToast)).toHaveBeenCalled();
+      expect(
+        vi.mocked(customToastHandlers.displayErrorToast),
+      ).toHaveBeenCalled();
     });
 
-    it("should keep the socket gated and retry after a failed recovery", async () => {
+    it("should release the socket gate and retry a failed recovery when the sandbox is running", async () => {
       const mockRefetch = vi.fn().mockResolvedValue({
         data: { sandbox_status: "RUNNING" },
       });
@@ -536,7 +540,7 @@ describe("useSandboxRecovery", () => {
         firstOptions.onError(new Error("Resume failed"));
       });
 
-      expect(result.current.isResuming).toBe(true);
+      expect(result.current.isResuming).toBe(false);
       mockMutate.mockClear();
 
       await act(async () => {
@@ -552,6 +556,38 @@ describe("useSandboxRecovery", () => {
 
       expect(result.current.isResuming).toBe(false);
     });
+
+    it.each(["ERROR", "MISSING"] as const)(
+      "should not retry a failed recovery when the sandbox is %s",
+      async (status) => {
+        const mockRefetch = vi.fn().mockResolvedValue({
+          data: { sandbox_status: status },
+        });
+        const { result } = renderHook(
+          () =>
+            useSandboxRecovery({
+              conversationId: "conv-123",
+              sandboxStatus: "PAUSED",
+              refetchConversation: mockRefetch,
+            }),
+          { wrapper: createWrapper() },
+        );
+        const firstOptions = mockMutate.mock.calls[0][1];
+
+        act(() => {
+          firstOptions.onError(new Error("Resume failed"));
+        });
+
+        expect(result.current.isResuming).toBe(false);
+        mockMutate.mockClear();
+
+        await act(async () => {
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+
+        expect(mockMutate).not.toHaveBeenCalled();
+      },
+    );
 
     it("should NOT call resumeSandbox when isPending is true", () => {
       vi.mocked(useUnifiedResumeConversationSandbox).mockReturnValue({
@@ -576,7 +612,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );

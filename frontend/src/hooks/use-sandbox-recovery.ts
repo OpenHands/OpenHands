@@ -59,7 +59,7 @@ export function useSandboxRecovery({
       const status = statusOverride ?? sandboxStatus;
       if (
         !conversationId ||
-        (status !== "PAUSED" && !recoveryFailed) ||
+        (status !== "PAUSED" && !(status === "RUNNING" && recoveryFailed)) ||
         isResuming
       ) {
         return;
@@ -138,5 +138,5 @@ export function useSandboxRecovery({
     onVisible: handleVisible,
   });
 
-  return { isResuming: isResuming || recoveryFailed };
+  return { isResuming };
 }

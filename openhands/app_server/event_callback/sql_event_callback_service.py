@@ -11,7 +11,7 @@ from typing import AsyncGenerator
 from uuid import UUID, uuid4
 
 from fastapi import Request
-from sqlalchemy import Enum, Index, String, and_, func, select
+from sqlalchemy import Enum, Index, String, and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -147,6 +147,18 @@ class SQLEventCallbackService(EventCallbackService):
             await db_session.commit()
             return True
 
+    async def delete_event_callbacks_for_conversation(
+        self, conversation_id: UUID
+    ) -> int:
+        async with self.async_session_maker() as db_session:
+            result = await db_session.execute(
+                delete(StoredEventCallback).where(
+                    StoredEventCallback.conversation_id == conversation_id
+                )
+            )
+            await db_session.commit()
+            return result.rowcount
+
     async def search_event_callbacks(
         self,
         conversation_id__eq: UUID | None = None,
@@ -238,12 +250,19 @@ class SQLEventCallbackService(EventCallbackService):
         async with self.async_session_maker() as db_session:
             for callback, stored_result in zip(callbacks, results, strict=False):
                 callback.updated_at = utc_now()
-                stored_callback = StoredEventCallback(**callback.model_dump())
-                await db_session.merge(stored_callback)
-                if stored_result is not None:
+                update_result = await db_session.execute(
+                    update(StoredEventCallback)
+                    .where(StoredEventCallback.id == callback.id)
+                    .values(
+                        status=callback.status,
+                        processor=callback.processor,
+                        event_kind=callback.event_kind,
+                        updated_at=callback.updated_at,
+                    )
+                )
+                if update_result.rowcount and stored_result is not None:
                     db_session.add(stored_result)
-            if any(r is not None for r in results):
-                await db_session.commit()
+            await db_session.commit()
 
     async def execute_callbacks(self, conversation_id: UUID, event: Event) -> None:
         """Run all active callbacks for the event and persist their results.

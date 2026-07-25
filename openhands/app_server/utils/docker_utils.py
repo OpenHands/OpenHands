@@ -1,3 +1,4 @@
+from ipaddress import ip_address
 from urllib.parse import urlparse, urlunparse
 
 from openhands.app_server.utils.environment import is_running_in_docker
@@ -7,13 +8,21 @@ def replace_localhost_hostname(
     url: str, replacement: str = 'host.docker.internal'
 ) -> str:
     parsed = urlparse(url)
-    if parsed.hostname != 'localhost':
+    hostname = parsed.hostname
+    if hostname is None:
         return url
-    userinfo, separator, host_and_port = parsed.netloc.rpartition('@')
-    if not separator:
-        host_and_port = parsed.netloc
-    _, port_separator, port = host_and_port.partition(':')
-    netloc = f'{replacement}{port_separator}{port}'
+    is_local = hostname.lower() == 'localhost'
+    try:
+        address = ip_address(hostname)
+        is_local = is_local or address.is_loopback or address.is_unspecified
+    except ValueError:
+        pass
+    if not is_local:
+        return url
+    userinfo, separator, _ = parsed.netloc.rpartition('@')
+    netloc = replacement
+    if parsed.port is not None:
+        netloc = f'{netloc}:{parsed.port}'
     if separator:
         netloc = f'{userinfo}@{netloc}'
     return urlunparse(parsed._replace(netloc=netloc))

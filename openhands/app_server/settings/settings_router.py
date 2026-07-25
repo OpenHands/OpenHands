@@ -357,15 +357,19 @@ async def load_conversation_settings_schema() -> dict[str, Any]:
 async def invalidate_legacy_secrets_store(
     settings: Settings, settings_store: SettingsStore, secrets_store: SecretsStore
 ) -> Secrets | None:
-    """We are moving `secrets_store` (a field from `Settings` object) to its own dedicated store
-    This function moves the values from Settings to Secrets, and deletes the values in Settings
-    While this function in called multiple times, the migration only ever happens once
-    """
+    """Migrate legacy provider tokens into the secrets store."""
     if len(settings.secrets_store.provider_tokens.items()) > 0:
-        user_secrets = Secrets(provider_tokens=settings.secrets_store.provider_tokens)
+        user_secrets = await secrets_store.load() or Secrets()
+        provider_tokens = {
+            **settings.secrets_store.provider_tokens,
+            **user_secrets.provider_tokens,
+        }
+        user_secrets = Secrets(
+            provider_tokens=provider_tokens,
+            custom_secrets=user_secrets.custom_secrets,
+        )
         await secrets_store.store(user_secrets)
 
-        # Invalidate old tokens via settings store serializer
         invalidated_secrets_settings = settings.model_copy(
             update={'secrets_store': Secrets()}
         )

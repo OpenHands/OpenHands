@@ -388,13 +388,20 @@ async def test_whole_save_preserves_unrecognized_version_metadata():
 
 
 @pytest.mark.asyncio
-async def test_whole_save_recovers_corrupt_file():
-    file_store = InMemoryFileStore(files={'secrets.json': '{'})
+@pytest.mark.parametrize(
+    'raw',
+    [
+        '{',
+        json.dumps([]),
+        json.dumps({'provider_tokens': []}),
+        json.dumps({'custom_secrets': []}),
+    ],
+)
+async def test_whole_save_rejects_invalid_file(raw):
+    file_store = InMemoryFileStore(files={'secrets.json': raw})
     store = _store(file_store)
 
-    await store.store(_secrets(_ORIGINAL, 'new'))
+    with pytest.raises(ValueError):
+        await store.store(_secrets(_ORIGINAL, 'new'))
 
-    loaded = await store.load()
-    assert loaded is not None
-    assert loaded.custom_secrets[_MANAGED_NAME].secret.get_secret_value() == _ORIGINAL
-    assert loaded.custom_secrets['OTHER'].secret.get_secret_value() == 'new'
+    assert file_store.read('secrets.json') == raw

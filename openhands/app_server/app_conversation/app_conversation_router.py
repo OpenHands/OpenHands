@@ -31,6 +31,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationStartTaskStatus,
     AppConversationUpdateRequest,
     AppSendMessageRequest,
     AppSendMessageResponse,
@@ -43,6 +44,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationAlreadyExists,
+    AppConversationNotFound,
     AppConversationService,
     ConversationExportAlreadyRunning,
     ConversationExportLockUnavailable,
@@ -118,6 +121,14 @@ db_session_dependency = depends_db_session()
 httpx_client_dependency = depends_httpx_client()
 sandbox_service_dependency = depends_sandbox_service()
 sandbox_spec_service_dependency = depends_sandbox_spec_service()
+
+
+def _public_start_task(
+    task: AppConversationStartTask,
+) -> AppConversationStartTask:
+    if task.status != AppConversationStartTaskStatus.READY:
+        return task.model_copy(update={'app_conversation_id': None})
+    return task
 
 
 @dataclass
@@ -384,15 +395,13 @@ async def start_app_conversation(
         # Analytics: conversation created (V1)
         try:
             analytics = get_analytics_service()
-            if analytics and result.app_conversation_id is None:
+            if analytics:
                 user_id = await user_context.get_user_id()
                 if user_id:
                     ctx = await resolve_analytics_context(user_id)
                     analytics.track_conversation_created(
                         ctx=ctx,
-                        conversation_id=str(result.app_conversation_id)
-                        if result.app_conversation_id
-                        else result.id,
+                        conversation_id=str(result.app_conversation_id or result.id),
                         trigger=start_request.trigger.value
                         if start_request.trigger
                         else None,
@@ -404,7 +413,38 @@ async def start_app_conversation(
             logger.exception('analytics:conversation_created:failed', stack_info=True)
 
         asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
-        return result
+        return _public_start_task(result)
+    except AppConversationAlreadyExists as exc:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise HTTPException(409, 'app_conversation_already_exists') from exc
+    except Exception:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise
+
+
+@router.post('/{conversation_id}/resume')
+async def resume_app_conversation(
+    conversation_id: UUID,
+    request: Request,
+    db_session: AsyncSession = db_session_dependency,
+    httpx_client: httpx.AsyncClient = httpx_client_dependency,
+    app_conversation_service: AppConversationService = (
+        app_conversation_service_dependency
+    ),
+) -> AppConversationStartTask:
+    set_db_session_keep_open(request.state, True)
+    set_httpx_client_keep_open(request.state, True)
+    try:
+        async_iter = app_conversation_service.resume_app_conversation(conversation_id)
+        result = await anext(async_iter)
+        asyncio.create_task(_consume_remaining(async_iter, db_session, httpx_client))
+        return _public_start_task(result)
+    except AppConversationNotFound as exc:
+        await db_session.close()
+        await httpx_client.aclose()
+        raise HTTPException(404, 'unknown_app_conversation') from exc
     except Exception:
         await db_session.close()
         await httpx_client.aclose()
@@ -473,7 +513,8 @@ async def send_message_to_conversation(
     **Prerequisites:**
 
     - The sandbox must be in RUNNING state
-    - If the sandbox is PAUSED, resume it through `POST /api/v1/app-conversations`
+    - If the sandbox is PAUSED, resume it through
+      `POST /api/v1/app-conversations/{conversation_id}/resume`
     - If the sandbox is STARTING, wait for it to reach RUNNING state
 
     **Error responses:**
@@ -525,8 +566,8 @@ async def send_message_to_conversation(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 f'Sandbox is {sandbox.status.value}. '
-                'Use POST /api/v1/app-conversations with conversation_id '
-                'to resume it first.'
+                f'Use POST /api/v1/app-conversations/{conversation_id}/resume '
+                'first.'
             ),
         )
 
@@ -1076,7 +1117,7 @@ async def search_app_conversation_start_tasks(
     ),
 ) -> AppConversationStartTaskPage:
     """Search / List conversation start tasks."""
-    return (
+    page = (
         await app_conversation_start_task_service.search_app_conversation_start_tasks(
             conversation_id__eq=conversation_id__eq,
             created_at__gte=created_at__gte,
@@ -1084,6 +1125,9 @@ async def search_app_conversation_start_tasks(
             page_id=page_id,
             limit=limit,
         )
+    )
+    return page.model_copy(
+        update={'items': [_public_start_task(task) for task in page.items]}
     )
 
 
@@ -1124,7 +1168,9 @@ async def batch_get_app_conversation_start_tasks(
     start_tasks = await app_conversation_start_task_service.batch_get_app_conversation_start_tasks(
         ids
     )
-    return start_tasks
+    return [
+        _public_start_task(task) if task is not None else None for task in start_tasks
+    ]
 
 
 @router.get('/{conversation_id}/file')
@@ -1712,7 +1758,7 @@ async def _stream_app_conversation_start(
         yield '[\n'
         comma = False
         async for task in app_conversation_service.start_app_conversation(request):
-            chunk = task.model_dump_json()
+            chunk = _public_start_task(task).model_dump_json()
             if comma:
                 chunk = ',\n' + chunk
             comma = True

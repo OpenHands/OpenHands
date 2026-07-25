@@ -93,14 +93,24 @@ class FileSecretsStore(SecretsStore):
 
     @staticmethod
     def _secrets(data: dict[str, Any]) -> Secrets:
+        raw_provider_tokens = data.get('provider_tokens', {})
+        raw_custom_secrets = data.get('custom_secrets', {})
+        if raw_provider_tokens is None:
+            raw_provider_tokens = {}
+        if raw_custom_secrets is None:
+            raw_custom_secrets = {}
+        if not isinstance(raw_provider_tokens, dict) or not isinstance(
+            raw_custom_secrets, dict
+        ):
+            raise ValueError('Invalid secrets file')
         provider_tokens = {
             name: value
-            for name, value in (data.get('provider_tokens') or {}).items()
+            for name, value in raw_provider_tokens.items()
             if value.get('token')
         }
         return Secrets(
             provider_tokens=provider_tokens,
-            custom_secrets=data.get('custom_secrets') or {},
+            custom_secrets=raw_custom_secrets,
         )
 
     @staticmethod
@@ -190,12 +200,8 @@ class FileSecretsStore(SecretsStore):
             return
 
         def store_locked() -> None:
-            try:
-                data = self._read_data()
-                current = self._secrets(data) if data else Secrets()
-            except (AttributeError, TypeError, ValueError):
-                data = {}
-                current = Secrets()
+            data = self._read_data()
+            current = self._secrets(data) if data else Secrets()
             versions = self._versions(data)
             incoming = dict(secrets.custom_secrets)
             preserved_names = set()

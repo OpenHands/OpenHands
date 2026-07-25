@@ -84,7 +84,7 @@ def remote_sandbox_service(
     mock_sandbox_spec_service, mock_user_context, mock_httpx_client, mock_db_session
 ):
     """Create RemoteSandboxService instance with mocked dependencies."""
-    return RemoteSandboxService(
+    service = RemoteSandboxService(
         sandbox_spec_service=mock_sandbox_spec_service,
         api_url='https://api.example.com',
         api_key='test-api-key',
@@ -97,6 +97,8 @@ def remote_sandbox_service(
         httpx_client=mock_httpx_client,
         db_session=mock_db_session,
     )
+    service._requires_credential_pause_barrier = AsyncMock(return_value=False)
+    return service
 
 
 def _make_stream_response(
@@ -696,6 +698,7 @@ class TestSandboxLifecycle:
             return_value=stored_sandbox
         )
         remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -720,11 +723,93 @@ class TestSandboxLifecycle:
             headers={'X-API-Key': 'test-api-key'},
             json={'runtime_id': 'runtime-456'},
         )
+        remote_sandbox_service.httpx_client.get.assert_awaited_once_with(
+            'https://sandbox.example.com/server_info',
+            headers={'X-Session-API-Key': 'test-session-key'},
+            timeout=30.0,
+        )
         remote_sandbox_service.httpx_client.post.assert_awaited_once_with(
             'https://sandbox.example.com/api/conversations/prepare-for-sandbox-pause',
             headers={'X-Session-API-Key': 'test-session-key'},
             timeout=30.0,
         )
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_nonmanaged_skips_agent_server(
+        self, remote_sandbox_service
+    ):
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=create_stored_sandbox()
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        runtime_pause = MagicMock()
+        runtime_pause.status_code = 200
+        remote_sandbox_service.httpx_client.request.return_value = runtime_pause
+        remote_sandbox_service.httpx_client.get.side_effect = httpx.ConnectError(
+            'unavailable'
+        )
+
+        result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
+
+        assert result is True
+        remote_sandbox_service.httpx_client.get.assert_not_awaited()
+        remote_sandbox_service.httpx_client.post.assert_not_awaited()
+        remote_sandbox_service.httpx_client.request.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'runtime_data',
+        [
+            create_runtime_data(session_api_key=''),
+            create_runtime_data(url=''),
+        ],
+    )
+    async def test_pause_sandbox_managed_requires_connection_metadata(
+        self, remote_sandbox_service, runtime_data
+    ):
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash='existing-session-hash'
+        )
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
+
+        with pytest.raises(SandboxError) as exc_info:
+            await remote_sandbox_service.pause_sandbox('test-sandbox-123')
+
+        assert exc_info.value.status_code == 503
+        assert stored_sandbox.session_api_key_hash == 'existing-session-hash'
+        remote_sandbox_service.httpx_client.request.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_pause_sandbox_managed_requires_guard_capability(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox(
+            session_api_key_hash='existing-session-hash'
+        )
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
+        server_info = MagicMock()
+        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
+        remote_sandbox_service.httpx_client.get.return_value = server_info
+
+        with pytest.raises(SandboxError) as exc_info:
+            await remote_sandbox_service.pause_sandbox('test-sandbox-123')
+
+        assert exc_info.value.status_code == 503
+        assert stored_sandbox.session_api_key_hash == 'existing-session-hash'
+        remote_sandbox_service.httpx_client.post.assert_not_awaited()
+        remote_sandbox_service.httpx_client.request.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_pause_sandbox_requires_exact_barrier_response(
@@ -739,6 +824,7 @@ class TestSandboxLifecycle:
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
         )
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
         server_info = MagicMock()
         server_info.json.return_value = {
             'capabilities': ['credential_binding_activation_guard_v1']
@@ -767,6 +853,7 @@ class TestSandboxLifecycle:
         remote_sandbox_service._get_runtime = AsyncMock(
             return_value=create_runtime_data()
         )
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
         server_info = MagicMock()
         server_info.json.return_value = {'capabilities': 'guard'}
         remote_sandbox_service.httpx_client.get.return_value = server_info
@@ -810,6 +897,62 @@ class TestSandboxLifecycle:
             headers={'X-API-Key': 'test-api-key'},
             json={'runtime_id': 'runtime-456'},
         )
+
+    @pytest.mark.asyncio
+    async def test_delete_running_managed_sandbox_drains_before_stop(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
+        order = []
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_activation_guard_v1']
+        }
+        remote_sandbox_service.httpx_client.get.side_effect = (
+            lambda *args, **kwargs: order.append('server-info') or server_info
+        )
+        drain = MagicMock(status_code=204)
+        remote_sandbox_service.httpx_client.post.side_effect = (
+            lambda *args, **kwargs: order.append('drain') or drain
+        )
+        stop = MagicMock(status_code=200)
+        remote_sandbox_service.httpx_client.request.side_effect = (
+            lambda *args, **kwargs: order.append('stop') or stop
+        )
+
+        result = await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert result is True
+        assert order == ['server-info', 'drain', 'stop']
+        remote_sandbox_service.db_session.delete.assert_awaited_once_with(
+            stored_sandbox
+        )
+
+    @pytest.mark.asyncio
+    async def test_delete_transitional_managed_sandbox_is_retryable(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox()
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data(status='starting')
+        )
+        remote_sandbox_service._requires_credential_pause_barrier.return_value = True
+
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        remote_sandbox_service.httpx_client.request.assert_not_awaited()
+        remote_sandbox_service.db_session.delete.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_archive_conversation_workspace_archives_without_stopping(

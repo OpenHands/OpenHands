@@ -206,6 +206,7 @@ class RemoteSandboxService(SandboxService):
             exposed_urls=exposed_urls,
             created_at=stored.created_at,
             status_detail=runtime.get('status_detail') if runtime else None,
+            runtime_status=runtime.get('status') if runtime else None,
         )
 
     def _get_sandbox_status_from_runtime(
@@ -665,6 +666,19 @@ class RemoteSandboxService(SandboxService):
                 await self.db_session.delete(stored_sandbox)
                 return True
 
+            if await self._requires_credential_pause_barrier(sandbox_id):
+                runtime_status = str(runtime_data.get('status') or '').lower()
+                sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
+                if runtime_status == 'running':
+                    await self._run_credential_pause_barrier(
+                        sandbox,
+                        self.httpx_client,
+                    )
+                elif runtime_status not in ('paused', 'stopped'):
+                    raise SandboxError(
+                        'Managed runtime status is not safe for deletion'
+                    )
+
             response = await self._send_runtime_api_request(
                 'POST',
                 '/stop',
@@ -674,7 +688,7 @@ class RemoteSandboxService(SandboxService):
                 response.raise_for_status()
             await self.db_session.delete(stored_sandbox)
             return True
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError, SandboxError) as e:
             # Transient runtime lookup/stop failure: keep the row + runtime and
             # signal retryable (503) — never a 404. Persist the key invalidation
             # now: the caller rolls back on this raise, which would otherwise

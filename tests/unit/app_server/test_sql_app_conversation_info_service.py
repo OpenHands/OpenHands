@@ -5,7 +5,7 @@ focusing on basic CRUD operations, search functionality, filtering, pagination,
 and batch operations using SQLite as a mock database.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 from uuid import uuid4
 
@@ -19,7 +19,10 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     ConversationTrigger,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    APP_CONVERSATION_RESERVATION_TOKEN_KEY,
+    APP_CONVERSATION_RESERVATION_VERSION,
     SQLAppConversationInfoService,
+    StoredConversationMetadata,
 )
 from openhands.app_server.integrations.service_types import ProviderType
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
@@ -174,6 +177,100 @@ class TestSQLAppConversationInfoService:
         nonexistent_id = uuid4()
         result = await service.get_app_conversation_info(nonexistent_id)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_conversation_id_availability(
+        self,
+        service: SQLAppConversationInfoService,
+        sample_conversation_info: AppConversationInfo,
+    ):
+        assert await service.is_app_conversation_id_available(
+            sample_conversation_info.id
+        )
+
+        await service.save_app_conversation_info(sample_conversation_info)
+
+        assert not await service.is_app_conversation_id_available(
+            sample_conversation_info.id
+        )
+
+    @pytest.mark.asyncio
+    async def test_stale_reservation_reclaim_rejects_old_owner(
+        self,
+        service: SQLAppConversationInfoService,
+        async_session: AsyncSession,
+    ):
+        conversation_id = uuid4()
+        assert await service.try_reserve_app_conversation_id(conversation_id)
+        stored = await async_session.get(
+            StoredConversationMetadata, str(conversation_id)
+        )
+        assert stored is not None
+        old_token = stored.tags[APP_CONVERSATION_RESERVATION_TOKEN_KEY]
+        stale_created_at = datetime.now(timezone.utc) - timedelta(days=2)
+        stored.created_at = stale_created_at
+        stored.last_updated_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        await async_session.commit()
+        async_session.expunge_all()
+
+        replacement = SQLAppConversationInfoService(
+            db_session=async_session,
+            user_context=SpecifyUserContext(user_id=None),
+        )
+        assert await replacement.try_reserve_app_conversation_id(conversation_id)
+        await service.release_app_conversation_id_reservation(conversation_id)
+
+        stored = await async_session.get(
+            StoredConversationMetadata, str(conversation_id)
+        )
+        assert stored is not None
+        assert stored.conversation_version == APP_CONVERSATION_RESERVATION_VERSION
+        assert stored.tags[APP_CONVERSATION_RESERVATION_TOKEN_KEY] != old_token
+        reclaimed_created_at = stored.created_at
+        assert reclaimed_created_at is not None
+        if reclaimed_created_at.tzinfo is None:
+            reclaimed_created_at = reclaimed_created_at.replace(tzinfo=timezone.utc)
+        assert reclaimed_created_at > stale_created_at
+
+        info = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id=None,
+            sandbox_id='sandbox',
+        )
+        with pytest.raises(ValueError, match='reservation is not owned'):
+            await service.save_app_conversation_info(info)
+        await async_session.rollback()
+
+        await replacement.save_app_conversation_info(info)
+        await replacement.release_app_conversation_id_reservation(conversation_id)
+        assert await replacement.get_app_conversation_info(conversation_id) is not None
+
+    @pytest.mark.asyncio
+    async def test_reservation_renewal_preserves_creation_time(
+        self,
+        service: SQLAppConversationInfoService,
+        async_session: AsyncSession,
+    ):
+        conversation_id = uuid4()
+        assert await service.try_reserve_app_conversation_id(conversation_id)
+        stored = await async_session.get(
+            StoredConversationMetadata, str(conversation_id)
+        )
+        assert stored is not None
+        created_at = stored.created_at
+        stale_updated_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        stored.last_updated_at = stale_updated_at
+        await async_session.commit()
+        async_session.expunge_all()
+
+        assert await service.renew_app_conversation_id_reservation(conversation_id)
+
+        stored = await async_session.get(
+            StoredConversationMetadata, str(conversation_id)
+        )
+        assert stored is not None
+        assert stored.created_at == created_at
+        assert stored.last_updated_at != stale_updated_at
 
     @pytest.mark.asyncio
     async def test_round_trip_with_all_fields(

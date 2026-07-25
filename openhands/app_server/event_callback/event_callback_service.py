@@ -31,6 +31,12 @@ class EventCallbackService(ABC):
         """Delete a event callback, returning True if deleted, False if not found."""
 
     @abstractmethod
+    async def delete_event_callbacks_for_conversation(
+        self, conversation_id: UUID
+    ) -> int:
+        """Delete callbacks for a conversation."""
+
+    @abstractmethod
     async def search_event_callbacks(
         self,
         conversation_id__eq: UUID | None = None,

@@ -76,6 +76,7 @@ class SandboxInfo(BaseModel):
             'ImagePullBackOff), surfaced when a sandbox is stuck or errored.'
         ),
     )
+    runtime_status: str | None = Field(default=None, exclude=True)
 
 
 class SandboxPage(BaseModel):

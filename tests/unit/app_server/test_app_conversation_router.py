@@ -4,36 +4,60 @@ This module tests the batch_get_app_conversations endpoint,
 focusing on UUID string parsing, validation, and error handling.
 """
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
 import pytest
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversation,
     AppConversationInfo,
     AppConversationPage,
+    AppConversationStartRequest,
+    AppConversationStartTask,
+    AppConversationStartTaskStatus,
     SwitchProfileRequest,
 )
 from openhands.app_server.app_conversation.app_conversation_router import (
     AgentServerContext,
     _finalize_sandbox_delete,
+    _public_start_task,
     batch_get_app_conversations,
     count_app_conversations,
     get_conversation_git_changes,
     get_conversation_git_diff,
+    resume_app_conversation,
     search_app_conversations,
+    start_app_conversation,
     switch_conversation_profile,
+)
+from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationAlreadyExists,
+    AppConversationNotFound,
 )
 from openhands.app_server.sandbox.sandbox_models import SandboxStatus
 from openhands.app_server.settings.llm_profiles import LLMProfiles
 from openhands.app_server.settings.settings_models import Settings
 from openhands.sdk.llm import LLM
 from openhands.sdk.settings import OpenHandsAgentSettings
+
+
+def test_public_start_task_hides_reserved_id_until_ready():
+    task = AppConversationStartTask(
+        created_by_user_id='test-user',
+        app_conversation_id=uuid4(),
+        request=AppConversationStartRequest(),
+    )
+
+    assert _public_start_task(task).app_conversation_id is None
+
+    task.status = AppConversationStartTaskStatus.READY
+    assert _public_start_task(task).app_conversation_id == task.app_conversation_id
 
 
 def _make_mock_app_conversation(
@@ -67,6 +91,96 @@ def _make_mock_service(
     )
     service.count_app_conversations = AsyncMock(return_value=count_return)
     return service
+
+
+@pytest.mark.asyncio
+class TestResumeAppConversation:
+    async def test_starts_explicit_resume_task(self):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='test-user',
+            app_conversation_id=conversation_id,
+            request=AppConversationStartRequest(conversation_id=conversation_id),
+        )
+        service = MagicMock()
+
+        async def stream():
+            yield task
+
+        service.resume_app_conversation = MagicMock(return_value=stream())
+        db_session = AsyncMock()
+        httpx_client = AsyncMock()
+        request = Request({'type': 'http', 'method': 'POST', 'path': '/'})
+
+        result = await resume_app_conversation(
+            conversation_id=conversation_id,
+            request=request,
+            db_session=db_session,
+            httpx_client=httpx_client,
+            app_conversation_service=service,
+        )
+        await asyncio.sleep(0)
+
+        assert result.id == task.id
+        assert result.app_conversation_id is None
+        service.resume_app_conversation.assert_called_once_with(conversation_id)
+        db_session.close.assert_awaited_once()
+        httpx_client.aclose.assert_awaited_once()
+
+    async def test_returns_not_found_for_unknown_conversation(self):
+        conversation_id = uuid4()
+        service = MagicMock()
+
+        async def stream():
+            raise AppConversationNotFound(conversation_id)
+            yield
+
+        service.resume_app_conversation = MagicMock(return_value=stream())
+        db_session = AsyncMock()
+        httpx_client = AsyncMock()
+        request = Request({'type': 'http', 'method': 'POST', 'path': '/'})
+
+        with pytest.raises(HTTPException) as exc_info:
+            await resume_app_conversation(
+                conversation_id=conversation_id,
+                request=request,
+                db_session=db_session,
+                httpx_client=httpx_client,
+                app_conversation_service=service,
+            )
+
+        assert exc_info.value.status_code == 404
+        db_session.close.assert_awaited_once()
+        httpx_client.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_start_rejects_preassigned_existing_id():
+    conversation_id = uuid4()
+    service = MagicMock()
+
+    async def stream():
+        raise AppConversationAlreadyExists(conversation_id)
+        yield
+
+    service.start_app_conversation = MagicMock(return_value=stream())
+    db_session = AsyncMock()
+    httpx_client = AsyncMock()
+    request = Request({'type': 'http', 'method': 'POST', 'path': '/'})
+
+    with pytest.raises(HTTPException) as exc_info:
+        await start_app_conversation(
+            request=request,
+            start_request=AppConversationStartRequest(conversation_id=conversation_id),
+            user_context=AsyncMock(),
+            db_session=db_session,
+            httpx_client=httpx_client,
+            app_conversation_service=service,
+        )
+
+    assert exc_info.value.status_code == 409
+    db_session.close.assert_awaited_once()
+    httpx_client.aclose.assert_awaited_once()
 
 
 @pytest.mark.asyncio

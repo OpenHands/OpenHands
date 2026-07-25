@@ -21,6 +21,9 @@ from openhands.app_server.event_callback.event_callback_models import (
     EventCallbackStatus,
     LoggingCallbackProcessor,
 )
+from openhands.app_server.event_callback.event_callback_result_models import (
+    EventCallbackResultStatus,
+)
 from openhands.app_server.event_callback.sql_event_callback_service import (
     SQLEventCallbackService,
     StoredEventCallback,
@@ -150,6 +153,79 @@ class TestSQLEventCallbackService:
         nonexistent_id = uuid4()
         result = await service.delete_event_callback(nonexistent_id)
         assert result is False
+
+    async def test_delete_callbacks_for_conversation(
+        self,
+        service: SQLEventCallbackService,
+        sample_processor: EventCallbackProcessor,
+    ):
+        conversation_id = uuid4()
+        other_conversation_id = uuid4()
+        callbacks = [
+            EventCallback(
+                conversation_id=conversation_id,
+                processor=sample_processor,
+                event_kind='ActionEvent',
+            ),
+            EventCallback(
+                conversation_id=conversation_id,
+                processor=sample_processor,
+                event_kind='ObservationEvent',
+            ),
+            EventCallback(
+                conversation_id=other_conversation_id,
+                processor=sample_processor,
+                event_kind='ActionEvent',
+            ),
+        ]
+        for callback in callbacks:
+            await service.save_event_callback(callback)
+
+        deleted = await service.delete_event_callbacks_for_conversation(conversation_id)
+
+        assert deleted == 2
+        remaining = await service.search_event_callbacks()
+        assert [callback.id for callback in remaining.items] == [callbacks[2].id]
+
+    async def test_deleted_in_flight_callback_is_not_restored(
+        self,
+        service: SQLEventCallbackService,
+        async_session_maker,
+        sample_processor: EventCallbackProcessor,
+    ):
+        conversation_id = uuid4()
+        callback = await service.create_event_callback(
+            CreateEventCallbackRequest(
+                conversation_id=conversation_id,
+                processor=sample_processor,
+                event_kind='MessageEvent',
+            )
+        )
+        event = MessageEvent(
+            source='user',
+            llm_message=Message(role='user', content=[TextContent(text='hi')]),
+        )
+        in_flight = await service.get_active_callbacks(conversation_id, event)
+        await service.delete_event_callbacks_for_conversation(conversation_id)
+
+        await service.persist_callback_results(
+            in_flight,
+            [
+                StoredEventCallbackResult(
+                    status=EventCallbackResultStatus.SUCCESS,
+                    event_callback_id=callback.id,
+                    event_id=event.id,
+                    conversation_id=conversation_id,
+                )
+            ],
+        )
+
+        assert await service.get_event_callback(callback.id) is None
+        async with async_session_maker() as db_session:
+            results = (
+                await db_session.execute(select(StoredEventCallbackResult))
+            ).scalars()
+            assert results.all() == []
 
     async def test_search_callbacks_no_filters(
         self,

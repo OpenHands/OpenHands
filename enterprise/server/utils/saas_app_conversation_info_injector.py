@@ -2,10 +2,11 @@
 
 from datetime import datetime
 from typing import AsyncGenerator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Request
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
@@ -13,15 +14,21 @@ from storage.user import User
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
     AppConversationInfoServiceInjector,
+    ManagedCredentialConversationRef,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
     AppConversationInfoPage,
     AppConversationSortOrder,
+    has_managed_codex_credential,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    APP_CONVERSATION_RESERVATION_TTL,
+    APP_CONVERSATION_RESERVATION_TOKEN_KEY,
+    APP_CONVERSATION_RESERVATION_VERSION,
     SQLAppConversationInfoService,
 )
+from openhands.agent_server.utils import utc_now
 from openhands.app_server.errors import AuthError
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.user.specifiy_user_context import ADMIN, SandboxUserContext
@@ -76,7 +83,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str:
             # Secure default: no user means no access, not "show everything"
-            raise AuthError('User authentication required')
+            raise AuthError("User authentication required")
 
         user_id_uuid = UUID(user_id_str)
         query = query.where(StoredConversationMetadataSaas.user_id == user_id_uuid)
@@ -103,9 +110,18 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         user.current_org_id) when the user is authenticated via SAAS auth,
         otherwise falls back to the user's persisted current_org_id.
         """
-        user_auth = getattr(self.user_context, 'user_auth', None)
-        if user_auth is not None and hasattr(user_auth, 'get_effective_org_id'):
-            return await user_auth.get_effective_org_id()
+        get_effective_org_id = getattr(self.user_context, "get_effective_org_id", None)
+        if callable(get_effective_org_id):
+            effective_org_id = await get_effective_org_id()
+            if effective_org_id is not None:
+                return effective_org_id
+        else:
+            user_auth = getattr(self.user_context, "user_auth", None)
+            get_effective_org_id = getattr(user_auth, "get_effective_org_id", None)
+            if callable(get_effective_org_id):
+                effective_org_id = await get_effective_org_id()
+                if effective_org_id is not None:
+                    return effective_org_id
         user = await self._get_current_user()
         return user.current_org_id if user else None
 
@@ -117,7 +133,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
 
@@ -125,14 +141,53 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         """Select query that includes SAAS metadata for retrieving user_id."""
         query = (
             select(StoredConversationMetadata, StoredConversationMetadataSaas)
-            .join(
+            .outerjoin(
                 StoredConversationMetadataSaas,
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
         return await self._apply_user_and_org_filter(query)
+
+    async def get_managed_credential_conversations_for_sandbox(
+        self, sandbox_id: str
+    ) -> list[ManagedCredentialConversationRef]:
+        query = (
+            select(StoredConversationMetadata, StoredConversationMetadataSaas)
+            .outerjoin(
+                StoredConversationMetadataSaas,
+                StoredConversationMetadata.conversation_id
+                == StoredConversationMetadataSaas.conversation_id,
+            )
+            .where(
+                StoredConversationMetadata.conversation_version == "V1",
+                StoredConversationMetadata.sandbox_id == sandbox_id,
+            )
+        )
+        if self.user_context != ADMIN:
+            user_id_str = await self.user_context.get_user_id()
+            if not user_id_str:
+                raise AuthError("User authentication required")
+            query = query.where(
+                StoredConversationMetadataSaas.user_id == UUID(user_id_str)
+            )
+        rows = (await self.db_session.execute(query)).all()
+        refs = []
+        for stored, saas in rows:
+            if not has_managed_codex_credential(stored.tags or {}):
+                continue
+            refs.append(
+                ManagedCredentialConversationRef(
+                    conversation_id=UUID(stored.conversation_id),
+                    created_by_user_id=(
+                        str(saas.user_id) if saas and saas.user_id else None
+                    ),
+                    organization_id=saas.org_id if saas else None,
+                    owner_resolved=saas is not None,
+                )
+            )
+        return refs
 
     async def search_app_conversation_info(
         self,
@@ -232,7 +287,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.conversation_id
                 == StoredConversationMetadataSaas.conversation_id,
             )
-            .where(StoredConversationMetadata.conversation_version == 'V1')
+            .where(StoredConversationMetadata.conversation_version == "V1")
         )
 
         # Apply user and organization filtering
@@ -267,7 +322,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         conditions: list[ColumnElement[bool]] = []
         if title__contains is not None:
             conditions.append(
-                StoredConversationMetadata.title.like(f'%{title__contains}%')
+                StoredConversationMetadata.title.like(f"%{title__contains}%")
             )
 
         if created_at__gte is not None:
@@ -356,103 +411,242 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         return results
 
+    async def try_reserve_app_conversation_id(
+        self,
+        conversation_id: UUID,
+        created_by_user_id: str | None = None,
+    ) -> bool:
+        user_id_str = await self.user_context.get_user_id() or created_by_user_id
+        if not user_id_str:
+            return False
+        user_id = UUID(user_id_str)
+        user = await self.db_session.get(User, user_id)
+        if user is None:
+            raise AuthError()
+        organization_id = await self._get_effective_org_id() or user.current_org_id
+        if organization_id is None:
+            raise AuthError()
+        token = uuid4().hex
+        if await self._insert_app_conversation_id_reservation_with_owner(
+            conversation_id,
+            user_id,
+            organization_id,
+            token,
+        ):
+            self._reservation_tokens[conversation_id] = token
+            return True
+
+        cutoff = utc_now() - APP_CONVERSATION_RESERVATION_TTL
+        now = utc_now()
+        result = await self.db_session.execute(
+            update(StoredConversationMetadata)
+            .where(
+                StoredConversationMetadata.conversation_id == str(conversation_id),
+                StoredConversationMetadata.conversation_version
+                == APP_CONVERSATION_RESERVATION_VERSION,
+                StoredConversationMetadata.last_updated_at < cutoff,
+            )
+            .values(
+                tags={APP_CONVERSATION_RESERVATION_TOKEN_KEY: token},
+                last_updated_at=now,
+                created_at=now,
+            )
+        )
+        if not result.rowcount:
+            await self.db_session.rollback()
+            return False
+        await self.db_session.merge(
+            StoredConversationMetadataSaas(
+                conversation_id=str(conversation_id),
+                user_id=user_id,
+                org_id=organization_id,
+            )
+        )
+        await self.db_session.commit()
+        self._reservation_tokens[conversation_id] = token
+        return True
+
+    async def _insert_app_conversation_id_reservation_with_owner(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        organization_id: UUID,
+        token: str,
+    ) -> bool:
+        self.db_session.add(
+            StoredConversationMetadata(
+                conversation_id=str(conversation_id),
+                conversation_version=APP_CONVERSATION_RESERVATION_VERSION,
+                tags={APP_CONVERSATION_RESERVATION_TOKEN_KEY: token},
+            )
+        )
+        self.db_session.add(
+            StoredConversationMetadataSaas(
+                conversation_id=str(conversation_id),
+                user_id=user_id,
+                org_id=organization_id,
+            )
+        )
+        try:
+            await self.db_session.flush()
+            await self.db_session.commit()
+        except IntegrityError:
+            await self.db_session.rollback()
+            return False
+        return True
+
+    async def release_app_conversation_id_reservation(
+        self, conversation_id: UUID
+    ) -> None:
+        token = self._reservation_tokens.get(conversation_id)
+        await self.db_session.rollback()
+        if token is None:
+            return
+        existing = (
+            await self.db_session.execute(
+                select(
+                    StoredConversationMetadata.conversation_version,
+                    StoredConversationMetadata.tags,
+                )
+                .where(
+                    StoredConversationMetadata.conversation_id == str(conversation_id)
+                )
+                .with_for_update(of=StoredConversationMetadata)
+            )
+        ).first()
+        if (
+            existing is None
+            or existing.conversation_version != APP_CONVERSATION_RESERVATION_VERSION
+            or (existing.tags or {}).get(APP_CONVERSATION_RESERVATION_TOKEN_KEY)
+            != token
+        ):
+            self._reservation_tokens.pop(conversation_id, None)
+            await self.db_session.rollback()
+            return
+        await self.db_session.execute(
+            delete(StoredConversationMetadataSaas).where(
+                StoredConversationMetadataSaas.conversation_id == str(conversation_id)
+            )
+        )
+        await self.db_session.execute(
+            delete(StoredConversationMetadata).where(
+                StoredConversationMetadata.conversation_id == str(conversation_id),
+                StoredConversationMetadata.conversation_version
+                == APP_CONVERSATION_RESERVATION_VERSION,
+            )
+        )
+        await self.db_session.commit()
+        self._reservation_tokens.pop(conversation_id, None)
+
+    async def delete_app_conversation_info(self, conversation_id: UUID) -> bool:
+        query = await self._secure_select_with_saas_metadata()
+        existing = (
+            await self.db_session.execute(
+                query.where(
+                    StoredConversationMetadata.conversation_id == str(conversation_id)
+                ).with_for_update(of=StoredConversationMetadata)
+            )
+        ).first()
+        if existing is None:
+            await self.db_session.rollback()
+            return False
+        await self.db_session.execute(
+            delete(StoredConversationMetadataSaas).where(
+                StoredConversationMetadataSaas.conversation_id == str(conversation_id)
+            )
+        )
+        await self.db_session.execute(
+            delete(StoredConversationMetadata).where(
+                StoredConversationMetadata.conversation_id == str(conversation_id)
+            )
+        )
+        await self.db_session.commit()
+        return True
+
     async def save_app_conversation_info(
         self, info: AppConversationInfo
     ) -> AppConversationInfo:
-        """Save conversation info and create/update SAAS metadata with user_id and org_id."""
-        if isinstance(self.user_context, SandboxUserContext):
-            user_id_str = await self.user_context.get_user_id()
-            if not user_id_str:
-                raise AuthError('Sandbox owner required')
-            if (
-                info.sandbox_id != self.user_context.sandbox_id
-                or info.created_by_user_id != user_id_str
-            ):
-                raise AuthError()
-            existing_query = (
+        user_id_str = await self.user_context.get_user_id()
+        if not user_id_str and info.created_by_user_id:
+            user_id_str = info.created_by_user_id
+        user_id = UUID(user_id_str) if user_id_str else None
+        user = await self.db_session.get(User, user_id) if user_id else None
+        if user_id is not None and user is None:
+            raise AuthError()
+        organization_id = (
+            await self._get_effective_org_id() if user_id is not None else None
+        )
+        if organization_id is None and user is not None:
+            organization_id = user.current_org_id
+
+        existing = (
+            await self.db_session.execute(
                 select(
                     StoredConversationMetadata.sandbox_id,
+                    StoredConversationMetadata.conversation_version,
                     StoredConversationMetadataSaas.user_id,
+                    StoredConversationMetadataSaas.org_id,
                 )
                 .outerjoin(
                     StoredConversationMetadataSaas,
                     StoredConversationMetadata.conversation_id
                     == StoredConversationMetadataSaas.conversation_id,
                 )
-                .where(
-                    StoredConversationMetadata.conversation_id == str(info.id),
-                    StoredConversationMetadata.conversation_version == 'V1',
-                )
+                .where(StoredConversationMetadata.conversation_id == str(info.id))
+                .with_for_update(of=StoredConversationMetadata)
             )
-            existing = (await self.db_session.execute(existing_query)).first()
-            if existing and (
-                existing.sandbox_id != self.user_context.sandbox_id
-                or existing.user_id != UUID(user_id_str)
+        ).first()
+
+        if existing is not None and self.user_context != ADMIN:
+            if existing.user_id is None:
+                if not isinstance(self.user_context, SandboxUserContext):
+                    raise AuthError()
+            elif existing.user_id != user_id:
+                raise AuthError()
+            if (
+                existing.user_id is not None
+                and not isinstance(self.user_context, SandboxUserContext)
+                and (existing.org_id != organization_id)
             ):
                 raise AuthError()
 
-        # Save the base conversation metadata
-        await super().save_app_conversation_info(info)
+        if isinstance(self.user_context, SandboxUserContext):
+            if not user_id_str:
+                raise AuthError("Sandbox owner required")
+            if existing is not None and existing.user_id is None:
+                raise AuthError("Conversation organization is unavailable")
+            if (
+                info.sandbox_id != self.user_context.sandbox_id
+                or info.created_by_user_id != user_id_str
+            ):
+                raise AuthError()
+            if existing and (
+                existing.sandbox_id not in (None, self.user_context.sandbox_id)
+                or existing.user_id not in (None, user_id)
+            ):
+                raise AuthError()
 
-        # Get current user_id for SAAS metadata
-        # Fall back to info.created_by_user_id for webhook callbacks (which use ADMIN context)
-        user_id_str = await self.user_context.get_user_id()
-        if not user_id_str and info.created_by_user_id:
-            user_id_str = info.created_by_user_id
-        if user_id_str:
-            # Convert string user_id to UUID
-            user_id_uuid = UUID(user_id_str)
-            user_query = select(User).where(User.id == user_id_uuid)
-            user_result = await self.db_session.execute(user_query)
-            user = user_result.scalar_one_or_none()
-            assert user
+        if existing is not None and existing.user_id is not None:
+            user_id = existing.user_id
+            organization_id = existing.org_id
 
-            # Determine org_id. The effective org id resolver handles
-            # the X-Org-Id > api_key_org_id > current_org_id precedence;
-            # we fall back to user.current_org_id for the ADMIN/webhook
-            # path where no user_auth is attached.
-            org_id = await self._get_effective_org_id()
-            if org_id is None:
-                org_id = user.current_org_id
-
-            # Override with resolver org_id if set (from git org claim resolution).
-            # This intentionally trumps the effective org because resolver
-            # conversations are authored against a webhook-resolved org,
-            # not the caller's session org.
-            resolver_org_id = getattr(self.user_context, 'resolver_org_id', None)
-            if resolver_org_id is not None:
-                org_id = resolver_org_id
-
-            # Check if SAAS metadata already exists
-            saas_query = select(StoredConversationMetadataSaas).where(
-                StoredConversationMetadataSaas.conversation_id == str(info.id)
-            )
-            saas_result = await self.db_session.execute(saas_query)
-            existing_saas_metadata = saas_result.scalar_one_or_none()
-
-            # org_id is not asserted: it falls back to user.current_org_id, which changes when the user switches orgs.
-            assert (
-                existing_saas_metadata is None
-                or existing_saas_metadata.user_id == user_id_uuid
-            )
-
-            if not existing_saas_metadata:
-                # Create new SAAS metadata with the determined org_id
-                saas_metadata = StoredConversationMetadataSaas(
+        await self._merge_app_conversation_info(info)
+        if (existing is None or existing.user_id is None) and user_id is not None:
+            assert organization_id is not None
+            self.db_session.add(
+                StoredConversationMetadataSaas(
                     conversation_id=str(info.id),
-                    user_id=user_id_uuid,
-                    org_id=org_id,
+                    user_id=user_id,
+                    org_id=organization_id,
                 )
-                self.db_session.add(saas_metadata)
-
-            await self.db_session.commit()
-
+            )
+        await self.db_session.commit()
         return info
 
     def _to_info_with_user_id(
         self,
         stored: StoredConversationMetadata,
-        saas_metadata: StoredConversationMetadataSaas,
+        saas_metadata: StoredConversationMetadataSaas | None,
         sub_conversation_ids: list[UUID] | None = None,
     ) -> AppConversationInfo:
         """Convert stored metadata to AppConversationInfo with user_id from SAAS metadata."""
@@ -461,7 +655,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
 
         # Override the created_by_user_id with the user_id from SAAS metadata
         info.created_by_user_id = (
-            str(saas_metadata.user_id) if saas_metadata.user_id else None
+            str(saas_metadata.user_id)
+            if saas_metadata is not None and saas_metadata.user_id
+            else None
         )
 
         return info

@@ -8,11 +8,18 @@ This module tests the SandboxService base class implementation, focusing on:
 - Error handling and edge cases
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_VALUE,
+    AppConversationInfo,
+    AppConversationInfoPage,
+)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
@@ -25,6 +32,7 @@ from openhands.app_server.sandbox.sandbox_service import (
     _classify_start_failure,
     _start_failure_error,
 )
+from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 
 
 class MockSandboxService(SandboxService):
@@ -95,6 +103,70 @@ def create_sandbox_info(
 def mock_sandbox_service():
     """Fixture providing a mock sandbox service."""
     return MockSandboxService()
+
+
+@pytest.mark.asyncio
+async def test_pause_barrier_requirement_uses_admin_metadata_and_all_pages(
+    mock_sandbox_service, monkeypatch
+):
+    conversation_service = AsyncMock()
+    conversation_service.search_app_conversation_info.side_effect = [
+        AppConversationInfoPage(items=[], next_page_id='next'),
+        AppConversationInfoPage(
+            items=[
+                AppConversationInfo(
+                    created_by_user_id='user',
+                    sandbox_id='sandbox',
+                    tags={
+                        CODEX_CREDENTIAL_BINDING_TAG_KEY: (
+                            CODEX_CREDENTIAL_BINDING_TAG_VALUE
+                        )
+                    },
+                )
+            ]
+        ),
+    ]
+    states = []
+
+    @asynccontextmanager
+    async def get_service(state):
+        states.append(state)
+        yield conversation_service
+
+    monkeypatch.setattr(
+        'openhands.app_server.config.get_app_conversation_info_service',
+        get_service,
+    )
+
+    result = await mock_sandbox_service._requires_credential_pause_barrier('sandbox')
+
+    assert result is True
+    assert getattr(states[0], USER_CONTEXT_ATTR) == ADMIN
+    assert conversation_service.search_app_conversation_info.await_count == 2
+    assert (
+        conversation_service.search_app_conversation_info.await_args_list[1].kwargs[
+            'page_id'
+        ]
+        == 'next'
+    )
+
+
+@pytest.mark.asyncio
+async def test_nonmanaged_pause_skips_agent_server(mock_sandbox_service):
+    mock_sandbox_service._requires_credential_pause_barrier = AsyncMock(
+        return_value=False
+    )
+    sandbox = create_sandbox_info(
+        'sandbox',
+        SandboxStatus.RUNNING,
+        datetime.now(timezone.utc),
+    )
+    client = AsyncMock()
+
+    await mock_sandbox_service._prepare_for_pause(sandbox, client)
+
+    client.get.assert_not_awaited()
+    client.post.assert_not_awaited()
 
 
 class TestWaitForSandboxRunning:

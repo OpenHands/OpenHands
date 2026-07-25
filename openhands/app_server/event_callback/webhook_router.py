@@ -325,6 +325,14 @@ async def valid_conversation(
         )
 
     if (
+        app_conversation_info.created_by_user_id is None
+        and app_conversation_info.sandbox_id == sandbox_record.id
+    ):
+        app_conversation_info = app_conversation_info.model_copy(
+            update={'created_by_user_id': sandbox_record.created_by_user_id}
+        )
+
+    if (
         app_conversation_info.created_by_user_id != sandbox_record.created_by_user_id
         or app_conversation_info.sandbox_id != sandbox_record.id
     ):

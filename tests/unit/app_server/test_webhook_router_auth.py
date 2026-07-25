@@ -11,6 +11,9 @@ import pytest
 from fastapi import FastAPI, HTTPException, status
 from fastapi.testclient import TestClient
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    AppConversationInfo,
+)
 from openhands.app_server.config_api.config_models import AppMode
 from openhands.app_server.event_callback.webhook_router import (
     router as webhook_router,
@@ -340,6 +343,30 @@ class TestValidConversation:
         # Assert
         assert result.id == conversation_id
         assert result.sandbox_id == sandbox_record.id
+        assert result.created_by_user_id == sandbox_record.created_by_user_id
+
+    @pytest.mark.asyncio
+    async def test_valid_conversation_recovers_missing_owner(self):
+        conversation_id = uuid4()
+        sandbox_record = SandboxRecord(
+            id='sandbox-123',
+            created_by_user_id='user-123',
+        )
+        mock_service = AsyncMock()
+        mock_service.get_app_conversation_info = AsyncMock(
+            return_value=AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id=sandbox_record.id,
+            )
+        )
+
+        result = await call_valid_conversation(
+            conversation_id,
+            sandbox_record,
+            mock_service,
+        )
+
         assert result.created_by_user_id == sandbox_record.created_by_user_id
 
     @pytest.mark.asyncio

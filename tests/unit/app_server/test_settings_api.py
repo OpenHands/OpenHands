@@ -8,12 +8,19 @@ from pydantic import SecretStr
 
 from openhands.app_server.app import app
 from openhands.app_server.file_store.memory import InMemoryFileStore
-from openhands.app_server.integrations.provider import ProviderToken, ProviderType
+from openhands.app_server.integrations.provider import (
+    CustomSecret,
+    ProviderToken,
+    ProviderType,
+)
 from openhands.app_server.integrations.service_types import UserGitInfo
 from openhands.app_server.secrets.secrets_models import Secrets
 from openhands.app_server.secrets.secrets_store import SecretsStore
 from openhands.app_server.settings.file_settings_store import FileSettingsStore
 from openhands.app_server.settings.settings_models import Settings
+from openhands.app_server.settings.settings_router import (
+    invalidate_legacy_secrets_store,
+)
 from openhands.app_server.settings.settings_store import SettingsStore
 from openhands.app_server.user_auth.user_auth import UserAuth
 from openhands.sdk.llm import LLM
@@ -143,6 +150,45 @@ def test_get_conversation_settings_schema_endpoint(test_client):
     field_keys = [f['key'] for f in verification_section['fields']]
     assert 'confirmation_mode' in field_keys
     assert 'security_analyzer' in field_keys
+
+
+@pytest.mark.asyncio
+async def test_invalidate_legacy_secrets_preserves_existing_secrets():
+    legacy_github_token = ProviderToken(token=SecretStr('legacy-github-token'))
+    current_github_token = ProviderToken(token=SecretStr('current-github-token'))
+    gitlab_token = ProviderToken(token=SecretStr('current-gitlab-token'))
+    custom_secret = CustomSecret.from_value(
+        {'secret': 'current-secret', 'description': 'Current'}
+    )
+    settings = Settings(
+        secrets_store=Secrets(
+            provider_tokens={ProviderType.GITHUB: legacy_github_token}
+        )
+    )
+    existing = Secrets(
+        provider_tokens={
+            ProviderType.GITHUB: current_github_token,
+            ProviderType.GITLAB: gitlab_token,
+        },
+        custom_secrets={'CUSTOM_SECRET': custom_secret},
+    )
+    settings_store = AsyncMock(spec=SettingsStore)
+    secrets_store = AsyncMock(spec=SecretsStore)
+    secrets_store.load.return_value = existing
+
+    migrated = await invalidate_legacy_secrets_store(
+        settings, settings_store, secrets_store
+    )
+
+    assert migrated is not None
+    assert migrated.custom_secrets == existing.custom_secrets
+    assert migrated.provider_tokens == {
+        ProviderType.GITHUB: current_github_token,
+        ProviderType.GITLAB: gitlab_token,
+    }
+    secrets_store.store.assert_awaited_once_with(migrated)
+    stored_settings = settings_store.store.await_args.args[0]
+    assert not stored_settings.secrets_store.provider_tokens
 
 
 @pytest.mark.asyncio

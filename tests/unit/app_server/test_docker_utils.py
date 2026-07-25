@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -124,10 +126,6 @@ class TestReplaceLocalhostHostnameForDocker:
     )
     def test_no_replacement_for_non_localhost(self, mock_is_docker):
         """Test that non-localhost hostnames are not replaced even when in Docker."""
-        # IP address
-        result = replace_localhost_hostname_for_docker('http://127.0.0.1:8080')
-        assert result == 'http://127.0.0.1:8080'
-
         # Different hostname
         result = replace_localhost_hostname_for_docker('http://example.com:8080')
         assert result == 'http://example.com:8080'
@@ -145,6 +143,33 @@ class TestReplaceLocalhostHostnameForDocker:
             'http://localhost.example.com:8080'
         )
         assert result == 'http://localhost.example.com:8080'
+
+    @pytest.mark.parametrize(
+        ('url', 'expected'),
+        [
+            (
+                'http://127.0.0.1:8080/path',
+                'http://host.docker.internal:8080/path',
+            ),
+            (
+                'http://127.42.0.1:8080/path',
+                'http://host.docker.internal:8080/path',
+            ),
+            ('http://0.0.0.0:8080/path', 'http://host.docker.internal:8080/path'),
+            ('http://[::1]:8080/path', 'http://host.docker.internal:8080/path'),
+            ('http://[::]:8080/path', 'http://host.docker.internal:8080/path'),
+            (
+                'http://user:pass@[::1]:8080/path',
+                'http://user:pass@host.docker.internal:8080/path',
+            ),
+        ],
+    )
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
+    def test_replace_loopback_and_bind_addresses(self, mock_is_docker, url, expected):
+        assert replace_localhost_hostname_for_docker(url) == expected
 
     @patch(
         'openhands.app_server.utils.docker_utils.is_running_in_docker',

@@ -5,11 +5,12 @@ import json
 import logging
 import zipfile
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, AsyncGenerator, BinaryIO, Sequence, cast
-from uuid import UUID, uuid4
+from typing import Any, AsyncGenerator, BinaryIO, Sequence, TypeVar, cast
+from uuid import UUID, uuid4, uuid5
 
 import httpx
 from fastapi import Request
@@ -23,6 +24,7 @@ from openhands.agent_server.models import (
 )
 from openhands.app_server.app_conversation.app_conversation_info_service import (
     AppConversationInfoService,
+    ManagedCredentialConversationRef,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
@@ -46,6 +48,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     has_managed_codex_credential,
 )
 from openhands.app_server.app_conversation.app_conversation_service import (
+    AppConversationAlreadyExists,
+    AppConversationNotFound,
     AppConversationService,
     AppConversationServiceInjector,
     ConversationExportAlreadyRunning,
@@ -162,6 +166,9 @@ _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
+_RESERVATION_RENEW_INTERVAL_SECONDS = 60
+_RESERVATION_RELEASE_ATTEMPTS = 3
+_T = TypeVar('_T')
 
 
 def _resolve_credential_binding_url(
@@ -248,10 +255,10 @@ The selected repository was cloned as a shallow clone. Git history may be incomp
 </GIT_WORKSPACE_CONTEXT>"""
 
 
-def _exception_detail(exc: Exception) -> str:
+def _exception_detail(exc: BaseException) -> str:
     """HTTPException.__str__ prepends '<status>: '; prefer its clean .detail."""
     detail = getattr(exc, 'detail', None)
-    return detail if isinstance(detail, str) else str(exc)
+    return detail if isinstance(detail, str) else str(exc) or type(exc).__name__
 
 
 def append_system_context(existing: str | None, block: str) -> str:
@@ -397,42 +404,46 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def start_app_conversation(
         self, request: AppConversationStartRequest
     ) -> AsyncGenerator[AppConversationStartTask, None]:
-        async for task in self._start_app_conversation(request):
-            await self.app_conversation_start_task_service.save_app_conversation_start_task(
-                task
+        async with aclosing(self._start_app_conversation(request)) as stream:
+            async for task in stream:
+                await self._save_start_task_update(task)
+                yield task
+
+    async def resume_app_conversation(
+        self, conversation_id: UUID
+    ) -> AsyncGenerator[AppConversationStartTask, None]:
+        existing_info = (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
             )
-            yield task
+        )
+        if existing_info is None:
+            raise AppConversationNotFound(conversation_id)
+        request = AppConversationStartRequest(
+            conversation_id=conversation_id,
+            sandbox_id=existing_info.sandbox_id,
+            selected_repository=existing_info.selected_repository,
+            selected_branch=existing_info.selected_branch,
+            git_provider=existing_info.git_provider,
+            trigger=existing_info.trigger,
+            llm_model=existing_info.llm_model,
+        )
+        user_id = await self.user_context.get_user_id()
+        async with aclosing(
+            self._resume_app_conversation(
+                request,
+                existing_info,
+                user_id,
+            )
+        ) as stream:
+            async for task in stream:
+                await self._save_start_task_update(task)
+                yield task
 
     async def _start_app_conversation(
         self, request: AppConversationStartRequest
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         user_id = await self.user_context.get_user_id()
-        existing_info = None
-        if request.conversation_id is not None:
-            existing_info = (
-                await self.app_conversation_info_service.get_app_conversation_info(
-                    request.conversation_id
-                )
-            )
-        if existing_info is not None:
-            request = request.model_copy(
-                update={
-                    'sandbox_id': request.sandbox_id or existing_info.sandbox_id,
-                    'selected_repository': existing_info.selected_repository,
-                    'selected_branch': existing_info.selected_branch,
-                    'git_provider': existing_info.git_provider,
-                    'trigger': existing_info.trigger,
-                    'llm_model': existing_info.llm_model,
-                }
-            )
-            async for task in self._resume_app_conversation(
-                request,
-                existing_info,
-                user_id,
-            ):
-                yield task
-            return
-
         laminar_user_id = await self.user_context.get_user_email() or user_id
 
         # Validate and inherit from parent conversation if provided
@@ -450,14 +461,40 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         self._apply_suggested_task(request)
 
+        requested_conversation_id = request.conversation_id
+        reserved_conversation_id = requested_conversation_id or uuid4()
+        callback_conversation_id: UUID | None = None
+        conversation_persisted = False
+        while not (
+            await self.app_conversation_info_service.try_reserve_app_conversation_id(
+                reserved_conversation_id,
+                user_id,
+            )
+        ):
+            if requested_conversation_id is not None:
+                raise AppConversationAlreadyExists(reserved_conversation_id)
+            reserved_conversation_id = uuid4()
+        reservation_heartbeat = asyncio.create_task(
+            self._maintain_app_conversation_id_reservation(reserved_conversation_id)
+        )
+
         task = AppConversationStartTask(
             created_by_user_id=user_id,
             request=request,
+            app_conversation_id=reserved_conversation_id,
         )
-        yield task
+        failed = False
 
         try:
-            async for updated_task in self._wait_for_sandbox_start(task):
+            yield task
+
+            await self._prepare_event_callbacks_for_start(reserved_conversation_id)
+            callback_conversation_id = reserved_conversation_id
+
+            async for updated_task in self._wait_for_sandbox_start(
+                task,
+                reactivate_managed_conversations=True,
+            ):
                 yield updated_task
 
             # Get the sandbox
@@ -480,7 +517,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             assert sandbox_spec is not None
 
             # Set up conversation id
-            conversation_id = request.conversation_id or uuid4()
+            conversation_id = reserved_conversation_id
 
             # Setup working dir based on grouping
             sandbox_grouping_strategy = await self._get_sandbox_grouping_strategy()
@@ -574,6 +611,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 if sandbox.session_api_key
                 else {}
             )
+            processors = request.processors or []
+            if not any(
+                isinstance(processor, SetTitleCallbackProcessor)
+                for processor in processors
+            ):
+                processors.append(SetTitleCallbackProcessor())
+            await self._prepare_event_callbacks_for_start(conversation_id)
+            for processor in processors:
+                event_kind = processor.get_event_kind()
+                await self.event_callback_service.save_event_callback(
+                    EventCallback(
+                        id=uuid5(
+                            conversation_id,
+                            f'{event_kind}:{processor.model_dump_json()}',
+                        ),
+                        conversation_id=conversation_id,
+                        event_kind=event_kind,
+                        processor=processor,
+                    )
+                )
+
             response = await self.httpx_client.post(
                 f'{agent_server_url}/api/conversations',
                 json=body_json,
@@ -598,6 +656,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     ) from exc
                 raise
             info = ConversationInfo.model_validate(response.json())
+            if info.id != conversation_id:
+                raise SandboxError('Started conversation ID did not match')
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
             # the same agent back through the AgentBase discriminator.
@@ -670,48 +730,234 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 parent_conversation_id=request.parent_conversation_id,
                 tags=conversation_tags,
             )
+
             await self.app_conversation_info_service.save_app_conversation_info(
                 app_conversation_info
             )
+            conversation_persisted = True
 
-            processors = request.processors or []
-            has_set_title_processor = any(
-                isinstance(processor, SetTitleCallbackProcessor)
-                for processor in processors
-            )
-            if not has_set_title_processor:
-                processors.append(SetTitleCallbackProcessor())
-
-            for processor in processors:
-                await self.event_callback_service.save_event_callback(
-                    EventCallback(
-                        conversation_id=info.id,
-                        event_kind=processor.get_event_kind(),
-                        processor=processor,
-                    )
-                )
-
-            # Update the start task
-            task.status = AppConversationStartTaskStatus.READY
             task.app_conversation_id = info.id
+            await self._process_pending_messages(
+                task_id=task.id,
+                conversation_id=info.id,
+                agent_server_url=agent_server_url,
+                session_api_key=sandbox.session_api_key,
+            )
+
+            task.status = AppConversationStartTaskStatus.READY
             yield task
 
-            # Process any pending messages queued while waiting for conversation
-            if sandbox.session_api_key:
-                await self._process_pending_messages(
-                    task_id=task.id,
-                    conversation_id=info.id,
-                    agent_server_url=agent_server_url,
-                    session_api_key=sandbox.session_api_key,
-                )
-
+        except (asyncio.CancelledError, GeneratorExit) as exc:
+            await self._persist_interrupted_start_task(task, exc)
+            raise
         except Exception as exc:
             _logger.exception('Error starting conversation', stack_info=True)
             task.status = AppConversationStartTaskStatus.ERROR
             task.detail = redact_text_secrets(
                 redact_api_key_literals(_exception_detail(exc))
             )
+            await self._persist_start_task_update(task)
+            failed = True
+        finally:
+            cleanup_task = asyncio.create_task(
+                self._finish_app_conversation_start(
+                    reserved_conversation_id,
+                    reservation_heartbeat,
+                    callback_conversation_id if not conversation_persisted else None,
+                )
+            )
+            await self._wait_for_cleanup_task(cleanup_task)
+        if failed:
             yield task
+
+    async def _finish_app_conversation_start(
+        self,
+        reserved_conversation_id: UUID,
+        heartbeat: asyncio.Task[None] | None,
+        callback_conversation_id: UUID | None,
+    ) -> None:
+        await self._stop_reservation_heartbeat(heartbeat)
+        if callback_conversation_id is not None:
+            try:
+                owns_reservation = await self.app_conversation_info_service.renew_app_conversation_id_reservation(
+                    reserved_conversation_id
+                )
+            except Exception:
+                _logger.exception(
+                    'Unable to verify conversation ID reservation',
+                    extra={'conversation_id': str(reserved_conversation_id)},
+                )
+                owns_reservation = False
+            if owns_reservation:
+                await self._delete_event_callbacks_with_retry(
+                    callback_conversation_id,
+                    required=False,
+                )
+        await self._release_app_conversation_id_reservation(reserved_conversation_id)
+
+    async def _wait_for_cleanup_task(self, task: asyncio.Task[_T]) -> _T:
+        cancellation: asyncio.CancelledError | None = None
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+        result = await task
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    async def _persist_interrupted_start_task(
+        self,
+        task: AppConversationStartTask,
+        exc: BaseException,
+    ) -> None:
+        async def persist() -> None:
+            stored_task = await self.app_conversation_start_task_service.get_app_conversation_start_task(
+                task.id
+            )
+            if stored_task is not None and stored_task.status in (
+                AppConversationStartTaskStatus.READY,
+                AppConversationStartTaskStatus.ERROR,
+            ):
+                task.status = stored_task.status
+                task.detail = stored_task.detail
+                return
+            task.status = AppConversationStartTaskStatus.ERROR
+            task.detail = redact_text_secrets(
+                redact_api_key_literals(_exception_detail(exc))
+            )
+            await self.app_conversation_start_task_service.save_app_conversation_start_task(
+                task
+            )
+
+        cleanup_task = asyncio.create_task(persist())
+        try:
+            await self._wait_for_cleanup_task(cleanup_task)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            _logger.exception(
+                'Unable to persist interrupted conversation start',
+                extra={'conversation_id': str(task.app_conversation_id)},
+            )
+
+    async def _persist_start_task_update(
+        self,
+        task: AppConversationStartTask,
+    ) -> None:
+        try:
+            await self._save_start_task_update(task)
+        except Exception:
+            _logger.exception(
+                'Unable to persist conversation start task',
+                extra={'conversation_id': str(task.app_conversation_id)},
+            )
+
+    async def _save_start_task_update(
+        self,
+        task: AppConversationStartTask,
+    ) -> None:
+        cleanup_task = asyncio.create_task(
+            self.app_conversation_start_task_service.save_app_conversation_start_task(
+                task
+            )
+        )
+        await self._wait_for_cleanup_task(cleanup_task)
+
+    async def _delete_event_callbacks_with_retry(
+        self,
+        conversation_id: UUID,
+        *,
+        required: bool,
+    ) -> bool:
+        for attempt in range(_RESERVATION_RELEASE_ATTEMPTS):
+            try:
+                await (
+                    self.event_callback_service.delete_event_callbacks_for_conversation(
+                        conversation_id
+                    )
+                )
+                return True
+            except Exception:
+                if attempt + 1 == _RESERVATION_RELEASE_ATTEMPTS:
+                    if required:
+                        raise
+                    _logger.exception(
+                        'Unable to delete event callbacks',
+                        extra={'conversation_id': str(conversation_id)},
+                    )
+                    return False
+                await asyncio.sleep(0.25 * (2**attempt))
+        return False
+
+    async def _prepare_event_callbacks_for_start(self, conversation_id: UUID) -> None:
+        try:
+            renewed = await self.app_conversation_info_service.renew_app_conversation_id_reservation(
+                conversation_id
+            )
+        except Exception as exc:
+            raise SandboxError('Could not verify conversation ID reservation') from exc
+        if not renewed:
+            raise SandboxError('Conversation ID reservation was lost')
+        await self._delete_event_callbacks_with_retry(
+            conversation_id,
+            required=True,
+        )
+
+    async def _maintain_app_conversation_id_reservation(
+        self, conversation_id: UUID
+    ) -> None:
+        while True:
+            await asyncio.sleep(_RESERVATION_RENEW_INTERVAL_SECONDS)
+            try:
+                renewed = await self.app_conversation_info_service.renew_app_conversation_id_reservation(
+                    conversation_id
+                )
+            except Exception:
+                _logger.exception(
+                    'Unable to renew conversation ID reservation',
+                    extra={'conversation_id': str(conversation_id)},
+                )
+                continue
+            if not renewed:
+                return
+
+    async def _finish_app_conversation_id_reservation(
+        self,
+        conversation_id: UUID,
+        heartbeat: asyncio.Task[None] | None,
+    ) -> None:
+        await self._stop_reservation_heartbeat(heartbeat)
+        await self._release_app_conversation_id_reservation(conversation_id)
+
+    async def _stop_reservation_heartbeat(
+        self, heartbeat: asyncio.Task[None] | None
+    ) -> None:
+        if heartbeat is not None:
+            heartbeat.cancel()
+            try:
+                await heartbeat
+            except asyncio.CancelledError:
+                pass
+
+    async def _release_app_conversation_id_reservation(
+        self, conversation_id: UUID
+    ) -> None:
+        for attempt in range(_RESERVATION_RELEASE_ATTEMPTS):
+            try:
+                await self.app_conversation_info_service.release_app_conversation_id_reservation(
+                    conversation_id
+                )
+                return
+            except Exception:
+                if attempt + 1 == _RESERVATION_RELEASE_ATTEMPTS:
+                    _logger.exception(
+                        'Unable to release conversation ID reservation',
+                        extra={'conversation_id': str(conversation_id)},
+                    )
+                    return
+                await asyncio.sleep(0.25 * (2**attempt))
 
     async def _resume_app_conversation(
         self,
@@ -724,41 +970,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             request=request,
             app_conversation_id=existing_info.id,
         )
-        yield task
-
-        extra_tasks: dict[UUID, AppConversationStartTask] = {}
-        activated_ids: set[UUID] = set()
         try:
+            yield task
             sandbox_id = request.sandbox_id
             assert sandbox_id is not None
-            sandbox_conversations = await self._get_sandbox_conversations(sandbox_id)
-            managed_conversation_ids = [
-                info.id
-                for info in sandbox_conversations
-                if has_managed_codex_credential(info.tags)
-            ]
-            if (
-                has_managed_codex_credential(existing_info.tags)
-                and existing_info.id not in managed_conversation_ids
-            ):
-                managed_conversation_ids.append(existing_info.id)
-
-            for conversation_id in managed_conversation_ids:
-                if conversation_id == existing_info.id:
-                    continue
-                extra_task = AppConversationStartTask(
-                    created_by_user_id=user_id,
-                    request=AppConversationStartRequest(
-                        conversation_id=conversation_id,
-                        sandbox_id=sandbox_id,
-                    ),
-                    app_conversation_id=conversation_id,
-                    sandbox_id=sandbox_id,
-                )
-                extra_tasks[conversation_id] = extra_task
-                await self.app_conversation_start_task_service.save_app_conversation_start_task(
-                    extra_task
-                )
+            managed_conversations = await self._get_managed_credential_conversations(
+                sandbox_id
+            )
 
             async for updated_task in self._wait_for_sandbox_start(task):
                 yield updated_task
@@ -773,54 +991,11 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.agent_server_url = agent_server_url
             yield task
 
-            for extra_task in extra_tasks.values():
-                extra_task.status = AppConversationStartTaskStatus.STARTING_CONVERSATION
-                extra_task.agent_server_url = agent_server_url
-                await self.app_conversation_start_task_service.save_app_conversation_start_task(
-                    extra_task
-                )
-
-            conversation_ids = [existing_info.id]
-            conversation_ids.extend(
-                conversation_id
-                for conversation_id in managed_conversation_ids
-                if conversation_id != existing_info.id
+            await self._get_cold_conversation(
+                sandbox,
+                agent_server_url,
+                existing_info.id,
             )
-            for conversation_id in conversation_ids:
-                await self._get_cold_conversation(
-                    sandbox,
-                    agent_server_url,
-                    conversation_id,
-                )
-
-            activation_order = [
-                conversation_id
-                for conversation_id in managed_conversation_ids
-                if conversation_id != existing_info.id
-            ]
-            if existing_info.id in managed_conversation_ids:
-                activation_order.append(existing_info.id)
-
-            for conversation_id in activation_order:
-                binding_task = (
-                    task
-                    if conversation_id == existing_info.id
-                    else extra_tasks[conversation_id]
-                )
-                await self._activate_credential_binding(
-                    sandbox,
-                    conversation_id,
-                    agent_server_url,
-                    start_task_id=binding_task.id,
-                    required=True,
-                )
-                activated_ids.add(conversation_id)
-                if conversation_id != existing_info.id:
-                    binding_task.status = AppConversationStartTaskStatus.READY
-                    await self.app_conversation_start_task_service.save_app_conversation_start_task(
-                        binding_task
-                    )
-
             if existing_info.sandbox_id != sandbox.id:
                 existing_info = existing_info.model_copy(
                     update={'sandbox_id': sandbox.id}
@@ -828,59 +1003,150 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 await self.app_conversation_info_service.save_app_conversation_info(
                     existing_info
                 )
+            before_delivery: Callable[[], Awaitable[Any]] | None = None
+            if has_managed_codex_credential(existing_info.tags):
 
+                async def activate_credential_binding() -> bool:
+                    return await self._activate_credential_binding(
+                        sandbox,
+                        existing_info.id,
+                        agent_server_url,
+                        start_task_id=task.id,
+                        required=True,
+                    )
+
+                before_delivery = activate_credential_binding
+
+            await self._process_pending_messages(
+                task_id=task.id,
+                conversation_id=existing_info.id,
+                agent_server_url=agent_server_url,
+                session_api_key=sandbox.session_api_key,
+                before_delivery=before_delivery,
+            )
             task.status = AppConversationStartTaskStatus.READY
-            yield task
-
-            if sandbox.session_api_key:
+            sibling_refs = [
+                ref
+                for ref in managed_conversations
+                if ref.conversation_id != existing_info.id
+                and (user_id is None or ref.created_by_user_id in (None, user_id))
+            ]
+            for sibling_ref in sibling_refs:
                 try:
-                    await self._process_pending_messages(
-                        task_id=task.id,
-                        conversation_id=existing_info.id,
-                        agent_server_url=agent_server_url,
-                        session_api_key=sandbox.session_api_key,
+                    await self._reactivate_managed_sibling(
+                        sandbox,
+                        agent_server_url,
+                        sibling_ref,
                     )
                 except Exception:
                     _logger.exception(
-                        'Error processing pending messages after resume',
-                        stack_info=True,
+                        'Unable to reactivate managed sibling %s',
+                        sibling_ref.conversation_id,
                     )
+            yield task
+        except (asyncio.CancelledError, GeneratorExit) as exc:
+            await self._persist_interrupted_start_task(task, exc)
+            raise
         except Exception as exc:
             _logger.exception('Error resuming conversation', stack_info=True)
             detail = redact_text_secrets(
                 redact_api_key_literals(_exception_detail(exc))
             )
-            for conversation_id, extra_task in extra_tasks.items():
-                if conversation_id in activated_ids:
-                    continue
-                extra_task.status = AppConversationStartTaskStatus.ERROR
-                extra_task.detail = detail
-                await self.app_conversation_start_task_service.save_app_conversation_start_task(
-                    extra_task
-                )
             task.status = AppConversationStartTaskStatus.ERROR
             task.detail = detail
+            await self._persist_start_task_update(task)
             yield task
 
-    async def _get_sandbox_conversations(
+    async def _reactivate_managed_sibling(
+        self,
+        sandbox: SandboxInfo,
+        agent_server_url: str,
+        conversation_ref: ManagedCredentialConversationRef,
+    ) -> None:
+        conversation_id = conversation_ref.conversation_id
+        current_refs = await self._get_managed_credential_conversations(sandbox.id)
+        current_ref = next(
+            (
+                ref
+                for ref in current_refs
+                if ref.conversation_id == conversation_id
+                and ref.owner_resolved
+                and (
+                    sandbox.created_by_user_id is None
+                    or ref.created_by_user_id in (None, sandbox.created_by_user_id)
+                )
+            ),
+            None,
+        )
+        if current_ref is None:
+            raise SandboxError('Managed credential conversation is unavailable')
+        owner_id = (
+            current_ref.created_by_user_id
+            or sandbox.created_by_user_id
+            or await self.user_context.get_user_id()
+            or 'root'
+        )
+        credential_owner = ManagedCredentialConversationRef(
+            conversation_id=conversation_id,
+            created_by_user_id=owner_id,
+            organization_id=current_ref.organization_id,
+        )
+        await self._get_cold_conversation(
+            sandbox,
+            agent_server_url,
+            conversation_id,
+        )
+        task = AppConversationStartTask(
+            created_by_user_id=owner_id,
+            request=AppConversationStartRequest(
+                conversation_id=conversation_id,
+                sandbox_id=sandbox.id,
+            ),
+            app_conversation_id=conversation_id,
+            sandbox_id=sandbox.id,
+            agent_server_url=agent_server_url,
+            status=AppConversationStartTaskStatus.STARTING_CONVERSATION,
+        )
+        try:
+            await self._save_start_task_update(task)
+
+            async def activate_credential_binding() -> bool:
+                return await self._activate_credential_binding(
+                    sandbox,
+                    conversation_id,
+                    agent_server_url,
+                    start_task_id=task.id,
+                    required=True,
+                    credential_owner=credential_owner,
+                )
+
+            await self._process_pending_messages(
+                task_id=task.id,
+                conversation_id=conversation_id,
+                agent_server_url=agent_server_url,
+                session_api_key=sandbox.session_api_key,
+                before_delivery=activate_credential_binding,
+            )
+            task.status = AppConversationStartTaskStatus.READY
+            await self._save_start_task_update(task)
+        except (asyncio.CancelledError, GeneratorExit) as exc:
+            await self._persist_interrupted_start_task(task, exc)
+            raise
+        except Exception as exc:
+            task.status = AppConversationStartTaskStatus.ERROR
+            task.detail = redact_text_secrets(
+                redact_api_key_literals(_exception_detail(exc))
+            )
+            await self._persist_start_task_update(task)
+            raise
+
+    async def _get_managed_credential_conversations(
         self,
         sandbox_id: str,
-    ) -> list[AppConversationInfo]:
-        conversations: list[AppConversationInfo] = []
-        page_id = None
-        while True:
-            page = (
-                await self.app_conversation_info_service.search_app_conversation_info(
-                    sandbox_id__eq=sandbox_id,
-                    page_id=page_id,
-                    limit=100,
-                    include_sub_conversations=True,
-                )
-            )
-            conversations.extend(page.items)
-            if page.next_page_id is None:
-                return conversations
-            page_id = page.next_page_id
+    ) -> list[ManagedCredentialConversationRef]:
+        return await self.app_conversation_info_service.get_managed_credential_conversations_for_sandbox(
+            sandbox_id
+        )
 
     async def _get_cold_conversation(
         self,
@@ -1169,7 +1435,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return {}
 
     async def _wait_for_sandbox_start(
-        self, task: AppConversationStartTask
+        self,
+        task: AppConversationStartTask,
+        *,
+        reactivate_managed_conversations: bool = False,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
         # Get or create the sandbox
@@ -1215,7 +1484,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         yield task
 
         # Resume if paused
-        if sandbox.status == SandboxStatus.PAUSED:
+        was_paused = sandbox.status == SandboxStatus.PAUSED
+        if was_paused:
             await self.sandbox_service.resume_sandbox(sandbox.id)
 
         # Check for immediate error states
@@ -1237,6 +1507,34 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             poll_interval=self.sandbox_startup_poll_frequency,
             httpx_client=self.httpx_client,
         )
+        if was_paused and reactivate_managed_conversations:
+            running_sandbox = await self.sandbox_service.get_sandbox(sandbox.id)
+            if running_sandbox is None:
+                raise SandboxError(f'Sandbox not found: {sandbox.id}')
+            agent_server_url = self._get_agent_server_url(running_sandbox)
+            conversations = await self._get_managed_credential_conversations(sandbox.id)
+            sandbox_owner_id = (
+                running_sandbox.created_by_user_id
+                or await self.user_context.get_user_id()
+            )
+            for conversation_ref in conversations:
+                if (
+                    sandbox_owner_id is not None
+                    and conversation_ref.created_by_user_id
+                    not in (None, sandbox_owner_id)
+                ):
+                    continue
+                try:
+                    await self._reactivate_managed_sibling(
+                        running_sandbox,
+                        agent_server_url,
+                        conversation_ref,
+                    )
+                except Exception:
+                    _logger.exception(
+                        'Unable to reactivate managed conversation %s',
+                        conversation_ref.conversation_id,
+                    )
 
     async def _seed_sandbox_profiles(
         self, agent_server_url: str, session_api_key: str | None
@@ -2572,6 +2870,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         *,
         start_task_id: UUID,
         required: bool,
+        credential_owner: ManagedCredentialConversationRef | None = None,
     ) -> bool:
         credential_binding_url = _resolve_credential_binding_url(
             self.web_url,
@@ -2628,8 +2927,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return False
 
         try:
-            user_id = await self.user_context.get_user_id() or 'root'
-            organization_id = await self.user_context.get_effective_org_id()
+            if credential_owner is None:
+                user_id = await self.user_context.get_user_id() or 'root'
+                organization_id = await self.user_context.get_effective_org_id()
+            else:
+                if not credential_owner.owner_resolved:
+                    raise SandboxError('Managed credential owner is unavailable')
+                user_id = credential_owner.created_by_user_id or 'root'
+                organization_id = credential_owner.organization_id
             token = self.jwt_service.create_jws_token(
                 payload={
                     'purpose': 'credential-binding',
@@ -2869,79 +3174,62 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         task_id: UUID,
         conversation_id: UUID,
         agent_server_url: str,
-        session_api_key: str,
+        session_api_key: str | None,
+        before_delivery: Callable[[], Awaitable[Any]] | None = None,
     ) -> None:
-        """Process pending messages queued before conversation was ready.
-
-        Messages are delivered concurrently to the agent server. After processing,
-        all messages are deleted from the database regardless of success or failure.
-
-        Args:
-            task_id: The start task ID (may have been used as conversation_id initially)
-            conversation_id: The real conversation ID
-            agent_server_url: URL of the agent server
-            session_api_key: API key for authenticating with agent server
-        """
-        # Convert UUIDs to strings for the pending message service
-        # The frontend uses task-{uuid.hex} format (no hyphens), matching OpenHandsUUID serialization
-        task_id_str = f'task-{task_id.hex}'
-        # conversation_id uses standard format (with hyphens) for agent server API compatibility
+        """Deliver queued messages in order."""
         conversation_id_str = str(conversation_id)
-
-        _logger.info(f'task_id={task_id_str} conversation_id={conversation_id_str}')
-
-        # First, update any messages that were queued with the task_id
-        updated_count = await self.pending_message_service.update_conversation_id(
-            old_conversation_id=task_id_str,
-            new_conversation_id=conversation_id_str,
-        )
-        _logger.info(f'updated_count={updated_count} ')
-        if updated_count > 0:
-            _logger.info(
-                f'Updated {updated_count} pending messages from task_id={task_id_str} '
-                f'to conversation_id={conversation_id_str}'
+        pending_messages = (
+            await self.pending_message_service.begin_message_delivery_cutover(
+                task_id,
+                conversation_id,
             )
-
-        # Get all pending messages for this conversation
-        pending_messages = await self.pending_message_service.get_pending_messages(
-            conversation_id_str
         )
-
-        if not pending_messages:
-            return
-
-        _logger.info(
-            f'Processing {len(pending_messages)} pending messages for '
-            f'conversation {conversation_id_str}'
-        )
-
-        # Process messages sequentially to preserve order
-        for msg in pending_messages:
-            try:
-                # Serialize content objects to JSON-compatible dicts
-                content_json = [item.model_dump() for item in msg.content]
-                # Use the events endpoint which handles message sending
-                response = await self.httpx_client.post(
-                    f'{agent_server_url}/api/conversations/{conversation_id_str}/events',
-                    json={
-                        'role': msg.role,
-                        'content': content_json,
-                        'run': True,
-                    },
-                    headers={'X-Session-API-Key': session_api_key},
-                    timeout=30.0,
+        delivered_message_ids: list[str] = []
+        delivery_complete = False
+        delivery_error: Exception | None = None
+        try:
+            if before_delivery is not None:
+                await before_delivery()
+            for message in pending_messages:
+                try:
+                    response = await self.httpx_client.post(
+                        f'{agent_server_url}/api/conversations/'
+                        f'{conversation_id_str}/events',
+                        json={
+                            'role': message.role,
+                            'content': [item.model_dump() for item in message.content],
+                            'run': True,
+                        },
+                        headers=(
+                            {'X-Session-API-Key': session_api_key}
+                            if session_api_key
+                            else {}
+                        ),
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    delivered_message_ids.append(message.id)
+                except Exception as exc:
+                    _logger.warning(
+                        'Failed to deliver pending message %s: %s',
+                        message.id,
+                        exc,
+                    )
+                    delivery_error = exc
+                    break
+            delivery_complete = delivery_error is None
+        finally:
+            finish_task = asyncio.create_task(
+                self.pending_message_service.finish_message_delivery_cutover(
+                    task_id,
+                    delivered_message_ids,
+                    delivery_complete,
                 )
-                response.raise_for_status()
-                _logger.debug(f'Delivered pending message {msg.id}')
-            except Exception as e:
-                _logger.warning(f'Failed to deliver pending message {msg.id}: {e}')
-
-        # Delete all pending messages after processing (regardless of success/failure)
-        deleted_count = (
-            await self.pending_message_service.delete_messages_for_conversation(
-                conversation_id_str
             )
-        )
+            deleted_count = await self._wait_for_cleanup_task(finish_task)
+        if delivery_error is not None:
+            raise SandboxError('Failed to deliver pending messages') from delivery_error
         _logger.info(
             f'Finished processing pending messages for conversation {conversation_id_str}. '
             f'Deleted {deleted_count} messages.'
@@ -3125,10 +3413,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             # Delete all sub-conversations first (to maintain referential integrity)
             await self._delete_sub_conversations(conversation_id)
 
-            # Now delete the parent conversation
-            # Delete from agent server if sandbox is running (skip if sandbox is shared)
-            if not skip_agent_server_delete:
-                await self._delete_from_agent_server(app_conversation)
+            managed_credential = has_managed_codex_credential(app_conversation.tags)
+            if not skip_agent_server_delete or managed_credential:
+                await self._delete_from_agent_server(
+                    app_conversation,
+                    require_credential_flush=managed_credential,
+                )
 
             # Delete from database using the conversation info from app_conversation
             # AppConversation extends AppConversationInfo, so we can use it directly
@@ -3161,14 +3451,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             try:
                 sub_conversation = await self.get_app_conversation(sub_id)
                 if sub_conversation:
-                    # Delete from agent server if sandbox is running
-                    await self._delete_from_agent_server(sub_conversation)
+                    await self._delete_from_agent_server(
+                        sub_conversation,
+                        require_credential_flush=has_managed_codex_credential(
+                            sub_conversation.tags
+                        ),
+                    )
                     # Delete from database
                     await self._delete_from_database(sub_conversation)
                     _logger.info(
                         f'Successfully deleted sub-conversation {sub_id}',
                         extra={'conversation_id': str(sub_id)},
                     )
+            except SandboxError:
+                raise
             except Exception as e:
                 # Log error but continue deleting remaining sub-conversations
                 _logger.warning(
@@ -3178,37 +3474,57 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
 
     async def _delete_from_agent_server(
-        self, app_conversation: AppConversation
+        self,
+        app_conversation: AppConversation,
+        require_credential_flush: bool = False,
     ) -> None:
         """Delete conversation from agent server if sandbox is running."""
         conversation_id = app_conversation.id
-        if not (
-            app_conversation.sandbox_status == SandboxStatus.RUNNING
-            and app_conversation.session_api_key
-        ):
-            return
 
         try:
-            # Get sandbox info to find agent server URL
-            sandbox = await self.sandbox_service.get_sandbox(
-                app_conversation.sandbox_id
-            )
-            if sandbox and sandbox.exposed_urls:
-                agent_server_url = self._get_agent_server_url(sandbox)
-
-                # Call agent server delete API
-                response = await self.httpx_client.delete(
-                    f'{agent_server_url}/api/conversations/{conversation_id}',
-                    headers={'X-Session-API-Key': app_conversation.session_api_key},
-                    timeout=30.0,
+            if require_credential_flush:
+                sandbox = await self.sandbox_service.get_sandbox_for_authorization(
+                    app_conversation.sandbox_id
                 )
-                response.raise_for_status()
+                if sandbox is None:
+                    return
+                if sandbox.status == SandboxStatus.PAUSED or (
+                    sandbox.runtime_status
+                    and sandbox.runtime_status.lower() in ('paused', 'stopped')
+                ):
+                    return
+                if sandbox.status != SandboxStatus.RUNNING:
+                    raise SandboxError(
+                        'Managed sandbox status is not safe for deletion'
+                    )
+                session_api_key = sandbox.session_api_key
+            else:
+                if app_conversation.sandbox_status != SandboxStatus.RUNNING:
+                    return
+                sandbox = await self.sandbox_service.get_sandbox(
+                    app_conversation.sandbox_id
+                )
+                session_api_key = app_conversation.session_api_key
+            if not session_api_key:
+                raise SandboxError('Missing session key')
+            if sandbox is None or not sandbox.exposed_urls:
+                raise SandboxError('Agent server unavailable')
+            agent_server_url = self._get_agent_server_url(sandbox)
+            response = await self.httpx_client.delete(
+                f'{agent_server_url}/api/conversations/{conversation_id}',
+                headers={'X-Session-API-Key': session_api_key},
+                timeout=30.0,
+            )
+            response.raise_for_status()
         except Exception as e:
+            if require_credential_flush:
+                raise SandboxError(
+                    'Failed to flush managed credentials before deletion'
+                ) from e
             _logger.warning(
                 f'Failed to delete conversation from agent server: {e}',
                 extra={'conversation_id': str(conversation_id)},
             )
-            # Continue with database cleanup even if agent server call fails
 
     async def _delete_from_database(
         self, app_conversation_info: AppConversationInfo

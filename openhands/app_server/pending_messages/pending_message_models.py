@@ -10,12 +10,7 @@ from openhands.agent_server.utils import utc_now
 
 
 class PendingMessage(BaseModel):
-    """A message queued for delivery when conversation becomes ready.
-
-    Pending messages are stored in the database and delivered to the agent_server
-    when the conversation transitions to READY status. Messages are deleted after
-    processing, regardless of success or failure.
-    """
+    """Represent a message queued for delivery."""
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     conversation_id: str  # Can be task-{uuid} or real conversation UUID
@@ -30,3 +25,4 @@ class PendingMessageResponse(BaseModel):
     id: str
     queued: bool
     position: int = Field(description='Position in the queue (1-based)')
+    conversation_id: str | None = None

@@ -5,6 +5,9 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    has_managed_codex_credential,
+)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -16,7 +19,8 @@ from openhands.app_server.sandbox.sandbox_models import (
 from openhands.app_server.secrets.credential_binding_models import (
     CREDENTIAL_BINDING_GUARD_CAPABILITY,
 )
-from openhands.app_server.services.injector import Injector
+from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -28,6 +32,7 @@ _logger = logging.getLogger(__name__)
 SESSION_API_KEY_VARIABLE = 'OH_SESSION_API_KEYS_0'
 WEBHOOK_CALLBACK_VARIABLE = 'OH_WEBHOOKS_0_BASE_URL'
 ALLOW_CORS_ORIGINS_VARIABLE = 'OH_ALLOW_CORS_ORIGINS_0'
+PAUSE_BARRIER_TIMEOUT = 30.0
 
 # Known start-failure classes we translate into short, user-safe messages. Raw
 # runtime status_detail (k8s pod/scheduling text) can leak internal registry
@@ -293,35 +298,69 @@ class SandboxService(ABC):
         sandbox: SandboxInfo,
         httpx_client: httpx.AsyncClient,
     ) -> None:
-        if not sandbox.session_api_key or not sandbox.exposed_urls:
+        if not await self._requires_credential_pause_barrier(sandbox.id):
             return
+        await self._run_credential_pause_barrier(sandbox, httpx_client)
+
+    async def _run_credential_pause_barrier(
+        self,
+        sandbox: SandboxInfo,
+        httpx_client: httpx.AsyncClient,
+    ) -> None:
+        if not sandbox.session_api_key:
+            raise SandboxError(
+                f'Missing session API key for managed sandbox: {sandbox.id}'
+            )
+        if not sandbox.exposed_urls:
+            raise SandboxError(
+                f'Missing Agent Server URL for managed sandbox: {sandbox.id}'
+            )
         agent_server_url = self._get_agent_server_url(sandbox)
         headers = {'X-Session-API-Key': sandbox.session_api_key}
         server_info_response = await httpx_client.get(
             f'{agent_server_url}/server_info',
             headers=headers,
+            timeout=PAUSE_BARRIER_TIMEOUT,
         )
         server_info_response.raise_for_status()
         server_info = server_info_response.json()
         if not isinstance(server_info, dict):
             raise ValueError('Invalid Agent Server metadata')
-        if 'capabilities' not in server_info:
-            return
-        capabilities = server_info['capabilities']
+        capabilities = server_info.get('capabilities')
         if not isinstance(capabilities, list) or not all(
             isinstance(capability, str) for capability in capabilities
         ):
             raise ValueError('Invalid Agent Server capabilities')
         if CREDENTIAL_BINDING_GUARD_CAPABILITY not in capabilities:
-            return
+            raise ValueError('Agent Server lacks the credential pause barrier')
         response = await httpx_client.post(
             f'{agent_server_url}/api/conversations/prepare-for-sandbox-pause',
             headers=headers,
-            timeout=30.0,
+            timeout=PAUSE_BARRIER_TIMEOUT,
         )
         response.raise_for_status()
         if response.status_code != 204:
             raise ValueError('Invalid Agent Server pause barrier response')
+
+    async def _requires_credential_pause_barrier(self, sandbox_id: str) -> bool:
+        from openhands.app_server.config import get_app_conversation_info_service
+
+        state = InjectorState()
+        setattr(state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_app_conversation_info_service(state) as service:
+            page_id = None
+            while True:
+                page = await service.search_app_conversation_info(
+                    sandbox_id__eq=sandbox_id,
+                    page_id=page_id,
+                    limit=100,
+                    include_sub_conversations=True,
+                )
+                if any(has_managed_codex_credential(info.tags) for info in page.items):
+                    return True
+                if page.next_page_id is None:
+                    return False
+                page_id = page.next_page_id
 
     @abstractmethod
     async def pause_sandbox(self, sandbox_id: str) -> bool:

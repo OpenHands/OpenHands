@@ -20,7 +20,7 @@ import type {
 } from "./v1-conversation-service.types";
 
 const RESUME_POLL_INTERVAL_MS = 1000;
-const RESUME_MAX_POLL_ATTEMPTS = 180;
+const RESUME_POLL_TIMEOUT_MS = 15 * 60 * 1000;
 
 class V1ConversationService {
   /**
@@ -116,27 +116,48 @@ class V1ConversationService {
   ): Promise<V1AppConversationStartTask> {
     const { data: initialTask } =
       await openHands.post<V1AppConversationStartTask>(
-        "/api/v1/app-conversations",
-        { conversation_id: conversationId },
+        `/api/v1/app-conversations/${conversationId}/resume`,
       );
-    return this.waitForResumeTask(initialTask, RESUME_MAX_POLL_ATTEMPTS);
+    return this.waitForResumeTask(initialTask);
   }
 
-  private static async waitForResumeTask(
-    task: V1AppConversationStartTask,
-    attemptsRemaining: number,
+  private static waitForResumeTask(
+    initialTask: V1AppConversationStartTask,
   ): Promise<V1AppConversationStartTask> {
-    if (task.status === "READY" && task.app_conversation_id) {
-      return task;
-    }
-    if (task.status === "ERROR" || attemptsRemaining === 0) {
-      throw new Error(task.detail || "Failed to resume conversation");
-    }
-    await new Promise((resolve) => {
-      setTimeout(resolve, RESUME_POLL_INTERVAL_MS);
+    const deadline = Date.now() + RESUME_POLL_TIMEOUT_MS;
+    return new Promise((resolve, reject) => {
+      const checkTask = (task: V1AppConversationStartTask) => {
+        if (task.status === "READY") {
+          if (!task.app_conversation_id) {
+            reject(new Error("Resume task completed without a conversation"));
+            return;
+          }
+          resolve(task);
+          return;
+        }
+        if (task.status === "ERROR") {
+          reject(new Error(task.detail || "Failed to resume conversation"));
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error("Timed out waiting for conversation resume"));
+          return;
+        }
+        setTimeout(() => {
+          this.getStartTask(task.id)
+            .then((nextTask) => {
+              if (!nextTask) {
+                reject(new Error("Resume task not found"));
+                return;
+              }
+              checkTask(nextTask);
+            })
+            .catch(reject);
+        }, RESUME_POLL_INTERVAL_MS);
+      };
+
+      checkTask(initialTask);
     });
-    const nextTask = (await this.getStartTask(task.id)) ?? task;
-    return this.waitForResumeTask(nextTask, attemptsRemaining - 1);
   }
 
   /**

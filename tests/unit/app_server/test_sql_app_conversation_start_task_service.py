@@ -120,6 +120,36 @@ class TestSQLAppConversationStartTaskService:
         assert retrieved_task.status == sample_task.status
         assert retrieved_task.request == sample_task.request
 
+    async def test_save_assigns_generation_order_under_clock_skew(
+        self,
+        service: SQLAppConversationStartTaskService,
+        sample_request: AppConversationStartRequest,
+    ):
+        from datetime import timedelta
+
+        conversation_id = uuid4()
+        first = AppConversationStartTask(
+            created_by_user_id='test_user',
+            app_conversation_id=conversation_id,
+            request=sample_request,
+        )
+        await service.save_app_conversation_start_task(first)
+        second = AppConversationStartTask(
+            created_by_user_id='test_user',
+            app_conversation_id=conversation_id,
+            request=sample_request,
+            created_at=first.created_at - timedelta(hours=1),
+        )
+
+        await service.save_app_conversation_start_task(second)
+        result = await service.search_app_conversation_start_tasks(
+            conversation_id__eq=conversation_id,
+            limit=2,
+        )
+
+        assert second.created_at > first.created_at
+        assert [task.id for task in result.items] == [second.id, first.id]
+
     async def test_get_nonexistent_task(
         self, service: SQLAppConversationStartTaskService
     ):
@@ -781,3 +811,36 @@ class TestSQLAppConversationStartTaskService:
             conversation_id__eq=conversation_id1, created_at__gte=filter_time
         )
         assert count == 1
+
+    async def test_mapping_existing_task_makes_generation_latest(
+        self,
+        service: SQLAppConversationStartTaskService,
+        sample_request: AppConversationStartRequest,
+    ):
+        from datetime import timedelta
+
+        conversation_id = uuid4()
+        older = AppConversationStartTask(
+            created_by_user_id='user1',
+            status=AppConversationStartTaskStatus.ERROR,
+            app_conversation_id=conversation_id,
+            request=sample_request,
+        )
+        await service.save_app_conversation_start_task(older)
+        retry = AppConversationStartTask(
+            created_by_user_id='user1',
+            status=AppConversationStartTaskStatus.WORKING,
+            request=sample_request,
+            created_at=older.created_at - timedelta(seconds=1),
+        )
+        await service.save_app_conversation_start_task(retry)
+
+        retry.app_conversation_id = conversation_id
+        await service.save_app_conversation_start_task(retry)
+
+        tasks = await service.search_app_conversation_start_tasks(
+            conversation_id__eq=conversation_id,
+            limit=2,
+        )
+        assert tasks.items[0].id == retry.id
+        assert retry.created_at > older.created_at

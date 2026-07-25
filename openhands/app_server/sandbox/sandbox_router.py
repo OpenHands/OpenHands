@@ -7,14 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.security import APIKeyHeader
 
 from openhands.agent_server.models import Success
-from openhands.app_server.app_conversation.app_conversation_info_service import (
-    AppConversationInfoService,
-)
-from openhands.app_server.app_conversation.app_conversation_models import (
-    has_managed_codex_credential,
-)
 from openhands.app_server.config import (
-    depends_app_conversation_info_service,
     depends_sandbox_service,
 )
 from openhands.app_server.sandbox.sandbox_models import (
@@ -41,7 +34,6 @@ router = APIRouter(
     prefix='/sandboxes', tags=['Sandbox'], dependencies=get_dependencies()
 )
 sandbox_service_dependency = depends_sandbox_service()
-app_conversation_info_service_dependency = depends_app_conversation_info_service()
 
 # Read methods
 
@@ -104,29 +96,17 @@ async def pause_sandbox(
 async def resume_sandbox(
     sandbox_id: str,
     sandbox_service: SandboxService = sandbox_service_dependency,
-    app_conversation_info_service: AppConversationInfoService = (
-        app_conversation_info_service_dependency
-    ),
 ) -> Success:
-    page_id = None
-    while True:
-        page = await app_conversation_info_service.search_app_conversation_info(
-            sandbox_id__eq=sandbox_id,
-            page_id=page_id,
-            limit=100,
-            include_sub_conversations=True,
+    if await sandbox_service.get_sandbox(sandbox_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+    if await sandbox_service._requires_credential_pause_barrier(sandbox_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=(
+                'Resume a conversation through '
+                'POST /api/v1/app-conversations/{conversation_id}/resume'
+            ),
         )
-        if any(has_managed_codex_credential(info.tags) for info in page.items):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT,
-                detail=(
-                    'Resume this sandbox through POST /api/v1/app-conversations '
-                    'with conversation_id'
-                ),
-            )
-        if page.next_page_id is None:
-            break
-        page_id = page.next_page_id
 
     exists = await sandbox_service.resume_sandbox(sandbox_id)
     if not exists:

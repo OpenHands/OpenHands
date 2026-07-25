@@ -48,6 +48,7 @@ import type {
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
+import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { classifyBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
@@ -919,13 +920,18 @@ export function ConversationWebSocketProvider({
         }
 
         try {
-          await PendingMessageService.queueMessage(conversationId, {
-            role: "user",
-            content: message.content,
-          });
-          // Message queued successfully - it will be delivered when ready
-          // Return queued: true so caller knows not to show optimistic UI
-          return { queued: true };
+          if (!conversationId.startsWith("task-")) {
+            await V1ConversationService.sendMessage(conversationId, message);
+            return { queued: false };
+          }
+          const response = await PendingMessageService.queueMessage(
+            conversationId,
+            {
+              role: "user",
+              content: message.content,
+            },
+          );
+          return { queued: response.queued };
         } catch (error) {
           const errorMessage =
             error instanceof Error

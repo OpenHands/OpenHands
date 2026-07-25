@@ -53,6 +53,9 @@ describe("V1ConversationService", () => {
       await vi.advanceTimersByTimeAsync(2000);
 
       await expect(resume).resolves.toMatchObject({ status: "READY" });
+      expect(mockPost).toHaveBeenCalledWith(
+        "/api/v1/app-conversations/conv-123/resume",
+      );
       expect(mockGet).toHaveBeenCalledTimes(2);
     });
 
@@ -82,6 +85,65 @@ describe("V1ConversationService", () => {
       );
 
       await vi.advanceTimersByTimeAsync(1000);
+
+      await rejection;
+    });
+
+    it("continues polling until the task reaches a terminal status", async () => {
+      vi.useFakeTimers();
+      mockPost.mockResolvedValue({
+        data: {
+          id: "task-id",
+          status: "WORKING",
+          app_conversation_id: "conv-123",
+        },
+      });
+      let pollCount = 0;
+      mockGet.mockImplementation(async () => {
+        pollCount += 1;
+        return {
+          data: [
+            {
+              id: "task-id",
+              status: pollCount > 180 ? "READY" : "WORKING",
+              app_conversation_id: "conv-123",
+            },
+          ],
+        };
+      });
+
+      const resume = V1ConversationService.resumeAppConversation("conv-123");
+
+      await vi.advanceTimersByTimeAsync(181_000);
+
+      await expect(resume).resolves.toMatchObject({ status: "READY" });
+      expect(mockGet).toHaveBeenCalledTimes(181);
+    });
+
+    it("rejects an orphaned nonterminal resume task", async () => {
+      vi.useFakeTimers();
+      mockPost.mockResolvedValue({
+        data: {
+          id: "task-id",
+          status: "WORKING",
+          app_conversation_id: "conv-123",
+        },
+      });
+      mockGet.mockResolvedValue({
+        data: [
+          {
+            id: "task-id",
+            status: "WORKING",
+            app_conversation_id: "conv-123",
+          },
+        ],
+      });
+
+      const rejection = expect(
+        V1ConversationService.resumeAppConversation("conv-123"),
+      ).rejects.toThrow("Timed out waiting for conversation resume");
+
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
 
       await rejection;
     });

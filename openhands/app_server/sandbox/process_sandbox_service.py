@@ -371,6 +371,27 @@ class ProcessSandboxService(SandboxService):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return False
 
+    @staticmethod
+    def _running_sandbox_info(
+        sandbox_id: str,
+        process_info: ProcessInfo,
+    ) -> SandboxInfo:
+        return SandboxInfo(
+            id=sandbox_id,
+            created_by_user_id=process_info.user_id,
+            sandbox_spec_id=process_info.sandbox_spec_id,
+            status=SandboxStatus.RUNNING,
+            session_api_key=process_info.session_api_key,
+            exposed_urls=[
+                ExposedUrl(
+                    name=AGENT_SERVER,
+                    url=f'http://localhost:{process_info.port}',
+                    port=process_info.port,
+                )
+            ],
+            created_at=process_info.created_at,
+        )
+
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Pause a running sandbox."""
         process_info = _processes.get(sandbox_id)
@@ -379,7 +400,15 @@ class ProcessSandboxService(SandboxService):
 
         try:
             process = psutil.Process(process_info.pid)
-            if process.is_running():
+            if process.is_running() and process.status() != psutil.STATUS_STOPPED:
+                sandbox = self._running_sandbox_info(sandbox_id, process_info)
+                try:
+                    await self._prepare_for_pause(sandbox, self.httpx_client)
+                except Exception as exc:
+                    raise SandboxError(
+                        'Agent Server did not complete its pause barrier',
+                        status_code=503,
+                    ) from exc
                 process.suspend()
             return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -392,9 +421,17 @@ class ProcessSandboxService(SandboxService):
             return False
 
         try:
-            # Terminate the process
             process = psutil.Process(process_info.pid)
             if process.is_running():
+                if process.status() != psutil.STATUS_STOPPED:
+                    sandbox = self._running_sandbox_info(sandbox_id, process_info)
+                    try:
+                        await self._prepare_for_pause(sandbox, self.httpx_client)
+                    except Exception as exc:
+                        raise SandboxError(
+                            'Agent Server did not complete its pause barrier',
+                            status_code=503,
+                        ) from exc
                 # Try graceful termination first
                 process.terminate()
                 try:

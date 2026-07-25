@@ -64,7 +64,7 @@ def mock_httpx_client():
 @pytest.fixture
 def service(mock_sandbox_spec_service, mock_httpx_client, mock_docker_client):
     """Create DockerSandboxService instance for testing."""
-    return DockerSandboxService(
+    service = DockerSandboxService(
         sandbox_spec_service=mock_sandbox_spec_service,
         container_name_prefix='oh-test-',
         host_port=3000,
@@ -83,6 +83,8 @@ def service(mock_sandbox_spec_service, mock_httpx_client, mock_docker_client):
         max_num_sandboxes=3,
         docker_client=mock_docker_client,
     )
+    service._requires_credential_pause_barrier = AsyncMock(return_value=False)
+    return service
 
 
 @pytest.fixture
@@ -866,6 +868,7 @@ class TestDockerSandboxService:
     async def test_pause_sandbox_success(self, service, mock_running_container):
         order = []
         service.docker_client.containers.get.return_value = mock_running_container
+        service._requires_credential_pause_barrier.return_value = True
         server_info = MagicMock()
         server_info.json.return_value = {
             'capabilities': ['credential_binding_activation_guard_v1']
@@ -884,23 +887,26 @@ class TestDockerSandboxService:
 
         assert result is True
         assert order == ['server-info', 'drain', 'pause']
+        service.httpx_client.get.assert_awaited_once_with(
+            'http://localhost:12345/server_info',
+            headers={'X-Session-API-Key': 'session_key_123'},
+            timeout=30.0,
+        )
         service.httpx_client.post.assert_awaited_once_with(
             'http://localhost:12345/api/conversations/prepare-for-sandbox-pause',
             headers={'X-Session-API-Key': 'session_key_123'},
             timeout=30.0,
         )
 
-    async def test_pause_sandbox_legacy_server_skips_drain(
+    async def test_pause_sandbox_nonmanaged_skips_agent_server(
         self, service, mock_running_container
     ):
         service.docker_client.containers.get.return_value = mock_running_container
-        server_info = MagicMock()
-        server_info.json.return_value = {'capabilities': ['credential_binding_v1']}
-        service.httpx_client.get.return_value = server_info
 
         result = await service.pause_sandbox('oh-test-abc123')
 
         assert result is True
+        service.httpx_client.get.assert_not_awaited()
         service.httpx_client.post.assert_not_awaited()
         mock_running_container.pause.assert_called_once()
 
@@ -908,6 +914,7 @@ class TestDockerSandboxService:
         self, service, mock_running_container
     ):
         service.docker_client.containers.get.return_value = mock_running_container
+        service._requires_credential_pause_barrier.return_value = True
         server_info = MagicMock()
         server_info.json.return_value = {
             'capabilities': ['credential_binding_activation_guard_v1']
@@ -922,6 +929,19 @@ class TestDockerSandboxService:
             response=response,
         )
         service.httpx_client.post.return_value = drain
+
+        with pytest.raises(SandboxError) as exc_info:
+            await service.pause_sandbox('oh-test-abc123')
+
+        assert exc_info.value.status_code == 503
+        mock_running_container.pause.assert_not_called()
+
+    async def test_pause_sandbox_managed_requires_runtime_metadata(
+        self, service, mock_running_container
+    ):
+        service.docker_client.containers.get.return_value = mock_running_container
+        service._requires_credential_pause_barrier.return_value = True
+        mock_running_container.image.tags = []
 
         with pytest.raises(SandboxError) as exc_info:
             await service.pause_sandbox('oh-test-abc123')
@@ -964,6 +984,31 @@ class TestDockerSandboxService:
             'openhands-workspace-oh-test-abc123'
         )
         mock_volume.remove.assert_called_once()
+
+    async def test_delete_running_managed_sandbox_drains_before_stop(
+        self, service, mock_running_container
+    ):
+        order = []
+        service.docker_client.containers.get.return_value = mock_running_container
+        service._requires_credential_pause_barrier.return_value = True
+        server_info = MagicMock()
+        server_info.json.return_value = {
+            'capabilities': ['credential_binding_activation_guard_v1']
+        }
+        service.httpx_client.get.side_effect = (
+            lambda *args, **kwargs: order.append('server-info') or server_info
+        )
+        drain = MagicMock(status_code=204)
+        service.httpx_client.post.side_effect = (
+            lambda *args, **kwargs: order.append('drain') or drain
+        )
+        mock_running_container.stop.side_effect = lambda **_: order.append('stop')
+
+        result = await service.delete_sandbox('oh-test-abc123')
+
+        assert result is True
+        assert order == ['server-info', 'drain', 'stop']
+        mock_running_container.remove.assert_called_once()
 
     async def test_delete_sandbox_volume_not_found(self, service):
         """Test sandbox deletion when volume doesn't exist."""
@@ -1058,6 +1103,17 @@ class TestDockerSandboxService:
         assert result.created_by_user_id is None
         assert result.sandbox_spec_id == 'spec456'
         assert result.status == SandboxStatus.RUNNING
+
+    async def test_container_uses_configured_image_when_image_has_multiple_tags(
+        self, service, mock_running_container
+    ):
+        mock_running_container.image.tags = ['other:tag', 'configured:tag']
+        mock_running_container.attrs['Config']['Image'] = 'configured:tag'
+
+        result = await service._container_to_sandbox_info(mock_running_container)
+
+        assert result is not None
+        assert result.sandbox_spec_id == 'configured:tag'
         assert result.session_api_key == 'session_key_123'
         assert len(result.exposed_urls) == 2
 
