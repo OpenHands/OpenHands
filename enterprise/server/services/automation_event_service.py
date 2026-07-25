@@ -244,14 +244,16 @@ class AutomationEventService:
     async def _get_requested_event_types(self, source: str) -> set[str]:
         now = time.monotonic()
         entry = self._requested_event_types_cache.get(source)
-        if self._is_requested_event_types_cache_fresh(entry, now):
+        if entry is not None and self._is_requested_event_types_cache_fresh(entry, now):
             entry.events_seen += 1
             return entry.event_types
 
         async with self._requested_event_types_lock:
             entry = self._requested_event_types_cache.get(source)
             now = time.monotonic()
-            if self._is_requested_event_types_cache_fresh(entry, now):
+            if entry is not None and self._is_requested_event_types_cache_fresh(
+                entry, now
+            ):
                 entry.events_seen += 1
                 return entry.event_types
 
