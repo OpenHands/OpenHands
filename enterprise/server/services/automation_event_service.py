@@ -29,7 +29,9 @@ from typing import Any
 from uuid import UUID
 
 import aiohttp
+import jmespath
 from integrations.resolver_org_router import resolve_org_for_repo
+from jmespath import exceptions as jmespath_exceptions
 from server.auth.constants import (
     AUTOMATION_SERVICE_TIMEOUT,
     AUTOMATION_SERVICE_URL,
@@ -69,10 +71,19 @@ class OrgContext:
 
 
 @dataclass
+class EventDetectionRule:
+    """Server-provided rule for detecting an event type from a payload."""
+
+    event_type: str
+    jmespath: str
+
+
+@dataclass
 class RequestedEventTypesCacheEntry:
-    """Cached event types requested by the automation service for a source."""
+    """Cached event metadata requested by the automation service for a source."""
 
     event_types: set[str]
+    event_detection_rules: list[EventDetectionRule]
     loaded_at: float
     events_seen: int = 0
 
@@ -130,7 +141,9 @@ class AutomationEventService:
         """
         org_id: UUID | None = None
         try:
-            if not await self._should_forward_source_event(provider, event_type):
+            if not await self._should_forward_source_event(
+                provider, payload, event_type
+            ):
                 return
 
             # Resolve org context (org_id and git_org name) - uses Redis cache
@@ -210,36 +223,68 @@ class AutomationEventService:
             )
 
     async def _should_forward_source_event(
-        self, provider: ProviderType, event_type: str | None
+        self, provider: ProviderType, payload: dict[str, Any], event_type: str | None
     ) -> bool:
-        """Return whether this provider event type should be forwarded."""
-        if not event_type:
-            return True
-
+        """Return whether this provider event should be forwarded."""
         source = provider.value
-        requested_event_types = await self._get_requested_event_types(source)
-        if requested_event_types is None:
+        metadata = await self._get_requested_event_metadata(source)
+        if metadata is None:
             logger.warning(
-                f'[AutomationEventService] Forwarding {source} event type '
-                f'{event_type}: requested event types unavailable'
+                f'[AutomationEventService] Forwarding {source} event: requested '
+                f'event metadata unavailable'
             )
             return True
 
-        if event_type in requested_event_types:
+        detected_event_type = self._detect_source_event_type(source, payload, metadata)
+        if detected_event_type is None:
+            logger.debug(
+                f'[AutomationEventService] Skipping {source} event type '
+                f'{event_type}: no automation detection rule matched'
+            )
+            return False
+
+        if detected_event_type in metadata.event_types:
             return True
 
         logger.debug(
             f'[AutomationEventService] Skipping {source} event type '
-            f'{event_type}: not requested by automation service'
+            f'{detected_event_type}: not requested by automation service'
         )
         return False
 
-    async def _get_requested_event_types(self, source: str) -> set[str] | None:
+    def _detect_source_event_type(
+        self,
+        source: str,
+        payload: dict[str, Any],
+        metadata: RequestedEventTypesCacheEntry,
+    ) -> str | None:
+        if not metadata.event_detection_rules:
+            logger.warning(
+                f'[AutomationEventService] Cannot filter {source} event: '
+                f'automation service returned no detection rules'
+            )
+            return None
+
+        for rule in metadata.event_detection_rules:
+            try:
+                if jmespath.search(rule.jmespath, payload):
+                    return rule.event_type
+            except jmespath_exceptions.JMESPathError as e:
+                logger.warning(
+                    f'[AutomationEventService] Invalid {source} event detection '
+                    f'rule for {rule.event_type}: {e}'
+                )
+                return None
+        return None
+
+    async def _get_requested_event_metadata(
+        self, source: str
+    ) -> RequestedEventTypesCacheEntry | None:
         now = time.monotonic()
         entry = self._requested_event_types_cache.get(source)
         if entry is not None and self._is_requested_event_types_cache_fresh(entry, now):
             entry.events_seen += 1
-            return entry.event_types
+            return entry
 
         async with self._requested_event_types_lock:
             entry = self._requested_event_types_cache.get(source)
@@ -248,17 +293,16 @@ class AutomationEventService:
                 entry, now
             ):
                 entry.events_seen += 1
-                return entry.event_types
+                return entry
 
-            fetched = await self._fetch_requested_event_types(source)
+            fetched = await self._fetch_requested_event_metadata(source)
             if fetched is not None:
-                self._requested_event_types_cache[source] = (
-                    RequestedEventTypesCacheEntry(event_types=fetched, loaded_at=now)
-                )
+                fetched.loaded_at = now
+                self._requested_event_types_cache[source] = fetched
                 return fetched
 
             if entry is not None:
-                return entry.event_types
+                return entry
             return None
 
     @staticmethod
@@ -272,7 +316,9 @@ class AutomationEventService:
             and entry.events_seen < REQUESTED_EVENT_TYPES_REFRESH_EVENT_COUNT
         )
 
-    async def _fetch_requested_event_types(self, source: str) -> set[str] | None:
+    async def _fetch_requested_event_metadata(
+        self, source: str
+    ) -> RequestedEventTypesCacheEntry | None:
         if not AUTOMATION_SERVICE_URL:
             return None
 
@@ -298,16 +344,57 @@ class AutomationEventService:
 
                     data = await resp.json()
                     event_types = data.get('event_types')
-                    if not isinstance(event_types, list):
+                    detection_rules = data.get('event_detection_rules')
+                    if not isinstance(event_types, list) or not isinstance(
+                        detection_rules, list
+                    ):
                         logger.warning(
                             f'[AutomationEventService] Invalid requested event '
-                            f'types response for {source}: {data}'
+                            f'metadata response for {source}: {data}'
                         )
                         return None
-                    return {item for item in event_types if isinstance(item, str)}
+
+                    rules = []
+                    for item in detection_rules:
+                        if not isinstance(item, dict):
+                            continue
+                        rule_event_type = item.get('event_type')
+                        rule_jmespath = item.get('jmespath')
+                        if isinstance(rule_event_type, str) and isinstance(
+                            rule_jmespath, str
+                        ):
+                            try:
+                                jmespath.compile(rule_jmespath)
+                            except jmespath_exceptions.JMESPathError as e:
+                                logger.warning(
+                                    f'[AutomationEventService] Invalid {source} '
+                                    f'event detection rule for {rule_event_type}: {e}'
+                                )
+                                return None
+                            rules.append(
+                                EventDetectionRule(
+                                    event_type=rule_event_type,
+                                    jmespath=rule_jmespath,
+                                )
+                            )
+
+                    if not rules:
+                        logger.warning(
+                            f'[AutomationEventService] Requested event metadata '
+                            f'for {source} did not include detection rules'
+                        )
+                        return None
+
+                    return RequestedEventTypesCacheEntry(
+                        event_types={
+                            item for item in event_types if isinstance(item, str)
+                        },
+                        event_detection_rules=rules,
+                        loaded_at=0,
+                    )
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
             logger.warning(
-                f'[AutomationEventService] Error fetching requested event types '
+                f'[AutomationEventService] Error fetching requested event metadata '
                 f'for {source}: {e}'
             )
             return None
