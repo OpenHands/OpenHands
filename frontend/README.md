@@ -67,8 +67,12 @@ Or to run backend and frontend separately.
 # Start the backend from the root directory
 make start-backend
 
-# Serve the frontend
-make start-frontend or
+# Develop the frontend (React Router dev server with HMR)
+make start-frontend
+# or
+cd frontend && npm run dev -- --port 3001
+
+# Serve the static production build (requires `npm run build` first)
 cd frontend && npm start -- --port 3001
 ```
 

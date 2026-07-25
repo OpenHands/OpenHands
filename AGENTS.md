@@ -146,7 +146,7 @@ Frontend:
   - Build for production: `npm run build`
 - Environment Variables:
   - Set in `frontend/.env` or as environment variables
-  - Available variables: VITE_BACKEND_HOST, VITE_USE_TLS, VITE_INSECURE_SKIP_VERIFY, VITE_FRONTEND_PORT
+  - Available variables: VITE_BACKEND_BASE_URL, VITE_BACKEND_HOST, VITE_MOCK_API, VITE_MOCK_SAAS, VITE_USE_TLS, VITE_FRONTEND_PORT, VITE_INSECURE_SKIP_VERIFY, VITE_GITHUB_TOKEN
 - Internationalization:
   - Generate i18n declaration file: `npm run make-i18n`
 - Data Fetching & Cache Management:
