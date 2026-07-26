@@ -1,6 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  within,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -40,7 +47,8 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   return {
     name: "deno",
     type: "knowledge",
-    source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
+    source:
+      "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
     description:
       "If the project uses deno, use this skill to initialize Deno projects.",
     triggers: ["deno", "deno.json", "deno.lock"],
@@ -55,7 +63,7 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
-function renderSkillsSettingsScreen() {
+function renderSkillsSettingsScreen(initialEntry = "/skills") {
   return render(<SkillsSettingsScreen />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
@@ -65,7 +73,9 @@ function renderSkillsSettingsScreen() {
           })
         }
       >
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        </MemoryRouter>
       </QueryClientProvider>
     ),
   });
@@ -118,7 +128,9 @@ Full skill body.`,
 
     expect(
       within(card).getByTestId(`skill-description-${skill.name}`),
-    ).toHaveTextContent("Connect and run commands on remote machines over SSH.");
+    ).toHaveTextContent(
+      "Connect and run commands on remote machines over SSH.",
+    );
   });
 
   it("surfaces the YAML description under the card title with the source path beneath it", async () => {
@@ -196,7 +208,7 @@ Full skill body.`,
     expect(screen.getByTestId("skill-card-vercel")).toBeInTheDocument();
   });
 
-  it("narrows the visible skills when a type filter chip is selected", async () => {
+  it("narrows the visible skills when a facet row is selected", async () => {
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: "deno", type: "knowledge" }),
@@ -211,9 +223,42 @@ Full skill body.`,
     renderSkillsSettingsScreen();
     await screen.findByTestId("skill-card-deno");
 
-    const filter = screen.getByTestId("skills-type-filter");
-    await user.click(within(filter).getByTestId("dropdown-trigger"));
-    await user.click(screen.getByTestId("skills-type-filter-repo"));
+    await user.click(screen.getByTestId("skill-facet-type-repo"));
+
+    expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
+    expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
+  });
+
+  it("seeds the filter state from the URL on load", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", category: "environment" }),
+      buildSkill({ name: "prd", category: "writing", triggers: [] }),
+    ]);
+
+    renderSkillsSettingsScreen("/skills?category=writing");
+
+    await screen.findByTestId("skill-card-prd");
+    expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
+  });
+
+  it("filters through the mobile filters modal", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", type: "knowledge" }),
+      buildSkill({
+        name: "global-rules",
+        type: "repo",
+        triggers: [],
+        source: "/skills/global-rules.md",
+      }),
+    ]);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId("skill-card-deno");
+
+    await user.click(screen.getByTestId("skills-filters-button"));
+    const modal = await screen.findByTestId("skill-filters-modal");
+    await user.click(within(modal).getByTestId("skill-facet-type-repo"));
 
     expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
     expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
@@ -247,7 +292,9 @@ Full skill body.`,
       within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-bash`),
     ).toHaveTextContent("bash");
     expect(
-      within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-execute_bash`),
+      within(modal).getByTestId(
+        `skill-modal-pill-${skill.name}-tool-execute_bash`,
+      ),
     ).toHaveTextContent("execute_bash");
     expect(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -264,7 +311,9 @@ Full skill body.`,
     await user.click(card);
 
     const modal = await screen.findByTestId("skill-detail-modal");
-    expect(within(modal).getByText("SETTINGS$SKILLS_ENABLED")).toBeInTheDocument();
+    expect(
+      within(modal).getByText("SETTINGS$SKILLS_ENABLED"),
+    ).toBeInTheDocument();
 
     await user.click(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -274,7 +323,9 @@ Full skill body.`,
     expect(
       within(card).getByTestId(`skill-toggle-${skill.name}`),
     ).toHaveAttribute("aria-checked", "false");
-    expect(within(modal).getByText("SETTINGS$SKILLS_DISABLED")).toBeInTheDocument();
+    expect(
+      within(modal).getByText("SETTINGS$SKILLS_DISABLED"),
+    ).toBeInTheDocument();
   });
 
   it("saves disabled_skills to the server when a skill is toggled off and settings has no prior disabled_skills field", async () => {

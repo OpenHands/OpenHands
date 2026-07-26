@@ -27233,23 +27233,6 @@
     "uk": "Шукати навички за назвою, описом або тригером",
     "ca": "Cerca habilitats per nom, descripció o activador"
   },
-  "SETTINGS$SKILLS_TYPE_ALL": {
-    "en": "All",
-    "ja": "すべて",
-    "zh-CN": "全部",
-    "zh-TW": "全部",
-    "ko-KR": "전체",
-    "no": "Alle",
-    "ar": "الكل",
-    "de": "Alle",
-    "fr": "Tout",
-    "it": "Tutti",
-    "pt": "Todos",
-    "es": "Todos",
-    "tr": "Tümü",
-    "uk": "Усі",
-    "ca": "Tot"
-  },
   "SETTINGS$SKILLS_TYPE_AGENTSKILLS": {
     "en": "Auto-discovery",
     "ja": "自動検出",
