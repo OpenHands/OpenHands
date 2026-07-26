@@ -392,7 +392,7 @@ async def start_app_conversation(
                         ctx=ctx,
                         conversation_id=str(result.app_conversation_id)
                         if result.app_conversation_id
-                        else result.id,
+                        else str(result.id),
                         trigger=start_request.trigger.value
                         if start_request.trigger
                         else None,
