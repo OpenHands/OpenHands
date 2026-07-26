@@ -29,6 +29,17 @@ export class SandboxService {
     return data;
   }
 
+  static async activateCredentialBinding(
+    sandboxId: string,
+    conversationId: string,
+  ): Promise<{ success: boolean }> {
+    const { data } = await openHands.post<{ success: boolean }>(
+      `/api/v1/sandboxes/${sandboxId}/credential-bindings/${conversationId}/activate`,
+      {},
+    );
+    return data;
+  }
+
   /**
    * Search / list available sandbox specs
    * Calls the /api/v1/sandbox-specs/search endpoint

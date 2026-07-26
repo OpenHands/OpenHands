@@ -382,11 +382,8 @@ class TestDockerSandboxService:
             'Docker daemon error'
         )
 
-        # Execute
-        result = await service.get_sandbox('oh-test-abc123')
-
-        # Verify
-        assert result is None
+        with pytest.raises(APIError, match='Docker daemon error'):
+            await service.get_sandbox('oh-test-abc123')
 
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')
@@ -865,17 +862,88 @@ class TestDockerSandboxService:
 
     async def test_pause_sandbox_success(self, service):
         """Test pausing a running sandbox."""
-        # Setup
         mock_container = MagicMock()
         mock_container.status = 'running'
         service.docker_client.containers.get.return_value = mock_container
+        sandbox = MagicMock()
+        order = []
+        service._container_to_sandbox_info = AsyncMock(return_value=sandbox)
+        service._prepare_for_pause = AsyncMock(
+            side_effect=lambda *args: order.append('barrier')
+        )
+        mock_container.pause.side_effect = lambda: order.append('pause')
 
-        # Execute
         result = await service.pause_sandbox('oh-test-abc123')
 
-        # Verify
         assert result is True
+        assert order == ['barrier', 'pause']
+        service._prepare_for_pause.assert_awaited_once_with(
+            sandbox, service.httpx_client
+        )
         mock_container.pause.assert_called_once()
+
+    async def test_pause_barrier_failure_keeps_container_running(self, service):
+        mock_container = MagicMock()
+        mock_container.status = 'running'
+        service.docker_client.containers.get.return_value = mock_container
+        service._container_to_sandbox_info = AsyncMock(return_value=MagicMock())
+        service._prepare_for_pause = AsyncMock(side_effect=SandboxError('flush failed'))
+
+        with pytest.raises(SandboxError, match='flush failed'):
+            await service.pause_sandbox('oh-test-abc123')
+
+        mock_container.pause.assert_not_called()
+
+    @pytest.mark.parametrize(('managed', 'raises'), [(True, True), (False, False)])
+    async def test_missing_pause_barrier_is_strict_only_for_managed(
+        self, service, managed, raises
+    ):
+        sandbox = MagicMock()
+        sandbox.id = 'oh-test-abc123'
+        sandbox.session_api_key = 'session-key'
+        service._get_agent_server_url = MagicMock(return_value='http://agent-server')
+        service._has_managed_credential_conversation = AsyncMock(return_value=managed)
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_service.agent_server_supports_credential_binding',
+            AsyncMock(return_value=False),
+        ):
+            if raises:
+                with pytest.raises(SandboxError):
+                    await service._prepare_for_pause(sandbox, service.httpx_client)
+            else:
+                await service._prepare_for_pause(sandbox, service.httpx_client)
+
+        service.httpx_client.post.assert_not_awaited()
+
+    async def test_unmanaged_pause_ignores_capability_probe_error(self, service):
+        sandbox = MagicMock()
+        sandbox.id = 'oh-test-abc123'
+        sandbox.session_api_key = 'session-key'
+        service._get_agent_server_url = MagicMock(return_value='http://agent-server')
+        service._has_managed_credential_conversation = AsyncMock(return_value=False)
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_service.agent_server_supports_credential_binding',
+            AsyncMock(side_effect=httpx.ConnectError('unavailable')),
+        ):
+            await service._prepare_for_pause(sandbox, service.httpx_client)
+
+        service.httpx_client.post.assert_not_awaited()
+
+    async def test_unmanaged_pause_ignores_barrier_error(self, service):
+        sandbox = MagicMock()
+        sandbox.id = 'oh-test-abc123'
+        sandbox.session_api_key = 'session-key'
+        service._get_agent_server_url = MagicMock(return_value='http://agent-server')
+        service._has_managed_credential_conversation = AsyncMock(return_value=False)
+        service.httpx_client.post.side_effect = httpx.ConnectError('unavailable')
+
+        with patch(
+            'openhands.app_server.sandbox.sandbox_service.agent_server_supports_credential_binding',
+            AsyncMock(return_value=True),
+        ):
+            await service._prepare_for_pause(sandbox, service.httpx_client)
 
     async def test_pause_sandbox_not_running(self, service):
         """Test pausing a non-running sandbox."""
@@ -893,19 +961,19 @@ class TestDockerSandboxService:
 
     async def test_delete_sandbox_success(self, service):
         """Test successful sandbox deletion."""
-        # Setup
         mock_container = MagicMock()
         mock_container.status = 'running'
         service.docker_client.containers.get.return_value = mock_container
+        service._container_to_sandbox_info = AsyncMock(return_value=MagicMock())
+        service._prepare_for_pause = AsyncMock()
 
         mock_volume = MagicMock()
         service.docker_client.volumes.get.return_value = mock_volume
 
-        # Execute
         result = await service.delete_sandbox('oh-test-abc123')
 
-        # Verify
         assert result is True
+        service._prepare_for_pause.assert_awaited_once()
         mock_container.stop.assert_called_once_with(timeout=10)
         mock_container.remove.assert_called_once()
         service.docker_client.volumes.get.assert_called_once_with(

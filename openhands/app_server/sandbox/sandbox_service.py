@@ -5,6 +5,9 @@ from abc import ABC, abstractmethod
 
 import httpx
 
+from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -13,7 +16,11 @@ from openhands.app_server.sandbox.sandbox_models import (
     SandboxRecord,
     SandboxStatus,
 )
-from openhands.app_server.services.injector import Injector
+from openhands.app_server.secrets.credential_binding import (
+    agent_server_supports_credential_binding,
+)
+from openhands.app_server.services.injector import Injector, InjectorState
+from openhands.app_server.user.specifiy_user_context import ADMIN, USER_CONTEXT_ATTR
 from openhands.app_server.utils.docker_utils import (
     replace_localhost_hostname_for_docker,
 )
@@ -279,6 +286,75 @@ class SandboxService(ABC):
                 return replace_localhost_hostname_for_docker(exposed_url.url)
 
         raise SandboxError(f'No agent server URL found for sandbox: {sandbox.id}')
+
+    async def _has_managed_credential_conversation(self, sandbox_id: str) -> bool:
+        from openhands.app_server.config import get_app_conversation_info_service
+
+        state = InjectorState()
+        setattr(state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_app_conversation_info_service(state) as service:
+            page_id = None
+            while True:
+                page = await service.search_app_conversation_info(
+                    sandbox_id__eq=sandbox_id,
+                    page_id=page_id,
+                    limit=100,
+                    include_sub_conversations=True,
+                )
+                if any(
+                    CODEX_CREDENTIAL_BINDING_TAG_KEY in item.tags for item in page.items
+                ):
+                    return True
+                page_id = page.next_page_id
+                if page_id is None:
+                    return False
+
+    async def _prepare_for_pause(
+        self,
+        sandbox: SandboxInfo,
+        httpx_client: httpx.AsyncClient,
+    ) -> None:
+        required = await self._has_managed_credential_conversation(sandbox.id)
+        if not sandbox.session_api_key:
+            if required:
+                raise SandboxError('Managed sandbox authorization is unavailable')
+            return
+        agent_server_url = self._get_agent_server_url(sandbox)
+        try:
+            supported = await agent_server_supports_credential_binding(
+                httpx_client,
+                agent_server_url,
+                sandbox.session_api_key,
+            )
+        except httpx.HTTPStatusError as exc:
+            if not required:
+                return
+            raise SandboxError('Could not verify the credential pause barrier') from exc
+        except Exception as exc:
+            if not required:
+                return
+            raise SandboxError('Could not verify the credential pause barrier') from exc
+        if not supported:
+            if required:
+                raise SandboxError('Agent Server lacks the credential pause barrier')
+            return
+        try:
+            response = await httpx_client.post(
+                f'{agent_server_url}/api/conversations/prepare-for-sandbox-pause',
+                headers={'X-Session-API-Key': sandbox.session_api_key},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            if not required:
+                return
+            raise SandboxError(
+                'Agent Server did not complete its credential pause barrier'
+            ) from exc
+        if response.status_code != 204:
+            if not required:
+                return
+            raise SandboxError('Agent Server returned an invalid pause response')
 
     @abstractmethod
     async def pause_sandbox(self, sandbox_id: str) -> bool:

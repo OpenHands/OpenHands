@@ -106,9 +106,11 @@ describe("useUnifiedResumeConversationSandbox", () => {
       .mockRejectedValueOnce(rateLimitError)
       .mockRejectedValueOnce(rateLimitError)
       .mockResolvedValueOnce([createConversation()]);
-    vi.spyOn(SandboxService, "resumeSandbox").mockResolvedValue({
-      success: true,
-    });
+    const activateCredentialBinding = vi
+      .spyOn(SandboxService, "activateCredentialBinding")
+      .mockResolvedValue({
+        success: true,
+      });
 
     const { result } = renderHook(() => useUnifiedResumeConversationSandbox(), {
       wrapper,
@@ -138,6 +140,10 @@ describe("useUnifiedResumeConversationSandbox", () => {
     });
     await expect(resume).resolves.toEqual({ success: true });
     expect(batchGetAppConversations).toHaveBeenCalledTimes(3);
+    expect(activateCredentialBinding).toHaveBeenCalledWith(
+      "test-sandbox-id",
+      "test-conv-id",
+    );
   });
 
   it("invalidates sandbox and vscode_url queries on settled", async () => {
@@ -146,7 +152,7 @@ describe("useUnifiedResumeConversationSandbox", () => {
       V1ConversationService,
       "batchGetAppConversations",
     ).mockResolvedValue([createConversation()]);
-    vi.spyOn(SandboxService, "resumeSandbox").mockResolvedValue({
+    vi.spyOn(SandboxService, "activateCredentialBinding").mockResolvedValue({
       success: true,
     });
 

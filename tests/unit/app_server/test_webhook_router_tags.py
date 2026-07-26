@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_START_TASK_TAG_KEY,
     ConversationTrigger,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
@@ -197,6 +199,33 @@ def test_merge_conversation_tags_with_both_none():
     merged_tags = merge_conversation_tags(None, None)
 
     assert merged_tags == {}
+
+
+def test_merge_conversation_tags_rejects_managed_marker_injection():
+    merged_tags = merge_conversation_tags(
+        {},
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'personal'},
+    )
+
+    assert CODEX_CREDENTIAL_BINDING_TAG_KEY not in merged_tags
+
+
+def test_merge_conversation_tags_preserves_managed_marker():
+    merged_tags = merge_conversation_tags(
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'org:trusted'},
+        {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'org:forged'},
+    )
+
+    assert merged_tags[CODEX_CREDENTIAL_BINDING_TAG_KEY] == 'org:trusted'
+
+
+def test_merge_conversation_tags_strips_start_task_tag():
+    merged_tags = merge_conversation_tags(
+        {CODEX_CREDENTIAL_START_TASK_TAG_KEY: 'old'},
+        {CODEX_CREDENTIAL_START_TASK_TAG_KEY: 'new'},
+    )
+
+    assert CODEX_CREDENTIAL_START_TASK_TAG_KEY not in merged_tags
 
 
 # ---------------------------------------------------------------------------

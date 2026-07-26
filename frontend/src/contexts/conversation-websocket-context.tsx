@@ -95,6 +95,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  onCredentialBindingActivationRequired,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -102,6 +103,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
+  onCredentialBindingActivationRequired?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -787,10 +789,14 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: () => {
+      onClose: (event) => {
         setMainConnectionState("CLOSED");
-        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
-        // No error message needed - silent recovery provides better UX
+        if (
+          event.code === 1013 &&
+          event.reason === "credential_binding_activation_required"
+        ) {
+          onCredentialBindingActivationRequired?.();
+        }
       },
       onError: () => {
         setMainConnectionState("CLOSED");
@@ -814,6 +820,7 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
+    onCredentialBindingActivationRequired,
   ]);
 
   // Separate WebSocket options for planning agent connection

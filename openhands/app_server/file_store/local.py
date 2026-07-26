@@ -1,11 +1,25 @@
+import errno
+import importlib
 import os
 import shutil
+import sys
 import threading
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pydantic import model_validator
 
 from openhands.app_server.file_store.files import FileStore
 from openhands.app_server.utils.logger import openhands_logger as logger
+
+fcntl: Any = None
+msvcrt: Any = None
+if sys.platform == 'win32':
+    msvcrt = importlib.import_module('msvcrt')
+else:
+    fcntl = importlib.import_module('fcntl')
+
+_T = TypeVar('_T')
 
 
 class LocalFileStore(FileStore):
@@ -22,6 +36,44 @@ class LocalFileStore(FileStore):
         if path.startswith('/'):
             path = path[1:]
         return os.path.join(self.root, path)
+
+    @property
+    def supports_locked_update(self) -> bool:
+        return True
+
+    def locked_update(self, path: str, update: Callable[[], _T]) -> _T:
+        lock_path = self.get_full_path(f'{path}.lock')
+        os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        locked = False
+        try:
+            if fcntl is not None:
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                locked = True
+            elif msvcrt is not None:
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                while True:
+                    try:
+                        msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+                        break
+                    except OSError as exc:
+                        if exc.errno not in (
+                            errno.EACCES,
+                            errno.EAGAIN,
+                            errno.EDEADLK,
+                        ):
+                            raise
+                locked = True
+            return update()
+        finally:
+            try:
+                if locked and fcntl is not None:
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                elif locked and msvcrt is not None:
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            finally:
+                os.close(descriptor)
 
     def write(self, path: str, contents: str | bytes) -> None:
         full_path = self.get_full_path(path)

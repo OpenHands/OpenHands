@@ -11,7 +11,6 @@ import { V1AppConversation } from "#/api/conversation-service/v1-conversation-se
 interface UseSandboxRecoveryOptions {
   conversationId: string | undefined;
   sandboxStatus: V1SandboxStatus | undefined;
-  /** Function to refetch the conversation data - used to get fresh status on tab focus */
   refetchConversation?: () => Promise<{
     data: V1AppConversation | null | undefined;
   }>;
@@ -19,25 +18,6 @@ interface UseSandboxRecoveryOptions {
   onError?: (error: Error) => void;
 }
 
-/**
- * Hook that handles sandbox recovery based on user intent.
- *
- * Recovery triggers:
- * - Page refresh: Resumes the sandbox on initial load if it was paused/stopped
- * - Tab gains focus: Resumes the sandbox if it was paused/stopped
- *
- * What does NOT trigger recovery:
- * - WebSocket disconnect: Does NOT automatically resume the sandbox
- *   (The server pauses sandboxes after 20 minutes of inactivity,
- *    and sandboxes should only be resumed when the user explicitly shows intent)
- *
- * @param options.conversationId - The conversation ID to recover
- * @param options.conversationStatus - The current conversation status
- * @param options.refetchConversation - Function to refetch conversation data on tab focus
- * @param options.onSuccess - Callback when recovery succeeds
- * @param options.onError - Callback when recovery fails
- * @returns isResuming - Whether a recovery is in progress
- */
 export function useSandboxRecovery({
   conversationId,
   sandboxStatus,
@@ -47,28 +27,54 @@ export function useSandboxRecovery({
 }: UseSandboxRecoveryOptions) {
   const { t } = useTranslation();
   const { providers } = useUserProviders();
+  const [
+    credentialBindingActivationFailed,
+    setCredentialBindingActivationFailed,
+  ] = React.useState(false);
+  const activeConversationIdRef = React.useRef(conversationId);
+  activeConversationIdRef.current = conversationId;
+  const recoveryInFlightRef = React.useRef(false);
+  const credentialBindingActivationFailedRef = React.useRef(false);
   const { mutate: resumeSandbox, isPending: isResuming } =
     useUnifiedResumeConversationSandbox();
 
-  // Track which conversation ID we've already processed for initial load recovery
   const processedConversationIdRef = React.useRef<string | null>(null);
 
   const attemptRecovery = React.useCallback(
-    (statusOverride?: V1SandboxStatus) => {
+    (statusOverride?: V1SandboxStatus, force = false) => {
       const status = statusOverride ?? sandboxStatus;
-      /**
-       * Only recover if sandbox is paused
-       */
-      if (!conversationId || status !== "PAUSED" || isResuming) {
+      if (
+        !conversationId ||
+        (!force && status !== "PAUSED") ||
+        (force && credentialBindingActivationFailedRef.current) ||
+        isResuming ||
+        recoveryInFlightRef.current
+      ) {
         return;
       }
+      const recoveryConversationId = conversationId;
+      recoveryInFlightRef.current = true;
       resumeSandbox(
-        { conversationId, providers },
+        { conversationId: recoveryConversationId, providers },
         {
           onSuccess: () => {
+            if (activeConversationIdRef.current !== recoveryConversationId) {
+              return;
+            }
+            recoveryInFlightRef.current = false;
+            credentialBindingActivationFailedRef.current = false;
+            setCredentialBindingActivationFailed(false);
             onSuccess?.();
           },
           onError: (error) => {
+            if (activeConversationIdRef.current !== recoveryConversationId) {
+              return;
+            }
+            recoveryInFlightRef.current = false;
+            if (force) {
+              credentialBindingActivationFailedRef.current = true;
+              setCredentialBindingActivationFailed(true);
+            }
             displayErrorToast(
               t(I18nKey.CONVERSATION$FAILED_TO_START_WITH_ERROR, {
                 error: error.message,
@@ -91,11 +97,15 @@ export function useSandboxRecovery({
     ],
   );
 
-  // Handle page refresh (initial load) and conversation navigation
+  React.useEffect(() => {
+    recoveryInFlightRef.current = false;
+    credentialBindingActivationFailedRef.current = false;
+    setCredentialBindingActivationFailed(false);
+  }, [conversationId]);
+
   React.useEffect(() => {
     if (!conversationId || !sandboxStatus) return;
 
-    // Only attempt recovery once per conversation (handles both initial load and navigation)
     if (processedConversationIdRef.current === conversationId) return;
 
     processedConversationIdRef.current = conversationId;
@@ -107,13 +117,19 @@ export function useSandboxRecovery({
   }, [conversationId, sandboxStatus]);
 
   const handleVisible = React.useCallback(async () => {
-    // Skip if no conversation or refetch function
     if (!conversationId || !refetchConversation) return;
+    const visibleConversationId = conversationId;
 
     try {
-      // Refetch to get fresh status - cached status may be stale if sandbox was paused while tab was inactive
       const { data } = await refetchConversation();
-      attemptRecovery(data?.sandbox_status);
+      if (activeConversationIdRef.current !== visibleConversationId) {
+        return;
+      }
+      const retryCredentialBinding =
+        credentialBindingActivationFailedRef.current;
+      credentialBindingActivationFailedRef.current = false;
+      setCredentialBindingActivationFailed(false);
+      attemptRecovery(data?.sandbox_status, retryCredentialBinding);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error(
@@ -121,13 +137,20 @@ export function useSandboxRecovery({
         error,
       );
     }
-  }, [conversationId, refetchConversation, isResuming, attemptRecovery]);
+  }, [conversationId, refetchConversation, attemptRecovery]);
 
-  // Handle tab focus (visibility change) - refetch conversation status and resume if needed
   useVisibilityChange({
     enabled: !!conversationId,
     onVisible: handleVisible,
   });
 
-  return { isResuming };
+  const recoverCredentialBinding = React.useCallback(() => {
+    attemptRecovery(undefined, true);
+  }, [attemptRecovery]);
+
+  return {
+    isResuming,
+    credentialBindingActivationFailed,
+    recoverCredentialBinding,
+  };
 }

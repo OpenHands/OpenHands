@@ -30,6 +30,8 @@ from openhands.app_server.app_conversation.app_conversation_info_service import 
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_START_TASK_TAG_KEY,
     AppConversationInfo,
     ConversationTrigger,
 )
@@ -39,6 +41,7 @@ from openhands.app_server.config import (
     depends_jwt_service,
     get_app_conversation_info_service,
     get_app_conversation_service,
+    get_app_conversation_start_task_service,
     get_event_callback_service,
     get_global_config,
     get_sandbox_service,
@@ -118,18 +121,42 @@ def merge_conversation_tags(
     existing_tags: dict[str, str] | None,
     incoming_tags: dict[str, str] | None,
 ) -> dict[str, str]:
-    """Merge conversation tags with incoming tags overriding existing ones.
-
-    Args:
-        existing_tags: Tags from the existing conversation (may be None)
-        incoming_tags: Tags from the incoming update (may be None)
-
-    Returns:
-        Merged tags dict (empty dict if both inputs are None/empty)
-    """
+    """Merge untrusted conversation tags."""
     existing = existing_tags or {}
-    incoming = incoming_tags or {}
-    return {**existing, **incoming}
+    incoming = dict(incoming_tags or {})
+    incoming.pop(CODEX_CREDENTIAL_START_TASK_TAG_KEY, None)
+    merged = {**existing, **incoming}
+    merged.pop(CODEX_CREDENTIAL_START_TASK_TAG_KEY, None)
+    marker = existing.get(CODEX_CREDENTIAL_BINDING_TAG_KEY)
+    if marker is None:
+        merged.pop(CODEX_CREDENTIAL_BINDING_TAG_KEY, None)
+    else:
+        merged[CODEX_CREDENTIAL_BINDING_TAG_KEY] = marker
+    return merged
+
+
+async def _matches_app_start_task(
+    conversation_info: ConversationInfo,
+    sandbox_record: SandboxRecord,
+) -> bool:
+    value = (conversation_info.tags or {}).get(CODEX_CREDENTIAL_START_TASK_TAG_KEY)
+    if value is None:
+        return False
+    try:
+        task_id = UUID(value)
+    except ValueError:
+        return False
+    state = InjectorState()
+    setattr(state, USER_CONTEXT_ATTR, ADMIN)
+    async with get_app_conversation_start_task_service(state) as task_service:
+        task = await task_service.get_app_conversation_start_task(task_id)
+    return (
+        task is not None
+        and task.id == task_id
+        and task.sandbox_id == sandbox_record.id
+        and task.created_by_user_id == sandbox_record.created_by_user_id
+        and task.request.conversation_id == conversation_info.id
+    )
 
 
 async def _track_conversation_terminal(
@@ -371,6 +398,14 @@ async def on_conversation_update(
     union so both OpenHands (``Agent``) and ACP (``ACPAgent``) payloads are
     accepted on this single endpoint.
     """
+    persisted = await app_conversation_info_service.get_app_conversation_info(
+        conversation_info.id
+    )
+    if persisted is None and await _matches_app_start_task(
+        conversation_info, sandbox_record
+    ):
+        return Success()
+
     existing = await valid_conversation(
         conversation_info.id,
         sandbox_record,

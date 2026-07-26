@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic import SecretStr
 
@@ -20,6 +21,8 @@ from openhands.agent_server.models import (
     TextContent,
 )
 from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_START_TASK_TAG_KEY,
     AgentType,
     AppConversationInfo,
     AppConversationStartRequest,
@@ -39,6 +42,7 @@ from openhands.app_server.app_conversation.live_status_app_conversation_service 
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.integrations.provider import ProviderToken, ProviderType
 from openhands.app_server.integrations.service_types import SuggestedTask, TaskType
+from openhands.app_server.sandbox.docker_sandbox_service import DockerSandboxService
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     ExposedUrl,
@@ -57,7 +61,11 @@ from openhands.app_server.utils.redis_lock import RedisLockUnavailable
 from openhands.sdk import Agent, AgentContext, Event
 from openhands.sdk.llm import LLM
 from openhands.sdk.secret import LookupSecret, StaticSecret
-from openhands.sdk.settings import ConversationSettings, OpenHandsAgentSettings
+from openhands.sdk.settings import (
+    ACPAgentSettings,
+    ConversationSettings,
+    OpenHandsAgentSettings,
+)
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
 
 
@@ -2506,7 +2514,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_callback_service.save_event_callback = AsyncMock()
 
         # Create request
-        request = AppConversationStartRequest()
+        request = AppConversationStartRequest(conversation_id=conversation_id)
 
         # Act
         async for task in self.service._start_app_conversation(request):
@@ -2526,6 +2534,110 @@ class TestLiveStatusAppConversationService:
             f'but got "{saved_info.title}"'
         )
         assert saved_info.id == conversation_id
+
+    @patch(
+        'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
+    )
+    @pytest.mark.parametrize('created_by_task', [False, True])
+    @pytest.mark.parametrize(
+        'response_kind', ['http_error', 'malformed', 'transport_error']
+    )
+    async def test_failed_managed_create_only_deletes_task_owned_conversation(
+        self, mock_remote_workspace_class, created_by_task, response_kind
+    ):
+        conversation_id = uuid4()
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_user_context.get_user_info = AsyncMock(return_value=self.mock_user)
+
+        mock_sandbox_spec = Mock(spec=SandboxSpecInfo)
+        mock_sandbox_spec.working_dir = '/test/workspace'
+        self.mock_sandbox.sandbox_spec_id = 'custom-image'
+        self.mock_sandbox.id = str(uuid4())
+        self.mock_sandbox.session_api_key = 'test_session_key'
+        self.mock_sandbox.exposed_urls = [
+            ExposedUrl(
+                name=AGENT_SERVER,
+                url='http://agent-server:8000',
+                port=60000,
+            )
+        ]
+        self.mock_sandbox_service.get_sandbox = AsyncMock(
+            return_value=self.mock_sandbox
+        )
+        self.mock_sandbox_spec_service.get_sandbox_spec = AsyncMock(
+            return_value=mock_sandbox_spec
+        )
+        mock_remote_workspace_class.return_value = Mock()
+
+        captured_task = {}
+
+        async def mock_wait_for_sandbox(task):
+            captured_task['value'] = task
+            task.sandbox_id = self.mock_sandbox.id
+            yield task
+
+        async def mock_run_setup_scripts(*args):
+            yield args[0]
+
+        self.service._wait_for_sandbox_start = mock_wait_for_sandbox
+        self.service.run_setup_scripts = mock_run_setup_scripts
+        self.service._seed_sandbox_profiles = AsyncMock()
+        mock_start_request = Mock(spec=StartConversationRequest)
+        mock_start_request.tags = {}
+        mock_start_request.model_dump.return_value = {}
+        self.service._build_start_conversation_request_for_user = AsyncMock(
+            return_value=mock_start_request
+        )
+        self.service._prepare_codex_credential_binding = AsyncMock(
+            return_value='personal'
+        )
+
+        request = httpx.Request('POST', 'http://agent-server:8000/api/conversations')
+        if response_kind == 'transport_error':
+            self.mock_httpx_client.post = AsyncMock(
+                side_effect=httpx.ReadTimeout('lost response', request=request)
+            )
+        else:
+            response = (
+                httpx.Response(409, request=request)
+                if response_kind == 'http_error'
+                else httpx.Response(200, request=request, json={'invalid': True})
+            )
+            self.mock_httpx_client.post = AsyncMock(return_value=response)
+        catalog_response = Mock(status_code=200)
+        catalog_response.json = Mock(
+            side_effect=lambda: {
+                'id': str(conversation_id),
+                'tags': (
+                    {
+                        CODEX_CREDENTIAL_START_TASK_TAG_KEY: str(
+                            captured_task['value'].id
+                        )
+                    }
+                    if created_by_task
+                    else {}
+                ),
+            }
+        )
+        self.mock_httpx_client.get = AsyncMock(return_value=catalog_response)
+        delete_response = httpx.Response(
+            204,
+            request=httpx.Request(
+                'DELETE',
+                f'http://agent-server:8000/api/conversations/{conversation_id}',
+            ),
+        )
+        self.mock_httpx_client.delete = AsyncMock(return_value=delete_response)
+
+        async for _ in self.service._start_app_conversation(
+            AppConversationStartRequest(conversation_id=conversation_id)
+        ):
+            pass
+
+        if created_by_task:
+            self.mock_httpx_client.delete.assert_awaited_once()
+        else:
+            self.mock_httpx_client.delete.assert_not_awaited()
 
     @patch(
         'openhands.app_server.app_conversation.live_status_app_conversation_service.AsyncRemoteWorkspace'
@@ -2600,6 +2712,7 @@ class TestLiveStatusAppConversationService:
         self.mock_event_callback_service.save_event_callback = AsyncMock()
 
         request = AppConversationStartRequest(
+            conversation_id=conversation_id,
             selected_repository='OpenHands/OpenHands',
             selected_branch='main',
             git_provider=ProviderType.GITHUB,
@@ -2696,7 +2809,7 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.save_app_conversation_info = AsyncMock()
 
         async for _ in self.service._start_app_conversation(
-            AppConversationStartRequest()
+            AppConversationStartRequest(conversation_id=conversation_id)
         ):
             pass
 
@@ -4580,6 +4693,326 @@ class TestBuildAcpStartConversationRequestSecrets:
             'conversation_id': str(request.conversation_id),
             'agent_kind': 'acp',
         }
+
+
+class TestCodexCredentialBinding:
+    codex_auth = json.dumps(
+        {'auth_mode': 'chatgpt', 'tokens': {'refresh_token': 'refresh-token'}}
+    )
+
+    @pytest.fixture
+    def service(self):
+        user_context = Mock(spec=UserContext)
+        service = LiveStatusAppConversationService(
+            init_git_in_empty_workspace=True,
+            user_context=user_context,
+            app_conversation_info_service=Mock(),
+            app_conversation_start_task_service=Mock(),
+            event_callback_service=Mock(),
+            event_service=Mock(),
+            sandbox_service=Mock(spec=DockerSandboxService),
+            sandbox_spec_service=Mock(),
+            jwt_service=Mock(),
+            pending_message_service=Mock(),
+            sandbox_startup_timeout=30,
+            sandbox_startup_poll_frequency=1,
+            max_num_conversations_per_sandbox=20,
+            httpx_client=AsyncMock(),
+            web_url='https://app.example.com',
+            openhands_provider_base_url=None,
+            access_token_hard_timeout=None,
+            app_mode='test',
+        )
+        user_context.get_user_id = AsyncMock(return_value='user-id')
+        user_context.get_effective_org_id = AsyncMock(return_value=None)
+        catalog_response = Mock(status_code=200)
+        catalog_response.raise_for_status = Mock()
+        service.httpx_client.get = AsyncMock(return_value=catalog_response)
+        return service
+
+    def _request(self, source, context_secrets=None):
+        agent = ACPAgentSettings(
+            acp_server='codex',
+            agent_context=(
+                AgentContext(secrets=context_secrets) if context_secrets else None
+            ),
+        ).create_agent()
+        return StartConversationRequest(
+            workspace={'working_dir': '/workspace'},
+            agent=agent,
+            secrets={'CODEX_AUTH_JSON': source},
+        )
+
+    def _sandbox(self):
+        return SandboxInfo(
+            id='sandbox-id',
+            created_by_user_id='user-id',
+            sandbox_spec_id='spec-id',
+            status=SandboxStatus.RUNNING,
+            session_api_key='session-key',
+            exposed_urls=[
+                ExposedUrl(
+                    name=AGENT_SERVER,
+                    url='http://agent-server',
+                    port=8000,
+                )
+            ],
+        )
+
+    async def test_initial_activation_removes_plaintext_from_start_request(
+        self, service, monkeypatch
+    ):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        source = StaticSecret(value=SecretStr(self.codex_auth))
+        request = self._request(source)
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(return_value=True),
+        ) as activate:
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=False,
+            )
+
+        assert marker == 'personal'
+        assert 'CODEX_AUTH_JSON' not in request.secrets
+        assert source.get_value() == self.codex_auth
+        assert activate.await_args.kwargs['required'] is False
+
+    async def test_legacy_activation_keeps_plaintext_and_is_not_managed(
+        self, service, monkeypatch
+    ):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        source = StaticSecret(value=SecretStr(self.codex_auth))
+        request = self._request(source)
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(return_value=False),
+        ):
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=False,
+            )
+
+        assert marker is None
+        assert request.secrets['CODEX_AUTH_JSON'] is source
+
+    async def test_invalid_saved_credential_is_not_managed(self, service, monkeypatch):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        source = StaticSecret(value=SecretStr('{}'))
+        request = self._request(source)
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(),
+        ) as activate:
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=False,
+            )
+
+        assert marker is None
+        activate.assert_not_awaited()
+
+    async def test_unsupported_sandbox_service_is_not_managed(
+        self, service, monkeypatch
+    ):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        service.sandbox_service = Mock()
+        source = StaticSecret(value=SecretStr(self.codex_auth))
+        request = self._request(source)
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(),
+        ) as activate:
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=False,
+            )
+
+        assert marker is None
+        assert request.secrets['CODEX_AUTH_JSON'] is source
+        activate.assert_not_awaited()
+
+    async def test_provider_detection_uses_acp_server(self, service, monkeypatch):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        source = StaticSecret(value=SecretStr(self.codex_auth))
+        request = self._request(source)
+        request.agent = request.agent.model_copy(
+            update={
+                'acp_server': 'claude-code',
+                'acp_command': ['codex-acp'],
+            }
+        )
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(),
+        ) as activate:
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=False,
+            )
+
+        assert marker is None
+        activate.assert_not_awaited()
+
+    @pytest.mark.parametrize('override_kind', ['api', 'agent-context'])
+    async def test_explicit_override_is_not_managed(
+        self, service, monkeypatch, override_kind
+    ):
+        monkeypatch.setenv('OH_ENABLE_CODEX_CREDENTIAL_SYNC', 'true')
+        source = StaticSecret(value=SecretStr(self.codex_auth))
+        request = self._request(
+            source,
+            (
+                {'CODEX_AUTH_JSON': 'one-off'}
+                if override_kind == 'agent-context'
+                else None
+            ),
+        )
+        service.user_context.get_secrets = AsyncMock(
+            return_value={'CODEX_AUTH_JSON': source}
+        )
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(),
+        ) as activate:
+            marker = await service._prepare_codex_credential_binding(
+                request,
+                sandbox=self._sandbox(),
+                conversation_id=uuid4(),
+                start_task_id=uuid4(),
+                agent_server_url='http://agent-server',
+                api_override=override_kind == 'api',
+            )
+
+        assert marker is None
+        activate.assert_not_awaited()
+
+    async def test_managed_delete_propagates_final_flush_failure(self, service):
+        conversation = Mock()
+        conversation.id = uuid4()
+        conversation.sandbox_id = 'sandbox-id'
+        conversation.created_by_user_id = 'user-id'
+        conversation.tags = {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'personal'}
+        conversation.sandbox_status = SandboxStatus.RUNNING
+        conversation.session_api_key = 'old-session-key'
+        service.sandbox_service.get_sandbox = AsyncMock(return_value=self._sandbox())
+
+        with (
+            patch(
+                'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+                AsyncMock(side_effect=SandboxError('flush failed')),
+            ),
+            pytest.raises(SandboxError, match='flush failed'),
+        ):
+            await service._delete_from_agent_server(conversation)
+
+        service.httpx_client.delete.assert_not_awaited()
+
+    async def test_managed_delete_waits_for_starting_sandbox(self, service):
+        conversation = Mock()
+        conversation.id = uuid4()
+        conversation.sandbox_id = 'sandbox-id'
+        conversation.created_by_user_id = 'user-id'
+        conversation.tags = {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'personal'}
+        conversation.sandbox_status = SandboxStatus.STARTING
+        conversation.session_api_key = 'session-key'
+        starting = self._sandbox().model_copy(update={'status': SandboxStatus.STARTING})
+        running = self._sandbox()
+        service.sandbox_service.get_sandbox = AsyncMock(return_value=starting)
+        service.sandbox_service.resume_sandbox = AsyncMock()
+        service.sandbox_service.wait_for_sandbox_running = AsyncMock(
+            return_value=running
+        )
+        response = Mock()
+        response.raise_for_status = Mock()
+        service.httpx_client.delete = AsyncMock(return_value=response)
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(return_value=True),
+        ):
+            await service._delete_from_agent_server(conversation)
+
+        service.sandbox_service.resume_sandbox.assert_not_awaited()
+        service.sandbox_service.wait_for_sandbox_running.assert_awaited_once()
+        service.httpx_client.delete.assert_awaited_once()
+
+    async def test_managed_delete_is_done_when_conversation_is_absent(self, service):
+        conversation = Mock()
+        conversation.id = uuid4()
+        conversation.sandbox_id = 'sandbox-id'
+        conversation.created_by_user_id = 'user-id'
+        conversation.tags = {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'personal'}
+        conversation.sandbox_status = SandboxStatus.RUNNING
+        conversation.session_api_key = 'session-key'
+        service.sandbox_service.get_sandbox = AsyncMock(return_value=self._sandbox())
+        service.httpx_client.get.return_value.status_code = 404
+
+        with patch(
+            'openhands.app_server.app_conversation.live_status_app_conversation_service.activate_codex_credential_binding',
+            AsyncMock(),
+        ) as activate:
+            await service._delete_from_agent_server(conversation)
+
+        activate.assert_not_awaited()
+        service.httpx_client.delete.assert_not_awaited()
+
+    async def test_managed_delete_is_done_when_sandbox_is_absent(self, service):
+        conversation = Mock()
+        conversation.id = uuid4()
+        conversation.sandbox_id = 'sandbox-id'
+        conversation.created_by_user_id = 'user-id'
+        conversation.tags = {CODEX_CREDENTIAL_BINDING_TAG_KEY: 'personal'}
+        conversation.sandbox_status = SandboxStatus.MISSING
+        conversation.session_api_key = None
+        service.sandbox_service.get_sandbox = AsyncMock(return_value=None)
+
+        await service._delete_from_agent_server(conversation)
+
+        service.httpx_client.get.assert_not_awaited()
+        service.httpx_client.delete.assert_not_awaited()
 
 
 def test_exception_detail_strips_http_status_prefix():

@@ -7,6 +7,7 @@ correctly discriminated from one carrying a regular ``Agent`` (via the
 are populated accordingly.
 """
 
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -18,12 +19,19 @@ from sqlalchemy.pool import StaticPool
 from openhands.agent_server.models import ConversationInfo, Success
 from openhands.app_server.app_conversation.app_conversation_models import (
     ACP_SERVER_TAG_KEY,
+    CODEX_CREDENTIAL_START_TASK_TAG_KEY,
     AppConversationInfo,
+    AppConversationStartRequest,
+    AppConversationStartTask,
+    AppConversationStartTaskStatus,
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
 )
-from openhands.app_server.event_callback.webhook_router import on_conversation_update
+from openhands.app_server.event_callback.webhook_router import (
+    _matches_app_start_task,
+    on_conversation_update,
+)
 from openhands.app_server.user.specifiy_user_context import SpecifyUserContext
 from openhands.app_server.utils.sql_utils import Base
 from openhands.sdk import Agent
@@ -178,6 +186,69 @@ async def test_acp_conversation_sets_agent_kind(async_session, service, sandbox_
     assert saved is not None
     assert saved.llm_model is None
     assert saved.agent_kind == 'acp'
+
+
+@pytest.mark.asyncio
+async def test_app_start_webhook_waits_for_final_metadata(service, sandbox_record):
+    task_id = uuid4()
+    acp_info = _make_acp_conversation_info(acp_command=['codex-acp']).model_copy(
+        update={'tags': {CODEX_CREDENTIAL_START_TASK_TAG_KEY: str(task_id)}}
+    )
+    task_service = AsyncMock()
+    task_service.get_app_conversation_start_task.return_value = (
+        AppConversationStartTask(
+            id=task_id,
+            created_by_user_id=sandbox_record.created_by_user_id,
+            status=AppConversationStartTaskStatus.ERROR,
+            sandbox_id=sandbox_record.id,
+            request=AppConversationStartRequest(conversation_id=acp_info.id),
+        )
+    )
+
+    @asynccontextmanager
+    async def service_context(state):
+        yield task_service
+
+    with (
+        patch(
+            'openhands.app_server.event_callback.webhook_router.get_app_conversation_start_task_service',
+            service_context,
+        ),
+        patch(
+            'openhands.app_server.event_callback.webhook_router.valid_conversation',
+            new=AsyncMock(),
+        ) as valid_conversation,
+    ):
+        result = await on_conversation_update(
+            conversation_info=acp_info,
+            sandbox_record=sandbox_record,
+            app_conversation_info_service=service,
+        )
+
+    assert isinstance(result, Success)
+    assert await service.get_app_conversation_info(acp_info.id) is None
+    valid_conversation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_start_webhook_rejects_unassociated_task(sandbox_record):
+    acp_info = _make_acp_conversation_info(acp_command=['codex-acp']).model_copy(
+        update={'tags': {CODEX_CREDENTIAL_START_TASK_TAG_KEY: str(uuid4())}}
+    )
+    task_service = AsyncMock()
+    task_service.get_app_conversation_start_task.return_value = None
+
+    @asynccontextmanager
+    async def service_context(state):
+        yield task_service
+
+    with patch(
+        'openhands.app_server.event_callback.webhook_router.get_app_conversation_start_task_service',
+        service_context,
+    ):
+        result = await _matches_app_start_task(acp_info, sandbox_record)
+
+    assert result is False
 
 
 @pytest.mark.asyncio

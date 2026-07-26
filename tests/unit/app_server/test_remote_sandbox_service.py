@@ -621,7 +621,10 @@ class TestSandboxLifecycle:
     @pytest.mark.asyncio
     async def test_resume_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox resume."""
-        # Setup
+        from openhands.app_server.sandbox.remote_sandbox_service import (
+            _hash_session_api_key,
+        )
+
         stored_sandbox = create_stored_sandbox()
         runtime_data = create_runtime_data()
 
@@ -636,11 +639,13 @@ class TestSandboxLifecycle:
         mock_response.json.return_value = {'session_api_key': 'new-session-key-123'}
         remote_sandbox_service.httpx_client.request.return_value = mock_response
 
-        # Execute
         result = await remote_sandbox_service.resume_sandbox('test-sandbox-123')
 
-        # Verify
         assert result is True
+        assert stored_sandbox.session_api_key_hash == _hash_session_api_key(
+            'new-session-key-123'
+        )
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
         remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(9)
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
@@ -688,8 +693,7 @@ class TestSandboxLifecycle:
     @pytest.mark.asyncio
     async def test_pause_sandbox_success(self, remote_sandbox_service):
         """Test successful sandbox pause."""
-        # Setup
-        stored_sandbox = create_stored_sandbox()
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='old-hash')
         runtime_data = create_runtime_data()
 
         remote_sandbox_service._get_stored_sandbox = AsyncMock(
@@ -699,19 +703,52 @@ class TestSandboxLifecycle:
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        remote_sandbox_service.httpx_client.request.return_value = mock_response
+        order = []
 
-        # Execute
+        async def prepare(*args):
+            assert stored_sandbox.session_api_key_hash is not None
+            order.append('barrier')
+
+        def request(*args, **kwargs):
+            assert stored_sandbox.session_api_key_hash is None
+            order.append('pause')
+            return mock_response
+
+        remote_sandbox_service._prepare_for_pause = AsyncMock(side_effect=prepare)
+        remote_sandbox_service.httpx_client.request.side_effect = request
+
         result = await remote_sandbox_service.pause_sandbox('test-sandbox-123')
 
-        # Verify
         assert result is True
+        assert order == ['barrier', 'pause']
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
             'https://api.example.com/pause',
             headers={'X-API-Key': 'test-api-key'},
             json={'runtime_id': 'runtime-456'},
         )
+
+    @pytest.mark.asyncio
+    async def test_pause_barrier_failure_keeps_key_and_runtime(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='old-hash')
+        original_hash = stored_sandbox.session_api_key_hash
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data()
+        )
+        remote_sandbox_service._prepare_for_pause = AsyncMock(
+            side_effect=SandboxError('flush failed')
+        )
+
+        with pytest.raises(SandboxError, match='flush failed'):
+            await remote_sandbox_service.pause_sandbox('test-sandbox-123')
+
+        assert stored_sandbox.session_api_key_hash == original_hash
+        remote_sandbox_service.httpx_client.request.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_delete_sandbox_success(self, remote_sandbox_service):
@@ -890,6 +927,9 @@ class TestSandboxLifecycle:
         )
         remote_sandbox_service.db_session.delete = AsyncMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
+        remote_sandbox_service._has_managed_credential_conversation = AsyncMock(
+            return_value=False
+        )
 
         with pytest.raises(SandboxDeleteRetryError):
             await remote_sandbox_service.delete_sandbox('test-sandbox-123')
@@ -899,6 +939,32 @@ class TestSandboxLifecycle:
         remote_sandbox_service.db_session.delete.assert_not_called()
         assert stored_sandbox.session_api_key_hash is None
         remote_sandbox_service.db_session.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_delete_transient_error_keeps_managed_session_key(
+        self, remote_sandbox_service
+    ):
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server Error',
+                request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+                response=httpx.Response(503),
+            )
+        )
+        remote_sandbox_service._has_managed_credential_conversation = AsyncMock(
+            return_value=True
+        )
+        remote_sandbox_service.db_session.commit = AsyncMock()
+
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert stored_sandbox.session_api_key_hash == 'live-hash'
+        remote_sandbox_service.db_session.commit.assert_not_awaited()
 
 
 class TestSandboxSearch:
@@ -2740,6 +2806,9 @@ class TestDeleteSandboxKeyHandling:
                 response=httpx.Response(503),
             )
         )
+        service_with_real_db._has_managed_credential_conversation = AsyncMock(
+            return_value=False
+        )
 
         with pytest.raises(SandboxDeleteRetryError):
             await service_with_real_db.delete_sandbox('test-sandbox-123')
@@ -2766,7 +2835,7 @@ class TestDeleteSandboxKeyHandling:
         await real_session.commit()
 
         service_with_real_db._get_runtime = AsyncMock(
-            return_value={'runtime_id': 'rt-123'}
+            return_value=create_runtime_data(runtime_id='rt-123')
         )
         stop_response = MagicMock()
         stop_response.status_code = 200

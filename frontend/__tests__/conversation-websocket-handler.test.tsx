@@ -94,6 +94,7 @@ function renderWithWebSocketContext(
   conversationId = "test-conversation-default",
   conversationUrl = "http://localhost:3000/api/conversations/test-conversation-default",
   sessionApiKey: string | null = null,
+  onCredentialBindingActivationRequired?: () => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -113,6 +114,9 @@ function renderWithWebSocketContext(
                 conversationId={conversationId}
                 conversationUrl={conversationUrl}
                 sessionApiKey={sessionApiKey}
+                onCredentialBindingActivationRequired={
+                  onCredentialBindingActivationRequired
+                }
               >
                 {children}
               </ConversationWebSocketProvider>
@@ -671,6 +675,53 @@ describe("Conversation WebSocket Handler", () => {
           "none",
         );
       });
+    });
+
+    it("requests credential activation for the binding guard close", async () => {
+      const recoverCredentialBinding = vi.fn();
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.close(1013, "credential_binding_activation_required");
+        }),
+      );
+
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        undefined,
+        undefined,
+        undefined,
+        recoverCredentialBinding,
+      );
+
+      await waitFor(() => {
+        expect(recoverCredentialBinding).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("does not request activation for another 1013 reason", async () => {
+      const recoverCredentialBinding = vi.fn();
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.close(1013, "try_again_later");
+        }),
+      );
+
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        undefined,
+        undefined,
+        undefined,
+        recoverCredentialBinding,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("connection-state")).toHaveTextContent(
+          "CLOSED",
+        );
+      });
+      expect(recoverCredentialBinding).not.toHaveBeenCalled();
     });
 
     it("should clear error message store when connection is restored", async () => {

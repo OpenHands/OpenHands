@@ -73,7 +73,7 @@ export const askV1Agent = async (
  */
 export const resumeV1ConversationSandbox = async (conversationId: string) => {
   const { sandboxId } = await fetchV1ConversationData(conversationId);
-  return SandboxService.resumeSandbox(sandboxId);
+  return SandboxService.activateCredentialBinding(sandboxId, conversationId);
 };
 
 /**

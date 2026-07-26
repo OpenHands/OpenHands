@@ -552,6 +552,7 @@ class RemoteSandboxService(SandboxService):
                 _logger.info(
                     f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
                 )
+                await self.db_session.commit()
 
             return True
         except httpx.HTTPError:
@@ -569,11 +570,11 @@ class RemoteSandboxService(SandboxService):
             if not stored_sandbox:
                 return False
 
-            # Security: Invalidate the session API key hash to prevent
-            # leaked keys from being used while the sandbox is paused.
-            stored_sandbox.session_api_key_hash = None
-
             runtime_data = await self._get_runtime(sandbox_id)
+            sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
+            if sandbox.status == SandboxStatus.RUNNING:
+                await self._prepare_for_pause(sandbox, self.httpx_client)
+            stored_sandbox.session_api_key_hash = None
             response = await self._send_runtime_api_request(
                 'POST',
                 '/pause',
@@ -605,22 +606,16 @@ class RemoteSandboxService(SandboxService):
         (router -> 503) and keeps the row + runtime for a retry — so a live sandbox
         is never reported as 404.
 
-        Security: the session_api_key_hash is invalidated UP FRONT (like
-        ``pause_sandbox`` clears it before pausing) so a delete — commonly a
-        revoke of a leaked key — kills it promptly. This goes further than pause:
-        on a transient stop failure the invalidation is committed before raising,
-        so the caller's rollback cannot resurrect the just-revoked key (pause does
-        not commit, so its clear can still be rolled back). The row is kept for
-        retry.
+        Unguarded runtimes revoke their session key before the stop request.
+        Managed runtimes drain credentials first.
         """
         had_key = False
+        stored_sandbox: StoredRemoteSandbox | None = None
         try:
             stored_sandbox = await self._get_stored_sandbox(sandbox_id)
             if not stored_sandbox:
                 return False
-            # Security: drop the key now, before the (fallible) runtime stop.
             had_key = stored_sandbox.session_api_key_hash is not None
-            stored_sandbox.session_api_key_hash = None
             try:
                 runtime_data = await self._get_runtime(sandbox_id)
             except httpx.HTTPStatusError as e:
@@ -631,9 +626,14 @@ class RemoteSandboxService(SandboxService):
                     f'Runtime for sandbox {sandbox_id} already gone (404); '
                     'deleting record'
                 )
+                stored_sandbox.session_api_key_hash = None
                 await self.db_session.delete(stored_sandbox)
                 return True
 
+            sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
+            if sandbox.status == SandboxStatus.RUNNING:
+                await self._prepare_for_pause(sandbox, self.httpx_client)
+            stored_sandbox.session_api_key_hash = None
             response = await self._send_runtime_api_request(
                 'POST',
                 '/stop',
@@ -644,13 +644,23 @@ class RemoteSandboxService(SandboxService):
             await self.db_session.delete(stored_sandbox)
             return True
         except httpx.HTTPError as e:
-            # Transient runtime lookup/stop failure: keep the row + runtime and
-            # signal retryable (503) — never a 404. Persist the key invalidation
-            # now: the caller rolls back on this raise, which would otherwise
-            # restore the hash and leave a just-revoked key valid.
             _logger.exception(f'Error deleting sandbox {sandbox_id}', stack_info=True)
-            if had_key:
-                await self.db_session.commit()
+            if had_key and stored_sandbox is not None:
+                if stored_sandbox.session_api_key_hash is not None:
+                    try:
+                        managed = await self._has_managed_credential_conversation(
+                            sandbox_id
+                        )
+                    except Exception:
+                        managed = True
+                        _logger.exception(
+                            'Could not determine whether sandbox credentials are managed',
+                            stack_info=True,
+                        )
+                    if not managed:
+                        stored_sandbox.session_api_key_hash = None
+                if stored_sandbox.session_api_key_hash is None:
+                    await self.db_session.commit()
             raise SandboxDeleteRetryError(
                 f'Could not complete delete for sandbox {sandbox_id}: {e}'
             ) from e

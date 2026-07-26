@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from openhands.app_server.secrets.secrets_models import Secrets
+
+
+class CredentialVersionConflict(Exception):
+    pass
 
 
 class SecretsStore(ABC):
@@ -26,6 +31,22 @@ class SecretsStore(ABC):
     @abstractmethod
     async def store(self, secrets: Secrets) -> None:
         """Store secrets."""
+
+    async def load_versioned(
+        self,
+        name: str,
+        organization_id: UUID | None = None,
+    ) -> tuple[str, str]:
+        raise NotImplementedError
+
+    async def replace_versioned(
+        self,
+        name: str,
+        expected_version: str,
+        value: str,
+        organization_id: UUID | None = None,
+    ) -> str:
+        raise NotImplementedError
 
     @classmethod
     @abstractmethod

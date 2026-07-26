@@ -32,6 +32,8 @@ __all__ = ['SandboxGroupingStrategy']
 # Constrained to ^[a-z0-9]+$ by the SDK validator — no underscores allowed.
 # The typed ``AppConversationInfo.acp_server`` field is a projection of this tag.
 ACP_SERVER_TAG_KEY = 'acpserver'
+CODEX_CREDENTIAL_BINDING_TAG_KEY = 'codexcredentialbinding'
+CODEX_CREDENTIAL_START_TASK_TAG_KEY = 'codexcredentialstarttask'
 
 # Conversation-tag key pinning the resolved (grouped) workspace path at creation
 # so the delete-time archive captures the right directory without re-deriving it

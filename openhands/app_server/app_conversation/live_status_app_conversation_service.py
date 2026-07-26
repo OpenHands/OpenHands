@@ -29,6 +29,8 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AGENT_PROFILE_ID_TAG_KEY,
     AGENT_PROFILE_REVISION_TAG_KEY,
     ARCHIVE_WORKSPACE_PATH_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_START_TASK_TAG_KEY,
     AgentType,
     AppConversation,
     AppConversationInfo,
@@ -94,6 +96,15 @@ from openhands.app_server.sandbox.sandbox_spec_service import (
     SandboxSpecService,
     is_custom_sandbox_spec,
 )
+from openhands.app_server.secrets.credential_binding import (
+    CODEX_AUTH_SECRET_NAME,
+    activate_codex_credential_binding,
+    codex_credential_sync_enabled,
+    credential_binding_callback_path,
+    managed_credential_marker,
+    marker_organization_id,
+    validate_codex_credential,
+)
 from openhands.app_server.services.injector import InjectorState
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.settings.llm_profiles import resolve_profile_llm
@@ -123,6 +134,7 @@ from openhands.app_server.utils.redis_lock import (
     try_acquire_redis_lock,
 )
 from openhands.sdk import Agent, AgentContext, LocalWorkspace
+from openhands.sdk.agent import ACPAgent
 from openhands.sdk.hooks import HookConfig
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.llm_profile_store import PROFILE_NAME_REGEX
@@ -404,6 +416,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             self._inherit_configuration_from_parent(request, parent_info)
 
         self._apply_suggested_task(request)
+        conversation_id = request.conversation_id or uuid4()
+        request = request.model_copy(update={'conversation_id': conversation_id})
 
         task = AppConversationStartTask(
             created_by_user_id=user_id,
@@ -411,6 +425,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
         yield task
 
+        managed_credential_marker_value: str | None = None
+        managed_start_attempted = False
+        managed_conversation_created = False
+        sandbox: SandboxInfo | None = None
         try:
             async for updated_task in self._wait_for_sandbox_start(task):
                 yield updated_task
@@ -433,9 +451,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox.sandbox_spec_id
             )
             assert sandbox_spec is not None
-
-            # Set up conversation id
-            conversation_id = request.conversation_id or uuid4()
 
             # Setup working dir based on grouping
             sandbox_grouping_strategy = await self._get_sandbox_grouping_strategy()
@@ -493,6 +508,23 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.agent_server_url = agent_server_url
             yield task
 
+            managed_credential_marker_value = (
+                await self._prepare_codex_credential_binding(
+                    start_conversation_request,
+                    sandbox=sandbox,
+                    conversation_id=conversation_id,
+                    start_task_id=task.id,
+                    agent_server_url=agent_server_url,
+                    api_override=bool(
+                        request.secrets and CODEX_AUTH_SECRET_NAME in request.secrets
+                    ),
+                )
+            )
+            if managed_credential_marker_value is not None:
+                start_conversation_request.tags[CODEX_CREDENTIAL_START_TASK_TAG_KEY] = (
+                    str(task.id)
+                )
+
             # Start conversation...
             body_json = start_conversation_request.model_dump(
                 mode='json', context={'expose_secrets': True}
@@ -515,13 +547,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 if sandbox.session_api_key
                 else {}
             )
+            managed_start_attempted = managed_credential_marker_value is not None
             response = await self.httpx_client.post(
                 f'{agent_server_url}/api/conversations',
                 json=body_json,
                 headers=headers,
                 timeout=self.sandbox_startup_timeout,
             )
-
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -539,6 +571,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     ) from exc
                 raise
             info = ConversationInfo.model_validate(response.json())
+            if info.id != conversation_id:
+                raise SandboxError('Agent Server returned an unexpected conversation')
+            if managed_credential_marker_value is not None:
+                if info.tags.get(CODEX_CREDENTIAL_START_TASK_TAG_KEY) != str(task.id):
+                    raise SandboxError(
+                        'Agent Server returned an unexpected managed conversation'
+                    )
+                managed_conversation_created = True
             # Determine kind / llm_model from the request we built (its
             # ``agent`` is the source of truth here): the response echoes
             # the same agent back through the AgentBase discriminator.
@@ -585,6 +625,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 agent_kind = 'openhands'
 
             conversation_tags: dict[str, str] = dict(tags)
+            if managed_credential_marker_value is not None:
+                conversation_tags[CODEX_CREDENTIAL_BINDING_TAG_KEY] = (
+                    managed_credential_marker_value
+                )
             if request.selected_repository:
                 conversation_tags['repo_name'] = request.selected_repository
             if request.git_provider:
@@ -633,6 +677,29 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     )
                 )
 
+            if managed_credential_marker_value is not None:
+                assert self.web_url is not None
+                assert sandbox.session_api_key is not None
+                await activate_codex_credential_binding(
+                    self.httpx_client,
+                    self.jwt_service,
+                    agent_server_url=agent_server_url,
+                    callback_url=(
+                        self.web_url.rstrip('/')
+                        + credential_binding_callback_path(sandbox.id, conversation_id)
+                    ),
+                    session_api_key=sandbox.session_api_key,
+                    user_id=user_id or 'root',
+                    organization_id=marker_organization_id(
+                        managed_credential_marker_value
+                    ),
+                    sandbox_id=sandbox.id,
+                    conversation_id=conversation_id,
+                    start_task_id=None,
+                    required=True,
+                )
+
+            managed_conversation_created = False
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
             task.app_conversation_id = info.id
@@ -648,6 +715,56 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 )
 
         except Exception as exc:
+            if (
+                managed_start_attempted
+                and not managed_conversation_created
+                and sandbox is not None
+            ):
+                try:
+                    agent_server_url = self._get_agent_server_url(sandbox)
+                    headers = (
+                        {'X-Session-API-Key': sandbox.session_api_key}
+                        if sandbox.session_api_key
+                        else {}
+                    )
+                    response = await self.httpx_client.get(
+                        f'{agent_server_url}/api/conversations/{conversation_id}',
+                        headers=headers,
+                        timeout=30.0,
+                    )
+                    if response.status_code == 200:
+                        payload = response.json()
+                        tags = payload.get('tags')
+                        managed_conversation_created = (
+                            UUID(str(payload.get('id'))) == conversation_id
+                            and isinstance(tags, dict)
+                            and tags.get(CODEX_CREDENTIAL_START_TASK_TAG_KEY)
+                            == str(task.id)
+                        )
+                except Exception:
+                    _logger.exception(
+                        'Failed to verify managed conversation after start failure',
+                        stack_info=True,
+                    )
+            if managed_conversation_created and sandbox is not None:
+                try:
+                    agent_server_url = self._get_agent_server_url(sandbox)
+                    headers = (
+                        {'X-Session-API-Key': sandbox.session_api_key}
+                        if sandbox.session_api_key
+                        else {}
+                    )
+                    response = await self.httpx_client.delete(
+                        f'{agent_server_url}/api/conversations/{conversation_id}',
+                        headers=headers,
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                except Exception:
+                    _logger.exception(
+                        'Failed to scrub managed credential after start failure',
+                        stack_info=True,
+                    )
             _logger.exception('Error starting conversation', stack_info=True)
             task.status = AppConversationStartTaskStatus.ERROR
             task.detail = redact_text_secrets(
@@ -2262,6 +2379,77 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             return request
 
+    async def _prepare_codex_credential_binding(
+        self,
+        request: StartConversationRequest,
+        *,
+        sandbox: SandboxInfo,
+        conversation_id: UUID,
+        start_task_id: UUID,
+        agent_server_url: str,
+        api_override: bool,
+    ) -> str | None:
+        if not codex_credential_sync_enabled() or api_override:
+            return None
+        if self.app_mode != 'saas' and not isinstance(
+            self.sandbox_service, DockerSandboxService
+        ):
+            return None
+        agent = request.agent
+        if not isinstance(agent, ACPAgent):
+            return None
+        if agent.acp_server != 'codex':
+            return None
+        agent_context_secrets = getattr(agent.agent_context, 'secrets', None) or {}
+        if CODEX_AUTH_SECRET_NAME in agent_context_secrets:
+            return None
+
+        source = (request.secrets or {}).get(CODEX_AUTH_SECRET_NAME)
+        canonical_source = (await self.user_context.get_secrets()).get(
+            CODEX_AUTH_SECRET_NAME
+        )
+        if not isinstance(source, StaticSecret) or not isinstance(
+            canonical_source, StaticSecret
+        ):
+            return None
+        value = source.get_value()
+        if not value or value != canonical_source.get_value():
+            return None
+        try:
+            validate_codex_credential(value)
+        except ValueError:
+            return None
+        if not self.web_url or not sandbox.session_api_key:
+            return None
+
+        user_id = await self.user_context.get_user_id()
+        get_effective_org_id = getattr(self.user_context, 'get_effective_org_id', None)
+        organization_id = (
+            await get_effective_org_id() if get_effective_org_id is not None else None
+        )
+        if self.app_mode == 'saas' and organization_id is None:
+            return None
+        callback_url = self.web_url.rstrip('/') + credential_binding_callback_path(
+            sandbox.id, conversation_id
+        )
+        activated = await activate_codex_credential_binding(
+            self.httpx_client,
+            self.jwt_service,
+            agent_server_url=agent_server_url,
+            callback_url=callback_url,
+            session_api_key=sandbox.session_api_key,
+            user_id=user_id or 'root',
+            organization_id=organization_id,
+            sandbox_id=sandbox.id,
+            conversation_id=conversation_id,
+            start_task_id=start_task_id,
+            required=False,
+        )
+        if not activated:
+            return None
+        request.secrets.pop(CODEX_AUTH_SECRET_NAME, None)
+        return managed_credential_marker(organization_id)
+
     async def _build_acp_start_conversation_request(
         self,
         sandbox: SandboxInfo,
@@ -2726,7 +2914,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Now delete the parent conversation
             # Delete from agent server if sandbox is running (skip if sandbox is shared)
-            if not skip_agent_server_delete:
+            if not skip_agent_server_delete or (
+                CODEX_CREDENTIAL_BINDING_TAG_KEY in app_conversation.tags
+            ):
                 await self._delete_from_agent_server(app_conversation)
 
             # Delete from database using the conversation info from app_conversation
@@ -2757,6 +2947,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
         for sub_id in sub_conversation_ids:
+            sub_conversation = None
             try:
                 sub_conversation = await self.get_app_conversation(sub_id)
                 if sub_conversation:
@@ -2769,6 +2960,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         extra={'conversation_id': str(sub_id)},
                     )
             except Exception as e:
+                if sub_conversation and (
+                    CODEX_CREDENTIAL_BINDING_TAG_KEY in sub_conversation.tags
+                ):
+                    raise
                 # Log error but continue deleting remaining sub-conversations
                 _logger.warning(
                     f'Error deleting sub-conversation {sub_id}: {e}',
@@ -2781,28 +2976,88 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> None:
         """Delete conversation from agent server if sandbox is running."""
         conversation_id = app_conversation.id
-        if not (
-            app_conversation.sandbox_status == SandboxStatus.RUNNING
-            and app_conversation.session_api_key
-        ):
-            return
+        managed_marker = app_conversation.tags.get(CODEX_CREDENTIAL_BINDING_TAG_KEY)
 
         try:
-            # Get sandbox info to find agent server URL
             sandbox = await self.sandbox_service.get_sandbox(
                 app_conversation.sandbox_id
             )
-            if sandbox and sandbox.exposed_urls:
+            if managed_marker is not None:
+                if sandbox is None:
+                    return
+                if sandbox.status != SandboxStatus.RUNNING:
+                    if sandbox.status not in (
+                        SandboxStatus.STARTING,
+                        SandboxStatus.PAUSED,
+                        SandboxStatus.ERROR,
+                    ):
+                        raise SandboxError('Managed credential sandbox is unavailable')
+                    if sandbox.status != SandboxStatus.STARTING:
+                        exists = await self.sandbox_service.resume_sandbox(sandbox.id)
+                        if not exists:
+                            sandbox = await self.sandbox_service.get_sandbox(sandbox.id)
+                            if sandbox is None or sandbox.status not in (
+                                SandboxStatus.RUNNING,
+                                SandboxStatus.STARTING,
+                            ):
+                                raise SandboxError(
+                                    'Managed credential sandbox is unavailable'
+                                )
+                    sandbox = await self.sandbox_service.wait_for_sandbox_running(
+                        sandbox.id, httpx_client=self.httpx_client
+                    )
+                if not sandbox.session_api_key or not self.web_url:
+                    raise SandboxError('Managed credential callback is unavailable')
+                organization_id = marker_organization_id(managed_marker)
                 agent_server_url = self._get_agent_server_url(sandbox)
-
-                # Call agent server delete API
-                response = await self.httpx_client.delete(
+                session_api_key = sandbox.session_api_key
+                lookup = await self.httpx_client.get(
                     f'{agent_server_url}/api/conversations/{conversation_id}',
-                    headers={'X-Session-API-Key': app_conversation.session_api_key},
+                    headers={'X-Session-API-Key': session_api_key},
                     timeout=30.0,
                 )
-                response.raise_for_status()
+                if lookup.status_code == 404:
+                    return
+                lookup.raise_for_status()
+                callback_url = self.web_url.rstrip(
+                    '/'
+                ) + credential_binding_callback_path(sandbox.id, app_conversation.id)
+                await activate_codex_credential_binding(
+                    self.httpx_client,
+                    self.jwt_service,
+                    agent_server_url=agent_server_url,
+                    callback_url=callback_url,
+                    session_api_key=session_api_key,
+                    user_id=app_conversation.created_by_user_id or 'root',
+                    organization_id=organization_id,
+                    sandbox_id=sandbox.id,
+                    conversation_id=app_conversation.id,
+                    start_task_id=None,
+                    required=True,
+                )
+            elif not (
+                app_conversation.sandbox_status == SandboxStatus.RUNNING
+                and app_conversation.session_api_key
+                and sandbox is not None
+            ):
+                return
+
+            assert sandbox is not None
+            delete_session_api_key = (
+                sandbox.session_api_key or app_conversation.session_api_key
+            )
+            if not delete_session_api_key:
+                raise SandboxError('Agent Server authorization is unavailable')
+            agent_server_url = self._get_agent_server_url(sandbox)
+            response = await self.httpx_client.delete(
+                f'{agent_server_url}/api/conversations/{conversation_id}',
+                headers={'X-Session-API-Key': delete_session_api_key},
+                timeout=30.0,
+            )
+            response.raise_for_status()
         except Exception as e:
+            if managed_marker is not None:
+                raise
             _logger.warning(
                 f'Failed to delete conversation from agent server: {e}',
                 extra={'conversation_id': str(conversation_id)},

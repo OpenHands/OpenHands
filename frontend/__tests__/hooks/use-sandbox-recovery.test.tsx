@@ -5,6 +5,7 @@ import React from "react";
 import { useSandboxRecovery } from "#/hooks/use-sandbox-recovery";
 import { useUnifiedResumeConversationSandbox } from "#/hooks/mutation/use-unified-start-conversation";
 import * as customToastHandlers from "#/utils/custom-toast-handlers";
+import type { V1AppConversation } from "#/api/conversation-service/v1-conversation-service.types";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -81,7 +82,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         { wrapper: createWrapper() },
       );
@@ -100,7 +101,7 @@ describe("useSandboxRecovery", () => {
     });
 
     it("should NOT call resumeSandbox on initial load when conversation is RUNNING", () => {
-      renderHook(
+      const { result } = renderHook(
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
@@ -110,6 +111,17 @@ describe("useSandboxRecovery", () => {
       );
 
       expect(mockMutate).not.toHaveBeenCalled();
+
+      act(() => {
+        result.current.recoverCredentialBinding();
+        result.current.recoverCredentialBinding();
+      });
+
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: "conv-123" }),
+        expect.any(Object),
+      );
     });
 
     it("should NOT call resumeSandbox when conversationId is undefined", () => {
@@ -117,7 +129,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: undefined,
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -143,7 +155,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         { wrapper: createWrapper() },
       );
@@ -161,7 +173,7 @@ describe("useSandboxRecovery", () => {
         ({ conversationId }) =>
           useSandboxRecovery({
             conversationId,
-            sandboxStatus: "PAUSED"
+            sandboxStatus: "PAUSED",
           }),
         {
           wrapper: createWrapper(),
@@ -257,6 +269,42 @@ describe("useSandboxRecovery", () => {
       expect(mockMutate).not.toHaveBeenCalled();
     });
 
+    it("ignores a stale visibility refetch after navigation", async () => {
+      let resolveRefetch!: (value: { data: V1AppConversation }) => void;
+      const mockRefetch = vi.fn(
+        () =>
+          new Promise<{ data: V1AppConversation }>((resolve) => {
+            resolveRefetch = resolve;
+          }),
+      );
+      const { rerender } = renderHook(
+        ({ conversationId }) =>
+          useSandboxRecovery({
+            conversationId,
+            sandboxStatus: "RUNNING",
+            refetchConversation: mockRefetch,
+          }),
+        {
+          wrapper: createWrapper(),
+          initialProps: { conversationId: "conv-123" },
+        },
+      );
+
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      rerender({ conversationId: "conv-456" });
+      await act(async () => {
+        resolveRefetch({
+          data: {
+            sandbox_status: "PAUSED",
+          } as V1AppConversation,
+        });
+      });
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
     it("should NOT call resumeSandbox when tab becomes visible but refetchConversation is not provided", async () => {
       renderHook(
         () =>
@@ -323,7 +371,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -386,7 +434,9 @@ describe("useSandboxRecovery", () => {
     });
 
     it("should handle refetch errors gracefully without crashing", async () => {
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
 
       const mockRefetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
@@ -456,7 +506,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -514,7 +564,9 @@ describe("useSandboxRecovery", () => {
 
       expect(onError).toHaveBeenCalledTimes(1);
       expect(onError).toHaveBeenCalledWith(testError);
-      expect(vi.mocked(customToastHandlers.displayErrorToast)).toHaveBeenCalled();
+      expect(
+        vi.mocked(customToastHandlers.displayErrorToast),
+      ).toHaveBeenCalled();
     });
 
     it("should NOT call resumeSandbox when isPending is true", () => {
@@ -540,7 +592,7 @@ describe("useSandboxRecovery", () => {
         () =>
           useSandboxRecovery({
             conversationId: "conv-123",
-            sandboxStatus: "MISSING"
+            sandboxStatus: "MISSING",
           }),
         { wrapper: createWrapper() },
       );
@@ -550,15 +602,8 @@ describe("useSandboxRecovery", () => {
     });
   });
 
-  describe("WebSocket disconnect (negative test)", () => {
-    it("should NOT have any mechanism to auto-resume on WebSocket disconnect", () => {
-      // This test documents the intended behavior: the hook does NOT
-      // listen for WebSocket disconnects. Recovery only happens on:
-      // 1. Initial page load (STOPPED status)
-      // 2. Tab focus (visibilitychange event)
-      //
-      // There is intentionally NO onDisconnect handler or WebSocket listener.
-
+  describe("WebSocket disconnect", () => {
+    it("does not recover a running sandbox without an activation signal", () => {
       const { result } = renderHook(
         () =>
           useSandboxRecovery({
@@ -568,13 +613,69 @@ describe("useSandboxRecovery", () => {
         { wrapper: createWrapper() },
       );
 
-      // The hook should only expose isResuming - no disconnect-related functionality
       expect(result.current).toEqual({
         isResuming: expect.any(Boolean),
+        credentialBindingActivationFailed: false,
+        recoverCredentialBinding: expect.any(Function),
       });
 
-      // No calls should have been made for RUNNING status
       expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it("does not loop after credential activation fails", () => {
+      const { result } = renderHook(
+        () =>
+          useSandboxRecovery({
+            conversationId: "conv-123",
+            sandboxStatus: "RUNNING",
+          }),
+        { wrapper: createWrapper() },
+      );
+
+      act(() => {
+        result.current.recoverCredentialBinding();
+      });
+      const options = mockMutate.mock.calls[0][1];
+      act(() => {
+        options.onError(new Error("Activation failed"));
+        result.current.recoverCredentialBinding();
+        result.current.recoverCredentialBinding();
+      });
+
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      expect(result.current.credentialBindingActivationFailed).toBe(true);
+    });
+
+    it("ignores a stale activation failure after navigation", () => {
+      const { result, rerender } = renderHook(
+        ({ conversationId }) =>
+          useSandboxRecovery({
+            conversationId,
+            sandboxStatus: "RUNNING",
+          }),
+        {
+          wrapper: createWrapper(),
+          initialProps: { conversationId: "conv-123" },
+        },
+      );
+
+      act(() => {
+        result.current.recoverCredentialBinding();
+      });
+      const staleOptions = mockMutate.mock.calls[0][1];
+
+      rerender({ conversationId: "conv-456" });
+      act(() => {
+        staleOptions.onError(new Error("Activation failed"));
+        result.current.recoverCredentialBinding();
+      });
+
+      expect(result.current.credentialBindingActivationFailed).toBe(false);
+      expect(mockMutate).toHaveBeenCalledTimes(2);
+      expect(mockMutate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ conversationId: "conv-456" }),
+        expect.any(Object),
+      );
     });
   });
 });
