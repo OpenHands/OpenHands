@@ -4,6 +4,7 @@ This module tests the SQL implementation of AppConversationStartTaskService,
 focusing on basic CRUD operations and batch operations using SQLite as a mock database.
 """
 
+from datetime import timedelta
 from typing import AsyncGenerator
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from openhands.agent_server.models import utc_now
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
@@ -119,6 +121,45 @@ class TestSQLAppConversationStartTaskService:
         assert retrieved_task.created_by_user_id == sample_task.created_by_user_id
         assert retrieved_task.status == sample_task.status
         assert retrieved_task.request == sample_task.request
+
+    async def test_claim_coalesces_active_resume(
+        self,
+        service: SQLAppConversationStartTaskService,
+        sample_request: AppConversationStartRequest,
+    ):
+        conversation_id = uuid4()
+        first = AppConversationStartTask(
+            created_by_user_id='test_user',
+            app_conversation_id=conversation_id,
+            request=sample_request,
+        )
+        claimed_task, claimed = await service.claim_app_conversation_start_task(
+            first,
+            utc_now() - timedelta(minutes=5),
+        )
+        assert claimed
+        assert claimed_task.id == first.id
+
+        second = AppConversationStartTask(
+            created_by_user_id='test_user',
+            app_conversation_id=conversation_id,
+            request=sample_request,
+        )
+        claimed_task, claimed = await service.claim_app_conversation_start_task(
+            second,
+            utc_now() - timedelta(minutes=5),
+        )
+        assert not claimed
+        assert claimed_task.id == first.id
+
+        first.status = AppConversationStartTaskStatus.ERROR
+        await service.save_app_conversation_start_task(first)
+        claimed_task, claimed = await service.claim_app_conversation_start_task(
+            second,
+            utc_now() - timedelta(minutes=5),
+        )
+        assert claimed
+        assert claimed_task.id == second.id
 
     async def test_save_assigns_generation_order_under_clock_skew(
         self,

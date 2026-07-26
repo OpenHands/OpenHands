@@ -104,6 +104,7 @@ class PendingMessageService(ABC):
         conversation_id: str,
         content: list[TextContent | ImageContent],
         role: str = 'user',
+        queue_if_ready: bool = False,
     ) -> PendingMessageResponse:
         """Queue a message for delivery when conversation becomes ready."""
 
@@ -142,10 +143,9 @@ class PendingMessageService(ABC):
     async def finish_message_delivery_cutover(
         self,
         task_id: UUID,
-        delivered_message_ids: list[str],
-        delivery_complete: bool,
-    ) -> int:
-        """Delete the delivered prefix and publish READY after full delivery."""
+        processed_message_ids: list[str],
+    ) -> tuple[int, bool]:
+        """Delete the processed batch and publish READY when the queue is empty."""
 
 
 @dataclass
@@ -248,6 +248,7 @@ class SQLPendingMessageService(PendingMessageService):
         conversation_id: str,
         content: list[TextContent | ImageContent],
         role: str = 'user',
+        queue_if_ready: bool = False,
     ) -> PendingMessageResponse:
         """Queue a message for delivery when conversation becomes ready."""
         conversation_aliases = _conversation_id_aliases(conversation_id)
@@ -278,7 +279,12 @@ class SQLPendingMessageService(PendingMessageService):
                 and task.app_conversation_id is not None
             ):
                 await self.db_session.rollback()
-                return await self.add_message(conversation_id, content, role)
+                return await self.add_message(
+                    conversation_id,
+                    content,
+                    role,
+                    queue_if_ready,
+                )
             if task is None and canonical_id is None:
                 await self._lock_legacy_conversation(conversation_id)
             elif task is None:
@@ -288,6 +294,7 @@ class SQLPendingMessageService(PendingMessageService):
             elif (
                 task.status == AppConversationStartTaskStatus.READY
                 and task.app_conversation_id is not None
+                and not queue_if_ready
             ):
                 await self.db_session.commit()
                 return PendingMessageResponse(
@@ -491,7 +498,7 @@ class SQLPendingMessageService(PendingMessageService):
             stored_messages = (
                 (await self.db_session.execute(messages_stmt)).scalars().all()
             )
-            return [
+            messages = [
                 PendingMessage(
                     id=message.id,
                     conversation_id=message.conversation_id,
@@ -501,6 +508,8 @@ class SQLPendingMessageService(PendingMessageService):
                 )
                 for message in stored_messages
             ]
+            await self.db_session.commit()
+            return messages
         except BaseException:
             await self._rollback()
             raise
@@ -508,9 +517,8 @@ class SQLPendingMessageService(PendingMessageService):
     async def finish_message_delivery_cutover(
         self,
         task_id: UUID,
-        delivered_message_ids: list[str],
-        delivery_complete: bool,
-    ) -> int:
+        processed_message_ids: list[str],
+    ) -> tuple[int, bool]:
         try:
             task_stmt = select(StoredAppConversationStartTask).where(
                 StoredAppConversationStartTask.id == task_id
@@ -528,32 +536,43 @@ class SQLPendingMessageService(PendingMessageService):
             )
             if current_task is None or current_task.id != task_id:
                 raise PendingMessageUnavailable
-            pending_stmt = (
-                select(StoredPendingMessage)
-                .where(
-                    StoredPendingMessage.conversation_id
-                    == str(task.app_conversation_id)
-                )
-                .order_by(
-                    StoredPendingMessage.created_at.asc(),
-                    StoredPendingMessage.id.asc(),
-                )
-            )
             pending_messages = list(
-                (await self.db_session.execute(pending_stmt)).scalars().all()
+                (
+                    await self.db_session.execute(
+                        select(StoredPendingMessage)
+                        .where(
+                            StoredPendingMessage.conversation_id
+                            == str(task.app_conversation_id)
+                        )
+                        .order_by(
+                            StoredPendingMessage.created_at.asc(),
+                            StoredPendingMessage.id.asc(),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
             )
-            delivered_messages = pending_messages[: len(delivered_message_ids)]
-            if [message.id for message in delivered_messages] != delivered_message_ids:
+            processed_messages = pending_messages[: len(processed_message_ids)]
+            if [message.id for message in processed_messages] != processed_message_ids:
                 raise PendingMessageUnavailable
-            if delivery_complete and len(delivered_messages) != len(pending_messages):
-                raise PendingMessageUnavailable
-            for message in delivered_messages:
+            for message in processed_messages:
                 await self.db_session.delete(message)
-            if delivery_complete:
+            await self.db_session.flush()
+            remaining_count = (
+                await self.db_session.execute(
+                    select(func.count()).where(
+                        StoredPendingMessage.conversation_id
+                        == str(task.app_conversation_id)
+                    )
+                )
+            ).scalar_one()
+            ready = remaining_count == 0
+            if ready:
                 task.status = AppConversationStartTaskStatus.READY
                 task.updated_at = utc_now()
             await self.db_session.commit()
-            return len(delivered_messages)
+            return len(processed_messages), ready
         except BaseException:
             await self._rollback()
             raise

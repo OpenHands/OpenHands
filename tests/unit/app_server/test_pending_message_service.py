@@ -389,13 +389,11 @@ class TestSQLPendingMessageService:
             task.id,
             conversation_id,
         )
-        result = await service.finish_message_delivery_cutover(
-            task.id, [queued.id], True
-        )
+        result = await service.finish_message_delivery_cutover(task.id, [queued.id])
 
         assert [message.id for message in messages] == [queued.id]
         assert messages[0].conversation_id == str(conversation_id)
-        assert result == 1
+        assert result == (1, True)
         stored_task = await async_session.get(StoredAppConversationStartTask, task.id)
         assert stored_task is not None
         assert stored_task.status == AppConversationStartTaskStatus.READY
@@ -424,12 +422,11 @@ class TestSQLPendingMessageService:
         result = await service.finish_message_delivery_cutover(
             task.id,
             [first.id],
-            False,
         )
 
         remaining = await service.get_pending_messages(str(conversation_id))
         assert [message.id for message in remaining] == [second.id]
-        assert result == 1
+        assert result == (1, False)
         stored_task = await async_session.get(StoredAppConversationStartTask, task.id)
         assert stored_task is not None
         assert (
@@ -456,9 +453,9 @@ class TestSQLPendingMessageService:
 
         await service.begin_message_delivery_cutover(task.id, conversation_id)
         with pytest.raises(PendingMessageUnavailable):
-            await service.finish_message_delivery_cutover(task.id, [second.id], False)
+            await service.finish_message_delivery_cutover(task.id, [second.id])
 
-        messages = await service.get_pending_messages(f'task-{task.id.hex}')
+        messages = await service.get_pending_messages(str(conversation_id))
         assert [message.id for message in messages] == [first.id, second.id]
 
     @pytest.mark.asyncio

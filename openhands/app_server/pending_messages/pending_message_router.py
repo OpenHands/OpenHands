@@ -55,6 +55,10 @@ sandbox_service_dependency = depends_sandbox_service()
 httpx_client_dependency = depends_httpx_client()
 
 
+class _SandboxNotRunning(Exception):
+    pass
+
+
 async def _send_to_ready_task(
     conversation_id: str,
     role: str,
@@ -119,10 +123,7 @@ async def _send_to_ready_task(
         )
     sandbox = await sandbox_service.get_sandbox(task.sandbox_id)
     if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail='Conversation sandbox is not running',
-        )
+        raise _SandboxNotRunning
     try:
         response = await httpx_client.post(
             f'{replace_localhost_hostname_for_docker(task.agent_server_url)}'
@@ -259,14 +260,36 @@ async def queue_pending_message(
         ) from exc
 
     if not response.queued:
-        delivered = await _send_to_ready_task(
-            response.conversation_id or conversation_id,
-            role,
-            content,
-            start_task_service,
-            sandbox_service,
-            httpx_client,
-        )
+        try:
+            delivered = await _send_to_ready_task(
+                response.conversation_id or conversation_id,
+                role,
+                content,
+                start_task_service,
+                sandbox_service,
+                httpx_client,
+            )
+        except _SandboxNotRunning:
+            try:
+                return await pending_service.add_message(
+                    conversation_id=conversation_id,
+                    content=content,
+                    role=role,
+                    queue_if_ready=True,
+                )
+            except PendingMessageLimitExceeded as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        'Too many pending messages. Maximum 10 messages per '
+                        'conversation.'
+                    ),
+                ) from exc
+            except PendingMessageUnavailable as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail='Conversation is not available',
+                ) from exc
         if delivered is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from openhands.app_server.utils.docker_utils import (
+    replace_localhost_hostname,
     replace_localhost_hostname_for_docker,
 )
 
@@ -169,7 +170,23 @@ class TestReplaceLocalhostHostnameForDocker:
         return_value=True,
     )
     def test_replace_loopback_and_bind_addresses(self, mock_is_docker, url, expected):
-        assert replace_localhost_hostname_for_docker(url) == expected
+        assert replace_localhost_hostname(url) == expected
+
+    @pytest.mark.parametrize(
+        'url',
+        [
+            'http://127.0.0.1:8080/path',
+            'http://0.0.0.0:8080/path',
+            'http://[::1]:8080/path',
+            'http://[::]:8080/path',
+        ],
+    )
+    @patch(
+        'openhands.app_server.utils.docker_utils.is_running_in_docker',
+        return_value=True,
+    )
+    def test_docker_wrapper_only_replaces_localhost(self, mock_is_docker, url):
+        assert replace_localhost_hostname_for_docker(url) == url
 
     @patch(
         'openhands.app_server.utils.docker_utils.is_running_in_docker',

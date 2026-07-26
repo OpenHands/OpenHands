@@ -44,7 +44,10 @@ async def test_task_alias_enforces_effective_organization():
     conversation_id = uuid4()
     user_id = uuid4()
     task_result = MagicMock()
-    task_result.scalar_one_or_none.return_value = conversation_id
+    task_result.scalar_one_or_none.return_value = SimpleNamespace(
+        app_conversation_id=conversation_id,
+        created_by_user_id=str(user_id),
+    )
     metadata_result = MagicMock()
     metadata_result.scalar_one_or_none.return_value = SimpleNamespace(
         user_id=user_id,
@@ -68,7 +71,10 @@ async def test_task_alias_accepts_matching_organization():
     user_id = uuid4()
     organization_id = uuid4()
     task_result = MagicMock()
-    task_result.scalar_one_or_none.return_value = conversation_id
+    task_result.scalar_one_or_none.return_value = SimpleNamespace(
+        app_conversation_id=conversation_id,
+        created_by_user_id=str(user_id),
+    )
     metadata_result = MagicMock()
     metadata_result.scalar_one_or_none.return_value = SimpleNamespace(
         user_id=user_id,
@@ -98,3 +104,20 @@ async def test_unmapped_task_alias_is_denied():
 
     with pytest.raises(AuthError, match='not available'):
         await service._validate_conversation_ownership(f'task-{uuid4().hex}')
+
+
+@pytest.mark.asyncio
+async def test_owned_task_without_conversation_mapping_is_accepted():
+    user_id = uuid4()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = SimpleNamespace(
+        app_conversation_id=None,
+        created_by_user_id=str(user_id),
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+    user_context = MagicMock()
+    user_context.get_user_id = AsyncMock(return_value=str(user_id))
+    service = SaasSQLPendingMessageService(session, user_context)
+
+    await service._validate_conversation_ownership(f'task-{uuid4().hex}')

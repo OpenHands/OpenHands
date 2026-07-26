@@ -48,7 +48,6 @@ import type {
 } from "#/api/conversation-service/v1-conversation-service.types";
 import EventService from "#/api/event-service/event-service.api";
 import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
-import V1ConversationService from "#/api/conversation-service/v1-conversation-service.api";
 import { useConversationStore } from "#/stores/conversation-store";
 import { classifyBudgetOrCreditError, trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
@@ -96,6 +95,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  onCredentialBindingActivationRequired,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -103,6 +103,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: V1AppConversation[];
   subConversationIds?: string[];
+  onCredentialBindingActivationRequired?: () => void;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -788,10 +789,14 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: () => {
+      onClose: (event) => {
         setMainConnectionState("CLOSED");
-        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
-        // No error message needed - silent recovery provides better UX
+        if (
+          event.code === 1013 &&
+          event.reason === "credential_binding_activation_required"
+        ) {
+          onCredentialBindingActivationRequired?.();
+        }
       },
       onError: () => {
         setMainConnectionState("CLOSED");
@@ -815,6 +820,7 @@ export function ConversationWebSocketProvider({
     sessionApiKey,
     conversationId,
     conversationUrl,
+    onCredentialBindingActivationRequired,
   ]);
 
   // Separate WebSocket options for planning agent connection
@@ -861,10 +867,14 @@ export function ConversationWebSocketProvider({
           }
         }
       },
-      onClose: () => {
+      onClose: (event) => {
         setPlanningConnectionState("CLOSED");
-        // Recovery is handled by useSandboxRecovery on tab focus/page refresh
-        // No error message needed - silent recovery provides better UX
+        if (
+          event.code === 1013 &&
+          event.reason === "credential_binding_activation_required"
+        ) {
+          onCredentialBindingActivationRequired?.();
+        }
       },
       onError: () => {
         setPlanningConnectionState("CLOSED");
@@ -887,6 +897,7 @@ export function ConversationWebSocketProvider({
     removeErrorMessage,
     sessionApiKey,
     subConversations,
+    onCredentialBindingActivationRequired,
   ]);
 
   // Only attempt WebSocket connection when we have a valid URL
@@ -920,10 +931,6 @@ export function ConversationWebSocketProvider({
         }
 
         try {
-          if (!conversationId.startsWith("task-")) {
-            await V1ConversationService.sendMessage(conversationId, message);
-            return { queued: false };
-          }
           const response = await PendingMessageService.queueMessage(
             conversationId,
             {

@@ -49,4 +49,7 @@ def replace_localhost_hostname_for_docker(
     """
     if not is_running_in_docker():
         return url
+    parsed = urlparse(url)
+    if parsed.hostname is None or parsed.hostname.lower() != 'localhost':
+        return url
     return replace_localhost_hostname(url, replacement)

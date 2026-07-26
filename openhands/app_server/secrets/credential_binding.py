@@ -199,10 +199,29 @@ async def _validate_active_binding(scope: CredentialBindingScope) -> None:
         get_app_conversation_start_task_service(state) as start_task_service,
         get_sandbox_service(state) as sandbox_service,
     ):
-        task_page = await start_task_service.search_app_conversation_start_tasks(
-            conversation_id__eq=scope.conversation_id, limit=1
-        )
-        task = task_page.items[0] if task_page.items else None
+        task = None
+        page_id = None
+        while task is None:
+            task_page = await start_task_service.search_app_conversation_start_tasks(
+                conversation_id__eq=scope.conversation_id,
+                page_id=page_id,
+                limit=100,
+            )
+            task = next(
+                (
+                    candidate
+                    for candidate in task_page.items
+                    if candidate.status
+                    in (
+                        AppConversationStartTaskStatus.STARTING_CONVERSATION,
+                        AppConversationStartTaskStatus.READY,
+                    )
+                ),
+                None,
+            )
+            page_id = task_page.next_page_id
+            if page_id is None:
+                break
         if not _is_current_start_task(task, scope):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,

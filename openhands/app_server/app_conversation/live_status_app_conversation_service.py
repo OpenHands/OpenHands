@@ -8,9 +8,10 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, AsyncGenerator, BinaryIO, Sequence, TypeVar, cast
 from uuid import UUID, uuid4, uuid5
+from weakref import WeakValueDictionary
 
 import httpx
 from fastapi import Request
@@ -164,11 +165,20 @@ from openhands.tools.preset.planning import (
 
 _conversation_info_type_adapter = TypeAdapter(list[ConversationInfo | None])
 _logger = logging.getLogger(__name__)
+_resume_locks: WeakValueDictionary[UUID, asyncio.Lock] = WeakValueDictionary()
 
 _EXPORT_LOCK_KEY_PREFIX = 'app_conversation_export'
 _RESERVATION_RENEW_INTERVAL_SECONDS = 60
 _RESERVATION_RELEASE_ATTEMPTS = 3
 _T = TypeVar('_T')
+
+
+def _resume_lock(conversation_id: UUID) -> asyncio.Lock:
+    lock = _resume_locks.get(conversation_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _resume_locks[conversation_id] = lock
+    return lock
 
 
 def _resolve_credential_binding_url(
@@ -412,28 +422,46 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def resume_app_conversation(
         self, conversation_id: UUID
     ) -> AsyncGenerator[AppConversationStartTask, None]:
-        existing_info = (
-            await self.app_conversation_info_service.get_app_conversation_info(
-                conversation_id
+        async with _resume_lock(conversation_id):
+            existing_info = (
+                await self.app_conversation_info_service.get_app_conversation_info(
+                    conversation_id
+                )
             )
-        )
-        if existing_info is None:
-            raise AppConversationNotFound(conversation_id)
-        request = AppConversationStartRequest(
-            conversation_id=conversation_id,
-            sandbox_id=existing_info.sandbox_id,
-            selected_repository=existing_info.selected_repository,
-            selected_branch=existing_info.selected_branch,
-            git_provider=existing_info.git_provider,
-            trigger=existing_info.trigger,
-            llm_model=existing_info.llm_model,
-        )
-        user_id = await self.user_context.get_user_id()
+            if existing_info is None:
+                raise AppConversationNotFound(conversation_id)
+            request = AppConversationStartRequest(
+                conversation_id=conversation_id,
+                sandbox_id=existing_info.sandbox_id,
+                selected_repository=existing_info.selected_repository,
+                selected_branch=existing_info.selected_branch,
+                git_provider=existing_info.git_provider,
+                trigger=existing_info.trigger,
+                llm_model=existing_info.llm_model,
+            )
+            user_id = await self.user_context.get_user_id()
+            (
+                task,
+                claimed,
+            ) = await self.app_conversation_start_task_service.claim_app_conversation_start_task(
+                AppConversationStartTask(
+                    created_by_user_id=user_id,
+                    request=request,
+                    app_conversation_id=existing_info.id,
+                ),
+                datetime.now(UTC)
+                - timedelta(seconds=max(self.sandbox_startup_timeout * 2, 300)),
+            )
+        yield task
+        if not claimed:
+            return
         async with aclosing(
             self._resume_app_conversation(
                 request,
                 existing_info,
                 user_id,
+                task=task,
+                yield_initial=False,
             )
         ) as stream:
             async for task in stream:
@@ -575,6 +603,29 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             task.agent_server_url = agent_server_url
             yield task
 
+            api_codex_auth = bool(
+                request.secrets and CODEX_AUTH_SECRET_NAME in request.secrets
+            )
+            managed_codex_candidate = (
+                self._managed_codex_credential_source(
+                    start_conversation_request,
+                    api_codex_auth=api_codex_auth,
+                )
+                is not None
+            )
+            reservation_tags = (
+                {CODEX_CREDENTIAL_BINDING_TAG_KEY: (CODEX_CREDENTIAL_BINDING_TAG_VALUE)}
+                if managed_codex_candidate
+                else None
+            )
+            if not (
+                await self.app_conversation_info_service.mark_app_conversation_id_reservation(
+                    conversation_id,
+                    sandbox.id,
+                    reservation_tags,
+                )
+            ):
+                raise SandboxError('Conversation ID reservation was lost')
             (
                 start_conversation_request,
                 managed_codex_credential,
@@ -584,10 +635,20 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 conversation_id,
                 agent_server_url,
                 start_task_id=task.id,
-                api_codex_auth=bool(
-                    request.secrets and CODEX_AUTH_SECRET_NAME in request.secrets
-                ),
+                api_codex_auth=api_codex_auth,
             )
+            if (
+                managed_codex_candidate
+                and not managed_codex_credential
+                and not (
+                    await self.app_conversation_info_service.mark_app_conversation_id_reservation(
+                        conversation_id,
+                        sandbox.id,
+                        {CODEX_CREDENTIAL_BINDING_TAG_KEY: '0'},
+                    )
+                )
+            ):
+                raise SandboxError('Conversation ID reservation was lost')
 
             # Explicit exposure preserves LookupSecret auth headers on this trusted hop.
             body_json = start_conversation_request.model_dump(
@@ -964,14 +1025,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         request: AppConversationStartRequest,
         existing_info: AppConversationInfo,
         user_id: str | None,
+        task: AppConversationStartTask | None = None,
+        yield_initial: bool = True,
     ) -> AsyncGenerator[AppConversationStartTask, None]:
-        task = AppConversationStartTask(
+        task = task or AppConversationStartTask(
             created_by_user_id=user_id,
             request=request,
             app_conversation_id=existing_info.id,
         )
         try:
-            yield task
+            if yield_initial:
+                yield task
             sandbox_id = request.sandbox_id
             assert sandbox_id is not None
             managed_conversations = await self._get_managed_credential_conversations(
@@ -2809,21 +2873,17 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             _logger.warning(f'Failed to load skills: {e}', exc_info=True)
             return request
 
-    async def _prepare_credential_bindings(
+    def _managed_codex_credential_source(
         self,
         request: StartConversationRequest,
-        sandbox: SandboxInfo,
-        conversation_id: UUID,
-        agent_server_url: str,
         *,
-        start_task_id: UUID,
         acp_server: str | None = None,
         api_codex_auth: bool,
-    ) -> tuple[StartConversationRequest, bool]:
+    ) -> StaticSecret | None:
         agent = request.agent
         request_secrets = getattr(request, 'secrets', None)
         if not isinstance(request_secrets, Mapping):
-            return request, False
+            return None
         source = request_secrets.get(CODEX_AUTH_SECRET_NAME)
         agent_context = getattr(agent, 'agent_context', None)
         agent_context_secrets = getattr(agent_context, 'secrets', None)
@@ -2843,9 +2903,27 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             or has_context_override
             or not isinstance(source, StaticSecret)
         ):
-            return request, False
+            return None
         value = source.get_value()
-        if not value or not is_valid_codex_auth(value):
+        return source if value and is_valid_codex_auth(value) else None
+
+    async def _prepare_credential_bindings(
+        self,
+        request: StartConversationRequest,
+        sandbox: SandboxInfo,
+        conversation_id: UUID,
+        agent_server_url: str,
+        *,
+        start_task_id: UUID,
+        acp_server: str | None = None,
+        api_codex_auth: bool,
+    ) -> tuple[StartConversationRequest, bool]:
+        source = self._managed_codex_credential_source(
+            request,
+            acp_server=acp_server,
+            api_codex_auth=api_codex_auth,
+        )
+        if source is None:
             return request, False
 
         activated = await self._activate_credential_binding(
@@ -2858,7 +2936,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not activated:
             return request, False
 
-        secrets = dict(request_secrets)
+        secrets = dict(request.secrets or {})
         secrets.pop(CODEX_AUTH_SECRET_NAME, None)
         return request.model_copy(update={'secrets': secrets}), True
 
@@ -3179,57 +3257,57 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> None:
         """Deliver queued messages in order."""
         conversation_id_str = str(conversation_id)
-        pending_messages = (
-            await self.pending_message_service.begin_message_delivery_cutover(
-                task_id,
-                conversation_id,
-            )
-        )
-        delivered_message_ids: list[str] = []
-        delivery_complete = False
-        delivery_error: Exception | None = None
-        try:
-            if before_delivery is not None:
-                await before_delivery()
-            for message in pending_messages:
-                try:
-                    response = await self.httpx_client.post(
-                        f'{agent_server_url}/api/conversations/'
-                        f'{conversation_id_str}/events',
-                        json={
-                            'role': message.role,
-                            'content': [item.model_dump() for item in message.content],
-                            'run': True,
-                        },
-                        headers=(
-                            {'X-Session-API-Key': session_api_key}
-                            if session_api_key
-                            else {}
-                        ),
-                        timeout=30.0,
-                    )
-                    response.raise_for_status()
-                    delivered_message_ids.append(message.id)
-                except Exception as exc:
-                    _logger.warning(
-                        'Failed to deliver pending message %s: %s',
-                        message.id,
-                        exc,
-                    )
-                    delivery_error = exc
-                    break
-            delivery_complete = delivery_error is None
-        finally:
-            finish_task = asyncio.create_task(
-                self.pending_message_service.finish_message_delivery_cutover(
+        if before_delivery is not None:
+            await before_delivery()
+        deleted_count = 0
+        ready = False
+        while not ready:
+            pending_messages = (
+                await self.pending_message_service.begin_message_delivery_cutover(
                     task_id,
-                    delivered_message_ids,
-                    delivery_complete,
+                    conversation_id,
                 )
             )
-            deleted_count = await self._wait_for_cleanup_task(finish_task)
-        if delivery_error is not None:
-            raise SandboxError('Failed to deliver pending messages') from delivery_error
+            processed_message_ids: list[str] = []
+            try:
+                for message in pending_messages:
+                    try:
+                        response = await self.httpx_client.post(
+                            f'{agent_server_url}/api/conversations/'
+                            f'{conversation_id_str}/events',
+                            json={
+                                'role': message.role,
+                                'content': [
+                                    item.model_dump() for item in message.content
+                                ],
+                                'run': True,
+                            },
+                            headers=(
+                                {'X-Session-API-Key': session_api_key}
+                                if session_api_key
+                                else {}
+                            ),
+                            timeout=30.0,
+                        )
+                        response.raise_for_status()
+                    except Exception as exc:
+                        _logger.warning(
+                            'Failed to deliver pending message %s: %s',
+                            message.id,
+                            exc,
+                        )
+                    processed_message_ids.append(message.id)
+            finally:
+                finish_task = asyncio.create_task(
+                    self.pending_message_service.finish_message_delivery_cutover(
+                        task_id,
+                        processed_message_ids,
+                    )
+                )
+                batch_deleted_count, ready = await self._wait_for_cleanup_task(
+                    finish_task
+                )
+                deleted_count += batch_deleted_count
         _logger.info(
             f'Finished processing pending messages for conversation {conversation_id_str}. '
             f'Deleted {deleted_count} messages.'
@@ -3486,17 +3564,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 sandbox = await self.sandbox_service.get_sandbox_for_authorization(
                     app_conversation.sandbox_id
                 )
-                if sandbox is None:
+                if sandbox is None or sandbox.status != SandboxStatus.RUNNING:
                     return
-                if sandbox.status == SandboxStatus.PAUSED or (
-                    sandbox.runtime_status
-                    and sandbox.runtime_status.lower() in ('paused', 'stopped')
-                ):
-                    return
-                if sandbox.status != SandboxStatus.RUNNING:
-                    raise SandboxError(
-                        'Managed sandbox status is not safe for deletion'
-                    )
                 session_api_key = sandbox.session_api_key
             else:
                 if app_conversation.sandbox_status != SandboxStatus.RUNNING:

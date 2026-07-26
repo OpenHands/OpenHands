@@ -15,6 +15,7 @@ from openhands.agent_server.models import TextContent
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartRequest,
     AppConversationStartTask,
+    AppConversationStartTaskPage,
     AppConversationStartTaskStatus,
 )
 from openhands.app_server.pending_messages.pending_message_models import (
@@ -85,6 +86,55 @@ class TestQueuePendingMessage:
         assert len(call_kwargs['content']) == 1
         assert isinstance(call_kwargs['content'][0], TextContent)
         assert call_kwargs['content'][0].text == 'Hello, world!'
+
+    async def test_ready_paused_conversation_is_queued(self):
+        conversation_id = uuid4()
+        task = AppConversationStartTask(
+            created_by_user_id='user',
+            request=AppConversationStartRequest(),
+            status=AppConversationStartTaskStatus.READY,
+            app_conversation_id=conversation_id,
+            sandbox_id='sandbox-1',
+            agent_server_url='http://agent-server',
+        )
+        direct = PendingMessageResponse(
+            id=str(uuid4()),
+            queued=False,
+            position=0,
+            conversation_id=str(conversation_id),
+        )
+        queued = PendingMessageResponse(
+            id=str(uuid4()),
+            queued=True,
+            position=1,
+        )
+        pending_service = _make_mock_service()
+        pending_service.add_message.side_effect = [direct, queued]
+        start_task_service = MagicMock()
+        start_task_service.search_app_conversation_start_tasks = AsyncMock(
+            return_value=AppConversationStartTaskPage(items=[task])
+        )
+        sandbox_service = MagicMock()
+        sandbox_service.get_sandbox = AsyncMock(
+            return_value=SimpleNamespace(status=SandboxStatus.PAUSED)
+        )
+        httpx_client = MagicMock()
+        httpx_client.post = AsyncMock()
+
+        response = await queue_pending_message(
+            conversation_id=str(conversation_id),
+            request=_make_mock_request(
+                {'content': [{'type': 'text', 'text': 'queued'}]}
+            ),
+            pending_service=pending_service,
+            start_task_service=start_task_service,
+            sandbox_service=sandbox_service,
+            httpx_client=httpx_client,
+        )
+
+        assert response == queued
+        assert pending_service.add_message.await_args_list[1].kwargs['queue_if_ready']
+        httpx_client.post.assert_not_awaited()
 
     async def test_uses_default_role_when_not_provided(self):
         """Test that 'user' role is used by default."""

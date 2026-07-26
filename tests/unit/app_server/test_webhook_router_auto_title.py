@@ -412,9 +412,9 @@ class TestOnConversationUpdateAutoTitle:
 
         original_save = app_conversation_info_service.save_app_conversation_info
 
-        async def tracking_save(info):
+        async def tracking_save(info, allow_reservation_handoff=False):
             operation_order.append('save_conversation')
-            return await original_save(info)
+            return await original_save(info, allow_reservation_handoff)
 
         async def mock_save_event_callback(callback):
             operation_order.append('save_callback')

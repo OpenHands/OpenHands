@@ -7,6 +7,7 @@ const state = vi.hoisted(() => ({
   isResuming: true,
   sandboxStatus: "RUNNING",
   providerProps: vi.fn(),
+  recoverCredentialBinding: vi.fn(),
 }));
 
 vi.mock("#/contexts/conversation-websocket-context", () => ({
@@ -34,7 +35,10 @@ vi.mock("#/hooks/query/use-sub-conversations", () => ({
 }));
 
 vi.mock("#/hooks/use-sandbox-recovery", () => ({
-  useSandboxRecovery: () => ({ isResuming: state.isResuming }),
+  useSandboxRecovery: () => ({
+    isResuming: state.isResuming,
+    recoverCredentialBinding: state.recoverCredentialBinding,
+  }),
 }));
 
 describe("WebSocketProviderWrapper", () => {
@@ -42,6 +46,7 @@ describe("WebSocketProviderWrapper", () => {
     state.isResuming = true;
     state.sandboxStatus = "RUNNING";
     state.providerProps.mockClear();
+    state.recoverCredentialBinding.mockClear();
   });
 
   it("withholds runtime credentials until resume completes", () => {
@@ -66,6 +71,7 @@ describe("WebSocketProviderWrapper", () => {
     expect(state.providerProps.mock.lastCall?.[0]).toMatchObject({
       conversationUrl: "http://agent-server/api/conversations/conversation-id",
       sessionApiKey: "session-key",
+      onCredentialBindingActivationRequired: state.recoverCredentialBinding,
     });
   });
 });

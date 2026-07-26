@@ -7,6 +7,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationStartTask,
     AppConversationStartTaskPage,
     AppConversationStartTaskSortOrder,
+    AppConversationStartTaskStatus,
 )
 from openhands.app_server.services.injector import Injector
 from openhands.sdk.utils.models import DiscriminatedUnionMixin
@@ -58,6 +59,32 @@ class AppConversationStartTaskService(ABC):
 
         Return the stored task
         """
+
+    async def claim_app_conversation_start_task(
+        self,
+        task: AppConversationStartTask,
+        active_since: datetime,
+    ) -> tuple[AppConversationStartTask, bool]:
+        page = await self.search_app_conversation_start_tasks(
+            conversation_id__eq=task.app_conversation_id,
+            created_at__gte=active_since,
+            limit=100,
+        )
+        existing = next(
+            (
+                item
+                for item in page.items
+                if item.status
+                not in (
+                    AppConversationStartTaskStatus.READY,
+                    AppConversationStartTaskStatus.ERROR,
+                )
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing, False
+        return await self.save_app_conversation_start_task(task), True
 
     @abstractmethod
     async def delete_app_conversation_start_tasks(self, conversation_id: UUID) -> bool:

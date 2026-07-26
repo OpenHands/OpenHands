@@ -166,13 +166,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
                 StoredConversationMetadata.sandbox_id == sandbox_id,
             )
         )
-        if self.user_context != ADMIN:
-            user_id_str = await self.user_context.get_user_id()
-            if not user_id_str:
-                raise AuthError('User authentication required')
-            query = query.where(
-                StoredConversationMetadataSaas.user_id == UUID(user_id_str)
-            )
+        query = await self._apply_user_and_org_filter(query)
         rows = (await self.db_session.execute(query)).all()
         refs = []
         for stored, saas in rows:
@@ -568,7 +562,9 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
         return True
 
     async def save_app_conversation_info(
-        self, info: AppConversationInfo
+        self,
+        info: AppConversationInfo,
+        allow_reservation_handoff: bool = False,
     ) -> AppConversationInfo:
         user_id_str = await self.user_context.get_user_id()
         if not user_id_str and info.created_by_user_id:
@@ -634,7 +630,7 @@ class SaasSQLAppConversationInfoService(SQLAppConversationInfoService):
             user_id = existing.user_id
             organization_id = existing.org_id
 
-        await self._merge_app_conversation_info(info)
+        await self._merge_app_conversation_info(info, allow_reservation_handoff)
         if (existing is None or existing.user_id is None) and user_id is not None:
             assert organization_id is not None
             self.db_session.add(

@@ -604,7 +604,6 @@ class TestSaasSQLAppConversationInfoService:
             for ref in refs
         } == {
             (org1_conversation.id, str(USER1_ID), ORG1_ID),
-            (org2_conversation.id, str(USER1_ID), ORG2_ID),
         }
 
     @pytest.mark.asyncio

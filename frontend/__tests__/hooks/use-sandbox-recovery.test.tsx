@@ -112,6 +112,28 @@ describe("useSandboxRecovery", () => {
       expect(mockMutate).not.toHaveBeenCalled();
     });
 
+    it("reactivates a RUNNING conversation after the binding guard closes", () => {
+      const { result } = renderHook(
+        () =>
+          useSandboxRecovery({
+            conversationId: "conv-123",
+            sandboxStatus: "RUNNING",
+          }),
+        { wrapper: createWrapper() },
+      );
+
+      act(() => {
+        result.current.recoverCredentialBinding();
+        result.current.recoverCredentialBinding();
+      });
+
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+      expect(mockMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: "conv-123" }),
+        expect.any(Object),
+      );
+    });
+
     it("should NOT call resumeSandbox when conversationId is undefined", () => {
       renderHook(
         () =>
@@ -622,15 +644,8 @@ describe("useSandboxRecovery", () => {
     });
   });
 
-  describe("WebSocket disconnect (negative test)", () => {
-    it("should NOT have any mechanism to auto-resume on WebSocket disconnect", () => {
-      // This test documents the intended behavior: the hook does NOT
-      // listen for WebSocket disconnects. Recovery only happens on:
-      // 1. Initial page load (STOPPED status)
-      // 2. Tab focus (visibilitychange event)
-      //
-      // There is intentionally NO onDisconnect handler or WebSocket listener.
-
+  describe("WebSocket disconnect", () => {
+    it("does not resume RUNNING without an activation signal", () => {
       const { result } = renderHook(
         () =>
           useSandboxRecovery({
@@ -640,12 +655,11 @@ describe("useSandboxRecovery", () => {
         { wrapper: createWrapper() },
       );
 
-      // The hook should only expose isResuming - no disconnect-related functionality
       expect(result.current).toEqual({
         isResuming: expect.any(Boolean),
+        recoverCredentialBinding: expect.any(Function),
       });
 
-      // No calls should have been made for RUNNING status
       expect(mockMutate).not.toHaveBeenCalled();
     });
   });

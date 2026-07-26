@@ -336,3 +336,76 @@ class TestPausedSandboxResumption:
             user_context.resolver_org_id
             == slack_update_conversation_view_v1.slack_conversation.org_id
         )
+
+    @patch('integrations.slack.slack_view.get_app_conversation_service')
+    @patch('openhands.app_server.config.get_sandbox_service')
+    @patch('openhands.app_server.config.get_app_conversation_info_service')
+    @patch('openhands.app_server.config.get_httpx_client')
+    @patch('openhands.app_server.event_callback.util.get_agent_server_url_from_sandbox')
+    @patch.object(
+        SlackUpdateExistingConversationView, '_get_instructions', new_callable=AsyncMock
+    )
+    async def test_running_binding_guard_resumes_and_retries(
+        self,
+        mock_get_instructions,
+        mock_get_agent_server_url,
+        mock_get_httpx_client,
+        mock_get_app_info_service,
+        mock_get_sandbox_service,
+        mock_get_app_conversation_service,
+        slack_update_conversation_view_v1,
+        mock_jinja_env,
+    ):
+        mock_get_instructions.return_value = ('User message', '')
+        app_info_service = AsyncMock()
+        app_info_service.get_app_conversation_info.return_value = MagicMock(
+            sandbox_id='sandbox-123'
+        )
+        mock_get_app_info_service.return_value.__aenter__.return_value = (
+            app_info_service
+        )
+
+        running_sandbox = MagicMock(
+            status=SandboxStatus.RUNNING,
+            session_api_key='test-api-key',
+        )
+        sandbox_service = AsyncMock()
+        sandbox_service.get_sandbox.return_value = running_sandbox
+        sandbox_service.wait_for_sandbox_running.return_value = running_sandbox
+        mock_get_sandbox_service.return_value.__aenter__.return_value = sandbox_service
+        mock_get_agent_server_url.return_value = 'http://localhost:8000'
+
+        app_conversation_service = MagicMock()
+
+        async def resume_app_conversation(_conversation_id):
+            yield MagicMock(
+                status=AppConversationStartTaskStatus.READY,
+                detail=None,
+            )
+
+        app_conversation_service.resume_app_conversation = MagicMock(
+            side_effect=resume_app_conversation
+        )
+        mock_get_app_conversation_service.return_value.__aenter__.return_value = (
+            app_conversation_service
+        )
+
+        activation_required = MagicMock(status_code=409)
+        activation_required.json.return_value = {
+            'detail': 'credential_binding_activation_required'
+        }
+        delivered = MagicMock(status_code=200)
+        httpx_client = AsyncMock()
+        httpx_client.post.side_effect = [activation_required, delivered]
+        mock_get_httpx_client.return_value.__aenter__.return_value = httpx_client
+
+        await slack_update_conversation_view_v1.send_message_to_v1_conversation(
+            mock_jinja_env
+        )
+
+        app_conversation_service.resume_app_conversation.assert_called_once_with(
+            UUID(slack_update_conversation_view_v1.conversation_id)
+        )
+        assert sandbox_service.wait_for_sandbox_running.await_count == 2
+        assert httpx_client.post.await_count == 2
+        delivered.raise_for_status.assert_called_once()

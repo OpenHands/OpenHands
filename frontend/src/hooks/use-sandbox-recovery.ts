@@ -48,6 +48,7 @@ export function useSandboxRecovery({
   const { t } = useTranslation();
   const { providers } = useUserProviders();
   const [recoveryFailed, setRecoveryFailed] = React.useState(false);
+  const recoveryInFlightRef = React.useRef(false);
   const { mutate: resumeSandbox, isPending: isResuming } =
     useUnifiedResumeConversationSandbox();
 
@@ -55,23 +56,28 @@ export function useSandboxRecovery({
   const processedConversationIdRef = React.useRef<string | null>(null);
 
   const attemptRecovery = React.useCallback(
-    (statusOverride?: V1SandboxStatus) => {
+    (statusOverride?: V1SandboxStatus, allowRunning = false) => {
       const status = statusOverride ?? sandboxStatus;
       if (
         !conversationId ||
-        (status !== "PAUSED" && !(status === "RUNNING" && recoveryFailed)) ||
-        isResuming
+        (status !== "PAUSED" &&
+          !(status === "RUNNING" && (recoveryFailed || allowRunning))) ||
+        isResuming ||
+        recoveryInFlightRef.current
       ) {
         return;
       }
+      recoveryInFlightRef.current = true;
       resumeSandbox(
         { conversationId, providers },
         {
           onSuccess: () => {
+            recoveryInFlightRef.current = false;
             setRecoveryFailed(false);
             onSuccess?.();
           },
           onError: (error) => {
+            recoveryInFlightRef.current = false;
             setRecoveryFailed(true);
             displayErrorToast(
               t(I18nKey.CONVERSATION$FAILED_TO_START_WITH_ERROR, {
@@ -98,6 +104,7 @@ export function useSandboxRecovery({
 
   // Handle page refresh (initial load) and conversation navigation
   React.useEffect(() => {
+    recoveryInFlightRef.current = false;
     setRecoveryFailed(false);
   }, [conversationId]);
 
@@ -138,5 +145,9 @@ export function useSandboxRecovery({
     onVisible: handleVisible,
   });
 
-  return { isResuming };
+  const recoverCredentialBinding = React.useCallback(() => {
+    attemptRecovery("RUNNING", true);
+  }, [attemptRecovery]);
+
+  return { isResuming, recoverCredentialBinding };
 }

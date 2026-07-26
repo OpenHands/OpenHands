@@ -55,6 +55,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfoPage,
     AppConversationSortOrder,
     ConversationTrigger,
+    has_managed_codex_credential,
 )
 from openhands.app_server.integrations.provider import ProviderType
 from openhands.app_server.services.injector import InjectorState
@@ -553,6 +554,64 @@ class SQLAppConversationInfoService(AppConversationInfoService):
             await session.commit()
             return True
 
+    async def mark_app_conversation_id_reservation(
+        self,
+        conversation_id: UUID,
+        sandbox_id: str,
+        tags: dict[str, str] | None = None,
+    ) -> bool:
+        token = self._reservation_tokens.get(conversation_id)
+        if token is None:
+            return False
+        existing = (
+            await self.db_session.execute(
+                select(
+                    StoredConversationMetadata.conversation_version,
+                    StoredConversationMetadata.tags,
+                )
+                .where(
+                    StoredConversationMetadata.conversation_id == str(conversation_id)
+                )
+                .with_for_update(of=StoredConversationMetadata)
+            )
+        ).first()
+        if (
+            existing is None
+            or existing.conversation_version != APP_CONVERSATION_RESERVATION_VERSION
+            or (existing.tags or {}).get(APP_CONVERSATION_RESERVATION_TOKEN_KEY)
+            != token
+        ):
+            await self.db_session.rollback()
+            return False
+        merged_tags = {**(existing.tags or {}), **(tags or {})}
+        merged_tags[APP_CONVERSATION_RESERVATION_TOKEN_KEY] = token
+        await self.db_session.execute(
+            update(StoredConversationMetadata)
+            .where(StoredConversationMetadata.conversation_id == str(conversation_id))
+            .values(
+                sandbox_id=sandbox_id,
+                tags=merged_tags,
+                last_updated_at=utc_now(),
+            )
+        )
+        await self.db_session.commit()
+        return True
+
+    async def has_managed_credential_conversation_for_sandbox(
+        self, sandbox_id: str
+    ) -> bool:
+        rows = (
+            await self.db_session.execute(
+                select(StoredConversationMetadata.tags).where(
+                    StoredConversationMetadata.sandbox_id == sandbox_id,
+                    StoredConversationMetadata.conversation_version.in_(
+                        ('V1', APP_CONVERSATION_RESERVATION_VERSION)
+                    ),
+                )
+            )
+        ).scalars()
+        return any(has_managed_codex_credential(tags or {}) for tags in rows)
+
     async def batch_get_app_conversation_info(
         self, conversation_ids: list[UUID]
     ) -> list[AppConversationInfo | None]:
@@ -581,7 +640,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
 
         return results
 
-    async def _merge_app_conversation_info(self, info: AppConversationInfo) -> None:
+    async def _merge_app_conversation_info(
+        self,
+        info: AppConversationInfo,
+        allow_reservation_handoff: bool = False,
+    ) -> None:
         metrics = info.metrics or MetricsSnapshot()
         usage = metrics.accumulated_token_usage or TokenUsage()
 
@@ -605,6 +668,7 @@ class SQLAppConversationInfoService(AppConversationInfoService):
                     StoredConversationMetadata.created_at,
                     StoredConversationMetadata.conversation_version,
                     StoredConversationMetadata.tags,
+                    StoredConversationMetadata.sandbox_id,
                 )
                 .where(StoredConversationMetadata.conversation_id == str(info.id))
                 .with_for_update(of=StoredConversationMetadata)
@@ -613,12 +677,29 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         if existing is not None:
             if existing.conversation_version == APP_CONVERSATION_RESERVATION_VERSION:
                 token = self._reservation_tokens.get(info.id)
-                if (
-                    token is None
-                    or (existing.tags or {}).get(APP_CONVERSATION_RESERVATION_TOKEN_KEY)
-                    != token
-                ):
+                owns_reservation = (
+                    token is not None
+                    and (existing.tags or {}).get(
+                        APP_CONVERSATION_RESERVATION_TOKEN_KEY
+                    )
+                    == token
+                )
+                accepts_handoff = (
+                    allow_reservation_handoff
+                    and info.sandbox_id is not None
+                    and existing.sandbox_id == info.sandbox_id
+                )
+                if not owns_reservation and not accepts_handoff:
                     raise ValueError('Conversation reservation is not owned')
+                if accepts_handoff:
+                    reservation_tags = {
+                        key: value
+                        for key, value in (existing.tags or {}).items()
+                        if key != APP_CONVERSATION_RESERVATION_TOKEN_KEY
+                    }
+                    info = info.model_copy(
+                        update={'tags': {**(info.tags or {}), **reservation_tags}}
+                    )
             if existing.created_at is not None:
                 created_at = existing.created_at
 
@@ -658,9 +739,11 @@ class SQLAppConversationInfoService(AppConversationInfoService):
         await self.db_session.merge(stored)
 
     async def save_app_conversation_info(
-        self, info: AppConversationInfo
+        self,
+        info: AppConversationInfo,
+        allow_reservation_handoff: bool = False,
     ) -> AppConversationInfo:
-        await self._merge_app_conversation_info(info)
+        await self._merge_app_conversation_info(info, allow_reservation_handoff)
         await self.db_session.commit()
         return info
 

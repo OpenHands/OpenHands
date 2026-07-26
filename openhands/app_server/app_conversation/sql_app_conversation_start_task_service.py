@@ -289,6 +289,54 @@ class SQLAppConversationStartTaskService(AppConversationStartTaskService):
         await self.session.commit()
         return task
 
+    async def claim_app_conversation_start_task(
+        self,
+        task: AppConversationStartTask,
+        active_since: datetime,
+    ) -> tuple[AppConversationStartTask, bool]:
+        assert task.app_conversation_id is not None
+        await lock_app_conversation(self.session, task.app_conversation_id)
+        query = (
+            select(StoredAppConversationStartTask)
+            .where(
+                StoredAppConversationStartTask.app_conversation_id
+                == task.app_conversation_id,
+                StoredAppConversationStartTask.status.not_in(
+                    (
+                        AppConversationStartTaskStatus.READY,
+                        AppConversationStartTaskStatus.ERROR,
+                    )
+                ),
+                func.coalesce(
+                    StoredAppConversationStartTask.updated_at,
+                    StoredAppConversationStartTask.created_at,
+                )
+                >= active_since,
+            )
+            .order_by(
+                StoredAppConversationStartTask.created_at.desc(),
+                StoredAppConversationStartTask.id.desc(),
+            )
+            .limit(1)
+        )
+        if self.user_id:
+            query = query.where(
+                StoredAppConversationStartTask.created_by_user_id == self.user_id
+            )
+        existing = (
+            await self.session.execute(query.execution_options(populate_existing=True))
+        ).scalar_one_or_none()
+        if existing is not None:
+            await self.session.commit()
+            return (
+                AppConversationStartTask.model_validate(row2dict(existing)),
+                False,
+            )
+        task.updated_at = utc_now()
+        self.session.add(StoredAppConversationStartTask(**task.model_dump()))
+        await self.session.commit()
+        return task, True
+
     async def delete_app_conversation_start_tasks(self, conversation_id: UUID) -> bool:
         """Delete all start tasks associated with a conversation.
 

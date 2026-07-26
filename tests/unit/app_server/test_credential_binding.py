@@ -315,6 +315,28 @@ async def test_active_binding_clauses_are_accepted(
     await credential_binding._validate_active_binding(_scope())
 
 
+@pytest.mark.asyncio
+async def test_failed_newer_generation_does_not_revoke_ready_binding(
+    active_binding_services,
+):
+    conversation_service, start_task_service, sandbox_service = active_binding_services
+    start_task_service.search_app_conversation_start_tasks.return_value = (
+        AppConversationStartTaskPage(
+            items=[
+                _start_task(
+                    task_id=_OTHER_ID,
+                    status=AppConversationStartTaskStatus.ERROR,
+                ),
+                _start_task(),
+            ]
+        )
+    )
+    sandbox_service.get_sandbox_for_authorization.return_value = _sandbox()
+    conversation_service.get_app_conversation_info.return_value = _conversation()
+
+    await credential_binding._validate_active_binding(_scope())
+
+
 def test_endpoint_enforces_active_binding(
     monkeypatch,
     jwt_service,

@@ -14,12 +14,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from openhands.app_server.app_conversation.app_conversation_models import (
-    CODEX_CREDENTIAL_BINDING_TAG_KEY,
-    CODEX_CREDENTIAL_BINDING_TAG_VALUE,
-    AppConversationInfo,
-    AppConversationInfoPage,
-)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     SandboxInfo,
@@ -106,26 +100,11 @@ def mock_sandbox_service():
 
 
 @pytest.mark.asyncio
-async def test_pause_barrier_requirement_uses_admin_metadata_and_all_pages(
+async def test_pause_barrier_requirement_uses_admin_metadata(
     mock_sandbox_service, monkeypatch
 ):
     conversation_service = AsyncMock()
-    conversation_service.search_app_conversation_info.side_effect = [
-        AppConversationInfoPage(items=[], next_page_id='next'),
-        AppConversationInfoPage(
-            items=[
-                AppConversationInfo(
-                    created_by_user_id='user',
-                    sandbox_id='sandbox',
-                    tags={
-                        CODEX_CREDENTIAL_BINDING_TAG_KEY: (
-                            CODEX_CREDENTIAL_BINDING_TAG_VALUE
-                        )
-                    },
-                )
-            ]
-        ),
-    ]
+    conversation_service.has_managed_credential_conversation_for_sandbox.return_value = True
     states = []
 
     @asynccontextmanager
@@ -142,12 +121,8 @@ async def test_pause_barrier_requirement_uses_admin_metadata_and_all_pages(
 
     assert result is True
     assert getattr(states[0], USER_CONTEXT_ATTR) == ADMIN
-    assert conversation_service.search_app_conversation_info.await_count == 2
-    assert (
-        conversation_service.search_app_conversation_info.await_args_list[1].kwargs[
-            'page_id'
-        ]
-        == 'next'
+    conversation_service.has_managed_credential_conversation_for_sandbox.assert_awaited_once_with(
+        'sandbox'
     )
 
 

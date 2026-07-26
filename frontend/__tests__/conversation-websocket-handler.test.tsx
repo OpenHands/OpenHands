@@ -42,6 +42,7 @@ import { conversationWebSocketTestSetup } from "./helpers/msw-websocket-setup";
 import { useEventStore } from "#/stores/use-event-store";
 import { isV1Event } from "#/types/v1/type-guards";
 import { useSelectedOrganizationStore } from "#/stores/selected-organization-store";
+import PendingMessageService from "#/api/pending-message-service/pending-message-service.api";
 
 // Mock useUserConversation to return V1 conversation data
 vi.mock("#/hooks/query/use-user-conversation", () => ({
@@ -92,8 +93,12 @@ afterAll(async () => {
 function renderWithWebSocketContext(
   children: React.ReactNode,
   conversationId = "test-conversation-default",
-  conversationUrl = "http://localhost:3000/api/conversations/test-conversation-default",
+  conversationUrl:
+    | string
+    | null
+    | undefined = "http://localhost:3000/api/conversations/test-conversation-default",
   sessionApiKey: string | null = null,
+  onCredentialBindingActivationRequired?: () => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -111,8 +116,11 @@ function renderWithWebSocketContext(
             element={
               <ConversationWebSocketProvider
                 conversationId={conversationId}
-                conversationUrl={conversationUrl}
+                conversationUrl={conversationUrl ?? undefined}
                 sessionApiKey={sessionApiKey}
+                onCredentialBindingActivationRequired={
+                  onCredentialBindingActivationRequired
+                }
               >
                 {children}
               </ConversationWebSocketProvider>
@@ -879,6 +887,28 @@ describe("Conversation WebSocket Handler", () => {
     it.todo(
       "should handle WebSocket close codes appropriately (1000, 1006, etc.)",
     );
+
+    it("reactivates credentials after an activation-required close", async () => {
+      const recoverCredentialBinding = vi.fn();
+      mswServer.use(
+        wsLink.addEventListener("connection", ({ client, server }) => {
+          server.connect();
+          client.close(1013, "credential_binding_activation_required");
+        }),
+      );
+
+      renderWithWebSocketContext(
+        <ConnectionStatusComponent />,
+        "binding-guard-conversation",
+        "http://localhost:3000/api/conversations/binding-guard-conversation",
+        null,
+        recoverCredentialBinding,
+      );
+
+      await waitFor(() => {
+        expect(recoverCredentialBinding).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   // 6. Connection State Validation Tests
@@ -891,6 +921,55 @@ describe("Conversation WebSocket Handler", () => {
 
   // 7. Message Sending Tests
   describe("Message Sending", () => {
+    it("queues a disconnected UUID conversation through the pending API", async () => {
+      const queueMessage = vi
+        .spyOn(PendingMessageService, "queueMessage")
+        .mockResolvedValue({
+          id: "pending-message",
+          queued: true,
+          position: 1,
+        });
+      let sendMessageFn:
+        | NonNullable<
+            ReturnType<typeof useConversationWebSocket>
+          >["sendMessage"]
+        | undefined;
+
+      function TestComponent() {
+        const context = useConversationWebSocket();
+        React.useEffect(() => {
+          if (context?.sendMessage) {
+            sendMessageFn = context.sendMessage;
+          }
+        }, [context?.sendMessage]);
+        return null;
+      }
+
+      renderWithWebSocketContext(
+        <TestComponent />,
+        "12345678-1234-5678-1234-567812345678",
+        null,
+      );
+
+      await waitFor(() => {
+        expect(sendMessageFn).toBeDefined();
+      });
+      await act(async () => {
+        await sendMessageFn!({
+          role: "user",
+          content: [{ type: "text", text: "queued" }],
+        });
+      });
+
+      expect(queueMessage).toHaveBeenCalledWith(
+        "12345678-1234-5678-1234-567812345678",
+        {
+          role: "user",
+          content: [{ type: "text", text: "queued" }],
+        },
+      );
+    });
+
     it("should send user actions through WebSocket when connected", async () => {
       // Arrange
       const conversationId = "test-conversation-send";

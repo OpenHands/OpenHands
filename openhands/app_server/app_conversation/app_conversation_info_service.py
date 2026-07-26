@@ -82,6 +82,14 @@ class AppConversationInfoService(ABC):
     ) -> bool:
         return True
 
+    async def mark_app_conversation_id_reservation(
+        self,
+        conversation_id: UUID,
+        sandbox_id: str,
+        tags: dict[str, str] | None = None,
+    ) -> bool:
+        return True
+
     async def get_managed_credential_conversations_for_sandbox(
         self, sandbox_id: str
     ) -> list[ManagedCredentialConversationRef]:
@@ -106,6 +114,13 @@ class AppConversationInfoService(ABC):
             if page.next_page_id is None:
                 return refs
             page_id = page.next_page_id
+
+    async def has_managed_credential_conversation_for_sandbox(
+        self, sandbox_id: str
+    ) -> bool:
+        return bool(
+            await self.get_managed_credential_conversations_for_sandbox(sandbox_id)
+        )
 
     async def batch_get_app_conversation_info(
         self, conversation_ids: list[UUID]
@@ -153,7 +168,9 @@ class AppConversationInfoService(ABC):
 
     @abstractmethod
     async def save_app_conversation_info(
-        self, info: AppConversationInfo
+        self,
+        info: AppConversationInfo,
+        allow_reservation_handoff: bool = False,
     ) -> AppConversationInfo:
         """Store the sandboxed conversation info object given.
 

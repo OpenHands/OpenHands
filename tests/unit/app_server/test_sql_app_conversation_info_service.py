@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from openhands.app_server.app_conversation.app_conversation_models import (
+    CODEX_CREDENTIAL_BINDING_TAG_KEY,
+    CODEX_CREDENTIAL_BINDING_TAG_VALUE,
     AppConversationInfo,
     AppConversationSortOrder,
     ConversationTrigger,
@@ -271,6 +273,68 @@ class TestSQLAppConversationInfoService:
         assert stored is not None
         assert stored.created_at == created_at
         assert stored.last_updated_at != stale_updated_at
+
+    @pytest.mark.asyncio
+    async def test_webhook_handoff_preserves_managed_reservation(
+        self,
+        service: SQLAppConversationInfoService,
+        async_session: AsyncSession,
+    ):
+        conversation_id = uuid4()
+        assert await service.try_reserve_app_conversation_id(conversation_id)
+        assert await service.mark_app_conversation_id_reservation(
+            conversation_id,
+            'sandbox-1',
+            {CODEX_CREDENTIAL_BINDING_TAG_KEY: (CODEX_CREDENTIAL_BINDING_TAG_VALUE)},
+        )
+        assert await service.has_managed_credential_conversation_for_sandbox(
+            'sandbox-1'
+        )
+
+        webhook_service = SQLAppConversationInfoService(
+            db_session=async_session,
+            user_context=SpecifyUserContext(user_id=None),
+        )
+        await webhook_service.save_app_conversation_info(
+            AppConversationInfo(
+                id=conversation_id,
+                created_by_user_id=None,
+                sandbox_id='sandbox-1',
+            ),
+            allow_reservation_handoff=True,
+        )
+
+        stored = await webhook_service.get_app_conversation_info(conversation_id)
+        assert stored is not None
+        assert stored.tags[CODEX_CREDENTIAL_BINDING_TAG_KEY] == (
+            CODEX_CREDENTIAL_BINDING_TAG_VALUE
+        )
+
+    @pytest.mark.asyncio
+    async def test_webhook_handoff_rejects_another_sandbox(
+        self,
+        service: SQLAppConversationInfoService,
+    ):
+        conversation_id = uuid4()
+        assert await service.try_reserve_app_conversation_id(conversation_id)
+        assert await service.mark_app_conversation_id_reservation(
+            conversation_id,
+            'sandbox-1',
+        )
+        other_service = SQLAppConversationInfoService(
+            db_session=service.db_session,
+            user_context=SpecifyUserContext(user_id=None),
+        )
+
+        with pytest.raises(ValueError, match='reservation is not owned'):
+            await other_service.save_app_conversation_info(
+                AppConversationInfo(
+                    id=conversation_id,
+                    created_by_user_id=None,
+                    sandbox_id='sandbox-2',
+                ),
+                allow_reservation_handoff=True,
+            )
 
     @pytest.mark.asyncio
     async def test_round_trip_with_all_fields(

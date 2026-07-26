@@ -96,14 +96,16 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
             except ValueError as exc:
                 raise AuthError('Invalid conversation task ID') from exc
             task_result = await self.db_session.execute(
-                select(StoredAppConversationStartTask.app_conversation_id).where(
+                select(StoredAppConversationStartTask).where(
                     StoredAppConversationStartTask.id == task_id
                 )
             )
-            app_conversation_id = task_result.scalar_one_or_none()
-            if app_conversation_id is None:
+            task = task_result.scalar_one_or_none()
+            if task is None or task.created_by_user_id != user_id_str:
                 raise AuthError('Conversation task is not available')
-            conversation_id = str(app_conversation_id)
+            if task.app_conversation_id is None:
+                return
+            conversation_id = str(task.app_conversation_id)
         else:
             try:
                 conversation_id = str(UUID(conversation_id))
@@ -137,22 +139,15 @@ class SaasSQLPendingMessageService(SQLPendingMessageService):
         conversation_id: str,
         content: list[TextContent | ImageContent],
         role: str = 'user',
+        queue_if_ready: bool = False,
     ) -> PendingMessageResponse:
-        """Queue a message with ownership validation.
-
-        Args:
-            conversation_id: The conversation ID to queue the message for
-            content: Message content
-            role: Message role (default: 'user')
-
-        Returns:
-            PendingMessageResponse with the queued message info
-
-        Raises:
-            AuthError: If user doesn't own the conversation
-        """
         await self._validate_conversation_ownership(conversation_id)
-        return await super().add_message(conversation_id, content, role)
+        return await super().add_message(
+            conversation_id,
+            content,
+            role,
+            queue_if_ready,
+        )
 
     async def get_pending_messages(self, conversation_id: str):
         """Get pending messages with ownership validation.

@@ -453,7 +453,8 @@ async def on_conversation_update(
         tags=merged_tags,
     )
     await app_conversation_info_service.save_app_conversation_info(
-        app_conversation_info
+        app_conversation_info,
+        allow_reservation_handoff=True,
     )
 
     # Register SetTitleCallbackProcessor for new conversations created via webhook.

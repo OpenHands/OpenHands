@@ -5,9 +5,6 @@ from abc import ABC, abstractmethod
 
 import httpx
 
-from openhands.app_server.app_conversation.app_conversation_models import (
-    has_managed_codex_credential,
-)
 from openhands.app_server.errors import SandboxError
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
@@ -348,19 +345,9 @@ class SandboxService(ABC):
         state = InjectorState()
         setattr(state, USER_CONTEXT_ATTR, ADMIN)
         async with get_app_conversation_info_service(state) as service:
-            page_id = None
-            while True:
-                page = await service.search_app_conversation_info(
-                    sandbox_id__eq=sandbox_id,
-                    page_id=page_id,
-                    limit=100,
-                    include_sub_conversations=True,
-                )
-                if any(has_managed_codex_credential(info.tags) for info in page.items):
-                    return True
-                if page.next_page_id is None:
-                    return False
-                page_id = page.next_page_id
+            return await service.has_managed_credential_conversation_for_sandbox(
+                sandbox_id
+            )
 
     @abstractmethod
     async def pause_sandbox(self, sandbox_id: str) -> bool:

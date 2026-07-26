@@ -307,11 +307,24 @@ class TestLiveStatusAppConversationService:
         self.mock_app_conversation_info_service.renew_app_conversation_id_reservation = AsyncMock(
             return_value=True
         )
+        self.mock_app_conversation_info_service.mark_app_conversation_id_reservation = (
+            AsyncMock(return_value=True)
+        )
         self.mock_app_conversation_start_task_service = Mock()
         self.mock_app_conversation_start_task_service.get_app_conversation_start_task = AsyncMock(
             return_value=None
         )
         self.mock_app_conversation_start_task_service.save_app_conversation_start_task = AsyncMock()
+
+        async def claim_start_task(task, _active_since):
+            await self.mock_app_conversation_start_task_service.save_app_conversation_start_task(
+                task
+            )
+            return task, True
+
+        self.mock_app_conversation_start_task_service.claim_app_conversation_start_task = AsyncMock(
+            side_effect=claim_start_task
+        )
         self.mock_event_callback_service = Mock()
         self.mock_event_callback_service.delete_event_callbacks_for_conversation = (
             AsyncMock(return_value=0)
@@ -323,7 +336,7 @@ class TestLiveStatusAppConversationService:
             return_value=[]
         )
         self.mock_pending_message_service.finish_message_delivery_cutover = AsyncMock(
-            return_value=0
+            return_value=(0, True)
         )
 
         # Create service instance
@@ -2622,6 +2635,43 @@ class TestLiveStatusAppConversationService:
         await stream.aclose()
 
     @pytest.mark.asyncio
+    async def test_concurrent_resume_calls_share_task(self):
+        conversation_id = uuid4()
+        existing = AppConversationInfo(
+            id=conversation_id,
+            created_by_user_id='test_user_123',
+            sandbox_id='sandbox-1',
+        )
+        self.mock_user_context.get_user_id = AsyncMock(return_value='test_user_123')
+        self.mock_app_conversation_info_service.get_app_conversation_info = AsyncMock(
+            return_value=existing
+        )
+        active_task = None
+
+        async def claim(task, _active_since):
+            nonlocal active_task
+            observed_task = active_task
+            await asyncio.sleep(0)
+            if observed_task is not None:
+                return observed_task, False
+            active_task = task
+            return task, True
+
+        self.mock_app_conversation_start_task_service.claim_app_conversation_start_task = AsyncMock(
+            side_effect=claim
+        )
+        first_stream = self.service.resume_app_conversation(conversation_id)
+        second_stream = self.service.resume_app_conversation(conversation_id)
+
+        first_task, second_task = await asyncio.gather(
+            anext(first_stream),
+            anext(second_stream),
+        )
+
+        assert first_task.id == second_task.id
+        await asyncio.gather(first_stream.aclose(), second_stream.aclose())
+
+    @pytest.mark.asyncio
     async def test_closing_resume_marks_generation_error(self):
         conversation_id = uuid4()
         existing = AppConversationInfo(
@@ -2717,7 +2767,7 @@ class TestLiveStatusAppConversationService:
             return_value=[]
         )
         self.mock_pending_message_service.finish_message_delivery_cutover = AsyncMock(
-            return_value=0
+            return_value=(0, True)
         )
         saved_tasks = []
 
@@ -2802,7 +2852,16 @@ class TestLiveStatusAppConversationService:
         self.service._delete_from_database.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_managed_delete_rejects_transitional_sandbox(self):
+    @pytest.mark.parametrize(
+        'sandbox_status',
+        [
+            SandboxStatus.STARTING,
+            SandboxStatus.PAUSED,
+            SandboxStatus.ERROR,
+            SandboxStatus.MISSING,
+        ],
+    )
+    async def test_managed_delete_skips_nonrunning_sandbox(self, sandbox_status):
         conversation = AppConversation(
             id=uuid4(),
             created_by_user_id='test_user_123',
@@ -2816,16 +2875,15 @@ class TestLiveStatusAppConversationService:
                 id='sandbox-1',
                 created_by_user_id='test_user_123',
                 sandbox_spec_id='spec',
-                status=SandboxStatus.STARTING,
+                status=sandbox_status,
                 session_api_key=None,
             )
         )
 
-        with pytest.raises(SandboxError):
-            await self.service._delete_from_agent_server(
-                conversation,
-                require_credential_flush=True,
-            )
+        await self.service._delete_from_agent_server(
+            conversation,
+            require_credential_flush=True,
+        )
 
         self.mock_httpx_client.delete.assert_not_called()
 
@@ -3014,7 +3072,7 @@ class TestLiveStatusAppConversationService:
         assert cleanup_task.done()
 
     @pytest.mark.asyncio
-    async def test_pending_delivery_retains_failed_message_and_tail(self):
+    async def test_pending_delivery_attempts_every_message(self):
         task_id = uuid4()
         conversation_id = uuid4()
         messages = [
@@ -3029,27 +3087,25 @@ class TestLiveStatusAppConversationService:
             return_value=messages
         )
         self.mock_pending_message_service.finish_message_delivery_cutover = AsyncMock(
-            return_value=1
+            return_value=(3, True)
         )
         success = Mock()
         success.raise_for_status = Mock()
         self.mock_httpx_client.post = AsyncMock(
-            side_effect=[success, RuntimeError('send failed')]
+            side_effect=[success, RuntimeError('send failed'), success]
         )
 
-        with pytest.raises(SandboxError, match='Failed to deliver pending messages'):
-            await self.service._process_pending_messages(
-                task_id,
-                conversation_id,
-                'http://agent-server',
-                'session-key',
-            )
+        await self.service._process_pending_messages(
+            task_id,
+            conversation_id,
+            'http://agent-server',
+            'session-key',
+        )
 
-        assert self.mock_httpx_client.post.await_count == 2
+        assert self.mock_httpx_client.post.await_count == 3
         self.mock_pending_message_service.finish_message_delivery_cutover.assert_awaited_once_with(
             task_id,
-            [messages[0].id],
-            False,
+            [message.id for message in messages],
         )
 
     @pytest.mark.asyncio
@@ -3060,7 +3116,7 @@ class TestLiveStatusAppConversationService:
             return_value=[]
         )
         self.mock_pending_message_service.finish_message_delivery_cutover = AsyncMock(
-            return_value=0
+            return_value=(0, True)
         )
 
         async def cancel_delivery():
@@ -3075,11 +3131,8 @@ class TestLiveStatusAppConversationService:
                 before_delivery=cancel_delivery,
             )
 
-        self.mock_pending_message_service.finish_message_delivery_cutover.assert_awaited_once_with(
-            task_id,
-            [],
-            False,
-        )
+        self.mock_pending_message_service.begin_message_delivery_cutover.assert_not_awaited()
+        self.mock_pending_message_service.finish_message_delivery_cutover.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_resume_rejects_unknown_conversation(self):
@@ -3454,7 +3507,7 @@ class TestLiveStatusAppConversationService:
             return_value=[]
         )
         self.mock_pending_message_service.finish_message_delivery_cutover = AsyncMock(
-            return_value=0
+            return_value=(0, True)
         )
         saved_tasks = []
 

@@ -593,14 +593,19 @@ class RemoteSandboxService(SandboxService):
                 return False
 
             runtime_data = await self._get_runtime(sandbox_id)
-            sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
-            try:
-                await self._prepare_for_pause(sandbox, self.httpx_client)
-            except (httpx.HTTPError, ValueError, SandboxError) as exc:
-                raise SandboxError(
-                    'Agent Server did not complete its pause barrier',
-                    status_code=503,
-                ) from exc
+            runtime_status = str(runtime_data.get('status') or '').lower()
+            if runtime_status in ('paused', 'stopped'):
+                stored_sandbox.session_api_key_hash = None
+                return True
+            if runtime_status == 'running':
+                sandbox = self._to_sandbox_info(stored_sandbox, runtime_data)
+                try:
+                    await self._prepare_for_pause(sandbox, self.httpx_client)
+                except (httpx.HTTPError, ValueError, SandboxError) as exc:
+                    raise SandboxError(
+                        'Agent Server did not complete its pause barrier',
+                        status_code=503,
+                    ) from exc
 
             stored_sandbox.session_api_key_hash = None
             response = await self._send_runtime_api_request(
@@ -673,10 +678,6 @@ class RemoteSandboxService(SandboxService):
                     await self._run_credential_pause_barrier(
                         sandbox,
                         self.httpx_client,
-                    )
-                elif runtime_status not in ('paused', 'stopped'):
-                    raise SandboxError(
-                        'Managed runtime status is not safe for deletion'
                     )
 
             response = await self._send_runtime_api_request(
