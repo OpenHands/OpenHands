@@ -270,9 +270,13 @@ function buildGroup(
   const discriminating = def.values.filter(
     (value) => (rawCounts[value] ?? 0) > 0,
   );
-  if (discriminating.length < 2) return null;
-
   const selected = def.selected(state);
+  // A group with only one (or zero) discriminating values is normally hidden,
+  // but a selection can still be carried in from the URL for a value that has
+  // no matches for this user. Hiding the group then would enforce the filter
+  // invisibly, with no row left to explain or undo it.
+  if (discriminating.length < 2 && selected.size === 0) return null;
+
   const visibleValues = def.values.filter(
     (value) => (rawCounts[value] ?? 0) > 0 || selected.has(value),
   );

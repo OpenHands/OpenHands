@@ -35,29 +35,37 @@ export function SkillFacetRail({
       data-testid="skill-facet-rail"
       className={cn("flex min-w-0 flex-col gap-5", className)}
     >
-      {groups.map((group) => (
-        <div
-          key={group.id}
-          data-testid={`skill-facet-group-${group.id}`}
-          className="flex flex-col gap-1.5"
-        >
-          <span className="px-1 text-[11px] font-semibold uppercase tracking-wider text-tertiary-alt">
-            {t(group.labelKey)}
-          </span>
-          {group.rows.map((row) => (
-            <SkillFacetRow
-              key={row.value}
-              testId={`skill-facet-${group.id}-${row.value}`}
-              labelKey={row.labelKey}
-              count={row.count}
-              checked={row.checked}
-              disabled={row.disabled}
-              icon={iconFor(group.id, row.value)}
-              onToggle={() => onToggle(group.id, row.value)}
-            />
-          ))}
-        </div>
-      ))}
+      {groups.map((group) => {
+        const titleId = `skill-facet-group-${group.id}-title`;
+        return (
+          <div
+            key={group.id}
+            data-testid={`skill-facet-group-${group.id}`}
+            role="group"
+            aria-labelledby={titleId}
+            className="flex flex-col gap-1.5"
+          >
+            <span
+              id={titleId}
+              className="px-1 text-[11px] font-semibold uppercase tracking-wider text-tertiary-alt"
+            >
+              {t(group.labelKey)}
+            </span>
+            {group.rows.map((row) => (
+              <SkillFacetRow
+                key={row.value}
+                testId={`skill-facet-${group.id}-${row.value}`}
+                labelKey={row.labelKey}
+                count={row.count}
+                checked={row.checked}
+                disabled={row.disabled}
+                icon={iconFor(group.id, row.value)}
+                onToggle={() => onToggle(group.id, row.value)}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

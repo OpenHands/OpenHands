@@ -168,6 +168,30 @@ describe("buildSkillFacetGroups", () => {
     expect(groups).toEqual([]);
   });
 
+  it("keeps a group visible when its only selected value has no matches for this user", () => {
+    // Reproduces sharing a filtered URL (e.g. `?source=project`) with someone
+    // whose skill list has no project skills: the group would otherwise be
+    // hidden as non-discriminating, enforcing the filter with no row left to
+    // explain or undo it.
+    const publicOnly = [
+      buildSkill({ name: "deno", source: "public" }),
+      buildSkill({ name: "uv", source: "public" }),
+    ];
+
+    const groups = buildSkillFacetGroups(
+      publicOnly,
+      new Set(),
+      stateWith({ sources: new Set(["project"]) }),
+    );
+
+    const source = groups.find((g) => g.id === "source");
+    expect(source).toBeDefined();
+    expect(source!.rows.find((r) => r.value === "project")).toMatchObject({
+      checked: true,
+      count: 0,
+    });
+  });
+
   it("shows groups once a second value exists", () => {
     const groups = buildSkillFacetGroups(
       buildMixedSkills(),

@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -63,6 +63,12 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
+/** Surfaces the router's current search string so tests can assert the URL write direction. */
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location-probe">{location.search}</div>;
+}
+
 function renderSkillsSettingsScreen(initialEntry = "/skills") {
   return render(<SkillsSettingsScreen />, {
     wrapper: ({ children }) => (
@@ -74,7 +80,10 @@ function renderSkillsSettingsScreen(initialEntry = "/skills") {
         }
       >
         <MemoryRouter initialEntries={[initialEntry]}>
-          <ActiveBackendProvider>{children}</ActiveBackendProvider>
+          <ActiveBackendProvider>
+            {children}
+            <LocationProbe />
+          </ActiveBackendProvider>
         </MemoryRouter>
       </QueryClientProvider>
     ),
@@ -227,6 +236,9 @@ Full skill body.`,
 
     expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
     expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      "type=repo",
+    );
   });
 
   it("seeds the filter state from the URL on load", async () => {

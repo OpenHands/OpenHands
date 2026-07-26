@@ -48,6 +48,12 @@ function SkillsSettingsScreen() {
   );
   const [showAddSkillModal, setShowAddSkillModal] = React.useState(false);
 
+  // `query` always comes from `queryInput`, never from `searchParams`, even
+  // though the URL also carries a `q` value: the input is the source of
+  // truth for what's rendered, and the URL is only a debounced mirror of it
+  // (see the sync effect below). Reading `q` back out of `searchParams` here
+  // would race the debounce and could bounce the input's own value back at
+  // it before the timeout fires.
   const filter = React.useMemo<SkillFilterState>(
     () => ({ ...parseSkillFilterState(searchParams), query: queryInput }),
     [searchParams, queryInput],
@@ -97,11 +103,17 @@ function SkillsSettingsScreen() {
   }, [queryInput, searchParams, setSearchParams]);
 
   const handleFilterChange = (next: SkillFilterState) => {
-    if (next.query !== filter.query) {
-      setQueryInput(next.query);
-      return;
-    }
-    setSearchParams(toSkillFilterSearchParams(next));
+    // A query change goes through local state, not straight to the URL (see
+    // the `filter` comment above and the sync effect below).
+    if (next.query !== filter.query) setQueryInput(next.query);
+
+    // Compare facets only (query aside) so a pure query change does not also
+    // trigger an immediate, undebounced URL write here; a facet change
+    // always writes through, even if a query change happens alongside it.
+    const facetsChanged =
+      toSkillFilterSearchParams({ ...next, query: "" }).toString() !==
+      toSkillFilterSearchParams({ ...filter, query: "" }).toString();
+    if (facetsChanged) setSearchParams(toSkillFilterSearchParams(next));
   };
 
   const handleToggle = (skillName: string, enabled: boolean) => {
