@@ -8,6 +8,10 @@ import {
   SKILL_CARD_PILL_CLASS,
   type SkillCardPill,
 } from "./skill-card-pill-row";
+import {
+  getSkillCategory,
+  SKILL_CATEGORY_LABEL_KEYS,
+} from "#/utils/skill-category";
 
 type SkillPillVariant = "card" | "detail";
 
@@ -33,10 +37,25 @@ export function buildSkillPills(
   options: BuildSkillPillsOptions = {},
 ): SkillCardPill[] {
   const { variant = "card", testIdPrefix } = options;
+  const category = getSkillCategory(skill);
   const pills: SkillCardPill[] = [
     {
       id: `type-${skill.type}`,
       node: <SkillTypeBadge type={skill.type} />,
+    },
+    {
+      id: `category-${category}`,
+      node: (
+        <span
+          data-testid={
+            pillTestId(testIdPrefix, skill.name, "category") ??
+            `skill-category-${skill.name}`
+          }
+          className={SKILL_CARD_PILL_CLASS}
+        >
+          {translate(SKILL_CATEGORY_LABEL_KEYS[category])}
+        </span>
+      ),
     },
   ];
 
