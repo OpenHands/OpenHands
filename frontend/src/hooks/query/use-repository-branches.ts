@@ -45,7 +45,5 @@ export const useRepositoryBranchesPaginated = (
     initialPageParam: null,
   });
 
-  return {
-    ...result,
-  };
+  return result;
 };
