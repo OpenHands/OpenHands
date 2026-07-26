@@ -454,22 +454,18 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                     headers=headers,
                     timeout=30.0,
                 )
-                response_body = (
-                    response.json() if response.status_code == 409 else None
-                )
+                response_body = response.json() if response.status_code == 409 else None
                 if (
                     isinstance(response_body, dict)
                     and response_body.get('detail')
                     == 'credential_binding_activation_required'
                 ):
                     await resume_conversation()
-                    running_sandbox = (
-                        await sandbox_service.wait_for_sandbox_running(
-                            app_conversation_info.sandbox_id,
-                            timeout=120,
-                            poll_interval=2,
-                            httpx_client=httpx_client,
-                        )
+                    running_sandbox = await sandbox_service.wait_for_sandbox_running(
+                        app_conversation_info.sandbox_id,
+                        timeout=120,
+                        poll_interval=2,
+                        httpx_client=httpx_client,
                     )
                     assert running_sandbox.session_api_key is not None
                     agent_server_url = get_agent_server_url_from_sandbox(
@@ -482,9 +478,7 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
                     response = await httpx_client.post(
                         url,
                         json=payload,
-                        headers={
-                            'X-Session-API-Key': running_sandbox.session_api_key
-                        },
+                        headers={'X-Session-API-Key': running_sandbox.session_api_key},
                         timeout=30.0,
                     )
                 response.raise_for_status()
