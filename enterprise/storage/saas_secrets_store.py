@@ -19,11 +19,11 @@ from openhands.app_server.secrets.secrets_store import (
 from openhands.app_server.services.jwt_service import JwtService
 from openhands.app_server.utils.logger import openhands_logger as logger
 
-_CODEX_AUTH_SECRET_NAME = "CODEX_AUTH_JSON"
+_CODEX_AUTH_SECRET_NAME = 'CODEX_AUTH_JSON'
 
 
 def _credential_version(row: StoredCustomSecrets) -> str:
-    state = f"{row.id}\0{row.secret_value}".encode()
+    state = f'{row.id}\0{row.secret_value}'.encode()
     return hashlib.sha256(state).hexdigest()
 
 
@@ -65,14 +65,14 @@ class SaasSecretsStore(SecretsStore):
             kwargs = {}
             for secret in settings:
                 kwargs[secret.secret_name] = {
-                    "secret": secret.secret_value,
-                    "description": secret.description,
+                    'secret': secret.secret_value,
+                    'description': secret.description,
                 }
 
             self._decrypt_kwargs(kwargs)
             codex_info = kwargs.get(_CODEX_AUTH_SECRET_NAME)
             codex_value = (
-                codex_info.get("secret") if isinstance(codex_info, dict) else None
+                codex_info.get('secret') if isinstance(codex_info, dict) else None
             )
             self._loaded_codex_auth[org_id] = (
                 codex_value if isinstance(codex_value, str) else None
@@ -83,15 +83,15 @@ class SaasSecretsStore(SecretsStore):
     async def store(self, item: Secrets):
         user = await UserStore.get_user_by_id(self.user_id)
         if user is None:
-            raise ValueError(f"User not found: {self.user_id}")
+            raise ValueError(f'User not found: {self.user_id}')
         org_id = self.effective_org_id or user.current_org_id
 
-        kwargs = item.model_dump(context={"expose_secrets": True})
-        del kwargs["provider_tokens"]
-        secrets_json = kwargs.get("custom_secrets", {})
+        kwargs = item.model_dump(context={'expose_secrets': True})
+        del kwargs['provider_tokens']
+        secrets_json = kwargs.get('custom_secrets', {})
         codex_info = secrets_json.get(_CODEX_AUTH_SECRET_NAME)
         submitted_codex = (
-            codex_info.get("secret") if isinstance(codex_info, dict) else None
+            codex_info.get('secret') if isinstance(codex_info, dict) else None
         )
         if not isinstance(submitted_codex, str):
             submitted_codex = None
@@ -119,7 +119,7 @@ class SaasSecretsStore(SecretsStore):
             if preserve_codex:
                 secrets_json.pop(_CODEX_AUTH_SECRET_NAME, None)
                 if codex_rows and isinstance(codex_info, dict):
-                    description = codex_info.get("description")
+                    description = codex_info.get('description')
                     encrypted_description = (
                         self._jwt_svc.encrypt_value(description)
                         if description is not None
@@ -142,8 +142,8 @@ class SaasSecretsStore(SecretsStore):
 
             secret_tuples = []
             for secret_name, secret_info in secrets_json.items():
-                secret_value = secret_info.get("secret")
-                description = secret_info.get("description")
+                secret_value = secret_info.get('secret')
+                description = secret_info.get('description')
 
                 secret_tuples.append((secret_name, secret_value, description))
 
@@ -200,7 +200,7 @@ class SaasSecretsStore(SecretsStore):
             current_version = _credential_version(rows[0])
             if not hmac.compare_digest(
                 current_version.encode(),
-                expected_version.encode(errors="surrogatepass"),
+                expected_version.encode(errors='surrogatepass'),
             ):
                 raise CredentialVersionConflict
 
@@ -281,7 +281,7 @@ class SaasSecretsStore(SecretsStore):
 
         TODO: This method should be replaced with dependency injection.
         """
-        logger.debug(f"saas_secrets_store.get_instance::{user_id}")
+        logger.debug(f'saas_secrets_store.get_instance::{user_id}')
         from storage.encrypt_utils import get_jwt_service
 
         return SaasSecretsStore(
