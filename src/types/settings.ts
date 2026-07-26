@@ -1,3 +1,4 @@
+import type { SkillCategoryId } from "@openhands/extensions/skills";
 import type { MCPAuthCredential } from "./mcp-auth";
 
 export const ProviderOptions = {
@@ -106,6 +107,14 @@ export type SkillInfo = {
   source: string | null;
   description?: string | null;
   triggers?: string[];
+  /**
+   * Topical category from the bundled `@openhands/extensions` catalog.
+   *
+   * Absent for user/project skills: the agent-server's wire shape carries no
+   * metadata passthrough, so local skills have no category and are treated as
+   * `"other"` by `getSkillCategory`.
+   */
+  category?: SkillCategoryId | null;
   version?: string;
   license?: string | null;
   compatibility?: string | null;
