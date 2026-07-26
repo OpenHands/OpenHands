@@ -222,7 +222,7 @@ describe("buildSkillFacetGroups", () => {
     expect(state.rows.map((r) => r.count)).toEqual([2, 1]);
   });
 
-  it("keeps group visibility stable while other facets narrow", () => {
+  it("keeps a different group's visibility stable while one facet narrows", () => {
     const skills = buildMixedSkills();
     const disabled = new Set(["prd"]);
 
@@ -232,9 +232,37 @@ describe("buildSkillFacetGroups", () => {
       stateWith({ categories: new Set(["environment"]) }),
     );
 
-    // Visibility uses raw counts, so narrowing to one category must not make
-    // the Category group disappear from under the cursor.
-    expect(narrowed.map((g) => g.id)).toContain("category");
+    // Selecting `environment` leaves only `deno`, whose source ("public")
+    // and type ("knowledge") are each a single value. An implementation
+    // that reused the count-half's denominator (other groups applied, own
+    // excluded) for visibility would compute Source's and Type's row sets
+    // against that one-skill result and drop both below the two-value
+    // threshold. Visibility must come from the raw list instead, so both
+    // groups still render.
+    expect(narrowed.map((g) => g.id)).toEqual(
+      expect.arrayContaining(["source", "type"]),
+    );
+  });
+
+  it("keeps group visibility stable while a search query narrows results", () => {
+    const skills = buildMixedSkills();
+    const disabled = new Set(["prd"]);
+    const unfiltered = buildSkillFacetGroups(
+      skills,
+      disabled,
+      EMPTY_SKILL_FILTER_STATE,
+    );
+
+    // "Requirements" matches only `prd`'s description, so a query-filtered
+    // denominator would leave every group with a single value. Visibility
+    // must come from the raw list, so the group set is unchanged.
+    const narrowed = buildSkillFacetGroups(
+      skills,
+      disabled,
+      stateWith({ query: "Requirements" }),
+    );
+
+    expect(narrowed.map((g) => g.id)).toEqual(unfiltered.map((g) => g.id));
   });
 
   it("disables a zero-count row unless it is checked", () => {
@@ -272,6 +300,30 @@ describe("toggleSkillFilterValue", () => {
     );
     expect(countActiveFilters(next)).toBe(0);
   });
+
+  it.each([
+    ["source", "sources", "project"],
+    ["state", "states", "disabled"],
+  ] as const)(
+    "toggles a %s value into its own set, leaving the rest empty",
+    (groupId, key, value) => {
+      const next = toggleSkillFilterValue(
+        EMPTY_SKILL_FILTER_STATE,
+        groupId,
+        value,
+      );
+
+      // A copy-paste typo assigning the new set to the wrong field (e.g. the
+      // `source` branch writing to `categories`) fails one of these two
+      // checks: either the intended set stays empty, or an unintended one
+      // gains the value.
+      const collections = ["sources", "categories", "types", "states"] as const;
+      for (const collection of collections) {
+        const expected = collection === key ? [value] : [];
+        expect([...next[collection]]).toEqual(expected);
+      }
+    },
+  );
 });
 
 describe("clearSkillFilterFacets and countActiveFilters", () => {
