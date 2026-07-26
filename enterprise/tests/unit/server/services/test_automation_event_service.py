@@ -462,6 +462,200 @@ class TestForwardEvent:
             assert payload['organization']['git_org'] == 'testuser'
             assert payload['organization']['openhands_org_id'] == keycloak_id
 
+    @staticmethod
+    def _requested_metadata(event_types: set[str]):
+        from server.services.automation_event_service import (
+            EventDetectionRule,
+            RequestedEventTypesCacheEntry,
+        )
+
+        return RequestedEventTypesCacheEntry(
+            event_types=event_types,
+            event_detection_rules=[
+                EventDetectionRule(
+                    event_type='pull_request',
+                    jmespath="contains(keys(@), 'pull_request')",
+                ),
+                EventDetectionRule(
+                    event_type='push',
+                    jmespath="contains(keys(@), 'ref') && contains(keys(@), 'commits')",
+                ),
+            ],
+            loaded_at=0,
+        )
+
+    @pytest.mark.asyncio
+    async def test_forward_event_skips_unrequested_github_event(
+        self, mock_token_manager, github_org_payload
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        payload = {**github_org_payload, 'pull_request': {'number': 1}}
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_metadata',
+                new_callable=AsyncMock,
+                return_value=self._requested_metadata({'push'}),
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+            ) as mock_resolver,
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=payload,
+                installation_id=99999,
+                event_type='pull_request',
+            )
+
+            mock_resolver.assert_not_called()
+            mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_forward_event_allows_requested_github_event(
+        self, mock_token_manager, github_org_payload, mock_org_git_claim
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        payload = {**github_org_payload, 'pull_request': {'number': 1}}
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_metadata',
+                new_callable=AsyncMock,
+                return_value=self._requested_metadata({'pull_request'}),
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ),
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=payload,
+                installation_id=99999,
+                event_type='pull_request',
+            )
+
+            mock_send.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_forward_event_uses_detection_rules_not_github_header(
+        self, mock_token_manager, github_org_payload, mock_org_git_claim
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        payload = {**github_org_payload, 'pull_request': {'number': 1}}
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_metadata',
+                new_callable=AsyncMock,
+                return_value=self._requested_metadata({'pull_request'}),
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ),
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=payload,
+                installation_id=99999,
+                event_type='pull_request_review_comment',
+            )
+
+            mock_send.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_requested_event_metadata_returns_none_without_server_truth(
+        self, mock_token_manager
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        with patch.object(
+            AutomationEventService,
+            '_fetch_requested_event_metadata',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            metadata = await service._get_requested_event_metadata('github')
+
+        assert metadata is None
+
+    @pytest.mark.asyncio
+    async def test_forward_event_allows_when_requested_types_unavailable(
+        self, mock_token_manager, github_org_payload, mock_org_git_claim
+    ):
+        from server.services.automation_event_service import AutomationEventService
+
+        mock_redis = AsyncMock()
+        mock_redis.get = AsyncMock(return_value=None)
+        mock_redis.setex = AsyncMock()
+
+        with (
+            patch.object(
+                AutomationEventService,
+                '_get_requested_event_metadata',
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                'server.services.automation_event_service.resolve_org_for_repo',
+                new_callable=AsyncMock,
+                return_value=mock_org_git_claim.org_id,
+            ),
+            patch(REDIS_PATCH, return_value=mock_redis),
+            patch.object(
+                AutomationEventService,
+                '_send_to_automation_service',
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            service = AutomationEventService(mock_token_manager)
+            await service.forward_event(
+                provider=ProviderType.GITHUB,
+                payload=github_org_payload,
+                installation_id=99999,
+                event_type='workflow_job',
+            )
+
+            mock_send.assert_called_once()
+
     @pytest.mark.asyncio
     async def test_forward_event_no_owner_in_payload(self, mock_token_manager):
         """

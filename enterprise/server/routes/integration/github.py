@@ -85,6 +85,7 @@ async def github_events(
                 provider=ProviderType.GITHUB,
                 payload=payload_data,
                 installation_id=installation_id,
+                event_type=x_github_event,
             )
 
         # Existing resolver bot processing

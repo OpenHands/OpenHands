@@ -5,9 +5,6 @@ from uuid import UUID
 
 import httpx
 
-from openhands.app_server.app_conversation.app_conversation_models import (
-    AppConversationInfo,
-)
 from openhands.app_server.event_callback.event_callback_models import (
     EventCallback,
     EventCallbackProcessor,
@@ -32,6 +29,10 @@ _logger = logging.getLogger(__name__)
 _POLL_DELAY_S = 3
 # Number of attempts to poll title
 _NUM_POLL_ATTEMPTS = 4
+# Avoid starting one slow title poll per webhook event. This set is scoped to a
+# worker process; with multiple workers, at most one poll per worker and
+# conversation can run at a time.
+_CONVERSATIONS_BEING_POLLED: set[UUID] = set()
 
 
 async def _poll_for_title(
@@ -92,6 +93,30 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
     ) -> EventCallbackResult | None:
         if not isinstance(event, MessageEvent):
             return None
+
+        if conversation_id in _CONVERSATIONS_BEING_POLLED:
+            _logger.debug(
+                'Skipping duplicate title poll for conversation %s',
+                conversation_id,
+            )
+            return None
+
+        _CONVERSATIONS_BEING_POLLED.add(conversation_id)
+        try:
+            return await self._process_callback(
+                conversation_id,
+                callback,
+                event,
+            )
+        finally:
+            _CONVERSATIONS_BEING_POLLED.discard(conversation_id)
+
+    async def _process_callback(
+        self,
+        conversation_id: UUID,
+        callback: EventCallback,
+        event: MessageEvent,
+    ) -> EventCallbackResult | None:
         from openhands.app_server.config import (
             get_app_conversation_info_service,
             get_app_conversation_service,
@@ -105,14 +130,9 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             redact_text_secrets(str(event)),
         )
 
-        state = InjectorState()
-        setattr(state, USER_CONTEXT_ATTR, ADMIN)
-        async with (
-            get_event_callback_service(state) as event_callback_service,
-            get_app_conversation_service(state) as app_conversation_service,
-            get_app_conversation_info_service(state) as app_conversation_info_service,
-            get_httpx_client(state) as httpx_client,
-        ):
+        read_state = InjectorState()
+        setattr(read_state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_app_conversation_service(read_state) as app_conversation_service:
             app_conversation = await app_conversation_service.get_app_conversation(
                 conversation_id
             )
@@ -122,32 +142,40 @@ class SetTitleCallbackProcessor(EventCallbackProcessor):
             app_conversation_url = replace_localhost_hostname_for_docker(
                 app_conversation_url
             )
+            session_api_key = app_conversation.session_api_key
 
+        http_state = InjectorState()
+        setattr(http_state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_httpx_client(http_state) as httpx_client:
             title = await _poll_for_title(
                 httpx_client,
                 app_conversation_url,
-                app_conversation.session_api_key,
+                session_api_key,
             )
 
-            if not title:
-                # Keep the callback active so later message events can retry.
-                _logger.info(
-                    f'Conversation {conversation_id} title not available yet; '
-                    'will retry on a future message event.'
-                )
-                return None
-
-            # Save the conversation info
-            info = AppConversationInfo(
-                **{
-                    name: getattr(app_conversation, name)
-                    for name in AppConversationInfo.model_fields
-                }
+        if not title:
+            # Keep the callback active so later message events can retry.
+            _logger.info(
+                f'Conversation {conversation_id} title not available yet; '
+                'will retry on a future message event.'
             )
+            return None
+
+        info_state = InjectorState()
+        setattr(info_state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_app_conversation_info_service(
+            info_state
+        ) as app_conversation_info_service:
+            info = await app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            assert info is not None
             info.title = title
             await app_conversation_info_service.save_app_conversation_info(info)
 
-            # Disable callback - we have already set the status
+        callback_state = InjectorState()
+        setattr(callback_state, USER_CONTEXT_ATTR, ADMIN)
+        async with get_event_callback_service(callback_state) as event_callback_service:
             callback.status = EventCallbackStatus.DISABLED
             await event_callback_service.save_event_callback(callback)
 

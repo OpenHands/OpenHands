@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import AsyncContextManager
+from typing import AsyncContextManager, Literal
 
 import httpx
 from fastapi import Depends, Request
@@ -524,10 +524,10 @@ def get_app_lifespan_service() -> AppLifespanService | None:
     return config.lifespan
 
 
-def depends_event_service():
+def depends_event_service(*, scope: Literal['function', 'request'] | None = None):
     injector = get_global_config().event
     assert injector is not None
-    return Depends(injector.depends)
+    return Depends(injector.depends, scope=scope)
 
 
 def depends_event_callback_service():
@@ -548,10 +548,12 @@ def depends_sandbox_spec_service():
     return Depends(injector.depends)
 
 
-def depends_app_conversation_info_service():
+def depends_app_conversation_info_service(
+    *, scope: Literal['function', 'request'] | None = None
+):
     injector = get_global_config().app_conversation_info
     assert injector is not None
-    return Depends(injector.depends)
+    return Depends(injector.depends, scope=scope)
 
 
 def depends_app_conversation_start_task_service():
