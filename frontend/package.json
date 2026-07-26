@@ -10,14 +10,14 @@
     "@heroui/react": "2.8.8",
     "@microlink/react-json-view": "1.27.1",
     "@monaco-editor/react": "4.7.0",
-    "@react-router/node": "7.17.0",
-    "@react-router/serve": "7.17.0",
+    "@react-router/node": "7.18.1",
+    "@react-router/serve": "7.18.1",
     "@tailwindcss/vite": "4.1.18",
     "@tanstack/react-query": "5.90.20",
     "@uidotdev/usehooks": "2.4.1",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
-    "axios": "1.16.0",
+    "axios": "1.18.1",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "downshift": "9.3.2",
@@ -36,7 +36,7 @@
     "react-i18next": "16.6.6",
     "react-icons": "5.5.0",
     "react-markdown": "10.1.0",
-    "react-router": "7.17.0",
+    "react-router": "7.18.1",
     "react-syntax-highlighter": "16.1.0",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
@@ -82,7 +82,7 @@
   "devDependencies": {
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.60.0",
-    "@react-router/dev": "7.17.0",
+    "@react-router/dev": "7.18.1",
     "@tailwindcss/typography": "0.5.19",
     "@tanstack/eslint-plugin-query": "5.100.10",
     "@testing-library/dom": "10.4.1",
@@ -132,6 +132,8 @@
     "dompurify": "3.4.11",
     "qs": "6.15.2",
     "@opentelemetry/core": "2.8.0",
-    "ws": ">=8.21.0"
+    "ws": ">=8.21.0",
+    "postcss": "8.5.23",
+    "js-yaml": "4.3.0"
   }
 }
