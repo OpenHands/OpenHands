@@ -306,9 +306,16 @@ async def _clone_marketplace_repo(
                 _cleanup_clone_dir(clone_dir)
                 return None, f'Git checkout failed: {checkout_result.stderr}'
 
-        # Navigate to repo_path if specified
+        # Navigate to repo_path if specified. Resolve and confirm containment
+        # within clone_dir: an absolute path replaces the join outright in
+        # pathlib, and '..' segments can walk outside the clone, so either
+        # would otherwise let a marketplace registration read arbitrary paths
+        # on the host (path traversal) via the manifest parse below.
         if marketplace.repo_path:
-            skills_path = clone_dir / marketplace.repo_path
+            skills_path = (clone_dir / marketplace.repo_path).resolve()
+            if not skills_path.is_relative_to(clone_dir.resolve()):
+                _cleanup_clone_dir(clone_dir)
+                return None, f'Invalid repo path: {marketplace.repo_path}'
             if not skills_path.exists():
                 _cleanup_clone_dir(clone_dir)
                 return None, f'Repo path not found: {marketplace.repo_path}'
