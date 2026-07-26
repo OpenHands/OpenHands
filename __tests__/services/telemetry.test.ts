@@ -18,7 +18,7 @@ const mockPosthog = {
   get_property: vi.fn((property: string) =>
     property === "$user_id" ? identifiedUserId : undefined,
   ),
-  get_distinct_id: vi.fn(() => "ph-test-distinct-id"),
+  get_distinct_id: vi.fn(() => identifiedUserId ?? "ph-test-distinct-id"),
   reset: vi.fn(() => {
     identifiedUserId = undefined;
   }),
@@ -41,6 +41,7 @@ import {
   initializePostHogClient,
   setTelemetryConsent,
   setTelemetryCloudContext,
+  setTelemetryIdentity,
   setTelemetryBackendContext,
   subscribeTelemetryConsent,
   isTelemetryEnabled,
@@ -60,7 +61,7 @@ vi.stubGlobal("import.meta", {
 });
 
 describe("Telemetry Service", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Clear localStorage before each test
     localStorage.clear();
     sessionStorage.clear();
@@ -70,7 +71,10 @@ describe("Telemetry Service", () => {
     vi.clearAllMocks();
     identifiedUserId = undefined;
     mockPosthog.has_opted_out_capturing.mockReturnValue(false);
-    mockPosthog.get_distinct_id.mockReturnValue("ph-test-distinct-id");
+    mockPosthog.get_distinct_id.mockImplementation(
+      () => identifiedUserId ?? "ph-test-distinct-id",
+    );
+    await setTelemetryIdentity(null);
     setTelemetryBackendContext({});
   });
 
@@ -155,8 +159,8 @@ describe("Telemetry Service", () => {
     });
   });
 
-  describe("Cloud context", () => {
-    it("adds Cloud user context without identifying PostHog as the Cloud user", async () => {
+  describe("Cloud identity and context", () => {
+    it("identifies a consented Cloud user and adds Cloud event context", async () => {
       await setTelemetryConsent("granted");
 
       setTelemetryCloudContext({
@@ -164,8 +168,12 @@ describe("Telemetry Service", () => {
         email: "a@example.com",
         orgId: "org-a",
       });
+      await setTelemetryIdentity("user-a", { email: "a@example.com" });
 
-      expect(mockPosthog.identify).not.toHaveBeenCalled();
+      expect(mockPosthog.identify).toHaveBeenCalledWith("user-a", {
+        email: "a@example.com",
+      });
+      await expect(getTelemetryDistinctId()).resolves.toBe("user-a");
       expect(latestPostHogConfig).toBeDefined();
       expect(
         latestPostHogConfig!.before_send({
@@ -180,6 +188,46 @@ describe("Telemetry Service", () => {
           cloud_org_id: "org-a",
         }),
       });
+    });
+
+    it("resets before switching Cloud accounts and restores consent", async () => {
+      await setTelemetryConsent("granted");
+      await setTelemetryIdentity("user-a");
+      vi.clearAllMocks();
+
+      await setTelemetryIdentity("user-b");
+
+      expect(mockPosthog.reset).toHaveBeenCalledWith(false);
+      expect(mockPosthog.opt_in_capturing).toHaveBeenCalledOnce();
+      expect(mockPosthog.identify).toHaveBeenCalledWith("user-b", {});
+    });
+
+    it("clears identity on logout without changing the device", async () => {
+      await setTelemetryConsent("granted");
+      await setTelemetryIdentity("user-a");
+      vi.clearAllMocks();
+
+      await setTelemetryIdentity(null);
+
+      expect(mockPosthog.reset).toHaveBeenCalledWith(false);
+      expect(mockPosthog.opt_in_capturing).toHaveBeenCalledOnce();
+      expect(mockPosthog.identify).not.toHaveBeenCalled();
+    });
+
+    it("removes identity on denial and reapplies it after consent returns", async () => {
+      await setTelemetryConsent("granted");
+      await setTelemetryIdentity("user-a");
+      vi.clearAllMocks();
+
+      await setTelemetryConsent("denied");
+
+      expect(mockPosthog.reset).toHaveBeenCalledWith(false);
+      expect(mockPosthog.opt_out_capturing).toHaveBeenCalled();
+
+      vi.clearAllMocks();
+      await setTelemetryConsent("granted");
+
+      expect(mockPosthog.identify).toHaveBeenCalledWith("user-a", {});
     });
 
     it("clears Cloud user context for local events", async () => {

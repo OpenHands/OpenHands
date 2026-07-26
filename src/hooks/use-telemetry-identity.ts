@@ -2,7 +2,10 @@ import React from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
 import { useSettings } from "#/hooks/query/use-settings";
-import { setTelemetryCloudContext } from "#/services/telemetry";
+import {
+  setTelemetryCloudContext,
+  setTelemetryIdentity,
+} from "#/services/telemetry";
 
 /** Keep Cloud user event context aligned with the active backend. */
 export const useTelemetryIdentity = () => {
@@ -24,9 +27,11 @@ export const useTelemetryIdentity = () => {
 
     if (!userId) {
       setTelemetryCloudContext(null);
+      void setTelemetryIdentity(null);
       return;
     }
 
     setTelemetryCloudContext({ userId, email, orgId });
+    void setTelemetryIdentity(userId, email ? { email } : {});
   }, [backend.kind, email, isIdentityLoading, orgId, userId]);
 };
