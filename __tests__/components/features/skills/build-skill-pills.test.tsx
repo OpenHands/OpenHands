@@ -1,18 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it } from "vitest";
+import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { buildSkillPills } from "#/components/features/skills/build-skill-pills";
 import type { SkillInfo } from "#/types/settings";
-import { translationResources } from "#/i18n/resources";
-import i18n from "#/i18n";
 
 /** Returns its key unchanged, for assertions that do not care about copy. */
 const identityTranslate = ((key: string) => key) as unknown as TFunction;
-
-beforeAll(async () => {
-  // Configure i18n with resources for testing
-  i18n.addResourceBundle("en", "openhands", translationResources.en || {});
-});
 
 function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   return {
@@ -27,11 +21,10 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
 
 /** Renders the built pills so translated output can be asserted. */
 function PillHarness({ skill }: { skill: SkillInfo }) {
-  const t = (key: string, options?: Record<string, unknown>) =>
-    i18n.t(key, options);
+  const { t } = useTranslation("openhands");
   return (
     <div>
-      {buildSkillPills(skill, t as TFunction).map((pill) => (
+      {buildSkillPills(skill, t).map((pill) => (
         <span key={pill.id}>{pill.node}</span>
       ))}
     </div>
@@ -43,7 +36,7 @@ describe("buildSkillPills category pill", () => {
     render(<PillHarness skill={buildSkill({ category: "environment" })} />);
 
     expect(screen.getByTestId("skill-category-deno")).toHaveTextContent(
-      "Environment & tooling",
+      "SETTINGS$SKILLS_CATEGORY_ENVIRONMENT",
     );
   });
 
@@ -51,7 +44,7 @@ describe("buildSkillPills category pill", () => {
     render(<PillHarness skill={buildSkill({ category: null })} />);
 
     expect(screen.getByTestId("skill-category-deno")).toHaveTextContent(
-      "Uncategorized",
+      "SETTINGS$SKILLS_CATEGORY_OTHER",
     );
   });
 
