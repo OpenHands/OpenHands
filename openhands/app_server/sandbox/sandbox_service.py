@@ -320,13 +320,15 @@ class SandboxService(ABC):
         In a multi user environment, this will pause sandboxes only for the current user.
 
         Args:
-            max_num_sandboxes: Maximum number of sandboxes to keep running
+            max_num_sandboxes: Maximum number of sandboxes to keep running. Zero is
+                valid and means pause every running sandbox, which is what callers
+                request when ``max_num_sandboxes`` is configured as 1.
 
         Returns:
             List of sandbox IDs that were paused
         """
-        if max_num_sandboxes <= 0:
-            raise ValueError('max_num_sandboxes must be greater than 0')
+        if max_num_sandboxes < 0:
+            raise ValueError('max_num_sandboxes must not be negative')
 
         # Get all running sandboxes (iterate through all pages)
         running_sandboxes = []

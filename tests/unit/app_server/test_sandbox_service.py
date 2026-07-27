@@ -499,17 +499,11 @@ class TestCleanupOldSandboxes:
 
     @pytest.mark.asyncio
     async def test_cleanup_invalid_max_num_sandboxes(self, mock_sandbox_service):
-        """Test cleanup raises ValueError for invalid max_num_sandboxes."""
-        # Test zero
-        with pytest.raises(
-            ValueError, match='max_num_sandboxes must be greater than 0'
-        ):
-            await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=0)
+        """Test cleanup raises ValueError for a negative max_num_sandboxes.
 
-        # Test negative
-        with pytest.raises(
-            ValueError, match='max_num_sandboxes must be greater than 0'
-        ):
+        Zero is valid — see ``test_cleanup_accepts_zero_limit``.
+        """
+        with pytest.raises(ValueError, match='max_num_sandboxes must not be negative'):
             await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=-1)
 
     @pytest.mark.asyncio
@@ -566,3 +560,23 @@ class TestCleanupOldSandboxes:
         # Verify: No sandboxes should be stopped
         assert result == []
         mock_sandbox_service.pause_sandbox_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_accepts_zero_limit(self, mock_sandbox_service):
+        """A limit of zero pauses every running sandbox.
+
+        ``start_sandbox``/``resume_sandbox`` pass ``max_num_sandboxes - 1``, so a
+        configured limit of 1 arrives here as 0 and must make room, not raise.
+        """
+        now = datetime.now(timezone.utc)
+        sandboxes = [
+            create_sandbox_info('sb1', SandboxStatus.RUNNING, now - timedelta(hours=2)),
+            create_sandbox_info('sb2', SandboxStatus.RUNNING, now - timedelta(hours=1)),
+        ]
+        mock_sandbox_service.search_sandboxes_mock.return_value = SandboxPage(
+            items=sandboxes, next_page_id=None
+        )
+
+        result = await mock_sandbox_service.pause_old_sandboxes(max_num_sandboxes=0)
+
+        assert result == ['sb1', 'sb2']

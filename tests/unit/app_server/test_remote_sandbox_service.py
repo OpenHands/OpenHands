@@ -1470,6 +1470,47 @@ class TestRemoteSandboxRunningCleanup:
         assert paused == []
         remote_sandbox_service.pause_sandbox.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_accepts_zero(self, remote_sandbox_service):
+        """A limit of zero pauses every running sandbox.
+
+        ``start_sandbox``/``resume_sandbox`` pass ``max_num_sandboxes - 1``, so a
+        configured limit of 1 arrives here as 0. That must make room rather than
+        raise.
+        """
+        remote_sandbox_service._get_user_running_sandboxes = AsyncMock(
+            return_value=[create_stored_sandbox('sb-1'), create_stored_sandbox('sb-2')]
+        )
+        remote_sandbox_service.pause_sandbox = AsyncMock(return_value=True)
+
+        paused = await remote_sandbox_service.pause_old_sandboxes(max_num_sandboxes=0)
+
+        assert paused == ['sb-1', 'sb-2']
+
+    @pytest.mark.asyncio
+    async def test_pause_old_sandboxes_rejects_negative(self, remote_sandbox_service):
+        """A negative limit is still a programming error."""
+        with pytest.raises(ValueError):
+            await remote_sandbox_service.pause_old_sandboxes(max_num_sandboxes=-1)
+
+    @pytest.mark.asyncio
+    async def test_start_sandbox_succeeds_with_max_num_sandboxes_of_one(
+        self, remote_sandbox_service
+    ):
+        """A configured limit of 1 must not break sandbox startup."""
+        remote_sandbox_service.max_num_sandboxes = 1
+        remote_sandbox_service._get_user_running_sandboxes = AsyncMock(return_value=[])
+        mock_response = MagicMock()
+        mock_response.json.return_value = create_runtime_data(status='running')
+        remote_sandbox_service.httpx_client.request.return_value = mock_response
+        remote_sandbox_service.db_session.add = MagicMock()
+        remote_sandbox_service.db_session.commit = AsyncMock()
+
+        with patch('base62.encodebytes', return_value='test-sandbox-123'):
+            sandbox_info = await remote_sandbox_service.start_sandbox()
+
+        assert sandbox_info.id == 'test-sandbox-123'
+
 
 def _async_cm_factory(value):
     """Return a callable that yields ``value`` as an async context manager.
