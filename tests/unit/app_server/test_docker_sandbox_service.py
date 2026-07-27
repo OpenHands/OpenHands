@@ -382,8 +382,8 @@ class TestDockerSandboxService:
             'Docker daemon error'
         )
 
-        with pytest.raises(APIError, match='Docker daemon error'):
-            await service.get_sandbox('oh-test-abc123')
+        # A daemon hiccup degrades to "missing" rather than 500ing every caller.
+        assert await service.get_sandbox('oh-test-abc123') is None
 
     @patch('openhands.app_server.sandbox.docker_sandbox_service.base62.encodebytes')
     @patch('os.urandom')

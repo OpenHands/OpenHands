@@ -552,7 +552,6 @@ class RemoteSandboxService(SandboxService):
                 _logger.info(
                     f'Updated session_api_key_hash for sandbox {sandbox_id} after resume'
                 )
-                await self.db_session.commit()
 
             return True
         except httpx.HTTPError:
@@ -643,7 +642,7 @@ class RemoteSandboxService(SandboxService):
                 response.raise_for_status()
             await self.db_session.delete(stored_sandbox)
             return True
-        except httpx.HTTPError as e:
+        except Exception as e:
             _logger.exception(f'Error deleting sandbox {sandbox_id}', stack_info=True)
             if had_key and stored_sandbox is not None:
                 if stored_sandbox.session_api_key_hash is not None:

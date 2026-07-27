@@ -97,7 +97,6 @@ def remote_sandbox_service(
         httpx_client=mock_httpx_client,
         db_session=mock_db_session,
     )
-    service._has_managed_credential_conversation = AsyncMock(return_value=False)
     return service
 
 
@@ -647,7 +646,9 @@ class TestSandboxLifecycle:
         assert stored_sandbox.session_api_key_hash == _hash_session_api_key(
             'new-session-key-123'
         )
-        remote_sandbox_service.db_session.commit.assert_awaited_once()
+        # The rotated hash is staged for the caller's transaction; committing the
+        # shared request session here would flush the caller's own pending work.
+        remote_sandbox_service.db_session.commit.assert_not_awaited()
         remote_sandbox_service.pause_old_sandboxes.assert_called_once_with(9)
         remote_sandbox_service.httpx_client.request.assert_called_once_with(
             'POST',
@@ -967,6 +968,61 @@ class TestSandboxLifecycle:
 
         assert stored_sandbox.session_api_key_hash == 'live-hash'
         remote_sandbox_service.db_session.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_delete_keeps_session_key_when_managed_probe_raises(
+        self, remote_sandbox_service
+    ):
+        """An unreadable conversation store must not silently revoke a live key."""
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                'Server Error',
+                request=httpx.Request('GET', 'https://api.example.com/sessions/x'),
+                response=httpx.Response(503),
+            )
+        )
+        remote_sandbox_service._has_managed_credential_conversation = AsyncMock(
+            side_effect=RuntimeError('conversation store unavailable')
+        )
+        remote_sandbox_service.db_session.commit = AsyncMock()
+
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        assert stored_sandbox.session_api_key_hash == 'live-hash'
+        remote_sandbox_service.db_session.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_delete_revokes_session_key_when_barrier_raises(
+        self, remote_sandbox_service
+    ):
+        """A SandboxError from the pause barrier must not skip key revocation."""
+        stored_sandbox = create_stored_sandbox(session_api_key_hash='live-hash')
+        remote_sandbox_service._get_stored_sandbox = AsyncMock(
+            return_value=stored_sandbox
+        )
+        remote_sandbox_service._get_runtime = AsyncMock(
+            return_value=create_runtime_data('test-sandbox-123')
+        )
+        remote_sandbox_service._prepare_for_pause = AsyncMock(
+            side_effect=SandboxError('No exposed URLs for sandbox: test-sandbox-123')
+        )
+        remote_sandbox_service._has_managed_credential_conversation = AsyncMock(
+            return_value=False
+        )
+        remote_sandbox_service.db_session.delete = AsyncMock()
+        remote_sandbox_service.db_session.commit = AsyncMock()
+
+        with pytest.raises(SandboxDeleteRetryError):
+            await remote_sandbox_service.delete_sandbox('test-sandbox-123')
+
+        remote_sandbox_service.db_session.delete.assert_not_called()
+        assert stored_sandbox.session_api_key_hash is None
+        remote_sandbox_service.db_session.commit.assert_awaited_once()
 
 
 class TestSandboxSearch:

@@ -336,7 +336,7 @@ class DockerSandboxService(SandboxService):
                 return None
             container = self.docker_client.containers.get(sandbox_id)
             return await self._container_to_checked_sandbox_info(container)
-        except NotFound:
+        except (NotFound, APIError):
             return None
 
     async def get_sandbox_by_session_api_key(
@@ -563,11 +563,10 @@ class DockerSandboxService(SandboxService):
 
             if container.status == 'running':
                 sandbox = await self._container_to_sandbox_info(container)
-                if sandbox is None:
-                    raise SandboxError(
-                        f'Could not resolve running sandbox: {sandbox_id}'
-                    )
-                await self._prepare_for_pause(sandbox, self.httpx_client)
+                # An unresolvable container carries no binding to drain, and the
+                # delete must still reclaim the container and its volume.
+                if sandbox is not None:
+                    await self._prepare_for_pause(sandbox, self.httpx_client)
             if container.status in ['running', 'paused']:
                 container.stop(timeout=10)
 

@@ -383,11 +383,13 @@ async def load_credential_binding(
         value, version = await store.load_versioned(
             CODEX_AUTH_SECRET_NAME, organization_id
         )
-        validate_codex_credential(value)
     except KeyError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND) from exc
     except NotImplementedError as exc:
         raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED) from exc
+    # Only an invalid credential is a 422; the SDK turns that into a re-auth prompt.
+    try:
+        validate_codex_credential(value)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY) from exc
     return JSONResponse(

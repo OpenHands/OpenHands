@@ -108,7 +108,9 @@ class SaasSecretsStore(SecretsStore):
                     StoredCustomSecrets.keycloak_user_id == self.user_id,
                     StoredCustomSecrets.org_id == org_id,
                 )
-                .order_by(StoredCustomSecrets.id)
+                # Lock in the same order as _versioned_query so a concurrent
+                # replace_versioned over the duplicate Codex rows cannot deadlock.
+                .order_by(StoredCustomSecrets.id.desc())
                 .with_for_update()
             )
             codex_rows = [

@@ -2976,7 +2976,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         )
 
         for sub_id in sub_conversation_ids:
-            sub_conversation = None
             try:
                 sub_conversation = await self.get_app_conversation(sub_id)
                 if sub_conversation:
@@ -2989,10 +2988,6 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         extra={'conversation_id': str(sub_id)},
                     )
             except Exception as e:
-                if sub_conversation and (
-                    CODEX_CREDENTIAL_BINDING_TAG_KEY in sub_conversation.tags
-                ):
-                    raise
                 # Log error but continue deleting remaining sub-conversations
                 _logger.warning(
                     f'Error deleting sub-conversation {sub_id}: {e}',
@@ -3012,7 +3007,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 app_conversation.sandbox_id
             )
             if managed_marker is not None:
-                if sandbox is None:
+                # A missing sandbox already ran the barrier on its own teardown.
+                if sandbox is None or sandbox.status == SandboxStatus.MISSING:
                     return
                 if sandbox.status != SandboxStatus.RUNNING:
                     if sandbox.status not in (

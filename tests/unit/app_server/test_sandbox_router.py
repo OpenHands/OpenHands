@@ -351,7 +351,6 @@ async def test_callback_rejects_completed_task_context_after_marker_commit():
     [
         (KeyError(), 404),
         (NotImplementedError(), 501),
-        (ValueError(), 422),
     ],
 )
 async def test_load_callback_maps_store_errors(error, status_code):
@@ -369,6 +368,39 @@ async def test_load_callback_maps_store_errors(error, status_code):
         await load_credential_binding(context=context)
 
     assert exc_info.value.status_code == status_code
+
+
+async def test_load_callback_maps_invalid_credential_to_422():
+    store = AsyncMock()
+    store.load_versioned.return_value = ('not-a-codex-credential', 'v1')
+    context = _context()
+
+    with (
+        patch(
+            'openhands.app_server.sandbox.sandbox_router._credential_store',
+            AsyncMock(return_value=store),
+        ),
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await load_credential_binding(context=context)
+
+    assert exc_info.value.status_code == 422
+
+
+async def test_load_callback_does_not_map_unreadable_store_to_422():
+    """A corrupt secrets store must not read as "please authenticate again"."""
+    store = AsyncMock()
+    store.load_versioned.side_effect = ValueError('Invalid secrets file')
+    context = _context()
+
+    with (
+        patch(
+            'openhands.app_server.sandbox.sandbox_router._credential_store',
+            AsyncMock(return_value=store),
+        ),
+        pytest.raises(ValueError, match='Invalid secrets file'),
+    ):
+        await load_credential_binding(context=context)
 
 
 @pytest.mark.parametrize(

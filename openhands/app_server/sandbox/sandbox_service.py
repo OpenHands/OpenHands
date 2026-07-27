@@ -319,7 +319,12 @@ class SandboxService(ABC):
             if required:
                 raise SandboxError('Managed sandbox authorization is unavailable')
             return
-        agent_server_url = self._get_agent_server_url(sandbox)
+        try:
+            agent_server_url = self._get_agent_server_url(sandbox)
+        except SandboxError:
+            if not required:
+                return
+            raise
         try:
             supported = await agent_server_supports_credential_binding(
                 httpx_client,
