@@ -347,7 +347,9 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
     },
     {
       // Curated agent_context section (SDK fields_opt_in): only load_memory
-      // is exposed, never the raw AgentContext model.
+      // is exposed, never the raw AgentContext model. ``label`` mirrors the
+      // server's literal string ("Memory"); the GUI names the page itself via
+      // the SCHEMA$AGENT_CONTEXT$SECTION_LABEL translation, which wins.
       key: "agent_context",
       label: "Memory",
       fields: [

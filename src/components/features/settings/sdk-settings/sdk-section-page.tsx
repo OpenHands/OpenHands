@@ -428,14 +428,15 @@ export function SdkSectionPage({
     } else {
       setDirtyBySource({});
     }
-    setView((currentView) => {
-      if (!hasHydratedViewRef.current) {
-        hasHydratedViewRef.current = true;
-        return initialView;
-      }
-
-      return getLessDetailedView(currentView, initialView);
-    });
+    // The ref flip stays outside the updater: React double-invokes state
+    // updaters in StrictMode, so mutating it in there makes the second
+    // (kept) call take the already-hydrated branch and pin the view.
+    if (!hasHydratedViewRef.current) {
+      hasHydratedViewRef.current = true;
+      setView(initialView);
+    } else {
+      setView((currentView) => getLessDetailedView(currentView, initialView));
+    }
   }, [initialValuesBySource, initialView]);
 
   const fieldKeyToSource = React.useMemo(() => {

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
-import MemorySettingsScreen from "#/routes/memory-settings";
+import AgentContextSettingsScreen from "#/routes/agent-context-settings";
 import { Settings } from "#/types/settings";
 
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
@@ -21,14 +21,14 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderMemorySettingsScreen() {
+function renderAgentContextSettingsScreen() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   });
 
-  return render(<MemorySettingsScreen />, {
+  return render(<AgentContextSettingsScreen />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
@@ -39,13 +39,13 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("MemorySettingsScreen", () => {
+describe("AgentContextSettingsScreen", () => {
   it("renders the persistent-memory toggle from the agent schema, off by default", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
-    renderMemorySettingsScreen();
+    renderAgentContextSettingsScreen();
 
-    await screen.findByTestId("memory-settings-screen");
+    await screen.findByTestId("agent-context-settings-screen");
 
     const toggle = screen.getByTestId("sdk-settings-agent_context.load_memory");
     expect(toggle).toBeInTheDocument();
@@ -62,9 +62,9 @@ describe("MemorySettingsScreen", () => {
       }),
     );
 
-    renderMemorySettingsScreen();
+    renderAgentContextSettingsScreen();
 
-    await screen.findByTestId("memory-settings-screen");
+    await screen.findByTestId("agent-context-settings-screen");
 
     expect(
       screen.getByTestId("sdk-settings-agent_context.load_memory"),
@@ -78,9 +78,9 @@ describe("MemorySettingsScreen", () => {
       .spyOn(SettingsService, "saveSettings")
       .mockResolvedValue(true);
 
-    renderMemorySettingsScreen();
+    renderAgentContextSettingsScreen();
 
-    await screen.findByTestId("memory-settings-screen");
+    await screen.findByTestId("agent-context-settings-screen");
     await user.click(
       screen.getByTestId("sdk-settings-agent_context.load_memory"),
     );
@@ -96,9 +96,9 @@ describe("MemorySettingsScreen", () => {
   it("shows the toggle without a dead Basic tab (major-only section)", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
 
-    renderMemorySettingsScreen();
+    renderAgentContextSettingsScreen();
 
-    await screen.findByTestId("memory-settings-screen");
+    await screen.findByTestId("agent-context-settings-screen");
 
     // The section's only field is major-prominence: the page floors its
     // initial view at "advanced" and hides the view toggle entirely (a
@@ -112,17 +112,18 @@ describe("MemorySettingsScreen", () => {
   });
 
   it("shows the schema-unavailable state when the server does not expose the section", async () => {
-    const schemaWithoutMemory = structuredClone(
+    const schemaWithoutAgentContext = structuredClone(
       MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
     );
-    schemaWithoutMemory.sections = schemaWithoutMemory.sections.filter(
-      (section) => section.key !== "agent_context",
-    );
+    schemaWithoutAgentContext.sections =
+      schemaWithoutAgentContext.sections.filter(
+        (section) => section.key !== "agent_context",
+      );
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
-      buildSettings({ agent_settings_schema: schemaWithoutMemory }),
+      buildSettings({ agent_settings_schema: schemaWithoutAgentContext }),
     );
 
-    renderMemorySettingsScreen();
+    renderAgentContextSettingsScreen();
 
     expect(await screen.findByTestId("sdk-schema-unavailable")).toBeVisible();
     expect(

@@ -2771,21 +2771,21 @@
     "ca": "Activa subagents"
   },
   "SCHEMA$AGENT_CONTEXT$SECTION_LABEL": {
-    "en": "Memory",
-    "ja": "メモリ",
-    "zh-CN": "记忆",
-    "zh-TW": "記憶",
-    "ko-KR": "메모리",
-    "de": "Gedächtnis",
-    "no": "Minne",
-    "it": "Memoria",
-    "pt": "Memória",
-    "es": "Memoria",
-    "ar": "الذاكرة",
-    "fr": "Mémoire",
-    "tr": "Bellek",
-    "uk": "Пам'ять",
-    "ca": "Memòria"
+    "en": "Agent Context",
+    "ja": "エージェントコンテキスト",
+    "zh-CN": "代理上下文",
+    "zh-TW": "代理上下文",
+    "ko-KR": "에이전트 컨텍스트",
+    "de": "Agentenkontext",
+    "no": "Agentkontekst",
+    "it": "Contesto dell'agente",
+    "pt": "Contexto do agente",
+    "es": "Contexto del agente",
+    "ar": "سياق الوكيل",
+    "fr": "Contexte de l'agent",
+    "tr": "Ajan Bağlamı",
+    "uk": "Контекст агента",
+    "ca": "Context de l'agent"
   },
   "SCHEMA$AGENT_CONTEXT$LOAD_MEMORY$LABEL": {
     "en": "Persistent Agent Memory",
@@ -5694,22 +5694,22 @@
     "uk": "Конденсатор",
     "ca": "Condensador"
   },
-  "SETTINGS$NAV_MEMORY": {
-    "en": "Memory",
-    "ja": "メモリ",
-    "zh-CN": "记忆",
-    "zh-TW": "記憶",
-    "ko-KR": "메모리",
-    "de": "Gedächtnis",
-    "no": "Minne",
-    "it": "Memoria",
-    "pt": "Memória",
-    "es": "Memoria",
-    "ar": "الذاكرة",
-    "fr": "Mémoire",
-    "tr": "Bellek",
-    "uk": "Пам'ять",
-    "ca": "Memòria"
+  "SETTINGS$NAV_AGENT_CONTEXT": {
+    "en": "Agent Context",
+    "ja": "エージェントコンテキスト",
+    "zh-CN": "代理上下文",
+    "zh-TW": "代理上下文",
+    "ko-KR": "에이전트 컨텍스트",
+    "de": "Agentenkontext",
+    "no": "Agentkontekst",
+    "it": "Contesto dell'agente",
+    "pt": "Contexto do agente",
+    "es": "Contexto del agente",
+    "ar": "سياق الوكيل",
+    "fr": "Contexte de l'agent",
+    "tr": "Ajan Bağlamı",
+    "uk": "Контекст агента",
+    "ca": "Context de l'agent"
   },
   "SETTINGS$NAV_LLM": {
     "en": "LLM",
@@ -6034,7 +6034,7 @@
     "uk": "Стискайте довгі розмови, щоб залишатися в межах контексту.",
     "ca": "Resumeix converses llargues per mantenir-te dins dels límits de context."
   },
-  "SETTINGS$PAGE_MEMORY_SUBLINE": {
+  "SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE": {
     "en": "Let the agent keep notes and recall them in new conversations.",
     "ja": "エージェントがメモを保存し、新しい会話で思い出せるようにします。",
     "zh-CN": "让代理保存笔记并在新对话中回忆起来。",

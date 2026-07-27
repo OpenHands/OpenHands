@@ -1,14 +1,14 @@
 import { SdkSectionPage } from "#/components/features/settings/sdk-settings/sdk-section-page";
 
-function MemorySettingsScreen() {
+function AgentContextSettingsScreen() {
   return (
     <SdkSectionPage
       settingsSources={[
         { settingsSource: "agent_settings", sectionKeys: ["agent_context"] },
       ]}
-      testId="memory-settings-screen"
+      testId="agent-context-settings-screen"
     />
   );
 }
 
-export default MemorySettingsScreen;
+export default AgentContextSettingsScreen;

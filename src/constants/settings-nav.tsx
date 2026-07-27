@@ -36,15 +36,16 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     subtitle: "SETTINGS$PAGE_CONDENSER_SUBLINE",
   },
   {
-    // Persistent agent memory (SDK ``agent_context.load_memory``). Not
+    // The agent's ``agent_context`` section, whatever the schema exposes in it
+    // — today only persistent memory (``agent_context.load_memory``). Not
     // ``disabledByAcp``: the stored flag rides the shared agent_settings
     // record into ACP conversations too — inline launches spread it into
     // ``agent_context``, and profile launches (the normal ACP path) have the
     // agent-server stamp it onto the profile-resolved agent.
     icon: <Brain className="size-4" strokeWidth={2} aria-hidden />,
-    to: "/settings/memory",
-    text: "SETTINGS$NAV_MEMORY",
-    subtitle: "SETTINGS$PAGE_MEMORY_SUBLINE",
+    to: "/settings/agent-context",
+    text: "SETTINGS$NAV_AGENT_CONTEXT",
+    subtitle: "SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE",
   },
   {
     icon: <Shield className="size-4" strokeWidth={2} aria-hidden />,
