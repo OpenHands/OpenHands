@@ -2379,6 +2379,23 @@
     "uk": "Профіль агента",
     "ca": "Perfil d'agent"
   },
+  "CHAT$SWITCH_AGENT_PROFILE": {
+    "en": "Switch agent profile",
+    "ja": "エージェントプロファイルを切り替え",
+    "zh-CN": "切换代理配置文件",
+    "zh-TW": "切換代理設定檔",
+    "ko-KR": "에이전트 프로필 전환",
+    "no": "Bytt agentprofil",
+    "it": "Cambia profilo agente",
+    "pt": "Trocar perfil de agente",
+    "es": "Cambiar perfil de agente",
+    "ar": "تبديل ملف تعريف الوكيل",
+    "fr": "Changer de profil d'agent",
+    "tr": "Ajan profilini değiştir",
+    "de": "Agentenprofil wechseln",
+    "uk": "Змінити профіль агента",
+    "ca": "Canvia el perfil d'agent"
+  },
   "CHAT$MANAGE_AGENT_PROFILES": {
     "en": "Manage agent profiles",
     "ja": "エージェントプロファイルを管理",

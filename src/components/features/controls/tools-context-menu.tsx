@@ -14,11 +14,13 @@ import SkillsIcon from "#/icons/skills.svg?react";
 import PuzzleIcon from "#/icons/u-puzzle-piece.svg?react";
 import FishingHookIcon from "#/icons/fishing-hook.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
+import RobotIcon from "#/icons/u-robot.svg?react";
 import SettingsIcon from "#/icons/settings.svg?react";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import { ToolsContextMenuIconText } from "./tools-context-menu-icon-text";
 import { GitToolsSubmenu } from "./git-tools-submenu";
 import { MacrosSubmenu } from "./macros-submenu";
+import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
 import { ArchivedDisabledTooltip } from "../context-menu/archived-disabled-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 
@@ -31,6 +33,12 @@ interface ToolsContextMenuProps {
   shouldShowAgentTools?: boolean;
   shouldShowHooks?: boolean;
   shouldShowPlugins?: boolean;
+  /**
+   * Offer the "Switch agent profile" submenu (OSS-5735). The caller owns the
+   * gating (pre-start only + profiles available) so this menu stays renderable
+   * without query/navigation providers when the item is off.
+   */
+  showAgentProfileSwitch?: boolean;
   /** When set, renders a divider and this action as the last menu item. */
   footerAction?: {
     testId: string;
@@ -49,6 +57,7 @@ export function ToolsContextMenu({
   shouldShowAgentTools = true,
   shouldShowHooks = false,
   shouldShowPlugins = false,
+  showAgentProfileSwitch = false,
   footerAction,
 }: ToolsContextMenuProps) {
   const { t } = useTranslation("openhands");
@@ -56,15 +65,15 @@ export function ToolsContextMenu({
   const { providers } = useUserProviders();
   const isArchivedConversation = useIsArchivedConversation();
 
-  const [activeSubmenu, setActiveSubmenu] = useState<"git" | "macros" | null>(
-    null,
-  );
+  const [activeSubmenu, setActiveSubmenu] = useState<
+    "git" | "macros" | "agent-profile" | null
+  >(null);
 
   const hasRepository = !!conversation?.selected_repository;
   const providersAreSet = providers.length > 0;
   const showGitTools = hasRepository && providersAreSet;
 
-  const handleSubmenuClick = (submenu: "git" | "macros") => {
+  const handleSubmenuClick = (submenu: "git" | "macros" | "agent-profile") => {
     if (isArchivedConversation) {
       return;
     }
@@ -86,6 +95,48 @@ export function ToolsContextMenu({
       alignment="left"
       className="left-[-16px] mb-2 bottom-full overflow-visible min-w-[200px]"
     >
+      {/* Switch agent profile — only while starting a new conversation; the
+          profile is locked once the conversation starts (OSS-5735). Selecting
+          a profile activates it (home) or recreates the blank conversation
+          with it (see ChatInputProfileMenuContent). No archived gating: this
+          never renders in a started (archivable) conversation. */}
+      {showAgentProfileSwitch && (
+        <div className="relative group/agent-profile">
+          <ContextMenuListItem
+            testId="switch-agent-profile-button"
+            onClick={() => handleSubmenuClick("agent-profile")}
+          >
+            <ToolsContextMenuIconText
+              icon={<RobotIcon width={16} height={16} aria-hidden />}
+              text={t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}
+              rightIcon={<CarretRightFillIcon width={10} height={10} />}
+            />
+          </ContextMenuListItem>
+          <div
+            className={cn(
+              "absolute left-full top-[-4px] z-60 opacity-0 invisible pointer-events-none transition-all duration-200 ml-[1px]",
+              "group-hover/agent-profile:opacity-100 group-hover/agent-profile:visible group-hover/agent-profile:pointer-events-auto",
+              "hover:opacity-100 hover:visible hover:pointer-events-auto",
+              activeSubmenu === "agent-profile" &&
+                "opacity-100 visible pointer-events-auto",
+            )}
+          >
+            {/* overflow-y-auto so a long profile list scrolls within the menu;
+                safe because the content has no floating children — only the
+                flat profile list + Manage link. */}
+            <ContextMenu
+              testId="agent-profile-submenu"
+              className="min-w-[220px] max-w-[320px] max-h-[60vh] overflow-y-auto gap-0"
+            >
+              <ChatInputProfileMenuContent
+                onClose={handleClose}
+                dividerInset="menu"
+              />
+            </ContextMenu>
+          </div>
+        </div>
+      )}
+
       {/* Git Tools */}
       {showGitTools && (
         <div className="relative group/git">

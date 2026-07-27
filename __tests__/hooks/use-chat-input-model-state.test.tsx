@@ -35,6 +35,19 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => useOptionalConversationIdMock(),
 }));
 
+// The detail query and the org-permission check need a QueryClient this
+// wrapper-less harness doesn't provide; both are driven per test (detail null
+// → the settings fallback the older tests exercise).
+const useActiveAcpProfileDetailMock = vi.fn();
+vi.mock("#/hooks/query/use-active-acp-profile-detail", () => ({
+  useActiveAcpProfileDetail: () => useActiveAcpProfileDetailMock(),
+}));
+
+const useCanManageOrgProfilesMock = vi.fn();
+vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
+  useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
+}));
+
 // `getAcpProvider`/`labelForAcpModel`/`resolveEffectiveAcpModel` are exercised
 // for real (not mocked) so the test pins the actual registry-sourced model
 // list the picker shows.
@@ -66,6 +79,10 @@ describe("useChatInputModelState", () => {
     useAcpModelContextMock.mockReturnValue(acpContext());
     useOptionalConversationIdMock.mockReset();
     useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    useActiveAcpProfileDetailMock.mockReset();
+    useActiveAcpProfileDetailMock.mockReturnValue(null);
+    useCanManageOrgProfilesMock.mockReset();
+    useCanManageOrgProfilesMock.mockReturnValue(true);
   });
 
   it("non-ACP: shows the conversation/settings llm_model with no picker", () => {
@@ -180,6 +197,60 @@ describe("useChatInputModelState", () => {
     const { result } = renderHook(() => useChatInputModelState());
 
     expect(result.current.currentModelId).toBe(provider?.default_model);
+  });
+
+  it("home ACP: the active profile's detail overrides stale agent settings for provider and model", () => {
+    // Activation is pointer-only: settings still describe claude-code, but the
+    // active ACP profile is codex — the picker must follow the profile (the
+    // conversation launch source), not the settings.
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: {
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_model: "claude-sonnet-4-6",
+        },
+      },
+    });
+    useActiveAcpProfileDetailMock.mockReturnValue({
+      id: "id-codex",
+      name: "codex-test",
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_model: "gpt-5.5",
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.currentModelId).toBe("gpt-5.5");
+    expect(result.current.availableAcpModels).toEqual(
+      getAcpProvider("codex")?.available_models,
+    );
+  });
+
+  it("home ACP on cloud: hides the selectable rows from members who cannot manage org profiles", () => {
+    // A home pick persists into the org-owned profile; a member's pick would
+    // only 403. The chip and settings link remain (showAcpPicker false).
+    useActiveBackendMock.mockReturnValue({ backend: { kind: "cloud" } });
+    useCanManageOrgProfilesMock.mockReturnValue(false);
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    useSettingsMock.mockReturnValue({
+      data: {
+        agent_settings: { agent_kind: "acp", acp_server: "claude-code" },
+      },
+    });
+    useAcpModelContextMock.mockReturnValue(
+      acpContext({ isHomeAcp: true, isAcpContext: true }),
+    );
+
+    const { result } = renderHook(() => useChatInputModelState());
+
+    expect(result.current.availableAcpModels.length).toBeGreaterThan(0);
+    expect(result.current.showAcpPicker).toBe(false);
   });
 
   it("showAcpPicker: cloud backend shows the picker when a model list is present (cloud ACP supports mid-conversation switching)", () => {

@@ -27,6 +27,12 @@ vi.mock("#/stores/model-store", () => ({
   useModelStore: (selector: (s: typeof modelStoreState) => unknown) =>
     selector(modelStoreState),
 }));
+// The org-permission check reads the active backend from a context this
+// wrapper-less harness doesn't provide; drive it per test instead.
+const useCanManageOrgProfilesMock = vi.fn();
+vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
+  useCanManageOrgProfiles: () => useCanManageOrgProfilesMock(),
+}));
 
 // eslint-disable-next-line import/first
 import { useChatInputLlmProfileState } from "#/hooks/use-chat-input-llm-profile-state";
@@ -59,6 +65,9 @@ describe("useChatInputLlmProfileState", () => {
       data: { profiles: PROFILES, active_profile: "Fast" },
       isLoading: false,
     });
+    useCanManageOrgProfilesMock.mockReset();
+    // Local backends always own their profiles.
+    useCanManageOrgProfilesMock.mockReturnValue(true);
   });
 
   it("prefers the profile stamped on the conversation over a model match", () => {
@@ -117,6 +126,43 @@ describe("useChatInputLlmProfileState", () => {
     });
     const { result } = renderState();
     result.current.selectProfile("Fast");
+    expect(switchAndLog).not.toHaveBeenCalled();
+  });
+
+  it("activates the picked profile account-wide from the home page", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+
+    const { result } = renderState();
+    result.current.selectProfile("Smart");
+
+    // No conversation → the switch activates the profile globally so the next
+    // conversation launches with it.
+    expect(switchAndLog).toHaveBeenCalledWith(null, "Smart");
+  });
+
+  it("keeps the home picker read-only for a member who cannot manage org profiles", () => {
+    // A home pick hits the org-gated activate endpoint, which a cloud member
+    // could only 403 on.
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    useCanManageOrgProfilesMock.mockReturnValue(false);
+
+    const { result } = renderState();
+    result.current.selectProfile("Smart");
+
+    expect(result.current.canSwitchProfile).toBe(false);
+    expect(switchAndLog).not.toHaveBeenCalled();
+  });
+
+  it("keeps the picker read-only while a cloud start task is provisioning", () => {
+    // `task-…` is not a real conversation id yet, so /switch_profile would 404.
+    useOptionalConversationIdMock.mockReturnValue({
+      conversationId: "task-abc",
+    });
+
+    const { result } = renderState();
+    result.current.selectProfile("Smart");
+
+    expect(result.current.canSwitchProfile).toBe(false);
     expect(switchAndLog).not.toHaveBeenCalled();
   });
 });
