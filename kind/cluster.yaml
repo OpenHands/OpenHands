@@ -1,9 +1,0 @@
----
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: local-hands
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 80 # node port on the cluster for nginx.
-    hostPort: 80 # local port for nginx http.

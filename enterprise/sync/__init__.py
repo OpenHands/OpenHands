@@ -1,1 +1,0 @@
-# Sync package for OpenHands
