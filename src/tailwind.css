@@ -1,0 +1,647 @@
+@import "tailwindcss";
+
+@plugin '../hero.ts';
+@config "../tailwind.config.js";
+@source '../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';
+
+@plugin 'tailwind-scrollbar' {
+  nocompatible: true;
+  preferredstrategy: "pseudoelements";
+}
+
+@theme inline {
+  --color-primary: var(--oh-color-primary);
+  --color-logo: var(--oh-color-logo);
+  --color-base: var(--oh-color-base);
+  --color-base-secondary: var(--oh-color-base-secondary);
+  --color-danger: var(--oh-color-danger);
+  --color-success: var(--oh-color-success);
+  --color-basic: var(--oh-color-basic);
+  --color-tertiary: var(--oh-color-tertiary);
+  --color-tertiary-light: var(--oh-color-tertiary-light);
+  --color-tertiary-alt: var(--oh-text-dim);
+  --color-content: var(--oh-color-content);
+  --color-content-2: var(--oh-color-content-2);
+
+  /* Semantic surface aliases */
+  --color-surface: var(--oh-surface);
+  --color-surface-raised: var(--oh-surface-raised);
+  --color-surface-deep: var(--oh-surface-deep);
+
+  /* Semantic text aliases */
+  --color-foreground: var(--oh-foreground);
+  --color-text-secondary: var(--oh-text-secondary);
+  --color-text-tertiary: var(--oh-text-tertiary);
+  --color-muted: var(--oh-muted);
+  --color-text-dim: var(--oh-text-dim);
+  --color-text-subtle: var(--oh-text-subtle);
+  --color-modal-title: var(--oh-modal-title-foreground);
+
+  /* Semantic border aliases */
+  --color-border-input: var(--oh-border-input);
+  --color-border-subtle: var(--oh-border-subtle);
+
+  /* Interactive state aliases */
+  --color-interactive-hover: var(--oh-interactive-hover);
+  --color-interactive-hover-low: var(--oh-interactive-hover-low);
+  --color-interactive-active: var(--oh-interactive-active);
+
+  /* Cool Grey scale */
+  --color-cool-grey-50:  var(--cool-grey-50);
+  --color-cool-grey-100: var(--cool-grey-100);
+  --color-cool-grey-200: var(--cool-grey-200);
+  --color-cool-grey-300: var(--cool-grey-300);
+  --color-cool-grey-400: var(--cool-grey-400);
+  --color-cool-grey-500: var(--cool-grey-500);
+  --color-cool-grey-600: var(--cool-grey-600);
+  --color-cool-grey-700: var(--cool-grey-700);
+  --color-cool-grey-800: var(--cool-grey-800);
+  --color-cool-grey-900: var(--cool-grey-900);
+  --color-cool-grey-925: var(--cool-grey-925);
+  --color-cool-grey-950: var(--cool-grey-950);
+  --color-cool-grey-975: var(--cool-grey-975);
+}
+
+:root {
+  color-scheme: dark;
+  --oh-color-primary: #c9b974;
+  --oh-color-logo: #cfb755;
+  --oh-color-base: var(--cool-grey-950);
+  --oh-color-base-secondary: var(--cool-grey-925);
+  --oh-color-danger: #e76a5e;
+  --oh-color-success: #a5e75e;
+  --oh-color-basic: var(--cool-grey-400);
+  --oh-color-tertiary: var(--cool-grey-800);
+  --oh-color-tertiary-light: var(--cool-grey-300);
+  --oh-color-content: var(--cool-grey-100);
+  --oh-color-content-2: var(--cool-grey-50);
+  --oh-background: var(--cool-grey-950);
+  --oh-foreground: var(--cool-grey-100);
+  --oh-surface: var(--cool-grey-925);
+  --oh-surface-foreground: var(--cool-grey-100);
+  --oh-surface-raised: var(--cool-grey-900);  /* elevated within a panel */
+  --oh-surface-deep: var(--cool-grey-975);    /* deep inset, context menus */
+  --oh-overlay: var(--cool-grey-925);
+  --oh-overlay-foreground: var(--cool-grey-100);
+  --oh-modal-title-foreground: #ffffff;
+  --oh-muted: var(--cool-grey-400);
+  --oh-text-secondary: var(--cool-grey-300);  /* readable secondary text */
+  --oh-text-tertiary: var(--cool-grey-200);   /* tertiary, slightly dimmer */
+  --oh-text-dim: var(--cool-grey-500);        /* placeholders, very muted */
+  --oh-text-subtle: var(--cool-grey-600);     /* subtle labels, breadcrumbs */
+  --oh-interactive-hover: var(--cool-grey-700);      /* hover on mid surfaces (800 bg) */
+  --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
+  --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
+  --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
+  --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
+  --oh-default: var(--cool-grey-800);
+  --oh-default-foreground: var(--cool-grey-100);
+  --oh-accent: #c9b974;
+  --oh-accent-foreground: var(--cool-grey-950);
+  --oh-success: #a5e75e;
+  --oh-success-foreground: var(--cool-grey-950);
+  --oh-warning: #c9b974;
+  --oh-warning-foreground: var(--cool-grey-950);
+  --oh-danger: #e76a5e;
+  --oh-danger-foreground: var(--cool-grey-50);
+  --oh-segment: var(--cool-grey-925);
+  --oh-segment-foreground: var(--cool-grey-100);
+  --oh-border-width: 1px;
+  --oh-field-border-width: 1px;
+  --oh-border: var(--cool-grey-700);
+  --oh-border-input: var(--cool-grey-700);   /* unified with --oh-border; same stroke weight everywhere */
+  --oh-border-subtle: var(--cool-grey-800);  /* within-panel separators, list dividers */
+  --oh-separator: rgba(113, 120, 136, 0.5);
+  --oh-focus: #ffffff;
+  --oh-status-success: #1FBD53;
+  --oh-status-error: #FF684E;
+  --oh-link: var(--cool-grey-100);
+  --oh-radius: 8px;
+  --oh-field-radius: 8px;
+  --oh-surface-shadow: none;
+  --oh-overlay-shadow: none;
+  --oh-field-shadow: none;
+  --background: var(--oh-background);
+  --foreground: var(--oh-foreground);
+  --surface: var(--oh-surface);
+  --surface-raised: var(--oh-surface-raised);
+  --surface-deep: var(--oh-surface-deep);
+  --surface-foreground: var(--oh-surface-foreground);
+  --overlay: var(--oh-overlay);
+  --overlay-foreground: var(--oh-overlay-foreground);
+  --muted: var(--oh-muted);
+  --scrollbar: var(--oh-scrollbar);
+  --default: var(--oh-default);
+  --default-foreground: var(--oh-default-foreground);
+  --accent: var(--oh-accent);
+  --accent-foreground: var(--oh-accent-foreground);
+  --success: var(--oh-success);
+  --success-foreground: var(--oh-success-foreground);
+  --warning: var(--oh-warning);
+  --warning-foreground: var(--oh-warning-foreground);
+  --danger: var(--oh-danger);
+  --danger-foreground: var(--oh-danger-foreground);
+  --segment: var(--oh-segment);
+  --segment-foreground: var(--oh-segment-foreground);
+  --border-width: var(--oh-border-width);
+  --field-border-width: var(--oh-field-border-width);
+  --border: var(--oh-border);
+  --separator: var(--oh-separator);
+  --focus: var(--oh-focus);
+  --link: var(--oh-link);
+  --radius: var(--oh-radius);
+  --field-radius: var(--oh-field-radius);
+  --surface-shadow: var(--oh-surface-shadow);
+  --overlay-shadow: var(--oh-overlay-shadow);
+  --field-shadow: var(--oh-field-shadow);
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Skills / MCP / Automations tiles: no border at rest; hover/focus-visible only. */
+.extension-module-card-interactive {
+  cursor: pointer;
+  border: 1px solid transparent;
+  outline: none;
+  box-shadow: none;
+  transition: border-color 150ms;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.extension-module-card-interactive {
+  appearance: none;
+}
+
+.extension-module-card-interactive:hover {
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.extension-module-card-interactive:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.extension-module-card-interactive:focus:not(:focus-visible) {
+  border-color: transparent;
+}
+
+.extension-module-card-interactive:focus-visible {
+  outline: none;
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.button-base {
+  @apply bg-tertiary border border-[var(--oh-border)] rounded-xs;
+}
+
+.skeleton {
+  @apply rounded-md animate-pulse motion-reduce:animate-none;
+  background-color: var(--oh-interactive-active);
+}
+
+.skeleton-round {
+  @apply rounded-full animate-pulse motion-reduce:animate-none;
+  background-color: var(--oh-interactive-active);
+}
+
+/**
+ * Stagger pulse in a 3-step wave for sibling groups (same rhythm as the
+ * conversation list loading rows).
+ */
+.skeleton-stagger > :nth-child(3n + 1) .skeleton,
+.skeleton-stagger > :nth-child(3n + 1) .skeleton-round,
+.skeleton-stagger > :nth-child(3n + 1).skeleton,
+.skeleton-stagger > :nth-child(3n + 1).skeleton-round {
+  animation-delay: 0ms;
+}
+.skeleton-stagger > :nth-child(3n + 2) .skeleton,
+.skeleton-stagger > :nth-child(3n + 2) .skeleton-round,
+.skeleton-stagger > :nth-child(3n + 2).skeleton,
+.skeleton-stagger > :nth-child(3n + 2).skeleton-round {
+  animation-delay: 180ms;
+}
+.skeleton-stagger > :nth-child(3n + 3) .skeleton,
+.skeleton-stagger > :nth-child(3n + 3) .skeleton-round,
+.skeleton-stagger > :nth-child(3n + 3).skeleton,
+.skeleton-stagger > :nth-child(3n + 3).skeleton-round {
+  animation-delay: 360ms;
+}
+
+.heading {
+  @apply text-[28px] leading-8 -tracking-[0.02em] font-bold text-content-2;
+}
+
+/* Custom Chat Input */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Hide scrollbar by default */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+}
+
+/* Show scrollbar on hover */
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: var(--oh-scrollbar);
+  opacity: 1;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--oh-scrollbar-hover);
+}
+
+/* Firefox scrollbar styling */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-scrollbar:hover {
+  scrollbar-color: var(--oh-scrollbar) transparent;
+}
+
+/* Always visible scrollbar for chat interface */
+.custom-scrollbar-always::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar-always::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar-always::-webkit-scrollbar-thumb {
+  background: var(--oh-scrollbar);
+  border-radius: 3px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.custom-scrollbar-always::-webkit-scrollbar-thumb:hover {
+  background: var(--oh-scrollbar-hover);
+}
+
+/* Firefox scrollbar styling for always visible */
+.custom-scrollbar-always {
+  scrollbar-width: thin;
+  scrollbar-color: var(--oh-scrollbar) transparent;
+}
+
+/*
+ * Sidebar conversation list: reserve a stable gutter so short lists keep the
+ * same right inset as when a vertical scrollbar is present (aligns with nav).
+ */
+.conversation-panel-list-scroll {
+  scrollbar-gutter: stable;
+}
+
+@supports not (scrollbar-gutter: stable) {
+  .conversation-panel-list-scroll {
+    padding-right: 0.5rem;
+  }
+}
+
+/* Custom styles for contenteditable */
+.chat-input:empty:before {
+  content: attr(data-placeholder);
+  color: var(--cool-grey-400);
+  pointer-events: none;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.chat-input:focus {
+  outline: none;
+}
+
+.chat-input {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Drag and drop styles */
+.drag-over {
+  backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 15px;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+}
+
+.drag-over-content-wrapper {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  left: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 100;
+  padding-top: 2rem;
+}
+
+.drag-over-ui-content {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 20px;
+  color: #fff;
+}
+
+/* File preview styles */
+.file-preview {
+  background: rgba(208, 217, 250, 0.1);
+  border: 1px solid rgba(208, 217, 250, 0.3);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--cool-grey-200);
+}
+
+.file-preview .file-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.file-preview .file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-preview .file-size {
+  color: var(--cool-grey-400);
+  font-size: 10px;
+}
+
+.file-preview .remove-file {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cool-grey-200);
+  font-size: 10px;
+  transition: background-color 0.2s;
+}
+
+.file-preview .remove-file:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.loader {
+  background: var(--oh-color-primary);
+  animation: l5 1s infinite linear alternate;
+}
+
+@keyframes l5 {
+  0% {
+    box-shadow:
+      20px 0 var(--oh-color-primary),
+      -20px 0 color-mix(in srgb, var(--oh-color-primary) 10%, transparent);
+    background: var(--oh-color-primary);
+  }
+  33% {
+    box-shadow:
+      20px 0 var(--oh-color-primary),
+      -20px 0 color-mix(in srgb, var(--oh-color-primary) 10%, transparent);
+    background: color-mix(in srgb, var(--oh-color-primary) 10%, transparent);
+  }
+  66% {
+    box-shadow:
+      20px 0 color-mix(in srgb, var(--oh-color-primary) 10%, transparent),
+      -20px 0 var(--oh-color-primary);
+    background: color-mix(in srgb, var(--oh-color-primary) 10%, transparent);
+  }
+  100% {
+    box-shadow:
+      20px 0 color-mix(in srgb, var(--oh-color-primary) 10%, transparent),
+      -20px 0 var(--oh-color-primary);
+    background: var(--oh-color-primary);
+  }
+}
+
+/* Custom styling for xterm */
+/* XTerm.js scrollbar styling - follows custom-scrollbar pattern */
+.xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--oh-scrollbar);
+  border-radius: 4px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+}
+
+.xterm-viewport:hover::-webkit-scrollbar-thumb {
+  background: var(--oh-scrollbar-hover);
+  opacity: 1;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--oh-scrollbar-hover);
+}
+
+/* Firefox scrollbar styling for xterm */
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--oh-scrollbar) transparent;
+  transition: scrollbar-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.xterm-viewport:hover {
+  scrollbar-color: var(--oh-scrollbar-hover) transparent;
+}
+
+/* Force text wrapping and proper overflow handling for xterm */
+.xterm {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  background: transparent !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.xterm-viewport {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  max-width: 100%;
+}
+
+.xterm-screen {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* Ensure terminal text doesn't overflow horizontally */
+.xterm .xterm-viewport {
+  overflow-x: hidden !important;
+  background: transparent !important;
+}
+
+.xterm .xterm-screen {
+  max-width: 100%;
+  word-break: break-all;
+  background: transparent !important;
+}
+
+/* Ensure all xterm DOM elements have transparent backgrounds. Exclude canvas elements */
+.xterm {
+  background: transparent !important;
+}
+
+/* Ensure xterm respects container boundaries */
+.xterm-viewport {
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.xterm-screen {
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.context-menu-box-shadow {
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.modal-box-shadow {
+  box-shadow:
+    0 183px 51px 0 rgba(0, 0, 0, 0),
+    0 117px 47px 0 rgba(0, 0, 0, 0.01),
+    0 66px 40px 0 rgba(0, 0, 0, 0.03),
+    0 29px 29px 0 rgba(0, 0, 0, 0.04),
+    0 7px 16px 0 rgba(0, 0, 0, 0.05);
+}
+
+.table-box-shadow {
+  box-shadow:
+    0 26px 7px 0 rgba(0, 0, 0, 0),
+    0 17px 7px 0 rgba(0, 0, 0, 0.01),
+    0 9px 6px 0 rgba(0, 0, 0, 0.03),
+    0 4px 4px 0 rgba(0, 0, 0, 0.04),
+    0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.git-external-link-icon {
+  background: linear-gradient(90deg, rgba(69, 69, 69, 0) 0.35%, var(--cool-grey-800) 41.39%);
+}
+
+.api-configuration-modal {
+  box-shadow:
+    0 183px 51px 0 rgba(0, 0, 0, 0),
+    0 117px 47px 0 rgba(0, 0, 0, 0.01),
+    0 66px 40px 0 rgba(0, 0, 0, 0.03),
+    0 29px 29px 0 rgba(0, 0, 0, 0.04),
+    0 7px 16px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Shine text effect for streaming content */
+@keyframes shine {
+  0% {
+    background-position: 200% 0%;
+  }
+  100% {
+    background-position: -200% 0%;
+  }
+}
+
+.shine-text {
+  color: transparent;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  animation: shine 2s linear infinite;
+  background:
+    radial-gradient(circle at center, rgb(24 24 27 / 85%), transparent) -200%
+      50% / 200% 100% no-repeat,
+    var(--cool-grey-50);
+}
+
+/* Flowing gradient text used for live agent activity (matches Proton). */
+@keyframes gradient-slide {
+  0% {
+    background-position: 200% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-flow {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--oh-muted) 0%,
+    var(--oh-foreground) 50%,
+    var(--oh-muted) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: repeat-x;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-slide 1.25s linear infinite;
+}
+
+/* CTA card gradient and shadow */
+.cta-card-gradient {
+  background:
+    radial-gradient(
+      85.36% 123.38% at 50% 0%,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(0, 0, 0, 0) 100%
+    ),
+    #000000;
+  box-shadow:
+    0px 4px 6px -4px rgba(0, 0, 0, 0.1),
+    0px 10px 15px -3px rgba(0, 0, 0, 0.1);
+}

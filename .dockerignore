@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs (rebuilt in Docker)
+build/
+dist/
+
+# Development files
+.git/
+.github/
+.openhands/
+.agents/
+.pr/
+
+# Test files
+__tests__/
+tests/
+__mocks__/
+test-results/
+playwright-report*/
+coverage/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.sample
+
+# Misc
+artifacts/
+*.tgz
+*.log

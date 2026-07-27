@@ -1,0 +1,41 @@
+{
+  "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
+  "versions": {
+    "agentServer": "1.37.0",
+    "agentCanvas": "1.6.1",
+    "automation": "1.3.1"
+  },
+  "compatibility": {
+    "minimumAgentServer": "1.28.0"
+  },
+  "constraints": {
+    "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. openhands-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed openhands-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
+    "agentClientProtocol": "agent-client-protocol<0.11"
+  },
+  "images": {
+    "agentServer": "ghcr.io/openhands/agent-server",
+    "agentCanvas": "ghcr.io/openhands/agent-canvas"
+  },
+  "ports": {
+    "agentServer": 18000,
+    "automation": 18001,
+    "proxy": 8000
+  },
+  "paths": {
+    "stateSubdir": "agent-canvas",
+    "conversations": "agent-canvas/conversations",
+    "bashEvents": "agent-canvas/bash_events",
+    "automationDb": "automation/automations.db",
+    "canvasBasePath": "/canvas"
+  },
+  "packages": {
+    "agentServer": "openhands-agent-server",
+    "automation": "openhands-automation",
+    "tools": "openhands-tools",
+    "workspace": "openhands-workspace"
+  },
+  "telemetry": {
+    "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
+    "posthogHost": "https://us.i.posthog.com"
+  }
+}

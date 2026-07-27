@@ -1,0 +1,235 @@
+# Default values for agent-canvas.
+# This chart deploys the all-in-one agent-canvas image (frontend +
+# agent-server + automation) as a single-replica StatefulSet with a
+# PersistentVolumeClaim mounted at $HOME/.openhands.
+
+# -- Number of replicas. The all-in-one image stores conversation state,
+# settings, and the automation SQLite DB on a single PVC — keep this at 1
+# unless you point AUTOMATION_DB_URL at an external Postgres and are ready
+# to run the agent-server in a genuinely shareable mode.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/openhands/agent-canvas
+  # Image tag is pinned to the chart's appVersion. Override with
+  # `--set image.tag=sha-<...>` when you need a specific build (e.g. a PR
+  # image or a hotfix that doesn't match the chart's appVersion).
+  # tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+# - name: ghcr-pull-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── ServiceAccount + RBAC ────────────────────────────────────────────────────
+# When rbac.enabled is true, the ServiceAccount gets permissions inside
+# the cluster. Two independent knobs:
+#
+#   rbac.namespaces         — list of namespaces where the SA is granted
+#                             full ("*") access to all resources via a
+#                             per-namespace RoleBinding to the cluster's
+#                             built-in `admin` ClusterRole.
+#   rbac.clusterAdmin       — if true, additionally bind the SA to the
+#                             built-in `cluster-admin` ClusterRole.
+#                             OFF by default.
+#
+# Leave rbac.enabled=false to run the agent with no cluster access at all
+# (the ServiceAccount is still created so pods run under a stable
+# identity, but no Role/ClusterRole bindings are created).
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: true
+
+rbac:
+  # Master switch for creating any RoleBinding / ClusterRoleBinding.
+  enabled: false
+  # Namespaces the agent-server is allowed to manage all resources in.
+  # Each entry produces a RoleBinding in that namespace binding this
+  # release's ServiceAccount to the built-in `admin` ClusterRole (full
+  # namespace-scoped access, but no cluster-wide privileges).
+  #
+  # Example:
+  #   namespaces:
+  #     - default
+  #     - agent-sandbox
+  namespaces: []
+  # If true, additionally grant cluster-admin via a ClusterRoleBinding.
+  # This is a very broad privilege — off by default.
+  clusterAdmin: false
+
+# ── Service ──────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8000
+  # nodePort: 30800   # only used when type is NodePort
+  annotations: {}
+
+# ── Ingress ──────────────────────────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: agent-canvas.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - hosts:
+  #      - agent-canvas.example.com
+  #    secretName: agent-canvas-tls
+
+# ── Persistence ──────────────────────────────────────────────────────────────
+# The chart provisions ONE PVC and mounts it in the pod at multiple
+# well-known subdirectories of $HOME so those trees survive pod
+# restarts, rescheduling, and image upgrades — while leaving the rest
+# of $HOME untouched (the base image ships dotfiles like ~/.bashrc and
+# ~/.profile there that must not be shadowed).
+#
+# Defaults cover the two paths users care about:
+#   * $HOME/.openhands — agent-server settings, encrypted secrets,
+#     conversation history, event stores, automation SQLite DB (unless
+#     AUTOMATION_DB_URL is overridden), session API key, OH_SECRET_KEY
+#   * $HOME/workspace  — the agent's default working directory: cloned
+#     repos, worktrees, generated files, anything the agent writes when
+#     it treats ~ as the workspace root
+#
+# The upstream agent-server image runs as `openhands` (UID 10001) with
+# HOME=/home/openhands. Add more entries to `mounts` if you want other
+# subtrees persisted (e.g. ~/.cache, ~/.config).
+persistence:
+  enabled: true
+  # List of paths inside $HOME to persist. Each entry becomes a
+  # volumeMount on the container backed by the same PVC via `subPath`,
+  # so multiple paths share the same disk. `mountPath` is the absolute
+  # path inside the container; `subPath` is a directory name inside
+  # the PVC (must be unique across entries and safe on ext4).
+  mounts:
+    - mountPath: /home/openhands/.openhands
+      subPath: openhands
+    - mountPath: /home/openhands/workspace
+      subPath: workspace
+  size: 20Gi
+  # storageClassName: ""    # empty → cluster default
+  accessModes:
+    - ReadWriteOnce
+  annotations: {}
+  # If you prefer to bring your own PVC (already existing in the
+  # namespace), set existingClaim to its name. That disables the
+  # StatefulSet volumeClaimTemplates path.
+  existingClaim: ""
+
+# ── Configuration ────────────────────────────────────────────────────────────
+config:
+  # Unified entry point port inside the container.
+  port: 8000
+  # Internal ports used by the entrypoint's process manager.
+  agentServerPort: 18000
+  automationPort: 18001
+  # Optional Postgres connection string for the automation backend.
+  # When empty, the entrypoint falls back to SQLite on the PVC.
+  # automationDbUrl: "postgresql+asyncpg://user:pass@host/db"
+  automationDbUrl: ""
+  # Extra environment variables to pass through to the container.
+  # Each entry is `{ name: ..., value: ... }` or `{ name: ..., valueFrom: ... }`.
+  extraEnv: []
+    # - name: LLM_MODEL
+    #   value: "openhands/claude-sonnet-4-5-20250929"
+    # - name: LLM_API_KEY
+    #   valueFrom:
+    #     secretKeyRef:
+    #       name: my-llm-secret
+    #       key: api-key
+
+secrets:
+  # If provided, seed OH_SECRET_KEY (settings encryption) and the
+  # session API key from Kubernetes Secrets instead of letting the
+  # entrypoint auto-generate them on first boot.
+  # Auto-generation persists to the PVC, so leaving these empty is fine
+  # for most single-tenant deployments.
+  ohSecretKey:
+    existingSecret: ""
+    key: "ohSecretKey"
+  sessionApiKey:
+    existingSecret: ""
+    key: "sessionApiKey"
+
+# ── Pod-level knobs ──────────────────────────────────────────────────────────
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  # The upstream agent-server image runs as `openhands` (UID 10001).
+  # fsGroup 10001 makes the kubelet chown the PVC to that gid on mount
+  # so the process can write to it. runAsUser/runAsGroup are pinned to
+  # the same values as a belt-and-suspenders check against future image
+  # rebuilds — if the image's USER changes, override these to match.
+  fsGroup: 10001
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+
+securityContext: {}
+  # capabilities:
+  #   drop: [ALL]
+  # readOnlyRootFilesystem: false
+  # allowPrivilegeEscalation: false
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# Probes hit the unified entry point.
+probes:
+  liveness:
+    enabled: true
+    path: /alive
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+  readiness:
+    enabled: true
+    path: /alive
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    path: /alive
+    periodSeconds: 5
+    timeoutSeconds: 5
+    # Allow up to 5 minutes for first-boot dependencies / DB migration.
+    failureThreshold: 60
+
+# StatefulSet-specific knobs.
+statefulSet:
+  # Whether the StatefulSet uses OrderedReady or Parallel pod management.
+  # OrderedReady is safer for stateful workloads; use Parallel only if
+  # you understand the implications.
+  podManagementPolicy: OrderedReady
+  # updateStrategy for rollouts.
+  updateStrategy:
+    type: RollingUpdate
+  # Retained volumes on scale-down/deletion. Kubernetes 1.27+.
+  # persistentVolumeClaimRetentionPolicy:
+  #   whenDeleted: Retain
+  #   whenScaled: Retain

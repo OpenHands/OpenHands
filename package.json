@@ -1,0 +1,242 @@
+{
+  "name": "@openhands/agent-canvas",
+  "version": "1.6.1",
+  "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenHands/agent-canvas"
+  },
+  "homepage": "https://github.com/OpenHands/agent-canvas#readme",
+  "bugs": {
+    "url": "https://github.com/OpenHands/agent-canvas/issues"
+  },
+  "bin": {
+    "agent-canvas": "bin/agent-canvas.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@heroui/react": "2.8.10",
+    "@microlink/react-json-view": "1.31.20",
+    "@monaco-editor/react": "4.7.0",
+    "@openhands/extensions": "0.11.0",
+    "@openhands/typescript-client": "1.34.0",
+    "@react-router/node": "7.17.0",
+    "@react-router/serve": "7.17.0",
+    "@tailwindcss/vite": "4.2.4",
+    "@tanstack/react-query": "5.100.9",
+    "@types/shell-quote": "1.7.5",
+    "@uidotdev/usehooks": "2.4.1",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "axios": "1.18.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "downshift": "9.3.2",
+    "framer-motion": "12.38.0",
+    "httpxy": "0.5.3",
+    "i18next": "26.0.8",
+    "i18next-browser-languagedetector": "8.2.1",
+    "i18next-http-backend": "4.0.0",
+    "isbot": "5.1.39",
+    "lucide-react": "1.25.0",
+    "monaco-editor": "0.55.1",
+    "posthog-js": "1.372.6",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-hot-toast": "2.6.0",
+    "react-i18next": "17.0.6",
+    "react-icons": "5.6.0",
+    "react-markdown": "10.1.0",
+    "react-router": "7.17.0",
+    "react-syntax-highlighter": "16.1.1",
+    "rehype-raw": "7.0.0",
+    "rehype-sanitize": "6.0.0",
+    "remark-breaks": "4.0.0",
+    "remark-gfm": "4.0.1",
+    "shell-quote": "1.9.0",
+    "sirv": "3.0.2",
+    "sirv-cli": "3.0.1",
+    "socket.io-client": "4.8.3",
+    "tailwind-merge": "3.5.0",
+    "tailwind-scrollbar": "4.0.2",
+    "unist-util-visit": "5.1.0",
+    "uuid": "14.0.0",
+    "vite": "8.0.16",
+    "winston": "3.19.0",
+    "winston-daily-rotate-file": "5.0.0",
+    "zustand": "5.0.12"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env scripts/dev-with-automation.mjs",
+    "dev:static": "node --env-file-if-exists=.env scripts/dev-static.mjs",
+    "dev:extra-backend": "node --env-file-if-exists=.env scripts/dev-extra-backend.mjs",
+    "dev:minimal": "node --env-file-if-exists=.env scripts/dev-safe.mjs",
+    "dev:frontend": "npm run make-i18n && cross-env VITE_MOCK_API=false react-router dev",
+    "dev:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true react-router dev",
+    "build": "npm run build:app",
+    "build:mock": "npm run make-i18n && cross-env VITE_MOCK_API=true react-router build",
+    "start": "npx sirv-cli build/ --single",
+    "test": "npm run make-i18n && vitest run",
+    "test:e2e": "playwright test --pass-with-no-tests",
+    "test:e2e:live": "node --env-file-if-exists=.env tests/e2e/live/scripts/run-live-e2e.mjs",
+    "test:e2e:mock-llm": "playwright test --config=playwright.mock-llm.config.ts",
+    "test:e2e:mock-llm:docker": "playwright test --config=playwright.mock-llm-docker.config.ts",
+    "test:coverage": "npm run make-i18n && vitest run --coverage",
+    "dev_wsl": "VITE_WATCH_USE_POLLING=true vite",
+    "preview": "vite preview",
+    "make-i18n": "node scripts/make-i18n-translations.cjs",
+    "prelint": "npm run make-i18n",
+    "lint": "npm run typecheck && eslint src && prettier --check src/**/*.{ts,tsx}",
+    "lint:fix": "eslint src --fix && prettier --write src/**/*.{ts,tsx}",
+    "prepare": "husky",
+    "typecheck": "react-router typegen && tsc",
+    "typecheck:staged": "react-router typegen && npx tsc --noEmit --skipLibCheck",
+    "check-translation-completeness": "node scripts/check-translation-completeness.cjs",
+    "build:app": "npm run make-i18n && react-router build",
+    "build:lib": "npm run make-i18n && react-router typegen && cross-env BUILD_LIB=true vite build && tsc -p tsconfig.lib.json",
+    "build:docker": "node scripts/docker-build.mjs",
+    "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
+    "desktop": "npm run build:app && electron electron/main.mjs",
+    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs",
+    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs",
+    "download-uv": "node scripts/download-uv.mjs",
+    "download-node": "node scripts/download-node.mjs"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{ts,tsx}": [
+      "node scripts/run-staged-typecheck.mjs"
+    ],
+    "src/**/*": [
+      "npm run check-translation-completeness"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.1",
+    "@eslint/js": "9.39.4",
+    "@mswjs/socket.io-binding": "0.2.0",
+    "@playwright/test": "1.59.1",
+    "@react-router/dev": "7.17.0",
+    "@tailwindcss/typography": "0.5.19",
+    "@tanstack/eslint-plugin-query": "5.100.9",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/mdast": "4.0.4",
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/react-syntax-highlighter": "15.5.13",
+    "@typescript-eslint/eslint-plugin": "8.59.2",
+    "@typescript-eslint/parser": "8.59.2",
+    "@vercel/react-router": "1.3.0",
+    "@vitest/coverage-v8": "4.1.5",
+    "cross-env": "10.1.0",
+    "electron": "42.3.3",
+    "electron-builder": "26.8.1",
+    "eslint": "9.39.4",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.4",
+    "eslint-plugin-i18next": "6.1.4",
+    "eslint-plugin-import-x": "4.16.2",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-prettier": "5.5.5",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-unused-imports": "4.4.1",
+    "globals": "16.5.0",
+    "husky": "9.1.7",
+    "jsdom": "29.1.1",
+    "lint-staged": "16.4.0",
+    "msw": "2.14.2",
+    "postcss-prefix-selector": "2.1.1",
+    "prettier": "3.8.3",
+    "tailwindcss": "4.2.4",
+    "typescript": "6.0.3",
+    "vite-plugin-svgr": "5.2.0",
+    "vitest": "4.1.5"
+  },
+  "packageManager": "npm@10.5.0",
+  "volta": {
+    "node": "22.12.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  },
+  "overrides": {
+    "@vercel/static-config": {
+      "ajv": "8.20.0"
+    },
+    "dompurify": "3.4.7"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin",
+    "build",
+    "config",
+    "scripts",
+    "tools"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/components/browser/index.d.ts",
+      "import": "./dist/components/browser/index.js",
+      "require": "./dist/components/browser/index.cjs"
+    },
+    "./conversation": {
+      "types": "./dist/components/conversation/index.d.ts",
+      "import": "./dist/components/conversation/index.js",
+      "require": "./dist/components/conversation/index.cjs"
+    },
+    "./files": {
+      "types": "./dist/components/files/index.d.ts",
+      "import": "./dist/components/files/index.js",
+      "require": "./dist/components/files/index.cjs"
+    },
+    "./settings": {
+      "types": "./dist/components/settings/index.d.ts",
+      "import": "./dist/components/settings/index.js",
+      "require": "./dist/components/settings/index.cjs"
+    },
+    "./sidebar": {
+      "types": "./dist/components/sidebar/index.d.ts",
+      "import": "./dist/components/sidebar/index.js",
+      "require": "./dist/components/sidebar/index.cjs"
+    },
+    "./terminal": {
+      "types": "./dist/components/terminal/index.d.ts",
+      "import": "./dist/components/terminal/index.js",
+      "require": "./dist/components/terminal/index.cjs"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js",
+      "require": "./dist/i18n/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-router": "7.17.0"
+  }
+}

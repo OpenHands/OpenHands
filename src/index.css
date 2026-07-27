@@ -1,0 +1,136 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Outfit:wght@100..900&display=swap");
+
+:root {
+  --oh-bg-dark: var(--cool-grey-950);
+  --oh-bg-light: var(--cool-grey-900);
+  --oh-bg-input: var(--cool-grey-800);
+  --oh-bg-workspace: var(--cool-grey-925);
+  --oh-text-editor-base: var(--cool-grey-400);
+  --oh-text-editor-active: var(--cool-grey-300);
+  --oh-bg-editor-sidebar: var(--cool-grey-925);
+  --oh-bg-editor-active: var(--cool-grey-900);
+  --oh-border-editor-sidebar: var(--cool-grey-800);
+  --oh-bg-neutral-muted: color-mix(in srgb, var(--cool-grey-300) 20%, transparent);
+  --bg-dark: var(--oh-bg-dark);
+  --bg-light: var(--oh-bg-light);
+  --bg-input: var(--oh-bg-input);
+  --bg-workspace: var(--oh-bg-workspace);
+  --text-editor-base: var(--oh-text-editor-base);
+  --text-editor-active: var(--oh-text-editor-active);
+  --bg-editor-sidebar: var(--oh-bg-editor-sidebar);
+  --bg-editor-active: var(--oh-bg-editor-active);
+  --border-editor-sidebar: var(--oh-border-editor-sidebar);
+  --bg-neutral-muted: var(--oh-bg-neutral-muted);
+  background-color: var(--oh-color-base) !important;
+
+  /* ── Cool Grey Scale (13 shades + 2 pure anchors: white / black) ──────── */
+  --cool-grey-50:  #F7F9FC;
+  --cool-grey-100: #EEF2F7;
+  --cool-grey-200: #DCE3EE;
+  --cool-grey-300: #C3CDDC;
+  --cool-grey-400: #A3B0C4;
+  --cool-grey-500: #7E8A9E;
+  --cool-grey-600: #626D82;
+  --cool-grey-700: #4B5468;
+  --cool-grey-800: #383F50;
+  --cool-grey-900: #2C313F;
+  --cool-grey-925: #21252F;
+  --cool-grey-950: #0B0E14; /* intentional override: preserves original app-shell depth */
+  --cool-grey-975: #05070A;
+  /* ─────────────────────────────────────────────────────────────────────── */
+}
+
+body {
+  margin: 0;
+  background-color: var(--oh-color-base);
+  font-family:
+    -apple-system, "SF Pro", BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family:
+    source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.markdown-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  white-space: break-spaces;
+  background-color: var(--cool-grey-900);
+  border-radius: 4px;
+  color: var(--cool-grey-100);
+  border: 1px solid var(--cool-grey-900);
+  letter-spacing: -0.2px;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background-color: inherit;
+}
+
+.markdown-body {
+  white-space: pre-wrap; /* Handles line breaks */
+}
+
+.markdown-body th {
+  text-align: left;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.1rem 1rem;
+}
+
+/* Fast smooth scrolling for chat interface */
+.fast-smooth-scroll {
+  scroll-behavior: smooth;
+  scroll-timeline: 100ms;
+}
+
+@keyframes environment-switch-content-refresh {
+  0% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+:host[data-environment-switching="true"] [data-testid="root-layout"] {
+  animation: environment-switch-content-refresh 980ms ease-in-out forwards;
+}
+
+@keyframes environment-switch-overlay-fade {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  85% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.environment-switch-overlay > div {
+  animation: environment-switch-overlay-fade 980ms ease-in-out forwards;
+}

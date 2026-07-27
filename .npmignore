@@ -1,0 +1,51 @@
+# npm ignore file - overrides .gitignore for npm publish
+# We need to INCLUDE build/ and dist/ which are in .gitignore
+
+# Source files (not needed in package)
+src/
+__tests__/
+tests/
+*.test.ts
+*.test.tsx
+*.spec.ts
+
+# Development config
+.github/
+.husky/
+.openhands/
+.agents/
+.vscode/
+*.config.ts
+*.config.js
+*.config.mjs
+tsconfig*.json
+eslint.config.mjs
+.eslintrc*
+.prettierrc*
+vitest.setup.ts
+
+# Development docs
+DEVELOPMENT.md
+AGENTS.md
+CHANGELOG.md
+
+# Generated files we don't need
+public/locales/
+src/i18n/declaration.ts
+.env*
+.envrc
+
+# Test artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/
+coverage/
+
+# Misc
+node_modules/
+*.tgz
+.react-router/
+.vercel
+ralph/
+artifacts/

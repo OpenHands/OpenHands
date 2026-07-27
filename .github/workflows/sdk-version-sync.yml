@@ -1,0 +1,83 @@
+name: SDK Version Sync
+
+on:
+  pull_request:
+    paths:
+      # Only run on PRs that touch version-related files
+      - "config/defaults.json"
+      - "scripts/dev-safe.mjs"
+      - "scripts/dev-with-automation.mjs"
+      - "scripts/check-sdk-version-sync.mjs"
+      - ".github/workflows/sdk-version-sync.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "config/defaults.json"
+      - "scripts/dev-safe.mjs"
+      - "scripts/dev-with-automation.mjs"
+      - "scripts/check-sdk-version-sync.mjs"
+      - ".github/workflows/sdk-version-sync.yml"
+
+  # Triggered by external repos (e.g., OpenHands/automation) when SDK deps change
+  # To trigger: POST /repos/{owner}/{repo}/dispatches with event_type: "sdk-version-check"
+  repository_dispatch:
+    types: [sdk-version-check, sdk-release]
+
+  # Triggered when new SDK packages are released on PyPI
+  # The OpenHands/software-agent-sdk repo can trigger this on release
+  workflow_dispatch:
+    inputs:
+      sdk_version:
+        description: "New SDK version to check against (optional)"
+        required: false
+        type: string
+
+  schedule:
+    # Run every 6 hours to catch upstream changes reasonably quickly
+    - cron: "0 */6 * * *"
+
+concurrency:
+  group: sdk-sync-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-sdk-versions:
+    name: Check SDK version consistency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Log trigger info
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          INPUT_VALUE: ${{ inputs.sdk_version }}
+        run: |
+          echo "Triggered by: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Event type: $EVENT_ACTION"
+            echo "Client payload: $CLIENT_PAYLOAD"
+          fi
+          if [ -n "$INPUT_VALUE" ]; then
+            echo "SDK version input: $INPUT_VALUE"
+          fi
+
+      - name: Check SDK version sync
+        run: node scripts/check-sdk-version-sync.mjs
+        env:
+          # Pass the SDK version from workflow_dispatch or repository_dispatch if provided
+          # workflow_dispatch: uses inputs.sdk_version
+          # repository_dispatch: uses client_payload.version
+          EXPECTED_SDK_VERSION: ${{ inputs.sdk_version || github.event.client_payload.version || '' }}

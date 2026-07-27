@@ -1,0 +1,110 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    versioning-strategy: increase
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - npm
+    # Group related packages together so they ship in a single PR.
+    # Packages that aren't matched by any group still get their own PR
+    # (the default behavior), which is what we want for high-impact deps
+    # like vite, react-router, framer-motion, etc.
+    groups:
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+          - "tailwind-merge"
+          - "tailwind-scrollbar"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      i18next:
+        patterns:
+          - "i18next"
+          - "i18next-*"
+          - "react-i18next"
+          - "eslint-plugin-i18next"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "@types/react-*"
+          - "eslint-plugin-react"
+          - "eslint-plugin-react-hooks"
+      react-router:
+        patterns:
+          - "react-router"
+          - "@react-router/*"
+          - "@vercel/react-router"
+          - "isbot"
+      testing:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@testing-library/*"
+          - "jsdom"
+          - "@playwright/test"
+          - "msw"
+          - "@mswjs/*"
+      eslint:
+        patterns:
+          - "eslint"
+          - "eslint-config-*"
+          - "eslint-plugin-*"
+          - "@typescript-eslint/*"
+          - "prettier"
+        exclude-patterns:
+          # These are grouped under their feature area instead.
+          - "eslint-plugin-i18next"
+          - "eslint-plugin-react"
+          - "eslint-plugin-react-hooks"
+      monaco:
+        patterns:
+          - "monaco-editor"
+          - "@monaco-editor/*"
+      xterm:
+        patterns:
+          - "@xterm/*"
+      types:
+        patterns:
+          - "@types/*"
+        exclude-patterns:
+          - "@types/react"
+          - "@types/react-dom"
+          - "@types/react-*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: "UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions:
+        patterns:
+          - "*"

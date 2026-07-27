@@ -1,0 +1,138 @@
+{
+  "$schema": "This file maps source code paths to mock-LLM E2E test subdirectories. The resolve-affected-tests.mjs script reads it to determine which tests to run for a given set of changed files.",
+
+  "testDir": "tests/e2e/mock-llm",
+
+  "mappings": [
+    {
+      "comment": "Settings UI, LLM profiles, agent config",
+      "sources": [
+        "src/components/features/settings/**",
+        "src/routes/llm-settings*.tsx",
+        "src/routes/agent-settings.tsx",
+        "src/routes/app-settings.tsx",
+        "src/routes/settings-layout.tsx"
+      ],
+      "tests": ["settings"]
+    },
+    {
+      "comment": "Conversation flow, chat input, messages",
+      "sources": [
+        "src/components/features/chat/**",
+        "src/components/features/conversation/**",
+        "src/components/features/conversation-panel/**",
+        "src/components/features/images/**",
+        "src/components/features/controls/**",
+        "src/components/features/terminal/**",
+        "src/components/conversation-events/**",
+        "src/routes/conversation.tsx"
+      ],
+      "tests": ["conversations"]
+    },
+    {
+      "comment": "Files tab, browser tab, git panels and controls",
+      "sources": [
+        "src/components/features/files-tab/**",
+        "src/components/features/files/**",
+        "src/components/features/browser/**",
+        "src/routes/files-tab.tsx",
+        "src/routes/browser-tab.tsx",
+        "src/api/git-service/**",
+        "src/stores/files-tab-store.ts",
+        "src/stores/browser-store.ts",
+        "src/utils/git-*.ts",
+        "src/utils/get-git-path.ts",
+        "src/utils/parse-git-remote-url.ts"
+      ],
+      "tests": ["files"]
+    },
+    {
+      "comment": "Automations lifecycle and preset cards",
+      "sources": [
+        "src/components/features/automations/**",
+        "src/routes/automations*.tsx"
+      ],
+      "tests": ["automations"]
+    },
+    {
+      "comment": "Onboarding modal and first-run flow",
+      "sources": ["src/components/features/onboarding/**"],
+      "tests": ["onboarding"]
+    },
+    {
+      "comment": "Backend management, auth, connectivity",
+      "sources": [
+        "src/components/features/backends/**",
+        "src/api/backend-registry/**",
+        "src/api/agent-server-compatibility.ts"
+      ],
+      "tests": ["backends"]
+    },
+    {
+      "comment": "Home page, workspace selection, folder browser",
+      "sources": [
+        "src/components/features/home/**",
+        "src/components/features/launch/**",
+        "src/routes/home.tsx",
+        "src/stores/workspace*.ts"
+      ],
+      "tests": ["home"]
+    },
+    {
+      "comment": "Skills loading and activation",
+      "sources": [
+        "src/components/features/skills/**",
+        "src/routes/skills.tsx",
+        "src/api/skills-service.*"
+      ],
+      "tests": ["skills"]
+    },
+    {
+      "comment": "MCP marketplace and server management",
+      "sources": [
+        "src/components/features/mcp-page/**",
+        "src/routes/mcp*.tsx",
+        "src/utils/mcp-marketplace-utils.ts",
+        "src/mocks/mcp-handlers.ts"
+      ],
+      "tests": ["mcp"]
+    }
+  ],
+
+  "alwaysRun": ["regressions"],
+
+  "runAllSources": [
+    "src/api/agent-server-adapter.ts",
+    "src/api/agent-server-client-options.ts",
+    "src/api/agent-server-config.ts",
+    "src/api/option-service.*",
+    "src/api/settings-service.*",
+    "src/api/event-service.*",
+    "src/context/**",
+    "src/hooks/query/**",
+    "src/hooks/use-websocket.*",
+    "src/routes/root.tsx",
+    "src/routes/root-layout.tsx",
+    "src/root.tsx",
+    "src/entry.client.tsx",
+    "src/stores/event-store.*",
+    "public/**",
+    "scripts/**",
+    "bin/**",
+    "config/**",
+    "tests/e2e/mock-llm/test-mapping.json",
+    "tests/e2e/mock-llm/utils/**",
+    "tests/e2e/mock-llm/scripts/**",
+    "tests/e2e/mock-llm/reporters/**",
+    "tests/e2e/support/**",
+    "package.json",
+    "package-lock.json",
+    "vite.config.ts",
+    "tsconfig.json",
+    "react-router.config.ts",
+    "playwright.mock-llm.config.ts",
+    "tailwind.config.js",
+    "hero.ts",
+    ".github/workflows/mock-llm-e2e.yml"
+  ]
+}

@@ -1,0 +1,74 @@
+# Containerized ACP agent-server for Agent Canvas (agent-canvas#1014).
+#
+# Brings up the OpenHands Agent Server image — which pre-installs the ACP CLI
+# wrappers (claude-agent-acp / codex-acp / gemini) — with a persistent volume so
+# conversations and materialised credential files survive restarts. Point Canvas
+# at it with VITE_BACKEND_BASE_URL=http://localhost:8010 (the image's CORS allows
+# localhost, so the browser talks to it directly).
+#
+#   1. Copy .env.example to .env and fill in the credentials for the provider(s)
+#      you want to run (see that file + ../../docs/ACP_AGENTS.md → "Running ACP
+#      agents in a Docker container").
+#   2. `docker compose up`        (from this directory)
+#   3. Run Canvas pointed at it:  VITE_BACKEND_BASE_URL=http://localhost:8010 npm run dev:frontend
+#
+# The credentials below are read from your shell/.env and handed to Canvas via
+# the onboarding "Set up credentials" step; this file only needs them if you
+# prefer to bake host logins into the container instead of entering them in the
+# UI. Leave them unset to supply everything through Canvas.
+
+services:
+  agent-server:
+    # Default `latest-python` is always >= the version Canvas requires. To pin a
+    # reproducible image (driven by config/defaults.json) or override per-run:
+    #   npm run example:acp-docker:env   # writes AGENT_SERVER_IMAGE to .env
+    # (Rationale — the compatibility floor and the #3510 LookupSecret fix — is in
+    # README.md §1 and the env-sync test.)
+    image: ${AGENT_SERVER_IMAGE:-ghcr.io/openhands/agent-server:latest-python}
+    container_name: oh-acp
+    ports:
+      # host:container — Canvas points VITE_BACKEND_BASE_URL at http://localhost:8010.
+      - "8010:8000"
+    environment:
+      # New conversations define canvas_ui_control through client_tools. Keep the
+      # old Python module importable so conversations persisted before that migration
+      # can restore CanvasUIAction / CanvasUIObservation events after a restart.
+      - OH_EXTRA_PYTHON_PATH=/canvas-tools
+      # Optional cipher key. ACP conversations work without it (Canvas sends ACP
+      # provider credentials as loopback LookupSecrets resolved from the
+      # agent-server's own secret store, and does NOT flag the request
+      # secrets_encrypted). Set it to (a) persist saved secrets across
+      # container restarts and (b) enable the encrypted-settings path used by
+      # OpenHands-agent (non-ACP) conversations. Generate one with
+      # `python -c "import secrets;print(secrets.token_urlsafe(32))"`.
+      # - OH_SECRET_KEY=${OH_SECRET_KEY}
+      #
+      # The agent-server's CORS already allows localhost origins, so no extra
+      # config is needed for the browser to reach it directly.
+      #
+      # Optionally bake provider logins into the container instead of entering
+      # them in the Canvas onboarding step. These are passed through from .env;
+      # unset values are simply not exported. NOTE: the recommended path is to
+      # enter credentials in Canvas (they ride the start request as secrets) —
+      # this is here for non-interactive / CI setups.
+      - ANTHROPIC_API_KEY
+      - CLAUDE_CODE_OAUTH_TOKEN
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
+      - GOOGLE_CLOUD_PROJECT
+      - GOOGLE_CLOUD_LOCATION
+      - GOOGLE_GENAI_USE_VERTEXAI
+      # Set a session key to require auth; mirror it into Canvas via
+      # VITE_SESSION_API_KEY. Leave unset for an open local backend.
+      # - SESSION_API_KEY
+    volumes:
+      # Persist conversations AND the credential files the SDK materialises
+      # (Codex auth.json under CODEX_HOME, Gemini ADC/SA JSON) across restarts.
+      - acp-data:/workspace
+      # Legacy canvas_ui module used only when restoring pre-client_tools state.
+      # Path is relative to this compose file.
+      - ../../tools:/canvas-tools:ro
+    restart: unless-stopped
+
+volumes:
+  acp-data:
