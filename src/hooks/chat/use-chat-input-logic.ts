@@ -1,12 +1,24 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import {
   isContentEmpty,
   clearEmptyContent,
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  useConversationStore,
+  type IMessageToSend,
+} from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
+
+/**
+ * How recent a `messageToSend` must be for the home composer to honor it as an
+ * intentional one-shot prefill (e.g. "Create Automation" / skill launch flows,
+ * which navigate to the home composer and then set the message in a 0ms
+ * timeout). Anything older is a stale leftover from a previous conversation
+ * and must not clobber the just-restored sessionStorage draft.
+ */
+const HOME_PREFILL_MAX_AGE_MS = 5_000;
 
 /**
  * Hook for managing chat input content logic
@@ -33,13 +45,33 @@ export const useChatInputLogic = () => {
     chatInputRef,
   );
 
-  // On the home page (no conversationId) the right-panel / messageToSend
-  // mechanism is not relevant.  More importantly, a stale messageToSend value
-  // in the Zustand store causes useAutoResize to overwrite the just-restored
-  // sessionStorage draft with an empty string (see useAutoResize value effect).
-  // Returning null here keeps value=undefined in useAutoResize so it never
-  // touches the element content on the home page.
-  const messageToSend = conversationId ? rawMessageToSend : null;
+  // On the home page (no conversationId) a stale messageToSend value in the
+  // Zustand store would cause useAutoResize to overwrite the just-restored
+  // sessionStorage draft (see useAutoResize value effect), so stale values are
+  // dropped here (null keeps value=undefined in useAutoResize so it never
+  // touches the element content). Fresh values, however, are intentional
+  // one-shot prefills: launch flows such as the "Create Automation" modal
+  // navigate("/conversations") and then setMessageToSend just afterwards, and
+  // the home composer must honor them (useAutoResize applies the text, places
+  // the caret at the end, and clears the store value via onValueApplied).
+  // The store timestamp distinguishes the two cases. The check runs in an
+  // effect (not during render) because reading the clock in render is impure.
+  const [homePrefill, setHomePrefill] = useState<IMessageToSend | null>(null);
+
+  useEffect(() => {
+    if (conversationId) {
+      return;
+    }
+    if (!rawMessageToSend) {
+      setHomePrefill(null);
+      return;
+    }
+    if (Date.now() - rawMessageToSend.timestamp <= HOME_PREFILL_MAX_AGE_MS) {
+      setHomePrefill(rawMessageToSend);
+    }
+  }, [conversationId, rawMessageToSend]);
+
+  const messageToSend = conversationId ? rawMessageToSend : homePrefill;
 
   // Restore a cancelled pending send back into the input only when empty.
   useEffect(() => {
