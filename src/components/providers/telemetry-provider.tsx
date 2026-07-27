@@ -1,5 +1,6 @@
 import React from "react";
 import type { BootstrapConfig } from "posthog-js";
+import { useTelemetry } from "#/hooks/use-telemetry";
 import {
   configurePostHogBootstrap,
   configureTelemetry,
@@ -62,6 +63,11 @@ function readBootstrapIds(): BootstrapConfig | undefined {
   }
 }
 
+function TelemetryLifecycle() {
+  useTelemetry();
+  return null;
+}
+
 export function TelemetryProvider({
   children,
   config = {},
@@ -91,5 +97,10 @@ export function TelemetryProvider({
     }
   }, [analyticsEnabled, apiHost, apiKey, uiHost]);
 
-  return children;
+  return (
+    <>
+      {analyticsEnabled ? <TelemetryLifecycle /> : null}
+      {children}
+    </>
+  );
 }
