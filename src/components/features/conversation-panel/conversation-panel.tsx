@@ -537,16 +537,7 @@ export function ConversationPanel({
     [conversationGroups],
   );
 
-  const compactVisibleConversations = React.useMemo(
-    () =>
-      sortConversationsByField(
-        recentScoped.filter((conversation) =>
-          isExecutionActive(conversation.execution_status),
-        ),
-        conversationSort,
-      ),
-    [conversationSort, recentScoped],
-  );
+  const compactVisibleConversations = sortedVisibleConversations;
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
