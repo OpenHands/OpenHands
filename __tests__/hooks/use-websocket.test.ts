@@ -298,6 +298,67 @@ describe("useWebSocket", () => {
     }
   });
 
+  it("should send the session key before application messages", async () => {
+    class MockWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static instance: MockWebSocket | null = null;
+
+      readonly url: string;
+      readonly sent: string[] = [];
+      readyState = MockWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instance = this;
+        queueMicrotask(() => {
+          this.readyState = MockWebSocket.OPEN;
+          this.onopen?.(new Event("open"));
+        });
+      }
+
+      send(data: string) {
+        this.sent.push(data);
+      }
+
+      close() {
+        this.readyState = MockWebSocket.CLOSED;
+      }
+    }
+
+    const originalWebSocket = globalThis.WebSocket;
+    vi.stubGlobal("WebSocket", MockWebSocket);
+    const sessionApiKey = `sk-oh-${"a".repeat(64)}`;
+
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws", {
+          sessionApiKey,
+          onOpen: () => MockWebSocket.instance?.send("application-message"),
+        }),
+      );
+
+      await waitForConnection(result);
+
+      expect(MockWebSocket.instance?.url).toBe("ws://acme.com/ws");
+      expect(MockWebSocket.instance?.sent).toEqual([
+        JSON.stringify({ type: "auth", session_api_key: sessionApiKey }),
+        "application-message",
+      ]);
+
+      unmount();
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+      MockWebSocket.instance = null;
+    }
+  });
+
   // Skipped: flaky in CI - see comment at top of file
   it.skip("should call onOpen handler when WebSocket connection opens", async () => {
     const onOpenSpy = vi.fn();

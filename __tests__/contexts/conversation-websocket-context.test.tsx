@@ -21,6 +21,10 @@ import type { MessageEvent } from "#/types/agent-server/core";
 // gets a non-empty url (planning stays ""), so url presence discriminates it.
 const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
+  mainOptions: null as null | {
+    queryParams?: Record<string, string | boolean>;
+    sessionApiKey?: string | null;
+  },
 }));
 
 // Keep the units under test real (the provider, `useConversationHistory`, the
@@ -30,10 +34,15 @@ vi.mock("#/hooks/use-websocket", () => ({
   useWebSocket: vi.fn(
     (
       url: string,
-      options?: { onMessage?: (event: { data: string }) => void },
+      options?: {
+        onMessage?: (event: { data: string }) => void;
+        queryParams?: Record<string, string | boolean>;
+        sessionApiKey?: string | null;
+      },
     ) => {
       if (url && options?.onMessage) {
         wsCapture.mainOnMessage = options.onMessage;
+        wsCapture.mainOptions = options;
       }
       return { socket: null, reconnect: vi.fn() };
     },
@@ -76,6 +85,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
   beforeEach(() => {
     wsCapture.mainOnMessage = null;
+    wsCapture.mainOptions = null;
     window.localStorage.clear();
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -157,6 +167,29 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // stamp this stays null and the header falls back to ambiguous matching.
     expect(getStoredConversationMetadata("conv-switch")?.active_profile).toBe(
       "fast-opus",
+    );
+  });
+
+  it("keeps the session key out of WebSocket query parameters", async () => {
+    const sessionApiKey = `sk-oh-${"c".repeat(64)}`;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-auth"
+          conversationUrl="http://localhost/api"
+          sessionApiKey={sessionApiKey}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    expect(wsCapture.mainOptions?.sessionApiKey).toBe(sessionApiKey);
+    expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
+      "session_api_key",
     );
   });
 

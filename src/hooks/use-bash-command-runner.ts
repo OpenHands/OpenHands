@@ -6,6 +6,7 @@ import type {
   BashOutput,
 } from "@openhands/typescript-client";
 import type { CommandResult } from "#/api/runtime-service/agent-server-runtime-service";
+import { sendWebSocketAuth } from "#/utils/websocket-auth";
 import { buildBashWebSocketUrl } from "#/utils/websocket-url";
 
 interface WaitingCommand {
@@ -73,11 +74,12 @@ export function useBashCommandRunner(
   useEffect(() => {
     if (!enabled) return;
 
-    const wsUrl = buildBashWebSocketUrl(conversationUrl, sessionApiKey);
+    const wsUrl = buildBashWebSocketUrl(conversationUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      sendWebSocketAuth(ws, sessionApiKey);
       // Flush any commands that arrived while connecting
       for (const {
         command,
