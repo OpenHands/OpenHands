@@ -1,5 +1,13 @@
 import asyncio
 
+import run_maintenance_tasks  # noqa: I001
+
+# NOTE: `run_maintenance_tasks` above is imported unqualified rather than as
+# `enterprise.run_maintenance_tasks`. The production Docker image COPYs the
+# contents of `enterprise/` directly into `/app` (flattening it), so in the
+# deployed container there is no importable top-level `enterprise` package --
+# only its flattened sibling modules, like the local/monorepo-dev environment
+# resolves `enterprise` as a package thanks to a dev-only .pth entry.
 from server.logger import logger
 from server.maintenance_task_processor.org_budget_maintenance_processor import (
     OrgBudgetMaintenanceProcessor,
@@ -7,8 +15,6 @@ from server.maintenance_task_processor.org_budget_maintenance_processor import (
 from storage.database import session_maker
 from storage.maintenance_task import MaintenanceTask, MaintenanceTaskStatus
 from storage.org_budget_settings import OrgBudgetSettings
-
-from enterprise import run_maintenance_tasks
 
 BATCH_SIZE = 25
 
