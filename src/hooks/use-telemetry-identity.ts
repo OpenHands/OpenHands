@@ -33,5 +33,13 @@ export const useTelemetryIdentity = () => {
 
     setTelemetryCloudContext({ userId, email, orgId });
     void setTelemetryIdentity(userId, email ? { email } : {});
-  }, [backend.kind, email, isIdentityLoading, orgId, userId]);
+  }, [
+    backend.connectionRevision,
+    backend.id,
+    backend.kind,
+    email,
+    isIdentityLoading,
+    orgId,
+    userId,
+  ]);
 };

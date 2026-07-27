@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
 // Mock posthog-js before importing telemetry service
 let identifiedUserId: string | undefined;
+let anonymousDistinctId = "ph-test-distinct-id";
 let latestPostHogConfig:
   | { before_send: (event: unknown) => unknown }
   | undefined;
@@ -18,9 +19,12 @@ const mockPosthog = {
   get_property: vi.fn((property: string) =>
     property === "$user_id" ? identifiedUserId : undefined,
   ),
-  get_distinct_id: vi.fn(() => identifiedUserId ?? "ph-test-distinct-id"),
-  reset: vi.fn(() => {
+  get_distinct_id: vi.fn(() => identifiedUserId ?? anonymousDistinctId),
+  reset: vi.fn((resetDeviceId = false) => {
     identifiedUserId = undefined;
+    anonymousDistinctId = resetDeviceId
+      ? "ph-reset-device-id"
+      : "ph-reset-distinct-id";
   }),
 };
 mockPosthog.init.mockImplementation((_, config) => {
@@ -34,22 +38,25 @@ vi.mock("posthog-js", () => ({
 
 import {
   clearPendingCloudTelemetryConsent,
+  clearPendingLocalTelemetryRevocation,
+  clearTelemetryData,
   configureTelemetry,
+  getPendingCloudTelemetryConsent,
+  getPendingLocalTelemetryRevocationId,
   getTelemetryConsent,
   getTelemetryDistinctId,
-  getPendingCloudTelemetryConsent,
+  getTelemetryDistinctIdForConsentSync,
   initializePostHogClient,
-  setTelemetryConsent,
-  setTelemetryCloudContext,
-  setTelemetryIdentity,
-  setTelemetryBackendContext,
-  subscribeTelemetryConsent,
   isTelemetryEnabled,
-  trackInstall,
-  trackSessionStart,
+  setTelemetryBackendContext,
+  setTelemetryCloudContext,
+  setTelemetryConsent,
+  setTelemetryIdentity,
+  subscribeTelemetryConsent,
   trackEvent,
   trackException,
-  clearTelemetryData,
+  trackInstall,
+  trackSessionStart,
 } from "#/services/telemetry";
 
 // Mock import.meta.env for tests
@@ -70,9 +77,10 @@ describe("Telemetry Service", () => {
     // Reset mock
     vi.clearAllMocks();
     identifiedUserId = undefined;
+    anonymousDistinctId = "ph-test-distinct-id";
     mockPosthog.has_opted_out_capturing.mockReturnValue(false);
     mockPosthog.get_distinct_id.mockImplementation(
-      () => identifiedUserId ?? "ph-test-distinct-id",
+      () => identifiedUserId ?? anonymousDistinctId,
     );
     await setTelemetryIdentity(null);
     setTelemetryBackendContext({});
@@ -228,6 +236,22 @@ describe("Telemetry Service", () => {
       await setTelemetryConsent("granted");
 
       expect(mockPosthog.identify).toHaveBeenCalledWith("user-a", {});
+    });
+
+    it("syncs denial for the actor that existed before PostHog reset", async () => {
+      await setTelemetryConsent("granted");
+      await setTelemetryIdentity("user-a");
+
+      await setTelemetryConsent("denied");
+
+      expect(mockPosthog.get_distinct_id()).toBe("ph-reset-distinct-id");
+      expect(getPendingLocalTelemetryRevocationId()).toBe("user-a");
+      await expect(getTelemetryDistinctIdForConsentSync()).resolves.toBe(
+        "user-a",
+      );
+
+      clearPendingLocalTelemetryRevocation("user-a");
+      expect(getPendingLocalTelemetryRevocationId()).toBeNull();
     });
 
     it("clears Cloud user context for local events", async () => {
@@ -536,6 +560,7 @@ describe("Telemetry Service", () => {
   describe("clearTelemetryData", () => {
     it("clears all telemetry data from localStorage", async () => {
       await setTelemetryConsent("granted");
+      await setTelemetryIdentity("user-a");
       localStorage.setItem("openhands-telemetry-first-use", "true");
 
       await clearTelemetryData();
@@ -545,6 +570,9 @@ describe("Telemetry Service", () => {
       expect(localStorage.getItem("openhands-telemetry-first-use")).toBeNull();
       expect(mockPosthog.reset).toHaveBeenCalledWith(true);
       expect(mockPosthog.opt_out_capturing).toHaveBeenCalled();
+      await expect(getTelemetryDistinctIdForConsentSync()).resolves.toBe(
+        "user-a",
+      );
     });
 
     it("falls back to opting out if the SDK cannot reset", async () => {

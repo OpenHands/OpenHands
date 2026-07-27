@@ -45,6 +45,8 @@ import {
 const TELEMETRY_CONSENT_KEY = "openhands-telemetry-consent";
 const TELEMETRY_CONSENT_PENDING_CLOUD_SYNC_KEY =
   "openhands-telemetry-consent-pending-cloud-sync";
+const TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY =
+  "openhands-telemetry-consent-pending-local-revocation";
 const TELEMETRY_CONSENT_CHANGE_EVENT = "openhands-telemetry-consent-change";
 const TELEMETRY_FIRST_USE_KEY = "openhands-telemetry-first-use";
 const TELEMETRY_SESSION_KEY = "openhands-telemetry-session";
@@ -430,6 +432,17 @@ export function getPendingCloudTelemetryConsent(): ResolvedTelemetryConsent | nu
   }
 }
 
+/** Return the pre-reset actor whose local Automation consent must be revoked. */
+export function getPendingLocalTelemetryRevocationId(): string | null {
+  if (!isBrowser()) return null;
+
+  try {
+    return localStorage.getItem(TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function subscribeTelemetryConsent(listener: () => void): () => void {
   if (!isBrowser()) return () => {};
   const handleStorage = (event: StorageEvent) => {
@@ -463,6 +476,37 @@ function markTelemetryConsentForCloudSync(
     localStorage.setItem(TELEMETRY_CONSENT_PENDING_CLOUD_SYNC_KEY, consent);
   } catch {
     // Ignore storage errors; the in-browser consent decision still applies.
+  }
+}
+
+function markPendingLocalTelemetryRevocation(distinctId: string | null): void {
+  if (!isBrowser() || !distinctId) return;
+
+  try {
+    localStorage.setItem(
+      TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY,
+      distinctId,
+    );
+  } catch {
+    // Ignore storage errors; browser capture is still disabled below.
+  }
+}
+
+export function clearPendingLocalTelemetryRevocation(
+  expectedDistinctId: string,
+): void {
+  if (!isBrowser()) return;
+
+  try {
+    if (
+      localStorage.getItem(TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY) !==
+      expectedDistinctId
+    ) {
+      return;
+    }
+    localStorage.removeItem(TELEMETRY_CONSENT_PENDING_LOCAL_REVOCATION_KEY);
+  } catch {
+    // Ignore storage errors.
   }
 }
 
@@ -515,6 +559,7 @@ export async function setTelemetryConsent(
       posthog.opt_in_capturing();
       applyDesiredTelemetryIdentity(posthog);
     } else {
+      markPendingLocalTelemetryRevocation(posthog.get_distinct_id?.() ?? null);
       if (posthog.get_property?.("$user_id") != null) {
         resetPostHogIdentity(posthog);
       } else {
@@ -744,7 +789,14 @@ export async function getTelemetryDistinctId(): Promise<string | null> {
 export async function getTelemetryDistinctIdForConsentSync(): Promise<
   string | null
 > {
-  if (!isBrowser() || telemetryDisabled || isDoNotTrackEnabled()) return null;
+  if (!isBrowser()) return null;
+
+  if (getTelemetryConsent() !== "granted") {
+    const pendingRevocationId = getPendingLocalTelemetryRevocationId();
+    if (pendingRevocationId) return pendingRevocationId;
+  }
+
+  if (telemetryDisabled || isDoNotTrackEnabled()) return null;
 
   const posthog = await initializePostHogClient();
   return posthog?.get_distinct_id?.() ?? null;
@@ -783,6 +835,9 @@ export async function clearTelemetryData(): Promise<void> {
   }
 
   try {
+    markPendingLocalTelemetryRevocation(
+      posthogInstance?.get_distinct_id?.() ?? null,
+    );
     localStorage.removeItem(TELEMETRY_CONSENT_KEY);
     localStorage.removeItem(TELEMETRY_FIRST_USE_KEY);
   } catch {
@@ -812,5 +867,7 @@ export async function clearTelemetryData(): Promise<void> {
     } catch {
       // Telemetry failures must not break the application.
     }
+  } finally {
+    notifyTelemetryConsentListeners();
   }
 }

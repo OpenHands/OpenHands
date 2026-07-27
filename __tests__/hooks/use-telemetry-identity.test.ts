@@ -129,4 +129,19 @@ describe("useTelemetryIdentity", () => {
       email: "user@example.com",
     });
   });
+
+  it("redeclares the user after Cloud connection credentials change", () => {
+    const { rerender } = renderHook(() => useTelemetryIdentity());
+    vi.clearAllMocks();
+    useActiveBackendMock.mockReturnValue({
+      backend: { ...cloudBackend, connectionRevision: 1 },
+      orgId: "org-123",
+    });
+
+    rerender();
+
+    expect(setTelemetryIdentityMock).toHaveBeenCalledWith("user-123", {
+      email: "user@example.com",
+    });
+  });
 });
