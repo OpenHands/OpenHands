@@ -132,9 +132,12 @@ describe("useTaskPolling", () => {
     renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith("/conversations/conversation-1", {
-        replace: true,
-      });
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backendId=default-local",
+        {
+          replace: true,
+        },
+      );
     });
     expect(getStoredConversationMetadata("conversation-1")).toEqual({
       selected_repository: "OpenHands/agent-canvas",
