@@ -123,7 +123,7 @@
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.39.4",
     "@mswjs/socket.io-binding": "0.2.0",
-    "@playwright/test": "1.59.1",
+    "@playwright/test": "1.61.1",
     "@react-router/dev": "7.17.0",
     "@tailwindcss/typography": "0.5.19",
     "@tanstack/eslint-plugin-query": "5.100.9",
@@ -139,7 +139,7 @@
     "@typescript-eslint/eslint-plugin": "8.59.2",
     "@typescript-eslint/parser": "8.59.2",
     "@vercel/react-router": "1.3.0",
-    "@vitest/coverage-v8": "4.1.5",
+    "@vitest/coverage-v8": "4.1.10",
     "cross-env": "10.1.0",
     "electron": "42.3.3",
     "electron-builder": "26.8.1",
@@ -157,13 +157,13 @@
     "husky": "9.1.7",
     "jsdom": "29.1.1",
     "lint-staged": "16.4.0",
-    "msw": "2.14.2",
+    "msw": "2.15.0",
     "postcss-prefix-selector": "2.1.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.2.4",
     "typescript": "6.0.3",
     "vite-plugin-svgr": "5.2.0",
-    "vitest": "4.1.5"
+    "vitest": "4.1.10"
   },
   "packageManager": "npm@10.5.0",
   "volta": {
