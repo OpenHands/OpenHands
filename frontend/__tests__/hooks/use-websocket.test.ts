@@ -211,6 +211,48 @@ describe("useWebSocket", () => {
     });
   });
 
+  it("ignores close handlers from the previous URL", async () => {
+    const firstUrl = "ws://old-conversation.com/ws";
+    const secondUrl = "ws://new-conversation.com/ws";
+    const firstLink = ws.link(firstUrl);
+    const secondLink = ws.link(secondUrl);
+    const onClose = vi.fn();
+    const secondConnected = vi.fn();
+    let closeFirst: (() => void) | undefined;
+    mswServer.use(
+      firstLink.addEventListener("connection", ({ client, server }) => {
+        server.connect();
+        closeFirst = () =>
+          client.close(1013, "credential_binding_activation_required");
+      }),
+      secondLink.addEventListener("connection", ({ server }) => {
+        server.connect();
+        secondConnected();
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ url }) => useWebSocket(url, { onClose }),
+      { initialProps: { url: firstUrl } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+      expect(closeFirst).toBeDefined();
+    });
+
+    rerender({ url: secondUrl });
+    closeFirst?.();
+
+    await waitFor(() => {
+      expect(secondConnected).toHaveBeenCalledOnce();
+    });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
+    });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it.skip("should call onMessage handler when WebSocket receives a message", async () => {
     const onMessageSpy = vi.fn();
     const options = { onMessage: onMessageSpy };

@@ -30,6 +30,8 @@ export const useWebSocket = <T = string>(
 
   // Store options in a ref to avoid reconnecting when callbacks change
   const optionsRef = React.useRef(options);
+  const urlRef = React.useRef(url);
+  urlRef.current = url;
   React.useEffect(() => {
     optionsRef.current = options;
   }, [options]);
@@ -71,6 +73,9 @@ export const useWebSocket = <T = string>(
     };
 
     ws.onclose = (event) => {
+      if (urlRef.current !== url) {
+        return;
+      }
       // Check if this specific WebSocket instance is allowed to reconnect
       const canReconnect = allowedToReconnectRef.current.has(ws);
       setIsConnected(false);

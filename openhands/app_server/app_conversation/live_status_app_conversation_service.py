@@ -86,6 +86,7 @@ from openhands.app_server.pending_messages.pending_message_service import (
     PendingMessageService,
 )
 from openhands.app_server.sandbox.docker_sandbox_service import DockerSandboxService
+from openhands.app_server.sandbox.remote_sandbox_service import RemoteSandboxService
 from openhands.app_server.sandbox.sandbox_models import (
     AGENT_SERVER,
     SandboxInfo,
@@ -428,6 +429,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         managed_credential_marker_value: str | None = None
         managed_start_attempted = False
         managed_conversation_created = False
+        app_conversation_info: AppConversationInfo | None = None
+        saved_event_callbacks: list[EventCallback] = []
         sandbox: SandboxInfo | None = None
         try:
             async for updated_task in self._wait_for_sandbox_start(task):
@@ -669,13 +672,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
             # Save processors
             for processor in processors:
-                await self.event_callback_service.save_event_callback(
-                    EventCallback(
-                        conversation_id=info.id,
-                        event_kind=processor.get_event_kind(),
-                        processor=processor,
-                    )
+                event_callback = EventCallback(
+                    conversation_id=info.id,
+                    event_kind=processor.get_event_kind(),
+                    processor=processor,
                 )
+                await self.event_callback_service.save_event_callback(event_callback)
+                saved_event_callbacks.append(event_callback)
 
             if managed_credential_marker_value is not None:
                 assert self.web_url is not None
@@ -699,7 +702,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                     required=True,
                 )
 
+            managed_start_attempted = False
             managed_conversation_created = False
+
             # Update the start task
             task.status = AppConversationStartTaskStatus.READY
             task.app_conversation_id = info.id
@@ -760,6 +765,18 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         timeout=30.0,
                     )
                     response.raise_for_status()
+                    if app_conversation_info is not None:
+                        await asyncio.gather(
+                            self.app_conversation_info_service.delete_app_conversation_info(
+                                conversation_id
+                            ),
+                            *(
+                                self.event_callback_service.delete_event_callback(
+                                    callback.id
+                                )
+                                for callback in saved_event_callbacks
+                            ),
+                        )
                 except Exception:
                     _logger.exception(
                         'Failed to scrub managed credential after start failure',
@@ -2391,9 +2408,14 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     ) -> str | None:
         if not codex_credential_sync_enabled() or api_override:
             return None
-        if self.app_mode != 'saas' and not isinstance(
-            self.sandbox_service, DockerSandboxService
-        ):
+        supported_backend = (
+            self.app_mode == 'saas'
+            and isinstance(self.sandbox_service, RemoteSandboxService)
+        ) or (
+            self.app_mode != 'saas'
+            and isinstance(self.sandbox_service, DockerSandboxService)
+        )
+        if not supported_backend:
             return None
         agent = request.agent
         if not isinstance(agent, ACPAgent):
@@ -2421,6 +2443,13 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             return None
         if not self.web_url or not sandbox.session_api_key:
             return None
+        if (
+            await self.app_conversation_info_service.get_app_conversation_info(
+                conversation_id
+            )
+            is not None
+        ):
+            raise SandboxError(f'Conversation already exists: {conversation_id}')
 
         user_id = await self.user_context.get_user_id()
         get_effective_org_id = getattr(self.user_context, 'get_effective_org_id', None)
