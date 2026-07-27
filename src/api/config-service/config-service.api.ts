@@ -61,10 +61,14 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/models/search` directly (verified status is embedded in
    *   each returned item).
+   * @param prefetchedModels - Pre-fetched full model-id list used by the local
+   *   reconstruction path to avoid a duplicate `/api/llm/models` fetch when the
+   *   caller already retrieved it. Ignored for cloud backends.
    */
   static async searchModels(
     params: SearchModelsParams = {},
     verifiedByProvider?: Record<string, string[]>,
+    prefetchedModels?: string[],
   ): Promise<LLMModelPage> {
     const active = getActiveBackend();
 
@@ -91,7 +95,9 @@ class ConfigService {
         ? Promise.resolve(verifiedByProvider)
         : llmClient.getVerifiedModels();
     const [models, verifiedMap] = await Promise.all([
-      llmClient.getModels(),
+      prefetchedModels !== undefined
+        ? Promise.resolve(prefetchedModels)
+        : llmClient.getModels(),
       verifiedFetch,
     ]);
 
@@ -133,10 +139,14 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/providers/search` directly (verified status is embedded in
    *   each returned item).
+   * @param prefetchedModels - Pre-fetched full model-id list used by the local
+   *   reconstruction path to avoid a duplicate `/api/llm/models` fetch when the
+   *   caller already retrieved it. Ignored for cloud backends.
    */
   static async searchProviders(
     params: SearchProvidersParams = {},
     verifiedByProvider?: Record<string, string[]>,
+    prefetchedModels?: string[],
   ): Promise<ProviderPage> {
     const active = getActiveBackend();
 
@@ -164,7 +174,9 @@ class ConfigService {
     const [providers, verifiedMap, models] = await Promise.all([
       llmClient.getProviders(),
       verifiedFetch,
-      llmClient.getModels(),
+      prefetchedModels !== undefined
+        ? Promise.resolve(prefetchedModels)
+        : llmClient.getModels(),
     ]);
 
     const verifiedProviders = new Set(Object.keys(verifiedMap ?? {}));

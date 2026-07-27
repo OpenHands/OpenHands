@@ -2,6 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
 import {
+  LLM_MODELS_QUERY_KEY,
+  LLM_MODELS_STALE_TIME,
+  fetchLLMModels,
+} from "./use-llm-models";
+import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
   VERIFIED_MODELS_STALE_TIME,
@@ -13,6 +18,7 @@ const MAX_PAGINATION_DEPTH = 10;
 async function fetchPage(
   provider: string,
   verifiedByProvider: Record<string, string[]>,
+  models: string[],
   pageId?: string,
   depth = 0,
 ): Promise<LLMModel[]> {
@@ -27,12 +33,14 @@ async function fetchPage(
       page_id: pageId,
     },
     verifiedByProvider,
+    models,
   );
 
   if (page.next_page_id) {
     const rest = await fetchPage(
       provider,
       verifiedByProvider,
+      models,
       page.next_page_id,
       depth + 1,
     );
@@ -45,12 +53,19 @@ export const useProviderModels = (provider: string | null) =>
   useQuery({
     queryKey: ["config", "models", provider],
     queryFn: async ({ client }) => {
-      const verifiedByProvider = await client.fetchQuery({
-        queryKey: VERIFIED_MODELS_QUERY_KEY,
-        queryFn: fetchVerifiedModelsByProvider,
-        staleTime: VERIFIED_MODELS_STALE_TIME,
-      });
-      return fetchPage(provider!, verifiedByProvider);
+      const [verifiedByProvider, models] = await Promise.all([
+        client.fetchQuery({
+          queryKey: VERIFIED_MODELS_QUERY_KEY,
+          queryFn: fetchVerifiedModelsByProvider,
+          staleTime: VERIFIED_MODELS_STALE_TIME,
+        }),
+        client.fetchQuery({
+          queryKey: LLM_MODELS_QUERY_KEY,
+          queryFn: fetchLLMModels,
+          staleTime: LLM_MODELS_STALE_TIME,
+        }),
+      ]);
+      return fetchPage(provider!, verifiedByProvider, models);
     },
     enabled: !!provider,
     staleTime: VERIFIED_MODELS_STALE_TIME,
