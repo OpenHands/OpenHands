@@ -38,7 +38,7 @@ export const TIPS: Tip[] = [
   },
   {
     key: I18nKey.TIPS$API_USAGE,
-    link: "https://docs.openhands.dev/api-reference/health-check",
+    link: "https://docs.openhands.dev/api-reference/health",
   },
 ];
 
