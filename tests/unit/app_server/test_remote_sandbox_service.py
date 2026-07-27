@@ -764,6 +764,7 @@ class TestSandboxLifecycle:
             return_value=stored_sandbox
         )
         remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service._prepare_for_pause = AsyncMock()
         remote_sandbox_service.db_session.delete = AsyncMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
@@ -846,6 +847,7 @@ class TestSandboxLifecycle:
             return_value=stored_sandbox
         )
         remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service._prepare_for_pause = AsyncMock()
         remote_sandbox_service.db_session.delete = AsyncMock()
         remote_sandbox_service.db_session.commit = AsyncMock()
 
@@ -1311,6 +1313,7 @@ class TestErrorHandling:
             return_value=stored_sandbox
         )
         remote_sandbox_service._get_runtime = AsyncMock(return_value=runtime_data)
+        remote_sandbox_service._prepare_for_pause = AsyncMock()
         remote_sandbox_service.httpx_client.request.side_effect = httpx.HTTPError(
             'API Error'
         )
