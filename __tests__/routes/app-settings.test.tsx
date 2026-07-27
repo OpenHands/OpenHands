@@ -8,6 +8,17 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 
+const activeBackendState = vi.hoisted(() => ({
+  kind: "local" as "local" | "cloud",
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { kind: activeBackendState.kind },
+    orgId: null,
+  }),
+}));
+
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     ...MOCK_DEFAULT_USER_SETTINGS,
@@ -42,6 +53,7 @@ function renderAppSettingsScreen() {
 describe("AppSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    activeBackendState.kind = "local";
   });
 
   it("renders the OSS application settings form", async () => {
@@ -71,6 +83,52 @@ describe("AppSettingsScreen", () => {
         name: "SETTINGS$TITLE_GENERATION_MODEL",
       }),
     ).toHaveValue("SETTINGS$TITLE_GENERATION_AUTOMATIC");
+  });
+
+  it("renders the analytics toggle as checked and disabled for cloud backends", async () => {
+    activeBackendState.kind = "cloud";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ user_consents_to_analytics: false }),
+    );
+
+    renderAppSettingsScreen();
+
+    const analyticsSwitch = await screen.findByTestId(
+      "enable-analytics-switch",
+    );
+    const submitButton = screen.getByTestId("submit-button");
+
+    expect(analyticsSwitch).toBeChecked();
+    expect(analyticsSwitch).toBeDisabled();
+
+    await userEvent.click(analyticsSwitch);
+    expect(submitButton).toBeDisabled();
+  });
+
+  it("does not submit analytics consent for cloud backends", async () => {
+    activeBackendState.kind = "cloud";
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ user_consents_to_analytics: false }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("enable-sound-notifications-switch"),
+    );
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          user_consents_to_analytics: expect.anything(),
+        }),
+      );
+    });
   });
 
   it("saves updated git author details in OSS mode", async () => {
