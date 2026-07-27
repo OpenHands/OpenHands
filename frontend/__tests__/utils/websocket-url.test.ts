@@ -4,6 +4,7 @@ import {
   extractPathPrefix,
   buildHttpBaseUrl,
   buildWebSocketUrl,
+  conversationIdFromWebSocketUrl,
 } from "#/utils/websocket-url";
 
 describe("websocket-url utilities", () => {
@@ -180,6 +181,39 @@ describe("websocket-url utilities", () => {
       expect(result).toBe(
         "wss://app.example.com/org/team/runtime/12345/sockets/events/test-conv",
       );
+    });
+  });
+
+  describe("conversationIdFromWebSocketUrl", () => {
+    it("should read back the id buildWebSocketUrl encoded", () => {
+      const url = buildWebSocketUrl(
+        "conv-123",
+        "http://localhost:3000/api/conversations/conv-123",
+      );
+      expect(conversationIdFromWebSocketUrl(url)).toBe("conv-123");
+    });
+
+    it("should ignore query parameters appended by the socket hook", () => {
+      expect(
+        conversationIdFromWebSocketUrl(
+          "ws://localhost:3000/sockets/events/conv-123?resend_all=true&session_api_key=secret",
+        ),
+      ).toBe("conv-123");
+    });
+
+    it("should handle proxy path prefixes", () => {
+      expect(
+        conversationIdFromWebSocketUrl(
+          "wss://app.example.com/runtime/12345/sockets/events/test-conv",
+        ),
+      ).toBe("test-conv");
+    });
+
+    it("should return null for missing or unparseable urls", () => {
+      expect(conversationIdFromWebSocketUrl(null)).toBeNull();
+      expect(conversationIdFromWebSocketUrl(undefined)).toBeNull();
+      expect(conversationIdFromWebSocketUrl("")).toBeNull();
+      expect(conversationIdFromWebSocketUrl("not a url")).toBeNull();
     });
   });
 });

@@ -724,6 +724,87 @@ describe("Conversation WebSocket Handler", () => {
       expect(recoverCredentialBinding).not.toHaveBeenCalled();
     });
 
+    it("does not request activation for a previously selected conversation", async () => {
+      const recoverCredentialBinding = vi.fn();
+      const staleConversationId = "conversation-stale";
+      const freshConversationId = "conversation-fresh";
+      const sockets: WebSocket[] = [];
+      const NativeWebSocket = window.WebSocket;
+      const webSocketSpy = vi
+        .spyOn(window, "WebSocket")
+        .mockImplementation(function trackingWebSocket(
+          url: string | URL,
+          protocols?: string | string[],
+        ) {
+          const socket = new NativeWebSocket(url, protocols);
+          sockets.push(socket);
+          return socket;
+        } as unknown as typeof WebSocket);
+
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const treeFor = (conversationId: string) => (
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={["/conversation"]}>
+            <Routes>
+              <Route
+                path="/conversation"
+                element={
+                  <ConversationWebSocketProvider
+                    conversationId={conversationId}
+                    conversationUrl={`http://localhost:3000/api/conversations/${conversationId}`}
+                    sessionApiKey={null}
+                    onCredentialBindingActivationRequired={
+                      recoverCredentialBinding
+                    }
+                  >
+                    <ConnectionStatusComponent />
+                  </ConversationWebSocketProvider>
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      try {
+        const { rerender } = render(treeFor(staleConversationId));
+
+        await waitFor(() => {
+          expect(screen.getByTestId("connection-state")).toHaveTextContent(
+            "OPEN",
+          );
+        });
+
+        const staleSocket = sockets[0];
+        expect(staleSocket.url).toContain(staleConversationId);
+
+        // The provider is reused across conversations, so the stale socket's close
+        // is dispatched through the freshly selected conversation's handler.
+        rerender(treeFor(freshConversationId));
+        await waitFor(() => {
+          expect(sockets.length).toBeGreaterThan(1);
+        });
+
+        act(() => {
+          staleSocket.dispatchEvent(
+            new CloseEvent("close", {
+              code: 1013,
+              reason: "credential_binding_activation_required",
+            }),
+          );
+        });
+
+        expect(recoverCredentialBinding).not.toHaveBeenCalled();
+      } finally {
+        webSocketSpy.mockRestore();
+      }
+    });
+
     it("should clear error message store when connection is restored", async () => {
       let connectionAttempt = 0;
 

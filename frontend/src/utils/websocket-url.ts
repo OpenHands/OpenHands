@@ -93,3 +93,21 @@ export function buildWebSocketUrl(
 
   return `${protocol}//${baseHost}${pathPrefix}/sockets/events/${conversationId}`;
 }
+
+/**
+ * Reads back the conversation ID that buildWebSocketUrl encoded into a live socket URL.
+ */
+export function conversationIdFromWebSocketUrl(
+  url: string | null | undefined,
+): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const segments = new URL(url).pathname.split("/");
+    return segments[segments.length - 1] || null;
+  } catch {
+    return null;
+  }
+}
