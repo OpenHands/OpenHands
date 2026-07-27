@@ -44,7 +44,7 @@
     "i18next-http-backend": "4.0.0",
     "isbot": "5.1.39",
     "lucide-react": "1.25.0",
-    "monaco-editor": "0.55.1",
+    "monaco-editor": "0.56.0",
     "posthog-js": "1.372.6",
     "react": "19.2.5",
     "react-dom": "19.2.5",
