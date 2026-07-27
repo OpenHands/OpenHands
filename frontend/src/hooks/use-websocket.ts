@@ -87,7 +87,11 @@ export const useWebSocket = <T = string>(
           optionsRef.current?.onError?.(event);
         }
       }
-      optionsRef.current?.onClose?.(event);
+      // optionsRef is mutable, so a superseded socket would otherwise deliver its
+      // close to whichever conversation is selected by the time it arrives.
+      if (ws === wsRef.current) {
+        optionsRef.current?.onClose?.(event);
+      }
 
       // Attempt reconnection if enabled and allowed
       // IMPORTANT: Only reconnect if this specific instance is allowed to reconnect

@@ -534,6 +534,17 @@ class DockerSandboxService(SandboxService):
         except (NotFound, APIError):
             return False
 
+    async def _drain_credentials(self, container, sandbox_id: str) -> None:
+        """Run the credential pause barrier for a running container."""
+        sandbox = await self._container_to_sandbox_info(container)
+        if sandbox is None:
+            # Losing the image tag hides the sandbox, not its binding, so only a
+            # managed sandbox may block here; a legacy one keeps failing open.
+            if await self._has_managed_credential_conversation(sandbox_id):
+                raise SandboxError(f'Could not resolve managed sandbox: {sandbox_id}')
+            return
+        await self._prepare_for_pause(sandbox, self.httpx_client)
+
     async def pause_sandbox(self, sandbox_id: str) -> bool:
         """Pause a running sandbox."""
         try:
@@ -542,12 +553,7 @@ class DockerSandboxService(SandboxService):
             container = self.docker_client.containers.get(sandbox_id)
 
             if container.status == 'running':
-                sandbox = await self._container_to_sandbox_info(container)
-                if sandbox is None:
-                    raise SandboxError(
-                        f'Could not resolve running sandbox: {sandbox_id}'
-                    )
-                await self._prepare_for_pause(sandbox, self.httpx_client)
+                await self._drain_credentials(container, sandbox_id)
                 container.pause()
 
             return True
@@ -562,11 +568,7 @@ class DockerSandboxService(SandboxService):
             container = self.docker_client.containers.get(sandbox_id)
 
             if container.status == 'running':
-                sandbox = await self._container_to_sandbox_info(container)
-                # An unresolvable container carries no binding to drain, and the
-                # delete must still reclaim the container and its volume.
-                if sandbox is not None:
-                    await self._prepare_for_pause(sandbox, self.httpx_client)
+                await self._drain_credentials(container, sandbox_id)
             if container.status in ['running', 'paused']:
                 container.stop(timeout=10)
 

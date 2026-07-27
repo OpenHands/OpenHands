@@ -41,10 +41,7 @@ import type {
   ServerErrorEvent,
 } from "#/types/v1/core/events/conversation-state-event";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
-import {
-  buildWebSocketUrl,
-  conversationIdFromWebSocketUrl,
-} from "#/utils/websocket-url";
+import { buildWebSocketUrl } from "#/utils/websocket-url";
 import type {
   V1AppConversation,
   V1SendMessageRequest,
@@ -798,14 +795,6 @@ export function ConversationWebSocketProvider({
           event.code === 1013 &&
           event.reason === "credential_binding_activation_required"
         ) {
-          // useWebSocket dispatches close through a mutable options ref, so a late
-          // close for a previous conversation would otherwise recover this one.
-          const closedConversationId = conversationIdFromWebSocketUrl(
-            (event.target as WebSocket | null)?.url,
-          );
-          if (closedConversationId && closedConversationId !== conversationId) {
-            return;
-          }
           onCredentialBindingActivationRequired?.();
         }
       },

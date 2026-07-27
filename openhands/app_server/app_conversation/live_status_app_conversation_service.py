@@ -2963,8 +2963,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     async def _delete_sub_conversations(self, parent_conversation_id: UUID) -> None:
         """Delete all sub-conversations of a parent conversation.
 
-        This method handles errors gracefully, continuing to delete remaining
-        sub-conversations even if one fails.
+        Every sub-conversation is attempted even if one fails. A managed
+        sub-conversation's failure is re-raised afterwards so its unflushed
+        credential stops the parent delete.
 
         Args:
             parent_conversation_id: The UUID of the parent conversation.
@@ -2975,7 +2976,9 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
             )
         )
 
+        managed_error: Exception | None = None
         for sub_id in sub_conversation_ids:
+            sub_conversation = None
             try:
                 sub_conversation = await self.get_app_conversation(sub_id)
                 if sub_conversation:
@@ -2988,12 +2991,19 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                         extra={'conversation_id': str(sub_id)},
                     )
             except Exception as e:
+                # A managed child's failed final flush must reach the caller, but
+                # only after its siblings have had their chance to be deleted.
+                if managed_error is None and sub_conversation is not None:
+                    if CODEX_CREDENTIAL_BINDING_TAG_KEY in sub_conversation.tags:
+                        managed_error = e
                 # Log error but continue deleting remaining sub-conversations
                 _logger.warning(
                     f'Error deleting sub-conversation {sub_id}: {e}',
                     extra={'conversation_id': str(sub_id)},
                     exc_info=True,
                 )
+        if managed_error is not None:
+            raise managed_error
 
     async def _delete_from_agent_server(
         self, app_conversation: AppConversation
@@ -3007,8 +3017,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 app_conversation.sandbox_id
             )
             if managed_marker is not None:
-                # A missing sandbox already ran the barrier on its own teardown.
-                if sandbox is None or sandbox.status == SandboxStatus.MISSING:
+                if sandbox is None:
                     return
                 if sandbox.status != SandboxStatus.RUNNING:
                     if sandbox.status not in (
