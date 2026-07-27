@@ -84,7 +84,7 @@ def remote_sandbox_service(
     mock_sandbox_spec_service, mock_user_context, mock_httpx_client, mock_db_session
 ):
     """Create RemoteSandboxService instance with mocked dependencies."""
-    return RemoteSandboxService(
+    service = RemoteSandboxService(
         sandbox_spec_service=mock_sandbox_spec_service,
         api_url='https://api.example.com',
         api_key='test-api-key',
@@ -97,6 +97,8 @@ def remote_sandbox_service(
         httpx_client=mock_httpx_client,
         db_session=mock_db_session,
     )
+    service._has_managed_credential_conversation = AsyncMock(return_value=False)
+    return service
 
 
 def _make_stream_response(
@@ -2774,7 +2776,7 @@ class TestDeleteSandboxKeyHandling:
     def service_with_real_db(
         self, mock_sandbox_spec_service, mock_user_context, real_session
     ):
-        return RemoteSandboxService(
+        service = RemoteSandboxService(
             sandbox_spec_service=mock_sandbox_spec_service,
             api_url='https://api.example.com',
             api_key='test-api-key',
@@ -2787,6 +2789,8 @@ class TestDeleteSandboxKeyHandling:
             httpx_client=AsyncMock(spec=httpx.AsyncClient),
             db_session=real_session,
         )
+        service._has_managed_credential_conversation = AsyncMock(return_value=False)
+        return service
 
     @pytest.mark.asyncio
     async def test_session_key_invalidated_and_survives_rollback(
