@@ -58,4 +58,35 @@ describe("ConfigService", () => {
     const openhands = page.items.find((p) => p.name === "openhands");
     expect(openhands).toEqual({ name: "openhands", verified: true });
   });
+
+  it("surfaces providers discoverable only from model IDs when /api/llm/providers omits them", async () => {
+    // Regression for #15576: a local agent-server may expose a provider only
+    // through its model IDs (e.g. `openrouter/...`) while omitting it from
+    // `/api/llm/providers` (litellm-derived) and `/api/llm/models/verified`.
+    // The Basic LLM provider picker should still surface such a provider.
+    server.use(
+      http.get("/api/llm/providers", () =>
+        HttpResponse.json({ providers: ["anthropic"] }),
+      ),
+      http.get("/api/llm/models/verified", () =>
+        HttpResponse.json({
+          models: { anthropic: ["claude-opus-4-5-20251101"] },
+        }),
+      ),
+      http.get("/api/llm/models", () =>
+        HttpResponse.json({
+          models: [
+            "anthropic/claude-opus-4-5-20251101",
+            "openrouter/anthropic/claude-sonnet-4-5-20250929",
+            "openrouter/google/gemini-2.5-pro",
+          ],
+        }),
+      ),
+    );
+
+    const page = await ConfigService.searchProviders({ limit: 50 });
+
+    const openrouter = page.items.find((p) => p.name === "openrouter");
+    expect(openrouter).toEqual({ name: "openrouter", verified: false });
+  });
 });
