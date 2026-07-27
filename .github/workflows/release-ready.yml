@@ -9,7 +9,7 @@ jobs:
     if: "${{ contains(github.event.pull_request.labels.*.name, 'release-line: gui') }}"
     permissions:
       actions: write
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     secrets: inherit
@@ -22,7 +22,7 @@ jobs:
     if: "${{ contains(github.event.pull_request.labels.*.name, 'release-line: cloud') }}"
     permissions:
       actions: write
-      contents: read
+      contents: write
       issues: write
       pull-requests: write
     secrets: inherit
