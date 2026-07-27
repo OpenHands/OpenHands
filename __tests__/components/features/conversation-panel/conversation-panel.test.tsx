@@ -557,7 +557,10 @@ describe("ConversationPanel", () => {
     await user.click(screen.getByTestId("load-more-conversations"));
 
     await waitFor(() => {
-      expect(searchConversationsSpy).toHaveBeenCalledWith(20, "page-2");
+      expect(searchConversationsSpy).toHaveBeenCalledWith({
+        limit: 20,
+        pageId: "page-2",
+      });
     });
     expect(await screen.findByText("Paged Conversation")).toBeInTheDocument();
   });
