@@ -18,6 +18,7 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -112,6 +113,7 @@ describe("ConversationPanel", () => {
     mockStopConversationMutate.mockClear();
     _mockConversationCounter = 0;
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
+    useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     // Setup default mock for searchConversations
     vi.spyOn(
       AgentServerConversationService,
@@ -432,6 +434,37 @@ describe("ConversationPanel", () => {
     expect(
       screen.queryByRole("button", { name: /confirm/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("should archive a conversation and remove it from the list", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    const firstCardTitle = within(cards[0]).getByText("Conversation 1");
+    expect(firstCardTitle).toBeInTheDocument();
+
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    await user.click(screen.getByTestId("archive-button"));
+
+    expect(
+      screen.getByText("CONVERSATION$CONFIRM_ARCHIVE"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("CONVERSATION$CONFIRM_ARCHIVE"),
+      ).not.toBeInTheDocument();
+    });
+
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
   });
 
   it("should call onClose after clicking a card", async () => {

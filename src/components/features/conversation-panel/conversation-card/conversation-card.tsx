@@ -20,6 +20,7 @@ import { useDownloadConversation } from "#/hooks/use-download-conversation";
 interface ConversationCardProps {
   onClick?: () => void;
   onDelete?: () => void;
+  onArchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
   showOptions?: boolean;
@@ -51,6 +52,7 @@ interface ConversationCardProps {
 export function ConversationCard({
   onClick,
   onDelete,
+  onArchive,
   onStop,
   onChangeTitle,
   showOptions,
@@ -92,6 +94,13 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     onDelete?.();
+    onContextMenuToggle?.(false);
+  };
+
+  const handleArchive = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onArchive?.();
     onContextMenuToggle?.(false);
   };
 
@@ -180,7 +189,12 @@ export function ConversationCard({
     </button>
   );
 
-  const hasContextMenu = !!(onDelete || onChangeTitle || showOptions);
+  const hasContextMenu = !!(
+    onDelete ||
+    onArchive ||
+    onChangeTitle ||
+    showOptions
+  );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
@@ -268,6 +282,7 @@ export function ConversationCard({
                       contextMenuOpen={contextMenuOpen}
                       onContextMenuToggle={onContextMenuToggle || (() => {})}
                       onDelete={onDelete && handleDelete}
+                      onArchive={onArchive && handleArchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -294,6 +309,7 @@ export function ConversationCard({
                   contextMenuOpen={contextMenuOpen}
                   onContextMenuToggle={onContextMenuToggle || (() => {})}
                   onDelete={onDelete && handleDelete}
+                  onArchive={onArchive && handleArchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
                   onDownloadViaVSCode={handleDownloadViaVSCode}

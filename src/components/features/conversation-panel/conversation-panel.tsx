@@ -8,6 +8,7 @@ import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversat
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -42,6 +43,7 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 
 interface ConversationPanelProps {
@@ -96,6 +98,8 @@ export function ConversationPanel({
   const ref = useClickOutsideElement<HTMLDivElement>(onClose ?? noop);
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
+    React.useState(false);
+  const [confirmArchiveModalVisible, setConfirmArchiveModalVisible] =
     React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
@@ -178,8 +182,22 @@ export function ConversationPanel({
       state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
   const togglePin = usePinnedConversationsStore((state) => state.togglePin);
+  const unpinConversation = usePinnedConversationsStore(
+    (state) => state.unpinConversation,
+  );
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
+  );
+  const archivedIds = useArchivedConversationsStore(
+    (state) =>
+      state.archivesByBackendId[activeBackend.id] ??
+      EMPTY_PINNED_CONVERSATION_IDS,
+  );
+  const archiveConversation = useArchivedConversationsStore(
+    (state) => state.archiveConversation,
+  );
+  const removeArchivedConversation = useArchivedConversationsStore(
+    (state) => state.removeArchivedConversation,
   );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
@@ -245,14 +263,15 @@ export function ConversationPanel({
     // same conversation twice. Dedupe by id (keeping the first/freshest copy)
     // so the rendered count reflects real growth and React keys stay unique.
     const seen = new Set<string>();
+    const archived = new Set(archivedIds);
     return all.filter((conversation) => {
-      if (seen.has(conversation.id)) {
+      if (seen.has(conversation.id) || archived.has(conversation.id)) {
         return false;
       }
       seen.add(conversation.id);
       return true;
     });
-  }, [data]);
+  }, [archivedIds, data]);
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -278,16 +297,14 @@ export function ConversationPanel({
     if (!isFetched) {
       return;
     }
-    pruneMissingPinnedConversations(
-      activeBackend.id,
-      conversations.map((conversation) => conversation.id),
-    );
-  }, [
-    activeBackend.id,
-    conversations,
-    isFetched,
-    pruneMissingPinnedConversations,
-  ]);
+    // Prune pins against the unfiltered loaded pages so archived-but-still-
+    // pinned rows are not treated as missing. Archived IDs are intentionally
+    // not pruned here — pagination would otherwise drop archives that are not
+    // on the currently loaded pages and let them reappear in the list.
+    const loadedIds =
+      data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
+    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
+  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -522,6 +539,15 @@ export function ConversationPanel({
     [],
   );
 
+  const handleArchiveProject = React.useCallback(
+    (conversationId: string, title: string) => {
+      setConfirmArchiveModalVisible(true);
+      setSelectedConversationId(conversationId);
+      setSelectedConversationTitle(title);
+    },
+    [],
+  );
+
   const handleStopConversation = React.useCallback((conversationId: string) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
@@ -543,16 +569,29 @@ export function ConversationPanel({
 
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
+      const conversationId = selectedConversationId;
       deleteConversation(
-        { conversationId: selectedConversationId },
+        { conversationId },
         {
           onSuccess: () => {
-            if (selectedConversationId === currentConversationId) {
+            removeArchivedConversation(activeBackend.id, conversationId);
+            if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
           },
         },
       );
+    }
+  };
+
+  const handleConfirmArchive = () => {
+    if (!selectedConversationId) {
+      return;
+    }
+    archiveConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(activeBackend.id, selectedConversationId);
+    if (selectedConversationId === currentConversationId) {
+      navigate("/conversations");
     }
   };
 
@@ -674,6 +713,9 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
+              onArchive={() =>
+                handleArchiveProject(conversation.id, conversation.title ?? "")
+              }
               onStop={() => handleStopConversation(conversation.id)}
               onChangeTitle={(title) =>
                 handleConversationTitleChange(conversation.id, title)
@@ -717,6 +759,7 @@ export function ConversationPanel({
       activeBackend.id,
       compact,
       currentConversationId,
+      handleArchiveProject,
       handleConversationTitleChange,
       handleDeleteProject,
       handleStopConversation,
@@ -930,6 +973,21 @@ export function ConversationPanel({
           }}
           onCancel={() => {
             setConfirmDeleteModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          conversationTitle={selectedConversationTitle ?? undefined}
+        />
+      )}
+
+      {confirmArchiveModalVisible && (
+        <ConfirmArchiveModal
+          onConfirm={() => {
+            handleConfirmArchive();
+            setConfirmArchiveModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          onCancel={() => {
+            setConfirmArchiveModalVisible(false);
             setSelectedConversationTitle(null);
           }}
           conversationTitle={selectedConversationTitle ?? undefined}
