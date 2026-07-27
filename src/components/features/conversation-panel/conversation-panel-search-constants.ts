@@ -1,0 +1,1 @@
+export const CONVERSATION_PANEL_SEARCH_HOTKEY = "k";

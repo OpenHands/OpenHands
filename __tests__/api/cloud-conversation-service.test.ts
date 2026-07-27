@@ -261,7 +261,7 @@ describe("cloud conversation-service overlay", () => {
       next_page_id: null,
     });
 
-    const page = await searchCloudConversations(20);
+    const page = await searchCloudConversations({ limit: 20 });
 
     expect(page.items[0].selected_repository).toBe("octocat/hello-world");
     expect(page.items[0].selected_branch).toBe("main");

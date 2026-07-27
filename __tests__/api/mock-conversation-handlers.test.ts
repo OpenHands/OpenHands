@@ -17,7 +17,9 @@ describe("mock conversation handlers", () => {
   });
 
   it("returns adapted conversation pages for search", async () => {
-    const page = await AgentServerConversationService.searchConversations(10);
+    const page = await AgentServerConversationService.searchConversations({
+      limit: 10,
+    });
 
     expect(page.items.length).toBeGreaterThan(0);
     expect(page.next_page_id).toBeNull();

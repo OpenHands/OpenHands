@@ -214,6 +214,13 @@ export interface AppConversation {
   sub_conversation_ids: string[];
 }
 
+export interface ConversationSearchParams {
+  limit?: number;
+  pageId?: string;
+  /** Cloud app-conversations search: server-side title filter. */
+  titleContains?: string;
+}
+
 export interface AppConversationPage {
   items: AppConversation[];
   next_page_id: string | null;

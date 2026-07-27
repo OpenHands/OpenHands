@@ -231,12 +231,24 @@ export const CONVERSATION_HANDLERS = [
   http.get("*/api/conversations/search", async ({ request }) => {
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "20");
-    const items = Array.from(CONVERSATIONS.values())
+    const pageId = url.searchParams.get("page_id");
+    const sorted = Array.from(CONVERSATIONS.values())
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .slice(0, limit)
       .map(createConversationResponse);
 
-    return HttpResponse.json({ items, next_page_id: null });
+    let startIndex = 0;
+    if (pageId) {
+      const pageStartIndex = sorted.findIndex(
+        (conversation) => conversation.id === pageId,
+      );
+      startIndex = pageStartIndex >= 0 ? pageStartIndex + 1 : 0;
+    }
+
+    const items = sorted.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < sorted.length;
+    const next_page_id = hasMore ? (items[items.length - 1]?.id ?? null) : null;
+
+    return HttpResponse.json({ items, next_page_id });
   }),
 
   http.get("*/api/conversations", async ({ request }) => {

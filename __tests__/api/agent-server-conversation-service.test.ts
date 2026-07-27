@@ -609,7 +609,7 @@ describe("AgentServerConversationService", () => {
       });
 
       const result =
-        await AgentServerConversationService.searchConversations(10);
+        await AgentServerConversationService.searchConversations({ limit: 10 });
 
       expect(result.items[0]?.sandbox_status).toBe("PAUSED");
     });

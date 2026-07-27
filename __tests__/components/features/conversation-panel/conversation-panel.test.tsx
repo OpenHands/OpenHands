@@ -16,8 +16,10 @@ import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
 import React from "react";
 import { renderWithProviders } from "test-utils";
+import { CommandMenu } from "#/components/features/command-menu/command-menu";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -1899,5 +1901,28 @@ describe("ConversationPanel", () => {
     expect(
       within(pinnedSection).getByTestId("conversation-panel-pinned-view-more"),
     ).toHaveTextContent("CONVERSATION_PANEL$MORE");
+  });
+
+  describe("conversation search", () => {
+    it("opens the command menu from the sidebar search toggle", async () => {
+      const user = userEvent.setup();
+      useCommandMenuStore.setState({ isOpen: false });
+
+      renderWithProviders(
+        <>
+          <RouterStub />
+          <CommandMenu />
+        </>,
+      );
+
+      await screen.findAllByTestId("conversation-card");
+
+      expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("conversation-panel-search-toggle"));
+
+      expect(await screen.findByTestId("command-menu")).toBeInTheDocument();
+      expect(useCommandMenuStore.getState().isOpen).toBe(true);
+    });
   });
 });
