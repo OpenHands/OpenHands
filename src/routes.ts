@@ -32,6 +32,10 @@ export default [
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
+    // Extension manifests declare their own paths, so the host cannot list them
+    // here. Keep this last: it claims only URLs the manifest registry matches
+    // and 404s the rest.
+    route("*", "routes/manifest-route.tsx"),
   ]),
   route(
     "shared/conversations/:conversationId",

@@ -50,6 +50,12 @@ export const PLUGINS_QUERY_KEYS = {
   local: ["plugins-local"] as const,
 } as const;
 
+export const MANIFEST_QUERY_KEYS = {
+  /** Deployment capability discovery, keyed by the manifest-declared path. */
+  capabilities: (servicePath: string) =>
+    ["manifest-capabilities", servicePath] as const,
+} as const;
+
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,

@@ -13,6 +13,10 @@ import type {
   AutomationsResponse,
   AutomationRunsResponse,
 } from "#/types/automation";
+import type {
+  ManifestPreflightResponse,
+  ManifestRequestBody,
+} from "#/manifests/types";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
   getActiveBackend,
@@ -477,6 +481,82 @@ class AutomationService {
     a.download = `${name}.tar`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Manifest-driven transport. The service-relative path comes from the
+   * manifest and is admitted only after it matches `/v1/…`; this host supplies
+   * the deployment base path, auth, and backend routing, and nothing else. No
+   * manifest-specific path is written here.
+   */
+  static async getCapabilities(
+    servicePath: string,
+  ): Promise<Record<string, unknown>> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Record<string, unknown>>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.get<Record<string, unknown>>(path);
+    return data;
+  }
+
+  /** See {@link AutomationService.getCapabilities} for the path contract. */
+  static async validateDraft(
+    servicePath: string,
+    body: ManifestRequestBody,
+  ): Promise<ManifestPreflightResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<ManifestPreflightResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<ManifestPreflightResponse>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  /** See {@link AutomationService.getCapabilities} for the path contract. */
+  static async createFromManifest(
+    servicePath: string,
+    body: ManifestRequestBody,
+  ): Promise<Record<string, unknown>> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Record<string, unknown>>({
+        backend: active,
+        method: "POST",
+        path,
+        body,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Record<string, unknown>>(
+      path,
+      body,
+    );
+    return data;
   }
 
   static async checkHealth(): Promise<AutomationHealthResponse> {

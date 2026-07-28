@@ -128,6 +128,23 @@ export const useTracking = () => {
     });
   };
 
+  /**
+   * Emit a stage an extension manifest declared.
+   *
+   * The event name and properties come from the manifest, so this host carries
+   * no stage names of its own. Capture still runs through the same
+   * consent-aware client as every other event.
+   */
+  const trackManifestStage = ({
+    stageId,
+    properties,
+  }: {
+    stageId: string;
+    properties: Record<string, string | number | boolean>;
+  }) => {
+    track(stageId, properties);
+  };
+
   const trackInitialQuerySubmitted = ({
     entryPoint,
     queryCharacterLength,
@@ -339,6 +356,7 @@ export const useTracking = () => {
     trackCreatePrButtonClick,
     trackUserSignupCompleted,
     trackPrebuiltAutomationEnabled,
+    trackManifestStage,
     trackInitialQuerySubmitted,
     trackUserMessageSent,
     trackDownloadVsCodeButtonClicked,
