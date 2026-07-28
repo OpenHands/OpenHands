@@ -148,6 +148,10 @@ jobs:
           kill $SERVER_PID
 
       - name: Build frontend (for agent-canvas binary)
+        env:
+          # This is a Vite build-time flag; setting it only on the later
+          # agent-canvas process leaves browser_tool_set baked into the bundle.
+          VITE_ENABLE_BROWSER_TOOLS: "false"
         run: npm run build:app
 
       - name: Resolve affected test directories
