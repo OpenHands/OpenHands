@@ -54,19 +54,12 @@ export const SKILL_CATEGORY_ICONS: Record<SkillCategoryId, LucideIcon> = {
   other: Package,
 };
 
-/**
- * The catalog uses `other` for a skill with no marketplace entry, so it means
- * "uncategorized" there exactly as it does for a local skill.
- */
+/** The catalog uses `other` for a skill with no marketplace entry, so it means "uncategorized" there exactly as it does for a local skill. */
 export const UNCATEGORIZED_SKILL_CATEGORY: SkillCategoryId = "other";
 
 const KNOWN_CATEGORIES = new Set<string>(SKILL_CATEGORY_IDS);
 
-/**
- * Local user/project skills carry no category, and a stale bundled catalog
- * could in principle carry one this build does not know, so both degrade to
- * `other` rather than producing an unrenderable facet value.
- */
+/** Local skills carry no category and a stale bundled catalog could carry one this build does not know; both degrade to `other` rather than an unrenderable facet value. */
 export function getSkillCategory(skill: SkillInfo): SkillCategoryId {
   const raw = skill.category;
   if (raw && KNOWN_CATEGORIES.has(raw)) {

@@ -170,10 +170,7 @@ describe("buildSkillFacetGroups", () => {
   });
 
   it("keeps a group visible when its only selected value has no matches for this user", () => {
-    // Reproduces sharing a filtered URL (e.g. `?source=project`) with someone
-    // whose skill list has no project skills: the group would otherwise be
-    // hidden as non-discriminating, enforcing the filter with no row left to
-    // explain or undo it.
+    // Reproduces sharing a `?source=project` URL with someone who has no project skills: hiding the group would enforce the filter with no row left to undo it.
     const publicOnly = [
       buildSkill({ name: "deno", source: "public" }),
       buildSkill({ name: "uv", source: "public" }),
@@ -257,13 +254,7 @@ describe("buildSkillFacetGroups", () => {
       stateWith({ categories: new Set(["environment"]) }),
     );
 
-    // Selecting `environment` leaves only `deno`, whose source ("public")
-    // and type ("knowledge") are each a single value. An implementation
-    // that reused the count-half's denominator (other groups applied, own
-    // excluded) for visibility would compute Source's and Type's row sets
-    // against that one-skill result and drop both below the two-value
-    // threshold. Visibility must come from the raw list instead, so both
-    // groups still render.
+    // Only `deno` survives, leaving Source and Type one value each among the matches; visibility comes from the raw list, so both groups still render.
     expect(narrowed.map((g) => g.id)).toEqual(
       expect.arrayContaining(["source", "type"]),
     );
@@ -278,9 +269,7 @@ describe("buildSkillFacetGroups", () => {
       EMPTY_SKILL_FILTER_STATE,
     );
 
-    // "Requirements" matches only `prd`'s description, so a query-filtered
-    // denominator would leave every group with a single value. Visibility
-    // must come from the raw list, so the group set is unchanged.
+    // "Requirements" matches only `prd`, so a query-filtered denominator would collapse every group to one value.
     const narrowed = buildSkillFacetGroups(
       skills,
       disabled,
@@ -338,10 +327,7 @@ describe("toggleSkillFilterValue", () => {
         value,
       );
 
-      // A copy-paste typo assigning the new set to the wrong field (e.g. the
-      // `source` branch writing to `categories`) fails one of these two
-      // checks: either the intended set stays empty, or an unintended one
-      // gains the value.
+      // Catches a branch writing to the wrong field: either the intended set stays empty, or an unintended one gains the value.
       const collections = ["sources", "categories", "types", "states"] as const;
       for (const collection of collections) {
         const expected = collection === key ? [value] : [];

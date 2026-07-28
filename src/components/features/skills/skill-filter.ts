@@ -62,21 +62,12 @@ export const EMPTY_SKILL_FILTER_STATE: SkillFilterState = {
   states: new Set(),
 };
 
-/**
- * One legal value of a group, carrying the label that renders it. `labelKey`s
- * are carried rather than translated strings so this whole module stays pure
- * and its tests need no i18n.
- */
+/** Carrying `labelKey`s rather than translated strings keeps this module pure, so its tests need no i18n. */
 interface GroupValue {
   value: string;
   labelKey: I18nKey;
 }
 
-/**
- * Pairs each value with its label at declaration time. A group whose order and
- * label record disagree then fails to compile, instead of reaching a row with
- * no label to render.
- */
 function labelledValues<TValue extends string>(
   order: readonly TValue[],
   labelKeys: Record<TValue, I18nKey>,
@@ -84,14 +75,7 @@ function labelledValues<TValue extends string>(
   return order.map((value) => ({ value, labelKey: labelKeys[value] }));
 }
 
-/**
- * One group's identity: how to read its value off a skill, which values are
- * legal and in what order, and how to read and write its slice of the filter
- * state.
- *
- * `selected` / `withSelected` are what keep every operation below driven by
- * this table alone: a new group is declared here and nowhere else.
- */
+/** A new facet group is declared here and nowhere else: `selected` / `withSelected` are what keep every operation below driven by this table alone. */
 interface GroupDef {
   id: SkillFacetGroupId;
   labelKey: I18nKey;
@@ -105,11 +89,7 @@ interface GroupDef {
   ) => SkillFilterState;
 }
 
-/**
- * Rebuilds a widened selection in the group's own value type. Rebuilding
- * rather than casting is what keeps every writer below cast-free: a value the
- * group does not declare cannot survive the filter.
- */
+/** Rebuilding rather than casting keeps every writer below cast-free: a value the group does not declare cannot survive. */
 function narrowSet<TValue extends string>(
   order: readonly TValue[],
   next: Set<string>,

@@ -109,13 +109,7 @@ export type SkillInfo = {
   triggers?: string[];
   /**
    * Topical category from the bundled `@openhands/extensions` catalog.
-   *
-   * Absent for user/project skills, and a `category` under a local SKILL.md's
-   * frontmatter cannot supply one: the SDK `Skill` model does carry a
-   * `metadata` dict, but the agent-server's `/api/skills` response model
-   * rebuilds each skill from eight named fields and drops it (checked against
-   * `skills_router.py` in agent-server 1.37.0 and 1.37.1). Uncategorized
-   * skills are treated as `"other"` by `getSkillCategory`.
+   * Always absent for user/project skills: the agent-server's `/api/skills` response drops SKILL.md frontmatter metadata, so a local `category` cannot reach us.
    */
   category?: SkillCategoryId | null;
   version?: string;

@@ -36,11 +36,6 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 import { cn } from "#/utils/utils";
 
-/**
- * Typing must not write a history entry per keystroke, so the input keeps its
- * own state and the URL is only a debounced mirror. Facet clicks push instead,
- * because each is a discrete choice the back button should undo.
- */
 const SEARCH_URL_SYNC_DELAY_MS = 300;
 
 function SkillsSettingsScreen() {
@@ -67,12 +62,6 @@ function SkillsSettingsScreen() {
   const isLoading = settingsLoading || skillsLoading || !settings;
   const allSkills = skills ?? [];
 
-  // `query` always comes from `queryInput`, never from `searchParams`, even
-  // though the URL also carries a `q` value: the input is the source of
-  // truth for what's rendered, and the URL is only a debounced mirror of it
-  // (see the sync effect below). Reading `q` back out of `searchParams` here
-  // would race the debounce and could bounce the input's own value back at
-  // it before the timeout fires.
   const filter = React.useMemo<SkillFilterState>(
     () => ({ ...parseSkillFilterState(searchParams), query: queryInput }),
     [searchParams, queryInput],
@@ -111,6 +100,7 @@ function SkillsSettingsScreen() {
     );
   }, [disabledSet, hasHydratedInitialSettings, saveSettings, t]);
 
+  // The search input owns its value and the URL only mirrors it, debounced: writing on every keystroke would push a history entry per character, and reading `q` back out mid-typing would bounce a stale value into the input.
   React.useEffect(() => {
     const current = searchParams.get(SKILL_FILTER_QUERY_PARAM) ?? "";
     if (current === queryInput) return undefined;
@@ -134,13 +124,9 @@ function SkillsSettingsScreen() {
   }, [queryInput, searchParams, setSearchParams]);
 
   const handleFilterChange = (next: SkillFilterState) => {
-    // A query change goes through local state, not straight to the URL (see
-    // the `filter` comment above and the sync effect below).
     if (next.query !== filter.query) setQueryInput(next.query);
 
-    // Compare facets only (query aside) so a pure query change does not also
-    // trigger an immediate, undebounced URL write here; a facet change
-    // always writes through, even if a query change happens alongside it.
+    // Compare facets only, so a pure query change does not bypass the debounce.
     const facetsChanged =
       toSkillFilterSearchParams({ ...next, query: "" }).toString() !==
       toSkillFilterSearchParams({ ...filter, query: "" }).toString();
