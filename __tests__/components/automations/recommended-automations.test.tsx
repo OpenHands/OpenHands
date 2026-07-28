@@ -436,8 +436,8 @@ describe("recommended automations", () => {
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const createSpy = vi
+      .spyOn(SettingsService, "createMcpServer")
       .mockResolvedValue(true);
 
     renderLauncher();
@@ -453,7 +453,7 @@ describe("recommended automations", () => {
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
-    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1),
     );

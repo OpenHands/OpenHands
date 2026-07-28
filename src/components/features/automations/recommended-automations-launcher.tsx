@@ -75,8 +75,11 @@ export function RecommendedAutomationsLauncher({
 
   const installedMcpConfig = useMemo(
     () =>
-      flattenMcpConfig(parseMcpConfig(settings?.agent_settings?.mcp_config)),
-    [settings?.agent_settings?.mcp_config],
+      flattenMcpConfig(
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
+      ),
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(

@@ -56,7 +56,9 @@ export default function MCPPage() {
   const [sectionFilter, setSectionFilter] =
     React.useState<McpSectionFilter>("all");
 
-  const mcpConfig = parseMcpConfig(settings?.agent_settings?.mcp_config);
+  const mcpConfig =
+    settings?.mcp_config ??
+    parseMcpConfig(settings?.agent_settings?.mcp_config);
   const allServers = flattenMcpConfig(mcpConfig);
   const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
 

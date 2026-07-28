@@ -233,4 +233,158 @@ test.describe("MCP GitHub server install flow", () => {
     const githubStillPresent = mcpConfig?.github != null;
     expect(githubStillPresent).toBe(false);
   });
+
+  // @spec MCP-001 — Sparse mutations preserve sibling servers
+  test("regression: sibling create, edit, and delete preserve GitHub credentials with one MCP request each", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await ensureMockLLMProfile(page);
+    const installResp = await page.request.patch(
+      `${BACKEND_URL}/api/settings`,
+      {
+        headers: {
+          "X-Session-API-Key": SESSION_API_KEY,
+          "Content-Type": "application/json",
+        },
+        data: {
+          agent_settings_diff: {
+            mcp_config: {
+              github: {
+                transport: "http",
+                url: GITHUB_HOSTED_MCP_URL,
+                auth: { strategy: "api_key", value: FAKE_PAT },
+              },
+            },
+          },
+        },
+      },
+    );
+    expect(installResp.ok()).toBe(true);
+
+    await routeSessionApiKey(page);
+    const mcpTestBodies: Array<Record<string, unknown>> = [];
+    await page.route("**/api/mcp/test", async (route) => {
+      mcpTestBodies.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          tools: ["get_me"],
+          tool_result: { is_error: false, text: '{"login":"octocat"}' },
+        }),
+      });
+    });
+
+    const mutationRequests: Array<{
+      method: string;
+      pathname: string;
+      body?: Record<string, unknown>;
+    }> = [];
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.startsWith("/api/settings/mcp/")) {
+        mutationRequests.push({
+          method: request.method(),
+          pathname,
+          ...(request.postData() ? { body: request.postDataJSON() } : {}),
+        });
+      }
+    });
+
+    await page.goto("/mcp", { waitUntil: "domcontentloaded" });
+    await dismissAnalyticsModal(page);
+    await expect(page.getByTestId("mcp-installed-list")).toBeVisible({
+      timeout: 10_000,
+    });
+
+    const verifyStoredGitHubCredential = async () => {
+      const before = mcpTestBodies.length;
+      await page.locator('[data-server-id="github"]').press("Enter");
+      await expect(page.getByTestId("mcp-custom-editor")).toBeVisible();
+      await page.getByTestId("mcp-test-connection").click();
+      await expect(page.getByTestId("mcp-test-message")).toBeVisible();
+      expect(mcpTestBodies).toHaveLength(before + 1);
+      const request = mcpTestBodies.at(-1) as {
+        name?: string;
+        server?: {
+          type?: string;
+          auth?: { strategy?: string; value?: string };
+        };
+      };
+      expect(request.name).toBe("github");
+      expect(request.server).toMatchObject({
+        type: "http",
+        auth: { strategy: "api_key" },
+      });
+      expect(request.server?.auth?.value).toBeTruthy();
+      expect(request.server?.auth?.value).not.toBe("**********");
+      expect(request.server?.auth?.value).not.toBe(FAKE_PAT);
+      await page.getByTestId("mcp-custom-editor-close").click();
+      await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
+    };
+
+    await verifyStoredGitHubCredential();
+
+    await page.getByTestId("mcp-add-custom-server").click();
+    await page.getByTestId("server-name-input").fill("docs");
+    await page.getByTestId("url-input").fill("https://docs.example/mcp");
+    await page.getByTestId("submit-button").click();
+    await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
+    expect(mutationRequests).toHaveLength(1);
+    expect(mutationRequests).toEqual([
+      {
+        method: "POST",
+        pathname: "/api/settings/mcp/docs",
+        body: {
+          transport: "sse",
+          url: "https://docs.example/mcp",
+        },
+      },
+    ]);
+    expect(JSON.stringify(mutationRequests[0])).not.toContain("github");
+    await verifyStoredGitHubCredential();
+
+    await page.locator('[data-server-id="docs"]').press("Enter");
+    await page.getByTestId("url-input").fill("https://docs.example/v2/mcp");
+    await page.getByTestId("submit-button").click();
+    await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
+    expect(mutationRequests).toHaveLength(2);
+    expect(mutationRequests[1]).toEqual({
+      method: "PATCH",
+      pathname: "/api/settings/mcp/docs",
+      body: {
+        transport: "sse",
+        url: "https://docs.example/v2/mcp",
+      },
+    });
+    expect(JSON.stringify(mutationRequests[1])).not.toContain("github");
+    await verifyStoredGitHubCredential();
+
+    await page.locator('[data-server-id="docs"]').press("Enter");
+    await page.getByTestId("mcp-custom-editor-delete").click();
+    await page.getByTestId("confirm-button").click();
+    await expect(page.locator('[data-server-id="docs"]')).not.toBeVisible();
+    expect(mutationRequests).toHaveLength(3);
+    expect(mutationRequests[2]).toEqual({
+      method: "DELETE",
+      pathname: "/api/settings/mcp/docs",
+    });
+    expect(JSON.stringify(mutationRequests[2])).not.toContain("github");
+    await verifyStoredGitHubCredential();
+
+    const settingsResp = await page.request.get(`${BACKEND_URL}/api/settings`, {
+      headers: { "X-Session-API-Key": SESSION_API_KEY },
+    });
+    expect(settingsResp.ok()).toBe(true);
+    const settings = await settingsResp.json();
+    expect(settings.agent_settings.mcp_config).toMatchObject({
+      github: {
+        url: GITHUB_HOSTED_MCP_URL,
+        auth: { strategy: "api_key", value: "**********" },
+      },
+    });
+    expect(settings.agent_settings.mcp_config.docs).toBeUndefined();
+  });
 });

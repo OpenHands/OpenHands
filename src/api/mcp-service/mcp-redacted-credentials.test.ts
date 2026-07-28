@@ -26,7 +26,7 @@ describe("substituteRedactedMcpCredentials", () => {
     } as unknown as SettingsApiResponse);
 
     const result = await substituteRedactedMcpCredentials({
-      id: "stdio-0",
+      id: "old-name",
       type: "stdio",
       name: "new-name",
       command: "npx",
@@ -39,7 +39,7 @@ describe("substituteRedactedMcpCredentials", () => {
 
   it("does not restore another server's secret when renamed onto an existing name", async () => {
     // Renaming "alpha" onto "beta"'s name must still resolve alpha's stored
-    // entry by position, not beta's entry (which the name match would return).
+    // entry by stable key, not beta's entry.
     vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
       agent_settings: {
         mcp_config: {
@@ -50,7 +50,7 @@ describe("substituteRedactedMcpCredentials", () => {
     } as unknown as SettingsApiResponse);
 
     const result = await substituteRedactedMcpCredentials({
-      id: "stdio-0",
+      id: "alpha",
       type: "stdio",
       name: "beta",
       command: "npx",
@@ -73,7 +73,7 @@ describe("substituteRedactedMcpCredentials", () => {
     } as unknown as SettingsApiResponse);
 
     const result = await substituteRedactedMcpCredentials({
-      id: "stdio-0",
+      id: "my-server",
       type: "stdio",
       name: "my-server",
       command: "npx",
@@ -145,7 +145,7 @@ describe("substituteRedactedMcpCredentials", () => {
     } as unknown as SettingsApiResponse);
 
     const result = await substituteRedactedMcpCredentials({
-      id: "shttp-0",
+      id: "superhuman-mail",
       type: "shttp",
       name: "superhuman-mail",
       url: "https://mcp.mail.superhuman.com/mcp",

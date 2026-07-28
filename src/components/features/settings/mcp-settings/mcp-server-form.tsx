@@ -354,7 +354,7 @@ export function MCPServerForm({
 
   const buildConfig = (formData: FormData): MCPServerConfig => {
     const baseConfig = {
-      id: server?.id || `${serverType}-${Date.now()}`,
+      id: server?.id || "",
       type: serverType,
     };
 
