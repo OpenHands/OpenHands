@@ -593,11 +593,23 @@ async function fillLlmProfileEditorAndSave(
   await nameInput.fill(profileName);
 
   // Switch to "All" view so base_url is visible. In some flows the editor can
-  // already be on advanced/all; only click the toggle when needed.
+  // already be on advanced/all; only click the toggle when needed. The form can
+  // briefly re-hydrate back to basic after mount, so retry the toggle until the
+  // advanced form actually becomes visible.
   const advancedForm = page.getByTestId("llm-settings-form-advanced");
   if (!(await advancedForm.isVisible().catch(() => false))) {
-    await page.getByTestId("sdk-section-all-toggle").click();
-    await waitForTestId(page, "llm-settings-form-advanced");
+    await expect(async () => {
+      if (await advancedForm.isVisible()) return;
+      const allToggle = page.getByTestId("sdk-section-all-toggle");
+      if (await allToggle.isVisible().catch(() => false)) {
+        await allToggle.click({ timeout: 5_000 });
+      } else {
+        await page.getByTestId("sdk-section-advanced-toggle").click({
+          timeout: 5_000,
+        });
+      }
+      await expect(advancedForm).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000, intervals: [500, 1_000, 2_000] });
   }
 
   const modelInput = page.getByTestId("llm-custom-model-input");
