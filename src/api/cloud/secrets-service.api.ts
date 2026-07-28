@@ -62,8 +62,8 @@ export async function createCloudSecret(
 
 /**
  * Rename and/or redescribe an existing cloud secret. The cloud `PUT` endpoint
- * does not accept a value field — it only updates name + description — which
- * matches what `useUpdateSecret` actually sends from the secret-edit form.
+ * does not accept a value field — it only updates name + description — so
+ * overwriting a value goes through `createCloudSecret` (`POST`) instead.
  */
 export async function updateCloudSecret(
   secretToEdit: string,

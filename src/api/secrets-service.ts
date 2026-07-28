@@ -91,32 +91,42 @@ export class SecretsService {
   }
 
   /**
-   * Update a secret's name and/or description while preserving its value.
-   * The agent-server only exposes an upsert endpoint, so we fetch the
-   * existing value and re-upsert it under the updated name/description.
+   * Update a secret's name and/or description, and optionally overwrite its
+   * value. When no value is given the existing one is preserved: the
+   * agent-server only exposes an upsert endpoint, so we fetch the existing
+   * value and re-upsert it under the updated name/description.
    *
    * @param secretToEdit - Existing secret name
    * @param name - New (or same) secret name
    * @param description - Optional new description
+   * @param value - Optional new value; when omitted the stored value is kept
    * @throws Error if the API call fails after retries
    */
   static async updateSecret(
     secretToEdit: string,
     name: string,
     description?: string,
+    value?: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
       await withRetry(() => updateCloudSecret(secretToEdit, name, description));
+      if (value !== undefined) {
+        // The cloud PUT cannot change a value; POST is the only endpoint that
+        // overwrites one. Running it after the PUT keeps the server-side
+        // rename-collision check as the first thing that can fail.
+        await withRetry(() => createCloudSecret(name, value, description));
+      }
       return;
     }
 
     const client = new SettingsClient(getAgentServerClientOptions());
-    const value = await withRetry(() => client.getSecret(secretToEdit));
+    const nextValue =
+      value ?? (await withRetry(() => client.getSecret(secretToEdit)));
 
     await withRetry(() =>
       client.upsertSecret({
         name,
-        value,
+        value: nextValue,
         description,
       }),
     );

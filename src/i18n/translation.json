@@ -1291,6 +1291,23 @@
     "uk": "Значення секрету є обов'язковим",
     "ca": "El valor del secret és obligatori"
   },
+  "SECRETS$SECRET_VALUE_LEAVE_BLANK": {
+    "en": "Secret Value (leave blank to preserve the existing value)",
+    "ja": "シークレット値（空欄のままにすると既存の値が保持されます）",
+    "zh-CN": "密钥值（留空以保留现有值）",
+    "zh-TW": "密鑰值（留空以保留現有值）",
+    "ko-KR": "비밀 값 (비워 두면 기존 값이 유지됩니다)",
+    "no": "Hemmelig verdi (la stå tom for å beholde eksisterende verdi)",
+    "it": "Valore del segreto (lascia vuoto per mantenere il valore esistente)",
+    "pt": "Valor do segredo (deixe em branco para manter o valor existente)",
+    "es": "Valor del secreto (déjalo en blanco para mantener el valor existente)",
+    "ar": "قيمة السر (اتركه فارغًا للإبقاء على القيمة الحالية)",
+    "fr": "Valeur du secret (laissez vide pour conserver la valeur existante)",
+    "tr": "Gizli Değer (mevcut değeri korumak için boş bırakın)",
+    "de": "Geheimer Wert (leer lassen, um den vorhandenen Wert beizubehalten)",
+    "uk": "Значення секрету (залиште порожнім, щоб зберегти наявне значення)",
+    "ca": "Valor del secret (deixa-ho en blanc per mantenir el valor existent)"
+  },
   "SECRETS$ADD_SECRET": {
     "en": "Add secret",
     "ja": "シークレットを追加",
