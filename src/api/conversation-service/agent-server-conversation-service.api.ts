@@ -854,9 +854,11 @@ class AgentServerConversationService {
    * session, preserving context. Mirrors {@link switchProfile}'s
    * local-backend-only guard and per-conversation ConversationClient call.
    *
-   * Only valid once an ACP session exists (after the first message); the
-   * agent-server returns 409 before then — the home/no-session default is
-   * persisted via Settings instead (see ``use-switch-acp-model``).
+   * Works on a created-but-not-yet-run conversation too: the agent-server
+   * treats a pre-first-run switch as a persist-only deferral (the model is
+   * mirrored into the conversation's stored agent and applied when the session
+   * starts). The home/no-conversation default is persisted via the active ACP
+   * profile / Settings instead (see ``use-switch-acp-model``).
    */
   static async switchAcpModel(
     conversationId: string,

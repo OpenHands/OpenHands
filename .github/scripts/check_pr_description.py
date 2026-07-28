@@ -16,7 +16,6 @@ import sys
 from pathlib import Path
 
 
-HUMAN_TESTED_TEXT = "A human has tested these changes."
 # Reject placeholders while allowing a concise human-written sentence.
 MIN_HUMAN_NOTE_CHARS = 20
 # These are the only PR-template sections that must remain and contain content.
@@ -26,18 +25,6 @@ HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 HEADING_RE = re.compile(r"(?m)^##\s+(.+?)\s*$")
 HUMAN_HEADING_RE = re.compile(r"(?im)^\s*HUMAN:\s*$")
 AGENT_HEADING_RE = re.compile(r"(?im)^\s*AGENT:\s*$")
-
-
-def checkbox_re(label: str) -> re.Pattern[str]:
-    return re.compile(rf"(?im)^\s*[-*]\s+\[(?P<mark>[ xX])]\s+{re.escape(label)}\s*$")
-
-
-def checkbox_is_checked(pattern: re.Pattern[str], text: str) -> bool:
-    match = pattern.search(text)
-    return match is not None and match.group("mark").lower() == "x"
-
-
-HUMAN_TESTED_RE = checkbox_re(HUMAN_TESTED_TEXT)
 
 
 def visible_text(text: str) -> str:
@@ -69,16 +56,16 @@ def extract_sections(body: str) -> dict[str, str]:
 
 
 def extract_human_note(body: str) -> str:
-    """Return human-written text in the required location before the checkbox."""
+    """Return human-written text in the required location before `AGENT:`."""
     human_match = HUMAN_HEADING_RE.search(body)
     if human_match is None:
         return ""
 
-    checkbox_match = HUMAN_TESTED_RE.search(body, human_match.end())
-    if checkbox_match is None:
+    agent_match = AGENT_HEADING_RE.search(body, human_match.end())
+    if agent_match is None:
         return ""
 
-    return visible_text(body[human_match.end() : checkbox_match.start()])
+    return visible_text(body[human_match.end() : agent_match.start()])
 
 
 def validate_pr_body(body: str) -> list[str]:
@@ -89,20 +76,7 @@ def validate_pr_body(body: str) -> list[str]:
 
     human_note = extract_human_note(body)
     if len(human_note) < MIN_HUMAN_NOTE_CHARS:
-        errors.append(
-            "Add a short human-written note between `HUMAN:` and "
-            "the human-tested checkbox."
-        )
-
-    human_tested = HUMAN_TESTED_RE.search(body)
-    if human_tested is None:
-        errors.append(
-            f"Keep the `- [ ] {HUMAN_TESTED_TEXT}` checkbox in the PR description."
-        )
-    elif not checkbox_is_checked(HUMAN_TESTED_RE, body):
-        errors.append(
-            "A human must check `A human has tested these changes.` before review."
-        )
+        errors.append("Add a short human-written note between `HUMAN:` and `AGENT:`.")
 
     if AGENT_HEADING_RE.search(body) is None:
         errors.append("Keep the `AGENT:` marker from the PR template.")

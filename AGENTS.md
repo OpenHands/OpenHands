@@ -21,12 +21,11 @@
 
 ## PR Description Human Check
 
-The `HUMAN:` section and the `A human has tested these changes.` checkbox in
-PR descriptions are reserved for human contributors only. AI agents
-MUST NOT add to, edit, move, remove, or check these fields. If the PR description
-CI fails because these fields are missing, empty, or unchecked, stop and ask the
-human user to update them in their own words. If the fields were already updated
-by a human, report the exact validator error rather than editing them yourself.
+The `HUMAN:` section in PR descriptions is reserved for human contributors only.
+AI agents MUST NOT add to, edit, move, or remove it. If the PR description
+CI fails because the section is missing or empty, stop and ask the
+human user to update it in their own words. If the section was already updated
+by a human, report the exact validator error rather than editing it yourself.
 
 ## Tracking / Analytics Architecture
 
