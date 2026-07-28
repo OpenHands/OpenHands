@@ -1,12 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { buildSkillPills } from "#/components/features/skills/build-skill-pills";
+import type { SkillCardPill } from "#/components/features/skills/skill-card-pill-row";
 import type { SkillInfo } from "#/types/settings";
 
 /** Returns its key unchanged, for assertions that do not care about copy. */
-const identityTranslate = ((key: string) => key) as unknown as TFunction;
+const translate = ((key: string) => key) as TFunction;
 
 function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   return {
@@ -19,21 +19,22 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
-/** Renders the built pills so translated output can be asserted. */
-function PillHarness({ skill }: { skill: SkillInfo }) {
-  const { t } = useTranslation("openhands");
-  return (
+/** Mounts the built pills so their rendered output can be asserted. */
+function renderPills(pills: SkillCardPill[]) {
+  render(
     <div>
-      {buildSkillPills(skill, t).map((pill) => (
+      {pills.map((pill) => (
         <span key={pill.id}>{pill.node}</span>
       ))}
-    </div>
+    </div>,
   );
 }
 
 describe("buildSkillPills category pill", () => {
   it("renders the catalog category", () => {
-    render(<PillHarness skill={buildSkill({ category: "environment" })} />);
+    renderPills(
+      buildSkillPills(buildSkill({ category: "environment" }), translate),
+    );
 
     expect(screen.getByTestId("skill-category-deno")).toHaveTextContent(
       "SETTINGS$SKILLS_CATEGORY_ENVIRONMENT",
@@ -41,15 +42,14 @@ describe("buildSkillPills category pill", () => {
   });
 
   it("omits the pill when the skill is uncategorized", () => {
-    render(<PillHarness skill={buildSkill({ category: null })} />);
+    renderPills(buildSkillPills(buildSkill({ category: null }), translate));
 
     expect(screen.queryByTestId("skill-category-deno")).not.toBeInTheDocument();
   });
 
   it("places the category pill directly after the type badge", () => {
-    // Order is asserted on pill ids, so a pass-through translate is enough —
-    // no rendering and no i18n setup needed.
-    const pills = buildSkillPills(buildSkill(), identityTranslate);
+    // Order is asserted on pill ids, so no rendering is needed here.
+    const pills = buildSkillPills(buildSkill(), translate);
 
     expect(pills[0]!.id).toBe("type-knowledge");
     expect(pills[1]!.id).toBe("category-environment");
