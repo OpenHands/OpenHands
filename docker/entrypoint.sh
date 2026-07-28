@@ -17,6 +17,10 @@
 #   AGENT_SERVER_PORT    – Internal agent-server port (default: 18000)
 #   AUTOMATION_PORT      – Internal automation port (default: 18001)
 #   AGENT_CANVAS_BASE_PATH – Static frontend mount path (default: /canvas)
+#   VSCODE_PORT          – Internal editor port, never published (default: 8001)
+#   VSCODE_BASE_PATH     – Path prefix the editor is served under on $PORT
+#                          (default: /vscode). Exported to agent-server as
+#                          OH_VSCODE_BASE_PATH and routed by the static server.
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
 #                          with --auth-required (no session key injected)
 #   OH_SECRET_KEY        – Secret key for settings encryption (auto-generated
@@ -57,6 +61,16 @@ PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
+
+# The bundled editor is reached through a path prefix on the proxy port rather
+# than a published port of its own. The same prefix has to reach agent-server
+# (it launches openvscode-server with --server-base-path and advertises the
+# prefix from /api/vscode/url) and the static-server route table below, or the
+# advertised URL and the route serving it disagree.
+VSCODE_PORT="${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}"
+VSCODE_BASE_PATH="${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}"
+export OH_VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT}}"
+export OH_VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH}}"
 
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
@@ -272,7 +286,8 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+  --route "${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
 
@@ -299,7 +314,8 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}" &
   PIDS+=($!)
 fi
 

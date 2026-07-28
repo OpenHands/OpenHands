@@ -429,6 +429,10 @@ async function buildConfig(args, env = process.env) {
     autoBackendPort: preferredAutomationPort,
     vitePort: preferredVitePort,
     vscodePort,
+    // Prefix the editor is served under on the ingress origin. Carried on the
+    // config so the route table and the agent-server env are built from one
+    // value (see getLocalServiceRoutes / buildAgentServerEnv).
+    vscodeBasePath: safeConfig.vscodeBasePath,
 
     // Paths
     canvasPath: projectRoot,
@@ -693,6 +697,20 @@ function getLocalServiceRoutes(config) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       routes.push([prefix, `http://localhost:${config.agentServerPort}`]);
     }
+
+    // The editor is a separate process on its own port, but it is reached
+    // through the same origin as the canvas so no second port has to be
+    // published. The prefix is deliberately preserved rather than stripped:
+    // agent-server launches openvscode-server with `--server-base-path`, so
+    // the editor generates its own HTTP and WebSocket URLs beneath the prefix
+    // and only answers there. `createRouter` matches the longest prefix and
+    // the proxy forwards the original path, so both are already handled.
+    if (config.vscodeBasePath) {
+      routes.push([
+        config.vscodeBasePath,
+        `http://localhost:${config.vscodePort}`,
+      ]);
+    }
   }
 
   return routes;
@@ -715,6 +733,12 @@ function getRejectPrefixes(config) {
   if (!config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       prefixes.push(prefix);
+    }
+    // No agent-server means no editor behind this prefix either. Reject it
+    // rather than SPA-fallbacking to index.html, which would answer an editor
+    // request with the canvas shell.
+    if (config.vscodeBasePath) {
+      prefixes.push(config.vscodeBasePath);
     }
   }
   return prefixes;
@@ -1501,6 +1525,7 @@ export {
   buildViteBackendEnv,
   getFrontendBackend,
   getLocalServiceRoutes,
+  getRejectPrefixes,
   main,
   registerShutdownHook,
   spawnService,
