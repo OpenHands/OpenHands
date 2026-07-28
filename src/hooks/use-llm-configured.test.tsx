@@ -172,5 +172,22 @@ describe("useLlmConfigured", () => {
     expect(result.current.isConfigured).toBe(false);
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
+    expect(result.current.configurationIssue).toBe(
+      "missing_active_profile_key",
+    );
+  });
+
+  it("reports not_set_up when no active profile exists", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: null,
+      profiles: [],
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isConfigured).toBe(false);
+    expect(result.current.configurationIssue).toBe("not_set_up");
   });
 });

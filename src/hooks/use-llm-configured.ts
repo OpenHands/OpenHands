@@ -12,6 +12,8 @@ import {
 } from "#/hooks/query/query-keys";
 import { isSubscriptionLlmConfig } from "#/constants/llm-subscription";
 
+export type LlmConfigurationIssue = "not_set_up" | "missing_active_profile_key";
+
 interface LlmConfiguredResult {
   /**
    * True when the active backend's agent has a usable LLM:
@@ -29,6 +31,12 @@ interface LlmConfiguredResult {
    * warning doesn't flash before data loads or on a transient network error.
    */
   isLoading: boolean;
+  /**
+   * When `isConfigured` is false and loading has settled, explains why the LLM
+   * is blocked so the UI can show a specific recovery message instead of the
+   * generic "not set up yet" copy.
+   */
+  configurationIssue: LlmConfigurationIssue | null;
 }
 
 /**
@@ -153,13 +161,27 @@ export function useLlmConfigured(): LlmConfiguredResult {
     (activeProfileDetailLoading ||
       (activeProfileDetailError && !activeProfileDetail));
 
+  const isConfigured = isAcpAgent || llmSettingsHidden || hasUsableLlm;
+  const isLoading =
+    settingsIndeterminate ||
+    configIndeterminate ||
+    profilesIndeterminate ||
+    agentProfileIndeterminate ||
+    activeProfileDetailIndeterminate;
+  const hasActiveProfileMissingKey =
+    isLocal &&
+    !!activeProfile &&
+    !hasUsableActiveProfile &&
+    !activeProfileDetailIndeterminate;
+
   return {
-    isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
-    isLoading:
-      settingsIndeterminate ||
-      configIndeterminate ||
-      profilesIndeterminate ||
-      agentProfileIndeterminate ||
-      activeProfileDetailIndeterminate,
+    isConfigured,
+    isLoading,
+    configurationIssue:
+      !isLoading && !isConfigured
+        ? hasActiveProfileMissingKey
+          ? "missing_active_profile_key"
+          : "not_set_up"
+        : null,
   };
 }
