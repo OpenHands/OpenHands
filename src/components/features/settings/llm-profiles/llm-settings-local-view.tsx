@@ -423,6 +423,7 @@ export function LlmSettingsLocalView() {
         }
         embedded
         hideSaveButton
+        markInitialOverridesDirty={false}
         initialValueOverrides={
           viewMode === "edit" && editingProfile?.initialValues
             ? // Edit mode: use the existing profile values
@@ -454,7 +455,16 @@ export function LlmSettingsLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl}
+          isDisabled={
+            !isNameValid ||
+            isSaving ||
+            !saveControl ||
+            !(
+              viewMode === "create" ||
+              saveControl.isDirty ||
+              profileName !== editingProfile?.profile.name
+            )
+          }
           aria-busy={isSaving}
         >
           {isSaving ? t(I18nKey.STATUS$SAVING) : t(I18nKey.BUTTON$SAVE)}
