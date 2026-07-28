@@ -40,12 +40,10 @@ describe("buildSkillPills category pill", () => {
     );
   });
 
-  it("renders Uncategorized when the skill has no category", () => {
+  it("omits the pill when the skill is uncategorized", () => {
     render(<PillHarness skill={buildSkill({ category: null })} />);
 
-    expect(screen.getByTestId("skill-category-deno")).toHaveTextContent(
-      "SETTINGS$SKILLS_CATEGORY_OTHER",
-    );
+    expect(screen.queryByTestId("skill-category-deno")).not.toBeInTheDocument();
   });
 
   it("places the category pill directly after the type badge", () => {

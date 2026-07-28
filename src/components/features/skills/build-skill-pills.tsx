@@ -11,6 +11,7 @@ import {
 import {
   getSkillCategory,
   SKILL_CATEGORY_LABEL_KEYS,
+  UNCATEGORIZED_SKILL_CATEGORY,
 } from "#/utils/skill-category";
 
 type SkillPillVariant = "card" | "detail";
@@ -43,7 +44,12 @@ export function buildSkillPills(
       id: `type-${skill.type}`,
       node: <SkillTypeBadge type={skill.type} />,
     },
-    {
+  ];
+
+  // An "Other" pill says nothing, and every local skill would carry one:
+  // only the catalog assigns categories.
+  if (category !== UNCATEGORIZED_SKILL_CATEGORY) {
+    pills.push({
       id: `category-${category}`,
       node: (
         <span
@@ -56,8 +62,8 @@ export function buildSkillPills(
           {translate(SKILL_CATEGORY_LABEL_KEYS[category])}
         </span>
       ),
-    },
-  ];
+    });
+  }
 
   if (skill.version) {
     pills.push({

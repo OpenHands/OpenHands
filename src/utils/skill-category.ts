@@ -54,7 +54,11 @@ export const SKILL_CATEGORY_ICONS: Record<SkillCategoryId, LucideIcon> = {
   other: Package,
 };
 
-const FALLBACK_CATEGORY: SkillCategoryId = "other";
+/**
+ * The catalog uses `other` for a skill with no marketplace entry, so it means
+ * "uncategorized" there exactly as it does for a local skill.
+ */
+export const UNCATEGORIZED_SKILL_CATEGORY: SkillCategoryId = "other";
 
 const KNOWN_CATEGORIES = new Set<string>(SKILL_CATEGORY_IDS);
 
@@ -68,5 +72,5 @@ export function getSkillCategory(skill: SkillInfo): SkillCategoryId {
   if (raw && KNOWN_CATEGORIES.has(raw)) {
     return raw;
   }
-  return FALLBACK_CATEGORY;
+  return UNCATEGORIZED_SKILL_CATEGORY;
 }
