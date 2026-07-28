@@ -65,22 +65,40 @@ export const EMPTY_SKILL_FILTER_STATE: SkillFilterState = {
 };
 
 /**
+ * One legal value of a group, carrying the label that renders it. `labelKey`s
+ * are carried rather than translated strings so this whole module stays pure
+ * and its tests need no i18n.
+ */
+interface GroupValue {
+  value: string;
+  labelKey: I18nKey;
+}
+
+/**
+ * Pairs each value with its label at declaration time. A group whose order and
+ * label record disagree then fails to compile, instead of reaching a row with
+ * no label to render.
+ */
+function labelledValues<TValue extends string>(
+  order: readonly TValue[],
+  labelKeys: Record<TValue, I18nKey>,
+): readonly GroupValue[] {
+  return order.map((value) => ({ value, labelKey: labelKeys[value] }));
+}
+
+/**
  * One group's identity: how to read its value off a skill, which values are
  * legal and in what order, and how to read and write its slice of the filter
  * state.
  *
  * `selected` / `withSelected` are what keep every operation below driven by
  * this table alone: a new group is declared here and nowhere else.
- *
- * `labelKey`s are carried rather than translated strings so this whole module
- * stays pure and its tests need no i18n.
  */
 interface GroupDef {
   id: SkillFacetGroupId;
   labelKey: I18nKey;
   param: string;
-  values: readonly string[];
-  labelKeyByValue: Record<string, I18nKey>;
+  values: readonly GroupValue[];
   valueOf: (skill: SkillInfo, disabledSet: Set<string>) => string;
   selected: (state: SkillFilterState) => Set<string>;
   withSelected: (
@@ -123,8 +141,7 @@ const GROUP_DEFS: readonly GroupDef[] = [
     id: "state",
     labelKey: I18nKey.SETTINGS$SKILLS_FACET_STATE,
     param: STATE_PARAM,
-    values: SKILL_ENABLED_STATE_ORDER,
-    labelKeyByValue: STATE_LABEL_KEYS,
+    values: labelledValues(SKILL_ENABLED_STATE_ORDER, STATE_LABEL_KEYS),
     valueOf: (skill, disabledSet) =>
       disabledSet.has(skill.name) ? "disabled" : "enabled",
     selected: (state) => state.states,
@@ -137,8 +154,7 @@ const GROUP_DEFS: readonly GroupDef[] = [
     id: "source",
     labelKey: I18nKey.SETTINGS$SKILLS_FACET_SOURCE,
     param: SOURCE_PARAM,
-    values: SKILL_SCOPE_ORDER,
-    labelKeyByValue: SOURCE_LABEL_KEYS,
+    values: labelledValues(SKILL_SCOPE_ORDER, SOURCE_LABEL_KEYS),
     valueOf: (skill) => getSkillScope(skill),
     selected: (state) => state.sources,
     withSelected: (state, next) => ({
@@ -150,8 +166,7 @@ const GROUP_DEFS: readonly GroupDef[] = [
     id: "category",
     labelKey: I18nKey.SETTINGS$SKILLS_FACET_CATEGORY,
     param: CATEGORY_PARAM,
-    values: SKILL_CATEGORY_ORDER,
-    labelKeyByValue: SKILL_CATEGORY_LABEL_KEYS,
+    values: labelledValues(SKILL_CATEGORY_ORDER, SKILL_CATEGORY_LABEL_KEYS),
     valueOf: (skill) => getSkillCategory(skill),
     selected: (state) => state.categories,
     withSelected: (state, next) => ({
@@ -163,8 +178,7 @@ const GROUP_DEFS: readonly GroupDef[] = [
     id: "type",
     labelKey: I18nKey.SETTINGS$SKILLS_FACET_TYPE,
     param: TYPE_PARAM,
-    values: SKILL_TYPE_ORDER,
-    labelKeyByValue: TYPE_LABEL_KEYS,
+    values: labelledValues(SKILL_TYPE_ORDER, TYPE_LABEL_KEYS),
     valueOf: (skill) => skill.type,
     selected: (state) => state.types,
     withSelected: (state, next) => ({
@@ -183,7 +197,7 @@ function groupDef(id: SkillFacetGroupId): GroupDef {
 /** Unknown values are dropped, so a hand-edited URL cannot smuggle one in. */
 function parseSet(raw: string | null, def: GroupDef): Set<string> {
   if (!raw) return new Set();
-  const legal = new Set<string>(def.values);
+  const legal = new Set(def.values.map(({ value }) => value));
   return new Set(
     raw
       .split(VALUE_SEPARATOR)
@@ -217,7 +231,10 @@ export function toSkillFilterSearchParams(
     if (selected.size === 0) continue;
     params.set(
       def.param,
-      def.values.filter((value) => selected.has(value)).join(VALUE_SEPARATOR),
+      def.values
+        .filter(({ value }) => selected.has(value))
+        .map(({ value }) => value)
+        .join(VALUE_SEPARATOR),
     );
   }
 
@@ -298,7 +315,7 @@ function buildGroup(
   // tracked filtered counts, narrowing could make a group vanish mid-click.
   const rawCounts = countByValue(allSkills, def, disabledSet);
   const discriminating = def.values.filter(
-    (value) => (rawCounts[value] ?? 0) > 0,
+    ({ value }) => (rawCounts[value] ?? 0) > 0,
   );
   const selected = def.selected(state);
   // A group with only one (or zero) discriminating values is normally hidden,
@@ -308,7 +325,7 @@ function buildGroup(
   if (discriminating.length < 2 && selected.size === 0) return null;
 
   const visibleValues = def.values.filter(
-    (value) => (rawCounts[value] ?? 0) > 0 || selected.has(value),
+    ({ value }) => (rawCounts[value] ?? 0) > 0 || selected.has(value),
   );
 
   const candidates = searched.filter((skill) =>
@@ -319,12 +336,12 @@ function buildGroup(
   return {
     id: def.id,
     labelKey: def.labelKey,
-    rows: visibleValues.map((value) => {
+    rows: visibleValues.map(({ value, labelKey }) => {
       const count = counts[value] ?? 0;
       const checked = selected.has(value);
       return {
         value,
-        labelKey: def.labelKeyByValue[value]!,
+        labelKey,
         count,
         checked,
         disabled: count === 0 && !checked,
@@ -353,7 +370,7 @@ export function toggleSkillFilterValue(
   const def = groupDef(groupId);
   // `withSelected` would drop an unknown value anyway; returning the same
   // state object keeps a no-op toggle from re-rendering or rewriting the URL.
-  if (!def.values.includes(value)) return state;
+  if (!def.values.some((candidate) => candidate.value === value)) return state;
 
   const next = new Set(def.selected(state));
   if (next.has(value)) {
