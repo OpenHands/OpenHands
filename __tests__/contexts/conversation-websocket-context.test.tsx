@@ -14,30 +14,43 @@ import {
   getStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
 
-// Captures the main socket's `onMessage` (`handleMainMessage`) so tests can
-// drive the live message path without a real WebSocket. Only the main socket
-// gets a non-empty url (planning stays ""), so url presence discriminates it.
+type CapturedWebSocketOptions = {
+  onMessage?: (event: { data: string }) => void;
+  queryParams?: Record<string, string | boolean>;
+  sessionApiKey?: string | null;
+};
+
 const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
+  mainOptions: null as CapturedWebSocketOptions | null,
+  calls: [] as Array<{
+    url: string;
+    options?: CapturedWebSocketOptions;
+  }>,
 }));
 
 // Keep the units under test real (the provider, `useConversationHistory`, the
 // event store). Only the network is stubbed: the WebSocket transport and the
 // REST service the history query depends on.
 vi.mock("#/hooks/use-websocket", () => ({
-  useWebSocket: vi.fn(
-    (
-      url: string,
-      options?: { onMessage?: (event: { data: string }) => void },
-    ) => {
-      if (url && options?.onMessage) {
-        wsCapture.mainOnMessage = options.onMessage;
-      }
-      return { socket: null, reconnect: vi.fn() };
-    },
-  ),
+  useWebSocket: vi.fn((url: string, options?: CapturedWebSocketOptions) => {
+    if (url) {
+      wsCapture.calls.push({ url, options });
+    }
+    if (
+      url &&
+      options?.onMessage &&
+      options.queryParams &&
+      "resend_mode" in options.queryParams
+    ) {
+      wsCapture.mainOnMessage = options.onMessage;
+      wsCapture.mainOptions = options;
+    }
+    return { socket: null, reconnect: vi.fn() };
+  }),
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: vi.fn(),
@@ -76,6 +89,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
   beforeEach(() => {
     wsCapture.mainOnMessage = null;
+    wsCapture.mainOptions = null;
+    wsCapture.calls.length = 0;
     window.localStorage.clear();
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -157,6 +172,89 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // stamp this stays null and the header falls back to ambiguous matching.
     expect(getStoredConversationMetadata("conv-switch")?.active_profile).toBe(
       "fast-opus",
+    );
+  });
+
+  it("keeps the session key out of WebSocket query parameters", async () => {
+    const sessionApiKey = `sk-oh-${"c".repeat(64)}`;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-auth"
+          conversationUrl="http://localhost/api"
+          sessionApiKey={sessionApiKey}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    expect(wsCapture.mainOptions?.sessionApiKey).toBe(sessionApiKey);
+    expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
+      "session_api_key",
+    );
+  });
+
+  it("uses the planning sub-conversation session key", async () => {
+    const mainSessionApiKey = `sk-oh-main-${"m".repeat(48)}`;
+    const planningSessionApiKey = `sk-oh-plan-${"p".repeat(48)}`;
+    const planningConversation: AppConversation = {
+      id: "planning-auth",
+      created_by_user_id: null,
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      title: "Planner",
+      trigger: null,
+      pr_number: [],
+      llm_model: null,
+      metrics: null,
+      created_at: "2026-07-28T00:00:00Z",
+      updated_at: "2026-07-28T00:00:00Z",
+      execution_status: null,
+      conversation_url:
+        "http://planner.example/api/conversations/planning-auth",
+      session_api_key: planningSessionApiKey,
+      sandbox_id: null,
+      sub_conversation_ids: [],
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-auth"
+          conversationUrl="http://main.example/api/conversations/conv-auth"
+          sessionApiKey={mainSessionApiKey}
+          subConversationIds={[planningConversation.id]}
+          subConversations={[planningConversation]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        wsCapture.calls.some(({ url }) =>
+          url.endsWith("/sockets/events/planning-auth"),
+        ),
+      ).toBe(true),
+    );
+
+    const planningCall = wsCapture.calls.find(({ url }) =>
+      url.endsWith("/sockets/events/planning-auth"),
+    );
+
+    expect(planningCall?.url).toBe(
+      "ws://planner.example/sockets/events/planning-auth",
+    );
+    expect(planningCall?.options?.sessionApiKey).toBe(planningSessionApiKey);
+    expect(planningCall?.options?.queryParams).toEqual({ resend_all: true });
+    expect(planningCall?.options?.queryParams).not.toHaveProperty(
+      "session_api_key",
     );
   });
 

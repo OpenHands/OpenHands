@@ -23,6 +23,7 @@ import {
   buildSdkSettingsPayloadForView,
   getVisibleSettingsSections,
   hasAdvancedSettings,
+  hasCriticalSettings,
   hasMinorSettings,
   inferInitialView,
   isValidSettingsSchema,
@@ -57,9 +58,11 @@ const getMoreDetailedView = (
 const normalizeView = (
   view: SettingsView,
   {
+    showBasic,
     showAdvanced,
     showAll,
   }: {
+    showBasic: boolean;
     showAdvanced: boolean;
     showAll: boolean;
   },
@@ -80,6 +83,11 @@ const normalizeView = (
     return showAll ? "all" : "basic";
   }
 
+  // A critical-less page has nothing to render in the basic tier; bump up.
+  if (!showBasic) {
+    if (showAdvanced) return "advanced";
+    if (showAll) return "all";
+  }
   return "basic";
 };
 
@@ -300,6 +308,12 @@ export function SdkSectionPage({
     [resolvedSourceConfigs, getSchemaForSource],
   );
 
+  // The basic tier only exists when some field renders in it; a critical-less
+  // page (e.g. Memory, whose only field is major) hides the Basic tab and
+  // floors its view at "advanced".
+  const showBasic = resolvedSources.some((src) =>
+    hasCriticalSettings(src.filteredSchema),
+  );
   const showAdvanced =
     forceShowAdvancedView ||
     resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema));
@@ -380,8 +394,15 @@ export function SdkSectionPage({
       result = result ? getMoreDetailedView(result, perSource) : perSource;
     }
     if (!result) return null;
-    return normalizeView(result, { showAdvanced, showAll });
-  }, [settings, resolvedSources, getInitialView, showAdvanced, showAll]);
+    return normalizeView(result, { showBasic, showAdvanced, showAll });
+  }, [
+    settings,
+    resolvedSources,
+    getInitialView,
+    showBasic,
+    showAdvanced,
+    showAll,
+  ]);
 
   React.useEffect(() => {
     hasHydratedViewRef.current = false;
@@ -407,14 +428,15 @@ export function SdkSectionPage({
     } else {
       setDirtyBySource({});
     }
-    setView((currentView) => {
-      if (!hasHydratedViewRef.current) {
-        hasHydratedViewRef.current = true;
-        return initialView;
-      }
-
-      return getLessDetailedView(currentView, initialView);
-    });
+    // The ref flip stays outside the updater: React double-invokes state
+    // updaters in StrictMode, so mutating it in there makes the second
+    // (kept) call take the already-hydrated branch and pin the view.
+    if (!hasHydratedViewRef.current) {
+      hasHydratedViewRef.current = true;
+      setView(initialView);
+    } else {
+      setView((currentView) => getLessDetailedView(currentView, initialView));
+    }
   }, [initialValuesBySource, initialView]);
 
   const fieldKeyToSource = React.useMemo(() => {
@@ -630,6 +652,7 @@ export function SdkSectionPage({
       <ViewToggle
         view={view}
         setView={setView}
+        showBasic={showBasic}
         showAdvanced={showAdvanced}
         showAll={showAll}
         isDisabled={isReadOnly}
