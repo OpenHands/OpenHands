@@ -123,11 +123,20 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
-  ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
-});
+const sortEventState = (state: EventState): EventState => {
+  const events = [...state.events].sort(compareEventsByTimestamp);
+  return {
+    ...state,
+    events,
+    // Rebuild instead of sorting the derived list. `handleEventForUI` can
+    // intentionally keep a user message below the agent response that was
+    // already streaming when the message arrived (#15433).
+    uiEvents: events.reduce<OHEvent[]>(
+      (uiEvents, event) => handleEventForUI(event, uiEvents),
+      [],
+    ),
+  };
+};
 
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
   const next = appendEvent(state, event);

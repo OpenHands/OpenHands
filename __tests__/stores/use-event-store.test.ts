@@ -93,6 +93,21 @@ const makeUserMessageEvent = (id: string, timestamp: string): MessageEvent => ({
   timestamp,
 });
 
+const makeAgentMessageEvent = (
+  id: string,
+  timestamp: string,
+  text: string,
+): MessageEvent => ({
+  ...mockUserMessageEvent,
+  id,
+  timestamp,
+  source: "agent",
+  llm_message: {
+    role: "assistant",
+    content: [{ type: "text", text }],
+  },
+});
+
 describe("useEventStore", () => {
   it("should render initial state correctly", () => {
     const { result } = renderHook(() => useEventStore());
@@ -198,6 +213,47 @@ describe("useEventStore", () => {
     });
     expect(result.current.eventIds.has("delta-1")).toBe(true);
     expect(result.current.eventIds.has("delta-2")).toBe(true);
+  });
+
+  it("keeps a queued user message after the streamed response during bulk add", () => {
+    const { result } = renderHook(() => useEventStore());
+    const initialUserMessage = makeUserMessageEvent(
+      "user-1",
+      "2024-03-01T00:00:00Z",
+    );
+    const firstDelta = {
+      ...makeStreamingDeltaEvent("delta-1", "hello "),
+      timestamp: "2024-03-01T00:00:01Z",
+    };
+    const queuedUserMessage = makeUserMessageEvent(
+      "user-2",
+      "2024-03-01T00:00:02Z",
+    );
+    const secondDelta = {
+      ...makeStreamingDeltaEvent("delta-2", "world"),
+      timestamp: "2024-03-01T00:00:03Z",
+    };
+    const finalMessage = makeAgentMessageEvent(
+      "agent-1",
+      "2024-03-01T00:00:04Z",
+      "hello world",
+    );
+
+    act(() => {
+      result.current.addEvents([
+        initialUserMessage,
+        firstDelta,
+        queuedUserMessage,
+        secondDelta,
+        finalMessage,
+      ]);
+    });
+
+    expect(result.current.uiEvents).toEqual([
+      initialUserMessage,
+      finalMessage,
+      queuedUserMessage,
+    ]);
   });
 
   it("should not compact streaming deltas from different senders (#1656)", () => {

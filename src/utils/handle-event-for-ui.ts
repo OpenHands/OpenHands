@@ -1,6 +1,7 @@
 import {
   ActionEvent,
   ImageContent,
+  MessageEvent,
   OpenHandsEvent,
   TextContent,
 } from "#/types/agent-server/core";
@@ -16,6 +17,73 @@ import {
   getReasoningContent,
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
+
+// A user-message echo can arrive before the agent's in-flight stream finishes.
+// Keep that message at the visual tail until the current agent turn finalizes.
+// The non-enumerable symbol keeps this UI-only state off the server event shape.
+const DEFERRED_USER_MESSAGE = Symbol("deferred-user-message");
+
+type DeferredUserMessageEvent = MessageEvent & {
+  [DEFERRED_USER_MESSAGE]: true;
+};
+
+const isDeferredUserMessage = (
+  event: OpenHandsEvent,
+): event is DeferredUserMessageEvent =>
+  isMessageEvent(event) &&
+  event.source === "user" &&
+  Boolean(
+    (event as MessageEvent & { [DEFERRED_USER_MESSAGE]?: true })[
+      DEFERRED_USER_MESSAGE
+    ],
+  );
+
+const deferUserMessage = (event: MessageEvent): MessageEvent =>
+  Object.defineProperty({ ...event }, DEFERRED_USER_MESSAGE, {
+    value: true,
+  });
+
+const releaseUserMessage = (event: OpenHandsEvent): OpenHandsEvent =>
+  isDeferredUserMessage(event) ? { ...event } : event;
+
+const findEventBeforeDeferredUserMessages = (
+  events: OpenHandsEvent[],
+): { event: OpenHandsEvent; index: number } | null => {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!isDeferredUserMessage(event)) {
+      return { event, index };
+    }
+  }
+  return null;
+};
+
+const insertBeforeDeferredUserMessages = (
+  events: OpenHandsEvent[],
+  event: OpenHandsEvent,
+  releaseDeferredMessages = false,
+): OpenHandsEvent[] => {
+  let insertionIndex = events.length;
+  while (
+    insertionIndex > 0 &&
+    isDeferredUserMessage(events[insertionIndex - 1])
+  ) {
+    insertionIndex -= 1;
+  }
+
+  if (insertionIndex === events.length) {
+    return [...events, event];
+  }
+
+  const deferredMessages = events.slice(insertionIndex);
+  return [
+    ...events.slice(0, insertionIndex),
+    event,
+    ...(releaseDeferredMessages
+      ? deferredMessages.map(releaseUserMessage)
+      : deferredMessages),
+  ];
+};
 
 export const mergeStreamingDeltaEvent = (
   incoming: StreamingDeltaEvent,
@@ -39,7 +107,11 @@ export const isSameStreamingSender = (
 const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (isMessageEvent(event) && event.source === "user") {
+    if (
+      isMessageEvent(event) &&
+      event.source === "user" &&
+      !isDeferredUserMessage(event)
+    ) {
       return index;
     }
   }
@@ -107,6 +179,9 @@ const getTrailingDeltas = (
   const deltas: { event: StreamingDeltaEvent; index: number }[] = [];
   for (let index = uiEvents.length - 1; index >= 0; index -= 1) {
     const event = uiEvents[index];
+    if (isDeferredUserMessage(event)) {
+      continue;
+    }
     if (!isStreamingDeltaEvent(event)) {
       break;
     }
@@ -229,8 +304,7 @@ const finalizeStreamingDeltasInPlace = (
     contentStreamingDeltas,
     eventRendersReasoning(finalEvent),
   );
-  nextUiEvents.push(finalEvent);
-  return nextUiEvents;
+  return insertBeforeDeferredUserMessages(nextUiEvents, finalEvent, true);
 };
 
 /**
@@ -335,25 +409,27 @@ export const handleEventForUI = (
       return newUiEvents;
     }
 
-    const lastIndex = newUiEvents.length - 1;
-    const lastEvent = newUiEvents[lastIndex];
+    const activeTail = findEventBeforeDeferredUserMessages(newUiEvents);
     if (
-      lastEvent &&
-      isStreamingDeltaEvent(lastEvent) &&
-      isSameStreamingSender(event, lastEvent)
+      activeTail &&
+      isStreamingDeltaEvent(activeTail.event) &&
+      isSameStreamingSender(event, activeTail.event)
     ) {
-      newUiEvents[lastIndex] = mergeStreamingDeltaEvent(event, lastEvent);
+      newUiEvents[activeTail.index] = mergeStreamingDeltaEvent(
+        event,
+        activeTail.event,
+      );
       return newUiEvents;
     }
 
-    newUiEvents.push(event);
-    return newUiEvents;
+    return insertBeforeDeferredUserMessages(newUiEvents, event);
   }
 
-  if (
+  const isFinalAgentEvent =
     (isActionEvent(event) && event.action.kind === "FinishAction") ||
-    (isMessageEvent(event) && event.source === "agent")
-  ) {
+    (isMessageEvent(event) && event.source === "agent");
+
+  if (isFinalAgentEvent) {
     const finalizedUiEvents = finalizeStreamingDeltasInPlace(
       event,
       newUiEvents,
@@ -375,8 +451,7 @@ export const handleEventForUI = (
       supersedeStreamedThoughtWithAction(event, newUiEvents) ??
       supersedeStreamedReasoningWithAction(event, newUiEvents);
     if (reconciledUiEvents) {
-      reconciledUiEvents.push(event);
-      return reconciledUiEvents;
+      return insertBeforeDeferredUserMessages(reconciledUiEvents, event);
     }
   }
 
@@ -389,7 +464,7 @@ export const handleEventForUI = (
     if (existingIndex !== -1) {
       newUiEvents[existingIndex] = event;
     } else {
-      newUiEvents.push(event);
+      return insertBeforeDeferredUserMessages(newUiEvents, event);
     }
     return newUiEvents;
   }
@@ -416,11 +491,24 @@ export const handleEventForUI = (
       newUiEvents[actionIndex] = event;
     } else {
       // Action not found in uiEvents, just add the observation
-      newUiEvents.push(event);
+      return insertBeforeDeferredUserMessages(newUiEvents, event);
     }
   } else {
-    // For non-observation events, just add them to uiEvents
-    newUiEvents.push(event);
+    const activeTail = findEventBeforeDeferredUserMessages(newUiEvents);
+    if (
+      isMessageEvent(event) &&
+      event.source === "user" &&
+      activeTail &&
+      isStreamingDeltaEvent(activeTail.event)
+    ) {
+      newUiEvents.push(deferUserMessage(event));
+    } else {
+      return insertBeforeDeferredUserMessages(
+        newUiEvents,
+        event,
+        isFinalAgentEvent,
+      );
+    }
   }
 
   return newUiEvents;

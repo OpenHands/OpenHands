@@ -266,6 +266,27 @@ describe("handleEventForUI", () => {
       expect(result).toEqual([mockMessageEvent, mockInProgress]);
     });
 
+    it("keeps a tool call above a user message queued during streaming", () => {
+      const delta = makeStreamingDelta("delta-1", "I'll start ");
+      const queuedUserMessage: MessageEvent = {
+        ...mockMessageEvent,
+        id: "queued-user-message",
+      };
+      const afterUserMessage = handleEventForUI(
+        queuedUserMessage,
+        handleEventForUI(delta, [mockMessageEvent]),
+      );
+
+      const result = handleEventForUI(mockInProgress, afterUserMessage);
+
+      expect(result).toEqual([
+        mockMessageEvent,
+        delta,
+        mockInProgress,
+        queuedUserMessage,
+      ]);
+    });
+
     it("replaces a later status event at the original position", () => {
       const result = handleEventForUI(mockCompleted, [
         mockMessageEvent,
@@ -307,6 +328,58 @@ describe("handleEventForUI", () => {
           content: "I'll start working on that.",
           reasoning_content: null,
         },
+      ]);
+    });
+
+    it("keeps an interleaved user message below the active stream", () => {
+      const first = makeStreamingDelta("delta-1", "I'll start ");
+      const second = makeStreamingDelta("delta-2", "working on that.");
+      const queuedUserMessage: MessageEvent = {
+        ...mockMessageEvent,
+        id: "queued-user-message",
+        llm_message: {
+          role: "user",
+          content: [{ type: "text", text: "One more thing" }],
+        },
+      };
+
+      const afterFirst = handleEventForUI(first, [mockMessageEvent]);
+      const afterUserMessage = handleEventForUI(queuedUserMessage, afterFirst);
+      const result = handleEventForUI(second, afterUserMessage);
+
+      expect(result).toEqual([
+        mockMessageEvent,
+        {
+          ...first,
+          content: "I'll start working on that.",
+          reasoning_content: null,
+        },
+        queuedUserMessage,
+      ]);
+    });
+
+    it("finalizes an active stream before its interleaved user message", () => {
+      const streamedDelta = makeStreamingDelta(
+        "delta-1",
+        "I'll start working on that. Done.",
+      );
+      const queuedUserMessage: MessageEvent = {
+        ...mockMessageEvent,
+        id: "queued-user-message",
+        llm_message: {
+          role: "user",
+          content: [{ type: "text", text: "One more thing" }],
+        },
+      };
+      const afterStream = handleEventForUI(streamedDelta, [mockMessageEvent]);
+      const afterUserMessage = handleEventForUI(queuedUserMessage, afterStream);
+
+      const result = handleEventForUI(mockAgentMessageEvent, afterUserMessage);
+
+      expect(result).toEqual([
+        mockMessageEvent,
+        mockAgentMessageEvent,
+        queuedUserMessage,
       ]);
     });
 
