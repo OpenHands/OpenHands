@@ -592,9 +592,13 @@ async function fillLlmProfileEditorAndSave(
   await nameInput.click();
   await nameInput.fill(profileName);
 
-  // Switch to "All" view so base_url is visible
-  await page.getByTestId("sdk-section-all-toggle").click();
-  await waitForTestId(page, "llm-settings-form-advanced");
+  // Switch to "All" view so base_url is visible. In some flows the editor can
+  // already be on advanced/all; only click the toggle when needed.
+  const advancedForm = page.getByTestId("llm-settings-form-advanced");
+  if (!(await advancedForm.isVisible().catch(() => false))) {
+    await page.getByTestId("sdk-section-all-toggle").click();
+    await waitForTestId(page, "llm-settings-form-advanced");
+  }
 
   const modelInput = page.getByTestId("llm-custom-model-input");
   await modelInput.click();
@@ -608,7 +612,15 @@ async function fillLlmProfileEditorAndSave(
   await apiKeyInput.click();
   await apiKeyInput.fill(apiKey);
 
-  await page.getByTestId("save-profile-btn").click();
+  const saveButton = page.getByTestId("save-profile-btn");
+  const saveEnabled = await saveButton.isEnabled();
+  if (saveEnabled) {
+    await saveButton.click();
+  } else {
+    // Save stays disabled when the edit is a no-op. Return to list explicitly
+    // so callers can continue with activation/setup.
+    await page.getByTestId("back-to-profiles").click();
+  }
   await waitForTestId(page, "add-llm-profile");
 }
 
