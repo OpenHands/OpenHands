@@ -37,7 +37,9 @@ export function SkillFacetRow({
         "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm",
         disabled
           ? "cursor-default text-tertiary-alt/40"
-          : "cursor-pointer hover:bg-[var(--oh-interactive-hover)]",
+          : // Same hover pair as the extensions nav links: a raised surface the
+            // label brightens against, rather than a light fill it sinks into.
+            "cursor-pointer hover:bg-[var(--oh-surface-raised)] hover:text-white",
         checked ? "text-white" : "text-tertiary-light",
       )}
     >
