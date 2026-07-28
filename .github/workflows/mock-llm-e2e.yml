@@ -58,6 +58,7 @@ jobs:
     env:
       MOCK_LLM_REPORT_PATH: mock-llm-report.md
       MOCK_LLM_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      OH_AGENT_SERVER_GIT_REF: 06e55b3eea555fecca8ca975b0e7bb64b9adbea2
 
     steps:
       - name: Check out repository

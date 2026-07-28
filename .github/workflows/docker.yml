@@ -66,6 +66,7 @@ jobs:
     env:
       ARCH: ${{ matrix.arch }}
       PLATFORM: ${{ matrix.platform }}
+      STACKED_AGENT_SERVER_IMAGE: ghcr.io/openhands/agent-server:06e55b3-python
 
     steps:
       - name: Checkout
@@ -102,6 +103,7 @@ jobs:
         id: prep
         env:
           AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
+          STACKED_AGENT_SERVER_IMAGE: ${{ env.STACKED_AGENT_SERVER_IMAGE }}
           DEFAULT_AGENT_SERVER_IMAGE: ${{ steps.config.outputs.default_agent_server_image }}
           AUTOMATION_VERSION_INPUT: ${{ inputs.automation_version }}
           DEFAULT_AUTOMATION_VERSION: ${{ steps.config.outputs.default_automation_version }}
@@ -111,9 +113,11 @@ jobs:
           SHORT_SHA=$(echo "$RELEVANT_SHA" | cut -c1-7)
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
-          # Resolve agent-server base image (input override > config/defaults.json)
+          # Resolve agent-server base image (input override > stacked PR > release).
           if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
             echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
+          elif [ -n "$STACKED_AGENT_SERVER_IMAGE" ]; then
+            echo "agent_server_image=$STACKED_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
           else
             echo "agent_server_image=$DEFAULT_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
           fi
