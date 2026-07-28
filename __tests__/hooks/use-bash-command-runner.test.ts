@@ -23,6 +23,9 @@ class MockWebSocket {
   }
 
   send(data: string) {
+    if (this.readyState !== MockWebSocket.OPEN) {
+      throw new DOMException("WebSocket is not open", "InvalidStateError");
+    }
     this.sent.push(data);
   }
 

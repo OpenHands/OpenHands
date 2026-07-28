@@ -298,13 +298,14 @@ describe("useWebSocket", () => {
     }
   });
 
-  it("should send the session key before application messages", async () => {
+  it("should send the session key before application messages on every connection", async () => {
     class MockWebSocket {
       static readonly CONNECTING = 0;
       static readonly OPEN = 1;
       static readonly CLOSING = 2;
       static readonly CLOSED = 3;
       static instance: MockWebSocket | null = null;
+      static readonly instances: MockWebSocket[] = [];
 
       readonly url: string;
       readonly sent: string[] = [];
@@ -317,6 +318,7 @@ describe("useWebSocket", () => {
       constructor(url: string) {
         this.url = url;
         MockWebSocket.instance = this;
+        MockWebSocket.instances.push(this);
         queueMicrotask(() => {
           this.readyState = MockWebSocket.OPEN;
           this.onopen?.(new Event("open"));
@@ -324,6 +326,9 @@ describe("useWebSocket", () => {
       }
 
       send(data: string) {
+        if (this.readyState !== MockWebSocket.OPEN) {
+          throw new DOMException("WebSocket is not open", "InvalidStateError");
+        }
         this.sent.push(data);
       }
 
@@ -335,6 +340,10 @@ describe("useWebSocket", () => {
     const originalWebSocket = globalThis.WebSocket;
     vi.stubGlobal("WebSocket", MockWebSocket);
     const sessionApiKey = `sk-oh-${"a".repeat(64)}`;
+    const expectedFrames = [
+      JSON.stringify({ type: "auth", session_api_key: sessionApiKey }),
+      "application-message",
+    ];
 
     try {
       const { result, unmount } = renderHook(() =>
@@ -343,19 +352,29 @@ describe("useWebSocket", () => {
           onOpen: () => MockWebSocket.instance?.send("application-message"),
         }),
       );
+      const firstSocket = MockWebSocket.instance!;
 
+      expect(firstSocket.readyState).toBe(MockWebSocket.CONNECTING);
+      expect(firstSocket.sent).toEqual([]);
       await waitForConnection(result);
 
-      expect(MockWebSocket.instance?.url).toBe("ws://acme.com/ws");
-      expect(MockWebSocket.instance?.sent).toEqual([
-        JSON.stringify({ type: "auth", session_api_key: sessionApiKey }),
-        "application-message",
-      ]);
+      expect(firstSocket.url).toBe("ws://acme.com/ws");
+      expect(firstSocket.sent).toEqual(expectedFrames);
+
+      act(() => {
+        result.current.reconnect();
+      });
+
+      await waitFor(() => {
+        expect(MockWebSocket.instances).toHaveLength(2);
+        expect(MockWebSocket.instances[1].sent).toEqual(expectedFrames);
+      });
 
       unmount();
     } finally {
       globalThis.WebSocket = originalWebSocket;
       MockWebSocket.instance = null;
+      MockWebSocket.instances.length = 0;
     }
   });
 
