@@ -66,7 +66,11 @@ export const EMPTY_SKILL_FILTER_STATE: SkillFilterState = {
 
 /**
  * One group's identity: how to read its value off a skill, which values are
- * legal and in what order, and how to reach its slice of the filter state.
+ * legal and in what order, and how to read and write its slice of the filter
+ * state.
+ *
+ * `selected` / `withSelected` are what keep every operation below driven by
+ * this table alone: a new group is declared here and nowhere else.
  *
  * `labelKey`s are carried rather than translated strings so this whole module
  * stays pure and its tests need no i18n.
@@ -79,6 +83,22 @@ interface GroupDef {
   labelKeyByValue: Record<string, I18nKey>;
   valueOf: (skill: SkillInfo, disabledSet: Set<string>) => string;
   selected: (state: SkillFilterState) => Set<string>;
+  withSelected: (
+    state: SkillFilterState,
+    next: Set<string>,
+  ) => SkillFilterState;
+}
+
+/**
+ * Rebuilds a widened selection in the group's own value type. Rebuilding
+ * rather than casting is what keeps every writer below cast-free: a value the
+ * group does not declare cannot survive the filter.
+ */
+function narrowSet<TValue extends string>(
+  order: readonly TValue[],
+  next: Set<string>,
+): Set<TValue> {
+  return new Set(order.filter((value) => next.has(value)));
 }
 
 const SOURCE_LABEL_KEYS: Record<SkillScope, I18nKey> = {
@@ -108,6 +128,10 @@ const GROUP_DEFS: readonly GroupDef[] = [
     valueOf: (skill, disabledSet) =>
       disabledSet.has(skill.name) ? "disabled" : "enabled",
     selected: (state) => state.states,
+    withSelected: (state, next) => ({
+      ...state,
+      states: narrowSet(SKILL_ENABLED_STATE_ORDER, next),
+    }),
   },
   {
     id: "source",
@@ -117,6 +141,10 @@ const GROUP_DEFS: readonly GroupDef[] = [
     labelKeyByValue: SOURCE_LABEL_KEYS,
     valueOf: (skill) => getSkillScope(skill),
     selected: (state) => state.sources,
+    withSelected: (state, next) => ({
+      ...state,
+      sources: narrowSet(SKILL_SCOPE_ORDER, next),
+    }),
   },
   {
     id: "category",
@@ -126,6 +154,10 @@ const GROUP_DEFS: readonly GroupDef[] = [
     labelKeyByValue: SKILL_CATEGORY_LABEL_KEYS,
     valueOf: (skill) => getSkillCategory(skill),
     selected: (state) => state.categories,
+    withSelected: (state, next) => ({
+      ...state,
+      categories: narrowSet(SKILL_CATEGORY_ORDER, next),
+    }),
   },
   {
     id: "type",
@@ -135,6 +167,10 @@ const GROUP_DEFS: readonly GroupDef[] = [
     labelKeyByValue: TYPE_LABEL_KEYS,
     valueOf: (skill) => skill.type,
     selected: (state) => state.types,
+    withSelected: (state, next) => ({
+      ...state,
+      types: narrowSet(SKILL_TYPE_ORDER, next),
+    }),
   },
 ];
 
@@ -144,35 +180,29 @@ function groupDef(id: SkillFacetGroupId): GroupDef {
   return def;
 }
 
-function parseSet<T extends string>(
-  raw: string | null,
-  allowed: readonly string[],
-): Set<T> {
+/** Unknown values are dropped, so a hand-edited URL cannot smuggle one in. */
+function parseSet(raw: string | null, def: GroupDef): Set<string> {
   if (!raw) return new Set();
-  const legal = new Set(allowed);
-  const parsed = raw
-    .split(VALUE_SEPARATOR)
-    .map((value) => value.trim())
-    .filter((value) => legal.has(value));
-  return new Set(parsed as T[]);
+  const legal = new Set<string>(def.values);
+  return new Set(
+    raw
+      .split(VALUE_SEPARATOR)
+      .map((value) => value.trim())
+      .filter((value) => legal.has(value)),
+  );
 }
 
 export function parseSkillFilterState(
   params: URLSearchParams,
 ): SkillFilterState {
-  return {
-    query: params.get(SKILL_FILTER_QUERY_PARAM) ?? "",
-    sources: parseSet<SkillScope>(params.get(SOURCE_PARAM), SKILL_SCOPE_ORDER),
-    categories: parseSet<SkillCategoryId>(
-      params.get(CATEGORY_PARAM),
-      SKILL_CATEGORY_ORDER,
-    ),
-    types: parseSet<SkillType>(params.get(TYPE_PARAM), SKILL_TYPE_ORDER),
-    states: parseSet<SkillEnabledState>(
-      params.get(STATE_PARAM),
-      SKILL_ENABLED_STATE_ORDER,
-    ),
-  };
+  return GROUP_DEFS.reduce<SkillFilterState>(
+    (state, def) =>
+      def.withSelected(state, parseSet(params.get(def.param), def)),
+    {
+      ...EMPTY_SKILL_FILTER_STATE,
+      query: params.get(SKILL_FILTER_QUERY_PARAM) ?? "",
+    },
+  );
 }
 
 export function toSkillFilterSearchParams(
@@ -321,6 +351,8 @@ export function toggleSkillFilterValue(
   value: string,
 ): SkillFilterState {
   const def = groupDef(groupId);
+  // `withSelected` would drop an unknown value anyway; returning the same
+  // state object keeps a no-op toggle from re-rendering or rewriting the URL.
   if (!def.values.includes(value)) return state;
 
   const next = new Set(def.selected(state));
@@ -330,18 +362,7 @@ export function toggleSkillFilterValue(
     next.add(value);
   }
 
-  switch (groupId) {
-    case "state":
-      return { ...state, states: next as Set<SkillEnabledState> };
-    case "source":
-      return { ...state, sources: next as Set<SkillScope> };
-    case "category":
-      return { ...state, categories: next as Set<SkillCategoryId> };
-    case "type":
-      return { ...state, types: next as Set<SkillType> };
-    default:
-      return state;
-  }
+  return def.withSelected(state, next);
 }
 
 export function clearSkillFilterFacets(
