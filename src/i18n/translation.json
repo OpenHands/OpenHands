@@ -9859,6 +9859,23 @@
     "uk": "Повторити",
     "ca": "Torna-ho a provar"
   },
+  "CHAT_INTERFACE$MESSAGE_DISMISS": {
+    "en": "Dismiss",
+    "ja": "閉じる",
+    "zh-CN": "关闭",
+    "zh-TW": "關閉",
+    "ko-KR": "닫기",
+    "no": "Lukk",
+    "it": "Chiudi",
+    "pt": "Dispensar",
+    "es": "Descartar",
+    "ar": "إغلاق",
+    "fr": "Fermer",
+    "tr": "Kapat",
+    "de": "Schließen",
+    "uk": "Закрити",
+    "ca": "Tanca"
+  },
   "CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE": {
     "en": "NEW FILES ADDED",
     "de": "NEUE DATEIEN HINZUGEFÜGT",
