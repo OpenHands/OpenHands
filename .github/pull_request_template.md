@@ -53,3 +53,19 @@ Provide a video or screenshots of testing your PR. e.g. you added a new feature 
 ## Notes
 
 <!-- Optional: migrations, config changes, rollout concerns, follow-ups, or anything reviewers should know. -->
+
+<!-- landing-checklist:v1 -->
+### 🚀 Feature Landing Checklist
+_Required before merge:_
+- [ ] Documentation added for the feature on the website
+  _(add the page to `OpenHands/docs`, but set `hidden: true` in its frontmatter — the feature isn't public yet. Automation removes `hidden: true` only after two tech-council approvals and independent verification that the flag is enabled in production.)_
+- [ ] E2E test added covering regression / up-to-spec behavior
+- [ ] Feature is gated by an ENABLE_<FEATURE> flag and exposed through the appropriate Helm / embedded-cluster configuration
+
+_Tracked post-merge (do not check manually — automation updates these):_
+- [ ] Bug bash completed (3+ engineers), issues filed for next cycle
+- [ ] Feature is available in the most recent release
+- [ ] Feature included in an X / LinkedIn post
+
+Linear tracking ticket: _(auto-linked by automation once PR is opened)_
+Feature flag name: `___________`

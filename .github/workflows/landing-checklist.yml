@@ -1,0 +1,21 @@
+# Copy this file into each production repo at:
+#   .github/workflows/landing-checklist.yml
+#
+# This is intentionally tiny — all real logic lives in the reusable workflow
+# hosted in OpenHands/OpenHands (per team decision, no separate eng-process
+# repo) so it can be updated in one place for all seven production repos.
+#
+# Note: OpenHands/OpenHands itself also needs this caller (pointing at its
+# own @main reusable workflow) so it enforces the checklist on itself too.
+name: Landing Checklist
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, ready_for_review]
+
+jobs:
+  landing-checklist:
+    uses: OpenHands/OpenHands/.github/workflows/landing-checklist-reusable.yml@main
+    permissions:
+      pull-requests: write
+      contents: read

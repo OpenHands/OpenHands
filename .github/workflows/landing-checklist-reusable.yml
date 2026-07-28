@@ -1,0 +1,153 @@
+# Reusable workflow — lives once in OpenHands/OpenHands
+# at .github/workflows/landing-checklist-reusable.yml
+#
+# Each production repo calls this via a small caller workflow
+# (see landing-checklist-caller.yml). Editing checklist copy, item order, or
+# validation logic here updates every repo simultaneously — no per-repo
+# workflow changes needed for anything except onboarding.
+#
+# This workflow owns ONE sticky comment only: the pre-merge gate, marked
+# <!-- landing-checklist:v1 -->. Once the PR merges, a second, separate
+# sticky comment — the Feature Landing Tracker, marked
+# <!-- landing-tracker:v1 --> — is created and updated by the OpenHands
+# automations (see automations/01 through 07 and tracker-format.md), which
+# also post the same visual status to the #tech-council Slack channel. The
+# two comments are intentionally owned by two different systems (sync CI
+# check vs. async automations) so they can never race each other — see
+# tracker-format.md's "Why two PR comments" section.
+name: Landing Checklist (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      feat_title_regex:
+        type: string
+        default: '^\(feat\)'
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  check:
+    name: landing-checklist
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Skip non-feat PRs (neutral)
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title || "";
+            const re = new RegExp(${{ toJSON(inputs.feat_title_regex) }});
+            const isFeat = re.test(title);
+            core.setOutput('is_feat', isFeat ? 'true' : 'false');
+            if (!isFeat) {
+              core.notice(`Title does not start with (feat) — landing checklist skipped for: "${title}"`);
+            }
+
+      - name: Evaluate + post checklist
+        if: steps.gate.outputs.is_feat == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const marker = "<!-- landing-checklist:v1 -->";
+
+            // Items whose completion is expected *at review time*, i.e. before
+            // merge. The remaining 3 items (bug bash, released-to-prod,
+            // announced) are inherently post-merge and are tracked by the
+            // Linear "Feature Landing" issue + OpenHands automations instead
+            // of being blocking here.
+            const reviewTimeItems = [
+              { key: "docs",  label: "Documentation added for the feature on the website" },
+              { key: "e2e",   label: "E2E test added covering regression / up-to-spec behavior" },
+              { key: "helm",  label: "Feature is gated by an ENABLE_<FEATURE> flag and exposed through the appropriate Helm / embedded-cluster configuration" },
+            ];
+            const postMergeItems = [
+              { key: "bugbash", label: "Bug bash completed (3+ engineers), issues filed for next cycle" },
+              { key: "release", label: "Feature is available in the most recent release" },
+              { key: "announce", label: "Feature included in an X / LinkedIn post" },
+            ];
+
+            function isChecked(body, label) {
+              // Matches "- [x] <label>" (case-insensitive on the x, tolerant
+              // of extra whitespace) anywhere in the PR body.
+              const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const re = new RegExp(`-\\s*\\[( |x|X)\\]\\s*${escaped}`, 'i');
+              const m = body.match(re);
+              return !!(m && /x/i.test(m[1]));
+            }
+
+            const hasChecklistBlock = body.includes(marker);
+            const reviewResults = reviewTimeItems.map(i => ({...i, checked: isChecked(body, i.label)}));
+            const allReviewItemsChecked = reviewResults.every(i => i.checked);
+            const postResults = postMergeItems.map(i => ({...i, checked: isChecked(body, i.label)}));
+
+            const pass = hasChecklistBlock && allReviewItemsChecked;
+
+            const lines = [];
+            lines.push(marker);
+            lines.push("### 🚀 Feature Landing Checklist");
+            lines.push("");
+            lines.push("This PR title is tagged `(feat)`. Beyond code review, landing this feature means completing the full checklist below. Items 1-3 are required before merge; items 4-6 are tracked post-merge by the linked Linear ticket and automations.");
+            lines.push("");
+            lines.push("**Before merge:**");
+            for (const i of reviewResults) {
+              lines.push(`- [${i.checked ? 'x' : ' '}] ${i.label}`);
+            }
+            lines.push("");
+            lines.push("**After merge (tracked automatically, no action needed here):**");
+            for (const i of postResults) {
+              lines.push(`- [${i.checked ? 'x' : ' '}] ${i.label}`);
+            }
+            lines.push("");
+            if (!hasChecklistBlock) {
+              lines.push("⚠️ No landing-checklist block detected in the PR description. Please use the PR template (`.github/PULL_REQUEST_TEMPLATE.md`) so items can be checked off.");
+            } else if (!allReviewItemsChecked) {
+              lines.push("⚠️ Check off items 1-3 above (edit the PR description) before this can merge.");
+            } else {
+              lines.push("✅ Pre-merge landing requirements satisfied.");
+            }
+            lines.push("");
+            lines.push("_Automated by an OpenHands AI agent on behalf of the engineering team._");
+            const commentBody = lines.join("\n");
+
+            const isFork = context.payload.pull_request.head.repo.full_name !==
+              context.payload.pull_request.base.repo.full_name;
+            if (isFork) {
+              core.notice('Fork PR: token is read-only, so checklist output is in the job summary.');
+              await core.summary.addRaw(commentBody).write();
+            } else {
+              // Upsert sticky comment (find existing bot comment with our marker).
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                per_page: 100,
+              });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: commentBody,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: commentBody,
+                });
+              }
+            }
+
+            // Failing this step makes the reusable workflow job itself the
+            // required check, including for forked pull requests where commit
+            // status write permissions are unavailable.
+            if (!pass) {
+              core.setFailed('Landing checklist incomplete — see PR comment for details.');
+            }

@@ -1,0 +1,80 @@
+# Landing Checklist — Production Repository Allowlist
+#
+# Single source of truth for which repos are "production" and therefore
+# subject to the feature-landing checklist (presubmit check + post-merge
+# automations). Referenced by:
+#   - .github/workflows/landing-checklist-reusable.yml (via raw-fetch)
+#   - every OpenHands automation in landing-checklist/automations/*.md
+#     (filter: glob(repository.full_name, one of the entries below))
+#
+# To onboard a new production repo:
+#   1. Add an entry below.
+#   2. Copy .github/workflows/landing-checklist-caller.yml into that repo's
+#      .github/workflows/ directory.
+#   3. Add the "landing-checklist" check to the repo's required status
+#      checks in branch protection settings.
+#   4. Done — no automation changes needed; automations resolve this file
+#      at run time rather than hard-coding the list.
+
+production_repos:
+  - repo: OpenHands/OpenHands
+    release_mechanism: github-release   # tags like cloud-1.47.1; ships the
+                                         # enterprise-server image consumed
+                                         # by saas-deploy and OpenHands-Cloud
+  - repo: OpenHands/enterprise
+    release_mechanism: github-release+image+helm+argocd
+                                         # Pilot repository. Semver releases
+                                         # publish ghcr.io/openhands/enterprise-server;
+                                         # bump-chart.yml opens a PR updating
+                                         # OpenHands-Cloud's charts/openhands
+                                         # image tag/appVersion, and saas-deploy's
+                                         # app/openhands/environments/production/
+                                         # pin is the definitive production state.
+  - repo: OpenHands/agent-canvas
+    release_mechanism: github-tag       # semver tags, e.g. v1.6.1; image
+                                         # pinned by saas-deploy's
+                                         # app/openhands/environments/<env>/version.yaml
+  - repo: OpenHands/software-agent-sdk
+    release_mechanism: github-release
+  - repo: OpenHands/saas-deploy
+    release_mechanism: argocd-gitops    # THE definitive "is it in prod" source
+                                         # for the SaaS app. Prod state =
+                                         # app/<release>/environments/production/
+                                         # {Chart.yaml,Chart.lock,version.yaml}.
+                                         # ApplicationSet auto-syncs on merge to
+                                         # main (see gitops/production/applicationset.yaml),
+                                         # so "merged to main" == "in prod" here.
+  - repo: OpenHands/OpenHands-Cloud
+    release_mechanism: github-release+helm+replicated
+                                         # Public. release-please manifests
+                                         # (.release-please-manifest.openhands.json)
+                                         # version the Helm chart at charts/openhands;
+                                         # same chart + same ENABLE_<FEATURE> pattern
+                                         # is templated into replicated/openhands.yaml
+                                         # for the embedded-cluster/Replicated installer.
+                                         # This IS the "self-hosted via Helm or
+                                         # embedded installer" checklist item's
+                                         # source of truth.
+  - repo: All-Hands-AI/infra   # NOTE: verified org is All-Hands-AI, not OpenHands
+                                         # (differs from the other 5). CONFIRM this
+                                         # still belongs on this list — what I found
+                                         # here (k8s/argocd/production-core,
+                                         # production-runtime) is core platform
+                                         # infra (cert-manager, traefik, oauth2-proxy,
+                                         # sysbox, workspace-recovery), not
+                                         # product-feature code gated by
+                                         # ENABLE_<FEATURE> flags. If your (feat)
+                                         # PRs here are about platform capabilities
+                                         # rather than user-facing features, the
+                                         # checklist items (docs, E2E, Helm flag,
+                                         # x/LinkedIn post) may not all apply —
+                                         # worth a quick gut-check before wiring
+                                         # this repo into the same automations.
+
+# Where this file itself lives. Per team decision, the central "eng-process"
+# artifacts (this file + the reusable workflow) live directly in the main
+# OpenHands/OpenHands repo rather than a new dedicated repo.
+source:
+  repo: OpenHands/OpenHands
+  path: .github/landing-checklist/repos.yml
+  branch: main
