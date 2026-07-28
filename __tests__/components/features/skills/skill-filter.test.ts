@@ -57,7 +57,7 @@ describe("parseSkillFilterState", () => {
   it("reads every facet plus the query", () => {
     const state = parseSkillFilterState(
       new URLSearchParams(
-        "q=deno&source=personal,public&category=environment&type=repo&state=disabled",
+        "q=deno&source=personal&source=public&category=environment&type=repo&state=disabled",
       ),
     );
 
@@ -79,7 +79,8 @@ describe("parseSkillFilterState", () => {
   });
 
   it("round-trips through toSkillFilterSearchParams in canonical order", () => {
-    const search = "q=deno&source=project,public&category=environment,writing";
+    const search =
+      "q=deno&source=project&source=public&category=environment&category=writing";
     const state = parseSkillFilterState(new URLSearchParams(search));
 
     expect(toSkillFilterSearchParams(state).toString()).toBe(

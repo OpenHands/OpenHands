@@ -19,8 +19,6 @@ const CATEGORY_PARAM = "category";
 const TYPE_PARAM = "type";
 const STATE_PARAM = "state";
 
-const VALUE_SEPARATOR = ",";
-
 export type SkillEnabledState = "enabled" | "disabled";
 export type SkillFacetGroupId = "state" | "source" | "category" | "type";
 
@@ -195,14 +193,10 @@ function groupDef(id: SkillFacetGroupId): GroupDef {
 }
 
 /** Unknown values are dropped, so a hand-edited URL cannot smuggle one in. */
-function parseSet(raw: string | null, def: GroupDef): Set<string> {
-  if (!raw) return new Set();
+function parseSet(raw: string[], def: GroupDef): Set<string> {
   const legal = new Set(def.values.map(({ value }) => value));
   return new Set(
-    raw
-      .split(VALUE_SEPARATOR)
-      .map((value) => value.trim())
-      .filter((value) => legal.has(value)),
+    raw.map((value) => value.trim()).filter((value) => legal.has(value)),
   );
 }
 
@@ -211,7 +205,7 @@ export function parseSkillFilterState(
 ): SkillFilterState {
   return GROUP_DEFS.reduce<SkillFilterState>(
     (state, def) =>
-      def.withSelected(state, parseSet(params.get(def.param), def)),
+      def.withSelected(state, parseSet(params.getAll(def.param), def)),
     {
       ...EMPTY_SKILL_FILTER_STATE,
       query: params.get(SKILL_FILTER_QUERY_PARAM) ?? "",
@@ -228,14 +222,9 @@ export function toSkillFilterSearchParams(
   // Canonical order keeps URLs deterministic regardless of click order.
   for (const def of GROUP_DEFS) {
     const selected = def.selected(state);
-    if (selected.size === 0) continue;
-    params.set(
-      def.param,
-      def.values
-        .filter(({ value }) => selected.has(value))
-        .map(({ value }) => value)
-        .join(VALUE_SEPARATOR),
-    );
+    for (const { value } of def.values) {
+      if (selected.has(value)) params.append(def.param, value);
+    }
   }
 
   return params;
