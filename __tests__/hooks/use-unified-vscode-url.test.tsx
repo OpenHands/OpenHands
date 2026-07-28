@@ -86,9 +86,7 @@ function makeConversation(
   } as AppConversation;
 }
 
-function makeSandbox(
-  overrides: Partial<V1SandboxInfo> = {},
-): V1SandboxInfo {
+function makeSandbox(overrides: Partial<V1SandboxInfo> = {}): V1SandboxInfo {
   return {
     id: "sandbox-9",
     created_by_user_id: null,
@@ -126,6 +124,13 @@ beforeEach(() => {
   vi.mocked(useActiveConversation).mockReturnValue({
     data: makeConversation(),
   } as unknown as ReturnType<typeof useActiveConversation>);
+  // Default the capability probe to "editor present and running". Local-mode
+  // tests that care about the capability state override this; the rest would
+  // otherwise never reach the URL request, which is gated on it.
+  vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue({
+    enabled: true,
+    running: true,
+  });
 });
 
 afterEach(() => {
@@ -152,9 +157,7 @@ describe("useUnifiedVSCodeUrl", () => {
     expect(result.current.data?.url).toBe(
       "https://vscode-abc.staging-runtime.all-hands.dev/?tkn=sek&folder=%2Fworkspace%2Fproject",
     );
-    expect(
-      AgentServerConversationService.getVSCodeUrl,
-    ).not.toHaveBeenCalled();
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
   });
 
   it("returns null url in cloud mode when the sandbox has no VSCODE exposed_url", async () => {
@@ -197,9 +200,7 @@ describe("useUnifiedVSCodeUrl", () => {
 
     // Assert
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(
-      AgentServerConversationService.getVSCodeUrl,
-    ).toHaveBeenCalledWith(
+    expect(AgentServerConversationService.getVSCodeUrl).toHaveBeenCalledWith(
       "conv-123",
       "http://abc.staging-runtime.all-hands.dev/api/conv/1",
       "sek",
@@ -212,17 +213,65 @@ describe("useUnifiedVSCodeUrl", () => {
   });
 
   it("reports isUnavailable in local mode when the backend has VSCode disabled", async () => {
-    // Arrange — `enable_vscode: false` makes agent-server answer
-    // `GET /vscode/url` with 503, so both resolvers reject and the query
-    // settles in `error` with no data. This is a permanent property of the
-    // deployment, not a transient failure, so consumers must be able to
-    // drop the control rather than offer a click that cannot do anything.
+    // Arrange — `enable_vscode: false`. The capability probe answers 200 with
+    // `enabled: false`, so this is a value rather than an error: the control
+    // is dropped without the URL request ever running, which is what keeps
+    // the 503 from `/vscode/url` (and its toast) off the screen entirely.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
-    vi.mocked(AgentServerConversationService.getVSCodeUrl).mockRejectedValue(
-      new Error("Request failed with status code 503"),
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: false,
+        running: false,
+        message: "VSCode is disabled in configuration",
+      },
     );
-    vi.mocked(ConversationService.getVSCodeUrl).mockRejectedValue(
-      new Error("Request failed with status code 503"),
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(result.current.isError).toBe(false);
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+    expect(ConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("reports isUnavailable in local mode when the editor is enabled but not running", async () => {
+    // Arrange — configured, but the process failed to start (or has died).
+    // agent-server awaits VSCodeService.start() in its lifespan before it
+    // serves any request, so `running: false` here is terminal rather than a
+    // startup window. `/vscode/url` would still hand back a URL, so this
+    // state is only visible through the probe.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockResolvedValue(
+      {
+        enabled: true,
+        running: false,
+      },
+    );
+
+    // Act
+    const { result } = renderHook(() => useUnifiedVSCodeUrl(), {
+      wrapper: createWrapper(),
+    });
+
+    // Assert
+    await waitFor(() => expect(result.current.isUnavailable).toBe(true));
+    expect(result.current.isError).toBe(false);
+    expect(AgentServerConversationService.getVSCodeUrl).not.toHaveBeenCalled();
+  });
+
+  it("keeps a failing capability probe observable as an error rather than hiding the control", async () => {
+    // Arrange — a transport, auth or server fault on the probe itself. This
+    // is the case the previous `isError`-derived `isUnavailable` conflated
+    // with a disabled editor: it must stay an error (so retry and the global
+    // toast still apply) and must NOT silently remove the control, because
+    // nothing here says the deployment has no editor.
+    vi.mocked(useActiveBackend).mockReturnValue(localBackend);
+    vi.mocked(AgentServerConversationService.getVSCodeStatus).mockRejectedValue(
+      new Error("Request failed with status code 401"),
     );
 
     // Act
@@ -232,15 +281,14 @@ describe("useUnifiedVSCodeUrl", () => {
 
     // Assert
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.isUnavailable).toBe(true);
-    expect(result.current.data).toBeUndefined();
+    expect(result.current.isUnavailable).toBe(false);
   });
 
   it("reports isUnavailable in local mode when the backend reports no URL", async () => {
-    // Arrange — the request succeeds but carries no URL (VSCode enabled and
-    // yet nothing to point at, e.g. no connection token). Distinct code path
-    // from the 503 above: this settles in `success`, so `isError` alone
-    // would miss it.
+    // Arrange — the probe reports a running editor, but the URL request
+    // carries no URL to point at (e.g. no connection token). Distinct from
+    // both cases above: the capability state is fine and the query settles in
+    // `success`, so neither the probe nor `isError` would catch it.
     vi.mocked(useActiveBackend).mockReturnValue(localBackend);
     vi.mocked(AgentServerConversationService.getVSCodeUrl).mockResolvedValue({
       vscode_url: null,

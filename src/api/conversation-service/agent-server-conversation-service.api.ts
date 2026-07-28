@@ -2,6 +2,7 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
@@ -524,6 +525,27 @@ class AgentServerConversationService {
     });
 
     return { vscode_url: vscodeUrl };
+  }
+
+  /**
+   * Read the editor's capability state from the agent-server.
+   *
+   * `/api/vscode/status` answers 200 with `enabled: false` when the
+   * deployment set `enable_vscode: false`, which distinguishes "this
+   * deployment offers no editor" from a transport, auth, or server
+   * failure — `/api/vscode/url` answers 503 for the former and so
+   * cannot be told apart from the latter.
+   */
+  static async getVSCodeStatus(
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<VSCodeStatusResponse> {
+    return new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getStatus();
   }
 
   static async resolveConversationWorkingDir(
