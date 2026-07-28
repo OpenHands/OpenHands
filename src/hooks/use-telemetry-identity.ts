@@ -24,7 +24,10 @@ function hasTrackedCloudCookieBackendAddedThisSession(
   if (typeof window === "undefined") return true;
 
   try {
-    return window.sessionStorage.getItem(key) === "true";
+    return (
+      window.sessionStorage.getItem(key) === "true" ||
+      trackedCloudCookieBackendAddedSessionKeys.has(key)
+    );
   } catch {
     return trackedCloudCookieBackendAddedSessionKeys.has(key);
   }

@@ -178,6 +178,38 @@ describe("useTelemetryIdentity", () => {
     );
   });
 
+  it("dedupes cookie-auth backend additions when sessionStorage writes fail", () => {
+    const storageFailureCloudBackend = {
+      kind: "cloud" as const,
+      id: "cloud-storage-failure",
+      authMode: "cookie" as const,
+    };
+    useActiveBackendMock.mockReturnValue({
+      backend: storageFailureCloudBackend,
+      orgId: "org-123",
+    });
+    useCloudCurrentUserIdMock.mockReturnValue({
+      [storageFailureCloudBackend.id]: {
+        userId: "storage-failure-user",
+        isLoading: false,
+      },
+    });
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage writes blocked");
+      });
+
+    try {
+      const { rerender } = renderHook(() => useTelemetryIdentity());
+      rerender();
+
+      expect(trackBackendAddedMock).toHaveBeenCalledTimes(1);
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
   it("does not track backend_added for non-cookie Cloud identity resolution", () => {
     renderHook(() => useTelemetryIdentity());
 
