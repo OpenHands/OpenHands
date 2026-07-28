@@ -63,6 +63,7 @@ import {
   buildAutomationTelemetryEnv,
   buildConfig,
 } from "./dev-with-automation.mjs";
+import { createAutomationDbRecovery } from "./automation-db-recovery.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -233,7 +234,11 @@ function spawnService(name, command, args, options = {}) {
       .toString()
       .split("\n")
       .filter(Boolean)
-      .forEach((line) => logService(name, line.trim(), color));
+      .forEach((line) => {
+        const trimmed = line.trim();
+        if (options.onLine) options.onLine(trimmed, "stdout");
+        logService(name, trimmed, color);
+      });
   });
 
   proc.stderr.on("data", (data) => {
@@ -241,7 +246,11 @@ function spawnService(name, command, args, options = {}) {
       .toString()
       .split("\n")
       .filter(Boolean)
-      .forEach((line) => logService(name, line.trim(), c.yellow));
+      .forEach((line) => {
+        const trimmed = line.trim();
+        if (options.onLine) options.onLine(trimmed, "stderr");
+        logService(name, trimmed, c.yellow);
+      });
   });
 
   proc.on("error", (error) => {
@@ -249,7 +258,8 @@ function spawnService(name, command, args, options = {}) {
   });
 
   proc.on("exit", (code) => {
-    if (code !== 0 && code !== null && !shuttingDown) {
+    const recovered = options.onExit ? options.onExit(code) : false;
+    if (!recovered && code !== 0 && code !== null && !shuttingDown) {
       logService(name, `Exited with code ${code}`, c.red);
     }
     processes.delete(name);
@@ -341,7 +351,7 @@ function buildAutomationBackendEnv(config, env = process.env) {
   };
 }
 
-function startAutomationBackend(config) {
+function startAutomationBackend(config, attempt = 0) {
   logService(
     "automation",
     `Starting on port ${config.autoBackendPort}...`,
@@ -350,6 +360,21 @@ function startAutomationBackend(config) {
 
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
+
+  // Absolute path of the SQLite DB the backend will migrate — must match the
+  // AUTOMATION_DB_URL in buildAutomationBackendEnv so recovery deletes the
+  // right file.
+  const automationDbPath = join(config.stateDir, "automations.db");
+  // Arm stale-DB recovery only on the first attempt so a persistently broken
+  // migration can never trigger an infinite restart loop.
+  const recovery =
+    attempt === 0
+      ? createAutomationDbRecovery({
+          dbPath: automationDbPath,
+          log: (message) => logService("automation", message, c.yellow),
+          restart: () => startAutomationBackend(config, attempt + 1),
+        })
+      : null;
 
   spawnService(
     "automation",
@@ -365,6 +390,8 @@ function startAutomationBackend(config) {
       cwd: config.stateDir,
       env: buildAutomationBackendEnv(config),
       color: c.green,
+      onLine: recovery ? recovery.handleLine : undefined,
+      onExit: recovery ? recovery.handleExit : undefined,
     },
   );
 }
