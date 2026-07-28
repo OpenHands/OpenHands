@@ -17,6 +17,33 @@ from openhands.app_server.config import get_global_config
 
 _RESUME_RE = re.compile(r'^/api/v1/sandboxes/[^/]+/resume/?$')
 
+CONTENT_SECURITY_POLICY_REPORT_ONLY = (
+    "default-src 'self'; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
+    "img-src 'self'; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "frame-src 'self'; "
+    "frame-ancestors 'self'; "
+    "form-action 'self';"
+)
+
+
+class ContentSecurityPolicyMiddleware(BaseHTTPMiddleware):
+    """Expose the initial CSP policy without enforcing it yet."""
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        response = await call_next(request)
+        response.headers['Content-Security-Policy-Report-Only'] = (
+            CONTENT_SECURITY_POLICY_REPORT_ONLY
+        )
+        return response
+
 
 class LocalhostCORSMiddleware(CORSMiddleware):
     """Custom CORS middleware that allows any request from localhost/127.0.0.1 domains,

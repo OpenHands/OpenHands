@@ -19,6 +19,7 @@ from openhands.app_server.integrations.service_types import AuthenticationError
 from openhands.app_server.mcp.mcp_router import init_tavily_proxy, mcp_server
 from openhands.app_server.middleware import (
     CacheControlMiddleware,
+    ContentSecurityPolicyMiddleware,
     InMemoryRateLimiter,
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
@@ -84,3 +85,4 @@ app.add_middleware(
     RateLimitMiddleware,
     rate_limiter=InMemoryRateLimiter(requests=10, seconds=1),
 )
+app.add_middleware(ContentSecurityPolicyMiddleware)

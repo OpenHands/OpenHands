@@ -4,13 +4,17 @@
 # For backward compatibility, this module re-exports from openhands.app_server.middleware.
 
 from openhands.app_server.middleware import (
+    CONTENT_SECURITY_POLICY_REPORT_ONLY,
     CacheControlMiddleware,
+    ContentSecurityPolicyMiddleware,
     InMemoryRateLimiter,
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
 )
 
 __all__ = [
+    'CONTENT_SECURITY_POLICY_REPORT_ONLY',
+    'ContentSecurityPolicyMiddleware',
     'LocalhostCORSMiddleware',
     'CacheControlMiddleware',
     'InMemoryRateLimiter',

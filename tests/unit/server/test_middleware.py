@@ -7,6 +7,8 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 from openhands.app_server.middleware import (
+    CONTENT_SECURITY_POLICY_REPORT_ONLY,
+    ContentSecurityPolicyMiddleware,
     InMemoryRateLimiter,
     LocalhostCORSMiddleware,
     RateLimitMiddleware,
@@ -23,6 +25,38 @@ def app():
         return {'message': 'Test endpoint'}
 
     return app
+
+
+def test_content_security_policy_report_only_middleware_adds_header(app):
+    app.add_middleware(ContentSecurityPolicyMiddleware)
+    response = TestClient(app).get('/test')
+
+    assert (
+        response.headers['content-security-policy-report-only']
+        == CONTENT_SECURITY_POLICY_REPORT_ONLY
+    )
+
+
+def test_content_security_policy_report_only_middleware_wraps_rate_limit_response():
+    app = FastAPI()
+
+    @app.get('/test')
+    def test_endpoint():
+        return {'message': 'Test endpoint'}
+
+    app.add_middleware(
+        RateLimitMiddleware,
+        rate_limiter=InMemoryRateLimiter(requests=0, seconds=60, sleep_seconds=0),
+    )
+    app.add_middleware(ContentSecurityPolicyMiddleware)
+
+    response = TestClient(app).get('/test')
+
+    assert response.status_code == 429
+    assert (
+        response.headers['content-security-policy-report-only']
+        == CONTENT_SECURITY_POLICY_REPORT_ONLY
+    )
 
 
 def test_localhost_cors_middleware_init_with_config():
