@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router";
+import { RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -63,14 +63,22 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
-/** Surfaces the router's current search string so tests can assert the URL write direction. */
-function LocationProbe() {
-  const location = useLocation();
-  return <div data-testid="location-probe">{location.search}</div>;
-}
-
 function renderSkillsSettingsScreen(initialEntry = "/skills") {
-  return render(<SkillsSettingsScreen />, {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/skills",
+        Component: () => (
+          <ActiveBackendProvider>
+            <SkillsSettingsScreen />
+          </ActiveBackendProvider>
+        ),
+      },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+
+  render(<RouterProvider router={router} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -79,15 +87,12 @@ function renderSkillsSettingsScreen(initialEntry = "/skills") {
           })
         }
       >
-        <MemoryRouter initialEntries={[initialEntry]}>
-          <ActiveBackendProvider>
-            {children}
-            <LocationProbe />
-          </ActiveBackendProvider>
-        </MemoryRouter>
+        {children}
       </QueryClientProvider>
     ),
   });
+
+  return router;
 }
 
 describe("SkillsSettingsScreen", () => {
@@ -229,16 +234,14 @@ Full skill body.`,
       }),
     ]);
 
-    renderSkillsSettingsScreen();
+    const router = renderSkillsSettingsScreen();
     await screen.findByTestId("skill-card-deno");
 
     await user.click(screen.getByTestId("skill-facet-type-repo"));
 
     expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
     expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
-    expect(screen.getByTestId("location-probe")).toHaveTextContent(
-      "type=repo",
-    );
+    expect(router.state.location.search).toBe("?type=repo");
   });
 
   it("seeds the filter state from the URL on load", async () => {
