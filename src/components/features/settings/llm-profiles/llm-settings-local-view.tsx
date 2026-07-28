@@ -47,6 +47,14 @@ import { useSettingsSectionHeader } from "#/contexts/settings-section-header-con
 
 type ViewMode = "list" | "create" | "edit";
 
+const EMPTY_LLM_PROFILE_OVERRIDES: SettingsFormValues = {
+  "llm.model": "",
+  "llm.api_key": "",
+  "llm.base_url": "",
+  [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
+  [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
+};
+
 interface EditingProfile {
   profile: ProfileInfo;
   initialValues: SettingsFormValues;
@@ -429,13 +437,7 @@ export function LlmSettingsLocalView() {
             ? // Edit mode: use the existing profile values
               editingProfile.initialValues
             : // Create mode: start with empty fields for a fresh profile
-              {
-                "llm.model": "",
-                "llm.api_key": "",
-                "llm.base_url": "",
-                [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
-                [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
-              }
+              EMPTY_LLM_PROFILE_OVERRIDES
         }
         onSaveControlChange={handleSaveControlChange}
       />

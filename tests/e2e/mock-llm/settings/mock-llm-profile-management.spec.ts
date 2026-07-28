@@ -457,6 +457,11 @@ test.describe("OpenHands provider hidden base_url preservation", () => {
         await basicToggle.click();
       }
 
+      const apiKeyInput = page.getByTestId("llm-api-key-input");
+      await expect(apiKeyInput).toBeVisible({ timeout: 10_000 });
+      await apiKeyInput.click();
+      await apiKeyInput.fill("mock-api-key-for-basic-resave");
+
       const saveButton = page.getByTestId("save-profile-btn");
       await expect(saveButton).toBeEnabled({ timeout: 10_000 });
       await saveButton.click();

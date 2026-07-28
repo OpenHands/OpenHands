@@ -269,6 +269,115 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("keeps embedded editor tab and edits across settings refetch", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          fields: [
+            {
+              key: "llm.model",
+              label: "Model",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: "openhands/claude-opus-4-5-20251101",
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "llm.base_url",
+              label: "Base URL",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: null,
+              choices: [],
+              depends_on: [],
+              prominence: "major",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue(
+        buildSettings({
+          agent_settings_schema: schema,
+          agent_settings: {
+            "llm.model": "openhands/claude-opus-4-5-20251101",
+          },
+        }),
+      );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+    let latestControl: SdkSectionSaveControl | null = null;
+
+    mockUseConfig.mockReturnValue({
+      data: {},
+      isLoading: false,
+    });
+    mockUseSearchParams.mockReturnValue([{ get: () => null }, vi.fn()]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SdkSectionPage
+          settingsSources={[
+            { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+          ]}
+          hideSaveButton
+          markInitialOverridesDirty={false}
+          initialValueOverrides={{
+            "llm.model": "",
+            "llm.base_url": "",
+          }}
+          onSaveControlChange={(control) => {
+            latestControl = control;
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId("sdk-section-advanced-toggle");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    const baseUrlInput = await screen.findByTestId("sdk-settings-llm.base_url");
+    await userEvent.clear(baseUrlInput);
+    await userEvent.type(baseUrlInput, "http://127.0.0.1:9999");
+
+    getSettingsSpy.mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          "llm.model": "openhands/claude-opus-4-5-20251101",
+          "llm.base_url": null,
+        },
+      }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ["settings"] });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sdk-settings-llm.base_url")).toHaveValue(
+        "http://127.0.0.1:9999",
+      );
+      expect(latestControl?.view).toBe("advanced");
+      expect(latestControl?.isDirty).toBe(true);
+    });
+  });
+
   it("resets from advanced to the inferred basic view after saving when advanced settings match defaults", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
       model_name: "AgentSettings",

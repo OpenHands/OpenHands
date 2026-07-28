@@ -339,6 +339,7 @@ export function SdkSectionPage({
     () => (initialValueOverrides ? JSON.stringify(initialValueOverrides) : ""),
     [initialValueOverrides],
   );
+  const firstSettingsSource = resolvedSources[0]?.settingsSource;
 
   const [view, setView] = React.useState<SettingsView>("basic");
   const [valuesBySource, setValuesBySource] = React.useState<
@@ -400,10 +401,13 @@ export function SdkSectionPage({
 
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
+    if (hideSaveButton && hasHydratedViewRef.current) {
+      return;
+    }
 
     setValuesBySource(initialValuesBySource);
     if (initialValueOverrides && markInitialOverridesDirty) {
-      const firstSource = resolvedSources[0]?.settingsSource;
+      const firstSource = firstSettingsSource;
       if (firstSource) {
         const overrideDirty: SettingsDirtyState = Object.fromEntries(
           Object.keys(initialValueOverrides).map((key) => [key, true]),
@@ -426,9 +430,10 @@ export function SdkSectionPage({
   }, [
     initialValuesBySource,
     initialView,
-    initialValueOverrides,
+    overridesSignature,
     markInitialOverridesDirty,
-    resolvedSources,
+    firstSettingsSource,
+    hideSaveButton,
   ]);
 
   const fieldKeyToSource = React.useMemo(() => {
