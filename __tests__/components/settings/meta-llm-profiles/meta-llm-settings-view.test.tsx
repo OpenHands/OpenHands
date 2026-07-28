@@ -24,7 +24,7 @@ const mockMetaProfiles = [
     name: "balanced",
     classifier_model: "minimax",
     default_model: "gpt",
-    num_classes: 2,
+    num_classes: 0,
   },
   {
     name: "cheap",
@@ -155,7 +155,10 @@ describe("MetaLlmSettingsView", () => {
       config: {
         classifier_model: "minimax",
         default_model: "gpt",
-        classes: [{ description: "UI", model: "deepseek" }],
+        classes: [],
+        prompt_template: "Route this task.\n{{ instance_text }}",
+        model_table: "- GPT-5.4",
+        target_models: [{ model: "GPT-5.4", profile: "deepseek" }],
       },
     });
     renderWithProviders(<MetaLlmSettingsView />);

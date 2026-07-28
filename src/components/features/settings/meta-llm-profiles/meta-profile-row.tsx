@@ -35,9 +35,11 @@ export function MetaProfileRow({
   const route = [info.classifier_model, info.default_model]
     .filter(Boolean)
     .join(" → ");
-  const summary = `${route}${route ? " · " : ""}${info.num_classes} ${t(
-    I18nKey.SETTINGS$META_PROFILE_CLASSES,
-  )}`;
+  const mode =
+    info.num_classes > 0
+      ? `${info.num_classes} ${t(I18nKey.SETTINGS$META_PROFILE_CLASSES)}`
+      : t(I18nKey.SETTINGS$META_PROFILE_DIRECT_PROMPT);
+  const summary = `${route}${route ? " · " : ""}${mode}`;
 
   return (
     <div

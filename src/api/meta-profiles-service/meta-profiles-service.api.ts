@@ -1,9 +1,9 @@
 /**
  * MetaProfilesService wraps the agent-server's ``/api/meta-profiles`` endpoints
- * (added in software-agent-sdk PR #3744). A meta-profile is a model-routing
+ * (added in software-agent-sdk PR #4287). A meta-profile is a model-routing
  * configuration consumed by the ``classify_and_switch_llm`` tool: it names a
- * ``classifier_model``, a ``default_model`` and a list of task ``classes``,
- * where every model reference is the name of a saved LLM profile.
+ * ``classifier_model``, a ``default_model`` and a direct ``prompt_template``
+ * whose returned model labels are mapped to saved LLM profiles.
  *
  * The SDK's ``@openhands/typescript-client`` does not (yet) ship a dedicated
  * meta-profiles client, so we drive the endpoints with the SDK's public
@@ -19,12 +19,26 @@ export interface MetaProfileClass {
   model: string;
 }
 
+export interface MetaProfileTargetModel {
+  /** Exact model label the classifier prompt may return. */
+  model: string;
+  /** Name of the saved LLM profile to switch to for this model label. */
+  profile: string;
+}
+
 export interface MetaProfile {
   /** Name of the saved LLM profile used to classify the task. */
   classifier_model: string;
-  /** Name of the saved LLM profile to use when no class matches. */
+  /** Name of the saved LLM profile to use when routing fails or no label matches. */
   default_model: string;
-  classes: MetaProfileClass[];
+  /** Structured classes are kept for backend compatibility, but this UI writes direct prompt profiles. */
+  classes?: MetaProfileClass[];
+  /** Direct-routing prompt template. Must include ``{{ instance_text }}`` when set. */
+  prompt_template: string | null;
+  /** Optional text inserted into ``{{ model_table }}`` by the backend. */
+  model_table: string | null;
+  /** Allowed model labels and the saved LLM profiles they map to. */
+  target_models: MetaProfileTargetModel[];
 }
 
 export interface MetaProfileInfo {

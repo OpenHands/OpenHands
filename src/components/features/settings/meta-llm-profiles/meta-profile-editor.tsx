@@ -7,10 +7,12 @@ import { SettingsDropdownInput } from "#/components/features/settings/settings-d
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { Typography } from "#/ui/typography";
 import { isProfileNameValid } from "#/utils/derive-profile-name";
+import { cn } from "#/utils/utils";
+import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { I18nKey } from "#/i18n/declaration";
 import type {
   MetaProfile,
-  MetaProfileClass,
+  MetaProfileTargetModel,
 } from "#/api/meta-profiles-service/meta-profiles-service.api";
 
 interface MetaProfileEditorProps {
@@ -33,8 +35,28 @@ interface MetaProfileEditorProps {
 const EMPTY_CONFIG: MetaProfile = {
   classifier_model: "",
   default_model: "",
-  classes: [],
+  prompt_template: "",
+  model_table: "",
+  target_models: [],
 };
+
+const INSTANCE_TEXT_PLACEHOLDER = /{{\s*instance_text\s*}}/;
+const INSTANCE_TEXT_PLACEHOLDER_TEXT = "{{ instance_text }}";
+const MODEL_TABLE_PLACEHOLDER_TEXT = "{{ model_table }}";
+const PROMPT_TEMPLATE_PLACEHOLDER = `Return JSON with the best model for this task.
+${MODEL_TABLE_PLACEHOLDER_TEXT}
+
+Task:
+${INSTANCE_TEXT_PLACEHOLDER_TEXT}`;
+
+const normalizeConfig = (config?: MetaProfile): MetaProfile => ({
+  classifier_model: config?.classifier_model ?? "",
+  default_model: config?.default_model ?? "",
+  classes: [],
+  prompt_template: config?.prompt_template ?? "",
+  model_table: config?.model_table ?? "",
+  target_models: config?.target_models ?? [],
+});
 
 export function MetaProfileEditor({
   mode,
@@ -48,8 +70,8 @@ export function MetaProfileEditor({
 }: MetaProfileEditorProps) {
   const { t } = useTranslation("openhands");
   const [name, setName] = useState(initialName);
-  const [config, setConfig] = useState<MetaProfile>(
-    initialConfig ?? EMPTY_CONFIG,
+  const [config, setConfig] = useState<MetaProfile>(() =>
+    normalizeConfig(initialConfig ?? EMPTY_CONFIG),
   );
 
   const profileItems = useMemo(
@@ -62,35 +84,47 @@ export function MetaProfileEditor({
   // In create mode, a name that already exists would overwrite that profile
   // (the backend save is create-or-overwrite), so reject it here.
   const isDuplicateName = !isEdit && existingNames.includes(name.trim());
+  const targetModelLabels = config.target_models.map((target) =>
+    target.model.trim().toLowerCase(),
+  );
+  const hasDuplicateTargetModelLabels =
+    new Set(targetModelLabels).size !== targetModelLabels.length;
   const canSave =
     nameValid &&
     !isDuplicateName &&
     config.classifier_model.trim().length > 0 &&
     config.default_model.trim().length > 0 &&
-    config.classes.every(
-      (c) => c.description.trim().length > 0 && c.model.trim().length > 0,
+    INSTANCE_TEXT_PLACEHOLDER.test(config.prompt_template ?? "") &&
+    config.target_models.length > 0 &&
+    !hasDuplicateTargetModelLabels &&
+    config.target_models.every(
+      (target) =>
+        target.model.trim().length > 0 && target.profile.trim().length > 0,
     );
 
-  const updateClass = (index: number, patch: Partial<MetaProfileClass>) => {
+  const updateTargetModel = (
+    index: number,
+    patch: Partial<MetaProfileTargetModel>,
+  ) => {
     setConfig((prev) => ({
       ...prev,
-      classes: prev.classes.map((c, i) =>
-        i === index ? { ...c, ...patch } : c,
+      target_models: prev.target_models.map((target, i) =>
+        i === index ? { ...target, ...patch } : target,
       ),
     }));
   };
 
-  const addClass = () => {
+  const addTargetModel = () => {
     setConfig((prev) => ({
       ...prev,
-      classes: [...prev.classes, { description: "", model: "" }],
+      target_models: [...prev.target_models, { model: "", profile: "" }],
     }));
   };
 
-  const removeClass = (index: number) => {
+  const removeTargetModel = (index: number) => {
     setConfig((prev) => ({
       ...prev,
-      classes: prev.classes.filter((_, i) => i !== index),
+      target_models: prev.target_models.filter((_, i) => i !== index),
     }));
   };
 
@@ -99,9 +133,12 @@ export function MetaProfileEditor({
     onSave(name.trim(), {
       classifier_model: config.classifier_model.trim(),
       default_model: config.default_model.trim(),
-      classes: config.classes.map((c) => ({
-        description: c.description.trim(),
-        model: c.model.trim(),
+      classes: [],
+      prompt_template: (config.prompt_template ?? "").trim(),
+      model_table: config.model_table?.trim() || null,
+      target_models: config.target_models.map((target) => ({
+        model: target.model.trim(),
+        profile: target.profile.trim(),
       })),
     });
   };
@@ -182,85 +219,154 @@ export function MetaProfileEditor({
         </p>
       </div>
 
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-2.5">
+          <span className="text-sm">
+            {t(I18nKey.SETTINGS$META_PROFILE_PROMPT_TEMPLATE)}
+          </span>
+          <textarea
+            data-testid="meta-profile-prompt-template"
+            rows={8}
+            spellCheck={false}
+            value={config.prompt_template ?? ""}
+            placeholder={PROMPT_TEMPLATE_PLACEHOLDER}
+            onChange={(event) =>
+              setConfig((prev) => ({
+                ...prev,
+                prompt_template: event.target.value,
+              }))
+            }
+            disabled={isSaving}
+            className={cn(
+              formControlMultilineFieldClassName,
+              "font-mono text-xs",
+            )}
+          />
+        </label>
+        <p className="text-xs text-[var(--oh-muted)]">
+          {t(I18nKey.SETTINGS$META_PROFILE_PROMPT_TEMPLATE_HELP, {
+            instance_text: INSTANCE_TEXT_PLACEHOLDER_TEXT,
+            model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
+          })}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-2.5">
+          <span className="text-sm">
+            {t(I18nKey.SETTINGS$META_PROFILE_MODEL_TABLE)}
+          </span>
+          <textarea
+            data-testid="meta-profile-model-table"
+            rows={5}
+            spellCheck={false}
+            value={config.model_table ?? ""}
+            placeholder={t(
+              I18nKey.SETTINGS$META_PROFILE_MODEL_TABLE_PLACEHOLDER,
+            )}
+            onChange={(event) =>
+              setConfig((prev) => ({
+                ...prev,
+                model_table: event.target.value,
+              }))
+            }
+            disabled={isSaving}
+            className={cn(
+              formControlMultilineFieldClassName,
+              "font-mono text-xs",
+            )}
+          />
+        </label>
+        <p className="text-xs text-[var(--oh-muted)]">
+          {t(I18nKey.SETTINGS$META_PROFILE_MODEL_TABLE_HELP, {
+            model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
+          })}
+        </p>
+      </div>
+
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-col gap-1">
             <h3 className="text-base font-medium text-white">
-              {t(I18nKey.SETTINGS$META_PROFILE_CLASSES)}
+              {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS)}
             </h3>
             <p className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.SETTINGS$META_PROFILE_CLASSES_HELP)}
+              {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS_HELP)}
             </p>
           </div>
           <BrandButton
-            testId="meta-profile-add-class"
+            testId="meta-profile-add-target-model"
             type="button"
             variant="secondary"
-            onClick={addClass}
+            onClick={addTargetModel}
             isDisabled={isSaving}
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_ADD_CLASS)}
+            {t(I18nKey.SETTINGS$META_PROFILE_ADD_TARGET_MODEL)}
           </BrandButton>
         </div>
 
-        {config.classes.length === 0 ? (
+        {config.target_models.length === 0 ? (
           <p
-            data-testid="meta-profile-classes-empty"
+            data-testid="meta-profile-target-models-empty"
             className="text-sm text-[var(--oh-muted)]"
           >
-            {t(I18nKey.SETTINGS$META_PROFILE_CLASSES_EMPTY)}
+            {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS_EMPTY)}
           </p>
         ) : (
           <ul className="flex flex-col gap-4">
-            {config.classes.map((cls, index) => (
+            {config.target_models.map((target, index) => (
               <li
                 key={index}
                 className="flex flex-col gap-2 sm:flex-row sm:items-end"
               >
                 <div className="flex-1">
                   <SettingsInput
-                    testId={`meta-profile-class-description-${index}`}
-                    label={t(I18nKey.SETTINGS$META_PROFILE_CLASS_DESCRIPTION)}
+                    testId={`meta-profile-target-model-label-${index}`}
+                    label={t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_LABEL)}
                     type="text"
                     className="w-full"
-                    value={cls.description}
+                    value={target.model}
                     placeholder={t(
-                      I18nKey.SETTINGS$META_PROFILE_CLASS_DESCRIPTION_PLACEHOLDER,
+                      I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_LABEL_PLACEHOLDER,
                     )}
                     onChange={(value) =>
-                      updateClass(index, { description: value })
+                      updateTargetModel(index, { model: value })
                     }
                     isDisabled={isSaving}
                   />
                 </div>
                 <div className="flex-1">
                   <SettingsDropdownInput
-                    testId={`meta-profile-class-model-${index}`}
-                    name={`class_model_${index}`}
-                    label={t(I18nKey.SETTINGS$META_PROFILE_CLASS_MODEL)}
+                    testId={`meta-profile-target-model-profile-${index}`}
+                    name={`target_model_profile_${index}`}
+                    label={t(
+                      I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_PROFILE,
+                    )}
                     items={profileItems}
-                    defaultSelectedKey={cls.model || undefined}
+                    defaultSelectedKey={target.profile || undefined}
                     allowsCustomValue
                     isDisabled={isSaving}
                     onInputChange={(value) =>
-                      updateClass(index, { model: value })
+                      updateTargetModel(index, { profile: value })
                     }
                     onSelectionChange={(key) =>
-                      updateClass(index, { model: key ? String(key) : "" })
+                      updateTargetModel(index, {
+                        profile: key ? String(key) : "",
+                      })
                     }
                   />
                 </div>
                 <BrandButton
-                  testId={`meta-profile-remove-class-${index}`}
+                  testId={`meta-profile-remove-target-model-${index}`}
                   type="button"
                   variant="secondary"
-                  onClick={() => removeClass(index)}
+                  onClick={() => removeTargetModel(index)}
                   isDisabled={isSaving}
                   className="shrink-0"
                 >
                   <Trash2 size={16} aria-hidden />
                   <span className="sr-only">
-                    {t(I18nKey.SETTINGS$META_PROFILE_REMOVE_CLASS)}
+                    {t(I18nKey.SETTINGS$META_PROFILE_REMOVE_TARGET_MODEL)}
                   </span>
                 </BrandButton>
               </li>
