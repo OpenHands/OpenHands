@@ -236,7 +236,7 @@ function SkillsSettingsScreen() {
                 <SkillFacetRail
                   groups={groups}
                   onToggle={handleToggleFacet}
-                  className="hidden w-[204px] shrink-0 self-start md:flex"
+                  className="hidden w-[240px] shrink-0 self-start md:flex"
                 />
 
                 <section className="flex min-w-0 flex-1 flex-col gap-3">

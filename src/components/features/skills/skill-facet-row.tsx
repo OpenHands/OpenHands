@@ -23,6 +23,7 @@ export function SkillFacetRow({
   onToggle,
 }: SkillFacetRowProps) {
   const { t } = useTranslation("openhands");
+  const label = t(labelKey);
 
   return (
     <button
@@ -52,7 +53,10 @@ export function SkillFacetRow({
         {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}
       </span>
       {Icon ? <Icon className="size-3.5 shrink-0" aria-hidden /> : null}
-      <span className="min-w-0 flex-1 truncate">{t(labelKey)}</span>
+      {/* The rail cannot be wide enough for every locale, so a truncated label stays readable on hover. */}
+      <span title={label} className="min-w-0 flex-1 truncate">
+        {label}
+      </span>
       <span className="shrink-0 text-xs text-tertiary-alt">{count}</span>
     </button>
   );
