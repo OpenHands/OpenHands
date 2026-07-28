@@ -2,40 +2,13 @@ import { SettingsClient } from "@openhands/typescript-client/clients";
 import { isSdkHttpStatusError } from "./agent-server-compatibility";
 import { getActiveBackend } from "./backend-registry/active-store";
 import {
-  createCloudSecret,
   deleteCloudSecret,
   fetchCloudSecrets,
-  updateCloudSecret,
+  saveCloudSecret,
 } from "./cloud/secrets-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { CustomSecretWithoutValue } from "./secrets-service.types";
-
-/**
- * Retry helper for API calls with exponential backoff.
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelayMs: number = 500,
-): Promise<T> {
-  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt >= maxRetries - 1) {
-        throw error;
-      }
-
-      const delay = baseDelayMs * 2 ** attempt;
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, delay);
-      });
-    }
-  }
-
-  throw new Error("Retry attempts exhausted");
-}
+import { withRetry } from "./with-retry";
 
 export class SecretsService {
   /**
@@ -78,7 +51,7 @@ export class SecretsService {
     description?: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
-      await withRetry(() => createCloudSecret(name, value, description));
+      await saveCloudSecret({ name, value, description });
       return;
     }
     await withRetry(() =>
@@ -109,13 +82,12 @@ export class SecretsService {
     value?: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
-      await withRetry(() => updateCloudSecret(secretToEdit, name, description));
-      if (value !== undefined) {
-        // The cloud PUT cannot change a value; POST is the only endpoint that
-        // overwrites one. Running it after the PUT keeps the server-side
-        // rename-collision check as the first thing that can fail.
-        await withRetry(() => createCloudSecret(name, value, description));
-      }
+      await saveCloudSecret({
+        name,
+        value,
+        description,
+        previousName: secretToEdit,
+      });
       return;
     }
 
