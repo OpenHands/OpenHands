@@ -151,4 +151,33 @@ describe("SkillDetailModal", () => {
     expect(navigateMock).not.toHaveBeenCalled();
     expect(setMessageToSend).not.toHaveBeenCalled();
   });
+
+  it("keeps actions outside the scrollable content for long skills", () => {
+    const skill = buildSkill({
+      description: "Long skill description. ".repeat(100),
+    });
+
+    render(
+      <SkillDetailModal
+        skill={skill}
+        enabled
+        onToggle={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const content = screen.getByTestId("skill-detail-modal-content");
+    const actions = screen.getByTestId("skill-detail-modal-actions");
+
+    expect(content).toHaveClass(
+      "min-h-0",
+      "overflow-y-auto",
+      "custom-scrollbar-always",
+    );
+    expect(
+      within(content).getByTestId(`skill-modal-description-${skill.name}`),
+    ).toBeInTheDocument();
+    expect(within(content).queryByTestId("skill-detail-close")).toBeNull();
+    expect(within(actions).getByTestId("skill-detail-close")).toBeVisible();
+  });
 });
