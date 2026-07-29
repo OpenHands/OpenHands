@@ -1,11 +1,3 @@
-import React from "react";
-import { getLanguageFromPath } from "#/utils/get-language-from-path";
-import { defineVisualizer } from "../define";
-import { textFromContent } from "../text-content";
-import { CodeBlock } from "../primitives/code-block";
-import { DiffView } from "../primitives/diff-view";
-import { FilePathChip } from "../primitives/file-path-chip";
-
 /**
  * File-editor visualizer for `file_editor` / `str_replace_editor` tools.
  *
@@ -13,11 +5,32 @@ import { FilePathChip } from "../primitives/file-path-chip";
  * before vs after; `create`/`view` → the file content. Action card (shown while
  * the edit is in flight): `create` → new content; `str_replace` → diff of the
  * replaced snippet; `view`/`undo_edit` → just the path + range.
+ *
+ * Markdown artifacts get a height-clipped rich preview with a View bar that
+ * opens the Files drawer, instead of dumping the full source into a code block.
  */
+import React from "react";
+import { getLanguageFromPath } from "#/utils/get-language-from-path";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
+import { useFilesTabStore } from "#/stores/files-tab-store";
+import { defineVisualizer } from "../define";
+import { textFromContent } from "../text-content";
+import { CodeBlock } from "../primitives/code-block";
+import { DiffView } from "../primitives/diff-view";
+import { FilePathChip } from "../primitives/file-path-chip";
+import {
+  isMarkdownFilePath,
+  MarkdownFilePreview,
+} from "../primitives/markdown-file-preview";
+
 export const fileEditorVisualizer = defineVisualizer({
   actionKinds: ["FileEditorAction", "StrReplaceEditorAction"],
   observationKinds: ["FileEditorObservation", "StrReplaceEditorObservation"],
   Body: function FileEditorBody({ action, observation }) {
+    const { conversationId } = useOptionalConversationId();
+    const { navigateToTab } = useSelectConversationTab();
+    const setSelectedPath = useFilesTabStore((state) => state.setSelectedPath);
     const path = observation?.observation.path ?? action?.action.path ?? "";
     const command = observation?.observation.command ?? action?.action.command;
     const language = getLanguageFromPath(path);
@@ -27,11 +40,43 @@ export const fileEditorVisualizer = defineVisualizer({
       command === "view" && viewRange
         ? `${viewRange[0]}-${viewRange[1]}`
         : undefined;
-    const chip = path ? <FilePathChip path={path} range={range} /> : null;
+    // File events already carry the path the agent touched, so the chat card
+    // can deep-link into the existing Files drawer without another API call.
+    const openFile = path
+      ? () => {
+          setSelectedPath(path, conversationId);
+          navigateToTab("files");
+        }
+      : undefined;
+    const chip = path ? (
+      <FilePathChip path={path} range={range} onClick={openFile} />
+    ) : null;
+
+    const renderFileContent = (content: string) => {
+      if (path && openFile && isMarkdownFilePath(path)) {
+        // Markdown artifacts own their card (clipped preview + View bar), so
+        // skip the separate path chip to avoid a duplicate filename affordance.
+        return {
+          chip: null as React.ReactNode,
+          body: (
+            <MarkdownFilePreview
+              content={content}
+              path={path}
+              onView={openFile}
+            />
+          ),
+        };
+      }
+      return {
+        chip,
+        body: <CodeBlock code={content} language={language} />,
+      };
+    };
 
     if (observation) {
       const obs = observation.observation;
       let body: React.ReactNode = null;
+      let leadingChip: React.ReactNode = chip;
       if (obs.error) {
         body = (
           <span className="whitespace-pre-wrap text-xs text-danger">
@@ -50,13 +95,15 @@ export const fileEditorVisualizer = defineVisualizer({
           obs.new_content ||
           obs.output ||
           (obs.content ? textFromContent(obs.content) : "");
-        body = content ? (
-          <CodeBlock code={content} language={language} />
-        ) : null;
+        if (content) {
+          const rendered = renderFileContent(content);
+          leadingChip = rendered.chip;
+          body = rendered.body;
+        }
       }
       return (
         <div className="flex flex-col gap-2">
-          {chip}
+          {leadingChip}
           {body}
         </div>
       );
@@ -65,8 +112,11 @@ export const fileEditorVisualizer = defineVisualizer({
     if (action) {
       const act = action.action;
       let body: React.ReactNode = null;
+      let leadingChip: React.ReactNode = chip;
       if (act.command === "create" && act.file_text) {
-        body = <CodeBlock code={act.file_text} language={language} />;
+        const rendered = renderFileContent(act.file_text);
+        leadingChip = rendered.chip;
+        body = rendered.body;
       } else if (
         (act.command === "str_replace" || act.command === "insert") &&
         act.new_str != null
@@ -78,7 +128,7 @@ export const fileEditorVisualizer = defineVisualizer({
       }
       return (
         <div className="flex flex-col gap-2">
-          {chip}
+          {leadingChip}
           {body}
         </div>
       );

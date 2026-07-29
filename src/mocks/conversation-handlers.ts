@@ -10,10 +10,17 @@ import {
   TABLE_DEMO_CONVERSATION_ID,
   TABLE_DEMO_EVENTS,
 } from "#/fixtures/table-demo-conversation";
+import {
+  CANVAS_DEMO_CONVERSATION_ID,
+  CANVAS_DEMO_EVENTS,
+  CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_MARKDOWN,
+} from "#/fixtures/canvas-demo-conversation";
 
 /** Map from conversation id → events returned by GET /events/search */
 const CONVERSATION_EVENTS: Record<string, unknown[]> = {
   [TABLE_DEMO_CONVERSATION_ID]: TABLE_DEMO_EVENTS,
+  [CANVAS_DEMO_CONVERSATION_ID]: CANVAS_DEMO_EVENTS,
 };
 
 const now = Date.now();
@@ -94,6 +101,14 @@ const conversations: MockConversation[] = [
     title: "Wide table demo",
     created_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date(now - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    execution_status: "idle",
+    workspace: { working_dir: "/workspace/project" },
+  },
+  {
+    id: CANVAS_DEMO_CONVERSATION_ID,
+    title: "Generated canvas demo",
+    created_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
     execution_status: "idle",
     workspace: { working_dir: "/workspace/project" },
   },
@@ -335,6 +350,26 @@ export const CONVERSATION_HANDLERS = [
 
   http.post("*/api/conversations/:conversationId/events", async () =>
     HttpResponse.json({ ok: true }),
+  ),
+
+  // The generated-canvas fixture behaves like a real workspace artifact:
+  // after the chat chip opens the Files drawer, its static-session URL serves
+  // the same Markdown bytes carried by the file-editor observation.
+  http.get(
+    "*/api/conversations/:conversationId/workspace/*",
+    ({ params, request }) => {
+      const conversationId = params.conversationId?.toString();
+      const url = new URL(request.url);
+      if (
+        conversationId === CANVAS_DEMO_CONVERSATION_ID &&
+        url.pathname.endsWith(`/${CANVAS_DEMO_FILE_PATH}`)
+      ) {
+        return HttpResponse.text(CANVAS_DEMO_MARKDOWN, {
+          headers: { "Content-Type": "text/markdown; charset=utf-8" },
+        });
+      }
+      return HttpResponse.text("", { status: 404 });
+    },
   ),
 
   http.post("*/api/conversations/:conversationId/pause", async () =>
