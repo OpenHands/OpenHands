@@ -2,7 +2,9 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
+import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
 import { OPENHANDS_I18N_NAMESPACE } from "#/i18n";
@@ -23,9 +25,11 @@ function LocalTelemetryConsentBanner({
   backend,
   onChoice,
 }: TelemetryConsentBannerProps & {
-  backend: { id: string; name: string; host: string };
+  backend: Backend;
 }) {
   const { t, ready } = useTranslation(OPENHANDS_I18N_NAMESPACE);
+  const health = useBackendsHealth([backend]);
+  const isBackendConnected = health[backend.id]?.isConnected === true;
   const { data: settings, isSuccess: hasLoadedSettings } = useSettings();
   const { mutateAsync: saveSettings, isPending: isSavingSettings } =
     useSaveSettings();
@@ -37,6 +41,7 @@ function LocalTelemetryConsentBanner({
   }, [backend.id]);
 
   const shouldShow =
+    isBackendConnected &&
     hasLoadedSettings &&
     settings?.user_consents_to_analytics === null &&
     !hasSubmittedChoice;
@@ -66,7 +71,7 @@ function LocalTelemetryConsentBanner({
     onChoice?.(granted);
   };
 
-  if (!isReady) return null;
+  if (!shouldShow || !isReady) return null;
 
   return (
     <ModalBackdrop elevated aria-label={t(I18nKey.TELEMETRY$CONSENT_TITLE)}>

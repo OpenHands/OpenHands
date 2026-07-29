@@ -5,6 +5,7 @@ import { TelemetryConsentBanner } from "#/components/features/analytics/telemetr
 
 const useActiveBackendMock = vi.fn();
 const useSettingsMock = vi.fn();
+const useBackendsHealthMock = vi.fn();
 const saveSettingsMock = vi.fn();
 const getLockedCloudHostMock = vi.fn();
 const setTelemetryConsentMock = vi.fn();
@@ -35,6 +36,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => useSettingsMock(),
 }));
 
+vi.mock("#/hooks/query/use-backends-health", () => ({
+  useBackendsHealth: (...args: unknown[]) => useBackendsHealthMock(...args),
+}));
+
 vi.mock("#/hooks/mutation/use-save-settings", () => ({
   useSaveSettings: () => ({
     mutateAsync: saveSettingsMock,
@@ -59,6 +64,10 @@ describe("TelemetryConsentBanner", () => {
         host: "http://localhost:12000",
       },
     });
+    useBackendsHealthMock.mockReturnValue({
+      local: { isConnected: true },
+    });
+
     useSettingsMock.mockReturnValue({
       data: { user_consents_to_analytics: null },
       isSuccess: true,
@@ -78,11 +87,28 @@ describe("TelemetryConsentBanner", () => {
     ).toBeInTheDocument();
   });
 
-
   it("does not render until the local backend settings are connected", async () => {
     useSettingsMock.mockReturnValue({
       data: { user_consents_to_analytics: null },
       isSuccess: false,
+    });
+
+    render(<TelemetryConsentBanner />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("telemetry-consent-form"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("does not render when the active local backend is unhealthy", async () => {
+    useBackendsHealthMock.mockReturnValue({
+      local: { isConnected: false },
+    });
+    useSettingsMock.mockReturnValue({
+      data: { user_consents_to_analytics: null },
+      isSuccess: true,
     });
 
     render(<TelemetryConsentBanner />);
