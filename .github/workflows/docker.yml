@@ -111,7 +111,7 @@ jobs:
           SHORT_SHA=$(echo "$RELEVANT_SHA" | cut -c1-7)
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
-          # Resolve agent-server base image (input override > config/defaults.json).
+          # Resolve agent-server base image (input override > config/defaults.json)
           if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
             echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
           else

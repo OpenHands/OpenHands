@@ -37,8 +37,6 @@ const INGRESS_PORT = process.env.MOCK_LLM_INGRESS_PORT ?? "18300";
 // the same build/ directory with --auth-required (no baked session key)
 // and proxies to the same backend.
 const PUBLIC_MODE_PORT = process.env.MOCK_LLM_PUBLIC_MODE_PORT ?? "18301";
-const AGENT_SERVER_PORT = process.env.OH_CANVAS_SAFE_BACKEND_PORT ?? "18000";
-const AUTOMATION_PORT = process.env.OH_CANVAS_SAFE_AUTOMATION_PORT ?? "18001";
 
 // ── Session API key ────────────────────────────────────────────────────
 const sessionApiKey =
@@ -47,9 +45,7 @@ const sessionApiKey =
 process.env.MOCK_LLM_SESSION_API_KEY = sessionApiKey;
 
 // ── State directory (isolated per test run) ────────────────────────────
-const STATE_DIR = resolve(
-  process.env.OH_CANVAS_SAFE_STATE_DIR ?? ".tmp/mock-llm-state",
-);
+const STATE_DIR = resolve(".tmp/mock-llm-state");
 
 // Automation DB lives at $parent_of_STATE_DIR/automation/automations.db,
 // mirroring docker/entrypoint.sh which uses $HOME/.openhands/automation/automations.db.
@@ -170,18 +166,19 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
     },
     // 3. Public-mode static server — same build/, same backend, but with
-    //    --auth-required (no session key injected). It proxies to the same
-    //    internal ports selected for the full-stack launcher.
+    //    --auth-required (no session key injected). The agent-server's
+    //    internal ports are the defaults from config/defaults.json (18000
+    //    for agent-server, 18001 for automation).
     {
       command: [
         "exec node scripts/static-server.mjs",
         "--dir build",
         `--port ${PUBLIC_MODE_PORT}`,
         "--auth-required",
-        `--route /api/automation=http://localhost:${AUTOMATION_PORT}`,
-        `--route /api=http://localhost:${AGENT_SERVER_PORT}`,
-        `--route /server_info=http://localhost:${AGENT_SERVER_PORT}`,
-        `--route /sockets=http://localhost:${AGENT_SERVER_PORT}`,
+        "--route /api/automation=http://localhost:18001",
+        "--route /api=http://localhost:18000",
+        "--route /server_info=http://localhost:18000",
+        "--route /sockets=http://localhost:18000",
       ].join(" "),
       url: `http://localhost:${PUBLIC_MODE_PORT}/`,
       timeout: 15_000,
