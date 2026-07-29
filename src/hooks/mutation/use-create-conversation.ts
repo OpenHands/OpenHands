@@ -59,6 +59,28 @@ interface CreateConversationResponse {
   task_id?: string;
 }
 
+const OPTIONAL_PLUGIN_METADATA_TIMEOUT_MS = 2_000;
+
+function withOptionalMetadataTimeout<T>(
+  promise: Promise<T>,
+  fallback: T,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(
+      () => resolve(fallback),
+      OPTIONAL_PLUGIN_METADATA_TIMEOUT_MS,
+    );
+  });
+
+  return Promise.race([
+    promise.finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    }),
+    timeout,
+  ]);
+}
+
 export const useCreateConversation = () => {
   const queryClient = useQueryClient();
   const { trackConversationCreated } = useTracking();
@@ -246,10 +268,13 @@ export const useCreateConversation = () => {
       if (localConversationId) {
         let installed: InstalledPluginInfo[] = [];
         try {
-          installed = await queryClient.ensureQueryData({
-            queryKey: PLUGINS_QUERY_KEYS.installed,
-            queryFn: () => PluginsManagementService.listInstalledPlugins(),
-          });
+          installed = await withOptionalMetadataTimeout(
+            queryClient.ensureQueryData({
+              queryKey: PLUGINS_QUERY_KEYS.installed,
+              queryFn: () => PluginsManagementService.listInstalledPlugins(),
+            }),
+            [],
+          );
         } catch {
           // Best-effort: never let plugin lookup block conversation creation.
         }
