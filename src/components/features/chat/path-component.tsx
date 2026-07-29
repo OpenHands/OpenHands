@@ -1,7 +1,14 @@
-import { ReactNode } from "react";
+import { createContext, ReactNode, useContext } from "react";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { openWorkspaceFile } from "#/services/canvas-ui";
 import EventLogger from "#/utils/event-logger";
+
+/**
+ * When false, PathComponent renders a non-interactive span. EventGroup's
+ * header wraps titles in a toggle <button>, so nested path buttons would be
+ * invalid markup — that context sets this to false.
+ */
+export const PathInteractiveContext = createContext(true);
 
 /**
  * Decodes HTML entities in a string
@@ -50,16 +57,24 @@ const extractFilename = (path: string): string => {
 
 /**
  * Displays only the filename, with the full path on hover.
- * Click opens the Files drawer on that path.
+ * Click opens the Files drawer on that path (when interactive).
  */
 function PathComponent(props: { children?: ReactNode }) {
   const { children } = props;
   const { conversationId } = useOptionalConversationId();
+  const interactive = useContext(PathInteractiveContext);
 
   const processPath = (path: string) => {
     try {
       const decodedPath = decodeHtmlEntities(path);
       const filename = extractFilename(decodedPath);
+      if (!interactive) {
+        return (
+          <span className="font-mono" title={decodedPath}>
+            {filename}
+          </span>
+        );
+      }
       return (
         <button
           type="button"

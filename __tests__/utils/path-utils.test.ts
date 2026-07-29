@@ -64,4 +64,15 @@ describe("toFilesTabPath", () => {
     expect(toFilesTabPath("/workspace/repo/src/a.ts")).toBe("src/a.ts");
     expect(toFilesTabPath("/Users/me/ws/a.ts", "/Users/me/ws")).toBe("a.ts");
   });
+
+  it("strips editor line suffixes from POSIX and Windows paths", () => {
+    expect(toFilesTabPath("src/a.ts:12")).toBe("src/a.ts");
+    expect(toFilesTabPath("src/a.ts:12-40")).toBe("src/a.ts");
+    expect(toFilesTabPath("C:\\repo\\src\\a.ts:12", "C:\\repo")).toBe(
+      "src/a.ts",
+    );
+    expect(toFilesTabPath("C:\\repo\\src\\a.ts:12-40", "C:\\repo")).toBe(
+      "src/a.ts",
+    );
+  });
 });

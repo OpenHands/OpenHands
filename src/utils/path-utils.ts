@@ -30,10 +30,9 @@ export const toFilesTabPath = (
   let result = path.trim().replace(/\\/g, "/");
   if (!result) return "";
 
-  // Keep Windows drive letters; only strip editor `:12` / `:12-40` ranges.
-  if (!/^[A-Za-z]:(\/|$)/.test(result)) {
-    result = result.replace(/:(\d+)(-\d+)?$/, "");
-  }
+  // Strip editor `:12` / `:12-40` suffixes. Safe on Windows paths too —
+  // the drive colon is at the start (`C:`), never at the end.
+  result = result.replace(/:(\d+)(-\d+)?$/, "");
 
   result = stripWorkspacePrefix(result);
 
