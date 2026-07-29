@@ -440,6 +440,10 @@ describe("SettingsService", () => {
           integrations_hub: {
             url: "https://integrations.staging.all-hands.dev/api/mcp",
             headers: { Authorization: "Bearer new-key" },
+            // This is the one write that skips the pre-clear, so it lands as
+            // an RFC 7386 merge — `enabled` has to be spelled out because a
+            // merge cannot clear a persisted `enabled: false` by omission.
+            enabled: true,
           },
         },
       },
