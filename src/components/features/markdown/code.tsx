@@ -2,49 +2,10 @@ import React from "react";
 import { ExtraProps } from "react-markdown";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
-import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { openWorkspaceFile } from "#/services/canvas-ui";
-import { looksLikeWorkspaceFilePath } from "#/utils/path-utils";
 import { cn } from "#/utils/utils";
 import { SyntaxHighlighter } from "./syntax-highlighter";
 
 // See https://github.com/remarkjs/react-markdown?tab=readme-ov-file#use-custom-components-syntax-highlight
-
-function MarkdownFilePathLink({
-  path,
-  className,
-  children,
-}: {
-  path: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const { conversationId } = useOptionalConversationId();
-  const { data: conversation } = useActiveConversation();
-
-  return (
-    <button
-      type="button"
-      data-testid="markdown-file-path-link"
-      title={path}
-      className={cn(
-        className,
-        "cursor-pointer rounded border border-surface-raised bg-surface-raised px-[0.4em] py-[0.2em] font-mono text-foreground hover:underline",
-      )}
-      onClick={(event) => {
-        event.stopPropagation();
-        openWorkspaceFile(
-          path,
-          conversationId ?? null,
-          conversation?.workspace?.working_dir,
-        );
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 /**
  * Component to render code blocks in markdown.
@@ -62,14 +23,6 @@ export function code({
     const isMultiline = String(children).includes("\n");
 
     if (!isMultiline) {
-      if (looksLikeWorkspaceFilePath(codeString)) {
-        return (
-          <MarkdownFilePathLink path={codeString} className={className}>
-            {children}
-          </MarkdownFilePathLink>
-        );
-      }
-
       return (
         <code
           className={cn(

@@ -1,9 +1,11 @@
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import {
   ConversationTab,
   useConversationStore,
 } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
+import { setConversationState } from "#/utils/conversation-local-storage";
 import { toFilesTabPath } from "#/utils/path-utils";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
@@ -30,21 +32,22 @@ function isValidTab(value: string): value is ConversationTab {
   return VALID_TABS.has(value as ConversationTab);
 }
 
-/** User click on a chat path — same store path as agent `navigate_to_file`. */
+/**
+ * Chat path click → same as agent `navigate_to_file`.
+ * Optional `conversationId` tags the selection so FilesTab accepts it.
+ */
 export function openWorkspaceFile(
   path: string,
-  conversationId: string | null = null,
-  workingDir?: string | null,
+  conversationId?: string | null,
 ): void {
-  const normalized = toFilesTabPath(path, workingDir);
-  if (!normalized) return;
+  const conversation = ConversationService.getCurrentConversation();
   handleCanvasUIAction(
     {
       kind: "CanvasUIAction",
       command: "navigate_to_file",
-      path: normalized,
+      path,
     } as CanvasUIAction,
-    conversationId,
+    conversationId ?? conversation?.id ?? null,
   );
 }
 
@@ -54,14 +57,22 @@ export function handleCanvasUIAction(
 ): void {
   switch (action.command) {
     case "navigate_to_file":
-    case "show_preview":
+    case "show_preview": {
       navigateToTab("files");
-      if (action.path) {
-        useFilesTabStore
-          .getState()
-          .setSelectedPath(action.path, conversationId);
+      if (!action.path) return;
+
+      const workingDir =
+        ConversationService.getCurrentConversation()?.workspace?.working_dir;
+      const path = toFilesTabPath(action.path, workingDir);
+      if (!path) return;
+
+      useFilesTabStore.getState().revealFile(path, conversationId);
+      if (conversationId) {
+        // Leave Diff so the selected file content is visible.
+        setConversationState(conversationId, { filesTabDiffView: false });
       }
       return;
+    }
     case "open_tab":
       if (action.tab === "vscode") {
         // The in-app VS Code tab was removed — on cloud backends VS Code

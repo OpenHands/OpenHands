@@ -1,4 +1,3 @@
-/* eslint-disable react/jsx-props-no-spreading */
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -87,6 +86,7 @@ describe("FilesTab", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      contentViewNonce: 0,
     });
 
     useHasAttachedSourceMock.mockReset();
@@ -698,6 +698,96 @@ describe("FilesTab", () => {
       expect(
         screen.queryByTestId("files-tab-content-mode-toggle"),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("chat path navigation", () => {
+    it("leaves Diff view and shows file content when openWorkspaceFile runs", async () => {
+      const { openWorkspaceFile } = await import("#/services/canvas-ui");
+
+      useHasAttachedSourceMock.mockReturnValue({
+        hasAttachedSource: true,
+        isLoading: false,
+      });
+      useWorkspaceFilesMock.mockReturnValue({
+        data: ["src/app.ts"],
+        isLoading: false,
+      });
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "src/app.ts",
+          kind: "text",
+          text: "export const x = 1;\n",
+          staticUrl:
+            "http://localhost:3000/api/conversations/c1/workspace/src/app.ts",
+          mimeType: "text/typescript",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderTab("conv-path-nav");
+      expect(screen.getByTestId("changes-tab-content")).toBeInTheDocument();
+
+      openWorkspaceFile("src/app.ts", "conv-path-nav");
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("changes-tab-content"),
+        ).not.toBeInTheDocument();
+      });
+      expect(useFilesTabStore.getState().selectedPath).toBe("src/app.ts");
+      expect(useFilesTabStore.getState().selectedConversationId).toBe(
+        "conv-path-nav",
+      );
+      expect(useWorkspaceFileContentMock).toHaveBeenCalledWith("src/app.ts");
+      expect(
+        screen.getByTestId("file-content-viewer-highlighted"),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves Commits view and shows file content when openWorkspaceFile runs", async () => {
+      const { openWorkspaceFile } = await import("#/services/canvas-ui");
+      const user = userEvent.setup();
+
+      useHasAttachedSourceMock.mockReturnValue({
+        hasAttachedSource: true,
+        isLoading: false,
+      });
+      useWorkspaceFilesMock.mockReturnValue({
+        data: ["README.md"],
+        isLoading: false,
+      });
+      useWorkspaceFileContentMock.mockReturnValue({
+        data: {
+          path: "README.md",
+          kind: "text",
+          text: "# Hello\n",
+          staticUrl:
+            "http://localhost:3000/api/conversations/c1/workspace/README.md",
+          mimeType: "text/markdown",
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      renderTab("conv-path-commits");
+      await user.click(
+        screen.getByTestId("files-tab-diff-toggle-option-commits"),
+      );
+      expect(screen.getByTestId("commits-tab-content")).toBeInTheDocument();
+
+      openWorkspaceFile("README.md", "conv-path-commits");
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("commits-tab-content"),
+        ).not.toBeInTheDocument();
+      });
+      expect(useWorkspaceFileContentMock).toHaveBeenCalledWith("README.md");
+      expect(
+        screen.getByTestId("file-content-viewer-markdown"),
+      ).toBeInTheDocument();
     });
   });
 });

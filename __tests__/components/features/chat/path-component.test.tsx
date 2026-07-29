@@ -16,12 +16,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "conv-1" }),
 }));
 
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: { workspace: { working_dir: "/Users/me/ws" } },
-  }),
-}));
-
 describe("isLikelyDirectory", () => {
   it("should return false for empty path", () => {
     expect(isLikelyDirectory("")).toBe(false);
@@ -66,10 +60,6 @@ describe("PathComponent", () => {
 
     await user.click(screen.getByTestId("path-component-link"));
 
-    expect(openWorkspaceFile).toHaveBeenCalledWith(
-      path,
-      "conv-1",
-      "/Users/me/ws",
-    );
+    expect(openWorkspaceFile).toHaveBeenCalledWith(path, "conv-1");
   });
 });

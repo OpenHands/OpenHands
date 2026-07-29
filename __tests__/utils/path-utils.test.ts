@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   getPathBasename,
-  looksLikeWorkspaceFilePath,
   stripWorkspacePrefix,
   toFilesTabPath,
 } from "#/utils/path-utils";
@@ -57,19 +56,6 @@ describe("stripWorkspacePrefix", () => {
     expect(stripWorkspacePrefix("/workspace/repo")).toBe("/workspace/repo");
     expect(stripWorkspacePrefix("relative/path.ts")).toBe("relative/path.ts");
     expect(stripWorkspacePrefix("")).toBe("");
-  });
-});
-
-describe("looksLikeWorkspaceFilePath", () => {
-  it("accepts simple filenames and nested relative paths", () => {
-    expect(looksLikeWorkspaceFilePath("test.md")).toBe(true);
-    expect(looksLikeWorkspaceFilePath("src/app.ts")).toBe(true);
-  });
-
-  it("rejects bare tokens and URLs", () => {
-    expect(looksLikeWorkspaceFilePath("npm")).toBe(false);
-    expect(looksLikeWorkspaceFilePath("https://example.com")).toBe(false);
-    expect(looksLikeWorkspaceFilePath("two words")).toBe(false);
   });
 });
 

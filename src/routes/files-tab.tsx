@@ -77,6 +77,15 @@ function FilesTab() {
   let activeView: "on" | "off" | "commits" = diffViewEnabled ? "on" : "off";
   if (commitsViewSelected && showCommitsOption) activeView = "commits";
 
+  // Chat / canvas navigation can select a file while Diff or Commits is still
+  // the active pane. Honor content-view requests so the file is actually shown.
+  const contentViewNonce = useFilesTabStore((s) => s.contentViewNonce);
+  useEffect(() => {
+    if (contentViewNonce === 0) return;
+    setFilesTabDiffView(false);
+    setCommitsViewSelected(false);
+  }, [contentViewNonce, setFilesTabDiffView]);
+
   // Collapsed by default — the quick-access pill row at the top is usually
   // enough; the user can expand the tree on demand.
   const [isTreeVisible, setIsTreeVisible] = useState(false);

@@ -13,12 +13,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "conv-1" }),
 }));
 
-vi.mock("#/hooks/query/use-active-conversation", () => ({
-  useActiveConversation: () => ({
-    data: { workspace: { working_dir: "/Users/me/ws" } },
-  }),
-}));
-
 describe("FilePathChip", () => {
   beforeEach(() => {
     openWorkspaceFile.mockClear();
@@ -30,10 +24,6 @@ describe("FilePathChip", () => {
 
     await user.click(screen.getByTestId("file-path-chip"));
 
-    expect(openWorkspaceFile).toHaveBeenCalledWith(
-      "test.md",
-      "conv-1",
-      "/Users/me/ws",
-    );
+    expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1");
   });
 });

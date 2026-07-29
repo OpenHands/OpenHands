@@ -8,10 +8,13 @@ interface FilesTabState {
   // tagged with its conversation and the files tab ignores a path owned by a
   // different conversation.
   selectedConversationId: string | null;
+  /** Bumped to force Files tab out of Diff/Commits into file content. */
+  contentViewNonce: number;
   setSelectedPath: (
     path: string | null,
     conversationId?: string | null,
   ) => void;
+  revealFile: (path: string, conversationId?: string | null) => void;
 }
 
 // Hoisted out of files-tab.tsx local state so non-React callers (e.g. the
@@ -19,6 +22,13 @@ interface FilesTabState {
 export const useFilesTabStore = create<FilesTabState>((set) => ({
   selectedPath: null,
   selectedConversationId: null,
+  contentViewNonce: 0,
   setSelectedPath: (selectedPath, conversationId = null) =>
     set({ selectedPath, selectedConversationId: conversationId }),
+  revealFile: (selectedPath, conversationId = null) =>
+    set((state) => ({
+      selectedPath,
+      selectedConversationId: conversationId,
+      contentViewNonce: state.contentViewNonce + 1,
+    })),
 }));

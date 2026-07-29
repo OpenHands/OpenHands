@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
-import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { openWorkspaceFile } from "#/services/canvas-ui";
 import EventLogger from "#/utils/event-logger";
 
@@ -50,20 +49,16 @@ const extractFilename = (path: string): string => {
 };
 
 /**
- * Component that displays only the filename in the text but shows the full path on hover.
- * Click opens the Files drawer on that path (#16125).
+ * Displays only the filename, with the full path on hover.
+ * Click opens the Files drawer on that path.
  */
 function PathComponent(props: { children?: ReactNode }) {
   const { children } = props;
   const { conversationId } = useOptionalConversationId();
-  const { data: conversation } = useActiveConversation();
-  const workingDir = conversation?.workspace?.working_dir;
 
   const processPath = (path: string) => {
     try {
-      // First decode any HTML entities in the path
       const decodedPath = decodeHtmlEntities(path);
-      // Extract the filename from the decoded path
       const filename = extractFilename(decodedPath);
       return (
         <button
@@ -73,14 +68,13 @@ function PathComponent(props: { children?: ReactNode }) {
           title={decodedPath}
           onClick={(event) => {
             event.stopPropagation();
-            openWorkspaceFile(decodedPath, conversationId ?? null, workingDir);
+            openWorkspaceFile(decodedPath, conversationId);
           }}
         >
           {filename}
         </button>
       );
     } catch (e) {
-      // Just log the error without any message to avoid localization issues
       EventLogger.error(String(e));
       return <span className="font-mono">{path}</span>;
     }

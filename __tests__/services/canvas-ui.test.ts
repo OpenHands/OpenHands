@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import {
   CANVAS_UI_CLIENT_ACTION_KIND,
   CANVAS_UI_CLIENT_TOOL_NAME,
@@ -19,9 +20,7 @@ function action(overrides: Partial<CanvasUIAction>): CanvasUIAction {
 
 describe("handleCanvasUIAction", () => {
   beforeEach(() => {
-    // Arrange (shared): collapsed right panel, no selected file. Lets us
-    // observe both the tab/panel toggling and the path mutation that the
-    // dispatcher performs.
+    ConversationService.setCurrentConversation(null);
     useConversationStore.setState({
       selectedTab: null,
       isRightPanelShown: false,
@@ -30,6 +29,7 @@ describe("handleCanvasUIAction", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      contentViewNonce: 0,
     });
   });
 
@@ -44,6 +44,7 @@ describe("handleCanvasUIAction", () => {
     expect(conv.isRightPanelShown).toBe(true);
     expect(useFilesTabStore.getState().selectedPath).toBe("docs/intro.html");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
+    expect(useFilesTabStore.getState().contentViewNonce).toBeGreaterThan(0);
   });
 
   it("show_preview selects the files tab and the requested path", () => {
@@ -94,10 +95,28 @@ describe("handleCanvasUIAction", () => {
     expect(useFilesTabStore.getState().selectedPath).toBe("previous.txt");
     expect(useConversationStore.getState().selectedTab).toBe("files");
   });
+
+  it("strips the conversation working dir from absolute host paths", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-abs",
+      workspace: { working_dir: "/Users/me/ws" },
+    } as never);
+
+    handleCanvasUIAction(
+      action({
+        command: "navigate_to_file",
+        path: "/Users/me/ws/agentic_ai.docx",
+      }),
+      "conv-abs",
+    );
+
+    expect(useFilesTabStore.getState().selectedPath).toBe("agentic_ai.docx");
+  });
 });
 
 describe("openWorkspaceFile", () => {
   beforeEach(() => {
+    ConversationService.setCurrentConversation(null);
     useConversationStore.setState({
       selectedTab: null,
       isRightPanelShown: false,
@@ -106,30 +125,23 @@ describe("openWorkspaceFile", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
+      contentViewNonce: 0,
     });
   });
 
-  it("normalizes a workspace path and opens the Files tab", () => {
-    openWorkspaceFile(
-      "/workspace/project/test.md",
-      "conv-1",
-      "/Users/me/project",
-    );
+  it("delegates to navigate_to_file with the active conversation", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-1",
+      workspace: { working_dir: "/Users/me/project" },
+    } as never);
+
+    openWorkspaceFile("/Users/me/project/test.md");
 
     expect(useConversationStore.getState().selectedTab).toBe("files");
     expect(useConversationStore.getState().isRightPanelShown).toBe(true);
     expect(useFilesTabStore.getState().selectedPath).toBe("test.md");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
-  });
-
-  it("strips the working-dir prefix from absolute host paths", () => {
-    openWorkspaceFile(
-      "/Users/me/project/docs/test.md",
-      "conv-2",
-      "/Users/me/project",
-    );
-
-    expect(useFilesTabStore.getState().selectedPath).toBe("docs/test.md");
+    expect(useFilesTabStore.getState().contentViewNonce).toBeGreaterThan(0);
   });
 });
 
