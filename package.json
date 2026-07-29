@@ -7,11 +7,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenHands/agent-canvas"
+    "url": "https://github.com/OpenHands/OpenHands"
   },
-  "homepage": "https://github.com/OpenHands/agent-canvas#readme",
+  "homepage": "https://github.com/OpenHands/OpenHands#readme",
   "bugs": {
-    "url": "https://github.com/OpenHands/agent-canvas/issues"
+    "url": "https://github.com/OpenHands/OpenHands/issues"
   },
   "bin": {
     "agent-canvas": "bin/agent-canvas.mjs"
