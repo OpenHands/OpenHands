@@ -33,6 +33,8 @@ function makeRun(
 
 export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
   "a1000000-0000-0000-0000-000000000001": [
+    makeRun("r1-cancelled", AutomationRunStatus.CANCELLED, 0, 11),
+    makeRun("r1-skipped", AutomationRunStatus.SKIPPED, 0, 10),
     makeRun("r1-01", AutomationRunStatus.COMPLETED, 0),
     makeRun("r1-02", AutomationRunStatus.COMPLETED, 1),
     makeRun("r1-03", AutomationRunStatus.FAILED, 2),
