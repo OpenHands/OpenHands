@@ -19,6 +19,39 @@ export const stripWorkspacePrefix = (path: string): string => {
   return workspaceMatch ? workspaceMatch[1] : path;
 };
 
+/** Inline tokens that look like workspace files (`test.md`, `src/a.ts`). */
+export const looksLikeWorkspaceFilePath = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!trimmed || /\s/.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    return false;
+  }
+  const normalized = trimmed
+    .replace(/:(\d+)(-\d+)?$/, "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "");
+  return normalized.includes("/") || /\.[A-Za-z0-9]{1,16}$/.test(normalized);
+};
+
+/** Normalize chat/tool paths for the Files tab selection store. */
+export const toFilesTabPath = (
+  path: string,
+  workingDir?: string | null,
+): string => {
+  let result = path.trim().replace(/\\/g, "/");
+  if (!result) return "";
+  if (!/^[A-Za-z]:(\/|$)/.test(result)) {
+    result = result.replace(/:(\d+)(-\d+)?$/, "");
+  }
+  result = stripWorkspacePrefix(result);
+  const wd = workingDir?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (wd && result.startsWith(`${wd}/`)) {
+    result = result.slice(wd.length + 1);
+  } else if (wd && result === wd) {
+    return "";
+  }
+  return result.replace(/^\.\//, "");
+};
+
 /**
  * Returns the basename (top-level folder/file name) from a path string,
  * tolerating POSIX and Windows separators and trailing slashes.

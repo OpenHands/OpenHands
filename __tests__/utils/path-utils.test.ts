@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { getPathBasename, stripWorkspacePrefix } from "#/utils/path-utils";
+import {
+  getPathBasename,
+  looksLikeWorkspaceFilePath,
+  stripWorkspacePrefix,
+  toFilesTabPath,
+} from "#/utils/path-utils";
 
 describe("getPathBasename", () => {
   it("returns an empty string for empty or whitespace-only input", () => {
@@ -52,5 +57,25 @@ describe("stripWorkspacePrefix", () => {
     expect(stripWorkspacePrefix("/workspace/repo")).toBe("/workspace/repo");
     expect(stripWorkspacePrefix("relative/path.ts")).toBe("relative/path.ts");
     expect(stripWorkspacePrefix("")).toBe("");
+  });
+});
+
+describe("looksLikeWorkspaceFilePath", () => {
+  it("accepts simple filenames and nested relative paths", () => {
+    expect(looksLikeWorkspaceFilePath("test.md")).toBe(true);
+    expect(looksLikeWorkspaceFilePath("src/app.ts")).toBe(true);
+  });
+
+  it("rejects bare tokens and URLs", () => {
+    expect(looksLikeWorkspaceFilePath("npm")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("https://example.com")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("two words")).toBe(false);
+  });
+});
+
+describe("toFilesTabPath", () => {
+  it("strips workspace and working-dir prefixes", () => {
+    expect(toFilesTabPath("/workspace/repo/src/a.ts")).toBe("src/a.ts");
+    expect(toFilesTabPath("/Users/me/ws/a.ts", "/Users/me/ws")).toBe("a.ts");
   });
 });

@@ -5,7 +5,7 @@ import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
-import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleCanvasUIAction, openWorkspaceFile } from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
@@ -93,6 +93,43 @@ describe("handleCanvasUIAction", () => {
 
     expect(useFilesTabStore.getState().selectedPath).toBe("previous.txt");
     expect(useConversationStore.getState().selectedTab).toBe("files");
+  });
+});
+
+describe("openWorkspaceFile", () => {
+  beforeEach(() => {
+    useConversationStore.setState({
+      selectedTab: null,
+      isRightPanelShown: false,
+      hasRightPanelToggled: false,
+    });
+    useFilesTabStore.setState({
+      selectedPath: null,
+      selectedConversationId: null,
+    });
+  });
+
+  it("normalizes a workspace path and opens the Files tab", () => {
+    openWorkspaceFile(
+      "/workspace/project/test.md",
+      "conv-1",
+      "/Users/me/project",
+    );
+
+    expect(useConversationStore.getState().selectedTab).toBe("files");
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    expect(useFilesTabStore.getState().selectedPath).toBe("test.md");
+    expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
+  });
+
+  it("strips the working-dir prefix from absolute host paths", () => {
+    openWorkspaceFile(
+      "/Users/me/project/docs/test.md",
+      "conv-2",
+      "/Users/me/project",
+    );
+
+    expect(useFilesTabStore.getState().selectedPath).toBe("docs/test.md");
   });
 });
 

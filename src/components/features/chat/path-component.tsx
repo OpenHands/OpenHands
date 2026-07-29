@@ -1,4 +1,7 @@
 import { ReactNode } from "react";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { openWorkspaceFile } from "#/services/canvas-ui";
 import EventLogger from "#/utils/event-logger";
 
 /**
@@ -47,11 +50,14 @@ const extractFilename = (path: string): string => {
 };
 
 /**
- * Component that displays only the filename in the text but shows the full path on hover
- * Similar to MonoComponent but with path-specific functionality
+ * Component that displays only the filename in the text but shows the full path on hover.
+ * Click opens the Files drawer on that path (#16125).
  */
 function PathComponent(props: { children?: ReactNode }) {
   const { children } = props;
+  const { conversationId } = useOptionalConversationId();
+  const { data: conversation } = useActiveConversation();
+  const workingDir = conversation?.workspace?.working_dir;
 
   const processPath = (path: string) => {
     try {
@@ -60,9 +66,18 @@ function PathComponent(props: { children?: ReactNode }) {
       // Extract the filename from the decoded path
       const filename = extractFilename(decodedPath);
       return (
-        <span className="font-mono" title={decodedPath}>
+        <button
+          type="button"
+          data-testid="path-component-link"
+          className="cursor-pointer font-mono hover:underline"
+          title={decodedPath}
+          onClick={(event) => {
+            event.stopPropagation();
+            openWorkspaceFile(decodedPath, conversationId ?? null, workingDir);
+          }}
+        >
           {filename}
-        </span>
+        </button>
       );
     } catch (e) {
       // Just log the error without any message to avoid localization issues

@@ -4,6 +4,7 @@ import {
 } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
+import { toFilesTabPath } from "#/utils/path-utils";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
@@ -27,6 +28,24 @@ function navigateToTab(tab: ConversationTab) {
 
 function isValidTab(value: string): value is ConversationTab {
   return VALID_TABS.has(value as ConversationTab);
+}
+
+/** User click on a chat path — same store path as agent `navigate_to_file`. */
+export function openWorkspaceFile(
+  path: string,
+  conversationId: string | null = null,
+  workingDir?: string | null,
+): void {
+  const normalized = toFilesTabPath(path, workingDir);
+  if (!normalized) return;
+  handleCanvasUIAction(
+    {
+      kind: "CanvasUIAction",
+      command: "navigate_to_file",
+      path: normalized,
+    } as CanvasUIAction,
+    conversationId,
+  );
 }
 
 export function handleCanvasUIAction(
