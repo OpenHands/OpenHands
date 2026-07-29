@@ -25,15 +25,26 @@ vi.mock("#/services/telemetry", () => ({
     setTelemetryIdentityMock(...args),
 }));
 
+const trackBackendAddedMock = vi.fn();
+vi.mock("#/hooks/use-tracking", () => ({
+  useTracking: () => ({ trackBackendAdded: trackBackendAddedMock }),
+}));
+
 import { useTelemetryIdentity } from "#/hooks/use-telemetry-identity";
 
 const BACKEND_ID = "cloud-1";
 const cloudBackend = { kind: "cloud" as const, id: BACKEND_ID };
+const cookieCloudBackend = {
+  kind: "cloud" as const,
+  id: BACKEND_ID,
+  authMode: "cookie" as const,
+};
 const localBackend = { kind: "local" as const, id: "local-1" };
 
 describe("useTelemetryIdentity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     useActiveBackendMock.mockReturnValue({
       backend: cloudBackend,
       orgId: "org-123",
@@ -143,5 +154,91 @@ describe("useTelemetryIdentity", () => {
     expect(setTelemetryIdentityMock).toHaveBeenCalledWith("user-123", {
       email: "user@example.com",
     });
+  });
+
+  it("tracks cookie-auth Cloud backend addition after identity and email resolve", () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: cookieCloudBackend,
+      orgId: "org-123",
+    });
+
+    renderHook(() => useTelemetryIdentity());
+
+    expect(trackBackendAddedMock).toHaveBeenCalledWith({
+      backendKind: "cloud",
+      connectionMethod: "cloud_cookie",
+      hasApiKey: false,
+      source: "cloud_auto_connect",
+    });
+  });
+
+  it("dedupes cookie-auth Cloud backend additions within a browser session", () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: cookieCloudBackend,
+      orgId: "org-123",
+    });
+
+    const { rerender } = renderHook(() => useTelemetryIdentity());
+    rerender();
+
+    expect(trackBackendAddedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for an email before tracking cookie-auth Cloud backend addition", () => {
+    useActiveBackendMock.mockReturnValue({
+      backend: cookieCloudBackend,
+      orgId: "org-123",
+    });
+    useSettingsMock.mockReturnValue({ data: {} });
+    const { rerender } = renderHook(() => useTelemetryIdentity());
+
+    expect(trackBackendAddedMock).not.toHaveBeenCalled();
+
+    useSettingsMock.mockReturnValue({
+      data: { email: "", git_user_email: "git@example.com" },
+    });
+    rerender();
+
+    expect(trackBackendAddedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionMethod: "cloud_cookie" }),
+    );
+  });
+
+  it("dedupes cookie-auth backend additions when sessionStorage writes fail", () => {
+    const storageFailureCloudBackend = {
+      kind: "cloud" as const,
+      id: "cloud-storage-failure",
+      authMode: "cookie" as const,
+    };
+    useActiveBackendMock.mockReturnValue({
+      backend: storageFailureCloudBackend,
+      orgId: "org-123",
+    });
+    useCloudCurrentUserIdMock.mockReturnValue({
+      [storageFailureCloudBackend.id]: {
+        userId: "storage-failure-user",
+        isLoading: false,
+      },
+    });
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage writes blocked");
+      });
+
+    try {
+      const { rerender } = renderHook(() => useTelemetryIdentity());
+      rerender();
+
+      expect(trackBackendAddedMock).toHaveBeenCalledTimes(1);
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
+  it("does not track backend_added for non-cookie Cloud identity resolution", () => {
+    renderHook(() => useTelemetryIdentity());
+
+    expect(trackBackendAddedMock).not.toHaveBeenCalled();
   });
 });

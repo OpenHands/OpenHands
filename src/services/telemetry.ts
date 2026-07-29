@@ -51,6 +51,7 @@ const TELEMETRY_CONSENT_CHANGE_EVENT = "openhands-telemetry-consent-change";
 const TELEMETRY_FIRST_USE_KEY = "openhands-telemetry-first-use";
 const TELEMETRY_SESSION_KEY = "openhands-telemetry-session";
 const POSTHOG_INSTANCE_NAME = "agent-canvas";
+const POSTHOG_PAGEVIEW_CAPTURE_MODE = "history_change";
 
 // Unconfigured source builds use staging. Production release workflows pass
 // VITE_POSTHOG_API_KEY explicitly for both the app and library artifacts.
@@ -347,12 +348,12 @@ export async function initializePostHogClient(
         api_host: config.apiHost,
         ui_host: config.uiHost,
         opt_out_capturing_by_default: !enableCapturing,
-        capture_pageview: false,
-        autocapture: false,
         persistence: "localStorage",
         persistence_name: POSTHOG_INSTANCE_NAME,
         consent_persistence_name: `${POSTHOG_INSTANCE_NAME}-consent`,
         person_profiles: "always",
+        capture_pageview: POSTHOG_PAGEVIEW_CAPTURE_MODE,
+        autocapture: true,
         disable_session_recording: true,
         bootstrap: pendingBootstrap,
         before_send: addCanvasEventProperties,

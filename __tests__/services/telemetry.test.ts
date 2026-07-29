@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 let identifiedUserId: string | undefined;
 let anonymousDistinctId = "ph-test-distinct-id";
 let latestPostHogConfig:
-  | { before_send: (event: unknown) => unknown }
+  | (Record<string, unknown> & { before_send: (event: unknown) => unknown })
   | undefined;
 const mockPosthog = {
   init: vi.fn(),
@@ -119,6 +119,8 @@ describe("Telemetry Service", () => {
           persistence_name: "agent-canvas",
           consent_persistence_name: "agent-canvas-consent",
           person_profiles: "always",
+          capture_pageview: "history_change",
+          autocapture: true,
         }),
         "agent-canvas",
       );
