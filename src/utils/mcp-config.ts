@@ -1,4 +1,5 @@
 import type {
+  MCPAuthCredential,
   MCPConfig,
   MCPConfigPatch,
   MCPServer,
@@ -170,6 +171,88 @@ const buildStringMapPatch = (
   return Object.keys(patch).length > 0 ? patch : undefined;
 };
 
+type OAuthCredential = Extract<MCPAuthCredential, { strategy: "oauth2" }>;
+type OAuthCredentialPatch = Extract<
+  NonNullable<MCPServerPatch["auth"]>,
+  { strategy: "oauth2" }
+>;
+const OAUTH_EDITABLE_AUTHENTICATION_FIELDS = [
+  "client_auth_method",
+  "scopes",
+  "client_id",
+  "client_secret",
+] as const;
+
+const buildRedactionSafeNestedPatch = (
+  previous: unknown,
+  next: unknown,
+): unknown | undefined => {
+  if (next === REDACTED_MCP_SECRET_VALUE || next === undefined) {
+    return undefined;
+  }
+  if (next === null) return null;
+  if (Array.isArray(next)) {
+    if (hasRedactedMcpSecretLeaf(next)) return undefined;
+    return JSON.stringify(previous) === JSON.stringify(next) ? undefined : next;
+  }
+  if (!isRecord(next)) {
+    return Object.is(previous, next) ? undefined : next;
+  }
+
+  const previousRecord = isRecord(previous) ? previous : {};
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(next)) {
+    const nestedPatch = buildRedactionSafeNestedPatch(
+      previousRecord[key],
+      value,
+    );
+    if (nestedPatch !== undefined) patch[key] = nestedPatch;
+  }
+  return Object.keys(patch).length > 0 ? patch : undefined;
+};
+
+const buildOAuthAuthenticationPatch = (
+  previous: OAuthCredential["authentication"],
+  edited: OAuthCredential["authentication"],
+): OAuthCredentialPatch["authentication"] | undefined => {
+  if (edited === undefined) return undefined;
+  if (edited === null) return null;
+
+  const nestedPatch = buildRedactionSafeNestedPatch(previous, edited);
+  const patch = isRecord(nestedPatch) ? { ...nestedPatch } : {};
+  const previousRecord = isRecord(previous) ? previous : {};
+  for (const key of OAUTH_EDITABLE_AUTHENTICATION_FIELDS) {
+    if (key in previousRecord && !(key in edited)) patch[key] = null;
+  }
+  if (Object.keys(patch).length === 0) return undefined;
+  return { type: "oauth", ...patch } as NonNullable<
+    OAuthCredentialPatch["authentication"]
+  >;
+};
+
+const buildOAuthCredentialPatch = (
+  previous: MCPAuthCredential | null | undefined,
+  edited: OAuthCredential,
+): OAuthCredentialPatch | undefined => {
+  const previousOAuth = previous?.strategy === "oauth2" ? previous : undefined;
+  const authentication = buildOAuthAuthenticationPatch(
+    previousOAuth?.authentication,
+    edited.authentication,
+  );
+  const state = buildRedactionSafeNestedPatch(
+    previousOAuth?.state,
+    edited.state,
+  );
+  if (previousOAuth && authentication === undefined && state === undefined) {
+    return undefined;
+  }
+  return {
+    strategy: "oauth2",
+    ...(authentication !== undefined && { authentication }),
+    ...(state !== undefined && { state }),
+  } as OAuthCredentialPatch;
+};
+
 /**
  * Build one sparse MCP server merge-patch from an editor result. Redacted
  * values are display-only and are never mutation inputs.
@@ -208,7 +291,12 @@ export function buildMcpServerPatch(
   }
 
   if (edited.auth) {
-    if (!hasRedactedMcpSecretLeaf(edited.auth)) patch.auth = edited.auth;
+    if (edited.auth.strategy === "oauth2") {
+      const auth = buildOAuthCredentialPatch(previousRemote?.auth, edited.auth);
+      if (auth !== undefined) patch.auth = auth;
+    } else if (!hasRedactedMcpSecretLeaf(edited.auth)) {
+      patch.auth = edited.auth;
+    }
   } else if (previousRemote?.auth) {
     patch.auth = null;
   }

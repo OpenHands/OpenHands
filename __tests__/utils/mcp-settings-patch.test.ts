@@ -140,6 +140,105 @@ describe("MCP sparse patches", () => {
     });
   });
 
+  it("patches OAuth metadata and a replacement secret without sending redacted state", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: {
+          type: "oauth" as const,
+          client_auth_method: "client_secret_post" as const,
+          scopes: "mail.read",
+          client_name: "OpenHands Canvas",
+          client_metadata_url: "https://mail.example/oauth/client.json",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+        },
+        state: {
+          tokens: {
+            access_token: REDACTED_MCP_SECRET_VALUE,
+            refresh_token: REDACTED_MCP_SECRET_VALUE,
+          },
+          token_expires_at: 123,
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: "client_secret_basic",
+          scopes: "mail.read mail.send",
+          client_id: "new-client",
+          client_secret: "replacement-secret",
+        },
+        state: stored.auth.state,
+      },
+    };
+
+    const patch = buildMcpServerPatch(stored, edited);
+
+    expect(patch.auth).toEqual({
+      strategy: "oauth2",
+      authentication: {
+        type: "oauth",
+        client_auth_method: "client_secret_basic",
+        scopes: "mail.read mail.send",
+        client_id: "new-client",
+        client_secret: "replacement-secret",
+      },
+    });
+    expect(JSON.stringify(patch)).not.toContain(REDACTED_MCP_SECRET_VALUE);
+  });
+
+  it("sends nested nulls for explicitly cleared OAuth authentication fields", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: {
+          type: "oauth" as const,
+          client_auth_method: "client_secret_post" as const,
+          scopes: "mail.read",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+        },
+        state: {
+          tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth" },
+        state: stored.auth.state,
+      },
+    };
+
+    expect(buildMcpServerPatch(stored, edited).auth).toEqual({
+      strategy: "oauth2",
+      authentication: {
+        type: "oauth",
+        client_auth_method: null,
+        scopes: null,
+        client_id: null,
+        client_secret: null,
+      },
+    });
+  });
+
   it("omits unchanged redacted env leaves and deletes removed env entries", () => {
     const stored = {
       transport: "stdio" as const,
