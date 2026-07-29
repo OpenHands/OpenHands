@@ -35307,5 +35307,22 @@
     "de": "Versionshinweise anzeigen",
     "uk": "Переглянути примітки до випуску",
     "ca": "Mostra les notes de la versió"
+  },
+  "TRANSCRIPT_EXPORT$TRUNCATION_NOTICE": {
+    "en": "{{count}} events from the middle of this conversation were omitted to keep the export a manageable size.",
+    "ja": "エクスポートを扱いやすいサイズに保つため、この会話の中間にある {{count}} 件のイベントが省略されました。",
+    "zh-CN": "为使导出文件保持合理大小，此对话中间的 {{count}} 个事件已被省略。",
+    "zh-TW": "為使匯出檔案保持合理大小，此對話中間的 {{count}} 個事件已被省略。",
+    "ko-KR": "내보내기 크기를 적절하게 유지하기 위해 이 대화 중간의 이벤트 {{count}}개가 생략되었습니다.",
+    "no": "{{count}} hendelser fra midten av denne samtalen ble utelatt for å holde eksporten i en håndterbar størrelse.",
+    "it": "{{count}} eventi dalla parte centrale di questa conversazione sono stati omessi per mantenere l'esportazione di dimensioni gestibili.",
+    "pt": "{{count}} eventos do meio desta conversa foram omitidos para manter a exportação com um tamanho gerenciável.",
+    "es": "Se omitieron {{count}} eventos de la parte central de esta conversación para mantener la exportación en un tamaño manejable.",
+    "ar": "تم حذف {{count}} حدثًا من منتصف هذه المحادثة للحفاظ على حجم التصدير ضمن حدٍّ يمكن التعامل معه.",
+    "fr": "{{count}} événements du milieu de cette conversation ont été omis afin de conserver une taille d'export raisonnable.",
+    "tr": "Dışa aktarmayı yönetilebilir bir boyutta tutmak için bu konuşmanın ortasındaki {{count}} olay atlandı.",
+    "de": "{{count}} Ereignisse aus der Mitte dieser Unterhaltung wurden ausgelassen, um den Export in einer überschaubaren Größe zu halten.",
+    "uk": "{{count}} подій із середини цієї розмови було пропущено, щоб зберегти прийнятний розмір експорту.",
+    "ca": "S'han omès {{count}} esdeveniments de la part central d'aquesta conversa per mantenir una mida d'exportació manejable."
   }
 }

@@ -36,8 +36,14 @@ vi.mock("#/i18n", () => ({
         TRANSCRIPT_EXPORT$MODEL: "Model",
         TRANSCRIPT_EXPORT$TOOL: "Tool",
         TRANSCRIPT_EXPORT$USER: "User",
+        TRANSCRIPT_EXPORT$TRUNCATION_NOTICE: "{{count}} events omitted",
       };
-      return translations[key] ?? values?.name ?? key;
+      const template = translations[key] ?? values?.name ?? key;
+      return typeof template === "string" && values
+        ? template.replace(/\{\{(\w+)\}\}/g, (_, name) =>
+            values[name] !== undefined ? String(values[name]) : `{{${name}}}`,
+          )
+        : template;
     },
   },
 }));
@@ -359,5 +365,71 @@ describe("conversation transcript export", () => {
 
     expect(html).not.toMatch(/<(?:link|script)[^>]+(?:href|src)=/i);
     expect(html).toMatchSnapshot();
+  });
+});
+
+describe("transcript export truncation notice", () => {
+  const makeUserMessage = (index: number): MessageEvent => ({
+    id: `msg-${index}`,
+    timestamp: new Date(Date.UTC(2026, 6, 10, 0, 0, index)).toISOString(),
+    source: "user",
+    llm_message: {
+      role: "user",
+      content: [{ type: "text", text: `Message ${index}` }],
+    },
+    activated_microagents: [],
+    extended_content: [],
+  });
+
+  const headTailEvents = [
+    makeUserMessage(0),
+    makeUserMessage(1),
+    makeUserMessage(2),
+    makeUserMessage(3),
+  ];
+  const truncation = { omittedCount: 5, headEventCount: 2 };
+
+  it("inserts a single omission notice between head and tail in Markdown", () => {
+    const md = eventsToMarkdown(headTailEvents, {
+      ...defaultOptions,
+      truncation,
+    });
+
+    expect(md).toContain("5 events omitted");
+    expect(md.match(/events omitted/g)).toHaveLength(1);
+    // Notice sits after the head (Message 1) and before the tail (Message 2).
+    const noticeAt = md.indexOf("events omitted");
+    expect(md.indexOf("Message 1")).toBeLessThan(noticeAt);
+    expect(noticeAt).toBeLessThan(md.indexOf("Message 2"));
+  });
+
+  it("renders the omission notice as a note aside in HTML", () => {
+    const html = eventsToHtml(headTailEvents, {
+      ...defaultOptions,
+      truncation,
+    });
+
+    expect(html).toContain('<aside class="note">');
+    expect(html).toContain("5 events omitted");
+    const noticeAt = html.indexOf("events omitted");
+    expect(html.indexOf("Message 1")).toBeLessThan(noticeAt);
+    expect(noticeAt).toBeLessThan(html.indexOf("Message 2"));
+  });
+
+  it("omits the notice when there is no truncation", () => {
+    const md = eventsToMarkdown(headTailEvents, defaultOptions);
+    const html = eventsToHtml(headTailEvents, defaultOptions);
+
+    expect(md).not.toContain("events omitted");
+    expect(html).not.toContain("events omitted");
+  });
+
+  it("omits the notice when omittedCount is zero", () => {
+    const md = eventsToMarkdown(headTailEvents, {
+      ...defaultOptions,
+      truncation: { omittedCount: 0, headEventCount: 2 },
+    });
+
+    expect(md).not.toContain("events omitted");
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { MessageEvent } from "#/types/agent-server/core";
 import {
   loadCompleteTranscriptEvents,
+  loadBoundedTranscriptEvents,
   TRANSCRIPT_HISTORY_PAGE_SIZE,
 } from "./load-complete-events";
 
@@ -147,5 +148,101 @@ describe("loadCompleteTranscriptEvents", () => {
         2,
       ),
     ).rejects.toThrow("Transcript history is incomplete");
+  });
+});
+
+describe("loadBoundedTranscriptEvents", () => {
+  // Cursor-based mock: pageId is an offset into the direction-ordered view.
+  const makeBoundedSearch = (ascendingAll: MessageEvent[]) =>
+    vi.fn(
+      async ({
+        limit,
+        sortOrder,
+        pageId,
+      }: {
+        limit: number;
+        sortOrder: "TIMESTAMP" | "TIMESTAMP_DESC";
+        pageId?: string;
+      }) => {
+        const ordered =
+          sortOrder === "TIMESTAMP_DESC"
+            ? ascendingAll.slice().reverse()
+            : ascendingAll.slice();
+        const start = pageId !== undefined ? Number(pageId) : 0;
+        const items = ordered.slice(start, start + limit);
+        const nextOffset = start + items.length;
+        return {
+          items,
+          next_page_id: nextOffset < ordered.length ? String(nextOffset) : null,
+        };
+      },
+    );
+
+  it("loads the oldest head + newest tail and reports the omitted middle", async () => {
+    const all = Array.from({ length: 20 }, (_, index) => makeMessage(index));
+    const searchEvents = makeBoundedSearch(all);
+
+    const { events, truncation } = await loadBoundedTranscriptEvents(
+      [],
+      searchEvents,
+      all.length,
+      3,
+      5,
+    );
+
+    expect(events.map((event) => event.id)).toEqual([
+      "event-000",
+      "event-001",
+      "event-002",
+      "event-015",
+      "event-016",
+      "event-017",
+      "event-018",
+      "event-019",
+    ]);
+    expect(truncation).toEqual({ omittedCount: 12, headEventCount: 3 });
+
+    // Both directions were actually queried (ascending head, descending tail).
+    const sortOrders = searchEvents.mock.calls.map(
+      ([options]) => options.sortOrder,
+    );
+    expect(sortOrders).toContain("TIMESTAMP");
+    expect(sortOrders).toContain("TIMESTAMP_DESC");
+  });
+
+  it("returns every event with no truncation when head+tail cover the total", async () => {
+    const all = Array.from({ length: 8 }, (_, index) => makeMessage(index));
+    const searchEvents = makeBoundedSearch(all);
+
+    const { events, truncation } = await loadBoundedTranscriptEvents(
+      [],
+      searchEvents,
+      all.length,
+      3,
+      5,
+    );
+
+    expect(events).toEqual(all);
+    expect(truncation).toBeUndefined();
+  });
+
+  it("merges live store events into the newest tail without duplicating", async () => {
+    const all = Array.from({ length: 20 }, (_, index) => makeMessage(index));
+    const searchEvents = makeBoundedSearch(all);
+    // The two newest events are already in the live store.
+    const loadedEvents = all.slice(-2);
+
+    const { events, truncation } = await loadBoundedTranscriptEvents(
+      loadedEvents,
+      searchEvents,
+      all.length,
+      3,
+      5,
+    );
+
+    const ids = events.map((event) => event.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicates
+    expect(ids).toContain("event-019");
+    expect(truncation?.headEventCount).toBe(3);
   });
 });

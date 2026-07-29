@@ -14,11 +14,16 @@ import {
   eventsToHtml,
   eventsToMarkdown,
   type TranscriptExportFormat,
+  type TranscriptTruncation,
 } from "#/utils/transcript-export";
 import { useTracking } from "#/hooks/use-tracking";
 import { useEventStore } from "#/stores/use-event-store";
 import EventService from "#/api/event-service/event-service.api";
-import { loadCompleteTranscriptEvents } from "#/utils/transcript-export/load-complete-events";
+import {
+  loadCompleteTranscriptEvents,
+  loadBoundedTranscriptEvents,
+  MAX_TRANSCRIPT_EXPORT_EVENTS,
+} from "#/utils/transcript-export/load-complete-events";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const TRANSCRIPT_FORMAT_RADIO_NAME = "transcript-export-format";
@@ -86,17 +91,39 @@ export function TranscriptExportModal({
         eventStore.loadedConversationId === conversationId
           ? eventStore.events
           : [];
-      const events = await loadCompleteTranscriptEvents(
-        loadedEvents,
-        (searchOptions) =>
-          EventService.searchEvents(
-            conversationId,
-            conversationUrl,
-            sessionApiKey,
-            searchOptions,
-          ),
-        expectedEventCount,
-      );
+      const searchTranscriptEvents = (
+        searchOptions: Parameters<typeof EventService.searchEvents>[3],
+      ) =>
+        EventService.searchEvents(
+          conversationId,
+          conversationUrl,
+          sessionApiKey,
+          searchOptions,
+        );
+
+      // For very large conversations, load a bounded head+tail window rather
+      // than the entire history, so a 60k-event export never materializes in
+      // memory. Smaller conversations keep loading in full.
+      let events;
+      let truncation: TranscriptTruncation | undefined;
+      if (
+        expectedEventCount !== undefined &&
+        expectedEventCount > MAX_TRANSCRIPT_EXPORT_EVENTS
+      ) {
+        const bounded = await loadBoundedTranscriptEvents(
+          loadedEvents,
+          searchTranscriptEvents,
+          expectedEventCount,
+        );
+        events = bounded.events;
+        truncation = bounded.truncation;
+      } else {
+        events = await loadCompleteTranscriptEvents(
+          loadedEvents,
+          searchTranscriptEvents,
+          expectedEventCount,
+        );
+      }
       if (isCancelledRef.current) return;
 
       const options = {
@@ -104,6 +131,7 @@ export function TranscriptExportModal({
         includeTimestamps,
         title: conversationTitle,
         model,
+        truncation,
       };
       const isMarkdown = format === "markdown";
       const content = isMarkdown

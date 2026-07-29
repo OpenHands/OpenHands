@@ -1,12 +1,26 @@
 import type { OpenHandsEvent } from "#/types/agent-server/core";
+import type { TranscriptTruncation } from "./index";
 
 export const TRANSCRIPT_HISTORY_PAGE_SIZE = 100;
 
+/**
+ * Above this many events, the export loads a bounded head+tail window instead
+ * of the full history, so a 60k-event conversation never materializes in
+ * memory. Kept intentionally generous: enyst tested 7k-event exports fine.
+ */
+export const MAX_TRANSCRIPT_EXPORT_EVENTS = 10_000;
+/** Oldest events kept when a large conversation is truncated (task setup). */
+export const TRANSCRIPT_HEAD_EVENTS = 2_000;
+/** Newest events kept when a large conversation is truncated (recent context). */
+export const TRANSCRIPT_TAIL_EVENTS =
+  MAX_TRANSCRIPT_EXPORT_EVENTS - TRANSCRIPT_HEAD_EVENTS;
+
 interface TranscriptEventSearchOptions {
   limit: number;
-  sortOrder: "TIMESTAMP_DESC";
+  sortOrder: "TIMESTAMP" | "TIMESTAMP_DESC";
   pageId?: string;
   timestampLt?: string;
+  timestampGte?: string;
   strictPagination: true;
 }
 
@@ -134,4 +148,143 @@ export const loadCompleteTranscriptEvents = async (
     );
   }
   return completeEvents;
+};
+
+/**
+ * Pages in a single direction until `maxEvents` are collected or the server
+ * signals exhaustion. Mirrors the cursor / timestamp anchoring in
+ * loadCompleteTranscriptEvents but stops at a hard cap, so an enormous history
+ * is never loaded in full. Descending order walks newest->oldest (the tail);
+ * ascending order walks oldest->newest (the head).
+ */
+const fetchBoundedTranscriptEvents = async (
+  searchEvents: SearchTranscriptEvents,
+  sortOrder: "TIMESTAMP" | "TIMESTAMP_DESC",
+  maxEvents: number,
+): Promise<OpenHandsEvent[]> => {
+  const collected: OpenHandsEvent[] = [];
+  const fetchedEventIds = new Set<string>();
+  const seenPageIds = new Set<string>();
+  const descending = sortOrder === "TIMESTAMP_DESC";
+  let boundaryTimestamp: string | undefined;
+  let pageId: string | undefined;
+
+  while (collected.length < maxEvents) {
+    const page = await searchEvents({
+      limit: Math.min(
+        TRANSCRIPT_HISTORY_PAGE_SIZE,
+        maxEvents - collected.length,
+      ),
+      sortOrder,
+      strictPagination: true,
+      ...(pageId ? { pageId } : {}),
+      ...(boundaryTimestamp
+        ? descending
+          ? { timestampLt: boundaryTimestamp }
+          : { timestampGte: boundaryTimestamp }
+        : {}),
+    });
+
+    if (!Array.isArray(page.items)) {
+      throw new Error(
+        "Invalid transcript history response: expected page.items to be an array.",
+      );
+    }
+
+    let addedEvent = false;
+    let pageBoundaryTimestamp: string | undefined;
+    for (const event of page.items) {
+      if (!fetchedEventIds.has(event.id)) {
+        fetchedEventIds.add(event.id);
+        collected.push(event);
+        addedEvent = true;
+      }
+      if (
+        !pageBoundaryTimestamp ||
+        (descending
+          ? event.timestamp < pageBoundaryTimestamp
+          : event.timestamp > pageBoundaryTimestamp)
+      ) {
+        pageBoundaryTimestamp = event.timestamp;
+      }
+      if (collected.length >= maxEvents) break;
+    }
+    if (collected.length >= maxEvents) break;
+
+    if (page.next_page_id) {
+      if (seenPageIds.has(page.next_page_id)) {
+        throw new Error(
+          "Transcript history pagination repeated a page cursor.",
+        );
+      }
+      seenPageIds.add(page.next_page_id);
+      pageId = page.next_page_id;
+      boundaryTimestamp = undefined;
+      continue;
+    }
+
+    // A short page means the server has no more events in this direction.
+    if (page.items.length < TRANSCRIPT_HISTORY_PAGE_SIZE) break;
+    // Full page without a cursor: fall back to a timestamp anchor, but bail if
+    // it cannot advance (e.g. a whole page sharing one timestamp) so the loop
+    // is always bounded.
+    if (!addedEvent || !pageBoundaryTimestamp) break;
+    pageId = undefined;
+    boundaryTimestamp = pageBoundaryTimestamp;
+  }
+
+  return collected;
+};
+
+/**
+ * Loads a bounded head+tail window for very large conversations: the oldest
+ * TRANSCRIPT_HEAD_EVENTS and newest TRANSCRIPT_TAIL_EVENTS, plus any live store
+ * events, without ever paging the omitted middle. Returns the merged, ordered
+ * events and a `truncation` descriptor the renderer uses to place the omission
+ * notice. When nothing was actually omitted, `truncation` is left undefined.
+ */
+export const loadBoundedTranscriptEvents = async (
+  loadedEvents: OpenHandsEvent[],
+  searchEvents: SearchTranscriptEvents,
+  totalEventCount: number,
+  headMax: number = TRANSCRIPT_HEAD_EVENTS,
+  tailMax: number = TRANSCRIPT_TAIL_EVENTS,
+): Promise<{ events: OpenHandsEvent[]; truncation?: TranscriptTruncation }> => {
+  const tail = await fetchBoundedTranscriptEvents(
+    searchEvents,
+    "TIMESTAMP_DESC",
+    tailMax,
+  );
+  const head = await fetchBoundedTranscriptEvents(
+    searchEvents,
+    "TIMESTAMP",
+    headMax,
+  );
+
+  const headIds = new Set(head.map((event) => event.id));
+  const eventsById = new Map<string, OpenHandsEvent>();
+  for (const event of head) eventsById.set(event.id, event);
+  for (const event of tail) {
+    if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+  }
+  // Live store events are the newest; keep any not already fetched.
+  for (const event of loadedEvents) {
+    if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+  }
+
+  const events = [...eventsById.values()].sort(compareEventTimestamps);
+
+  // Head events (oldest) sort first; count the leading run so the renderer
+  // knows where the head ends and the omission notice belongs.
+  let headEventCount = 0;
+  for (const event of events) {
+    if (!headIds.has(event.id)) break;
+    headEventCount += 1;
+  }
+
+  const omittedCount = Math.max(0, totalEventCount - eventsById.size);
+  if (omittedCount === 0) {
+    return { events };
+  }
+  return { events, truncation: { omittedCount, headEventCount } };
 };
