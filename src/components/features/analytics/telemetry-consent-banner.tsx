@@ -26,8 +26,9 @@ function LocalTelemetryConsentBanner({
   backend: { id: string; name: string; host: string };
 }) {
   const { t, ready } = useTranslation(OPENHANDS_I18N_NAMESPACE);
-  const { data: settings } = useSettings();
-  const { mutate: saveSettings } = useSaveSettings();
+  const { data: settings, isSuccess: hasLoadedSettings } = useSettings();
+  const { mutateAsync: saveSettings, isPending: isSavingSettings } =
+    useSaveSettings();
   const [isReady, setIsReady] = React.useState(false);
   const [hasSubmittedChoice, setHasSubmittedChoice] = React.useState(false);
 
@@ -36,7 +37,9 @@ function LocalTelemetryConsentBanner({
   }, [backend.id]);
 
   const shouldShow =
-    settings?.user_consents_to_analytics === null && !hasSubmittedChoice;
+    hasLoadedSettings &&
+    settings?.user_consents_to_analytics === null &&
+    !hasSubmittedChoice;
 
   React.useEffect(() => {
     if (ready && shouldShow) {
@@ -47,14 +50,19 @@ function LocalTelemetryConsentBanner({
     return undefined;
   }, [ready, shouldShow]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const granted = formData.get("analytics") === "on";
 
+    try {
+      await saveSettings({ user_consents_to_analytics: granted });
+    } catch {
+      return;
+    }
+
     setHasSubmittedChoice(true);
-    void setTelemetryConsent(granted ? "granted" : "denied");
-    saveSettings({ user_consents_to_analytics: granted });
+    await setTelemetryConsent(granted ? "granted" : "denied");
     onChoice?.(granted);
   };
 
@@ -94,6 +102,7 @@ function LocalTelemetryConsentBanner({
             type="submit"
             variant="primary"
             className="w-full"
+            isDisabled={isSavingSettings}
           >
             {t(I18nKey.TELEMETRY$CONFIRM_PREFERENCES)}
           </BrandButton>

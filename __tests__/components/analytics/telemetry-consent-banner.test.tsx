@@ -36,7 +36,10 @@ vi.mock("#/hooks/query/use-settings", () => ({
 }));
 
 vi.mock("#/hooks/mutation/use-save-settings", () => ({
-  useSaveSettings: () => ({ mutate: saveSettingsMock }),
+  useSaveSettings: () => ({
+    mutateAsync: saveSettingsMock,
+    isPending: false,
+  }),
 }));
 
 vi.mock("#/services/telemetry", () => ({
@@ -46,6 +49,7 @@ vi.mock("#/services/telemetry", () => ({
 describe("TelemetryConsentBanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    saveSettingsMock.mockResolvedValue(undefined);
     getLockedCloudHostMock.mockReturnValue(null);
     useActiveBackendMock.mockReturnValue({
       backend: {
@@ -57,6 +61,7 @@ describe("TelemetryConsentBanner", () => {
     });
     useSettingsMock.mockReturnValue({
       data: { user_consents_to_analytics: null },
+      isSuccess: true,
     });
   });
 
@@ -73,11 +78,28 @@ describe("TelemetryConsentBanner", () => {
     ).toBeInTheDocument();
   });
 
+
+  it("does not render until the local backend settings are connected", async () => {
+    useSettingsMock.mockReturnValue({
+      data: { user_consents_to_analytics: null },
+      isSuccess: false,
+    });
+
+    render(<TelemetryConsentBanner />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("telemetry-consent-form"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it.each([true, false])(
     "does not render when agent-server consent is %s",
     async (serverConsent) => {
       useSettingsMock.mockReturnValue({
         data: { user_consents_to_analytics: serverConsent },
+        isSuccess: true,
       });
 
       render(<TelemetryConsentBanner />);
@@ -129,4 +151,22 @@ describe("TelemetryConsentBanner", () => {
       user_consents_to_analytics: false,
     });
   });
+
+  it("does not persist browser consent when the backend save fails", async () => {
+    const user = userEvent.setup();
+    saveSettingsMock.mockRejectedValue(new Error("unauthorized"));
+    render(<TelemetryConsentBanner />);
+
+    await screen.findByTestId("telemetry-consent-form");
+    await user.click(screen.getByTestId("confirm-telemetry-preferences"));
+
+    await waitFor(() => {
+      expect(saveSettingsMock).toHaveBeenCalledWith({
+        user_consents_to_analytics: true,
+      });
+    });
+    expect(setTelemetryConsentMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId("telemetry-consent-form")).toBeInTheDocument();
+  });
+
 });
