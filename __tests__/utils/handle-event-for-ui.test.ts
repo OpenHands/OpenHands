@@ -383,6 +383,101 @@ describe("handleEventForUI", () => {
       ]);
     });
 
+    it("keeps a queued user message deferred when planning finishes before main", () => {
+      const mainDelta = makeStreamingDelta("main-delta-1", "Main starts");
+      const planningDelta = {
+        ...makeStreamingDelta("planning-delta", "Planning response"),
+        isFromPlanningAgent: true,
+      };
+      const planningFinal = {
+        ...mockAgentMessageEvent,
+        id: "planning-final",
+        isFromPlanningAgent: true,
+        llm_message: {
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: "Planning response" }],
+        },
+      };
+      const mainFinal = {
+        ...mockAgentMessageEvent,
+        id: "main-final",
+        llm_message: {
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: "Main starts and ends" }],
+        },
+      };
+      const queuedUserMessage: MessageEvent = {
+        ...mockMessageEvent,
+        id: "queued-user-message",
+      };
+
+      let uiEvents = handleEventForUI(mainDelta, [mockMessageEvent]);
+      uiEvents = handleEventForUI(queuedUserMessage, uiEvents);
+      uiEvents = handleEventForUI(planningDelta, uiEvents);
+      uiEvents = handleEventForUI(planningFinal, uiEvents);
+      uiEvents = handleEventForUI(
+        makeStreamingDelta("main-delta-2", " and ends"),
+        uiEvents,
+      );
+      const result = handleEventForUI(mainFinal, uiEvents);
+
+      expect(result).toEqual([
+        mockMessageEvent,
+        planningFinal,
+        mainFinal,
+        queuedUserMessage,
+      ]);
+    });
+
+    it("keeps a queued user message deferred when main finishes before planning", () => {
+      const planningDelta = {
+        ...makeStreamingDelta("planning-delta-1", "Planning starts"),
+        isFromPlanningAgent: true,
+      };
+      const mainDelta = makeStreamingDelta("main-delta", "Main response");
+      const mainFinal = {
+        ...mockAgentMessageEvent,
+        id: "main-final",
+        llm_message: {
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: "Main response" }],
+        },
+      };
+      const planningFinal = {
+        ...mockAgentMessageEvent,
+        id: "planning-final",
+        isFromPlanningAgent: true,
+        llm_message: {
+          role: "assistant" as const,
+          content: [
+            { type: "text" as const, text: "Planning starts and ends" },
+          ],
+        },
+      };
+      const queuedUserMessage: MessageEvent = {
+        ...mockMessageEvent,
+        id: "queued-user-message",
+      };
+      const planningContinuation = {
+        ...makeStreamingDelta("planning-delta-2", " and ends"),
+        isFromPlanningAgent: true,
+      };
+
+      let uiEvents = handleEventForUI(planningDelta, [mockMessageEvent]);
+      uiEvents = handleEventForUI(queuedUserMessage, uiEvents);
+      uiEvents = handleEventForUI(mainDelta, uiEvents);
+      uiEvents = handleEventForUI(mainFinal, uiEvents);
+      uiEvents = handleEventForUI(planningContinuation, uiEvents);
+      const result = handleEventForUI(planningFinal, uiEvents);
+
+      expect(result).toEqual([
+        mockMessageEvent,
+        mainFinal,
+        planningFinal,
+        queuedUserMessage,
+      ]);
+    });
+
     it("keeps the canonical finish event after streamed content", () => {
       const first = makeStreamingDelta("delta-1", "I'll start ");
       const second = makeStreamingDelta("delta-2", "working on that.");

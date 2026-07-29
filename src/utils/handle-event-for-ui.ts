@@ -18,13 +18,13 @@ import {
   splitInlineThink,
 } from "#/components/conversation-events/chat/event-thought-helpers";
 
-// A user-message echo can arrive before the agent's in-flight stream finishes.
-// Keep that message at the visual tail until the current agent turn finalizes.
+// A user-message echo can arrive before one or both agent streams finish. Keep
+// that message at the visual tail until every stream that crossed it finalizes.
 // The non-enumerable symbol keeps this UI-only state off the server event shape.
-const DEFERRED_USER_MESSAGE = Symbol("deferred-user-message");
+const DEFERRED_USER_MESSAGE_SENDERS = Symbol("deferred-user-message-senders");
 
 type DeferredUserMessageEvent = MessageEvent & {
-  [DEFERRED_USER_MESSAGE]: true;
+  [DEFERRED_USER_MESSAGE_SENDERS]: ReadonlySet<boolean>;
 };
 
 const isDeferredUserMessage = (
@@ -33,18 +33,67 @@ const isDeferredUserMessage = (
   isMessageEvent(event) &&
   event.source === "user" &&
   Boolean(
-    (event as MessageEvent & { [DEFERRED_USER_MESSAGE]?: true })[
-      DEFERRED_USER_MESSAGE
-    ],
+    (
+      event as MessageEvent & {
+        [DEFERRED_USER_MESSAGE_SENDERS]?: ReadonlySet<boolean>;
+      }
+    )[DEFERRED_USER_MESSAGE_SENDERS]?.size,
   );
 
-const deferUserMessage = (event: MessageEvent): MessageEvent =>
-  Object.defineProperty({ ...event }, DEFERRED_USER_MESSAGE, {
-    value: true,
+const getStreamingSender = (
+  event: OpenHandsEvent & { isFromPlanningAgent?: boolean },
+): boolean => Boolean(event.isFromPlanningAgent);
+
+const deferUserMessageForSenders = (
+  event: MessageEvent,
+  senders: ReadonlySet<boolean>,
+): MessageEvent =>
+  Object.defineProperty({ ...event }, DEFERRED_USER_MESSAGE_SENDERS, {
+    value: senders,
   });
 
-const releaseUserMessage = (event: OpenHandsEvent): OpenHandsEvent =>
-  isDeferredUserMessage(event) ? { ...event } : event;
+const deferUserMessage = (
+  event: MessageEvent,
+  streamingEvent: StreamingDeltaEvent,
+): MessageEvent =>
+  deferUserMessageForSenders(
+    event,
+    new Set([getStreamingSender(streamingEvent)]),
+  );
+
+const addDeferredUserMessageSender = (
+  event: OpenHandsEvent,
+  streamingEvent: StreamingDeltaEvent,
+): OpenHandsEvent => {
+  if (!isDeferredUserMessage(event)) {
+    return event;
+  }
+
+  const senders = new Set(event[DEFERRED_USER_MESSAGE_SENDERS]);
+  senders.add(getStreamingSender(streamingEvent));
+  return deferUserMessageForSenders(event, senders);
+};
+
+const releaseDeferredUserMessageSender = (
+  event: OpenHandsEvent,
+  finalEvent: OpenHandsEvent,
+): OpenHandsEvent => {
+  if (!isDeferredUserMessage(event)) {
+    return event;
+  }
+
+  const senders = new Set(event[DEFERRED_USER_MESSAGE_SENDERS]);
+  senders.delete(getStreamingSender(finalEvent));
+  return senders.size > 0
+    ? deferUserMessageForSenders(event, senders)
+    : { ...event };
+};
+
+const releaseDeferredUserMessagesForSender = (
+  events: OpenHandsEvent[],
+  finalEvent: OpenHandsEvent,
+): OpenHandsEvent[] =>
+  events.map((event) => releaseDeferredUserMessageSender(event, finalEvent));
 
 const findEventBeforeDeferredUserMessages = (
   events: OpenHandsEvent[],
@@ -61,7 +110,6 @@ const findEventBeforeDeferredUserMessages = (
 const insertBeforeDeferredUserMessages = (
   events: OpenHandsEvent[],
   event: OpenHandsEvent,
-  releaseDeferredMessages = false,
 ): OpenHandsEvent[] => {
   let insertionIndex = events.length;
   while (
@@ -75,14 +123,14 @@ const insertBeforeDeferredUserMessages = (
     return [...events, event];
   }
 
-  const deferredMessages = events.slice(insertionIndex);
-  return [
-    ...events.slice(0, insertionIndex),
-    event,
-    ...(releaseDeferredMessages
-      ? deferredMessages.map(releaseUserMessage)
-      : deferredMessages),
-  ];
+  const deferredMessages = events
+    .slice(insertionIndex)
+    .map((deferredEvent) =>
+      isStreamingDeltaEvent(event)
+        ? addDeferredUserMessageSender(deferredEvent, event)
+        : deferredEvent,
+    );
+  return [...events.slice(0, insertionIndex), event, ...deferredMessages];
 };
 
 export const mergeStreamingDeltaEvent = (
@@ -304,7 +352,10 @@ const finalizeStreamingDeltasInPlace = (
     contentStreamingDeltas,
     eventRendersReasoning(finalEvent),
   );
-  return insertBeforeDeferredUserMessages(nextUiEvents, finalEvent, true);
+  return releaseDeferredUserMessagesForSender(
+    insertBeforeDeferredUserMessages(nextUiEvents, finalEvent),
+    finalEvent,
+  );
 };
 
 /**
@@ -501,13 +552,12 @@ export const handleEventForUI = (
       activeTail &&
       isStreamingDeltaEvent(activeTail.event)
     ) {
-      newUiEvents.push(deferUserMessage(event));
+      newUiEvents.push(deferUserMessage(event, activeTail.event));
     } else {
-      return insertBeforeDeferredUserMessages(
-        newUiEvents,
-        event,
-        isFinalAgentEvent,
-      );
+      const nextUiEvents = insertBeforeDeferredUserMessages(newUiEvents, event);
+      return isFinalAgentEvent
+        ? releaseDeferredUserMessagesForSender(nextUiEvents, event)
+        : nextUiEvents;
     }
   }
 
