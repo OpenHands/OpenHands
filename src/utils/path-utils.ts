@@ -46,6 +46,37 @@ export const toFilesTabPath = (
   return result.replace(/^\.\//, "");
 };
 
+const WORKSPACE_FILE_EXTENSION =
+  /\.(md|txt|ts|tsx|js|jsx|mjs|cjs|py|json|html?|css|scss|ya?ml|toml|rs|go|java|kt|swift|c|cc|cpp|h|hpp|sh|bash|zsh|sql|xml|svg|pdf|env|rb|php|vue|svelte|lock|ini|cfg|docx?|xlsx?|pptx?|odt|rtf)$/i;
+
+/**
+ * Conservative check for inline chat tokens that should open in Files.
+ * Rejects URLs, MIME types, versions, and dotted identifiers like `console.log`.
+ */
+export const looksLikeWorkspaceFilePath = (text: string): boolean => {
+  const trimmed = text.trim();
+  if (!trimmed || /\s/.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    return false;
+  }
+
+  let path = trimmed.replace(/\\/g, "/").replace(/^\.\//, "");
+  path = path.replace(/:(\d+)(-\d+)?$/, "");
+
+  if (
+    /^(application|audio|image|text|video|font|multipart|message|model)\/[\w.+-]+$/i.test(
+      path,
+    )
+  ) {
+    return false;
+  }
+  if (/^v?\d+(\.\d+){1,3}([-+][\w.]+)?$/i.test(path)) {
+    return false;
+  }
+
+  const lastSegment = path.includes("/") ? (path.split("/").pop() ?? "") : path;
+  return WORKSPACE_FILE_EXTENSION.test(lastSegment);
+};
+
 /**
  * Returns the basename (top-level folder/file name) from a path string,
  * tolerating POSIX and Windows separators and trailing slashes.

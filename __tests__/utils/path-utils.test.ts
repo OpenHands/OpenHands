@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getPathBasename,
+  looksLikeWorkspaceFilePath,
   stripWorkspacePrefix,
   toFilesTabPath,
 } from "#/utils/path-utils";
@@ -74,5 +75,21 @@ describe("toFilesTabPath", () => {
     expect(toFilesTabPath("C:\\repo\\src\\a.ts:12-40", "C:\\repo")).toBe(
       "src/a.ts",
     );
+  });
+});
+
+describe("looksLikeWorkspaceFilePath", () => {
+  it("accepts common workspace file tokens", () => {
+    expect(looksLikeWorkspaceFilePath("test.md")).toBe(true);
+    expect(looksLikeWorkspaceFilePath("src/app.ts")).toBe(true);
+    expect(looksLikeWorkspaceFilePath("docs/guide.md:12")).toBe(true);
+  });
+
+  it("rejects non-path dotted tokens, versions, MIME types, and URLs", () => {
+    expect(looksLikeWorkspaceFilePath("console.log")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("v1.2.3")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("application/json")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("https://example.com/a.ts")).toBe(false);
+    expect(looksLikeWorkspaceFilePath("bareword")).toBe(false);
   });
 });
