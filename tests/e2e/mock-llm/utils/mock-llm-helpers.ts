@@ -877,41 +877,22 @@ export async function getMockLLMRequests(
 }
 
 /**
- * Set contentEditable chat input text and dispatch an input event.
- *
- * contentEditable divs don't respond reliably to Playwright's .fill() or
- * .type(), so we set the text programmatically via page.evaluate().
+ * Set contentEditable chat input text using real browser editing events.
  */
 export async function setChatInput(
   page: Page,
   text: string,
   testId = "chat-input",
 ) {
-  // page.evaluate has no auto-waiting: right after a goto with
-  // `domcontentloaded`, the React app can take longer than
-  // dismissAnalyticsModal's give-up window to paint the composer on a
-  // loaded CI runner, and the querySelector below would throw. Wait for
-  // the input the way a locator action would before setting text.
-  await page
-    .getByTestId(testId)
-    .waitFor({ state: "visible", timeout: 30_000 });
-  await page.evaluate(
-    ({ tid, inputText }) => {
-      const el = document.querySelector(`[data-testid="${tid}"]`);
-      if (!(el instanceof HTMLElement))
-        throw new Error(`Chat input [data-testid="${tid}"] not found`);
-      el.focus();
-      el.textContent = inputText;
-      el.dispatchEvent(
-        new InputEvent("input", {
-          bubbles: true,
-          data: inputText,
-          inputType: "insertText",
-        }),
-      );
-    },
-    { tid: testId, inputText: text },
+  const input = page.getByTestId(testId);
+  await input.waitFor({ state: "visible", timeout: 30_000 });
+  await input.click();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+A" : "Control+A",
   );
+  await page.keyboard.press("Backspace");
+  await page.keyboard.insertText(text);
+  await expect(input).toContainText(text);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

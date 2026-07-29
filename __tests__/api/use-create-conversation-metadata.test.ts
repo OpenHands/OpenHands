@@ -132,6 +132,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     window.localStorage.clear();
   });
 
@@ -287,5 +288,20 @@ describe("useCreateConversation persists selected repository metadata", () => {
     expect(getStoredConversationMetadata("conv-new")?.plugins).toEqual([
       { source: "github:acme/city-weather", ref: "main", repo_path: null },
     ]);
+  });
+
+  it("does not block conversation creation when installed plugin lookup hangs", async () => {
+    vi.useFakeTimers();
+    mockListInstalledPlugins.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    result.current.mutate({ query: "scratch session" });
+    await vi.waitFor(() => expect(mockListInstalledPlugins).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(2_100);
+    await vi.waitFor(() => expect(result.current.isSuccess).toBe(true));
+    vi.useRealTimers();
+
+    expect(result.current.data?.conversation_id).toBe("conv-new");
   });
 });
