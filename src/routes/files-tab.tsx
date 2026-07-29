@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -77,11 +77,13 @@ function FilesTab() {
   let activeView: "on" | "off" | "commits" = diffViewEnabled ? "on" : "off";
   if (commitsViewSelected && showCommitsOption) activeView = "commits";
 
-  // Chat / canvas navigation can select a file while Diff or Commits is still
-  // the active pane. Honor content-view requests so the file is actually shown.
+  // Chat path clicks request the file-content view via contentViewNonce.
+  // Consume each request once so the Diff/Commits toggle isn't pinned.
   const contentViewNonce = useFilesTabStore((s) => s.contentViewNonce);
+  const consumedContentViewNonce = useRef(contentViewNonce);
   useEffect(() => {
-    if (contentViewNonce === 0) return;
+    if (contentViewNonce === consumedContentViewNonce.current) return;
+    consumedContentViewNonce.current = contentViewNonce;
     setFilesTabDiffView(false);
     setCommitsViewSelected(false);
   }, [contentViewNonce, setFilesTabDiffView]);

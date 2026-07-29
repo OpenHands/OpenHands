@@ -789,5 +789,35 @@ describe("FilesTab", () => {
         screen.getByTestId("file-content-viewer-markdown"),
       ).toBeInTheDocument();
     });
+
+    it("lets the user switch back to Diff after a chat path click", async () => {
+      const { openWorkspaceFile } = await import("#/services/canvas-ui");
+      const user = userEvent.setup();
+
+      useHasAttachedSourceMock.mockReturnValue({
+        hasAttachedSource: true,
+        isLoading: false,
+      });
+      useWorkspaceFilesMock.mockReturnValue({
+        data: ["src/app.ts"],
+        isLoading: false,
+      });
+
+      renderTab("conv-path-back");
+      openWorkspaceFile("src/app.ts", "conv-path-back");
+
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("changes-tab-content"),
+        ).not.toBeInTheDocument();
+      });
+
+      // The content-view request must be consumed once, not pin the toggle.
+      await user.click(screen.getByTestId("files-tab-diff-toggle-option-on"));
+
+      await waitFor(() => {
+        expect(screen.getByTestId("changes-tab-content")).toBeInTheDocument();
+      });
+    });
   });
 });
