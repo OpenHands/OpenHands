@@ -50,10 +50,9 @@ export const PLUGINS_QUERY_KEYS = {
   local: ["plugins-local"] as const,
 } as const;
 
-export const MANIFEST_QUERY_KEYS = {
-  /** Deployment capability discovery, keyed by the manifest-declared path. */
-  capabilities: (servicePath: string) =>
-    ["manifest-capabilities", servicePath] as const,
+export const SETUP_QUERY_KEYS = {
+  /** What the deployment supports. The same answer for every setup entry. */
+  capabilities: () => ["setup-capabilities"] as const,
 } as const;
 
 export const APP_UPDATE_QUERY_KEYS = {

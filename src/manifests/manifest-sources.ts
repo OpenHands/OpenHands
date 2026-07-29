@@ -1,22 +1,19 @@
 /**
  * The one place that decides which manifests this host is offered.
  *
- * Manifests are published by extension packages. `@openhands/extensions` does
- * not export any yet, so the only registered source today is the neutrality
- * fixture, which is development-only. Adding the published manifests is a
- * one-line change here and needs no other host change.
+ * Setup manifests are published by `@openhands/extensions` as an optional
+ * `setup` block on a catalog entry, so the catalog is the whole source. Entries
+ * without one are skipped, which means the pinned package deciding to ship them
+ * is the only step left — there is no wiring to add here.
+ *
+ * The catalog is passed as `unknown[]` on purpose: admission is a trust
+ * boundary, so the host validates the published data rather than trusting the
+ * types that shipped beside it.
  */
 
-import {
-  createManifestRegistry,
-  type ManifestRegistry,
-} from "./manifest-registry";
-import { RELEASE_NOTES_DEMO_MANIFEST } from "./fixtures/release-notes-demo-manifest";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
+import { createSetupRegistry, type SetupRegistry } from "./manifest-registry";
 
-function getManifestSources(): unknown[] {
-  if (import.meta.env.PROD) return [];
-  return [RELEASE_NOTES_DEMO_MANIFEST];
-}
-
-export const MANIFEST_REGISTRY: ManifestRegistry =
-  createManifestRegistry(getManifestSources());
+export const SETUP_REGISTRY: SetupRegistry = createSetupRegistry(
+  AUTOMATION_CATALOG as readonly unknown[],
+);

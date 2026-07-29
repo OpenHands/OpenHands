@@ -9,38 +9,39 @@ import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { getApiErrorBody } from "#/utils/api-error-message";
-import { useManifestCapabilities } from "#/hooks/query/use-manifest-capabilities";
-import { useManifestPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
-import { useManifestPreflight } from "#/hooks/use-manifest-preflight";
-import { useManifestAnalytics } from "#/hooks/use-manifest-analytics";
+import { useTracking } from "#/hooks/use-tracking";
+import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
+import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
+import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
+import { useSetupAction } from "#/manifests/manifest-actions";
 import {
-  buildManifestPayload,
-  useManifestAction,
-} from "#/manifests/manifest-actions";
+  buildCreatePayload,
+  deriveErrorMap,
+} from "#/manifests/automation-setup";
 import {
+  collectFields,
   getFieldOptions,
   getInitialFormValues,
   resolveFieldOverrides,
   validateFormValues,
-  type ManifestFieldError,
-  type ManifestFieldErrors,
+  type SetupFieldError,
+  type SetupFieldErrors,
 } from "#/manifests/manifest-local-validation";
 import {
   mapServiceErrors,
   normalizeServiceErrors,
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
-import {
-  interpolateText,
-  type ManifestScope,
-} from "#/manifests/manifest-template";
 import type { GitRepository } from "#/types/git";
-import type { ExtensionManifest, ManifestFormValues } from "#/manifests/types";
-import { ManifestFormField } from "./manifest-form-field";
-import { ManifestPrerequisitesStep } from "./manifest-prerequisites-step";
-import { ManifestReviewStep } from "./manifest-review-step";
+import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import { SetupFormField } from "./manifest-form-field";
+import { SetupPrerequisitesStep } from "./manifest-prerequisites-step";
+import { SetupReviewStep } from "./manifest-review-step";
 
 type SetupStep = "prerequisites" | "form" | "review";
+
+/** How long a field rests after a blur before the draft is sent for checking. */
+const PREFLIGHT_DEBOUNCE_MS = 400;
 
 const NO_SERVICE_ERRORS: MappedManifestErrors = {
   fieldErrors: {},
@@ -53,40 +54,51 @@ function hasAnyError(errors: MappedManifestErrors): boolean {
   );
 }
 
-export interface ManifestSetupDialogProps {
-  manifest: ExtensionManifest;
+/** Where a completed setup lands: the new automation, or the conversation. */
+function getDestination(response: Record<string, unknown>): string | null {
+  if (typeof response.conversation_id === "string") {
+    return `/conversations/${response.conversation_id}`;
+  }
+  if (typeof response.id === "string") return `/automations/${response.id}`;
+  return null;
+}
+
+export interface SetupDialogProps {
+  entry: SetupEntry;
   onClose: () => void;
 }
 
 /**
- * The generic setup host: capabilities check, prerequisites, form, review, and
- * the manifest-declared action, rendered as a dialog.
+ * The setup host: capabilities check, prerequisites, form, review, and the
+ * action the manifest's mode selects, rendered as a dialog.
  *
- * The host runs the stages; the manifest supplies every stage's content. Any
- * string the user reads here is either manifest-authored or host chrome, and
- * the host never adds a word about what is being configured.
+ * The host runs the stages and owns everything the same for every entry; the
+ * manifest supplies only what varies. Any string the user reads here is either
+ * manifest-authored or host chrome.
  */
-export function ManifestSetupDialog({
-  manifest,
-  onClose,
-}: ManifestSetupDialogProps) {
+export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
   const navigate = useNavigate();
 
-  const capabilities = useManifestCapabilities(manifest);
-  const prerequisites = useManifestPrerequisites(manifest);
-  const runPreflight = useManifestPreflight(manifest);
-  const runAction = useManifestAction();
-  const emitStage = useManifestAnalytics(manifest);
+  const capabilities = useSetupCapabilities(entry);
+  const prerequisites = useSetupPrerequisites(entry);
+  const runPreflight = useSetupPreflight(entry);
+  const runAction = useSetupAction();
+  const {
+    trackAutomationSetupOpened,
+    trackAutomationSetupValidated,
+    trackAutomationSetupCreated,
+    trackAutomationSetupFailed,
+  } = useTracking();
 
   const [step, setStep] = useState<SetupStep>("prerequisites");
-  const [values, setValues] = useState<ManifestFormValues>(() =>
-    getInitialFormValues(manifest),
+  const [values, setValues] = useState<SetupFormValues>(() =>
+    getInitialFormValues(entry.setup),
   );
   const [repositories, setRepositories] = useState<
     Record<string, GitRepository | null>
   >({});
-  const [localErrors, setLocalErrors] = useState<ManifestFieldErrors>({});
+  const [localErrors, setLocalErrors] = useState<SetupFieldErrors>({});
   const [serviceErrors, setServiceErrors] =
     useState<MappedManifestErrors>(NO_SERVICE_ERRORS);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,55 +114,30 @@ export function ManifestSetupDialog({
     [],
   );
 
-  const capabilitiesScope = useMemo(
-    () => ({
-      ...(capabilities.capabilities ?? {}),
-      supported: capabilities.supported,
-    }),
-    [capabilities.capabilities, capabilities.supported],
-  );
-
+  const fields = useMemo(() => collectFields(entry.setup), [entry]);
   const overrides = useMemo(
-    () => resolveFieldOverrides(manifest, capabilities.capabilities),
-    [manifest, capabilities.capabilities],
+    () => resolveFieldOverrides(entry.setup, capabilities.capabilities),
+    [entry, capabilities.capabilities],
   );
-
   const payload = useMemo(
-    () => buildManifestPayload(manifest, values),
-    [manifest, values],
+    () => buildCreatePayload(entry, values),
+    [entry, values],
   );
+  const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
-  const scope: ManifestScope = useMemo(
-    () => ({
-      manifest,
-      form: values,
-      capabilities: capabilitiesScope,
-      submit: { payload: payload ?? undefined },
-    }),
-    [manifest, values, capabilitiesScope, payload],
-  );
-
-  const emittedRouteRef = useRef(false);
+  const emittedOpenRef = useRef(false);
   useEffect(() => {
-    if (emittedRouteRef.current) return;
-    emittedRouteRef.current = true;
-    emitStage("route.entered");
-  }, [emitStage]);
-
-  const emittedCapabilitiesRef = useRef(false);
-  useEffect(() => {
-    if (capabilities.isLoading || emittedCapabilitiesRef.current) return;
-    emittedCapabilitiesRef.current = true;
-    emitStage("capabilities.resolved", { capabilities: capabilitiesScope });
-  }, [capabilities.isLoading, capabilitiesScope, emitStage]);
+    if (emittedOpenRef.current) return;
+    emittedOpenRef.current = true;
+    trackAutomationSetupOpened({ automationId: entry.id });
+  }, [entry.id, trackAutomationSetupOpened]);
 
   const isUnsupported = capabilities.supported === false;
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
-    prerequisites.warningIntegrations.length > 0 ||
-    prerequisites.missingSecrets.length > 0;
-  // Prerequisites resolve asynchronously; deriving the step keeps a manifest
-  // with nothing to check from flashing an empty first screen.
+    prerequisites.warningIntegrations.length > 0;
+  // Prerequisites resolve asynchronously; deriving the step keeps an entry with
+  // nothing to check from flashing an empty first screen.
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
 
@@ -166,18 +153,12 @@ export function ManifestSetupDialog({
   };
 
   const handleFieldBlur = () => {
-    const preflight = manifest.validation?.preflight;
-    if (!preflight?.runOn.includes("fieldBlur")) return;
-
     if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
     blurTimerRef.current = window.setTimeout(() => {
-      const draft = valuesRef.current;
-      void runPreflight(draft, buildManifestPayload(manifest, draft)).then(
-        (result) => {
-          if (result) setServiceErrors(result);
-        },
-      );
-    }, preflight.debounceMs ?? 0);
+      void runPreflight(valuesRef.current).then((result) => {
+        if (result) setServiceErrors(result);
+      });
+    }, PREFLIGHT_DEBOUNCE_MS);
   };
 
   const handleContinue = async () => {
@@ -186,51 +167,50 @@ export function ManifestSetupDialog({
       return;
     }
 
-    const failures = validateFormValues(manifest, values, overrides);
+    const failures = validateFormValues(entry.setup, values, overrides);
     if (Object.keys(failures).length > 0) {
       setLocalErrors(failures);
       return;
     }
     setLocalErrors({});
 
-    if (manifest.validation?.preflight?.runOn.includes("beforeSubmit")) {
-      const result = await runPreflight(values, payload);
-      if (result && hasAnyError(result)) {
-        setServiceErrors(result);
-        return;
-      }
+    const result = await runPreflight(values);
+    if (result && hasAnyError(result)) {
+      setServiceErrors(result);
+      return;
     }
 
     setServiceErrors(NO_SERVICE_ERRORS);
-    emitStage("validation.succeeded", { form: values });
+    trackAutomationSetupValidated({ automationId: entry.id });
     setStep("review");
   };
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(manifest, values, payload);
-      emitStage("submit.succeeded", { form: values, response });
-      navigate(
-        interpolateText(manifest.submit.onSuccess.to, { ...scope, response }),
-        { replace: true },
-      );
+      const { response } = await runAction(entry, values, payload);
+      trackAutomationSetupCreated({
+        automationId: entry.id,
+        setupMode: entry.setup.mode,
+      });
+      const destination = getDestination(response);
+      if (destination) navigate(destination, { replace: true });
+      else onClose();
     } catch (error) {
-      emitStage("submit.failed", { form: values });
-      const { onError } = manifest.submit;
+      trackAutomationSetupFailed({
+        automationId: entry.id,
+        setupMode: entry.setup.mode,
+      });
       const mapped = mapServiceErrors(
         normalizeServiceErrors(getApiErrorBody(error), payload),
-        onError.reuseErrorMap
-          ? manifest.validation?.onInvalid.errorMap
-          : undefined,
-        onError.errorTarget,
+        errorMap,
       );
       setServiceErrors(
         hasAnyError(mapped)
           ? mapped
           : {
               fieldErrors: {},
-              formErrors: [onError.message ?? t(I18nKey.SETUP$SUBMIT_FAILED)],
+              formErrors: [t(I18nKey.SETUP$SUBMIT_FAILED)],
             },
       );
       setStep("form");
@@ -250,19 +230,19 @@ export function ManifestSetupDialog({
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
     if (currentStep === "prerequisites")
       return t(I18nKey.SETUP$PREREQUISITES_TITLE);
-    if (currentStep === "review") return manifest.review.title;
-    return manifest.name;
+    if (currentStep === "review") return t(I18nKey.SETUP$REVIEW_TITLE);
+    return entry.name;
   })();
 
   return (
-    <ModalBackdrop onClose={onClose} aria-label={manifest.name}>
+    <ModalBackdrop onClose={onClose} aria-label={entry.name}>
       <div
-        data-testid="manifest-setup-dialog"
+        data-testid="setup-dialog"
         className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton
           onClose={onClose}
-          testId="manifest-setup-dialog-close"
+          testId="setup-dialog-close"
           disabled={isSubmitting}
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
@@ -278,41 +258,39 @@ export function ManifestSetupDialog({
 
           {!isLoading && isUnsupported && (
             <p className="text-sm text-[var(--oh-muted)]">
-              {manifest.capabilities?.onUnsupported.message}
+              {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
             </p>
           )}
 
           {!isLoading && !isUnsupported && currentStep === "prerequisites" && (
-            <ManifestPrerequisitesStep
-              requires={manifest.requires!}
-              prerequisites={prerequisites}
-            />
+            <SetupPrerequisitesStep prerequisites={prerequisites} />
           )}
 
           {!isLoading && !isUnsupported && currentStep === "form" && (
             <div className="flex flex-col gap-5">
               <p className="text-sm text-[var(--oh-muted)]">
-                {manifest.description}
+                {entry.description}
               </p>
-              {manifest.form.note && (
+              {entry.setup.form.note && (
                 <p className="text-sm text-[var(--oh-muted)]">
-                  {manifest.form.note}
+                  {entry.setup.form.note}
                 </p>
               )}
-              {manifest.form.fields.map((field) => (
-                <ManifestFormField
-                  key={field.name}
+              {Object.entries(fields).map(([name, field]) => (
+                <SetupFormField
+                  key={name}
+                  name={name}
                   field={field}
-                  value={values[field.name] ?? ""}
-                  error={resolveFieldError(field.name)}
-                  options={getFieldOptions(field, overrides)}
-                  repository={repositories[field.name] ?? null}
+                  value={values[name] ?? ""}
+                  error={resolveFieldError(name)}
+                  options={getFieldOptions(name, field, overrides)}
+                  repository={repositories[name] ?? null}
                   disabled={isSubmitting}
-                  onChange={(value) => setFieldValue(field.name, value)}
+                  onChange={(value) => setFieldValue(name, value)}
                   onRepositoryChange={(repository) =>
                     setRepositories((current) => ({
                       ...current,
-                      [field.name]: repository,
+                      [name]: repository,
                     }))
                   }
                   onBlur={handleFieldBlur}
@@ -322,14 +300,14 @@ export function ManifestSetupDialog({
           )}
 
           {!isLoading && !isUnsupported && currentStep === "review" && (
-            <ManifestReviewStep review={manifest.review} scope={scope} />
+            <SetupReviewStep setup={entry.setup} values={values} />
           )}
 
           {serviceErrors.formErrors.map((message) => (
             <p
               key={message}
               role="alert"
-              data-testid="manifest-form-error"
+              data-testid="setup-form-error"
               className="pt-4 text-sm text-red-400"
             >
               {message}
@@ -340,7 +318,7 @@ export function ManifestSetupDialog({
         <footer className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4">
           {currentStep === "review" && (
             <BrandButton
-              testId="manifest-back-button"
+              testId="setup-back-button"
               type="button"
               variant="secondary"
               isDisabled={isSubmitting}
@@ -356,7 +334,7 @@ export function ManifestSetupDialog({
             </BrandButton>
           ) : (
             <BrandButton
-              testId="manifest-continue-button"
+              testId="setup-continue-button"
               type="button"
               variant="primary"
               isDisabled={
@@ -369,7 +347,7 @@ export function ManifestSetupDialog({
               }
             >
               {currentStep === "review"
-                ? manifest.review.confirmLabel
+                ? t(I18nKey.SETUP$CONFIRM)
                 : t(I18nKey.BUTTON$CONTINUE)}
             </BrandButton>
           )}
@@ -380,7 +358,7 @@ export function ManifestSetupDialog({
 }
 
 function formatFieldError(
-  error: ManifestFieldError,
+  error: SetupFieldError,
   t: (key: I18nKey, options?: Record<string, unknown>) => string,
 ): string {
   switch (error.code) {

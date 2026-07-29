@@ -2,10 +2,10 @@
  * The action bridge — the only channel through which a manifest can make this
  * host *do* something.
  *
- * A manifest is data from another repository, so it chooses among pre-approved
- * capabilities rather than describing a request of its own. The union of
- * actions is closed at the type level and admission rejects anything outside
- * it, which is what keeps the manifest data rather than code.
+ * A manifest is data from another repository, so it never describes a request.
+ * It chooses between the two outcomes this host offers, and it chooses by
+ * declaring a `mode`: a direct entry produces a create request the host derives,
+ * an assisted entry hands setup to a conversation.
  */
 
 import { useCallback } from "react";
@@ -16,44 +16,22 @@ import {
   setConversationState,
   setPendingTaskDraft,
 } from "#/utils/conversation-local-storage";
-import { buildRequestBody, interpolateText } from "./manifest-template";
-import type {
-  ExtensionManifest,
-  ManifestFormValues,
-  ManifestRequestBody,
-} from "./types";
+import { buildAssistedMessage } from "./automation-setup";
+import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
 
-export interface ManifestActionResult {
-  /** Values the manifest may reference through the `response` namespace. */
+export interface SetupActionResult {
+  /** The created resource, or the conversation that will finish setup. */
   response: Record<string, unknown>;
 }
 
-/**
- * Map form values into the request body the manifest declares.
- *
- * Returns null for a manifest that hands setup to a conversation instead of
- * sending a body. The result is also what preflight validates, so what is
- * checked is exactly what would be sent.
- */
-export function buildManifestPayload(
-  manifest: ExtensionManifest,
-  formValues: ManifestFormValues,
-): ManifestRequestBody | null {
-  if (manifest.submit.action !== "automation.create") return null;
-  return buildRequestBody(manifest.submit.payload, {
-    form: formValues,
-    manifest,
-  });
-}
-
-export function useManifestAction() {
+export function useSetupAction() {
   const createConversation = useCreateConversation();
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
   );
 
   const startConversation = useCallback(
-    async (message: string): Promise<ManifestActionResult> => {
+    async (message: string): Promise<SetupActionResult> => {
       const conversation = await createConversation.mutateAsync({});
 
       // Seed the message the same way the rest of the app does, so the
@@ -77,23 +55,15 @@ export function useManifestAction() {
 
   return useCallback(
     async (
-      manifest: ExtensionManifest,
-      formValues: ManifestFormValues,
-      payload: ManifestRequestBody | null,
-    ): Promise<ManifestActionResult> => {
-      const { submit } = manifest;
-
-      if (submit.action === "conversation.start") {
-        return startConversation(
-          interpolateText(submit.message, { form: formValues, manifest }),
-        );
+      entry: SetupEntry,
+      values: SetupFormValues,
+      /** Present for a direct entry, and absent for an assisted one. */
+      payload: SetupRequestBody | null,
+    ): Promise<SetupActionResult> => {
+      if (!payload) {
+        return startConversation(buildAssistedMessage(entry, values));
       }
-
-      const response = await AutomationService.createFromManifest(
-        submit.endpoint.path,
-        payload ??
-          buildRequestBody(submit.payload, { form: formValues, manifest }),
-      );
+      const response = await AutomationService.createAutomationDraft(payload);
       return { response };
     },
     [startConversation],

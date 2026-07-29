@@ -1,66 +1,67 @@
-import type { ExtensionManifest } from "#/manifests/types";
+import type { SetupBlock, SetupEntry } from "#/manifests/types";
 
 /**
- * A minimal manifest the host will admit. Deliberately not an automation: the
- * host is only allowed to be a generic renderer, so its tests are written
- * against a manifest that carries no automation vocabulary.
+ * A minimal catalog entry the host will admit.
  *
- * Tests override only the part they exercise.
+ * Tests override only the part they exercise. The three published entries live
+ * in `automation-setup.test.ts`, where the derived request bodies are pinned
+ * against the contract fixtures.
  */
-export function createManifest(
-  overrides: Partial<ExtensionManifest> = {},
-): ExtensionManifest {
+export function createSetupEntry(
+  overrides: Partial<SetupEntry> = {},
+): SetupEntry {
   return {
-    manifestVersion: "1.0",
-    id: "widget-setup",
-    name: "Widget setup",
-    category: "Demo",
-    description: "Configure a widget.",
-    setupMode: "direct",
-    routes: [{ path: "/ext/widget", page: "setup" }],
+    id: "widget-monitor",
+    name: "Widget monitor",
+    description: "Watch widgets and report on them.",
+    requires: {
+      integrations: { github: { message: "Used to read widgets." } },
+    },
+    setup: createSetup(),
+    ...overrides,
+  };
+}
+
+export function createSetup(overrides: Partial<SetupBlock> = {}): SetupBlock {
+  return {
+    version: "1.0",
+    mode: "direct",
     form: {
-      fields: [
-        {
-          name: "widgetName",
+      triggers: {
+        cron: {
+          schedule: {
+            type: "cron",
+            label: "Check frequency",
+            help: "How often to look.",
+            default: "*/15 * * * *",
+            required: true,
+          },
+        },
+      },
+      args: {
+        repository: {
+          type: "repo-picker",
+          label: "Repository",
+          help: "Which repository to watch.",
+          provider: "github",
+          required: true,
+        },
+        widgetName: {
           type: "text",
           label: "Widget name",
           help: "What to call it.",
           required: true,
         },
-      ],
+      },
     },
-    validation: {
-      onInvalid: { behavior: "blockSubmit", errorTarget: "field" },
-    },
-    review: {
-      title: "Review",
-      summary: [{ label: "Name", value: "{{form.widgetName}}" }],
-      confirmLabel: "Create",
-    },
-    submit: {
-      action: "automation.create",
-      endpoint: { method: "POST", path: "/v1/preset/prompt" },
-      payload: { name: "{{form.widgetName}}" },
-      onSuccess: { behavior: "navigate", to: "/widgets/{{response.id}}" },
-      onError: { behavior: "stayOnForm", errorTarget: "field" },
-    },
-    analytics: {
-      consent: "required",
-      stages: [
-        {
-          id: "widget_setup_opened",
-          on: "route.entered",
-          properties: { manifest_id: "{{manifest.id}}" },
-        },
-      ],
-    },
+    prompt: "Report on {{form.widgetName}} in {{form.repository}}.",
     ...overrides,
   };
 }
 
 /** Build a candidate that is invalid in one specific way. */
-export function createManifestWith(
+export function createSetupEntryWith(
   overrides: Record<string, unknown>,
 ): unknown {
-  return { ...createManifest(), ...overrides };
+  return { ...createSetupEntry(), ...overrides };
 }

@@ -1,73 +1,52 @@
 /**
- * Registry of admitted extension manifests.
+ * Registry of admitted setup manifests.
  *
- * Stage 1 of the setup flow: load manifests, decide which ones this host will
- * act on, and index the survivors by the route they mount at and by their id.
- * A manifest that fails admission is dropped entirely rather than rendered
- * partially, because everything downstream treats its content as instructions.
+ * Stage 1 of the setup flow: load the catalog, decide which entries this host
+ * will act on, and index the survivors by id. An entry that fails admission is
+ * dropped entirely rather than rendered partially, because everything
+ * downstream treats its content as instructions.
  */
 
-import { validateManifest } from "./manifest-validation";
-import type { ExtensionManifest } from "./types";
+import { hasSetupBlock, validateSetupEntry } from "./manifest-validation";
+import type { SetupEntry } from "./types";
 
-export interface ManifestRegistry {
-  /** Manifests this host has admitted, in source order. */
-  readonly manifests: readonly ExtensionManifest[];
-  findByRoutePath(pathname: string): ExtensionManifest | null;
-  findById(id: string): ExtensionManifest | null;
+export interface SetupRegistry {
+  /** Entries this host has admitted, in source order. */
+  readonly entries: readonly SetupEntry[];
+  findById(id: string): SetupEntry | null;
 }
 
-/** Trailing slashes are a URL detail, not a routing difference. */
-function normalizeRoutePath(pathname: string): string {
-  if (pathname.length > 1 && pathname.endsWith("/")) {
-    return pathname.slice(0, -1);
-  }
-  return pathname;
-}
-
-export function createManifestRegistry(
+export function createSetupRegistry(
   candidates: readonly unknown[],
-): ManifestRegistry {
-  const manifests: ExtensionManifest[] = [];
-  const byRoutePath = new Map<string, ExtensionManifest>();
-  const byId = new Map<string, ExtensionManifest>();
+): SetupRegistry {
+  const entries: SetupEntry[] = [];
+  const byId = new Map<string, SetupEntry>();
 
   candidates.forEach((candidate) => {
-    const { valid, errors } = validateManifest(candidate);
+    // A catalog entry without a setup block is a card, not a setup experience.
+    // That is the normal case, so it is skipped rather than reported.
+    if (!hasSetupBlock(candidate)) return;
+
+    const { valid, errors } = validateSetupEntry(candidate);
     if (!valid) {
-      console.warn("Rejected an extension manifest:", errors.join("; "));
+      console.warn("Rejected a setup manifest:", errors.join("; "));
       return;
     }
 
-    const manifest = candidate as ExtensionManifest;
-    if (byId.has(manifest.id)) {
+    const entry = candidate as SetupEntry;
+    if (byId.has(entry.id)) {
       console.warn(
-        `Rejected an extension manifest: id "${manifest.id}" is already registered`,
+        `Rejected a setup manifest: id "${entry.id}" is already registered`,
       );
       return;
     }
 
-    const conflictingRoute = manifest.routes.find((route) =>
-      byRoutePath.has(normalizeRoutePath(route.path)),
-    );
-    if (conflictingRoute) {
-      console.warn(
-        `Rejected extension manifest "${manifest.id}": route "${conflictingRoute.path}" is already registered`,
-      );
-      return;
-    }
-
-    manifests.push(manifest);
-    byId.set(manifest.id, manifest);
-    manifest.routes.forEach((route) => {
-      byRoutePath.set(normalizeRoutePath(route.path), manifest);
-    });
+    entries.push(entry);
+    byId.set(entry.id, entry);
   });
 
   return {
-    manifests,
-    findByRoutePath: (pathname) =>
-      byRoutePath.get(normalizeRoutePath(pathname)) ?? null,
+    entries,
     findById: (id) => byId.get(id) ?? null,
   };
 }

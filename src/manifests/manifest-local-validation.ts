@@ -1,99 +1,105 @@
 /**
- * Stage 5 — the host's own check of form input against the constraints a
- * manifest declares.
+ * The form model, and the host's own check of what the user typed into it.
  *
- * This is a convenience, not the authority: it is instant and needs no round
- * trip, so it catches empty required fields and obvious typos. Deployment-
- * specific questions ("is a one-minute schedule allowed here?") belong to
- * preflight, which is authoritative.
+ * Local validation is a convenience, not the authority: it is instant and needs
+ * no round trip, so it catches empty required fields and obvious typos.
+ * Deployment-specific questions ("is a one-minute schedule allowed here?")
+ * belong to preflight, which is authoritative.
  *
  * Errors are returned as codes rather than sentences so the host can render
  * them through its own translations; only manifest-authored copy is literal.
  */
 
-import { getByPath } from "./manifest-template";
 import type {
-  ExtensionManifest,
-  ManifestFieldOption,
-  ManifestFormField,
-  ManifestFormValues,
+  DeploymentCapabilities,
+  SetupBlock,
+  SetupFieldOption,
+  SetupFormField,
+  SetupFormFields,
+  SetupFormValues,
 } from "./types";
 
 /** Characters that would break out of an expression string literal. */
 const UNSAFE_EXPRESSION_LITERAL_PATTERN = /["'\\]/;
 
-export type ManifestFieldError =
+export type SetupFieldError =
   | { code: "required" }
   | { code: "minLength"; length: number }
   | { code: "maxLength"; length: number }
   | { code: "invalidOption" }
   | { code: "unsafeExpressionLiteral" };
 
-export type ManifestFieldErrors = Record<string, ManifestFieldError>;
+export type SetupFieldErrors = Record<string, SetupFieldError>;
 
 /** Field constraints supplied by the deployment rather than by the manifest. */
-export interface ManifestFieldOverride {
-  options?: ManifestFieldOption[];
+export interface SetupFieldOverride {
+  options?: SetupFieldOption[];
 }
 
-export type ManifestFieldOverrides = Record<string, ManifestFieldOverride>;
+export type SetupFieldOverrides = Record<string, SetupFieldOverride>;
 
-function toOptions(value: unknown): ManifestFieldOption[] | null {
-  if (!Array.isArray(value)) return null;
-  const options = value.filter(
-    (item): item is string => typeof item === "string" && item.length > 0,
-  );
-  return options.length > 0
-    ? options.map((option) => ({ value: option, label: option }))
-    : null;
+/**
+ * Every input the form declares, keyed by name, whichever half it is in.
+ *
+ * Trigger inputs come first so the user is asked when it runs before what it
+ * runs on, and so every derived view of the form keeps that order. Admission
+ * rejects a name declared in both halves, so the merge cannot lose a field.
+ */
+export function collectFields(setup: SetupBlock): SetupFormFields {
+  const triggers = Object.values(setup.form.triggers ?? {});
+  return Object.assign({}, ...triggers, setup.form.args) as SetupFormFields;
 }
 
 /**
  * Feed deployment values into form field constraints, so the form offers only
  * what the deployment accepts.
  *
- * Only `options` changes what the form renders. A `minIntervalSeconds` binding
- * is deliberately left to preflight: the deployment owns that limit and states
- * it in its own words, and a local approximation would pre-empt the
- * authoritative message with a worse one.
+ * A `timezone` field is the case that needs it: a manifest declares no options
+ * for one, because the accepted zones belong to the deployment. The cron
+ * interval floor is deliberately left to preflight — the deployment owns that
+ * limit and states it in its own words, and a local approximation would
+ * pre-empt the authoritative message with a worse one.
  */
 export function resolveFieldOverrides(
-  manifest: ExtensionManifest,
-  capabilities: Record<string, unknown> | null,
-): ManifestFieldOverrides {
-  const bindings = manifest.capabilities?.bindings;
-  if (!bindings || !capabilities) return {};
+  setup: SetupBlock,
+  capabilities: DeploymentCapabilities | null,
+): SetupFieldOverrides {
+  const timezones = capabilities?.triggers?.cron?.timezones;
+  if (!timezones?.length) return {};
 
-  return bindings.reduce<ManifestFieldOverrides>((overrides, binding) => {
-    if (binding.constraint !== "options") return overrides;
-    const options = toOptions(getByPath(capabilities, binding.from));
-    if (!options) return overrides;
-    return { ...overrides, [binding.field]: { options } };
-  }, {});
+  const options = timezones.map((zone) => ({ value: zone, label: zone }));
+  return Object.fromEntries(
+    Object.entries(collectFields(setup))
+      .filter(([, field]) => field.type === "timezone")
+      .map(([name]) => [name, { options }]),
+  );
 }
 
-/** The options a select field offers, after deployment bindings are applied. */
+/** The options a field offers, after deployment constraints are applied. */
 export function getFieldOptions(
-  field: ManifestFormField,
-  overrides: ManifestFieldOverrides = {},
-): ManifestFieldOption[] {
-  return overrides[field.name]?.options ?? field.options ?? [];
+  name: string,
+  field: SetupFormField,
+  overrides: SetupFieldOverrides = {},
+): SetupFieldOption[] {
+  return overrides[name]?.options ?? field.options ?? [];
 }
 
 /** Initial form state: every declared field, seeded with its declared default. */
-export function getInitialFormValues(
-  manifest: ExtensionManifest,
-): ManifestFormValues {
+export function getInitialFormValues(setup: SetupBlock): SetupFormValues {
   return Object.fromEntries(
-    manifest.form.fields.map((field) => [field.name, field.default ?? ""]),
+    Object.entries(collectFields(setup)).map(([name, field]) => [
+      name,
+      field.default ?? "",
+    ]),
   );
 }
 
 function validateField(
-  field: ManifestFormField,
+  name: string,
+  field: SetupFormField,
   rawValue: string | undefined,
-  overrides: ManifestFieldOverrides,
-): ManifestFieldError | null {
+  overrides: SetupFieldOverrides,
+): SetupFieldError | null {
   const value = (rawValue ?? "").trim();
 
   if (!value) {
@@ -114,14 +120,11 @@ function validateField(
     return { code: "unsafeExpressionLiteral" };
   }
 
-  if (field.type === "select") {
-    const options = getFieldOptions(field, overrides);
-    if (
-      options.length > 0 &&
-      !options.some((option) => option.value === value)
-    ) {
-      return { code: "invalidOption" };
-    }
+  // Any field offering a closed set of values, whether the manifest declared it
+  // or the deployment supplied it, must be answered from that set.
+  const options = getFieldOptions(name, field, overrides);
+  if (options.length > 0 && !options.some((option) => option.value === value)) {
+    return { code: "invalidOption" };
   }
 
   return null;
@@ -129,12 +132,15 @@ function validateField(
 
 /** Check every declared field. Returns only the fields that failed. */
 export function validateFormValues(
-  manifest: ExtensionManifest,
-  values: ManifestFormValues,
-  overrides: ManifestFieldOverrides = {},
-): ManifestFieldErrors {
-  return manifest.form.fields.reduce<ManifestFieldErrors>((errors, field) => {
-    const error = validateField(field, values[field.name], overrides);
-    return error ? { ...errors, [field.name]: error } : errors;
-  }, {});
+  setup: SetupBlock,
+  values: SetupFormValues,
+  overrides: SetupFieldOverrides = {},
+): SetupFieldErrors {
+  return Object.entries(collectFields(setup)).reduce<SetupFieldErrors>(
+    (errors, [name, field]) => {
+      const error = validateField(name, field, values[name], overrides);
+      return error ? { ...errors, [name]: error } : errors;
+    },
+    {},
+  );
 }

@@ -5,17 +5,19 @@ import { formControlMultilineFieldClassName } from "#/utils/form-control-classes
 import { cn } from "#/utils/utils";
 import type { GitRepository } from "#/types/git";
 import type {
-  ManifestFieldOption,
-  ManifestFormField as ManifestFormFieldDefinition,
+  SetupFieldOption,
+  SetupFormField as SetupFormFieldDefinition,
 } from "#/manifests/types";
 
-export interface ManifestFormFieldProps {
-  field: ManifestFormFieldDefinition;
+export interface SetupFormFieldProps {
+  /** The record key the field is declared under, and what `{{form.x}}` reads. */
+  name: string;
+  field: SetupFormFieldDefinition;
   value: string;
   /** Already-resolved copy: local checks and service errors look the same here. */
   error?: string;
   /** Declared options, or the ones the deployment supplied. */
-  options: ManifestFieldOption[];
+  options: SetupFieldOption[];
   /** The picked repository, kept so the picker can show what is selected. */
   repository: GitRepository | null;
   disabled: boolean;
@@ -31,7 +33,8 @@ export interface ManifestFormFieldProps {
  * manifest's business. Every user-visible string here comes from the manifest,
  * which is why none of them are translated by the host.
  */
-export function ManifestFormField({
+export function SetupFormField({
+  name,
   field,
   value,
   error,
@@ -41,8 +44,8 @@ export function ManifestFormField({
   onChange,
   onRepositoryChange,
   onBlur,
-}: ManifestFormFieldProps) {
-  const testId = `manifest-field-${field.name}`;
+}: SetupFormFieldProps) {
+  const testId = `setup-field-${name}`;
   const help = <p className="text-xs text-[var(--oh-muted)]">{field.help}</p>;
 
   if (field.type === "repo-picker") {
@@ -67,12 +70,18 @@ export function ManifestFormField({
     );
   }
 
-  if (field.type === "select") {
+  // A timezone field declares no options of its own: the accepted zones are the
+  // deployment's, so it renders as a list once they are known and as a plain
+  // input when they are not.
+  if (
+    field.type === "select" ||
+    (field.type === "timezone" && options.length > 0)
+  ) {
     return (
       <div className="flex w-full flex-col gap-2.5">
         <SettingsDropdownInput
           testId={testId}
-          name={field.name}
+          name={name}
           label={<FieldLabelText field={field} />}
           items={options.map((option) => ({
             key: option.value,
@@ -99,7 +108,7 @@ export function ManifestFormField({
         <FieldLabelText field={field} />
         <textarea
           data-testid={testId}
-          name={field.name}
+          name={name}
           rows={4}
           value={value}
           placeholder={field.placeholder}
@@ -118,13 +127,14 @@ export function ManifestFormField({
     );
   }
 
-  // `text` and `cron` are both single-line strings to the host; only the
-  // manifest and the service know what a cron expression means.
+  // `text`, `cron` and an unresolved `timezone` are all single-line strings to
+  // the host; only the manifest and the service know what a cron expression
+  // means.
   return (
     <div className="flex w-full flex-col gap-2.5">
       <SettingsInput
         testId={testId}
-        name={field.name}
+        name={name}
         type="text"
         label={field.label}
         value={value}
@@ -140,7 +150,7 @@ export function ManifestFormField({
   );
 }
 
-function FieldLabelText({ field }: { field: ManifestFormFieldDefinition }) {
+function FieldLabelText({ field }: { field: SetupFormFieldDefinition }) {
   return (
     <span className="flex items-center gap-2 text-sm">
       {field.label}
@@ -153,7 +163,7 @@ function FieldLabelText({ field }: { field: ManifestFormFieldDefinition }) {
   );
 }
 
-function FieldLabel({ field }: { field: ManifestFormFieldDefinition }) {
+function FieldLabel({ field }: { field: SetupFormFieldDefinition }) {
   return (
     <div className="flex items-center gap-2">
       <FieldLabelText field={field} />

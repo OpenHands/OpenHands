@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { validateManifest } from "#/manifests/manifest-validation";
-import { createManifest, createManifestWith } from "./manifest-test-data";
+import { validateSetupEntry } from "#/manifests/manifest-validation";
+import {
+  createSetup,
+  createSetupEntry,
+  createSetupEntryWith,
+} from "./manifest-test-data";
 
-describe("validateManifest", () => {
+describe("validateSetupEntry", () => {
   it("admits a well-formed manifest", () => {
     // Arrange
-    const manifest = createManifest();
+    const entry = createSetupEntry();
 
     // Act
-    const result = validateManifest(manifest);
+    const result = validateSetupEntry(entry);
 
     // Assert
     expect(result).toEqual({ valid: true, errors: [] });
@@ -18,44 +22,8 @@ describe("validateManifest", () => {
   // another repository. A manifest that trips any of them must not render.
   it.each([
     [
-      "a manifest version this host cannot interpret",
-      { manifestVersion: "2.0" },
-    ],
-    [
-      "an action outside the allowlist",
-      {
-        submit: {
-          action: "shell.exec",
-          endpoint: { method: "POST", path: "/v1/preset/prompt" },
-          payload: { name: "x" },
-          onSuccess: { behavior: "navigate", to: "/widgets/1" },
-          onError: { behavior: "stayOnForm", errorTarget: "field" },
-        },
-      },
-    ],
-    [
-      "a request path outside the service namespace",
-      {
-        submit: {
-          action: "automation.create",
-          endpoint: { method: "POST", path: "/internal/admin" },
-          payload: { name: "x" },
-          onSuccess: { behavior: "navigate", to: "/widgets/1" },
-          onError: { behavior: "stayOnForm", errorTarget: "field" },
-        },
-      },
-    ],
-    [
-      "a redirect that leaves the application",
-      {
-        submit: {
-          action: "automation.create",
-          endpoint: { method: "POST", path: "/v1/preset/prompt" },
-          payload: { name: "x" },
-          onSuccess: { behavior: "navigate", to: "https://example.com/steal" },
-          onError: { behavior: "stayOnForm", errorTarget: "field" },
-        },
-      },
+      "a setup version this host cannot interpret",
+      { setup: createSetup({ version: "2.0" as "1.0" }) },
     ],
     [
       "markup inside user-visible copy",
@@ -63,38 +31,117 @@ describe("validateManifest", () => {
     ],
     [
       "a placeholder namespace the host does not expose",
+      { setup: createSetup({ prompt: "Use {{secrets.githubToken}}." }) },
+    ],
+    [
+      "an assisted message on an entry that sends a request",
+      { setup: createSetup({ message: "Finish setup with the agent." }) },
+    ],
+    [
+      // The host reads one trigger kind to build the request, so a second one
+      // would be silently dropped rather than refused.
+      "more trigger kinds than the host can send",
       {
-        review: {
-          title: "Review",
-          summary: [{ label: "Token", value: "{{secrets.githubToken}}" }],
-          confirmLabel: "Create",
-        },
+        setup: createSetup({
+          form: {
+            triggers: {
+              cron: {
+                schedule: {
+                  type: "cron",
+                  label: "Frequency",
+                  help: "How often.",
+                  required: true,
+                },
+              },
+              event: {
+                on: {
+                  type: "select",
+                  label: "Respond to",
+                  help: "Which event.",
+                  required: true,
+                  options: [{ value: "push", label: "Push" }],
+                },
+              },
+            },
+            args: {
+              repository: {
+                type: "repo-picker",
+                label: "Repository",
+                help: "Which repository.",
+                provider: "github",
+                required: true,
+              },
+            },
+          },
+        }),
       },
     ],
     [
-      "a credential requirement carrying anything beyond its name",
+      // An event trigger's source is read off the repository field's provider.
+      "an event trigger with no repository field to take its source from",
       {
-        requires: {
-          integrations: [],
-          secrets: [
-            {
-              key: "API_TOKEN",
-              label: "API token",
-              help: "Needed to call the service.",
-              required: true,
-              value: "ghp_realtokenvalue",
+        setup: createSetup({
+          form: {
+            triggers: {
+              event: {
+                on: {
+                  type: "select",
+                  label: "Respond to",
+                  help: "Which event.",
+                  required: true,
+                  options: [{ value: "push", label: "Push" }],
+                },
+              },
             },
-          ],
-          onUnmet: { behavior: "block", message: "Provide a token." },
-        },
+            args: {
+              widgetName: {
+                type: "text",
+                label: "Widget name",
+                help: "What to call it.",
+                required: true,
+              },
+            },
+          },
+          filter: "icontains(body, '{{form.widgetName}}')",
+        }),
+      },
+    ],
+    [
+      // Both halves merge into one value map, so a repeat would shadow a field
+      // and misaddress every error reported against it.
+      "a field name declared in both halves of the form",
+      {
+        setup: createSetup({
+          form: {
+            triggers: {
+              cron: {
+                repository: {
+                  type: "text",
+                  label: "Repository",
+                  help: "Shadows the argument below.",
+                  required: true,
+                },
+              },
+            },
+            args: {
+              repository: {
+                type: "repo-picker",
+                label: "Repository",
+                help: "Which repository to watch.",
+                provider: "github",
+                required: true,
+              },
+            },
+          },
+        }),
       },
     ],
   ])("refuses %s", (_case, overrides) => {
     // Arrange
-    const candidate = createManifestWith(overrides);
+    const candidate = createSetupEntryWith(overrides);
 
     // Act
-    const result = validateManifest(candidate);
+    const result = validateSetupEntry(candidate);
 
     // Assert
     expect(result.valid).toBe(false);
@@ -102,10 +149,10 @@ describe("validateManifest", () => {
 
   it("reports every problem at once so an author sees the whole picture", () => {
     // Arrange
-    const candidate = createManifestWith({ name: "", category: "" });
+    const candidate = createSetupEntryWith({ name: "", description: "" });
 
     // Act
-    const { errors } = validateManifest(candidate);
+    const { errors } = validateSetupEntry(candidate);
 
     // Assert
     expect(errors).toHaveLength(2);

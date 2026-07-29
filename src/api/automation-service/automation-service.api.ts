@@ -13,9 +13,11 @@ import type {
   AutomationsResponse,
   AutomationRunsResponse,
 } from "#/types/automation";
+import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
 import type {
-  ManifestPreflightResponse,
-  ManifestRequestBody,
+  DeploymentCapabilities,
+  SetupRequestBody,
+  ValidateDraftResponse,
 } from "#/manifests/types";
 import type { Backend, ResolvedActiveBackend } from "../backend-registry/types";
 import {
@@ -484,19 +486,17 @@ class AutomationService {
   }
 
   /**
-   * Manifest-driven transport. The service-relative path comes from the
-   * manifest and is admitted only after it matches `/v1/…`; this host supplies
-   * the deployment base path, auth, and backend routing, and nothing else. No
-   * manifest-specific path is written here.
+   * Ask what this deployment supports, before a setup form renders.
+   *
+   * The setup endpoints answer a contract authored in `OpenHands/extensions`,
+   * so their bodies are camelCase where the rest of this service is snake_case.
    */
-  static async getCapabilities(
-    servicePath: string,
-  ): Promise<Record<string, unknown>> {
+  static async getCapabilities(): Promise<DeploymentCapabilities> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+    const path = `${AUTOMATION_BASE_PATH}/v1/capabilities`;
 
     if (active.kind === "cloud") {
-      return callCloudProxy<Record<string, unknown>>({
+      return callCloudProxy<DeploymentCapabilities>({
         backend: active,
         method: "GET",
         path,
@@ -505,20 +505,22 @@ class AutomationService {
     }
 
     const { data } =
-      await localAutomationAxios.get<Record<string, unknown>>(path);
+      await localAutomationAxios.get<DeploymentCapabilities>(path);
     return data;
   }
 
-  /** See {@link AutomationService.getCapabilities} for the path contract. */
+  /**
+   * Validate a draft without creating it. An invalid draft is a 200 carrying
+   * field-addressed errors; only a malformed envelope is a 4xx.
+   */
   static async validateDraft(
-    servicePath: string,
-    body: ManifestRequestBody,
-  ): Promise<ManifestPreflightResponse> {
+    body: SetupRequestBody,
+  ): Promise<ValidateDraftResponse> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+    const path = `${AUTOMATION_BASE_PATH}/v1/validate`;
 
     if (active.kind === "cloud") {
-      return callCloudProxy<ManifestPreflightResponse>({
+      return callCloudProxy<ValidateDraftResponse>({
         backend: active,
         method: "POST",
         path,
@@ -527,20 +529,24 @@ class AutomationService {
       });
     }
 
-    const { data } = await localAutomationAxios.post<ManifestPreflightResponse>(
+    const { data } = await localAutomationAxios.post<ValidateDraftResponse>(
       path,
       body,
     );
     return data;
   }
 
-  /** See {@link AutomationService.getCapabilities} for the path contract. */
-  static async createFromManifest(
-    servicePath: string,
-    body: ManifestRequestBody,
+  /**
+   * Create from a draft a setup form derived. Unlike {@link
+   * AutomationService.createAutomation}, which exists for import and has to
+   * park the record on a placeholder trigger, this sends the finished record in
+   * one request.
+   */
+  static async createAutomationDraft(
+    body: SetupRequestBody,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${servicePath}`;
+    const path = `${AUTOMATION_BASE_PATH}${AUTOMATION_CREATE_ENDPOINT}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({

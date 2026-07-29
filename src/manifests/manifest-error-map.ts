@@ -1,13 +1,14 @@
 /**
  * Translate service-reported errors back to the form field that produced them.
  *
- * The host validates and submits the *mapped payload*, so errors come back
+ * The host validates and submits the *derived payload*, so errors come back
  * addressed by payload path (`trigger.schedule`) rather than by form field
- * (`schedule`). A manifest's `errorMap` is the reverse lookup; the mapping is
- * lossy by nature, since one payload value can be built from several fields.
+ * (`schedule`). The reverse lookup is derived from the same builder that made
+ * the payload; the mapping is lossy by nature, since one payload value can be
+ * built from several fields.
  */
 
-import type { ManifestRequestBody, ManifestValidation } from "./types";
+import type { SetupRequestBody } from "./types";
 
 /** An error the service reported, addressed by payload path where it gave one. */
 export interface ManifestServiceError {
@@ -73,7 +74,7 @@ export function locToPayloadPath(
  */
 export function normalizeServiceErrors(
   body: unknown,
-  payload: ManifestRequestBody | null,
+  payload: SetupRequestBody | null,
 ): ManifestServiceError[] {
   if (!isRecord(body)) return [];
 
@@ -106,11 +107,10 @@ export function normalizeServiceErrors(
   return [];
 }
 
-/** Apply a manifest's `errorMap`, falling back to a form-level error. */
+/** Apply the derived payload-path map, falling back to a form-level error. */
 export function mapServiceErrors(
   errors: readonly ManifestServiceError[],
-  errorMap: ManifestValidation["onInvalid"]["errorMap"],
-  errorTarget: "field" | "form",
+  errorMap: Record<string, string[]>,
 ): MappedManifestErrors {
   if (errors.length === 0) return EMPTY_MAPPED_ERRORS;
 
@@ -118,13 +118,11 @@ export function mapServiceErrors(
   const formErrors: string[] = [];
 
   errors.forEach(({ path, message }) => {
-    const target =
-      errorTarget === "field" && path ? errorMap?.[path] : undefined;
-    if (!target) {
+    const fields = path ? errorMap[path] : undefined;
+    if (!fields?.length) {
       formErrors.push(message);
       return;
     }
-    const fields = Array.isArray(target) ? target : [target];
     fields.forEach((field) => {
       // Keep the first error reported against a field; later ones would
       // silently replace a message the user has not read yet.

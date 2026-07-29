@@ -11,45 +11,39 @@ import {
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 import { parseMcpConfig } from "#/utils/mcp-config";
 import type {
-  ExtensionManifest,
-  ManifestIntegrationRequirement,
-  ManifestSecretRequirement,
+  SetupEntry,
+  SetupIntegrationRequirement,
 } from "#/manifests/types";
 import { useSettings } from "./use-settings";
-import { useSearchSecrets } from "./use-get-secrets";
 
-export interface MissingManifestIntegration {
-  requirement: ManifestIntegrationRequirement;
+export interface MissingSetupIntegration {
+  id: string;
+  requirement: SetupIntegrationRequirement;
   /** The catalog entry, when the id resolves to one. */
   entry: MarketplaceEntry | null;
 }
 
-export interface ManifestPrerequisitesResult {
-  /** Unconnected integrations the manifest declares as blocking. */
-  blockingIntegrations: MissingManifestIntegration[];
+export interface SetupPrerequisitesResult {
+  /** Unconnected integrations the manifest declares as required. */
+  blockingIntegrations: MissingSetupIntegration[];
   /** Unconnected integrations the manifest is willing to proceed without. */
-  warningIntegrations: MissingManifestIntegration[];
-  /** Required credentials the deployment does not yet hold. */
-  missingSecrets: ManifestSecretRequirement[];
+  warningIntegrations: MissingSetupIntegration[];
   isBlocked: boolean;
   isLoading: boolean;
 }
 
 /**
- * Stages 3 and 4 — which accounts are connected and which credentials exist.
+ * Stage 3 — which of the accounts this manifest needs are already connected.
  *
- * Credentials are observed by *name only*. The host learns whether a credential
- * is present; it never reads, collects, or forwards its value, so a manifest
- * naming a secret can never become a route by which the host handles one.
+ * A requirement is blocking unless it opts out with `required: false`, which is
+ * the manifest's way of saying the integration can be connected later, during
+ * setup itself.
  */
-export function useManifestPrerequisites(
-  manifest: ExtensionManifest,
-): ManifestPrerequisitesResult {
-  const requires = manifest.requires;
-  const { data: settings, isLoading: isLoadingSettings } = useSettings();
-  const { data: secrets, isLoading: isLoadingSecrets } = useSearchSecrets({
-    enabled: (requires?.secrets.length ?? 0) > 0,
-  });
+export function useSetupPrerequisites(
+  entry: SetupEntry,
+): SetupPrerequisitesResult {
+  const integrations = entry.requires.integrations;
+  const { data: settings, isLoading } = useSettings();
 
   const installedServers = useMemo(
     () =>
@@ -57,38 +51,32 @@ export function useManifestPrerequisites(
     [settings?.agent_settings?.mcp_config],
   );
 
-  const missingIntegrations = useMemo<MissingManifestIntegration[]>(() => {
+  const missingIntegrations = useMemo<MissingSetupIntegration[]>(() => {
     const catalog = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
-    return (requires?.integrations ?? [])
-      .map((requirement) => ({
+    return Object.entries(integrations)
+      .map(([id, requirement]) => ({
+        id,
         requirement,
-        entry: getMarketplaceEntryById(requirement.id, catalog) ?? null,
+        entry: getMarketplaceEntryById(id, catalog) ?? null,
       }))
       .filter(
-        ({ entry }) =>
-          !entry || !findInstalledEntryMatch(entry, installedServers),
+        ({ entry: catalogEntry }) =>
+          !catalogEntry ||
+          !findInstalledEntryMatch(catalogEntry, installedServers),
       );
-  }, [requires?.integrations, installedServers]);
-
-  const missingSecrets = useMemo(() => {
-    const present = new Set((secrets ?? []).map((secret) => secret.name));
-    return (requires?.secrets ?? []).filter(
-      (secret) => secret.required && !present.has(secret.key),
-    );
-  }, [requires?.secrets, secrets]);
+  }, [integrations, installedServers]);
 
   const blockingIntegrations = missingIntegrations.filter(
-    ({ requirement }) => requirement.enforcement === "block",
+    ({ requirement }) => requirement.required !== false,
   );
   const warningIntegrations = missingIntegrations.filter(
-    ({ requirement }) => requirement.enforcement === "warn",
+    ({ requirement }) => requirement.required === false,
   );
 
   return {
     blockingIntegrations,
     warningIntegrations,
-    missingSecrets,
-    isBlocked: blockingIntegrations.length > 0 || missingSecrets.length > 0,
-    isLoading: isLoadingSettings || isLoadingSecrets,
+    isBlocked: blockingIntegrations.length > 0,
+    isLoading,
   };
 }

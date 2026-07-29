@@ -4,7 +4,7 @@ import {
   normalizeServiceErrors,
 } from "#/manifests/manifest-error-map";
 
-/** The body the manifest's mapping produced, as the service received it. */
+/** The body the host derived, as the service received it. */
 const PAYLOAD = {
   name: "PR Reviewer - OpenHands/agent-server-gui",
   prompt: "Review pull requests labeled 'openhands-review'.",
@@ -12,9 +12,10 @@ const PAYLOAD = {
   trigger: { type: "cron", schedule: "0 0 31 2 *", timezone: "UTC" },
 };
 
+/** As `deriveErrorMap` produces it: every path maps to the fields that built it. */
 const ERROR_MAP = {
-  "repos[0].ref": "baseRef",
-  "trigger.schedule": "schedule",
+  "repos[0].ref": ["ref"],
+  "trigger.schedule": ["schedule"],
   prompt: ["triggerLabel", "reviewTone"],
 };
 
@@ -79,12 +80,11 @@ describe("normalizeServiceErrors", () => {
 });
 
 describe("mapServiceErrors", () => {
-  it("highlights the field the manifest says produced the value", () => {
+  it("highlights the field that produced the rejected value", () => {
     // Act
     const { fieldErrors } = mapServiceErrors(
       [{ path: "trigger.schedule", message: "Too frequent." }],
       ERROR_MAP,
-      "field",
     );
 
     // Assert
@@ -96,7 +96,6 @@ describe("mapServiceErrors", () => {
     const { fieldErrors } = mapServiceErrors(
       [{ path: "prompt", message: "Prompt is too long." }],
       ERROR_MAP,
-      "field",
     );
 
     // Assert
@@ -111,7 +110,6 @@ describe("mapServiceErrors", () => {
     const { fieldErrors, formErrors } = mapServiceErrors(
       [{ path: "tarball_path", message: "Upload failed." }],
       ERROR_MAP,
-      "field",
     );
 
     // Assert
@@ -119,17 +117,5 @@ describe("mapServiceErrors", () => {
       fieldErrors: {},
       formErrors: ["Upload failed."],
     });
-  });
-
-  it("keeps errors on the form when the manifest asks for form-level reporting", () => {
-    // Act
-    const { formErrors } = mapServiceErrors(
-      [{ path: "trigger.schedule", message: "Too frequent." }],
-      ERROR_MAP,
-      "form",
-    );
-
-    // Assert
-    expect(formErrors).toEqual(["Too frequent."]);
   });
 });
