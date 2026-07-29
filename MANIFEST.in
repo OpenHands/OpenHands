@@ -1,5 +1,0 @@
-# Exclude all Python bytecode files
-global-exclude *.pyc
-
-# Exclude Python cache directories
-global-exclude __pycache__

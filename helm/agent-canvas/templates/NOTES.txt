@@ -1,0 +1,55 @@
+agent-canvas has been installed as release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+1. Wait for the StatefulSet pod to be ready:
+   kubectl -n {{ .Release.Namespace }} rollout status statefulset/{{ include "agent-canvas.fullname" . }}
+
+2. Access the UI:
+{{- if .Values.ingress.enabled }}
+   {{- range .Values.ingress.hosts }}
+   {{- $scheme := "http" -}}
+   {{- range $.Values.ingress.tls -}}
+     {{- if has $.host .hosts -}}
+       {{- $scheme = "https" -}}
+     {{- end -}}
+   {{- end }}
+   {{- range .paths }}
+   {{ $scheme }}://{{ $.host }}{{ .path }}
+   {{- end }}
+   {{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+   export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "agent-canvas.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+   export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+   echo "http://$NODE_IP:$NODE_PORT"
+{{- else if contains "LoadBalancer" .Values.service.type }}
+   Waiting for the LoadBalancer to be provisioned...
+   kubectl -n {{ .Release.Namespace }} get svc -w {{ include "agent-canvas.fullname" . }}
+{{- else }}
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "agent-canvas.fullname" . }} 8000:{{ .Values.service.port }}
+   # Then open http://localhost:8000
+{{- end }}
+
+3. Retrieve the auto-generated session API key (needed for direct API calls):
+   kubectl -n {{ .Release.Namespace }} exec {{ include "agent-canvas.fullname" . }}-0 -- \
+     cat {{ .Values.persistence.mountPath }}/session-api-key.txt
+
+{{- if .Values.rbac.enabled }}
+
+4. RBAC is enabled for this release. The agent has been granted:
+   {{- if .Values.rbac.namespaces }}
+   - Admin access (built-in `admin` ClusterRole) in namespaces:
+     {{- range .Values.rbac.namespaces }}
+     * {{ . }}
+     {{- end }}
+   {{- end }}
+   {{- if .Values.rbac.clusterAdmin }}
+   - CLUSTER-ADMIN access to the entire cluster (via `cluster-admin`
+     ClusterRoleBinding). This is a very broad privilege — audit
+     access accordingly.
+   {{- end }}
+{{- else }}
+
+4. RBAC is disabled — the agent has no in-cluster permissions beyond
+   what the default ServiceAccount can do. Set `rbac.enabled=true` and
+   populate `rbac.namespaces` (and optionally `rbac.clusterAdmin=true`)
+   to grant it cluster access.
+{{- end }}

@@ -1,0 +1,490 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "rel-*"
+      - "release/**"
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to run live QA against when running manually.
+        required: true
+
+concurrency:
+  # Push runs get a per-COMMIT group and never cancel: the "Release Tag" ruleset
+  # requires `test-and-build (ubuntu)` to be green on the exact commit release-please
+  # tags (the release-PR merge commit), so a later push to main must not cancel an
+  # earlier commit's checks. PR/dispatch runs keep cheap cancel-on-update.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-test-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+      - name: Build test matrix
+        id: matrix
+        run: |
+          echo 'matrix={"include":[{"name":"ubuntu","os":"ubuntu-24.04","full_checks":true},{"name":"windows","os":"windows-latest","full_checks":false}]}' >> "$GITHUB_OUTPUT"
+
+  test-and-build:
+    needs: prepare-test-matrix
+    name: test-and-build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare-test-matrix.outputs.matrix) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v7
+        with:
+          # Pin to 24.15.x — Node 24.16.0 has a zip-extraction regression
+          # (nodejs/node#63487) that hangs `playwright install` for Playwright
+          # < 1.60.0. Remove this pin after upgrading to Playwright >= 1.60.0.
+          node-version: "24.15"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        if: matrix.full_checks
+        run: npm run lint
+
+      - name: Test
+        if: matrix.full_checks
+        run: npm test
+
+      - name: Build app
+        run: npm run build
+
+      - name: Build library
+        if: matrix.full_checks
+        run: npm run build:lib
+
+      - name: Verify package contents
+        if: matrix.full_checks
+        run: npm pack --dry-run
+
+  live-e2e:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'live-e2e'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: pr-artifacts-live-e2e-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      LIVE_E2E_LLM_BASE_URL: ${{ vars.LIVE_E2E_LLM_BASE_URL || 'https://llm-proxy.app.all-hands.dev' }}
+      LIVE_E2E_LLM_MODEL: ${{ vars.LIVE_E2E_LLM_MODEL || 'openhands/claude-haiku-4-5-20251001' }}
+      LIVE_E2E_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+      LIVE_E2E_REPORT_PATH: live-e2e-report.md
+      LIVE_E2E_RECORD_VIDEO: "on"
+      LIVE_E2E_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      LIVE_E2E_PR_ARTIFACT_KEEP_RUNS: 3
+
+    steps:
+      - name: Resolve live E2E PR context
+        id: pr_context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$LIVE_E2E_PR_NUMBER" ]; then
+            echo "::error::Live E2E QA must run against a PR. Provide workflow_dispatch.pr_number or add the live-e2e label to a PR."
+            exit 1
+          fi
+          case "$LIVE_E2E_PR_NUMBER" in
+            *[!0-9]*)
+              echo "::error::Invalid PR number: $LIVE_E2E_PR_NUMBER"
+              exit 1
+              ;;
+          esac
+
+          pr_api="repos/$GITHUB_REPOSITORY/pulls/$LIVE_E2E_PR_NUMBER"
+          head_repo="$(gh api "$pr_api" --jq '.head.repo.full_name')"
+          head_ref="$(gh api "$pr_api" --jq '.head.ref')"
+          head_sha="$(gh api "$pr_api" --jq '.head.sha')"
+          base_repo="$(gh api "$pr_api" --jq '.base.repo.full_name')"
+
+          if [ -z "$head_repo" ] || [ -z "$head_ref" ] || [ -z "$head_sha" ] || [ -z "$base_repo" ]; then
+            echo "::error::Failed to fetch complete PR data from GitHub API."
+            exit 1
+          fi
+
+          echo "has_pr=true" >> "$GITHUB_OUTPUT"
+          echo "head_repo=$head_repo" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          if [ "$head_repo" = "$base_repo" ]; then
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip live E2E for fork PRs
+        if: steps.pr_context.outputs.is_fork == 'true'
+        run: echo "::notice::Skipping live E2E for fork PRs so secrets are never exposed to untrusted code."
+
+      - name: Check live E2E credential
+        id: live_credential
+        if: steps.pr_context.outputs.is_fork != 'true'
+        env:
+          LIVE_E2E_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          if [ -n "$LIVE_E2E_LLM_API_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out PR head
+        if: steps.pr_context.outputs.is_fork != 'true'
+        env:
+          PR_HEAD_REPO: ${{ steps.pr_context.outputs.head_repo }}
+          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote remove pr-head >/dev/null 2>&1 || true
+          git remote add pr-head "https://github.com/$PR_HEAD_REPO.git"
+          git fetch pr-head "$PR_HEAD_SHA"
+          git checkout --detach FETCH_HEAD
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$PR_HEAD_SHA" ]; then
+            echo "::error::SHA mismatch: expected $PR_HEAD_SHA, got $actual_sha"
+            exit 1
+          fi
+
+      - name: Detect PR artifact-only commit
+        id: latest_commit
+        if: steps.pr_context.outputs.is_fork != 'true'
+        run: |
+          set -euo pipefail
+          changed_files="$(git diff-tree --no-commit-id --name-only -r --root HEAD)"
+
+          artifact_only=false
+          if [ -n "$changed_files" ]; then
+            artifact_only=true
+            while IFS= read -r changed_file; do
+              [ -n "$changed_file" ] || continue
+              case "$changed_file" in
+                .pr/*) ;;
+                *) artifact_only=false ;;
+              esac
+            done < <(printf '%s\n' "$changed_files")
+          fi
+
+          echo "pr_artifact_only=$artifact_only" >> "$GITHUB_OUTPUT"
+          if [ "$artifact_only" = "true" ]; then
+            echo "::notice::Skipping live E2E because the latest commit only changes .pr artifacts."
+          fi
+
+      - name: Set up Node.js
+        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        uses: actions/setup-node@v7
+        with:
+          # Pin to 24.15.x — Node 24.16.0 has a zip-extraction regression
+          # (nodejs/node#63487) that hangs `playwright install` for Playwright
+          # < 1.60.0. Remove this pin after upgrading to Playwright >= 1.60.0.
+          node-version: "24.15"
+          cache: npm
+
+      - name: Create live E2E PR comment
+        if: env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node tests/e2e/live/scripts/render-live-e2e-report.mjs \
+            --status running \
+            --model "$LIVE_E2E_LLM_MODEL" \
+            --workflow-url "$LIVE_E2E_WORKFLOW_URL" \
+            --commit "${{ steps.pr_context.outputs.head_sha }}" \
+            --timestamp "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+            --output "$LIVE_E2E_REPORT_PATH"
+          node tests/e2e/live/scripts/upsert-pr-comment.mjs \
+            --issue-number "$LIVE_E2E_PR_NUMBER" \
+            --body-file "$LIVE_E2E_REPORT_PATH"
+
+      - name: Install dependencies
+        if: steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: npm ci
+
+      - name: Install uv
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Get Playwright version
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        id: pw_version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        id: pw_cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true' && steps.pw_cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+
+      - name: Install Playwright system deps
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run live Agent Server E2E
+        id: live_test
+        if: steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        env:
+          LIVE_E2E_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          set +e
+          npm run test:e2e:live
+          exit_code=$?
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Skip live Agent Server E2E
+        if: steps.live_credential.outputs.has_key != 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: echo "Skipping live Agent Server E2E because LLM_API_KEY is not configured."
+
+      - name: Extract live E2E media
+        id: live_media
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: |
+          node tests/e2e/live/scripts/extract-live-e2e-media.mjs \
+            --results "test-results-live/results.json" \
+            --output-dir "test-results-live/media"
+
+      - name: Create live E2E video preview
+        id: live_video_preview
+        if: always() && steps.live_media.outputs.video_path != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        continue-on-error: true
+        env:
+          VIDEO_PATH: ${{ steps.live_media.outputs.video_path }}
+        run: |
+          video_path="$VIDEO_PATH"
+          if [ ! -f "$video_path" ]; then
+            echo "::warning::Live E2E video file was not found, skipping GIF preview generation."
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -y \
+            -i "$video_path" \
+            -vf "fps=4,scale=960:-1:flags=lanczos" \
+            -loop 0 \
+            test-results-live/media/live-agent-recording.gif
+          echo "video_preview_path=test-results-live/media/live-agent-recording.gif" >> "$GITHUB_OUTPUT"
+
+      - name: Publish live E2E media
+        id: publish_live_media
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        env:
+          MEDIA_KEEP_RUNS: ${{ env.LIVE_E2E_PR_ARTIFACT_KEEP_RUNS }}
+          MEDIA_RUN_DIR: ${{ github.run_id }}
+          PR_ARTIFACT_PUSH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+          PR_HEAD_IS_FORK: ${{ steps.pr_context.outputs.is_fork }}
+          PR_HEAD_REF: ${{ steps.pr_context.outputs.head_ref }}
+          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+          SCREENSHOT_PATH: ${{ steps.live_media.outputs.screenshot_path || '' }}
+          VIDEO_PATH: ${{ steps.live_media.outputs.video_path || '' }}
+          VIDEO_PREVIEW_PATH: ${{ steps.live_video_preview.outputs.video_preview_path || '' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SCREENSHOT_PATH" ] && [ -z "$VIDEO_PREVIEW_PATH" ] && [ -z "$VIDEO_PATH" ]; then
+            echo "No live E2E media was produced."
+            exit 0
+          fi
+
+          if [ "$PR_HEAD_IS_FORK" = "true" ]; then
+            echo "::notice::Skipping .pr media publishing for fork PRs."
+            exit 0
+          fi
+
+          media_dir=".pr/live-e2e/$MEDIA_RUN_DIR"
+          mkdir -p "$media_dir"
+          {
+            echo "# PR Artifacts"
+            echo
+            echo "This directory contains generated PR-only QA artifacts. The PR Artifacts workflow removes it after approval so these files do not enter the final squash merge."
+          } > .pr/README.md
+
+          if [ -n "$SCREENSHOT_PATH" ]; then
+            cp "$SCREENSHOT_PATH" "$media_dir/live-agent-response.png"
+          fi
+          if [ -n "$VIDEO_PREVIEW_PATH" ]; then
+            cp "$VIDEO_PREVIEW_PATH" "$media_dir/live-agent-recording.gif"
+          fi
+          if [ -n "$VIDEO_PATH" ]; then
+            cp "$VIDEO_PATH" "$media_dir/live-agent-recording.webm"
+          fi
+
+          if [ -d ".pr/live-e2e" ]; then
+            find ".pr/live-e2e" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+              sort -nr |
+              tail -n "+$((MEDIA_KEEP_RUNS + 1))" |
+              while IFS= read -r stale_run; do
+                [ -n "$stale_run" ] || continue
+                if [[ ! "$stale_run" =~ ^[0-9]+$ ]]; then
+                  echo "::warning::Skipping invalid live E2E media directory name: $stale_run"
+                  continue
+                fi
+                rm -rf ".pr/live-e2e/$stale_run"
+              done
+          fi
+
+          git config user.name "allhands-bot"
+          git config user.email "allhands-bot@users.noreply.github.com"
+          git config credential.helper '!f() { echo "username=x-access-token"; echo "password=$PR_ARTIFACT_PUSH_TOKEN"; }; f'
+          git remote remove pr-artifacts >/dev/null 2>&1 || true
+          git remote add pr-artifacts "https://github.com/${GITHUB_REPOSITORY}.git"
+          git add .pr
+          if git diff --cached --quiet; then
+            echo "No .pr media changes to publish."
+            exit 0
+          fi
+
+          git commit -m "chore: Update PR QA artifacts"
+          push_succeeded=false
+          for attempt in 1 2 3; do
+            if git push pr-artifacts "HEAD:refs/heads/$PR_HEAD_REF"; then
+              push_succeeded=true
+              break
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "::notice::Failed to push .pr media, rebasing and retrying."
+              git fetch pr-artifacts "$PR_HEAD_REF"
+              if ! git rebase FETCH_HEAD; then
+                echo "::error::Failed to rebase .pr media commit. Manual resolution required."
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$PR_HEAD_SHA" HEAD; then
+                echo "::error::Rebased .pr media commit no longer descends from the tested PR head $PR_HEAD_SHA."
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+          if [ "$push_succeeded" != "true" ]; then
+            echo "::error::Failed to push .pr media after retries."
+            exit 1
+          fi
+
+          media_commit="$(git rev-parse HEAD)"
+          media_url() {
+            printf 'https://raw.githubusercontent.com/%s/%s/%s/%s\n' "$GITHUB_REPOSITORY" "$media_commit" "$media_dir" "$1"
+          }
+
+          if [ -f "$media_dir/live-agent-response.png" ]; then
+            echo "screenshot_url=$(media_url "live-agent-response.png")" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f "$media_dir/live-agent-recording.gif" ]; then
+            echo "video_preview_url=$(media_url "live-agent-recording.gif")" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f "$media_dir/live-agent-recording.webm" ]; then
+            echo "video_url=$(media_url "live-agent-recording.webm")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload live E2E artifacts
+        id: upload_live_artifacts
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-agent-server-e2e
+          if-no-files-found: ignore
+          path: |
+            playwright-report-live/
+            test-results-live/
+
+      - name: Determine live E2E result
+        id: live_status
+        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: |
+          if [ "${{ steps.live_credential.outputs.has_key }}" != "true" ]; then
+            echo "status=skipped" >> "$GITHUB_OUTPUT"
+            echo "reason=LLM_API_KEY is not configured." >> "$GITHUB_OUTPUT"
+            echo "exit_code=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          exit_code="${{ steps.live_test.outputs.exit_code }}"
+          if [ -z "$exit_code" ]; then
+            exit_code=1
+          fi
+
+          if [ "$exit_code" = "0" ]; then
+            echo "status=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+          fi
+          echo "reason=" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Render live E2E report
+        if: always() && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        env:
+          LIVE_E2E_ARTIFACT_URL: ${{ steps.upload_live_artifacts.outputs.artifact-url || '' }}
+          LIVE_E2E_SCREENSHOT_URL: ${{ steps.publish_live_media.outputs.screenshot_url || '' }}
+          LIVE_E2E_STATUS: ${{ steps.live_status.outputs.status }}
+          LIVE_E2E_REASON: ${{ steps.live_status.outputs.reason }}
+          LIVE_E2E_VIDEO_PREVIEW_URL: ${{ steps.publish_live_media.outputs.video_preview_url || '' }}
+          LIVE_E2E_VIDEO_URL: ${{ steps.publish_live_media.outputs.video_url || '' }}
+        run: |
+          node tests/e2e/live/scripts/render-live-e2e-report.mjs \
+            --status "$LIVE_E2E_STATUS" \
+            --reason "$LIVE_E2E_REASON" \
+            --results "test-results-live/results.json" \
+            --model "$LIVE_E2E_LLM_MODEL" \
+            --workflow-url "$LIVE_E2E_WORKFLOW_URL" \
+            --artifact-url "$LIVE_E2E_ARTIFACT_URL" \
+            --screenshot-url "$LIVE_E2E_SCREENSHOT_URL" \
+            --video-preview-url "$LIVE_E2E_VIDEO_PREVIEW_URL" \
+            --video-url "$LIVE_E2E_VIDEO_URL" \
+            --commit "${{ steps.pr_context.outputs.head_sha }}" \
+            --timestamp "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" \
+            --output "$LIVE_E2E_REPORT_PATH"
+          cat "$LIVE_E2E_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update live E2E PR comment
+        if: always() && env.LIVE_E2E_PR_NUMBER != '' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node tests/e2e/live/scripts/upsert-pr-comment.mjs \
+            --issue-number "$LIVE_E2E_PR_NUMBER" \
+            --body-file "$LIVE_E2E_REPORT_PATH"
+
+      - name: Fail live E2E job when tests fail
+        if: always() && steps.live_credential.outputs.has_key == 'true' && steps.pr_context.outputs.is_fork != 'true' && steps.latest_commit.outputs.pr_artifact_only != 'true'
+        run: exit "${{ steps.live_status.outputs.exit_code }}"

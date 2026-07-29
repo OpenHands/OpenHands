@@ -1,6 +1,8 @@
 <a name="readme-top"></a>
+
 <div align="center">
   <img src="https://assets.openhands.dev/logo-whitebackground.png" alt="OpenHands logo" width="340">
+  <h1 align="center" style="border-bottom: none">Agent Canvas</h1>
   <p align="center">
     <strong>The self-hosted developer control center for coding agents and automations.</strong>
   </p>
@@ -17,8 +19,8 @@
 </div>
 <div align="center">
   <a href="#quickstart">Quickstart</a> |
-  <a href="https://docs.openhands.dev/overview/introduction">Docs</a> |
-  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm">Self-Hosting</a> |
+  <a href="./docs/README.md">Docs</a> |
+  <a href="./docs/SELF_HOSTING.md">Self-Hosting</a> |
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents">ACP Agents</a> |
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations">Automations</a> |
   <a href="https://go.openhands.dev/slack">Slack</a>
@@ -34,24 +36,16 @@ It runs locally on your machine by default, but can connect to multiple “agent
 
 Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use any third-party agent like Claude Code and Codex.
 
-|    |    |
-|---|---|
-| [**Self-host your way**](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm) | Run agents locally, in Docker, on VMs, or anywhere you can run an agent server backend |
-| [**Switch between different backends**](https://docs.openhands.dev/openhands/usage/agent-canvas/backends) | Switch between local, remote, and cloud agents without losing focus |
-| [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events  |
-| [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows |
-| [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles) | Use with any LLM |
-| [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents) | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP). |
-
+|                                                                                                                      |                                                                                                                                          |
+| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Self-host your way**](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm)                   | Run agents locally, in Docker, on VMs, or anywhere you can run an agent server backend                                                   |
+| [**Switch between different backends**](https://docs.openhands.dev/openhands/usage/agent-canvas/backends)            | Switch between local, remote, and cloud agents without losing focus                                                                      |
+| [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations)               | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events |
+| [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows                            |
+| [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles)            | Use with any LLM                                                                                                                         |
+| [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents)                         | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP).                                           |
 
 If you have questions or feedback, please open a GitHub issue or join the [#proj-agent-canvas channel in Slack](https://openhands.dev/joinslack).
-
-> [!NOTE]
-> The code in this repo is moving! See [Agent Canvas transition FAQ](https://github.com/OpenHands/OpenHands/issues/14841)
->
-> The source code for OpenHands Agent and Agent Server lives in [OpenHands/software-agent-sdk](https://github.com/OpenHands/software-agent-sdk).
->
-> The source code for Agent Canvas lives in [OpenHands/agent-canvas](https://github.com/OpenHands/agent-canvas).
 
 ## Quickstart
 
@@ -60,7 +54,7 @@ or on a server in the cloud.
 
 The most powerful way to run OpenHands is on a server in the cloud. This allows your agents to continue running
 even when your laptop is shut, and makes it easier to trigger your agents through third-party services
-like Slack, GitHub, and Datadog. See the [self-hosting guide](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm) for details, especially with respect to security hardening.
+like Slack, GitHub, and Datadog. See [SELF_HOSTING.md](docs/SELF_HOSTING.md) for details, especially with respect to security hardening.
 
 Notably, you can run the backend in _multiple different environments_, and switch between
 them from the same Agent Canvas frontend. E.g. you can share an Agent Server with your team for agents doing
@@ -102,10 +96,10 @@ docker run -it --rm \
   -p 8000:8000 \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1
+  ghcr.io/openhands/agent-canvas:1.6.1 # x-release-please-version
 ```
 
-**Windows (PowerShell / Windows Terminal):** See [README.windows.md](https://github.com/OpenHands/agent-canvas/blob/main/README.windows.md) for the equivalent commands.
+**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
@@ -125,7 +119,7 @@ npm run dev
 
 ---
 
-Access the UI at [http://localhost:8000](http://localhost:8000). You can add additional backends directly from the UI.
+Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
 
 # Architecture
 
@@ -144,7 +138,7 @@ The Agent Server is often paired with an [Automation Server](https://github.com/
 
 ## More documentation
 
-- [Documentation index](https://docs.openhands.dev/overview/introduction)
-- [Architecture overview](#architecture)
-- [Development guide](./Development.md)
-- [Self-hosting guide](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm)
+- [Documentation index](./docs/README.md)
+- [Architecture overview](./docs/architecture.md)
+- [Development guide](./docs/DEVELOPMENT.md)
+- [Self-hosting guide](./docs/SELF_HOSTING.md)

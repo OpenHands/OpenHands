@@ -1,0 +1,32 @@
+---
+name: PR Description Check
+
+# Use pull_request_target so fork PR descriptions can be checked, but only run
+# trusted validation code from the base branch checkout below.
+
+on:
+    pull_request_target:
+        types: [opened, edited, reopened, ready_for_review]
+
+permissions:
+    contents: read
+    pull-requests: read
+
+jobs:
+    validate-pr-description:
+        name: Validate PR description
+        # Draft PRs may still have incomplete descriptions; validate when review starts.
+        # Bots (dependabot, release-please) write their own bodies and can't follow
+        # the HUMAN/AGENT template, so exempt them rather than failing every such PR.
+        if: >-
+            github.event.pull_request.draft == false
+            && github.event.pull_request.user.type != 'Bot'
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout trusted workflow scripts
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ github.event.pull_request.base.sha }}
+
+            - name: Validate HUMAN note and PR template
+              run: python .github/scripts/check_pr_description.py

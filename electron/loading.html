@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Canvas</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Agent Canvas design tokens. The splash renders before the frontend is
+       served, so it cannot import the app's CSS — these values mirror the
+       static baseline in src/tailwind.css / src/index.css. Keep in sync. */
+    :root {
+      --oh-background: #0b0e14; /* cool-grey-950 */
+      --oh-foreground: #eef2f7; /* cool-grey-100 */
+      --oh-muted: #a3b0c4; /* cool-grey-400 */
+      --oh-text-dim: #7e8a9e; /* cool-grey-500 */
+      --oh-text-subtle: #626d82; /* cool-grey-600 */
+      --oh-border: #4b5468; /* cool-grey-700 */
+      --oh-border-subtle: #383f50; /* cool-grey-800 */
+      --oh-surface-deep: #05070a; /* cool-grey-975 */
+      --oh-color-danger: #e76a5e;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--oh-background);
+      font-family:
+        -apple-system, "SF Pro", BlinkMacSystemFont, "Segoe UI", "Roboto",
+        "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+        "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      color: var(--oh-foreground);
+      user-select: none;
+      -webkit-app-region: drag;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      /* Must equal the collapsed window height (LOADING_WIN_HEIGHT in
+         main.mjs): the block keeps its layout when the window grows to
+         reveal the startup-log console below it. */
+      height: 360px;
+      flex: none;
+      gap: 0;
+    }
+
+    /* Real app icon — squircle corners are baked into the PNG. Kept inert so
+       image dragging cannot hijack the -webkit-app-region window drag. */
+    .logo {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 20px;
+      -webkit-user-drag: none;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      margin-bottom: 8px;
+      color: var(--oh-foreground);
+    }
+
+    .tagline {
+      font-size: 13px;
+      color: var(--oh-muted);
+      margin-bottom: 36px;
+    }
+
+    /* The app's canonical loading indicator: the 270° arc from
+       src/icons/loading-outer.svg with LoadingSpinner's animate-spin timing. */
+    .spinner {
+      width: 25px;
+      height: 25px;
+      color: #fff;
+      animation: spin 1s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--oh-text-dim);
+      letter-spacing: 0.3px;
+      /* Long lines (e.g. uvx "Installing openhands-agent-server==1.24.0…")
+         must not push the window or wrap awkwardly. */
+      max-width: 360px;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .hint {
+      margin-top: 14px;
+      font-size: 11px;
+      color: var(--oh-text-subtle);
+      letter-spacing: 0.2px;
+      max-width: 340px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* Progress dots animation for status text */
+    .dots::after {
+      content: "";
+      animation: dots 1.5s steps(3, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: ""; }
+      33%  { content: "."; }
+      66%  { content: ".."; }
+      100% { content: "..."; }
+    }
+
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      -webkit-app-region: no-drag;
+    }
+
+    .ghost-button {
+      font: inherit;
+      font-size: 11px;
+      padding: 4px 12px;
+      color: var(--oh-muted);
+      background: transparent;
+      border: 1px solid var(--oh-border);
+      border-radius: 8px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .ghost-button:hover {
+      color: var(--oh-foreground);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    /* ── Startup-log console ─────────────────────────────────────────────
+       Fills the extra height revealed by "Show details" (the window grows —
+       see setLoadingWindowExpanded in main.mjs); zero-height and clipped
+       while the window is collapsed. Interactive: opts out of the window
+       drag region and re-enables text selection. */
+    .console {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      margin: 0 16px 16px;
+      background: var(--oh-surface-deep);
+      border: 1px solid var(--oh-border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+      -webkit-app-region: no-drag;
+    }
+
+    .console-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 6px 5px 12px;
+      border-bottom: 1px solid var(--oh-border-subtle);
+      font-size: 11px;
+      color: var(--oh-muted);
+    }
+
+    .log {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px 12px;
+      /* The app's `code` stack (src/index.css). */
+      font-family:
+        source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+      font-size: 10.5px;
+      line-height: 1.55;
+      color: var(--oh-text-dim);
+      user-select: text;
+      -webkit-user-select: text;
+      cursor: text;
+      /* Full lines, never truncated — long uvx/pip output wraps. */
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .log:empty::before {
+      content: "Waiting for output…";
+      color: var(--oh-text-subtle);
+    }
+
+    .log-name {
+      color: var(--oh-text-subtle);
+    }
+    .log-line-error {
+      color: var(--oh-color-danger);
+    }
+
+    /* ── Failure state (main.mjs::showStartupFailure) ──────────────────── */
+    body.failed .spinner {
+      display: none;
+    }
+    body.failed .status {
+      color: var(--oh-color-danger);
+      /* The full error summary matters more than a tidy single line here. */
+      white-space: normal;
+      line-height: 1.45;
+    }
+    body.failed .hint {
+      display: none;
+    }
+    .quit-button {
+      display: none;
+    }
+    body.failed .quit-button {
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img class="logo" src="build-resources/icon.png" alt="" draggable="false" />
+    <h1>Agent Canvas</h1>
+    <p class="tagline">AI coding agent interface</p>
+    <svg class="spinner" viewBox="0 0 66 66" fill="none" aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg">
+      <path d="M63 33C63 16.4315 49.5685 3 33 3C16.4315 3 3 16.4315 3 33C3 49.5685 16.4315 63 33 63"
+        stroke="currentColor" stroke-width="6" stroke-linecap="round" />
+    </svg>
+    <p id="status" class="status">Starting services<span class="dots"></span></p>
+    <p class="hint">
+      First launch downloads Python + the OpenHands agent server.<br />
+      This can take a few minutes on a fresh machine.
+    </p>
+    <div class="actions">
+      <button id="details-toggle" type="button" class="ghost-button">
+        Show details
+      </button>
+      <button id="quit-button" type="button" class="ghost-button quit-button">
+        Quit
+      </button>
+    </div>
+  </div>
+  <div class="console" aria-label="Startup log">
+    <div class="console-head">
+      <span>Startup log</span>
+      <button id="copy-logs" type="button" class="ghost-button">Copy</button>
+    </div>
+    <div id="log" class="log"></div>
+  </div>
+  <script>
+    // Called from the Electron main process via webContents.executeJavaScript
+    // (see electron/main.mjs::setLoadingStatus). Replaces the entire status
+    // line, so the animated dots only appear when no concrete status is set.
+    window.__setLoadingStatus = function (line) {
+      var el = document.getElementById("status");
+      if (!el) return;
+      var text = String(line == null ? "" : line);
+      el.textContent = text || "";
+    };
+
+    // ── Startup-log console ──────────────────────────────────────────────
+    // Fed by the main process over IPC via preload.cjs (window.desktopBoot);
+    // undefined when the file is opened outside Electron, so every use is
+    // guarded and the static layout stays previewable in a plain browser.
+    // All DOM insertion uses textContent — log lines are untrusted process
+    // output and must never be parsed as HTML.
+    (function () {
+      var boot = window.desktopBoot;
+      var logEl = document.getElementById("log");
+      var statusEl = document.getElementById("status");
+      var toggleBtn = document.getElementById("details-toggle");
+      var copyBtn = document.getElementById("copy-logs");
+      var quitBtn = document.getElementById("quit-button");
+
+      // Cap DOM rows so an hours-long install can't grow layout cost;
+      // matches the main process's BOOT_LOG_MAX_LINES buffer cap.
+      var MAX_LINES = 2000;
+      var expanded = false;
+      // Follow the tail only while the user hasn't scrolled up.
+      var pinned = true;
+
+      logEl.addEventListener("scroll", function () {
+        pinned =
+          logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 8;
+      });
+
+      function appendBatch(batch) {
+        if (!batch || !batch.length) return;
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < batch.length; i++) {
+          var entry = batch[i];
+          var row = document.createElement("div");
+          row.className =
+            "log-line" + (entry.level === "error" ? " log-line-error" : "");
+          var name = document.createElement("span");
+          name.className = "log-name";
+          name.textContent = "[" + entry.name + "]";
+          row.appendChild(name);
+          row.appendChild(document.createTextNode(" " + entry.line));
+          frag.appendChild(row);
+        }
+        logEl.appendChild(frag);
+        while (logEl.childElementCount > MAX_LINES) {
+          logEl.removeChild(logEl.firstElementChild);
+        }
+        if (pinned) logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setExpanded(next) {
+        expanded = next;
+        toggleBtn.textContent = expanded ? "Hide details" : "Show details";
+        if (boot) boot.setDetailsExpanded(expanded);
+        if (expanded && pinned) logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      toggleBtn.addEventListener("click", function () {
+        setExpanded(!expanded);
+      });
+
+      copyBtn.addEventListener("click", function () {
+        if (!boot) return;
+        boot.copyLogs().then(function () {
+          copyBtn.textContent = "Copied";
+          setTimeout(function () {
+            copyBtn.textContent = "Copy";
+          }, 1200);
+        });
+      });
+
+      quitBtn.addEventListener("click", function () {
+        if (boot) boot.quit();
+      });
+
+      if (boot) {
+        boot.onLogBatch(appendBatch);
+        boot.onFatal(function (summary) {
+          document.body.classList.add("failed");
+          statusEl.textContent = String(summary == null ? "" : summary);
+          // Main already resized the window; sync the local toggle state.
+          if (!expanded) setExpanded(true);
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

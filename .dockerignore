@@ -1,24 +1,39 @@
-# NodeJS
-frontend/node_modules
+# Dependencies
+node_modules/
 
-# Configuration (except pyproject.toml)
-*.ini
-*.toml
-!pyproject.toml
-*.yml
+# Build outputs (rebuilt in Docker)
+build/
+dist/
 
-# Documentation (except README.md)
-*.md
-!README.md
+# Development files
+.git/
+.github/
+.openhands/
+.agents/
+.pr/
 
-# Hidden files and directories
-.*
-**/.venv
-__pycache__
+# Test files
+__tests__/
+tests/
+__mocks__/
+test-results/
+playwright-report*/
+coverage/
 
-# Unneded files and directories
-/dev_config/
-/docs/
-/evaluation/
-/tests/
-CITATION.cff
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.sample
+
+# Misc
+artifacts/
+*.tgz
+*.log

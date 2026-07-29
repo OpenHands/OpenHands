@@ -1,5 +1,0 @@
-[*]
-# force *nix line endings so files don't look modified in container run from Windows clone
-end_of_line = lf
-trim_trailing_whitespace = true
-insert_final_newline = true

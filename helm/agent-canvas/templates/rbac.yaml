@@ -1,0 +1,55 @@
+{{- if .Values.rbac.enabled -}}
+{{- $fullName := include "agent-canvas.fullname" . -}}
+{{- $saName := include "agent-canvas.serviceAccountName" . -}}
+{{- $saNs := .Release.Namespace -}}
+{{- $labels := include "agent-canvas.labels" . -}}
+
+{{/*
+  Per-namespace bindings. Each entry in .Values.rbac.namespaces gets a
+  RoleBinding to the built-in `admin` ClusterRole, granting the agent
+  full access to all resources in that namespace (create/update/delete
+  Pods, Deployments, Services, etc.) but NOT to cluster-scoped resources.
+*/}}
+{{- range $ns := .Values.rbac.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fullName }}-admin
+  namespace: {{ $ns }}
+  labels:
+    {{- $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ $saName }}
+    namespace: {{ $saNs }}
+{{- end }}
+
+{{/*
+  Optional cluster-admin binding. Off by default because it grants full
+  control of the whole cluster including all namespaces, nodes, CRDs,
+  RBAC itself, etc. Turn on with rbac.clusterAdmin=true only when the
+  agent legitimately needs to manage the entire cluster.
+*/}}
+{{- if .Values.rbac.clusterAdmin }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $fullName }}-cluster-admin
+  labels:
+    {{- $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ $saName }}
+    namespace: {{ $saNs }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,59 @@
+# Post Mock-LLM E2E test report as a PR comment.
+#
+# Triggered by `workflow_run` so it executes in the context of the base
+# repository with write permissions — necessary for fork PRs where the
+# `pull_request` token is read-only.
+#
+# Same-repo PRs already get an inline comment from the test workflow
+# itself; this workflow covers the fork-PR gap. It is safe because it
+# only checks out base-repository workflow code, never PR code, then downloads
+# the rendered report artifact and posts it.
+
+name: "Mock-LLM E2E: Post PR Comment"
+
+on:
+  workflow_run:
+    workflows: ["Mock-LLM E2E Tests"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  post-comment:
+    name: Post PR comment
+    runs-on: ubuntu-24.04
+    # Only run for fork PRs — same-repo PRs are handled inline.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name != github.repository
+    steps:
+      - name: Check out base repository
+        uses: actions/checkout@v7
+
+      - name: Download PR comment payload
+        uses: actions/download-artifact@v8
+        id: download
+        with:
+          name: mock-llm-pr-comment-payload
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+        continue-on-error: true
+
+      - name: Post comment
+        if: steps.download.outcome == 'success'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=$(cat pr_number.txt)
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::warning::Could not determine PR number; skipping comment."
+            exit 0
+          fi
+          node tests/e2e/mock-llm/scripts/upsert-pr-comment.mjs \
+            --issue-number "$PR_NUMBER" \
+            --body-file mock-llm-report.md \
+            --marker "<!-- agent-canvas-mock-llm-e2e-report -->" \
+            --legacy-title "Mock-LLM E2E Tests"

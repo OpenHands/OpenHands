@@ -1,4 +1,0 @@
-TODO WRITE PROMPT WHICH WILL
--  EXPLAIN AGENT WHERE THE COMPONENTS ARE
--  EXPLAIN AGENT WHERE TO PUT SB STORIES
--  EXPLAIN AGENT TO USE FURTHER INSTRUCTIONS FROM components/<name>/prompt.txt (this will contain specific information about component, for example how to construct stories and which prop to use)

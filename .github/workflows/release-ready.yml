@@ -5,8 +5,7 @@ on:
     types: [ready_for_review]
 
 jobs:
-  local-gui-release-ready:
-    if: "${{ contains(github.event.pull_request.labels.*.name, 'release-line: gui') }}"
+  release-ready:
     permissions:
       actions: write
       contents: read
@@ -15,18 +14,5 @@ jobs:
     secrets: inherit
     uses: OpenHands/release-actions/.github/workflows/release-ready.yml@main
     with:
-      product-name: Local GUI
-      slack-channel: "#proj-agent-canvas"
-
-  cloud-release-ready:
-    if: "${{ contains(github.event.pull_request.labels.*.name, 'release-line: cloud') }}"
-    permissions:
-      actions: write
-      contents: read
-      issues: write
-      pull-requests: write
-    secrets: inherit
-    uses: OpenHands/release-actions/.github/workflows/release-ready.yml@main
-    with:
-      product-name: OpenHands Cloud
-      slack-channel: "#openhands-cloud"
+      product-name: Agent Canvas
+      slack-channel: '#proj-agent-canvas'
