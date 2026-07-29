@@ -230,6 +230,21 @@ const buildOAuthAuthenticationPatch = (
   >;
 };
 
+const withAuthStrategyReplacementDeletes = <T extends MCPAuthCredential>(
+  previous: MCPAuthCredential | null | undefined,
+  patch: T,
+): T => {
+  if (!previous || previous.strategy === patch.strategy) return patch;
+
+  const replacement = { ...patch } as Record<string, unknown>;
+  for (const key of Object.keys(previous)) {
+    if (key !== "strategy" && !(key in replacement)) {
+      replacement[key] = null;
+    }
+  }
+  return replacement as T;
+};
+
 const buildOAuthCredentialPatch = (
   previous: MCPAuthCredential | null | undefined,
   edited: OAuthCredential,
@@ -246,11 +261,11 @@ const buildOAuthCredentialPatch = (
   if (previousOAuth && authentication === undefined && state === undefined) {
     return undefined;
   }
-  return {
+  return withAuthStrategyReplacementDeletes(previous, {
     strategy: "oauth2",
     ...(authentication !== undefined && { authentication }),
     ...(state !== undefined && { state }),
-  } as OAuthCredentialPatch;
+  } as OAuthCredentialPatch);
 };
 
 /**
@@ -295,7 +310,10 @@ export function buildMcpServerPatch(
       const auth = buildOAuthCredentialPatch(previousRemote?.auth, edited.auth);
       if (auth !== undefined) patch.auth = auth;
     } else if (!hasRedactedMcpSecretLeaf(edited.auth)) {
-      patch.auth = edited.auth;
+      patch.auth = withAuthStrategyReplacementDeletes(
+        previousRemote?.auth,
+        edited.auth,
+      );
     }
   } else if (previousRemote?.auth) {
     patch.auth = null;

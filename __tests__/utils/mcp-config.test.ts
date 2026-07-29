@@ -140,6 +140,57 @@ describe("MCP sparse patches", () => {
     });
   });
 
+  it("deletes stale auth fields when replacing one strategy with another", () => {
+    const storedOAuth = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: { type: "oauth" as const, scopes: "mail.read" },
+        state: { tokens: { access_token: REDACTED_MCP_SECRET_VALUE } },
+      },
+    };
+    const bearerEdit: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: storedOAuth.url,
+      auth: { strategy: "bearer", value: "replacement-token" },
+    };
+
+    expect(buildMcpServerPatch(storedOAuth, bearerEdit).auth).toEqual({
+      strategy: "bearer",
+      value: "replacement-token",
+      authentication: null,
+      state: null,
+    });
+
+    const storedHeader = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: { "X-API-Key": REDACTED_MCP_SECRET_VALUE },
+      },
+    };
+    const oauthEdit: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: storedHeader.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", scopes: "mail.read" },
+      },
+    };
+
+    expect(buildMcpServerPatch(storedHeader, oauthEdit).auth).toEqual({
+      strategy: "oauth2",
+      authentication: { type: "oauth", scopes: "mail.read" },
+      headers: null,
+    });
+  });
+
   it("patches OAuth metadata and a replacement secret without sending redacted state", () => {
     const stored = {
       transport: "http" as const,

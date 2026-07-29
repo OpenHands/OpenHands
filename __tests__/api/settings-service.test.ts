@@ -11,6 +11,7 @@ import type { Backend } from "#/api/backend-registry/types";
 import { server } from "#/mocks/node";
 import { resetTestHandlersMockSettings } from "#/mocks/settings-handlers";
 import type { Settings } from "#/types/settings";
+import { buildMcpServerPatch } from "#/utils/mcp-config";
 
 const mockSaveCloudSettings = vi.fn();
 const mockFetchCloudSettings = vi.fn();
@@ -397,6 +398,55 @@ describe("SettingsService", () => {
       {
         method: "DELETE",
         settingsKey: "old",
+      },
+    ]);
+  });
+
+  it("sends auth replacement tombstones to the named MCP endpoint", async () => {
+    const patchBodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.patch("*/api/settings/mcp/:settingsKey", async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+        });
+      }),
+    );
+
+    await SettingsService.patchMcpServer(
+      "mail",
+      buildMcpServerPatch(
+        {
+          transport: "http",
+          url: "https://mail.example/mcp",
+          auth: {
+            strategy: "oauth2",
+            authentication: { type: "oauth", scopes: "mail.read" },
+            state: { tokens: { access_token: "**********" } },
+          },
+        },
+        {
+          id: "mail",
+          type: "shttp",
+          name: "mail",
+          url: "https://mail.example/mcp",
+          auth: { strategy: "bearer", value: "replacement-token" },
+        },
+      ),
+    );
+
+    expect(patchBodies).toEqual([
+      {
+        transport: "http",
+        url: "https://mail.example/mcp",
+        auth: {
+          strategy: "bearer",
+          value: "replacement-token",
+          authentication: null,
+          state: null,
+        },
       },
     ]);
   });
