@@ -15,7 +15,9 @@ import { useSettings } from "./query/use-settings";
  * Reconciles the browser's capture state with the backend preference.
  *
  * A first-run user can make an explicit choice before Cloud login. That newer
- * browser decision remains pending across local backends and is written to the
+ * browser decision remains pending across local backends, but does not
+ * automatically fill unset local backend settings; each local backend can ask
+ * for its own persisted preference. The pending decision is written to the
  * Cloud backend after login; until Cloud confirms it, a stale/default backend
  * value must not overwrite it. With no pending browser choice, backend updates
  * remain authoritative so revocation in another tab or via the API is respected.
@@ -58,6 +60,8 @@ export const useSyncTelemetryConsent = () => {
         }
         return;
       }
+
+      if (backend.kind !== "cloud") return;
 
       const syncKey = `${backend.id}:${pendingBrowserConsent}`;
       if (isSavingSettings || attemptedSyncRef.current === syncKey) return;

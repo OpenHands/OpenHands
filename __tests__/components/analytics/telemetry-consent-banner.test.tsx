@@ -12,7 +12,10 @@ const setTelemetryConsentMock = vi.fn();
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     ready: true,
-    t: (key: string) => key,
+    t: (key: string, options?: Record<string, string>) =>
+      key === "TELEMETRY$BACKEND_SCOPE"
+        ? `This preference is saved for ${options?.name} at ${options?.host}.`
+        : key,
   }),
 }));
 
@@ -45,7 +48,12 @@ describe("TelemetryConsentBanner", () => {
     vi.clearAllMocks();
     getLockedCloudHostMock.mockReturnValue(null);
     useActiveBackendMock.mockReturnValue({
-      backend: { id: "local", kind: "local" },
+      backend: {
+        id: "local",
+        kind: "local",
+        name: "Local Dev",
+        host: "http://localhost:12000",
+      },
     });
     useSettingsMock.mockReturnValue({
       data: { user_consents_to_analytics: null },
@@ -57,6 +65,11 @@ describe("TelemetryConsentBanner", () => {
 
     expect(
       await screen.findByTestId("telemetry-consent-form"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This preference is saved for Local Dev at http://localhost:12000.",
+      ),
     ).toBeInTheDocument();
   });
 

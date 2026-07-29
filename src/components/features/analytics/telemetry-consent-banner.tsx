@@ -20,9 +20,11 @@ interface TelemetryConsentBannerProps {
 }
 
 function LocalTelemetryConsentBanner({
-  backendId,
+  backend,
   onChoice,
-}: TelemetryConsentBannerProps & { backendId: string }) {
+}: TelemetryConsentBannerProps & {
+  backend: { id: string; name: string; host: string };
+}) {
   const { t, ready } = useTranslation(OPENHANDS_I18N_NAMESPACE);
   const { data: settings } = useSettings();
   const { mutate: saveSettings } = useSaveSettings();
@@ -31,7 +33,7 @@ function LocalTelemetryConsentBanner({
 
   React.useEffect(() => {
     setHasSubmittedChoice(false);
-  }, [backendId]);
+  }, [backend.id]);
 
   const shouldShow =
     settings?.user_consents_to_analytics === null && !hasSubmittedChoice;
@@ -70,6 +72,12 @@ function LocalTelemetryConsentBanner({
           <BaseModalDescription>
             {t(I18nKey.TELEMETRY$CONSENT_DESCRIPTION)}
           </BaseModalDescription>
+          <p className="text-xs text-neutral-400">
+            {t(I18nKey.TELEMETRY$BACKEND_SCOPE, {
+              name: backend.name,
+              host: backend.host,
+            })}
+          </p>
 
           <label className="flex gap-2 items-center self-start text-sm cursor-pointer">
             <input
@@ -102,7 +110,5 @@ export function TelemetryConsentBanner({
 
   if (getLockedCloudHost() !== null || backend.kind !== "local") return null;
 
-  return (
-    <LocalTelemetryConsentBanner backendId={backend.id} onChoice={onChoice} />
-  );
+  return <LocalTelemetryConsentBanner backend={backend} onChoice={onChoice} />;
 }

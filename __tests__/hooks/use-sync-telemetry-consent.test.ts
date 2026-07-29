@@ -146,6 +146,19 @@ describe("useSyncTelemetryConsent", () => {
     expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
+  it("does not auto-fill unset consent on another local backend", () => {
+    state.backendKind = "local";
+    state.pendingConsent = "granted";
+    useSettingsMock.mockReturnValue({
+      data: { user_consents_to_analytics: null },
+    });
+
+    renderHook(() => useSyncTelemetryConsent());
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(setTelemetryConsentMock).not.toHaveBeenCalled();
+  });
+
   it("does not start another mutation while bounded retries run", () => {
     state.pendingConsent = "granted";
     useSettingsMock.mockReturnValue({
