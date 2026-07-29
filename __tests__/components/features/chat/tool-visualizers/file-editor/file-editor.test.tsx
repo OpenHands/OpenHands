@@ -15,13 +15,12 @@ const Body = fileEditorVisualizer.Body;
 describe("fileEditorVisualizer", () => {
   beforeEach(() => {
     useConversationStore.setState({
-      isRightPanelShown: false,
+      hasRightPanelToggled: false,
       selectedTab: "terminal",
     });
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
-      openPaths: [],
     });
   });
 
@@ -172,10 +171,9 @@ describe("fileEditorVisualizer", () => {
     expect(useFilesTabStore.getState()).toMatchObject({
       selectedPath: "/workspace/app.ts",
       selectedConversationId: "test-conversation-id",
-      openPaths: ["/workspace/app.ts"],
     });
     expect(useConversationStore.getState()).toMatchObject({
-      isRightPanelShown: true,
+      hasRightPanelToggled: true,
       selectedTab: "files",
     });
   });
@@ -207,6 +205,8 @@ describe("fileEditorVisualizer", () => {
     expect(screen.getByTestId("markdown-file-preview")).toBeInTheDocument();
     expect(screen.getByTestId("markdown-file-preview-content")).toHaveClass(
       "max-h-40",
+      "overflow-y-auto",
+      "custom-scrollbar-always",
     );
     expect(screen.getByText("Agent Canvas Demo")).toBeInTheDocument();
     expect(screen.getByText("canvas.md")).toBeInTheDocument();
@@ -218,7 +218,7 @@ describe("fileEditorVisualizer", () => {
       selectedConversationId: "test-conversation-id",
     });
     expect(useConversationStore.getState()).toMatchObject({
-      isRightPanelShown: true,
+      hasRightPanelToggled: true,
       selectedTab: "files",
     });
   });

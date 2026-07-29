@@ -14,7 +14,15 @@ import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
-import { defineVisualizer } from "../define";
+import type {
+  FileEditorAction,
+  StrReplaceEditorAction,
+} from "#/types/agent-server/core/base/action";
+import type {
+  FileEditorObservation,
+  StrReplaceEditorObservation,
+} from "#/types/agent-server/core/base/observation";
+import { defineVisualizer, VisualizerProps } from "../define";
 import { textFromContent } from "../text-content";
 import { CodeBlock } from "../primitives/code-block";
 import { DiffView } from "../primitives/diff-view";
@@ -24,116 +32,164 @@ import {
   MarkdownFilePreview,
 } from "../primitives/markdown-file-preview";
 
+type FileEditorCardProps = VisualizerProps<
+  FileEditorAction | StrReplaceEditorAction,
+  FileEditorObservation | StrReplaceEditorObservation
+>;
+
+/** The path the event touched; observations win because they are authoritative. */
+const resolvePath = ({ action, observation }: FileEditorCardProps): string =>
+  observation?.observation.path ?? action?.action.path ?? "";
+
+interface FileEditorCardBodyProps extends FileEditorCardProps {
+  /**
+   * Deep-links the file into the Files drawer. Absent outside a conversation
+   * route, where there is no drawer to open; the card then stays read-only.
+   */
+  onOpenFile?: () => void;
+}
+
+function FileEditorCardBody({
+  action,
+  observation,
+  onOpenFile,
+}: FileEditorCardBodyProps) {
+  const path = resolvePath({ action, observation });
+  const command = observation?.observation.command ?? action?.action.command;
+  const language = getLanguageFromPath(path);
+
+  const viewRange = action?.action.view_range;
+  const range =
+    command === "view" && viewRange
+      ? `${viewRange[0]}-${viewRange[1]}`
+      : undefined;
+  const chip = path ? (
+    <FilePathChip path={path} range={range} onClick={onOpenFile} />
+  ) : null;
+
+  const renderFileContent = (content: string) => {
+    if (path && onOpenFile && isMarkdownFilePath(path)) {
+      // Markdown artifacts own their card (clipped preview + View bar), so
+      // skip the separate path chip to avoid a duplicate filename affordance.
+      return {
+        chip: null as React.ReactNode,
+        body: (
+          <MarkdownFilePreview
+            content={content}
+            path={path}
+            onView={onOpenFile}
+          />
+        ),
+      };
+    }
+    return {
+      chip,
+      body: <CodeBlock code={content} language={language} />,
+    };
+  };
+
+  if (observation) {
+    const obs = observation.observation;
+    let body: React.ReactNode = null;
+    let leadingChip: React.ReactNode = chip;
+    if (obs.error) {
+      body = (
+        <span className="whitespace-pre-wrap text-xs text-danger">
+          {obs.error}
+        </span>
+      );
+    } else if (obs.old_content != null && obs.new_content != null) {
+      // Nullish, not truthy: an empty string is a valid side of the diff —
+      // clearing a file or inserting into an empty file must still render it.
+      body = <DiffView oldText={obs.old_content} newText={obs.new_content} />;
+    } else {
+      // `view` returns the snippet the agent saw in `content` (the `cat -n`
+      // output) rather than `output`/`new_content`, so fall back to it.
+      // Mirrors the markdown path's "prefer content for view" handling.
+      const content =
+        obs.new_content ||
+        obs.output ||
+        (obs.content ? textFromContent(obs.content) : "");
+      if (content) {
+        const rendered = renderFileContent(content);
+        leadingChip = rendered.chip;
+        body = rendered.body;
+      }
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        {leadingChip}
+        {body}
+      </div>
+    );
+  }
+
+  if (action) {
+    const act = action.action;
+    let body: React.ReactNode = null;
+    let leadingChip: React.ReactNode = chip;
+    if (act.command === "create" && act.file_text) {
+      const rendered = renderFileContent(act.file_text);
+      leadingChip = rendered.chip;
+      body = rendered.body;
+    } else if (
+      (act.command === "str_replace" || act.command === "insert") &&
+      act.new_str != null
+    ) {
+      // `insert` carries only `new_str`, no `old_str`. Key on `new_str` and
+      // default `old_str` to "" so an in-flight insert shows an addition diff
+      // instead of nothing.
+      body = <DiffView oldText={act.old_str ?? ""} newText={act.new_str} />;
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        {leadingChip}
+        {body}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Conversation-scoped wrapper: owns the Files-drawer deep link. Split from the
+ * card so the conversation-only hooks below never run outside a conversation
+ * route (they throw on a missing conversation id).
+ */
+function FileEditorCardWithDrawerLink({
+  conversationId,
+  ...props
+}: FileEditorCardProps & { conversationId: string }) {
+  const { navigateToTab } = useSelectConversationTab();
+  const setSelectedPath = useFilesTabStore((state) => state.setSelectedPath);
+  const path = resolvePath(props);
+
+  // File events already carry the path the agent touched, so the chat card
+  // can deep-link into the existing Files drawer without another API call.
+  const onOpenFile = path
+    ? () => {
+        setSelectedPath(path, conversationId);
+        navigateToTab("files");
+      }
+    : undefined;
+
+  return <FileEditorCardBody {...props} onOpenFile={onOpenFile} />;
+}
+
 export const fileEditorVisualizer = defineVisualizer({
   actionKinds: ["FileEditorAction", "StrReplaceEditorAction"],
   observationKinds: ["FileEditorObservation", "StrReplaceEditorObservation"],
-  Body: function FileEditorBody({ action, observation }) {
+  Body: function FileEditorBody(props) {
     const { conversationId } = useOptionalConversationId();
-    const { navigateToTab } = useSelectConversationTab();
-    const setSelectedPath = useFilesTabStore((state) => state.setSelectedPath);
-    const path = observation?.observation.path ?? action?.action.path ?? "";
-    const command = observation?.observation.command ?? action?.action.command;
-    const language = getLanguageFromPath(path);
 
-    const viewRange = action?.action.view_range;
-    const range =
-      command === "view" && viewRange
-        ? `${viewRange[0]}-${viewRange[1]}`
-        : undefined;
-    // File events already carry the path the agent touched, so the chat card
-    // can deep-link into the existing Files drawer without another API call.
-    const openFile = path
-      ? () => {
-          setSelectedPath(path, conversationId);
-          navigateToTab("files");
-        }
-      : undefined;
-    const chip = path ? (
-      <FilePathChip path={path} range={range} onClick={openFile} />
-    ) : null;
-
-    const renderFileContent = (content: string) => {
-      if (path && openFile && isMarkdownFilePath(path)) {
-        // Markdown artifacts own their card (clipped preview + View bar), so
-        // skip the separate path chip to avoid a duplicate filename affordance.
-        return {
-          chip: null as React.ReactNode,
-          body: (
-            <MarkdownFilePreview
-              content={content}
-              path={path}
-              onView={openFile}
-            />
-          ),
-        };
-      }
-      return {
-        chip,
-        body: <CodeBlock code={content} language={language} />,
-      };
-    };
-
-    if (observation) {
-      const obs = observation.observation;
-      let body: React.ReactNode = null;
-      let leadingChip: React.ReactNode = chip;
-      if (obs.error) {
-        body = (
-          <span className="whitespace-pre-wrap text-xs text-danger">
-            {obs.error}
-          </span>
-        );
-      } else if (obs.old_content != null && obs.new_content != null) {
-        // Nullish, not truthy: an empty string is a valid side of the diff —
-        // clearing a file or inserting into an empty file must still render it.
-        body = <DiffView oldText={obs.old_content} newText={obs.new_content} />;
-      } else {
-        // `view` returns the snippet the agent saw in `content` (the `cat -n`
-        // output) rather than `output`/`new_content`, so fall back to it.
-        // Mirrors the markdown path's "prefer content for view" handling.
-        const content =
-          obs.new_content ||
-          obs.output ||
-          (obs.content ? textFromContent(obs.content) : "");
-        if (content) {
-          const rendered = renderFileContent(content);
-          leadingChip = rendered.chip;
-          body = rendered.body;
-        }
-      }
-      return (
-        <div className="flex flex-col gap-2">
-          {leadingChip}
-          {body}
-        </div>
-      );
-    }
-
-    if (action) {
-      const act = action.action;
-      let body: React.ReactNode = null;
-      let leadingChip: React.ReactNode = chip;
-      if (act.command === "create" && act.file_text) {
-        const rendered = renderFileContent(act.file_text);
-        leadingChip = rendered.chip;
-        body = rendered.body;
-      } else if (
-        (act.command === "str_replace" || act.command === "insert") &&
-        act.new_str != null
-      ) {
-        // `insert` carries only `new_str`, no `old_str`. Key on `new_str` and
-        // default `old_str` to "" so an in-flight insert shows an addition diff
-        // instead of nothing.
-        body = <DiffView oldText={act.old_str ?? ""} newText={act.new_str} />;
-      }
-      return (
-        <div className="flex flex-col gap-2">
-          {leadingChip}
-          {body}
-        </div>
-      );
-    }
-
-    return null;
+    return conversationId ? (
+      <FileEditorCardWithDrawerLink
+        {...props}
+        conversationId={conversationId}
+      />
+    ) : (
+      <FileEditorCardBody {...props} />
+    );
   },
 });

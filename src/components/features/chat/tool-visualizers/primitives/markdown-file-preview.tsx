@@ -1,9 +1,9 @@
 /**
  * Inline markdown artifact preview for chat tool cards.
  *
- * Shows a height-clipped rich preview so long reports stay compact in the
- * stream; the footer View action deep-links into the Files drawer for the
- * full document. Markdown file-editor events stay expanded and ungrouped so
+ * Shows a height-limited scrollable rich preview so long reports stay compact
+ * in the stream; the footer View action deep-links into the Files drawer for
+ * the full document. Markdown file-editor events stay expanded and ungrouped so
  * the preview is visible without an extra click.
  */
 import { useTranslation } from "react-i18next";
@@ -128,7 +128,7 @@ export function MarkdownFilePreview({
     >
       <div
         data-testid="markdown-file-preview-content"
-        className="max-h-40 overflow-hidden px-4 py-3 text-white"
+        className="max-h-40 overflow-y-auto px-4 py-3 text-white custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
         <MarkdownRenderer
           content={content}
