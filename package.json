@@ -24,7 +24,7 @@
     "@microlink/react-json-view": "1.31.20",
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.11.0",
-    "@openhands/typescript-client": "git+https://github.com/OpenHands/typescript-client.git#127e0e7844a23dc985008da664f9c580d6adadc9",
+    "@openhands/typescript-client": "1.36.0",
     "@react-router/node": "7.17.0",
     "@react-router/serve": "7.17.0",
     "@tailwindcss/vite": "4.2.4",
