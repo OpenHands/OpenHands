@@ -268,4 +268,28 @@ describe("cloud conversation-service overlay", () => {
     expect(page.items[0].git_provider).toBe("github");
     expect(page.items[1].selected_repository).toBeNull();
   });
+
+  it("includes title__contains when searching cloud conversations by title", async () => {
+    mockCallCloudProxy.mockResolvedValueOnce({
+      items: [],
+      next_page_id: null,
+    });
+
+    await searchCloudConversations({
+      limit: 50,
+      titleContains: "figma",
+    });
+
+    expect(mockCallCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        path: expect.stringContaining("title__contains=figma"),
+      }),
+    );
+    expect(mockCallCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: expect.stringContaining("limit=50"),
+      }),
+    );
+  });
 });

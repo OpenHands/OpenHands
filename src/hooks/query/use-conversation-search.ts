@@ -20,7 +20,8 @@ export function useConversationSearch(query: string, isEnabled: boolean) {
       active.orgId,
       debouncedQuery,
     ],
-    queryFn: () => searchMatchingConversations(debouncedQuery),
+    queryFn: ({ signal }) =>
+      searchMatchingConversations(debouncedQuery, { signal }),
     enabled: isEnabled && !!userIsAuthenticated && hasBackend,
     placeholderData: keepPreviousData,
     staleTime: 10_000,

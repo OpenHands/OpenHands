@@ -43,22 +43,59 @@ describe("searchMatchingConversations", () => {
     expect(searchSpy).toHaveBeenCalledWith({ limit: 50 });
   });
 
-  it("paginates through the server index before filtering", async () => {
-    const pageOne = [
-      createConversation({ id: "1", title: "Visible in sidebar" }),
-    ];
-    const pageTwo = [
-      createConversation({ id: "2", title: "Hidden figma export" }),
-    ];
+  it("passes titleContains to the server and returns matching items", async () => {
+    const match = createConversation({
+      id: "2",
+      title: "Hidden figma export",
+    });
+    const unrelated = createConversation({
+      id: "1",
+      title: "Visible in sidebar",
+      selected_repository: "org/figma-tools",
+    });
 
     const searchSpy = vi
       .spyOn(AgentServerConversationService, "searchConversations")
-      .mockResolvedValueOnce({ items: pageOne, next_page_id: "1" })
-      .mockResolvedValueOnce({ items: pageTwo, next_page_id: null });
+      .mockResolvedValue({ items: [match, unrelated], next_page_id: null });
 
     const results = await searchMatchingConversations("figma");
 
-    expect(searchSpy).toHaveBeenCalledTimes(2);
-    expect(results).toEqual([pageTwo[0]]);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    expect(searchSpy).toHaveBeenCalledWith({
+      limit: 50,
+      titleContains: "figma",
+    });
+    // Client filter keeps title + multi-field matches from the server page.
+    expect(results).toEqual([match, unrelated]);
+  });
+
+  it("does not download additional pages beyond the bounded title search", async () => {
+    const searchSpy = vi
+      .spyOn(AgentServerConversationService, "searchConversations")
+      .mockResolvedValue({
+        items: [createConversation({ id: "1", title: "figma one" })],
+        next_page_id: "more-pages-exist",
+      });
+
+    await searchMatchingConversations("figma");
+
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts before returning when the signal is already aborted", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [createConversation({ id: "1", title: "figma" })],
+      next_page_id: null,
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      searchMatchingConversations("figma", { signal: controller.signal }),
+    ).rejects.toThrow();
   });
 });
