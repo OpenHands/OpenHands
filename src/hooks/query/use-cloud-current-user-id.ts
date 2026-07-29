@@ -17,27 +17,35 @@ import { useAllCloudOrganizations } from "./use-cloud-organizations";
  * Path-param rule: when `backend.id === active.backend.id` and
  * `active.orgId` is set, the call uses **that** orgId — i.e. `/me`
  * always tracks the currently selected environment for the active
- * backend. For inactive backends (or when no org is selected yet), the
- * first org is used as a sentinel just to obtain `user_id`. This
- * matches the requirement that `/me` reflect the selected org for the
- * active environment, while still supporting the personal-workspace
- * label across non-active backends in the dropdown.
+ * backend. When `includeInactive` is enabled, inactive backends use their
+ * first org as a sentinel just to obtain `user_id`. This matches the
+ * requirement that `/me` reflect the selected org for the active environment,
+ * while still supporting personal-workspace labels when the backend picker or
+ * management UI explicitly loads non-active backends.
  *
  * The query key includes `active.orgId`, so picking a different org
  * via `setActive` re-keys this query and refetches `/me` with the new
  * active orgId.
  */
-export function useCloudCurrentUserId(): Record<
-  string,
-  { isLoading: boolean; userId: string | null }
-> {
+export interface UseCloudCurrentUserIdOptions {
+  /** Resolve identities for non-active Cloud backends as well. */
+  includeInactive?: boolean;
+}
+
+export function useCloudCurrentUserId(
+  options: UseCloudCurrentUserIdOptions = {},
+): Record<string, { isLoading: boolean; userId: string | null }> {
+  const { includeInactive = false } = options;
   const { backends } = useActiveBackendContext();
   const active = useActiveBackend();
-  const cloudOrgs = useAllCloudOrganizations();
+  const cloudOrgs = useAllCloudOrganizations({ includeInactive });
 
   const targets: { backendId: string; orgIdForMe: string }[] = [];
   for (const backend of backends) {
-    if (backend.kind === "cloud") {
+    if (
+      backend.kind === "cloud" &&
+      (includeInactive || backend.id === active.backend.id)
+    ) {
       const entry = cloudOrgs[backend.id];
       // Prefer the active org when this backend IS the active one and
       // an org has been selected; otherwise fall back to the first org
