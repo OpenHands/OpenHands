@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatMessage } from "#/components/features/chat/chat-message";
+import { WorkspaceFilesForChatContext } from "#/components/features/chat/chat-markdown-path-code";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 
 const openWorkspaceFile = vi.fn();
@@ -14,12 +15,15 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "conv-1" }),
 }));
 
-vi.mock("#/hooks/query/use-workspace-files", () => ({
-  useWorkspaceFiles: () => ({
-    data: ["test.md", "motivational_message.md", "src/app.ts"],
-    isLoading: false,
-  }),
-}));
+const WORKSPACE_FILES = ["test.md", "motivational_message.md", "src/app.ts"];
+
+function renderAgentMessage(message: string) {
+  return render(
+    <WorkspaceFilesForChatContext.Provider value={WORKSPACE_FILES}>
+      <ChatMessage type="agent" message={message} />
+    </WorkspaceFilesForChatContext.Provider>,
+  );
+}
 
 describe("assistant chat Markdown path linking", () => {
   beforeEach(() => {
@@ -34,7 +38,7 @@ describe("assistant chat Markdown path linking", () => {
   it("opens the Files drawer when an existing workspace path is clicked", async () => {
     const user = userEvent.setup();
 
-    render(<ChatMessage type="agent" message={"Created `test.md`"} />);
+    renderAgentMessage("Created `test.md`");
 
     await user.click(screen.getByTestId("markdown-file-path-link"));
 
@@ -44,13 +48,8 @@ describe("assistant chat Markdown path linking", () => {
   it("opens the Files drawer for bold-emphasized existing paths", async () => {
     const user = userEvent.setup();
 
-    render(
-      <ChatMessage
-        type="agent"
-        message={
-          "The file **motivational_message.md** has been created with an inspiring quote."
-        }
-      />,
+    renderAgentMessage(
+      "The file **motivational_message.md** has been created with an inspiring quote.",
     );
 
     await user.click(screen.getByTestId("markdown-file-path-link"));
@@ -62,9 +61,7 @@ describe("assistant chat Markdown path linking", () => {
   });
 
   it("does not link paths that are not in the workspace", () => {
-    render(
-      <ChatMessage type="agent" message={"Send me exactly same text - profile.md"} />,
-    );
+    renderAgentMessage("Send me exactly same text - profile.md");
 
     expect(
       screen.queryByTestId("markdown-file-path-link"),
@@ -73,7 +70,7 @@ describe("assistant chat Markdown path linking", () => {
   });
 
   it("does not link missing backtick paths either", () => {
-    render(<ChatMessage type="agent" message={"See `profile.md` please"} />);
+    renderAgentMessage("See `profile.md` please");
 
     expect(
       screen.queryByTestId("markdown-file-path-link"),
@@ -82,12 +79,7 @@ describe("assistant chat Markdown path linking", () => {
   });
 
   it("keeps path code nested in a Markdown link as plain code", () => {
-    render(
-      <ChatMessage
-        type="agent"
-        message={"See [`src/app.ts`](https://example.com)"}
-      />,
-    );
+    renderAgentMessage("See [`src/app.ts`](https://example.com)");
 
     expect(
       screen.queryByTestId("markdown-file-path-link"),
@@ -96,9 +88,7 @@ describe("assistant chat Markdown path linking", () => {
   });
 
   it("does not link ordinary dotted / non-path inline code", () => {
-    render(
-      <ChatMessage type="agent" message={"Use `console.log` and `v1.2.3`"} />,
-    );
+    renderAgentMessage("Use `console.log` and `v1.2.3`");
 
     expect(
       screen.queryByTestId("markdown-file-path-link"),

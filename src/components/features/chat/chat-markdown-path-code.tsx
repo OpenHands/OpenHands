@@ -11,6 +11,28 @@ import { anchor as defaultAnchor } from "../markdown/anchor";
 /** True while rendering Markdown descendants of an existing `<a>`. */
 const InMarkdownLinkContext = createContext(false);
 
+/**
+ * Workspace paths available for chat Markdown linking. Absent outside
+ * ChatInterface (e.g. unit tests) so ChatCode never requires QueryClient.
+ */
+export const WorkspaceFilesForChatContext = createContext<string[] | undefined>(
+  undefined,
+);
+
+/** Fetches workspace files once for the chat tree and exposes them to path links. */
+export function WorkspaceFilesForChatProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { data } = useWorkspaceFiles();
+  return (
+    <WorkspaceFilesForChatContext.Provider value={data}>
+      {children}
+    </WorkspaceFilesForChatContext.Provider>
+  );
+}
+
 type CodeProps = React.ClassAttributes<HTMLElement> &
   React.HTMLAttributes<HTMLElement> &
   ExtraProps;
@@ -39,7 +61,7 @@ function getPlainText(children: React.ReactNode): string | null {
 
 /** Only link paths that currently exist in the conversation workspace. */
 function useExistingWorkspacePath(candidate: string): string | null {
-  const { data: files } = useWorkspaceFiles();
+  const files = useContext(WorkspaceFilesForChatContext);
   if (!files?.length || !looksLikeWorkspaceFilePath(candidate)) return null;
 
   const normalized = toFilesTabPath(candidate);
