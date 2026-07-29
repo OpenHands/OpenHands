@@ -976,6 +976,14 @@ export function buildStartConversationRequest(
     // Finish/Think). The dev ``RUNTIME_SERVICES`` system-message suffix remains
     // agent-settings-only; the Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
+    //
+    // Persistent memory is NOT on that boundary: ``load_memory`` is a global
+    // user preference, so the agent-server stamps the stored
+    // ``agent_settings.agent_context.load_memory`` onto the profile-resolved
+    // agent the same way it already applies the global ``mcp_config``. The
+    // toggle therefore applies to both launch paths, and the client must not
+    // re-send it here (``agent_profile_id`` and ``agent_settings`` are
+    // mutually exclusive).
     ...(options.agentProfileId
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),

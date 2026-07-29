@@ -6,7 +6,10 @@ import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { getCachedAgentServerVersion } from "#/api/agent-server-compatibility";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useAutomationSdkVersion } from "#/hooks/query/use-automation-sdk-version";
-import { getBackendTelemetryProperties } from "#/services/telemetry-context";
+import {
+  type BackendConnectionMethod,
+  getBackendTelemetryProperties,
+} from "#/services/telemetry-context";
 import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
 
 /**
@@ -284,7 +287,7 @@ export const useTracking = () => {
     backendVersion,
   }: {
     backendKind: BackendKind;
-    connectionMethod: "manual" | "cloud_login";
+    connectionMethod: BackendConnectionMethod;
     hasApiKey: boolean;
     source?: CloudConnectionSource;
     agentServerVersion?: string | null;
