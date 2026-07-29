@@ -1,4 +1,4 @@
-import { AppWindow, Shield } from "lucide-react";
+import { AppWindow, Brain, Shield } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -34,6 +34,18 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/condenser",
     text: "SETTINGS$NAV_CONDENSER",
     subtitle: "SETTINGS$PAGE_CONDENSER_SUBLINE",
+  },
+  {
+    // The agent's ``agent_context`` section, whatever the schema exposes in it
+    // — today only persistent memory (``agent_context.load_memory``). Not
+    // ``disabledByAcp``: the stored flag rides the shared agent_settings
+    // record into ACP conversations too — inline launches spread it into
+    // ``agent_context``, and profile launches (the normal ACP path) have the
+    // agent-server stamp it onto the profile-resolved agent.
+    icon: <Brain className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/agent-context",
+    text: "SETTINGS$NAV_AGENT_CONTEXT",
+    subtitle: "SETTINGS$PAGE_AGENT_CONTEXT_SUBLINE",
   },
   {
     icon: <Shield className="size-4" strokeWidth={2} aria-hidden />,

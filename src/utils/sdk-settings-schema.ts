@@ -494,6 +494,12 @@ export function getVisibleSettingsSections(
     .filter((section) => section.fields.length > 0);
 }
 
+/** Whether the schema has any "critical" prominence fields (the basic tier). */
+export function hasCriticalSettings(schema: SettingsSchema | null): boolean {
+  if (!schema) return false;
+  return getSchemaFields(schema).some((f) => f.prominence === "critical");
+}
+
 /** Whether the schema has any fields visible in the "advanced" tier. */
 export function hasAdvancedSettings(schema: SettingsSchema | null): boolean {
   if (!schema) return false;

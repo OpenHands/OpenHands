@@ -28,6 +28,7 @@ import {
   buildSdkSettingsPayloadForView,
   getVisibleSettingsSections,
   hasAdvancedSettings,
+  hasCriticalSettings,
   hasMinorSettings,
   inferInitialView,
   isValidSettingsSchema,
@@ -63,9 +64,11 @@ const getMoreDetailedView = (
 const normalizeView = (
   view: SettingsView,
   {
+    showBasic,
     showAdvanced,
     showAll,
   }: {
+    showBasic: boolean;
     showAdvanced: boolean;
     showAll: boolean;
   },
@@ -86,6 +89,11 @@ const normalizeView = (
     return showAll ? "all" : "basic";
   }
 
+  // A critical-less page has nothing to render in the basic tier; bump up.
+  if (!showBasic) {
+    if (showAdvanced) return "advanced";
+    if (showAll) return "all";
+  }
   return "basic";
 };
 
@@ -299,15 +307,31 @@ export function SdkSectionPage({
           return { ...src, filteredSchema: null };
         }
         const sectionSet = new Set(src.sectionKeys);
+        // The agent schema can carry more than one section per key — e.g. the
+        // combined AgentSettings schema emits an "llm" section for both the
+        // "openhands" and "acp" variants. Only the first (openhands) is used,
+        // so keep the first section per key; otherwise every field renders
+        // twice and React sees duplicate section keys.
+        const seenKeys = new Set<string>();
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => sectionSet.has(s.key)),
+          sections: schema.sections.filter((s) => {
+            if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
+            seenKeys.add(s.key);
+            return true;
+          }),
         };
         return { ...src, filteredSchema };
       }),
     [resolvedSourceConfigs, getSchemaForSource],
   );
 
+  // The basic tier only exists when some field renders in it; a critical-less
+  // page (e.g. Memory, whose only field is major) hides the Basic tab and
+  // floors its view at "advanced".
+  const showBasic = resolvedSources.some((src) =>
+    hasCriticalSettings(src.filteredSchema),
+  );
   const showAdvanced =
     forceShowAdvancedView ||
     resolvedSources.some((src) => hasAdvancedSettings(src.filteredSchema));
@@ -389,8 +413,15 @@ export function SdkSectionPage({
       result = result ? getMoreDetailedView(result, perSource) : perSource;
     }
     if (!result) return null;
-    return normalizeView(result, { showAdvanced, showAll });
-  }, [settings, resolvedSources, getInitialView, showAdvanced, showAll]);
+    return normalizeView(result, { showBasic, showAdvanced, showAll });
+  }, [
+    settings,
+    resolvedSources,
+    getInitialView,
+    showBasic,
+    showAdvanced,
+    showAll,
+  ]);
 
   React.useEffect(() => {
     hasHydratedViewRef.current = false;
@@ -419,14 +450,15 @@ export function SdkSectionPage({
     } else {
       setDirtyBySource({});
     }
-    setView((currentView) => {
-      if (!hasHydratedViewRef.current) {
-        hasHydratedViewRef.current = true;
-        return initialView;
-      }
-
-      return getLessDetailedView(currentView, initialView);
-    });
+    // The ref flip stays outside the updater: React double-invokes state
+    // updaters in StrictMode, so mutating it in there makes the second
+    // (kept) call take the already-hydrated branch and pin the view.
+    if (!hasHydratedViewRef.current) {
+      hasHydratedViewRef.current = true;
+      setView(initialView);
+    } else {
+      setView((currentView) => getLessDetailedView(currentView, initialView));
+    }
   }, [
     initialValuesBySource,
     initialView,
@@ -692,6 +724,7 @@ export function SdkSectionPage({
       <ViewToggle
         view={view}
         setView={setView}
+        showBasic={showBasic}
         showAdvanced={showAdvanced}
         showAll={showAll}
         isDisabled={isReadOnly}

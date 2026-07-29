@@ -85,6 +85,7 @@ function buildSavableSettings(): Settings {
 
 function renderSdkSectionPage(
   props: React.ComponentProps<typeof SdkSectionPage>,
+  { strict = false }: { strict?: boolean } = {},
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -99,9 +100,14 @@ function renderSdkSectionPage(
   mockUseSearchParams.mockReturnValue([{ get: () => null }, vi.fn()]);
 
   return render(React.createElement(SdkSectionPage, props), {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    ),
+    wrapper: ({ children }) => {
+      const tree = (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      );
+      return strict ? <React.StrictMode>{tree}</React.StrictMode> : tree;
+    },
   });
 }
 
@@ -173,6 +179,53 @@ describe("SdkSectionPage", () => {
     expect(
       await screen.findByTestId("sdk-settings-llm.api_version"),
     ).toBeInTheDocument();
+  });
+
+  it("renders each field once when the schema has duplicate sections for a key", async () => {
+    // The combined AgentSettings schema emits an "llm" section for each agent
+    // variant ("openhands" and "acp") with identical field keys. Only the first
+    // is used; without de-duplication every field would render twice (and React
+    // would warn about duplicate keys).
+    const llmSection = {
+      key: "llm",
+      label: "LLM",
+      fields: [
+        {
+          key: "llm.api_version",
+          label: "API Version",
+          section: "llm",
+          section_label: "LLM",
+          value_type: "string" as const,
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "minor" as const,
+          secret: false,
+          required: false,
+        },
+      ],
+    };
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [llmSection, { ...llmSection }],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {},
+      }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      getInitialView: () => "all",
+    });
+
+    const fields = await screen.findAllByTestId("sdk-settings-llm.api_version");
+    expect(fields).toHaveLength(1);
   });
 
   it("preserves the selected view when parent rerenders with the same settings", async () => {
@@ -671,6 +724,56 @@ describe("SdkSectionPage", () => {
       screen.queryByTestId("sdk-section-advanced-toggle"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("sdk-section-all-toggle")).toBeInTheDocument();
+  });
+
+  it("floors a critical-less schema at advanced under StrictMode", async () => {
+    // StrictMode double-invokes state updaters, so the hydration updater must
+    // stay pure: an impure one takes its already-hydrated branch on the second
+    // (kept) call and pins the page to the empty basic tier (#16097).
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "agent_context",
+          label: "Agent Context",
+          fields: [
+            {
+              key: "agent_context.load_memory",
+              label: "Persistent memory",
+              section: "agent_context",
+              section_label: "Agent Context",
+              value_type: "boolean",
+              default: false,
+              choices: [],
+              depends_on: [],
+              prominence: "major",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: { "agent_context.load_memory": false },
+      }),
+    );
+
+    renderSdkSectionPage(
+      {
+        settingsSources: [
+          { settingsSource: "agent_settings", sectionKeys: ["agent_context"] },
+        ],
+      },
+      { strict: true },
+    );
+
+    expect(
+      await screen.findByTestId("sdk-settings-agent_context.load_memory"),
+    ).toBeInTheDocument();
   });
 
   it("renders URL-like schema fields as url inputs", async () => {

@@ -82,9 +82,10 @@ export function SecretForm({
     secretToEdit: string,
     name: string,
     description?: string,
+    value?: string,
   ) => {
     updateSecret(
-      { secretToEdit, name, description },
+      { secretToEdit, name, description, value },
       {
         onSettled: onCancel,
         onSuccess: invalidateSecrets,
@@ -119,7 +120,14 @@ export function SecretForm({
 
         handleCreateSecret(trimmedName, trimmedValue, normalizedDescription);
       } else if (mode === "edit" && selectedSecret) {
-        handleEditSecret(selectedSecret, trimmedName, normalizedDescription);
+        // Blank value means "keep the existing secret"; only send a value when
+        // the user typed a replacement (#16134).
+        handleEditSecret(
+          selectedSecret,
+          trimmedName,
+          normalizedDescription,
+          trimmedValue || undefined,
+        );
       }
     }
   };
@@ -127,7 +135,9 @@ export function SecretForm({
   const formTestId = mode === "add" ? "add-secret-form" : "edit-secret-form";
   const isEditDirty =
     mode === "edit" &&
-    (name.trim() !== initialName.trim() || description !== secretDescription);
+    (name.trim() !== initialName.trim() ||
+      description !== secretDescription ||
+      value.trim() !== "");
   const isSubmitDisabled =
     mode === "add"
       ? !name.trim() || !value.trim()
@@ -156,25 +166,27 @@ export function SecretForm({
       />
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      {mode === "add" && (
-        <label className="flex flex-col gap-2.5 w-full min-w-0">
-          <span className="text-sm">{t(I18nKey.FORM$VALUE)}</span>
-          <textarea
-            data-testid="value-input"
-            name="secret-value"
-            required
-            value={value}
-            onChange={(event) => setValue(event.currentTarget.value)}
-            className={cn(
-              "resize-none",
-              formControlMultilineFieldClassName,
-              "placeholder:italic",
-              "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
-            )}
-            rows={8}
-          />
-        </label>
-      )}
+      <label className="flex flex-col gap-2.5 w-full min-w-0">
+        <span className="text-sm">
+          {mode === "add"
+            ? t(I18nKey.FORM$VALUE)
+            : t(I18nKey.SECRETS$SECRET_VALUE_LEAVE_BLANK)}
+        </span>
+        <textarea
+          data-testid="value-input"
+          name="secret-value"
+          required={mode === "add"}
+          value={value}
+          onChange={(event) => setValue(event.currentTarget.value)}
+          className={cn(
+            "resize-none",
+            formControlMultilineFieldClassName,
+            "placeholder:italic",
+            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
+          )}
+          rows={8}
+        />
+      </label>
 
       <label className="flex flex-col gap-2.5 w-full min-w-0">
         <div className="flex items-center gap-2">
