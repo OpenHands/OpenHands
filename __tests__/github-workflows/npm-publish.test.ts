@@ -36,6 +36,15 @@ describe("npm publish workflow", () => {
     );
   });
 
+  it("does not let electron-builder auto-publish during desktop builds", () => {
+    const packageJson = JSON.parse(read("package.json"));
+
+    expect(packageJson.scripts["build:desktop"]).toContain("--publish never");
+    expect(packageJson.scripts["build:desktop:universal"]).toContain(
+      "--publish never",
+    );
+  });
+
   it("builds both package surfaces with the production PostHog key", () => {
     const workflow = read(".github/workflows/npm-publish.yml");
     const buildAppStep = workflow.match(
