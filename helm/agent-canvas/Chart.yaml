@@ -13,7 +13,7 @@ version: 0.1.0
 # or a `sha-<git-sha>` tag).
 # Kept in sync by release-please (extra-files, type `generic`) — do not edit by
 # hand; the trailing annotation is what marks this line for replacement.
-appVersion: "1.6.1" # x-release-please-version
+appVersion: "1.7.0" # x-release-please-version
 kubeVersion: ">=1.24.0-0"
 home: https://github.com/OpenHands/agent-canvas
 sources:
