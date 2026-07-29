@@ -1721,6 +1721,71 @@ describe("ConversationPanel", () => {
         ).not.toBeInTheDocument();
       });
     });
+
+    it("loads hidden workspace folders without adding conversations to an exposed folder", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
+        createMockConversation({
+          id: `no-workspace-${index + 1}`,
+          title: `No workspace ${index + 1}`,
+        }),
+      );
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: noWorkspaceConversations,
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "no-workspace-7",
+              title: "No workspace 7",
+            }),
+            createMockConversation({
+              id: "no-workspace-8",
+              title: "No workspace 8",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha",
+              title: "Alpha conversation",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const noWorkspaceFolder = await screen.findByTestId(
+        "thread-folder-__none_workspace",
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+
+      await user.click(screen.getByTestId("load-more-conversations"));
+
+      await screen.findByTestId("thread-folder-ws--workspace-alpha");
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+
+      await user.click(
+        within(noWorkspaceFolder).getByTestId(
+          "thread-folder-view-more-__none_workspace",
+        ),
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(6);
+    });
   });
 
   it("reorders grouped folders via drag and drop", async () => {

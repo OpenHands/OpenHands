@@ -35,6 +35,7 @@ import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
   applyGroupFolderOrder,
+  filterToGroupDiscoveryPages,
   filterOutPinnedConversations,
   groupConversations,
   resolvePinnedConversations,
@@ -253,6 +254,21 @@ export function ConversationPanel({
     });
   }, [data]);
 
+  // Grouped pagination is folder-oriented. Record the first backend page for
+  // every conversation so later pages can introduce new folders without
+  // mutating the contents of folders that are already visible.
+  const conversationPageById = React.useMemo(() => {
+    const pageById = new Map<string, number>();
+    data?.pages.forEach((page, pageIndex) => {
+      page.items.forEach((conversation) => {
+        if (!pageById.has(conversation.id)) {
+          pageById.set(conversation.id, pageIndex);
+        }
+      });
+    });
+    return pageById;
+  }, [data]);
+
   const pinnedConversations = React.useMemo(
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
@@ -331,8 +347,13 @@ export function ConversationPanel({
       ...recentScoped,
       ...(showOlderConversations ? olderScoped : []),
     ];
-    return groupConversations(
+    const folderDiscoveryConversations = filterToGroupDiscoveryPages(
       merged,
+      conversationPageById,
+      activeBackend.kind,
+    );
+    return groupConversations(
+      folderDiscoveryConversations,
       activeBackend.kind,
       conversationSort,
       groupLabels,
@@ -340,6 +361,7 @@ export function ConversationPanel({
   }, [
     activeBackend.kind,
     compact,
+    conversationPageById,
     conversationSort,
     groupLabels,
     olderScoped,
@@ -373,27 +395,20 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupedCount = React.useMemo(() => {
-    if (!orderedConversationGroups) {
-      return 0;
-    }
-    return orderedConversationGroups.reduce(
-      (n, g) => n + g.conversations.length,
-      0,
-    );
-  }, [orderedConversationGroups]);
+  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
 
   const listIsEffectivelyEmpty =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount === 0
+      ? visibleGroupCount === 0
       : visibleFlatCount === 0;
 
-  // Number of conversations actually rendered in the list right now, in the
-  // current organize mode. "Load more" succeeds only when this number grows.
+  // Grouped pagination succeeds only when it discovers another folder;
+  // chronological pagination still succeeds when another row appears.
   const visibleCount =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount
+      ? visibleGroupCount
       : visibleFlatCount;
+  const loadedPageCount = data?.pages.length ?? 0;
 
   // KNOWN ISSUE (unresolved as of 2026-05-29): users still report that the
   // sidebar "Load more" sometimes requires two clicks before new conversations
@@ -413,7 +428,9 @@ export function ConversationPanel({
   // *visible* rows (filtered out by the active scope, or deduped as overlap),
   // so the list does not appear to grow. We capture the visible count at click
   // time and keep fetching pages — once the query is idle — until the visible
-  // count actually increases or there are no more pages.
+  // count actually increases or there are no more pages. `loadedPageCount`
+  // keeps the driver advancing when a grouped page contains only folders that
+  // were already discovered, leaving every other effect dependency unchanged.
   const [loadMoreFloor, setLoadMoreFloor] = React.useState<number | null>(null);
   const visibleCountRef = React.useRef(visibleCount);
   visibleCountRef.current = visibleCount;
@@ -433,20 +450,22 @@ export function ConversationPanel({
       setLoadMoreFloor(null);
       return;
     }
+    // Wait for any in-flight fetch (including the background refetch) to settle
+    // before evaluating `hasNextPage`; React Query may transiently clear that
+    // flag while replacing the last page.
+    if (isFetching || isFetchingNextPage) {
+      return;
+    }
     // Nothing more to fetch — stop waiting even if the list did not grow.
     if (!hasNextPage) {
       setLoadMoreFloor(null);
-      return;
-    }
-    // Wait for any in-flight fetch (including the background refetch) to settle
-    // before requesting the next page, otherwise the request is dropped.
-    if (isFetching || isFetchingNextPage) {
       return;
     }
     fetchNextPage();
   }, [
     loadMoreFloor,
     visibleCount,
+    loadedPageCount,
     hasNextPage,
     isFetching,
     isFetchingNextPage,

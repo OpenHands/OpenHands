@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyGroupFolderOrder,
+  filterToGroupDiscoveryPages,
   getGroupConversationPreview,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
@@ -253,6 +254,43 @@ describe("conversation-panel-list-helpers", () => {
       withActiveBeyondPreview.visibleConversations.map((c) => c.id),
     ).toEqual(["c-0", "c-1", "c-2", "c-3", "c-5"]);
     expect(GROUP_CONVERSATIONS_PREVIEW_LIMIT).toBe(5);
+  });
+
+  it("keeps only the discovery page for each workspace folder", () => {
+    // Later pages may still contain rows for already-visible folders; those
+    // must stay out of the grouped list so global Load more only reveals new
+    // folders.
+    const items = [
+      {
+        ...base,
+        id: "none-1",
+        title: "None 1",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "none-2",
+        title: "None 2",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "alpha-1",
+        title: "Alpha 1",
+        selected_workspace: "/workspace/alpha",
+      },
+    ] as AppConversation[];
+    const pageByConversationId = new Map([
+      ["none-1", 0],
+      ["none-2", 1],
+      ["alpha-1", 1],
+    ]);
+
+    expect(
+      filterToGroupDiscoveryPages(items, pageByConversationId, "local").map(
+        (conversation) => conversation.id,
+      ),
+    ).toEqual(["none-1", "alpha-1"]);
   });
 
   it("resolvePinnedConversations preserves pin order and drops missing ids", () => {

@@ -189,6 +189,51 @@ function repositoryGroup(conversation: AppConversation): {
   return { id: `repo:${normalized}`, label };
 }
 
+/**
+ * Resolves the stable folder identity used by grouped conversation views.
+ *
+ * Keeping this shared with `groupConversations` lets pagination reason about
+ * folder discovery without duplicating workspace/repository normalization.
+ */
+function getConversationGroupIdentity(
+  conversation: AppConversation,
+  backendKind: BackendKind,
+): { id: string; label: string } {
+  return backendKind === "local"
+    ? workspaceGroup(conversation)
+    : repositoryGroup(conversation);
+}
+
+/**
+ * Keeps only the page on which each folder first appears.
+ *
+ * The global "Load more" control discovers folders, while each folder's own
+ * "More" control owns conversation expansion. Later pages therefore cannot
+ * silently add conversations to a folder the user can already see.
+ */
+export function filterToGroupDiscoveryPages(
+  items: readonly AppConversation[],
+  pageByConversationId: ReadonlyMap<string, number>,
+  backendKind: BackendKind,
+): AppConversation[] {
+  const discoveryPageByGroupId = new Map<string, number>();
+
+  for (const conversation of items) {
+    const { id } = getConversationGroupIdentity(conversation, backendKind);
+    const page = pageByConversationId.get(conversation.id) ?? 0;
+    const currentDiscoveryPage = discoveryPageByGroupId.get(id);
+    if (currentDiscoveryPage === undefined || page < currentDiscoveryPage) {
+      discoveryPageByGroupId.set(id, page);
+    }
+  }
+
+  return items.filter((conversation) => {
+    const { id } = getConversationGroupIdentity(conversation, backendKind);
+    const page = pageByConversationId.get(conversation.id) ?? 0;
+    return page === discoveryPageByGroupId.get(id);
+  });
+}
+
 export function groupConversations(
   items: readonly AppConversation[],
   backendKind: BackendKind,
@@ -206,8 +251,10 @@ export function groupConversations(
   >();
 
   for (const c of items) {
-    const { id, label: rawLabel } =
-      backendKind === "local" ? workspaceGroup(c) : repositoryGroup(c);
+    const { id, label: rawLabel } = getConversationGroupIdentity(
+      c,
+      backendKind,
+    );
     const label =
       id === "__none_workspace"
         ? labels.emptyWorkspace
