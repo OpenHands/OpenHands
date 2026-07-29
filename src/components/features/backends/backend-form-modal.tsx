@@ -33,6 +33,10 @@ import {
   modalTitleLgClassName,
   modalTitleLgMediumClassName,
 } from "#/utils/modal-classes";
+import CloudMinimalIcon from "#/icons/cloud-minimal.svg?react";
+import ExternalLinkIcon from "#/icons/external-link.svg?react";
+import ChevronRightSmallIcon from "#/icons/chevron-right-small.svg?react";
+import ServerIcon from "#/icons/server.svg?react";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { BackendStatusDot } from "./backend-status-dot";
 import { DeviceFlowAuth } from "./device-flow-auth";
@@ -142,10 +146,19 @@ function isValidHostUrl(host: string): boolean {
 }
 
 const DEFAULT_OPENHANDS_CLOUD_HOST = "https://app.all-hands.dev";
+const LOCAL_BACKEND_COMMAND = "agent-canvas --backend-only --port 8001";
+const LOCAL_AGENT_SERVER_DOCS_URL =
+  "https://github.com/OpenHands/OpenHands/blob/main/docs/DEVELOPMENT.md#alternative-development-workflows";
+const REMOTE_AGENT_SERVER_DOCS_URL =
+  "https://github.com/OpenHands/OpenHands/blob/main/docs/SELF_HOSTING.md";
+const DEPLOYMENT_OPTIONS_URL =
+  "https://docs.openhands.dev/overview/introduction";
 
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
+type AddBackendOption = "cloud" | "agent-server";
+type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
   t: ReturnType<typeof useTranslation>["t"],
@@ -308,6 +321,8 @@ interface UseBackendFormOptions {
    * success side effects. Should throw on failure.
    */
   onSubmitOverride?: (payload: BackendFormSubmitPayload) => Promise<void>;
+  /** Fix the persisted backend kind instead of inferring it from the host. */
+  fixedKind?: BackendKind;
 }
 
 /**
@@ -324,6 +339,7 @@ function useBackendForm({
   onSuccess,
   requireApiKey = false,
   onSubmitOverride,
+  fixedKind,
 }: UseBackendFormOptions) {
   const { t } = useTranslation("openhands");
 
@@ -342,7 +358,7 @@ function useBackendForm({
   // respects that choice. A custom-domain OHE can't be distinguished from a
   // custom-domain local agent-server by host alone, so ManualConnectionColumn
   // exposes `setKind` (a Type selector) to let the user declare it.
-  const kind = kindOverride ?? inferKindFromHost(host);
+  const kind = fixedKind ?? kindOverride ?? inferKindFromHost(host);
   const needsApiKey = requireApiKey || kind !== "local";
   const canSubmit =
     name.trim().length > 0 &&
@@ -395,6 +411,7 @@ function useBackendForm({
       onSuccess,
       requireApiKey,
       onSubmitOverride,
+      fixedKind,
       t,
     ],
   );
@@ -793,6 +810,8 @@ interface ManualConnectionColumnProps {
   submitLabel: React.ReactNode;
   submittingLabel: React.ReactNode;
   submitTestId?: string;
+  fixedKind?: BackendKind;
+  showKindSelector?: boolean;
 }
 
 /**
@@ -807,6 +826,8 @@ function ManualConnectionColumn({
   submitLabel,
   submittingLabel,
   submitTestId,
+  fixedKind,
+  showKindSelector = true,
 }: ManualConnectionColumnProps) {
   const { t } = useTranslation("openhands");
 
@@ -842,6 +863,7 @@ function ManualConnectionColumn({
       );
     },
     requireApiKey,
+    fixedKind,
   });
 
   return (
@@ -893,19 +915,21 @@ function ManualConnectionColumn({
         </p>
       </div>
 
-      <div className="flex flex-col items-start gap-2.5">
-        <span className="text-sm">{t(I18nKey.BACKEND$KIND_LABEL)}</span>
-        <SegmentedToggle<BackendKind>
-          value={kind}
-          options={[
-            { value: "local", label: t(I18nKey.BACKEND$KIND_LOCAL) },
-            { value: "cloud", label: t(I18nKey.BACKEND$KIND_CLOUD) },
-          ]}
-          onChange={(value) => setKind(value)}
-          ariaLabel={t(I18nKey.BACKEND$KIND_LABEL)}
-          testId={`${testIdRoot}-kind`}
-        />
-      </div>
+      {showKindSelector ? (
+        <div className="flex flex-col items-start gap-2.5">
+          <span className="text-sm">{t(I18nKey.BACKEND$KIND_LABEL)}</span>
+          <SegmentedToggle<BackendKind>
+            value={kind}
+            options={[
+              { value: "local", label: t(I18nKey.BACKEND$KIND_LOCAL) },
+              { value: "cloud", label: t(I18nKey.BACKEND$KIND_CLOUD) },
+            ]}
+            onChange={(value) => setKind(value)}
+            ariaLabel={t(I18nKey.BACKEND$KIND_LABEL)}
+            testId={`${testIdRoot}-kind`}
+          />
+        </div>
+      ) : null}
 
       <SettingsInput
         testId={`${testIdRoot}-api-key`}
@@ -1056,6 +1080,318 @@ function CloudLoginColumn({
   );
 }
 
+interface BackendOptionTabProps {
+  value: AddBackendOption;
+  selectedValue: AddBackendOption;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  onSelect: (value: AddBackendOption) => void;
+  panelId: string;
+  testId: string;
+}
+
+function BackendOptionTab({
+  value,
+  selectedValue,
+  title,
+  description,
+  icon,
+  onSelect,
+  panelId,
+  testId,
+}: BackendOptionTabProps) {
+  const isSelected = value === selectedValue;
+  const tabId = `${testId}-tab`;
+
+  return (
+    <button
+      id={tabId}
+      type="button"
+      role="tab"
+      aria-selected={isSelected}
+      aria-controls={panelId}
+      data-testid={testId}
+      onClick={() => onSelect(value)}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-4 rounded-xl border p-4 text-left transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
+        isSelected
+          ? "border-primary bg-white/5"
+          : "border-[var(--oh-border)] hover:border-[var(--oh-text-tertiary)] hover:bg-white/[0.03]",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-12 shrink-0 items-center justify-center rounded-xl bg-[var(--oh-surface-raised)]",
+          isSelected ? "text-primary" : "text-[var(--oh-muted)]",
+        )}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-base font-medium text-white">{title}</span>
+        <span className="mt-1 block text-sm leading-5 text-[var(--oh-muted)]">
+          {description}
+        </span>
+      </span>
+      <ChevronRightSmallIcon
+        className={cn(
+          "size-5 shrink-0",
+          isSelected ? "text-primary" : "text-[var(--oh-muted)]",
+        )}
+        aria-hidden
+      />
+    </button>
+  );
+}
+
+function GuidanceCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-[var(--oh-border)] p-5">
+      <h4 className="text-base font-medium text-white">{title}</h4>
+      <div className="mt-3 text-sm leading-6 text-[var(--oh-muted)]">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function DocsCard({
+  href,
+  label,
+  testId,
+}: {
+  href: string;
+  label: string;
+  testId: string;
+}) {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <GuidanceCard title={t(I18nKey.SIDEBAR$DOCS)}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid={testId}
+        className="inline-flex items-center gap-1.5 text-primary hover:underline"
+      >
+        <span>{label}</span>
+        <ExternalLinkIcon className="size-4 shrink-0" aria-hidden />
+      </a>
+    </GuidanceCard>
+  );
+}
+
+function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
+  const { t } = useTranslation("openhands");
+
+  if (location === "remote") {
+    return (
+      <div
+        data-testid="add-backend-remote-guidance"
+        className="flex min-w-0 flex-col gap-4"
+      >
+        <GuidanceCard title={t(I18nKey.BACKEND$REMOTE_SETUP_TITLE)}>
+          <p>{t(I18nKey.BACKEND$REMOTE_SETUP_DESCRIPTION)}</p>
+        </GuidanceCard>
+        <GuidanceCard title={t(I18nKey.BACKEND$REMOTE_CONNECTION_TITLE)}>
+          <p>{t(I18nKey.BACKEND$REMOTE_CONNECTION_DESCRIPTION)}</p>
+        </GuidanceCard>
+        <DocsCard
+          href={REMOTE_AGENT_SERVER_DOCS_URL}
+          label={t(I18nKey.BACKEND$REMOTE_SETUP_DOCS)}
+          testId="add-backend-remote-docs-link"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="add-backend-local-guidance"
+      className="flex min-w-0 flex-col gap-4"
+    >
+      <GuidanceCard title={t(I18nKey.BACKEND$BEFORE_CONNECT_TITLE)}>
+        <p>{t(I18nKey.BACKEND$LOCAL_SETUP_DESCRIPTION)}</p>
+        <code className="mt-2 block break-words font-mono text-sm text-white">
+          {LOCAL_BACKEND_COMMAND}
+        </code>
+      </GuidanceCard>
+      <DocsCard
+        href={LOCAL_AGENT_SERVER_DOCS_URL}
+        label={t(I18nKey.BACKEND$LOCAL_SETUP_DOCS)}
+        testId="add-backend-local-docs-link"
+      />
+    </div>
+  );
+}
+
+function AddBackendChooser({
+  onConnected,
+  source,
+}: {
+  onConnected: (
+    payload: BackendFormSubmitPayload,
+    connectionMethod: BackendConnectionMethod,
+    metadata?: BackendConnectionTestMetadata,
+  ) => void;
+  source: BackendAddedSource;
+}) {
+  const { t } = useTranslation("openhands");
+  const [selectedOption, setSelectedOption] =
+    React.useState<AddBackendOption>("cloud");
+  const [agentServerLocation, setAgentServerLocation] =
+    React.useState<AgentServerLocation>("local");
+  const panelId = "add-backend-selected-panel";
+  const selectedTabId = `add-backend-option-${selectedOption}-tab`;
+  const isCloudSelected = selectedOption === "cloud";
+
+  return (
+    <div data-testid="add-backend-chooser" className="flex flex-col">
+      <div className="grid min-h-[520px] grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="border-b border-[var(--oh-border)] pb-6 lg:border-r lg:border-b-0 lg:pr-6 lg:pb-0">
+          <h3 className="text-lg font-medium text-white">
+            {t(I18nKey.BACKEND$CHOOSER_TITLE)}
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[var(--oh-muted)]">
+            {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}
+          </p>
+
+          <div
+            role="tablist"
+            aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
+            className="mt-6 flex flex-col gap-3"
+          >
+            <BackendOptionTab
+              value="cloud"
+              selectedValue={selectedOption}
+              title={t(I18nKey.BACKEND$CLOUD_TITLE)}
+              description={t(I18nKey.BACKEND$CLOUD_OPTION_DESCRIPTION)}
+              icon={<CloudMinimalIcon className="size-7" />}
+              onSelect={setSelectedOption}
+              panelId={panelId}
+              testId="add-backend-option-cloud"
+            />
+            <BackendOptionTab
+              value="agent-server"
+              selectedValue={selectedOption}
+              title={t(I18nKey.BACKEND$AGENT_SERVER_TITLE)}
+              description={t(I18nKey.BACKEND$AGENT_SERVER_OPTION_DESCRIPTION)}
+              icon={<ServerIcon className="size-7" />}
+              onSelect={setSelectedOption}
+              panelId={panelId}
+              testId="add-backend-option-agent-server"
+            />
+          </div>
+        </aside>
+
+        <section
+          id={panelId}
+          role="tabpanel"
+          aria-labelledby={selectedTabId}
+          className="min-w-0 pt-6 lg:pl-7 lg:pt-0"
+        >
+          <header className="flex items-start gap-4">
+            <span
+              className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] text-primary"
+              aria-hidden
+            >
+              {isCloudSelected ? (
+                <CloudMinimalIcon className="size-7" />
+              ) : (
+                <ServerIcon className="size-7" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-2xl font-medium text-white">
+                {isCloudSelected
+                  ? t(I18nKey.BACKEND$CLOUD_TITLE)
+                  : t(I18nKey.BACKEND$AGENT_SERVER_TITLE)}
+              </h3>
+              <p className="mt-2 text-[16px] leading-6 text-[var(--oh-muted)]">
+                {isCloudSelected
+                  ? t(I18nKey.BACKEND$CLOUD_OPTION_DESCRIPTION)
+                  : t(I18nKey.BACKEND$AGENT_SERVER_DESCRIPTION)}
+              </p>
+            </div>
+          </header>
+
+          {isCloudSelected ? (
+            <div
+              data-testid="add-backend-cloud-panel"
+              className="mt-6 flex min-h-[360px] items-center justify-center rounded-xl border border-[var(--oh-border)] p-8"
+            >
+              <div className="w-full max-w-md">
+                <CloudLoginColumn
+                  onConnected={onConnected}
+                  testIdRoot="add-backend"
+                  analyticsSource={source}
+                />
+              </div>
+            </div>
+          ) : (
+            <div data-testid="add-backend-agent-server-panel" className="mt-6">
+              <SegmentedToggle<AgentServerLocation>
+                value={agentServerLocation}
+                options={[
+                  {
+                    value: "local",
+                    label: t(I18nKey.BACKEND$KIND_LOCAL),
+                  },
+                  {
+                    value: "remote",
+                    label: t(I18nKey.BACKEND$KIND_REMOTE),
+                  },
+                ]}
+                onChange={setAgentServerLocation}
+                ariaLabel={t(I18nKey.BACKEND$AGENT_SERVER_LOCATION)}
+                testId="add-backend-location"
+              />
+
+              <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <AgentServerGuidance location={agentServerLocation} />
+                <ManualConnectionColumn
+                  onConnected={onConnected}
+                  testIdRoot="add-backend"
+                  requireApiKey={agentServerLocation === "remote"}
+                  submitLabel={t(I18nKey.BACKEND$CONNECT)}
+                  submittingLabel={t(
+                    I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING,
+                  )}
+                  fixedKind="local"
+                  showKindSelector={false}
+                />
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      <div className="mt-6 border-t border-[var(--oh-border)] pt-5 text-center">
+        <a
+          href={DEPLOYMENT_OPTIONS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="add-backend-deployment-options-link"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          <span>{t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}</span>
+          <ExternalLinkIcon className="size-4 shrink-0" aria-hidden />
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function AddBackendConnectionOptions({
   onClose,
   source,
@@ -1066,6 +1402,7 @@ function AddBackendConnectionOptions({
   const { addBackend } = useActiveBackendContext();
   const redirectAfterAdd = useRedirectAfterAddBackend();
   const { trackBackendAdded } = useTracking();
+  const lockedCloudHost = getLockedCloudHost();
 
   const handleConnected = React.useCallback(
     (
@@ -1087,12 +1424,18 @@ function AddBackendConnectionOptions({
     [addBackend, redirectAfterAdd, onClose, trackBackendAdded, source],
   );
 
-  return (
-    <BackendConnectionOptions
-      onConnected={handleConnected}
-      analyticsSource={source}
-    />
-  );
+  if (lockedCloudHost) {
+    return (
+      <CloudLoginColumn
+        onConnected={handleConnected}
+        testIdRoot="add-backend"
+        lockedHost={lockedCloudHost}
+        analyticsSource={source}
+      />
+    );
+  }
+
+  return <AddBackendChooser onConnected={handleConnected} source={source} />;
 }
 
 // ── Modal wrappers ──────────────────────────────────────────────────
@@ -1124,8 +1467,7 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative rounded-xl border border-[var(--oh-border)] bg-base-secondary",
-            modalWidthClassName("xl"),
+            "relative max-h-[92vh] w-[1120px] overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
@@ -1141,7 +1483,7 @@ export function BackendFormModal({
             </div>
           )}
 
-          <div className={cn("px-6 pb-6", hideCloseButton ? "pt-6" : "pt-2")}>
+          <div className={cn("px-6 pb-6", hideCloseButton ? "pt-6" : "pt-4")}>
             <AddBackendConnectionOptions onClose={onClose} source={source} />
           </div>
         </div>

@@ -51,6 +51,11 @@ function renderWithProviders(
   );
 }
 
+async function selectAgentServer(user = userEvent.setup()) {
+  await user.click(screen.getByTestId("add-backend-option-agent-server"));
+  return user;
+}
+
 beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
@@ -66,41 +71,73 @@ afterEach(() => {
 });
 
 describe("AddBackendModal – two-column layout", () => {
-  it("renders a two-column layout with manual and cloud sections", () => {
+  it("renders Cloud first and selected, with Agent-server as the second tab", () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]).toHaveAttribute("data-testid", "add-backend-option-cloud");
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[1]).toHaveAttribute(
+      "data-testid",
+      "add-backend-option-agent-server",
+    );
+    expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+
+    expect(screen.getByTestId("add-backend-cloud-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-cloud-title")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-login-button")).toBeInTheDocument();
+  });
+
+  it("shows Local and Remote inside the Agent-server tab", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    await selectAgentServer();
+
+    expect(
+      screen.getByTestId("add-backend-agent-server-panel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-backend-location-option-local"),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByTestId("add-backend-location-option-remote"),
+    ).toHaveAttribute("aria-checked", "false");
+    expect(
+      screen.getByTestId("add-backend-local-guidance"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-local-docs-link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("docs/DEVELOPMENT.md"),
+    );
     expect(screen.getByTestId("add-backend-name")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-host")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-host-helper")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-api-key")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-submit")).toBeInTheDocument();
-
-    expect(screen.getByTestId("add-backend-cloud-title")).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-login-button")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("add-backend-advanced-toggle"),
-    ).toBeInTheDocument();
   });
 
-  it("starts with an empty host field (no prefilled value)", () => {
+  it("starts the Agent-server form with an empty host field", async () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    await selectAgentServer();
 
     expect(screen.getByTestId("add-backend-host")).toHaveValue("");
   });
 
   it("disables Connect until name and host are filled (local backend)", async () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await selectAgentServer();
 
     const submit = screen.getByTestId(
       "add-backend-submit",
     ) as HTMLButtonElement;
     expect(submit).toBeDisabled();
 
-    const user = userEvent.setup();
     await user.type(screen.getByTestId("add-backend-name"), "My Server");
     expect(submit).toBeDisabled();
 
-    // A localhost host infers "local" kind → no API key required
+    // Local agent-server connections do not require an API key.
     await user.type(
       screen.getByTestId("add-backend-host"),
       "http://localhost:8000",
@@ -112,7 +149,7 @@ describe("AddBackendModal – two-column layout", () => {
     const onClose = vi.fn();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
 
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
     await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
     await user.type(
       screen.getByTestId("add-backend-host"),
@@ -137,31 +174,54 @@ describe("AddBackendModal – two-column layout", () => {
     });
   });
 
-  it("requires API key when host infers cloud kind", async () => {
-    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+  it("requires an API key for a Remote agent-server", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    const user = await selectAgentServer();
+    await user.click(screen.getByTestId("add-backend-location-option-remote"));
 
     const submit = screen.getByTestId(
       "add-backend-submit",
     ) as HTMLButtonElement;
-    const user = userEvent.setup();
 
-    await user.type(screen.getByTestId("add-backend-name"), "Cloud");
+    expect(
+      screen.getByTestId("add-backend-remote-guidance"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-remote-docs-link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("docs/SELF_HOSTING.md"),
+    );
+
+    await user.type(screen.getByTestId("add-backend-name"), "Remote GPU");
     await user.type(
       screen.getByTestId("add-backend-host"),
-      "https://app.openhands.dev",
+      "https://agent.example.com",
     );
-    // Cloud host without API key → submit should be disabled
     expect(submit).toBeDisabled();
 
     await user.type(screen.getByTestId("add-backend-api-key"), "token");
     expect(submit).not.toBeDisabled();
+
+    await user.click(submit);
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    const stored = JSON.parse(
+      window.localStorage.getItem("openhands-backends") ?? "[]",
+    );
+    expect(
+      stored.find((backend: { name: string }) => backend.name === "Remote GPU"),
+    ).toMatchObject({
+      host: "https://agent.example.com",
+      apiKey: "token",
+      kind: "local",
+    });
   });
 
   it("saves the backend, switches to it, and closes", async () => {
     const onClose = vi.fn();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
 
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
     await user.type(screen.getByTestId("add-backend-name"), "Local 1");
     await user.type(
       screen.getByTestId("add-backend-host"),
@@ -197,7 +257,7 @@ describe("AddBackendModal – two-column layout", () => {
     const onClose = vi.fn();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
 
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
     await user.type(screen.getByTestId("add-backend-name"), "GPU Tunnel");
     await user.type(
       screen.getByTestId("add-backend-host"),
@@ -220,7 +280,7 @@ describe("AddBackendModal – two-column layout", () => {
     const onClose = vi.fn();
     renderWithProviders(<AddBackendModal onClose={onClose} />);
 
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
     await user.type(screen.getByTestId("add-backend-name"), "Old Tunnel");
     await user.type(
       screen.getByTestId("add-backend-host"),
@@ -282,7 +342,7 @@ describe("AddBackendModal – redirect after adding a backend", () => {
   }
 
   async function addLocalBackend() {
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
     await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
     await user.type(
       screen.getByTestId("add-backend-host"),
@@ -332,7 +392,7 @@ describe("AddBackendModal – analytics", () => {
   it("captures backend_added once with manual connection metadata", async () => {
     // Arrange
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
-    const user = userEvent.setup();
+    const user = await selectAgentServer();
 
     // Act — connect a local backend through the manual form
     await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
