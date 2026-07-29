@@ -23,8 +23,8 @@ import { useSettings } from "./query/use-settings";
  * Consent model:
  *   true  → opt in  (user explicitly accepted)
  *   false → opt out (user explicitly denied)
- *   null  → opt out (consent not yet collected — safe default while loading
- *           or on first visit, prevents capturing before the user has decided)
+ *   null  → pending (consent not yet collected; PostHog stays opted out until
+ *           the user decides)
  */
 export const useSyncTelemetryConsent = () => {
   const { backend } = useActiveBackend();
@@ -69,8 +69,8 @@ export const useSyncTelemetryConsent = () => {
       return;
     }
 
-    // null and false are both treated as "not consented".
-    // Only an explicit true opts PostHog in.
+    if (settings.user_consents_to_analytics === null) return;
+
     void setTelemetryConsent(
       settings.user_consents_to_analytics === true ? "granted" : "denied",
       { syncToCloud: false },

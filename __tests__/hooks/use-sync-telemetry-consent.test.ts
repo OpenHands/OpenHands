@@ -60,16 +60,14 @@ describe("useSyncTelemetryConsent", () => {
     pendingConsentListener = null;
   });
 
-  it("calls opt-out when user_consents_to_analytics is null", () => {
+  it("leaves browser consent pending when user_consents_to_analytics is null", () => {
     useSettingsMock.mockReturnValue({
       data: { user_consents_to_analytics: null },
     });
 
     renderHook(() => useSyncTelemetryConsent());
 
-    expect(setTelemetryConsentMock).toHaveBeenCalledWith("denied", {
-      syncToCloud: false,
-    });
+    expect(setTelemetryConsentMock).not.toHaveBeenCalled();
   });
 
   it("calls opt-out when user_consents_to_analytics is false", () => {
@@ -165,12 +163,10 @@ describe("useSyncTelemetryConsent", () => {
 
   it("reacts when a first-run choice is made after the hook has mounted", () => {
     useSettingsMock.mockReturnValue({
-      data: { user_consents_to_analytics: false },
+      data: { user_consents_to_analytics: null },
     });
     renderHook(() => useSyncTelemetryConsent());
-    expect(setTelemetryConsentMock).toHaveBeenCalledWith("denied", {
-      syncToCloud: false,
-    });
+    expect(setTelemetryConsentMock).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
     state.pendingConsent = "granted";
