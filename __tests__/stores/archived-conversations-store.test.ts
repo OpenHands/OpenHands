@@ -55,26 +55,23 @@ describe("archived-conversations store", () => {
     ).toEqual([]);
   });
 
-  it("prunes missing conversations and persists archive order", () => {
+  it("persists archives across reloads so they survive pagination", () => {
+    // Archives are never pruned against the loaded pages: an archived
+    // conversation that is not on the currently fetched page must stay
+    // archived instead of reappearing in the list.
     useArchivedConversationsStore
       .getState()
       .archiveConversation(BACKEND_ID, "conversation-a");
     useArchivedConversationsStore
       .getState()
       .archiveConversation(BACKEND_ID, "conversation-b");
-    useArchivedConversationsStore
-      .getState()
-      .pruneMissingConversations(BACKEND_ID, ["conversation-b"]);
-
-    expect(
-      useArchivedConversationsStore.getState().archivesByBackendId[BACKEND_ID],
-    ).toEqual(["conversation-b"]);
 
     const persisted = JSON.parse(
       window.localStorage.getItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY) ?? "{}",
     );
     expect(persisted.state.archivesByBackendId[BACKEND_ID]).toEqual([
       "conversation-b",
+      "conversation-a",
     ]);
   });
 });

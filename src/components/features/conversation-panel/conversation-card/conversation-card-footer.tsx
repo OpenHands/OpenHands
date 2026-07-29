@@ -67,6 +67,12 @@ interface ConversationCardFooterProps {
    * "Tags" toggle.
    */
   showTags?: boolean;
+  /**
+   * Marks the conversation as archived. Archived rows are hidden from the list
+   * unless the panel's "Show archived" toggle is on, so the chip is what tells
+   * the user why an otherwise ordinary row is visible.
+   */
+  isArchived?: boolean;
 }
 
 export function ConversationCardFooter({
@@ -83,6 +89,7 @@ export function ConversationCardFooter({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
 }: ConversationCardFooterProps) {
   const { t } = useTranslation("openhands");
 
@@ -156,13 +163,21 @@ export function ConversationCardFooter({
           </span>
         </div>
       ) : null}
-      {displayTags.length > 0 ? (
+      {displayTags.length > 0 || isArchived ? (
         <div
           className={cn(
             "flex flex-row flex-wrap items-center gap-1 min-w-0",
             metadataIndentClass,
           )}
         >
+          {isArchived ? (
+            <span
+              data-testid="conversation-card-archived-chip"
+              className="inline-flex items-center rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]"
+            >
+              {t(I18nKey.COMMON$ARCHIVED)}
+            </span>
+          ) : null}
           {visibleTags.map(([key, value]) => (
             <span
               key={key}

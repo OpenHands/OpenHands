@@ -28,6 +28,8 @@ function renderFilterMenu(
     setThreadScope: vi.fn(),
     showOlderConversations: false,
     toggleShowOlderConversations: vi.fn(),
+    showArchivedConversations: false,
+    toggleShowArchivedConversations: vi.fn(),
     showRepoBranchMetadata: false,
     toggleShowRepoBranchMetadata: vi.fn(),
     showLlmProfiles: false,

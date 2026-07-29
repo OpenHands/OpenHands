@@ -112,6 +112,12 @@ export function ConversationPanel({
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
   );
+  const showArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.showArchivedConversations,
+  );
+  const toggleShowArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.toggleShowArchivedConversations,
+  );
   const toggleShowOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.toggleShowOlderConversations,
   );
@@ -196,6 +202,10 @@ export function ConversationPanel({
   const archiveConversation = useArchivedConversationsStore(
     (state) => state.archiveConversation,
   );
+  const archivedIdSet = React.useMemo(
+    () => new Set(archivedIds),
+    [archivedIds],
+  );
   const removeArchivedConversation = useArchivedConversationsStore(
     (state) => state.removeArchivedConversation,
   );
@@ -263,15 +273,19 @@ export function ConversationPanel({
     // same conversation twice. Dedupe by id (keeping the first/freshest copy)
     // so the rendered count reflects real growth and React keys stay unique.
     const seen = new Set<string>();
-    const archived = new Set(archivedIds);
     return all.filter((conversation) => {
-      if (seen.has(conversation.id) || archived.has(conversation.id)) {
+      if (seen.has(conversation.id)) {
+        return false;
+      }
+      // Archiving hides a conversation from the list; it never deletes it. The
+      // "Show archived" toggle brings those rows back so they stay restorable.
+      if (!showArchivedConversations && archivedIdSet.has(conversation.id)) {
         return false;
       }
       seen.add(conversation.id);
       return true;
     });
-  }, [archivedIds, data]);
+  }, [archivedIdSet, data, showArchivedConversations]);
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -501,12 +515,15 @@ export function ConversationPanel({
   // pagination, which previously caused the panel to feel like it had stray
   // scrollable space at the bottom.
   const olderHidden = olderScoped.length > 0 && !showOlderConversations;
-  // Compact mode also hides "Load more" — paginating into archived
-  // conversations contradicts the "active only" intent of the icon rail.
-  // Do not show when the visible list is empty (e.g. filters hide every
-  // loaded conversation) — that state already shows "No conversations found".
-  const showLoadMore =
-    !!hasNextPage && !olderHidden && !compact && !listIsEffectivelyEmpty;
+  // Compact mode also hides "Load more" — paginating into stale conversations
+  // contradicts the "active only" intent of the icon rail.
+  // Availability tracks backend exhaustion, never visible emptiness: archiving
+  // (like any client-side filter) can hide every row of the loaded pages, and
+  // hiding the control there would strand the remaining pages behind a "No
+  // conversations found" message with no way forward. `requestLoadMore`'s floor
+  // driver keeps paging until a visible row appears, so a single click walks
+  // past pages that are entirely archived.
+  const showLoadMore = !!hasNextPage && !olderHidden && !compact;
 
   const { mutate: createConversation } = useCreateConversation();
   const isCreatingConversationFlow = useIsCreatingConversation();
@@ -546,6 +563,15 @@ export function ConversationPanel({
       setSelectedConversationTitle(title);
     },
     [],
+  );
+
+  // Unarchiving needs no confirmation: it restores a row the user can archive
+  // again in one click, and nothing about the conversation itself changes.
+  const handleUnarchiveProject = React.useCallback(
+    (conversationId: string) => {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    },
+    [activeBackend.id, removeArchivedConversation],
   );
 
   const handleStopConversation = React.useCallback((conversationId: string) => {
@@ -636,6 +662,7 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
+      const isArchived = archivedIdSet.has(conversation.id);
       if (compact) {
         return (
           <CompactConversationRow
@@ -713,8 +740,21 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
-              onArchive={() =>
-                handleArchiveProject(conversation.id, conversation.title ?? "")
+              // Exactly one direction is offered per row, so the menu always
+              // reflects the conversation's current archived state.
+              onArchive={
+                isArchived
+                  ? undefined
+                  : () =>
+                      handleArchiveProject(
+                        conversation.id,
+                        conversation.title ?? "",
+                      )
+              }
+              onUnarchive={
+                isArchived
+                  ? () => handleUnarchiveProject(conversation.id)
+                  : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
               onChangeTitle={(title) =>
@@ -747,6 +787,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               tags={conversation.tags}
               showTags={showTagsMetadata}
+              isArchived={isArchived}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
@@ -757,12 +798,14 @@ export function ConversationPanel({
     },
     [
       activeBackend.id,
+      archivedIdSet,
       compact,
       currentConversationId,
       handleArchiveProject,
       handleConversationTitleChange,
       handleDeleteProject,
       handleStopConversation,
+      handleUnarchiveProject,
       onClose,
       openContextMenuId,
       pinnedIds,
@@ -832,6 +875,10 @@ export function ConversationPanel({
                 threadScope={threadScope}
                 setThreadScope={setThreadScope}
                 showOlderConversations={showOlderConversations}
+                showArchivedConversations={showArchivedConversations}
+                toggleShowArchivedConversations={
+                  toggleShowArchivedConversations
+                }
                 toggleShowOlderConversations={toggleShowOlderConversations}
                 showRepoBranchMetadata={showRepoBranchMetadata}
                 toggleShowRepoBranchMetadata={toggleShowRepoBranchMetadata}

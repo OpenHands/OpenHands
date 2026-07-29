@@ -21,6 +21,7 @@ import {
  */
 interface ConversationPanelPreferencesState {
   showOlderConversations: boolean;
+  showArchivedConversations: boolean;
   showRepoBranchMetadata: boolean;
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
@@ -34,6 +35,8 @@ interface ConversationPanelPreferencesState {
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
   toggleShowOlderConversations: () => void;
+  setShowArchivedConversations: (value: boolean) => void;
+  toggleShowArchivedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
   toggleShowRepoBranchMetadata: () => void;
   setShowLlmProfiles: (value: boolean) => void;
@@ -53,6 +56,7 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
 
 const initialState: ConversationPanelPreferencesState = {
   showOlderConversations: true,
+  showArchivedConversations: false,
   showRepoBranchMetadata: false,
   showLlmProfiles: true,
   showTagsMetadata: true,
@@ -74,6 +78,13 @@ export const useConversationPanelPreferencesStore =
         toggleShowOlderConversations: () =>
           set((state) => ({
             showOlderConversations: !state.showOlderConversations,
+          })),
+
+        setShowArchivedConversations: (value) =>
+          set(() => ({ showArchivedConversations: value })),
+        toggleShowArchivedConversations: () =>
+          set((state) => ({
+            showArchivedConversations: !state.showArchivedConversations,
           })),
 
         setShowRepoBranchMetadata: (value) =>
@@ -116,6 +127,7 @@ export const useConversationPanelPreferencesStore =
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,
+          showArchivedConversations: state.showArchivedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,
           showTagsMetadata: state.showTagsMetadata,

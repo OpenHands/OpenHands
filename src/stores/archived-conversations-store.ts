@@ -14,10 +14,6 @@ interface ArchivedConversationsActions {
     conversationId: string,
   ) => void;
   isArchived: (backendId: string, conversationId: string) => boolean;
-  pruneMissingConversations: (
-    backendId: string,
-    existingIds: readonly string[],
-  ) => void;
 }
 
 type ArchivedConversationsStore = ArchivedConversationsState &
@@ -76,24 +72,6 @@ export const useArchivedConversationsStore =
           getArchivesForBackend(get().archivesByBackendId, backendId).includes(
             conversationId,
           ),
-
-        pruneMissingConversations: (backendId, existingIds) => {
-          const existing = new Set(existingIds);
-          const current = getArchivesForBackend(
-            get().archivesByBackendId,
-            backendId,
-          );
-          const pruned = current.filter((id) => existing.has(id));
-          if (pruned.length === current.length) {
-            return;
-          }
-          set((state) => ({
-            archivesByBackendId: {
-              ...state.archivesByBackendId,
-              [backendId]: pruned,
-            },
-          }));
-        },
       }),
       {
         name: ARCHIVED_CONVERSATIONS_STORAGE_KEY,

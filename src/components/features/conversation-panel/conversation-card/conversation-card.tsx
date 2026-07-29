@@ -21,6 +21,12 @@ interface ConversationCardProps {
   onClick?: () => void;
   onDelete?: () => void;
   onArchive?: () => void;
+  /**
+   * Restores an archived conversation. The panel passes this instead of
+   * `onArchive` for rows that are already archived, so the menu offers exactly
+   * one of the two directions.
+   */
+  onUnarchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
   showOptions?: boolean;
@@ -43,6 +49,7 @@ interface ConversationCardProps {
   tags?: Record<string, string> | null;
   /** Gates the tag-chip row; wired to the panel's "Tags" metadata toggle. */
   showTags?: boolean;
+  isArchived?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
   /** When true and pinned, keep the pin icon visible without hovering. */
@@ -53,6 +60,7 @@ export function ConversationCard({
   onClick,
   onDelete,
   onArchive,
+  onUnarchive,
   onStop,
   onChangeTitle,
   showOptions,
@@ -74,6 +82,7 @@ export function ConversationCard({
   acpServer = null,
   tags = null,
   showTags = false,
+  isArchived = false,
   isPinned = false,
   onTogglePin,
   alwaysShowPinIcon = false,
@@ -101,6 +110,13 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     onArchive?.();
+    onContextMenuToggle?.(false);
+  };
+
+  const handleUnarchive = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onUnarchive?.();
     onContextMenuToggle?.(false);
   };
 
@@ -192,6 +208,7 @@ export function ConversationCard({
   const hasContextMenu = !!(
     onDelete ||
     onArchive ||
+    onUnarchive ||
     onChangeTitle ||
     showOptions
   );
@@ -199,6 +216,7 @@ export function ConversationCard({
   const showPersistentPinIcon = alwaysShowPinIcon && isPinned && !!onTogglePin;
   const shouldRenderFooter =
     showRepositoryMetadata ||
+    isArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
     (showTags && getDisplayConversationTags(tags).length > 0);
 
@@ -283,6 +301,7 @@ export function ConversationCard({
                       onContextMenuToggle={onContextMenuToggle || (() => {})}
                       onDelete={onDelete && handleDelete}
                       onArchive={onArchive && handleArchive}
+                      onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -310,6 +329,7 @@ export function ConversationCard({
                   onContextMenuToggle={onContextMenuToggle || (() => {})}
                   onDelete={onDelete && handleDelete}
                   onArchive={onArchive && handleArchive}
+                  onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
@@ -339,6 +359,7 @@ export function ConversationCard({
           acpServer={acpServer}
           tags={tags}
           showTags={showTags}
+          isArchived={isArchived}
         />
       )}
     </div>

@@ -74,6 +74,7 @@ describe("conversation-panel-preferences store", () => {
       "conversationSort",
       "groupFolderOrder",
       "organizeMode",
+      "showArchivedConversations",
       "showHoverMetadata",
       "showLlmProfiles",
       "showOlderConversations",
