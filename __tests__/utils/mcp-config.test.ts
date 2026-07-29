@@ -10,7 +10,7 @@ import {
 } from "#/utils/mcp-config";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 
-describe("canonical MCP settings", () => {
+describe("canonical MCP configuration", () => {
   // @spec MCP-003 — Settings map keys are stable MCP identities
   it("keeps settings map keys as stable identities across transport grouping", () => {
     const first = parseMcpConfig({

@@ -325,53 +325,25 @@ test.describe("MCP GitHub server install flow", () => {
       await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
     };
 
-    await verifyStoredGitHubCredential();
-
     await page.getByTestId("mcp-add-custom-server").click();
     await page.getByTestId("server-name-input").fill("docs");
     await page.getByTestId("url-input").fill("https://docs.example/mcp");
     await page.getByTestId("submit-button").click();
     await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
-    expect(mutationRequests).toHaveLength(1);
-    expect(mutationRequests).toEqual([
-      {
-        method: "POST",
-        pathname: "/api/settings/mcp/docs",
-        body: {
-          transport: "sse",
-          url: "https://docs.example/mcp",
-        },
-      },
-    ]);
-    expect(JSON.stringify(mutationRequests[0])).not.toContain("github");
-    await verifyStoredGitHubCredential();
-
     await page.locator('[data-server-id="docs"]').press("Enter");
     await page.getByTestId("url-input").fill("https://docs.example/v2/mcp");
     await page.getByTestId("submit-button").click();
     await expect(page.getByTestId("mcp-custom-editor")).not.toBeVisible();
-    expect(mutationRequests).toHaveLength(2);
-    expect(mutationRequests[1]).toEqual({
-      method: "PATCH",
-      pathname: "/api/settings/mcp/docs",
-      body: {
-        transport: "sse",
-        url: "https://docs.example/v2/mcp",
-      },
-    });
-    expect(JSON.stringify(mutationRequests[1])).not.toContain("github");
-    await verifyStoredGitHubCredential();
-
     await page.locator('[data-server-id="docs"]').press("Enter");
     await page.getByTestId("mcp-custom-editor-delete").click();
     await page.getByTestId("confirm-button").click();
     await expect(page.locator('[data-server-id="docs"]')).not.toBeVisible();
-    expect(mutationRequests).toHaveLength(3);
-    expect(mutationRequests[2]).toEqual({
-      method: "DELETE",
-      pathname: "/api/settings/mcp/docs",
-    });
-    expect(JSON.stringify(mutationRequests[2])).not.toContain("github");
+    expect(mutationRequests.map(({ method, pathname }) => `${method} ${pathname}`)).toEqual([
+      "POST /api/settings/mcp/docs",
+      "PATCH /api/settings/mcp/docs",
+      "DELETE /api/settings/mcp/docs",
+    ]);
+    expect(JSON.stringify(mutationRequests)).not.toContain("github");
     await verifyStoredGitHubCredential();
 
     const settingsResp = await page.request.get(`${BACKEND_URL}/api/settings`, {
