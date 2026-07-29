@@ -38,6 +38,7 @@ import {
   DirectConversationInfo,
   assertSubscriptionAuthReady,
   buildStartConversationRequestWithEncryptedSettings,
+  buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
   getDefaultConversationTitle,
   toAppConversation,
@@ -484,6 +485,41 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
     };
+  }
+
+  static async createLocalPlanningConversation(
+    parentConversationId: string,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      throw new Error("Local planning conversations require a local backend.");
+    }
+
+    const workingDir =
+      await this.resolveConversationWorkingDir(parentConversationId);
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir,
+        parentConversationId,
+      });
+
+    const data = await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).createConversation<DirectConversationInfo>(payload);
+
+    const existing = getStoredConversationMetadata(parentConversationId);
+    // Spread `existing` so optional fields added to ConversationMetadata later
+    // are carried forward instead of being silently dropped (the setter does a
+    // full replace). Required fields are defaulted up front and overridden by
+    // `existing` when present.
+    setStoredConversationMetadata(parentConversationId, {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      ...(existing ?? {}),
+      local_planning_conversation_id: data.id,
+    });
+
+    return toAppConversation(data);
   }
 
   static async getStartTask(

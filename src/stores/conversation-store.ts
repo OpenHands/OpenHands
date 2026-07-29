@@ -39,7 +39,8 @@ interface ConversationState {
   hasRightPanelToggled: boolean;
   planContent: string | null;
   conversationMode: ConversationMode;
-  subConversationTaskId: string | null; // Task ID for sub-conversation creation
+  subConversationTaskId: string | null; // Task ID for cloud sub-conversation creation
+  localPlanningConversationId: string | null;
 }
 
 interface ConversationActions {
@@ -70,6 +71,7 @@ interface ConversationActions {
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
+  setLocalPlanningConversationId: (conversationId: string | null) => void;
   setPlanContent: (planContent: string | null) => void;
 }
 
@@ -129,6 +131,7 @@ export const useConversationStore = create<ConversationStore>()(
       planContent: null,
       conversationMode: getInitialConversationMode(),
       subConversationTaskId: null,
+      localPlanningConversationId: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -327,6 +330,7 @@ export const useConversationStore = create<ConversationStore>()(
             shouldHideSuggestions: false,
             conversationMode: getInitialConversationMode(),
             subConversationTaskId: null,
+            localPlanningConversationId: null,
             planContent: null,
           },
           false,
@@ -346,6 +350,13 @@ export const useConversationStore = create<ConversationStore>()(
 
       setSubConversationTaskId: (subConversationTaskId) =>
         set({ subConversationTaskId }, false, "setSubConversationTaskId"),
+
+      setLocalPlanningConversationId: (localPlanningConversationId) =>
+        set(
+          { localPlanningConversationId },
+          false,
+          "setLocalPlanningConversationId",
+        ),
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),

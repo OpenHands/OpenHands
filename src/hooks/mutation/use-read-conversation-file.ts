@@ -9,6 +9,10 @@ interface UseReadConversationFileVariables {
 export const useReadConversationFile = () =>
   useMutation({
     mutationKey: ["read-conversation-file"],
+    // Reading PLAN.md is an existence check that legitimately 404s when no plan
+    // exists yet; callers handle that locally. Opt out of the global
+    // MutationCache error toast (query-client-config) so the 404 isn't shown.
+    meta: { disableToast: true },
     mutationFn: async ({
       conversationId,
       filePath,

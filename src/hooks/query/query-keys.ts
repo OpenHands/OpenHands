@@ -55,6 +55,15 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+export const CONVERSATION_QUERY_KEYS = {
+  all: ["user", "conversations"] as const,
+  subConversations: ["v1", "sub-conversations"] as const,
+} as const;
+
+export const LOCAL_PLANNER_MUTATION_KEYS = {
+  create: ["create-local-planning-conversation"] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

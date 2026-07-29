@@ -37,6 +37,12 @@ export interface ConversationMetadata {
   active_profile?: string | null;
   /** Store plugin coordinates only; parameters may contain secrets. */
   plugins?: PluginSpec[] | null;
+  /**
+   * Local-only client-managed planning conversation id. Cloud backends expose
+   * real sub-conversations through `sub_conversation_ids`; local agent-server
+   * backends do not, so Canvas stores the relationship here.
+   */
+  local_planning_conversation_id?: string | null;
 }
 
 export const toPluginCoordinates = (plugin: PluginSpec): PluginSpec => ({

@@ -9,6 +9,8 @@ import { useScrollToBottom } from "#/hooks/use-scroll-to-bottom";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
 import { planComponents } from "#/components/features/markdown/plan-components";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
 
 function PlannerTab() {
   const { t } = useTranslation("openhands");
@@ -20,7 +22,30 @@ function PlannerTab() {
     scrollDomToBottom,
   } = useScrollToBottom(scrollRef);
 
-  const { planContent, conversationMode } = useConversationStore();
+  const {
+    planContent,
+    conversationMode,
+    localPlanningConversationId,
+    setPlanContent,
+  } = useConversationStore();
+  const { data: conversation } = useActiveConversation();
+  const { mutate: readConversationFile } = useReadConversationFile();
+
+  React.useEffect(() => {
+    if (!conversation?.id || planContent) return;
+
+    readConversationFile(
+      { conversationId: conversation.id },
+      {
+        onSuccess: (fileContent) => {
+          setPlanContent(fileContent);
+        },
+        onError: () => {
+          // Missing PLAN.md is the normal empty-planner state.
+        },
+      },
+    );
+  }, [conversation?.id, planContent, readConversationFile, setPlanContent]);
 
   // Auto-scroll to bottom when plan content changes
   React.useEffect(() => {
@@ -29,7 +54,7 @@ function PlannerTab() {
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
   const isPlanMode = conversationMode === "plan";
-  const { handlePlanClick } = useHandlePlanClick();
+  const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
     return (
@@ -53,7 +78,11 @@ function PlannerTab() {
           type="button"
           variant="secondary"
           onClick={handlePlanClick}
-          isDisabled={isPlanMode}
+          isDisabled={
+            isPlanMode ||
+            isCreatingConversation ||
+            !!localPlanningConversationId
+          }
           className="min-w-40 justify-center px-6"
         >
           {t(I18nKey.COMMON$CREATE_A_PLAN)}

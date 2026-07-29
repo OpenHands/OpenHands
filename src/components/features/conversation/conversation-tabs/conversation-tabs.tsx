@@ -136,10 +136,8 @@ export function ConversationTabs({
 
   // Pinned tabs always show in the bar. Unpinned tabs stay hidden unless the
   // user has that tab selected — then it appears while active so the bar
-  // matches the open panel. Hide Planner on local backends — the planning
-  // agent isn't supported locally.
+  // matches the open panel.
   const visibleTabs = tabs.filter((tab) => {
-    if (tab.tabValue === "planner" && backend.kind !== "cloud") return false;
     if (!persistedState.unpinnedTabs.includes(tab.tabValue)) return true;
     return selectedTab === tab.tabValue;
   });

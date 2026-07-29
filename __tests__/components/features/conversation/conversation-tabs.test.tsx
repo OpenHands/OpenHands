@@ -462,7 +462,7 @@ describe("ConversationTabs localStorage behavior", () => {
       mockConversationId = REAL_CONVERSATION_ID;
     });
 
-    it("should hide the planner tab when the active backend is local", () => {
+    it("should show the planner tab when the active backend is local", () => {
       // Arrange
       seedActiveBackend({
         id: "local-test",
@@ -477,10 +477,10 @@ describe("ConversationTabs localStorage behavior", () => {
         wrapper: createWrapper(REAL_CONVERSATION_ID),
       });
 
-      // Assert
+      // Assert: local planning is now supported, so the tab is shown.
       expect(
-        screen.queryByTestId("conversation-tab-planner"),
-      ).not.toBeInTheDocument();
+        screen.getByTestId("conversation-tab-planner"),
+      ).toBeInTheDocument();
     });
 
     it("should show the planner tab when the active backend is cloud", () => {

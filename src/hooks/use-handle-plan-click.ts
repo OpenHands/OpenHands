@@ -1,4 +1,5 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type MouseEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -9,6 +10,59 @@ import {
   getConversationState,
   setConversationState,
 } from "#/utils/conversation-local-storage";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  CONVERSATION_QUERY_KEYS,
+  LOCAL_PLANNER_MUTATION_KEYS,
+} from "#/hooks/query/query-keys";
+
+function useCreateLocalPlanningConversationMutation(options: {
+  onCreated: (planningConversationId: string) => void;
+  onInitialized: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationKey: LOCAL_PLANNER_MUTATION_KEYS.create,
+    mutationFn: (parentConversationId: string) =>
+      AgentServerConversationService.createLocalPlanningConversation(
+        parentConversationId,
+      ),
+    onSuccess: (planningConversation) => {
+      options.onCreated(planningConversation.id);
+      queryClient.invalidateQueries({ queryKey: CONVERSATION_QUERY_KEYS.all });
+      queryClient.invalidateQueries({
+        queryKey: CONVERSATION_QUERY_KEYS.subConversations,
+      });
+      options.onInitialized();
+    },
+  });
+}
+
+function restorePlanningConversationIds(options: {
+  conversationId: string;
+  subConversationTaskId: string | null;
+  localPlanningConversationId: string | null;
+  setSubConversationTaskId: (taskId: string | null) => void;
+  setLocalPlanningConversationId: (conversationId: string | null) => void;
+}) {
+  const storedState = getConversationState(options.conversationId);
+  if (storedState.subConversationTaskId && !options.subConversationTaskId) {
+    options.setSubConversationTaskId(storedState.subConversationTaskId);
+  }
+
+  const metadata = getStoredConversationMetadata(options.conversationId);
+  if (
+    metadata?.local_planning_conversation_id &&
+    !options.localPlanningConversationId
+  ) {
+    options.setLocalPlanningConversationId(
+      metadata.local_planning_conversation_id,
+    );
+  }
+}
 
 /**
  * Custom hook that encapsulates the logic for handling plan creation.
@@ -19,46 +73,73 @@ import {
  */
 export const useHandlePlanClick = () => {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const {
     setConversationMode,
     setSubConversationTaskId,
     subConversationTaskId,
+    setLocalPlanningConversationId,
+    localPlanningConversationId,
   } = useConversationStore();
   const { data: conversation } = useActiveConversation();
-  const { mutate: createConversation, isPending: isCreatingConversation } =
+  const { mutate: createConversation, isPending: isCreatingCloudConversation } =
     useCreateConversation();
+  const {
+    mutate: createLocalPlanningConversation,
+    isPending: isCreatingLocalPlanningConversation,
+  } = useCreateLocalPlanningConversationMutation({
+    onCreated: setLocalPlanningConversationId,
+    onInitialized: () => {
+      displaySuccessToast(
+        t(I18nKey.PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED),
+      );
+    },
+  });
 
-  // Restore subConversationTaskId from localStorage on conversation load
-  // This handles the case where page was refreshed while sub-conversation creation was in progress
+  // Restore planning conversation ids on conversation load. This handles page
+  // refreshes while cloud or local planning conversation creation is in progress.
   useEffect(() => {
     if (!conversation?.id) return;
 
-    const storedState = getConversationState(conversation.id);
-    if (storedState.subConversationTaskId && !subConversationTaskId) {
-      setSubConversationTaskId(storedState.subConversationTaskId);
-    }
-  }, [conversation?.id, subConversationTaskId, setSubConversationTaskId]);
+    restorePlanningConversationIds({
+      conversationId: conversation.id,
+      subConversationTaskId,
+      localPlanningConversationId,
+      setSubConversationTaskId,
+      setLocalPlanningConversationId,
+    });
+  }, [
+    conversation?.id,
+    localPlanningConversationId,
+    setLocalPlanningConversationId,
+    subConversationTaskId,
+    setSubConversationTaskId,
+  ]);
 
   const handlePlanClick = useCallback(
-    (event?: React.MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
+    (event?: MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
       event?.preventDefault();
       event?.stopPropagation();
 
-      // Set conversation mode to "plan" immediately
       setConversationMode("plan");
 
-      // Check if sub_conversation_ids is not empty or if a sub-conversation creation is already in progress
+      if (backend.kind !== "cloud") {
+        if (!conversation?.id || localPlanningConversationId) {
+          return;
+        }
+        createLocalPlanningConversation(conversation.id);
+        return;
+      }
+
       if (
         (conversation?.sub_conversation_ids &&
           conversation.sub_conversation_ids.length > 0) ||
         !conversation?.id ||
         subConversationTaskId
       ) {
-        // Do nothing if any condition is true
         return;
       }
 
-      // Create a new sub-conversation if we have a current conversation ID
       createConversation(
         {
           parentConversationId: conversation.id,
@@ -70,10 +151,8 @@ export const useHandlePlanClick = () => {
             displaySuccessToast(
               t(I18nKey.PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED),
             );
-            // Track the task ID to poll for sub-conversation creation
             if (data.task_id) {
               setSubConversationTaskId(data.task_id);
-              // Persist to localStorage so it survives page refresh
               setConversationState(conversation.id, {
                 subConversationTaskId: data.task_id,
               });
@@ -83,8 +162,11 @@ export const useHandlePlanClick = () => {
       );
     },
     [
+      backend.kind,
       conversation,
       createConversation,
+      createLocalPlanningConversation,
+      localPlanningConversationId,
       setConversationMode,
       setSubConversationTaskId,
       subConversationTaskId,
@@ -92,5 +174,9 @@ export const useHandlePlanClick = () => {
     ],
   );
 
-  return { handlePlanClick, isCreatingConversation };
+  return {
+    handlePlanClick,
+    isCreatingConversation:
+      isCreatingCloudConversation || isCreatingLocalPlanningConversation,
+  };
 };

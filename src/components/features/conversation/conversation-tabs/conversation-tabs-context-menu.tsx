@@ -16,7 +16,6 @@ import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { useTaskList } from "#/hooks/use-task-list";
-import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
@@ -86,7 +85,6 @@ export function ConversationTabsContextMenu({
   const { navigateToTab } = useSelectConversationTab();
 
   const { hasTaskList } = useTaskList();
-  const { backend } = useActiveBackend();
   const isArchivedConversation = useIsArchivedConversation();
 
   const tabConfig = [
@@ -112,9 +110,7 @@ export function ConversationTabsContextMenu({
     });
   }
 
-  const visibleTabConfig = tabConfig.filter(
-    ({ tab }) => tab !== "planner" || backend.kind === "cloud",
-  );
+  const visibleTabConfig = tabConfig;
 
   const handleOpenTab = (tab: string) => {
     if (isArchivedConversation) {
