@@ -62,8 +62,11 @@ export async function substituteRedactedMcpCredentials(
   const redactedRemoteAuth =
     (server.type === "sse" || server.type === "shttp") &&
     hasRedactedMcpSecretLeaf(server.auth);
+  const redactedRemoteHeaders =
+    (server.type === "sse" || server.type === "shttp") &&
+    hasRedactedValue(server.headers);
 
-  if (!redactedStdioEnv && !redactedRemoteAuth) {
+  if (!redactedStdioEnv && !redactedRemoteAuth && !redactedRemoteHeaders) {
     return server;
   }
 
@@ -85,11 +88,23 @@ export async function substituteRedactedMcpCredentials(
       return { ...server, env };
     }
 
-    if (!redactedRemoteAuth) return server;
-    if (isMcpAuthCredential(stored.auth)) {
-      return { ...server, auth: stored.auth };
+    const nextServer = { ...server };
+    if (redactedRemoteAuth && isMcpAuthCredential(stored.auth)) {
+      nextServer.auth = stored.auth;
     }
-    return server;
+    if (redactedRemoteHeaders) {
+      const storedHeaders = stringRecord(stored.headers) ?? {};
+      nextServer.headers = Object.fromEntries(
+        Object.entries(server.headers ?? {}).map(([key, value]) => [
+          key,
+          value === REDACTED_MCP_SECRET_VALUE &&
+          typeof storedHeaders[key] === "string"
+            ? storedHeaders[key]
+            : value,
+        ]),
+      );
+    }
+    return nextServer;
   } catch {
     return server;
   }

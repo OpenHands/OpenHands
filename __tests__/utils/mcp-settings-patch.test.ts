@@ -298,4 +298,33 @@ describe("MCP sparse patches", () => {
       }),
     ).toThrow(/credential/i);
   });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("preserves stored remote metadata when renaming a server", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://catalog.example/mcp",
+      description: "Catalog-managed server",
+      icon: "catalog-icon",
+      headers: { "X-Catalog-Mode": "managed" },
+      sse_read_timeout: 5_000,
+      keep_alive: true,
+    };
+    const renamed: MCPServerConfig = {
+      id: "catalog",
+      type: "shttp",
+      name: "renamed-catalog",
+      url: "https://catalog.example/v2/mcp",
+    };
+
+    expect(
+      buildRenameMcpConfigPatch("catalog", "renamed-catalog", stored, renamed),
+    ).toEqual({
+      catalog: null,
+      "renamed-catalog": {
+        ...stored,
+        url: renamed.url,
+      },
+    });
+  });
 });

@@ -178,4 +178,31 @@ describe("substituteRedactedMcpCredentials", () => {
       },
     });
   });
+
+  it("replaces redacted raw remote headers with encrypted stored values", async () => {
+    vi.spyOn(SettingsService, "fetchSettingsFromApi").mockResolvedValue({
+      agent_settings: {
+        mcp_config: {
+          github: {
+            url: "https://github.example/mcp",
+            headers: {
+              Authorization: "Bearer gAAAAA-encrypted-github-token",
+            },
+          },
+        },
+      },
+    } as unknown as SettingsApiResponse);
+
+    const result = await substituteRedactedMcpCredentials({
+      id: "github",
+      type: "shttp",
+      name: "github",
+      url: "https://github.example/mcp",
+      headers: { Authorization: REDACTED_MCP_SECRET_VALUE },
+    });
+
+    expect(result.headers).toEqual({
+      Authorization: "Bearer gAAAAA-encrypted-github-token",
+    });
+  });
 });

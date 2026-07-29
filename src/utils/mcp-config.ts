@@ -304,6 +304,29 @@ export function buildMcpServerPatch(
   return patch;
 }
 
+const applyMcpServerPatch = (
+  previous: MCPServer,
+  patch: MCPServerPatch,
+): MCPServer => {
+  const apply = (base: unknown, next: unknown): Record<string, unknown> => {
+    const merged = isRecord(base) ? { ...base } : {};
+    if (!isRecord(next)) return merged;
+
+    for (const [key, value] of Object.entries(next)) {
+      if (value === null) {
+        delete merged[key];
+      } else if (isRecord(value)) {
+        merged[key] = apply(merged[key], value);
+      } else {
+        merged[key] = value;
+      }
+    }
+    return merged;
+  };
+
+  return apply(previous, patch) as MCPServer;
+};
+
 // @spec MCP-003 — Settings map keys are stable MCP identities
 export function buildRenameMcpConfigPatch(
   oldKey: string,
@@ -320,9 +343,13 @@ export function buildRenameMcpConfigPatch(
       "Replace or clear the stored credential before renaming this MCP server.",
     );
   }
+  const renamedServer = applyMcpServerPatch(
+    previous,
+    buildMcpServerPatch(previous, edited),
+  );
   return {
     [oldKey]: null,
-    [newKey]: toCanonicalMcpServer(edited),
+    [newKey]: renamedServer,
   };
 }
 
