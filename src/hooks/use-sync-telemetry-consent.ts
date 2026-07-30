@@ -15,7 +15,9 @@ import { useSettings } from "./query/use-settings";
  * Reconciles the browser's capture state with the backend preference.
  *
  * A first-run user can make an explicit choice before Cloud login. That newer
- * browser decision remains pending across local backends and is written to the
+ * browser decision remains pending across local backends, but does not
+ * automatically fill unset local backend settings; each local backend can ask
+ * for its own persisted preference. The pending decision is written to the
  * Cloud backend after login; until Cloud confirms it, a stale/default backend
  * value must not overwrite it. With no pending browser choice, backend updates
  * remain authoritative so revocation in another tab or via the API is respected.
@@ -23,8 +25,8 @@ import { useSettings } from "./query/use-settings";
  * Consent model:
  *   true  → opt in  (user explicitly accepted)
  *   false → opt out (user explicitly denied)
- *   null  → opt out (consent not yet collected — safe default while loading
- *           or on first visit, prevents capturing before the user has decided)
+ *   null  → pending (consent not yet collected; PostHog stays opted out until
+ *           the user decides)
  */
 export const useSyncTelemetryConsent = () => {
   const { backend } = useActiveBackend();
@@ -59,6 +61,8 @@ export const useSyncTelemetryConsent = () => {
         return;
       }
 
+      if (backend.kind !== "cloud") return;
+
       const syncKey = `${backend.id}:${pendingBrowserConsent}`;
       if (isSavingSettings || attemptedSyncRef.current === syncKey) return;
 
@@ -69,8 +73,8 @@ export const useSyncTelemetryConsent = () => {
       return;
     }
 
-    // null and false are both treated as "not consented".
-    // Only an explicit true opts PostHog in.
+    if (settings.user_consents_to_analytics === null) return;
+
     void setTelemetryConsent(
       settings.user_consents_to_analytics === true ? "granted" : "denied",
       { syncToCloud: false },
