@@ -21,6 +21,10 @@
 #   VSCODE_BASE_PATH     – Path prefix the editor is served under on $PORT
 #                          (default: /vscode). Exported to agent-server as
 #                          OH_VSCODE_BASE_PATH and routed by the static server.
+#                          agent-server's own OH_VSCODE_PORT / OH_VSCODE_BASE_PATH
+#                          take precedence over these aliases; whichever is set,
+#                          one effective pair drives both the editor process and
+#                          the proxy route.
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
 #                          with --auth-required (no session key injected)
 #   OH_SECRET_KEY        – Secret key for settings encryption (auto-generated
@@ -67,10 +71,41 @@ AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/ca
 # (it launches openvscode-server with --server-base-path and advertises the
 # prefix from /api/vscode/url) and the static-server route table below, or the
 # advertised URL and the route serving it disagree.
-VSCODE_PORT="${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}"
-VSCODE_BASE_PATH="${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}"
-export OH_VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT}}"
-export OH_VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH}}"
+#
+# Two env var names reach the same setting: OH_VSCODE_PORT / OH_VSCODE_BASE_PATH
+# are agent-server's own documented variables, which a deployment may already
+# set and which this entrypoint passes through like any other OH_* var, while
+# VSCODE_PORT / VSCODE_BASE_PATH are this image's aliases. They collapse to one
+# effective pair here, before anything reads them — resolving them
+# independently would let `OH_VSCODE_BASE_PATH=/editor` move the editor without
+# moving the route, leaving the button pointing at a path the proxy never
+# serves.
+# >>> vscode-config: this block is extracted and executed by
+# >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
+VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}}"
+VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}}"
+
+# Accept "editor", "/editor" and "/editor/" alike: agent-server strips the
+# slashes when it builds the advertised URL, the static-server route table
+# needs the leading one, so settle on one spelling rather than one per use site.
+normalize_base_path() {
+  local p="$1"
+  while [ "${p#/}" != "$p" ]; do p="${p#/}"; done
+  while [ "${p%/}" != "$p" ]; do p="${p%/}"; done
+  printf '/%s' "$p"
+}
+VSCODE_BASE_PATH="$(normalize_base_path "$VSCODE_BASE_PATH")"
+if [ "$VSCODE_BASE_PATH" = "/" ]; then
+  log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
+  exit 1
+fi
+
+export OH_VSCODE_PORT="$VSCODE_PORT"
+export OH_VSCODE_BASE_PATH="$VSCODE_BASE_PATH"
+# The single route string every static-server instance registers. Derived from
+# the exported pair above so the advertised URL and the route cannot diverge.
+VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}"
+# <<< vscode-config
 
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
@@ -287,7 +322,7 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}" &
+  --route "$VSCODE_ROUTE" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
 
@@ -315,7 +350,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}" &
+    --route "$VSCODE_ROUTE" &
   PIDS+=($!)
 fi
 
