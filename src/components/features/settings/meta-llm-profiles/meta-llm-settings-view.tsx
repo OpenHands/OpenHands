@@ -77,8 +77,12 @@ export function MetaLlmSettingsView() {
   };
 
   const handleSave = async (name: string, config: MetaProfile) => {
+    const shouldActivateAfterCreate = view === "create" && active === null;
     try {
       await saveMetaProfile.mutateAsync({ name, config });
+      if (shouldActivateAfterCreate) {
+        await activateMetaProfile.mutateAsync(name);
+      }
       displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
       setView("list");
       setEditing(null);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpError } from "@openhands/typescript-client";
 import { renderWithProviders } from "test-utils";
@@ -133,6 +133,69 @@ describe("MetaLlmSettingsView", () => {
 
     expect(screen.getByTestId("meta-profile-editor")).toBeInTheDocument();
     expect(screen.getByTestId("meta-profile-name-input")).toBeInTheDocument();
+  });
+
+  it("activates the first meta-profile after creating it", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
+      data: { meta_profiles: [], active_meta_profile: null },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useMetaProfilesHook.useMetaProfiles>);
+    saveMutateAsync.mockResolvedValue({ name: "pareto" });
+    activateMutateAsync.mockResolvedValue({ name: "pareto" });
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await user.click(screen.getByTestId("add-meta-profile"));
+    await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
+      target: { value: "minimax" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-default-input"), {
+      target: { value: "gpt" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
+      target: { value: "Task:\n{{ instance_text }}" },
+    });
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() =>
+      expect(saveMutateAsync).toHaveBeenCalledWith({
+        name: "pareto",
+        config: {
+          classifier_model: "minimax",
+          default_model: "gpt",
+          classes: [],
+          prompt_template: "Task:\n{{ instance_text }}",
+          model_table: null,
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(activateMutateAsync).toHaveBeenCalledWith("pareto"),
+    );
+  });
+
+  it("does not auto-activate a newly-created meta-profile when one is already active", async () => {
+    const user = userEvent.setup();
+    saveMutateAsync.mockResolvedValue({ name: "pareto" });
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await user.click(screen.getByTestId("add-meta-profile"));
+    await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
+      target: { value: "minimax" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-default-input"), {
+      target: { value: "gpt" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
+      target: { value: "Task:\n{{ instance_text }}" },
+    });
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
+    expect(activateMutateAsync).not.toHaveBeenCalled();
   });
 
   it("activates a meta-profile via the actions menu", async () => {
