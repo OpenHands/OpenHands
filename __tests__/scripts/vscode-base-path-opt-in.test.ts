@@ -152,7 +152,53 @@ describe("every launcher that advertises the prefix also serves it", () => {
     // Its browser origin belongs to a different stack, so a prefix there either
     // does not resolve or resolves to the bundled stack's editor — handing back
     // another container's workspace. No global prefix can disambiguate them.
+    //
+    // Opting out is not by itself what hides the control: this launcher still
+    // starts the editor, so its /api/vscode/status reports it available. What
+    // hides it is that with no prefix configured, agent-server appends nothing
+    // to the origin and the URL comes back as the canvas root — which
+    // `isVSCodeUrlServedByOrigin` rejects. That behaviour is asserted in
+    // __tests__/hooks/use-unified-vscode-url.test.tsx; this only pins the
+    // launcher's half.
     const source = readScript("dev-extra-backend.mjs");
     expect(optsIntoPrefixMode(source)).toBe(false);
+  });
+
+  it("advertises the prefix on the servers that inject into the document", () => {
+    // Only the static server rewrites index.html, so only it can tell the
+    // frontend what this origin serves; the ingress in front of it routes the
+    // same prefix but proxies the document through untouched. Passing the flag
+    // to the ingress would also be a hard error — it does not accept it.
+    for (const script of ["dev-with-automation.mjs", "dev-static.mjs"]) {
+      const source = readScript(script);
+      const advertises = source.match(
+        /\.\.\.getVSCodeAdvertiseArgs\(config\)/g,
+      );
+      expect(advertises, `${script} advertises exactly once`).toHaveLength(1);
+    }
+
+    // Vite serves the document in full-stack dev mode, so the advertisement is
+    // an env var there rather than a server flag.
+    expect(readScript("dev-with-automation.mjs")).toContain(
+      "viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath",
+    );
+  });
+
+  it("gates advertising on exactly the condition that adds the route", () => {
+    // If these two guards ever disagree, one of the two failure modes returns:
+    // an advertised prefix with no route (control opens the SPA), or a routed
+    // prefix nobody advertises (feature silently off). static-server rejects
+    // the first at startup; this pins the source of both.
+    const source = readScript("dev-with-automation.mjs");
+    const advertiseGuard = source.match(
+      /function getVSCodeAdvertiseArgs\(config\) \{\s*if \(([^)]*)\) return \[\];/,
+    );
+    const referrerGuard = source.match(
+      /function getNoReferrerPrefixArgs\(config\) \{\s*if \(([^)]*)\) return \[\];/,
+    );
+    expect(advertiseGuard?.[1]).toBe(
+      "!config.launchAgentServer || !config.vscodeBasePath",
+    );
+    expect(advertiseGuard?.[1]).toBe(referrerGuard?.[1]);
   });
 });

@@ -88,6 +88,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
+    vscodeBasePath: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -132,6 +133,16 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
         break;
+      case "--vscode-base-path": {
+        const prefix = argv[++i];
+        if (!prefix || !prefix.startsWith("/")) {
+          throw new Error(
+            `--vscode-base-path value must start with '/': ${prefix ?? "(empty)"}`,
+          );
+        }
+        config.vscodeBasePath = prefix.replace(/\/+$/, "") || "/";
+        break;
+      }
 
       case "--auth-required":
         config.authRequired = true;
@@ -178,6 +189,20 @@ export function parseArgs(argv = process.argv.slice(2)) {
     process.exit(1);
   }
 
+  // Guard: advertising the editor and routing it are the same decision, so
+  // they cannot be allowed to drift. This flag is what the frontend gates the
+  // editor control on; if it named a prefix with no route behind it, the
+  // control would render and the navigation would fall through to the SPA —
+  // which is precisely the bug this flag exists to prevent.
+  if (config.vscodeBasePath && !config.routes[config.vscodeBasePath]) {
+    console.error(
+      `ERROR: --vscode-base-path ${config.vscodeBasePath} has no matching --route.\n` +
+        "  This server would advertise an editor it does not serve.\n" +
+        `  Add --route ${config.vscodeBasePath}=<editor-url>, or drop --vscode-base-path.`,
+    );
+    process.exit(1);
+  }
+
   return config;
 }
 
@@ -220,6 +245,13 @@ OPTIONS:
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
+  --vscode-base-path <path>    Advertise to the frontend that this origin
+                               serves the editor under <path>, so the editor
+                               control renders here. Requires a matching
+                               --route; the server refuses to start otherwise,
+                               since advertising a prefix it does not route
+                               produces a control that opens the SPA. Omit on
+                               any origin without the editor route.
   --reject-prefix <prefix>     Return 503 for requests matching <prefix>
   --no-referrer-prefix <p>     Send "Referrer-Policy: no-referrer" on proxied
                                responses under <p>. For upstreams whose URL
@@ -280,6 +312,13 @@ ROUTING:
  * - `basePath`: the path prefix the SPA is mounted under, exposed as
  *   `window.__AGENT_CANVAS_BASE_PATH__` so runtime static assets like locale
  *   files can resolve through the same subpath as the built bundle.
+ *
+ * - `vscodeBasePath`: the prefix *this origin* serves the editor under, exposed
+ *   as `window.__AGENT_CANVAS_VSCODE_BASE_PATH__`. Read by
+ *   `getOriginVSCodeBasePath()` in `#/utils/vscode-origin` to decide whether the
+ *   editor control can render here at all. Absent means this origin serves no
+ *   editor — which is the correct answer for the public-mode instance, whose
+ *   route table deliberately omits it.
  */
 function makeConfigInjectionScript(
   sessionApiKey,
@@ -287,6 +326,7 @@ function makeConfigInjectionScript(
   runtimeServicesInfo,
   lockToCloud,
   basePath,
+  vscodeBasePath,
 ) {
   const parts = [];
 
@@ -336,6 +376,12 @@ function makeConfigInjectionScript(
     );
   }
 
+  if (vscodeBasePath) {
+    parts.push(
+      `window.__AGENT_CANVAS_VSCODE_BASE_PATH__=${JSON.stringify(vscodeBasePath)};`,
+    );
+  }
+
   if (parts.length === 0) return "";
 
   return `<script>(function(){${parts.join("")}}());</script>`;
@@ -355,6 +401,7 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    vscodeBasePath,
   } = {},
 ) {
   let content;
@@ -370,6 +417,7 @@ async function serveInjectedIndexHtml(
     runtimeServicesInfo,
     lockToCloud,
     basePath,
+    vscodeBasePath,
   );
   // Inject right before </head> so the key is available before any app code runs.
   // replace() targets the first (and only) </head> in well-formed HTML.
@@ -418,6 +466,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
+    injectionOpts.vscodeBasePath ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -562,6 +611,7 @@ export function startStaticServer(config) {
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),
+    vscodeBasePath: config.vscodeBasePath || null,
   };
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];

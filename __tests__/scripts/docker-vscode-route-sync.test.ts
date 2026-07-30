@@ -147,6 +147,16 @@ describe("docker editor route", () => {
     expect(assignments).toHaveLength(1);
   });
 
+  it("advertises the editor prefix on the instance that routes it", () => {
+    // Routing the editor and telling the frontend about it are the same
+    // decision. static-server refuses to start if the advertised prefix has no
+    // route, so this pins the other direction: an instance that routes the
+    // editor must also advertise it, or the control never renders and the
+    // feature is silently off.
+    const [normal] = staticServerInvocations();
+    expect(normal).toContain('--vscode-base-path "$VSCODE_BASE_PATH"');
+  });
+
   it("keeps the editor off the public-mode (--auth-required) instance", () => {
     // --auth-required only decides whether the session key is injected into
     // the served HTML: the dispatcher matches routes before consulting it, so
@@ -162,6 +172,11 @@ describe("docker editor route", () => {
     );
     expect(publicMode).toBeDefined();
     expect(publicMode).not.toContain("VSCODE_ROUTE");
+    // And it must not advertise one either. Omitting only the route would
+    // leave the control rendering — the agent-server this instance shares with
+    // the main one still reports the editor as available — and the click would
+    // fall through to the SPA.
+    expect(publicMode).not.toContain("--vscode-base-path");
   });
 
   it("sends Referrer-Policy: no-referrer on the editor path", () => {

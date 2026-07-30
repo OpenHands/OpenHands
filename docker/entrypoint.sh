@@ -366,6 +366,7 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "$VSCODE_ROUTE" \
+  --vscode-base-path "$VSCODE_BASE_PATH" \
   --no-referrer-prefix "$VSCODE_BASE_PATH" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
@@ -376,7 +377,13 @@ PIDS+=("$STATIC_PID")
 # (--auth-required). This is used by auth-mode E2E tests to verify the
 # ApiKeyEntryScreen gate, key rotation recovery, etc.
 #
-# The editor route is deliberately NOT registered here. --auth-required only
+# Neither the editor route nor --vscode-base-path is registered here, and the
+# pair is deliberate: the route is what would serve the editor, and the flag is
+# what tells the frontend this origin can. Omitting only the route would leave
+# the control rendering and falling through to the SPA, because the agent-server
+# it shares with the main instance still reports the editor as available.
+#
+# --auth-required only
 # controls whether the session key is injected into the served HTML; the
 # dispatcher matches routes before it reaches that flag, so proxied paths are
 # not gated by it. The routes above are safe on that footing because

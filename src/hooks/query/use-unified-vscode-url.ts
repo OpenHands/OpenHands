@@ -10,6 +10,10 @@ import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudSandbox } from "#/hooks/query/use-cloud-sandbox";
+import {
+  getOriginVSCodeBasePath,
+  isVSCodeUrlServedByOrigin,
+} from "#/utils/vscode-origin";
 
 interface VSCodeUrlResult {
   url: string | null;
@@ -28,6 +32,13 @@ export const useUnifiedVSCodeUrl = () => {
   const sessionApiKey = conversation?.session_api_key ?? null;
   const sandboxId = conversation?.sandbox_id ?? null;
   const isCloud = active.backend.kind === "cloud";
+
+  // The origin half of the availability question. The agent-server will
+  // happily report an editor this page has no route to — see
+  // `#/utils/vscode-origin`. `null` means this origin serves no editor, in
+  // which case there is nothing to probe for and nothing to render.
+  const originBasePath = getOriginVSCodeBasePath();
+  const originServesEditor = originBasePath !== null;
 
   // Cloud mode: read VSCode URL from the cloud-computed `exposed_urls` on
   // the conversation's sandbox. The runtime's `/api/vscode/url` only
@@ -58,7 +69,8 @@ export const useUnifiedVSCodeUrl = () => {
         conversationUrl,
         sessionApiKey,
       ),
-    enabled: !isCloud && runtimeIsReady && !!conversationId,
+    enabled:
+      !isCloud && originServesEditor && runtimeIsReady && !!conversationId,
     refetchOnMount: true,
   });
 
@@ -93,7 +105,11 @@ export const useUnifiedVSCodeUrl = () => {
       return { url: transformVSCodeUrl(response.vscode_url) };
     },
     enabled:
-      !isCloud && runtimeIsReady && !!conversationId && editorIsAvailable,
+      !isCloud &&
+      originServesEditor &&
+      runtimeIsReady &&
+      !!conversationId &&
+      editorIsAvailable,
     refetchOnMount: true,
     retry: 3,
   });
@@ -158,15 +174,23 @@ export const useUnifiedVSCodeUrl = () => {
       return { data: result.data };
     };
     // Hide only on an explicit, terminal capability answer:
+    //   - this origin serves no editor at all, so nothing it advertises is
+    //     reachable from this page,
     //   - the probe succeeded and reports no usable editor (disabled, or
-    //     enabled but not running), or
-    //   - the editor is there but reports no URL to open.
+    //     enabled but not running),
+    //   - the editor is there but reports no URL to open, or
+    //   - the URL resolves somewhere this origin does not route the editor —
+    //     an extra backend with no prefix of its own hands back the canvas
+    //     root, which would open this app again instead of an editor.
     // A failed probe is deliberately not "unavailable": transport, auth and
     // server faults stay visible as query errors with their normal retry and
     // toast, rather than silently removing the control.
     isUnavailable =
+      !originServesEditor ||
       (statusQuery.isSuccess && !editorIsAvailable) ||
-      (isSuccess && !localQuery.data?.url);
+      (isSuccess && !localQuery.data?.url) ||
+      (isSuccess &&
+        !isVSCodeUrlServedByOrigin(localQuery.data?.url, originBasePath));
   }
 
   // Derive the i18n'd "URL unavailable" message outside `queryFn` so the

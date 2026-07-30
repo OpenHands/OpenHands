@@ -411,6 +411,10 @@ function startStaticServer(config) {
         ? ["--session-api-key", config.sessionApiKey]
         : []),
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress below routes
+      // the same prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
       ...getNoReferrerPrefixArgs(config),
     ],
     {

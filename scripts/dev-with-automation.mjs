@@ -733,6 +733,20 @@ function getNoReferrerPrefixArgs(config) {
 }
 
 /**
+ * The editor prefix, if this mode serves it, as `--vscode-base-path` args.
+ *
+ * Gated on exactly the same condition as the editor route in
+ * `getLocalServiceRoutes`, because they answer the same question: an origin
+ * advertises the editor if and only if it routes it. static-server enforces
+ * that pairing at startup, so a future edit that breaks it fails loudly rather
+ * than shipping a control that opens the SPA.
+ */
+function getVSCodeAdvertiseArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--vscode-base-path", config.vscodeBasePath];
+}
+
+/**
  * Build --reject-prefix args for the static server.
  * In frontend-only mode, API paths that have no backend should return 503
  * instead of being SPA-fallbacked to index.html.
@@ -1063,6 +1077,14 @@ function startVite(config) {
   };
   if (config.viteWorkingDir) {
     viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
+  }
+
+  // Vite serves the HTML for this mode's browser origin, so this is where the
+  // editor-capability advertisement has to be baked. The ingress in front of it
+  // routes the prefix but is a pure proxy — it injects nothing into the
+  // document, so it cannot tell the frontend what it serves.
+  if (config.launchAgentServer && config.vscodeBasePath) {
+    viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath;
   }
 
   if (runtimeServicesInfo) {
@@ -1519,6 +1541,10 @@ function startStaticFrontend(config, staticDir) {
         : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress routes the same
+      // prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
       ...getNoReferrerPrefixArgs(config),
       // Reject known API prefixes that have no backend — returns 503
       // instead of SPA-fallbacking to index.html.
@@ -1543,6 +1569,7 @@ export {
   buildRouteArgs,
   buildViteBackendEnv,
   getNoReferrerPrefixArgs,
+  getVSCodeAdvertiseArgs,
   getFrontendBackend,
   getLocalServiceRoutes,
   getRejectPrefixes,
