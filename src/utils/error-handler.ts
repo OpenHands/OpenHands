@@ -1,5 +1,5 @@
 import { trackEvent } from "#/services/telemetry";
-import { ErrorClassification } from "#/types/error-classification";
+import type { ErrorClassification } from "@openhands/typescript-client";
 
 interface ErrorDetails {
   message: string;

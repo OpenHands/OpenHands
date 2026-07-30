@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ErrorClassification } from "#/types/error-classification";
+import type { ErrorClassification } from "@openhands/typescript-client";
 
 /**
  * "connection" errors auto-clear once connectivity recovers; "conversation"
