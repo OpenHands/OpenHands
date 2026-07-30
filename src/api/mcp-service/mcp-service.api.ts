@@ -338,11 +338,15 @@ class McpService {
     return client.startOAuth(request as MCPTestRequest);
   }
 
+  // typescript-client 1.36 types the OAuth probes with the generated
+  // agent-server models, which describe the opaque `oauth_state` JSON blobs as
+  // `unknown` rather than the recursive `MCPJsonValue` the local types use. The
+  // wire shape is unchanged, so narrow back to the app's boundary type.
   private static async getOAuthStatusWithClient(
     client: MCPClient,
     jobId: string,
   ): Promise<MCPOAuthStatusResponse> {
-    return client.getOAuthStatus(jobId);
+    return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
   }
 
   private static async submitOAuthCallbackWithClient(
@@ -350,7 +354,9 @@ class McpService {
     jobId: string,
     callbackUrl: string,
   ): Promise<MCPOAuthStatusResponse> {
-    return client.submitOAuthCallback(jobId, { callback_url: callbackUrl });
+    return (await client.submitOAuthCallback(jobId, {
+      callback_url: callbackUrl,
+    })) as MCPOAuthStatusResponse;
   }
 }
 

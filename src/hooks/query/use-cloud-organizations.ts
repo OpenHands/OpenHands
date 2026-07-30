@@ -19,7 +19,11 @@ export function useAllCloudOrganizations() {
 
   const queries = useQueries({
     queries: cloudBackends.map((backend) => ({
-      queryKey: ["cloud-organizations", backend.id],
+      queryKey: [
+        "cloud-organizations",
+        backend.id,
+        backend.connectionRevision ?? 0,
+      ],
       // Filter the user's full org membership down to the single org the
       // backend's API key is bound to. The cloud enforces one-key-one-org
       // server-side (HTTP 403 otherwise); without this filter the
