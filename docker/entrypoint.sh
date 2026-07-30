@@ -387,6 +387,10 @@ PIDS+=("$STATIC_PID")
 # that secret in a browser-navigable URL on the origin that exists precisely
 # to test the unauthenticated case, where it would persist in history and
 # leak by Referer from the workbench's own subresources.
+#
+# The token's scope is upstream's to fix and is tracked in
+# OpenHands/software-agent-sdk#4317; if the editor gets a credential of its own,
+# this exclusion and the --no-referrer-prefix below can both be revisited.
 if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
   log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
   node /opt/agent-canvas/static-server.mjs \
