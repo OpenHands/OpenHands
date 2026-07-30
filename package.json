@@ -1,17 +1,17 @@
 {
   "name": "@openhands/agent-canvas",
-  "version": "1.6.1",
+  "version": "1.7.1",
   "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
   "license": "MIT",
   "private": false,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenHands/agent-canvas"
+    "url": "https://github.com/OpenHands/OpenHands"
   },
-  "homepage": "https://github.com/OpenHands/agent-canvas#readme",
+  "homepage": "https://github.com/OpenHands/OpenHands#readme",
   "bugs": {
-    "url": "https://github.com/OpenHands/agent-canvas/issues"
+    "url": "https://github.com/OpenHands/OpenHands/issues"
   },
   "bin": {
     "agent-canvas": "bin/agent-canvas.mjs"
@@ -105,8 +105,8 @@
     "build:docker": "node scripts/docker-build.mjs",
     "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
     "desktop": "npm run build:app && electron electron/main.mjs",
-    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs",
-    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs",
+    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs --publish never",
+    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
     "download-uv": "node scripts/download-uv.mjs",
     "download-node": "node scripts/download-node.mjs"
   },
