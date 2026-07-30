@@ -14,10 +14,14 @@ export function trackError({
   classification,
 }: ErrorDetails) {
   void trackEvent("error_outcome", {
+    ...metadata,
     error_source: source || "unknown",
     error_kind: classification?.kind || "unknown",
     error_telemetry:
-      classification?.kind === "internal" ? "diagnostic" : "outcome",
-    ...metadata,
+      classification == null ||
+      classification.kind === "internal" ||
+      classification.kind === "unknown"
+        ? "diagnostic"
+        : "outcome",
   });
 }
