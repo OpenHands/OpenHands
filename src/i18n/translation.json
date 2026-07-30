@@ -29885,6 +29885,23 @@
     "tr": "Ürünü geliştirmek için anonim kullanım verileri topluyoruz. Kişisel bilgi toplanmaz. Bu ayarı istediğiniz zaman değiştirebilirsiniz.",
     "uk": "Ми збираємо анонімні дані про використання для покращення продукту. Особиста інформація не збирається. Ви можете змінити цей параметр у будь-який час."
   },
+  "TELEMETRY$BACKEND_SCOPE": {
+    "en": "This preference is saved for the local backend “{{name}}” at {{host}}.",
+    "ja": "この設定は {{host}} のローカルバックエンド「{{name}}」に保存されます。",
+    "zh-CN": "此偏好设置将保存到 {{host}} 的本地后端“{{name}}”。",
+    "zh-TW": "此偏好設定將儲存到 {{host}} 的本機後端「{{name}}」。",
+    "ko-KR": "이 환경 설정은 {{host}}의 로컬 백엔드 “{{name}}”에 저장됩니다.",
+    "no": "Denne innstillingen lagres for den lokale backend-en «{{name}}» på {{host}}.",
+    "ar": "يتم حفظ هذا التفضيل للواجهة الخلفية المحلية \"{{name}}\" على {{host}}.",
+    "de": "Diese Einstellung wird für das lokale Backend „{{name}}“ unter {{host}} gespeichert.",
+    "fr": "Cette préférence est enregistrée pour le backend local « {{name}} » sur {{host}}.",
+    "it": "Questa preferenza viene salvata per il backend locale “{{name}}” su {{host}}.",
+    "pt": "Esta preferência é salva para o backend local “{{name}}” em {{host}}.",
+    "es": "Esta preferencia se guarda para el backend local “{{name}}” en {{host}}.",
+    "ca": "Aquesta preferència es desa per al backend local “{{name}}” a {{host}}.",
+    "tr": "Bu tercih, {{host}} adresindeki “{{name}}” yerel arka ucu için kaydedilir.",
+    "uk": "Цей параметр зберігається для локального бекенда «{{name}}» на {{host}}."
+  },
   "TELEMETRY$ACCEPT": {
     "en": "Accept",
     "ja": "同意する",

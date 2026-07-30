@@ -1,3 +1,4 @@
+import { getBackendHealthEntry } from "./health-store";
 import {
   readStoredActiveBackend,
   readStoredBackends,
@@ -33,8 +34,27 @@ export function isNoBackend(backend: Backend): boolean {
   return backend.id === NO_BACKEND_ID;
 }
 
+/**
+ * Choose an active backend when there is no valid explicit selection (fresh
+ * start, or the selected backend was removed). Most of the GUI speaks the
+ * local agent-server protocol, so a cloud or dead-local backend at index 0
+ * would leave `getEffectiveLocalBackend()` null and make every local-protocol
+ * call throw "No backend is configured" even when a healthy local backend is
+ * registered further down the list. Consult the synchronous, persisted health
+ * store and prefer a healthy local backend; fall back to any local backend so
+ * the effective-local resolver still resolves, then to the prior deterministic
+ * `backends[0]` behavior for the registry-has-no-local case.
+ */
 function pickFallbackBackend(backends: Backend[]): Backend {
-  return backends[0] ?? NO_BACKEND;
+  const healthyLocalBackend = backends.find(
+    (backend) =>
+      backend.kind === "local" &&
+      getBackendHealthEntry(backend.id)?.disabled !== true,
+  );
+  if (healthyLocalBackend) return healthyLocalBackend;
+
+  const localBackend = backends.find((backend) => backend.kind === "local");
+  return localBackend ?? backends[0] ?? NO_BACKEND;
 }
 
 function computeSnapshot(
