@@ -101,7 +101,9 @@ describe("InstallServerModal", () => {
     const slack = MCP_MARKETPLACE.find((e) => e.id === "slack")!;
     vi.spyOn(SettingsService, "saveSettings").mockResolvedValue(true);
 
-    renderWith(<InstallServerModal existingServers={[]} entry={slack} onClose={vi.fn()} />);
+    renderWith(
+      <InstallServerModal existingServers={[]} entry={slack} onClose={vi.fn()} />,
+    );
     await screen.findByTestId("mcp-install-modal");
 
     // Act: complete the install.
