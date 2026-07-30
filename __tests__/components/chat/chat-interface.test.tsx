@@ -36,6 +36,7 @@ import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { act } from "@testing-library/react";
+import { seedConversationEvents } from "../../helpers/seed-conversation-events";
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
@@ -215,11 +216,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       extended_content: [],
     };
 
-    useEventStore.setState({
-      events: [mockUserEvent],
-      eventIds: new Set(["msg-1"]),
-      uiEvents: [mockUserEvent],
-    });
+    seedConversationEvents("test-conversation-id", [mockUserEvent], [mockUserEvent]);
 
     renderWithQueryClient(<ChatInterface />, queryClient);
 
@@ -335,11 +332,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
   });
 
   afterEach(() => {
-    useEventStore.setState({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [],
-    });
+    useEventStore.getState().clearEvents();
     vi.clearAllMocks();
   });
 
@@ -363,11 +356,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       activated_microagents: [],
       extended_content: [],
     };
-    useEventStore.setState({
-      events: [seedEvent],
-      eventIds: new Set(["msg-seed"]),
-      uiEvents: [seedEvent],
-    });
+    seedConversationEvents("test-conversation-id", [seedEvent], [seedEvent]);
     return loadOlder;
   };
 
@@ -500,11 +489,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       activated_microagents: [],
       extended_content: [],
     };
-    useEventStore.setState({
-      events: [seedEvent],
-      eventIds: new Set(["msg-seed"]),
-      uiEvents: [seedEvent],
-    });
+    seedConversationEvents("test-conversation-id", [seedEvent], [seedEvent]);
 
     const useUserConversationModule =
       await import("#/hooks/query/use-user-conversation");
@@ -582,11 +567,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       thinking_blocks: [],
     };
 
-    useEventStore.setState({
-      events: [agentAction],
-      eventIds: new Set(["act-1"]),
-      uiEvents: [agentAction],
-    });
+    seedConversationEvents("test-conversation-id", [agentAction], [agentAction]);
 
     renderWithQueryClient(<ChatInterface />, queryClient);
 
@@ -628,11 +609,7 @@ describe("ChatInterface - Pending message queue", () => {
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
       isLoading: false,
     });
-    useEventStore.setState({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [],
-    });
+    useEventStore.getState().clearEvents();
   });
 
   afterEach(() => {
@@ -736,11 +713,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
       isLoading: false,
     });
-    useEventStore.setState({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [],
-    });
+    useEventStore.getState().clearEvents();
   });
 
   afterEach(() => {
@@ -929,7 +902,7 @@ describe("ChatInterface - Tracking", () => {
         .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
       isLoading: false,
     });
-    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+    useEventStore.getState().clearEvents();
   });
 
   function renderInterface() {
@@ -964,17 +937,13 @@ describe("ChatInterface - Tracking", () => {
     // totalEvents = uiEvents.filter(shouldRenderAgentServerEvent).length.
     // A MessageEvent (has llm_message.role + content) passes that filter,
     // so seeding uiEvents with one makes totalEvents = 1.
-    useEventStore.setState({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [
+    seedConversationEvents("test-conversation-id", [], [
         {
           id: "e1",
           source: "user",
           llm_message: { role: "user", content: "prior message" },
         } as never,
-      ],
-    });
+      ]);
 
     renderInterface();
 

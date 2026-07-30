@@ -7,7 +7,7 @@ import { useDeleteConversation } from "./mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "./mutation/use-unified-stop-conversation";
 import { useUpdateConversationPublicFlag } from "./mutation/use-update-conversation-public-flag";
 import { useActiveConversation } from "./query/use-active-conversation";
-import { useEventStore } from "#/stores/use-event-store";
+import { useConversationEvents } from "#/hooks/use-conversation-events";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -36,7 +36,7 @@ export function useConversationNameContextMenu({
   const { t } = useTranslation();
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend } = useActiveBackend();
-  const events = useEventStore((state) => state.events);
+  const events = useConversationEvents();
   const { mutate: deleteConversation } = useDeleteConversation();
   const { mutate: stopConversation } = useUnifiedPauseConversation();
   const { mutate: updatePublicFlag } = useUpdateConversationPublicFlag();

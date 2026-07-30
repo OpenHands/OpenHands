@@ -433,7 +433,11 @@ export default defineConfig(({ mode }) => {
         },
       },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        // `.tmp/` holds live runtime state (agent-server event/bash-event
+        // files, automation DB, e2e fixtures). The agent-server rewrites it
+        // continuously, so watching it makes Vite issue a `full-reload` every
+        // few seconds when a dev stack is pointed at an in-repo state dir.
+        ignored: ["**/node_modules/**", "**/.git/**", "**/.tmp/**"],
       },
     },
     ssr: {

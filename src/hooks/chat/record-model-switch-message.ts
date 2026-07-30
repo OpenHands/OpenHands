@@ -7,7 +7,7 @@ import { shouldRenderEvent } from "#/components/conversation-events/chat/event-c
 export function recordModelSwitchMessage(
   conversationId: string,
   profileName: string,
-  anchorEventId: string | null = getLastRenderableEventId(),
+  anchorEventId: string | null = getLastRenderableEventId(conversationId),
 ) {
   useModelStore
     .getState()

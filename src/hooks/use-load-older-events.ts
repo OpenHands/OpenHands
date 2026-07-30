@@ -1,7 +1,11 @@
 import React from "react";
 import EventService from "#/api/event-service/event-service.api";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
-import { useEventStore } from "#/stores/use-event-store";
+import {
+  getConversationEvents,
+  getConversationUiEvents,
+  useEventStore,
+} from "#/stores/use-event-store";
 import {
   INITIAL_HISTORY_PAGE_SIZE,
   useConversationHistory,
@@ -49,6 +53,13 @@ export const useLoadOlderEvents = (
   const { data: initialHistory, isFetched: isInitialHistoryFetched } =
     useConversationHistory(realConversationId ?? undefined);
   const addEvents = useEventStore((state) => state.addEvents);
+  const addEventsForConversation = React.useCallback(
+    (events: Parameters<typeof addEvents>[1]) => {
+      if (!conversationId) return;
+      addEvents(conversationId, events);
+    },
+    [addEvents, conversationId],
+  );
 
   const [isLoading, setIsLoading] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
@@ -103,7 +114,7 @@ export const useLoadOlderEvents = (
       return;
     }
 
-    const { events } = useEventStore.getState();
+    const events = getConversationEvents(conversationId);
     const oldest = events[0];
 
     // No anchor yet — defer until the initial REST load has populated the
@@ -141,13 +152,13 @@ export const useLoadOlderEvents = (
 
       const older = [...page.items].reverse();
       if (older.length > 0) {
-        addEvents(older);
+        addEventsForConversation(older);
         // The initial preload only seeds switches from the tail page; a switch
         // in an older page is hidden as a card but never seeded — silently lost.
         // Reseed over the merged `uiEvents` (idempotent) so it still surfaces.
         seedModelSwitchesFromHistory(
           conversationId,
-          useEventStore.getState().uiEvents,
+          getConversationUiEvents(conversationId),
         );
       }
       // Stop once the server signals there are no more pages, OR — for
@@ -168,7 +179,7 @@ export const useLoadOlderEvents = (
     conversation,
     conversation?.conversation_url,
     conversation?.session_api_key,
-    addEvents,
+    addEventsForConversation,
   ]);
 
   return { isLoading, hasMore, loadOlder };

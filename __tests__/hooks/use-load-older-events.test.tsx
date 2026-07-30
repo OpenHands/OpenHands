@@ -120,7 +120,7 @@ describe("useLoadOlderEvents", () => {
     // Seed the store with a single recent event so the hook has an anchor.
     const recent = makeEvent("evt-recent", "2024-06-01T00:00:00Z");
     act(() => {
-      useEventStore.getState().addEvent(recent);
+      useEventStore.getState().addEvent("conv-1", recent);
     });
 
     const olderPage = [
@@ -151,7 +151,7 @@ describe("useLoadOlderEvents", () => {
     );
 
     // Older events landed in the store, in chronological order.
-    expect(useEventStore.getState().events.map((e) => (e as any).id)).toEqual([
+    expect((useEventStore.getState().byConversation["conv-1"]?.events ?? []).map((e) => (e as any).id)).toEqual([
       "evt-older-1",
       "evt-older-2",
       "evt-recent",
@@ -170,7 +170,7 @@ describe("useLoadOlderEvents", () => {
     // page paginates in, or it vanishes from the transcript entirely.
     const recent = makeEvent("evt-recent", "2024-06-01T00:00:00Z");
     act(() => {
-      useEventStore.getState().addEvent(recent);
+      useEventStore.getState().addEvent("conv-1", recent);
     });
 
     // Older page (server returns TIMESTAMP_DESC; the hook reverses it): a user
@@ -229,7 +229,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
     const fullPage: OpenHandsEvent[] = Array.from(
@@ -262,7 +262,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
     let resolvePage!: (page: EventSearchPage<OpenHandsEvent>) => void;
@@ -302,7 +302,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
     vi.spyOn(EventService, "searchEvents").mockRejectedValue(
@@ -332,7 +332,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
     vi.spyOn(EventService, "searchEvents").mockResolvedValue({
@@ -365,7 +365,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent({ id: "evt-missing-ts" } as OpenHandsEvent);
+        .addEvent("conv-1", { id: "evt-missing-ts" } as OpenHandsEvent);
     });
 
     const spy = vi.spyOn(EventService, "searchEvents");
@@ -387,7 +387,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
     });
 
     const spy = vi.spyOn(EventService, "searchEvents");
@@ -417,7 +417,7 @@ describe("useLoadOlderEvents", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeEvent("evt-only", "2024-06-01T00:00:00Z"));
+        .addEvent("conv-1", makeEvent("evt-only", "2024-06-01T00:00:00Z"));
     });
 
     const spy = vi.spyOn(EventService, "searchEvents");

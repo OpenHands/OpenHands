@@ -3,11 +3,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { adaptSystemMessage } from "#/utils/system-message-adapter";
-import { EventState } from "#/stores/use-event-store";
+import type { OHEvent } from "#/stores/use-event-store";
 import { SystemMessageModal } from "#/components/features/conversation-panel/system-message-modal";
 import { ToolsContextMenu } from "#/components/features/controls/tools-context-menu";
 
-const v1Event: EventState["events"] = [
+const v1Event: OHEvent[] = [
   {
     id: "v1-id",
     timestamp: "2025-12-30T12:00:00Z",

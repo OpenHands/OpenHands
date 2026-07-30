@@ -13,7 +13,10 @@ import { ConversationClient } from "@openhands/typescript-client/clients";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWebSocket, WebSocketHookOptions } from "#/hooks/use-websocket";
 import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-error";
-import { useEventStore } from "#/stores/use-event-store";
+import {
+  getConversationUiEvents,
+  useEventStore,
+} from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
@@ -118,6 +121,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  sharedSideEffects = true,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -125,6 +129,13 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: AppConversation[];
   subConversationIds?: string[];
+  /**
+   * When false, this provider only writes into its own event-store bucket and
+   * skips the process-wide terminal / browser / metrics / error / execution
+   * stores. Used by popouts so a secondary conversation can't clobber the
+   * primary route's chrome.
+   */
+  sharedSideEffects?: boolean;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -140,17 +151,40 @@ export function ConversationWebSocketProvider({
   const queryClient = useQueryClient();
   const addEvent = useEventStore((state) => state.addEvent);
   const addEvents = useEventStore((state) => state.addEvents);
-  const clearEventsForConversation = useEventStore(
-    (state) => state.clearEventsForConversation,
+  const loadConversation = useEventStore((state) => state.loadConversation);
+  const isConversationLoaded = useEventStore(
+    (state) => state.isConversationLoaded,
   );
-  const { setErrorMessage, removeErrorMessage, clearConnectionError } =
-    useErrorMessageStore();
+  const {
+    setErrorMessage: setSharedErrorMessage,
+    removeErrorMessage: removeSharedErrorMessage,
+    clearConnectionError: clearSharedConnectionError,
+  } = useErrorMessageStore();
   const consumeMatchingPendingMessage = useOptimisticUserMessageStore(
     (state) => state.consumeMatchingPendingMessage,
   );
-  const { setExecutionStatus } = useConversationStateStore();
-  const { appendInput, appendOutput } = useCommandStore();
+  const { setExecutionStatus: setSharedExecutionStatus } =
+    useConversationStateStore();
+  const { appendInput: appendSharedInput, appendOutput: appendSharedOutput } =
+    useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
+
+  // Secondary conversations (popouts) write only to their event bucket;
+  // shared process-wide chrome stays owned by the primary route.
+  const setErrorMessage = sharedSideEffects
+    ? setSharedErrorMessage
+    : () => undefined;
+  const removeErrorMessage = sharedSideEffects
+    ? removeSharedErrorMessage
+    : () => undefined;
+  const clearConnectionError = sharedSideEffects
+    ? clearSharedConnectionError
+    : () => undefined;
+  const setExecutionStatus = sharedSideEffects
+    ? setSharedExecutionStatus
+    : () => undefined;
+  const appendInput = sharedSideEffects ? appendSharedInput : () => undefined;
+  const appendOutput = sharedSideEffects ? appendSharedOutput : () => undefined;
 
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
@@ -211,10 +245,12 @@ export function ConversationWebSocketProvider({
               }
             : null,
         };
-        useMetricsStore.getState().setMetrics(metrics);
+        if (sharedSideEffects) {
+          useMetricsStore.getState().setMetrics(metrics);
+        }
       }
     },
-    [],
+    [sharedSideEffects],
   );
 
   // Initial REST history load: fetch the most recent events and seed the
@@ -246,29 +282,43 @@ export function ConversationWebSocketProvider({
   // WebSocket resend (the agent's reply). Re-entering the same conversation is
   // a no-op, so the store survives navigating away to Settings and back.
   useLayoutEffect(() => {
-    const nextId = conversationId ?? null;
-    if (useEventStore.getState().loadedConversationId === nextId) {
+    if (!conversationId) {
       return;
     }
-    // Single atomic action: clears the previous conversation's events and
-    // records the new loaded id in one `set`, so no subscriber can observe a
-    // half-applied state (events gone but the old id still reported).
-    clearEventsForConversation(nextId);
-    resetBrowserStore();
-  }, [conversationId, clearEventsForConversation, resetBrowserStore]);
+    // Idempotent: re-entering the same conversation (e.g. Settings → back)
+    // keeps the bucket. A popout that already loaded this id is also a
+    // no-op, so the primary route and the window share one event stream.
+    if (isConversationLoaded(conversationId)) {
+      return;
+    }
+    loadConversation(conversationId);
+    if (sharedSideEffects) {
+      resetBrowserStore();
+    }
+  }, [
+    conversationId,
+    isConversationLoaded,
+    loadConversation,
+    resetBrowserStore,
+    sharedSideEffects,
+  ]);
 
   useLayoutEffect(() => {
-    if (!preloadedHistory || preloadedHistory.events.length === 0) {
+    if (
+      !conversationId ||
+      !preloadedHistory ||
+      preloadedHistory.events.length === 0
+    ) {
       return;
     }
-    addEvents(preloadedHistory.events);
+    addEvents(conversationId, preloadedHistory.events);
 
     // The first user message of a cloud start-task conversation is persisted
     // server-side and reaches us via this REST preload, not over the WebSocket
     // (which subscribes with resend_mode='since' after the latest preloaded
     // timestamp). Consume any matching optimistic "Sending…" bubble here too —
     // mirroring the WS handler — so it doesn't linger as a duplicate of the echo.
-    if (conversationId) {
+    {
       // Rebuild inline "Switched to" messages from the REST-preloaded history.
       // The live store writers (WS handler / user action) never see preloaded
       // events, so without this past model switches wouldn't render on reload.
@@ -277,7 +327,7 @@ export function ConversationWebSocketProvider({
       // match the ids the renderer actually mounts.
       seedModelSwitchesFromHistory(
         conversationId,
-        useEventStore.getState().uiEvents,
+        getConversationUiEvents(conversationId),
       );
 
       for (const event of preloadedHistory.events) {
@@ -480,13 +530,17 @@ export function ConversationWebSocketProvider({
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
-          const isDuplicateEvent = useEventStore
-            .getState()
-            .eventIds.has(event.id);
+          const isDuplicateEvent = conversationId
+            ? !!useEventStore
+                .getState()
+                .byConversation[conversationId]?.eventIds.has(event.id)
+            : false;
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
-          addEvent(event);
+          if (conversationId) {
+            addEvent(conversationId, event);
+          }
           if (isDuplicateEvent) {
             return;
           }
@@ -587,7 +641,7 @@ export function ConversationWebSocketProvider({
           }
 
           // Handle BrowserObservation events - update browser store with screenshot
-          if (isBrowserObservationEvent(event)) {
+          if (sharedSideEffects && isBrowserObservationEvent(event)) {
             const { screenshot_data: screenshotData } = event.observation;
             if (screenshotData) {
               const screenshotSrc = screenshotData.startsWith("data:")
@@ -598,7 +652,7 @@ export function ConversationWebSocketProvider({
           }
 
           // Handle BrowserNavigateAction events - update browser store with URL
-          if (isBrowserNavigateActionEvent(event)) {
+          if (sharedSideEffects && isBrowserNavigateActionEvent(event)) {
             useBrowserStore.getState().setUrl(event.action.url);
           }
 
@@ -685,15 +739,19 @@ export function ConversationWebSocketProvider({
         if (isAgentServerEvent(event)) {
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
-          const isDuplicateEvent = useEventStore
-            .getState()
-            .eventIds.has(event.id);
+          const isDuplicateEvent = conversationId
+            ? !!useEventStore
+                .getState()
+                .byConversation[conversationId]?.eventIds.has(event.id)
+            : false;
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,
             isFromPlanningAgent: true,
           };
-          addEvent(eventWithPlanningFlag);
+          if (conversationId) {
+            addEvent(conversationId, eventWithPlanningFlag);
+          }
           if (isDuplicateEvent) {
             return;
           }

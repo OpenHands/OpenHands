@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useEventStore, type OHEvent } from "#/stores/use-event-store";
+import { type OHEvent } from "#/stores/use-event-store";
+import { useConversationEvents } from "#/hooks/use-conversation-events";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 
 // `kind` values we treat as a file-mutation observation.
@@ -69,7 +70,7 @@ function isBashObservation(event: OHEvent): boolean {
  */
 export function useAutoRefreshFilesOnEdit(): void {
   const queryClient = useQueryClient();
-  const events = useEventStore((state) => state.events);
+  const events = useConversationEvents();
   const bumpWorkspaceMutationCounter = useWorkspaceMutationCounter(
     (state) => state.bump,
   );

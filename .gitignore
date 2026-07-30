@@ -6,9 +6,7 @@ src/i18n/declaration.ts
 node_modules/
 build/
 logs/
-/.tmp/live-e2e-state/
-/.tmp/mock-llm-state/
-/.tmp/mock-llm-skill-repos/
+/.tmp/
 dist/
 __pycache__
 

@@ -1,5 +1,8 @@
 import React from "react";
-import { useEventStore } from "#/stores/use-event-store";
+import {
+  useConversationEvents,
+  useConversationUiEvents,
+} from "#/hooks/use-conversation-events";
 import {
   shouldRenderEvent as shouldRenderAgentServerEvent,
   hasUserEvent as hasAgentServerUserEvent,
@@ -13,8 +16,8 @@ import {
  * Hook that provides memoized filtered event arrays for ChatInterface.
  */
 export function useFilteredEvents() {
-  const storeEvents = useEventStore((state) => state.events);
-  const uiEvents = useEventStore((state) => state.uiEvents);
+  const storeEvents = useConversationEvents();
+  const uiEvents = useConversationUiEvents();
 
   const renderableEvents = React.useMemo(
     () => uiEvents.filter(shouldRenderAgentServerEvent),

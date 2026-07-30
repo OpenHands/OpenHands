@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { adaptSystemMessage } from "#/utils/system-message-adapter";
-import { EventState } from "#/stores/use-event-store";
+import type { OHEvent } from "#/stores/use-event-store";
 
-const v1Event: EventState["events"] = [
+const v1Event: OHEvent[] = [
   {
     id: "v1-id",
     timestamp: "2025-12-30T12:00:00Z",
@@ -41,7 +41,7 @@ describe("adaptSystemMessage", () => {
   });
 
   it("should append dynamic_context to the system prompt content", () => {
-    const events: EventState["events"] = [
+    const events: OHEvent[] = [
       {
         id: "v1-id",
         timestamp: "2025-12-30T12:00:00Z",
@@ -57,7 +57,7 @@ describe("adaptSystemMessage", () => {
   });
 
   it("should redact unmasked custom secret values in dynamic_context", () => {
-    const events: EventState["events"] = [
+    const events: OHEvent[] = [
       {
         id: "v1-id",
         timestamp: "2025-12-30T12:00:00Z",

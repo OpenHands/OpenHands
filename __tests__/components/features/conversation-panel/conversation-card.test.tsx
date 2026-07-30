@@ -24,6 +24,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { usePopoutStore } from "#/stores/popout-store";
 
 // We'll use the actual i18next implementation but override the translation function
 
@@ -74,6 +75,7 @@ describe("ConversationCard", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    usePopoutStore.setState({ popouts: [] });
   });
 
   afterAll(() => {
@@ -248,6 +250,35 @@ describe("ConversationCard", () => {
     await user.click(deleteButton);
 
     expect(onDelete).toHaveBeenCalled();
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("should open the conversation in a popout window from the context menu", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        conversationId="conversation-1"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("open-in-popout-button"));
+
+    expect(usePopoutStore.getState().popouts).toEqual([
+      expect.objectContaining({
+        conversationId: "conversation-1",
+        title: "Conversation 1",
+        mode: "expanded",
+      }),
+    ]);
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 

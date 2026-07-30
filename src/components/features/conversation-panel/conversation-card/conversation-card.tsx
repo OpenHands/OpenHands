@@ -16,6 +16,7 @@ import { ConversationCardActions } from "./conversation-card-actions";
 import { ConversationCardFooter } from "./conversation-card-footer";
 import { ConversationStatusBadges } from "./conversation-status-badges";
 import { useDownloadConversation } from "#/hooks/use-download-conversation";
+import { usePopoutStore } from "#/stores/popout-store";
 
 interface ConversationCardProps {
   onClick?: () => void;
@@ -80,6 +81,7 @@ export function ConversationCard({
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+  const openPopout = usePopoutStore((state) => state.openPopout);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -106,6 +108,18 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     setTitleMode("edit");
+    onContextMenuToggle?.(false);
+  };
+
+  // Popping out is pure client-side window state, so the card drives it
+  // directly rather than routing a callback up through ConversationPanel.
+  const handleOpenInPopout = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (conversationId) {
+      openPopout({ conversationId, title });
+    }
     onContextMenuToggle?.(false);
   };
 
@@ -270,6 +284,7 @@ export function ConversationCard({
                       onDelete={onDelete && handleDelete}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
+                      onOpenInPopout={handleOpenInPopout}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
@@ -296,6 +311,7 @@ export function ConversationCard({
                   onDelete={onDelete && handleDelete}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
+                  onOpenInPopout={handleOpenInPopout}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}

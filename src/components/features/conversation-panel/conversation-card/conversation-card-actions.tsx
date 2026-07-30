@@ -12,6 +12,7 @@ interface ConversationCardActionsProps {
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onOpenInPopout?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadConversation?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus?: ExecutionStatus | null;
@@ -25,6 +26,7 @@ export function ConversationCardActions({
   onDelete,
   onStop,
   onEdit,
+  onOpenInPopout,
   onDownloadViaVSCode,
   onDownloadConversation,
   executionStatus,
@@ -108,6 +110,7 @@ export function ConversationCardActions({
               onDelete={onDelete}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
+              onOpenInPopout={conversationId ? onOpenInPopout : undefined}
               onDownloadViaVSCode={
                 conversationId && showOptions ? onDownloadViaVSCode : undefined
               }

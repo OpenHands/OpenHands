@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import TaskListTab from "#/routes/task-list-tab";
 import { useEventStore } from "#/stores/use-event-store";
 import type { OHEvent } from "#/stores/use-event-store";
+import { seedConversationEvents } from "../helpers/seed-conversation-events";
 
 // Mock i18n
 vi.mock("react-i18next", () => ({
@@ -47,19 +48,11 @@ function createTaskTrackingObservation(id: string, tasks: TestTask[]): OHEvent {
 
 function setTasks(tasks: TestTask[]) {
   const event = createTaskTrackingObservation("1", tasks);
-  useEventStore.setState({
-    events: [event],
-    eventIds: new Set(["1"]),
-    uiEvents: [event],
-  });
+  seedConversationEvents("test-conversation-id", [event], [event]);
 }
 
 beforeEach(() => {
-  useEventStore.setState({
-    events: [],
-    eventIds: new Set(),
-    uiEvents: [],
-  });
+  useEventStore.getState().clearEvents();
 });
 
 describe("TaskListTab", () => {
@@ -155,11 +148,7 @@ describe("TaskListTab", () => {
       { id: "2", title: "New task", status: "in_progress" },
     ]);
 
-    useEventStore.setState({
-      events: [event1, event2],
-      eventIds: new Set(["1", "2"]),
-      uiEvents: [event1, event2],
-    });
+    seedConversationEvents("test-conversation-id", [event1, event2], [event1, event2]);
 
     render(<TaskListTab />);
 
