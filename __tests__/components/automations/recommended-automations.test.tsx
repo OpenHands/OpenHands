@@ -17,6 +17,10 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
@@ -72,12 +76,25 @@ const cloudBackend: Backend = {
   kind: "cloud",
 };
 
+const mockNavigate = vi.fn();
+
+const navigationValue: NavigationContextValue = {
+  currentPath: "/automations",
+  conversationId: null,
+  isNavigating: false,
+  navigate: mockNavigate,
+};
+
 function renderLauncher({ withBackendProvider = false } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  const launcher = <RecommendedAutomationsLauncher />;
+  const launcher = (
+    <NavigationProvider value={navigationValue}>
+      <RecommendedAutomationsLauncher />
+    </NavigationProvider>
+  );
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -380,26 +397,49 @@ describe("recommended automations", () => {
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
-  it("launches directly with the catalog prompt when the required MCP is already installed", () => {
+  it("opens the setup form for an automation that ships one, creating nothing", () => {
+    // Arrange
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
     });
 
     renderLauncher();
 
+    // Act
     fireEvent.click(
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
-    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    // Assert — nothing exists until the user confirms in the setup form.
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/automations/new/github-pr-reviewer",
+    );
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
 
+  it("launches an automation that ships no setup form with its slash command", () => {
+    // Arrange
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    renderLauncher();
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
+    );
+
+    // Assert
+    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
     const [, options] = mockCreateConversationMutate.mock.calls[0];
     options.onSuccess({ conversation_id: "conversation-1" });
 
     const draft = getConversationState("conversation-1").draftMessage;
-    expect(draft).toBe("/pr-reviewer:setup");
+    expect(draft).toBe("/linear-triage:setup");
   });
 
   it("launches without waiting for an integration the automation can start without", () => {
@@ -421,9 +461,9 @@ describe("recommended automations", () => {
       ),
     );
 
-    // Assert
+    // Assert — nothing stands between the click and the launch.
     expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
-    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
   it("prompts to install when the required MCP server is disabled", async () => {
@@ -466,7 +506,7 @@ describe("recommended automations", () => {
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
 
-    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
   it("hides the recommended automations section on cloud backends", () => {
@@ -500,7 +540,9 @@ describe("recommended automations", () => {
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1),
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
     );
   });
 

@@ -1,6 +1,9 @@
+import { useTranslation } from "react-i18next";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { GitRepoDropdown } from "#/components/features/home/git-repo-dropdown";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { I18nKey } from "#/i18n/declaration";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import type { GitRepository } from "#/types/git";
@@ -30,8 +33,9 @@ export interface SetupFormFieldProps {
  * Render one manifest-declared field.
  *
  * The host knows how to render a field *type*; what any field means is the
- * manifest's business. Every user-visible string here comes from the manifest,
- * which is why none of them are translated by the host.
+ * manifest's business. Every field's own copy comes from the manifest and is
+ * never translated by the host; the only host string is the format hint the
+ * repository fallback below needs, because no manifest declares it.
  */
 export function SetupFormField({
   name,
@@ -45,10 +49,18 @@ export function SetupFormField({
   onRepositoryChange,
   onBlur,
 }: SetupFormFieldProps) {
+  const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const testId = `setup-field-${name}`;
   const help = <p className="text-xs text-[var(--oh-muted)]">{field.help}</p>;
 
-  if (field.type === "repo-picker") {
+  // Listing a user's repositories is a cloud-backend capability: `GitService`
+  // answers with an empty page on any other backend, so the picker would offer
+  // a source that can never respond. Recommended automations are themselves
+  // local-only, which makes that the common case rather than the edge one.
+  const canListRepositories = backend.kind === "cloud";
+
+  if (field.type === "repo-picker" && canListRepositories) {
     return (
       <div className="flex w-full flex-col gap-2.5">
         <FieldLabel field={field} />
@@ -127,9 +139,17 @@ export function SetupFormField({
     );
   }
 
-  // `text`, `cron` and an unresolved `timezone` are all single-line strings to
-  // the host; only the manifest and the service know what a cron expression
-  // means.
+  // `text`, `cron`, an unresolved `timezone` and a repository that cannot be
+  // browsed are all single-line strings to the host; only the manifest and the
+  // service know what a cron expression or a repository name means. A manifest
+  // states the format of everything it declares except the repository, whose
+  // shape the host derives, so that one hint is host copy.
+  const placeholder =
+    field.placeholder ??
+    (field.type === "repo-picker"
+      ? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)
+      : undefined);
+
   return (
     <div className="flex w-full flex-col gap-2.5">
       <SettingsInput
@@ -138,7 +158,7 @@ export function SetupFormField({
         type="text"
         label={field.label}
         value={value}
-        placeholder={field.placeholder}
+        placeholder={placeholder}
         isDisabled={disabled}
         showRequiredTag={field.required}
         error={error}

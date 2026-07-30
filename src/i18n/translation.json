@@ -35596,5 +35596,22 @@
     "de": "Diese Installation unterstützt nicht alles, was diese Automatisierung benötigt.",
     "uk": "Це середовище підтримує не все, що потрібно цій автоматизації.",
     "ca": "Aquest desplegament no admet tot el que necessita aquesta automatització."
+  },
+  "SETUP$REPOSITORY_PLACEHOLDER": {
+    "en": "owner/repo",
+    "ja": "owner/repo",
+    "zh-CN": "owner/repo",
+    "zh-TW": "owner/repo",
+    "ko-KR": "owner/repo",
+    "no": "owner/repo",
+    "it": "owner/repo",
+    "pt": "owner/repo",
+    "es": "owner/repo",
+    "ar": "owner/repo",
+    "fr": "owner/repo",
+    "tr": "owner/repo",
+    "de": "owner/repo",
+    "uk": "owner/repo",
+    "ca": "owner/repo"
   }
 }

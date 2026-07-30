@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
-  evaluateCapabilityRequirements,
+  assessCapabilityRequirements,
   type SetupCapabilitySupport,
 } from "#/manifests/manifest-capabilities";
 import type { DeploymentCapabilities, SetupEntry } from "#/manifests/types";
@@ -12,6 +12,8 @@ export interface SetupCapabilitiesResult {
   /** The discovery response, or null when there is nothing to report. */
   capabilities: DeploymentCapabilities | null;
   supported: SetupCapabilitySupport;
+  /** Which requirements a `false` verdict came from; empty otherwise. */
+  unmet: string[];
   isLoading: boolean;
 }
 
@@ -41,16 +43,29 @@ export function useSetupCapabilities(
   });
 
   if (query.isLoading) {
-    return { capabilities: null, supported: "unknown", isLoading: true };
+    return {
+      capabilities: null,
+      supported: "unknown",
+      unmet: [],
+      isLoading: true,
+    };
   }
 
   if (!query.data) {
-    return { capabilities: null, supported: "unknown", isLoading: false };
+    return {
+      capabilities: null,
+      supported: "unknown",
+      unmet: [],
+      isLoading: false,
+    };
   }
+
+  const assessment = assessCapabilityRequirements(entry, query.data);
 
   return {
     capabilities: query.data,
-    supported: evaluateCapabilityRequirements(entry, query.data),
+    supported: assessment.supported,
+    unmet: assessment.unmet,
     isLoading: false,
   };
 }

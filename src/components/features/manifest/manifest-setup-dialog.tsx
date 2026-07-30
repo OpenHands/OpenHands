@@ -257,9 +257,24 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           )}
 
           {!isLoading && isUnsupported && (
-            <p className="text-sm text-[var(--oh-muted)]">
-              {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-[var(--oh-muted)]">
+                {t(I18nKey.SETUP$UNSUPPORTED_MESSAGE)}
+              </p>
+              {/* The unmet requirements are the names both sides of the
+                  contract already use, so they are printed rather than
+                  translated. Without them the block is undiagnosable: the
+                  deployment answered, and the host would be discarding the
+                  one thing it learned. */}
+              {capabilities.unmet.length > 0 && (
+                <p
+                  data-testid="setup-unmet-requirements"
+                  className="text-sm text-[var(--oh-muted)]"
+                >
+                  {capabilities.unmet.join(", ")}
+                </p>
+              )}
+            </div>
           )}
 
           {!isLoading && !isUnsupported && currentStep === "prerequisites" && (

@@ -15,24 +15,39 @@ import type { DeploymentCapabilities, SetupEntry } from "./types";
  */
 export type SetupCapabilitySupport = boolean | "unknown";
 
-function supportsAll(
-  reported: readonly string[],
-  required: readonly string[],
-): boolean {
-  return required.every((entry) => reported.includes(entry));
+export interface SetupCapabilityAssessment {
+  supported: boolean;
+  /**
+   * Requirement names the deployment did not report, so a block can say which
+   * ones rather than only that there were some. Empty when a deployment that
+   * reports it is not accepting work blocks the entry, because then no single
+   * requirement is the reason.
+   */
+  unmet: string[];
 }
 
-export function evaluateCapabilityRequirements(
+function findUnreported(
+  reported: readonly string[],
+  required: readonly string[],
+): string[] {
+  return required.filter((entry) => !reported.includes(entry));
+}
+
+export function assessCapabilityRequirements(
   entry: SetupEntry,
   reported: DeploymentCapabilities,
-): boolean {
-  if (!reported.ready) return false;
+): SetupCapabilityAssessment {
+  // A deployment that is not accepting work blocks every entry, including one
+  // that requires nothing of it.
+  if (!reported.ready) return { supported: false, unmet: [] };
 
-  return (
-    supportsAll(reported.features ?? [], entry.requires.features ?? []) &&
-    supportsAll(
+  const unmet = [
+    ...findUnreported(reported.features ?? [], entry.requires.features ?? []),
+    ...findUnreported(
       reported.triggerKinds ?? [],
       Object.keys(entry.setup.form.triggers ?? {}),
-    )
-  );
+    ),
+  ];
+
+  return { supported: unmet.length === 0, unmet };
 }
