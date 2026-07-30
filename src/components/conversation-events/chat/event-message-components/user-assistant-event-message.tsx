@@ -87,12 +87,11 @@ export function UserAssistantEventMessage({
       },
       {
         onSuccess: ({ info, excluded }) => {
-          navigate(`/conversations/${info.id}`);
-          // Prefill only when excluded (else the send duplicates it). Deferred
-          // so the new conversation's composer receives it (as useLaunchSkillInChat).
+          // Prefill only when excluded (else the send duplicates it).
           if (excluded) {
-            window.setTimeout(() => setMessageToSend(message), 0);
+            setMessageToSend(message, info.id);
           }
+          navigate(`/conversations/${info.id}`);
         },
         onError: (error) =>
           displayErrorToast(error instanceof Error ? error.message : null),

@@ -117,7 +117,10 @@ describe("CreateInstructions", () => {
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
+      expect(setMessageToSend).toHaveBeenCalledWith(
+        "Create an automation",
+        null,
+      );
     });
   });
 });

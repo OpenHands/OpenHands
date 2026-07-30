@@ -86,10 +86,11 @@ export function PendingUserMessages() {
 
   const handleStop = React.useCallback(
     (id: string, text: string) => {
-      restoreMessageToInputIfEmpty(text);
+      if (!conversationId) return;
+      restoreMessageToInputIfEmpty(text, conversationId);
       removePendingMessage(id);
     },
-    [restoreMessageToInputIfEmpty, removePendingMessage],
+    [conversationId, restoreMessageToInputIfEmpty, removePendingMessage],
   );
 
   if (visibleMessages.length === 0) {

@@ -87,7 +87,8 @@ export function CustomChatInput({
   } = useChatInputLogic();
 
   const syncCanSubmit = React.useCallback(() => {
-    const text = chatInputRef.current?.innerText ?? "";
+    const element = chatInputRef.current;
+    const text = element?.innerText ?? element?.textContent ?? "";
     const hasAttachments = images.length > 0 || files.length > 0;
     setCanSubmit(text.trim().length > 0 || hasAttachments);
   }, [chatInputRef, images, files]);
@@ -161,7 +162,7 @@ export function CustomChatInput({
   );
   useEffect(() => {
     syncCanSubmit();
-  }, [syncCanSubmit, images.length, files.length]);
+  }, [syncCanSubmit, images.length, files.length, messageToSend]);
   return (
     <div className={cn("w-full", className)}>
       {/* Hidden file input */}

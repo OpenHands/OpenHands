@@ -57,7 +57,9 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     // Simulate useLaunchSkillInChat: navigate("/conversations") has landed on
     // the home composer, then setMessageToSend fires from a timeout.
     act(() => {
-      useConversationStore.getState().setMessageToSend("Create an automation");
+      useConversationStore
+        .getState()
+        .setMessageToSend("Create an automation", null);
     });
 
     await waitFor(() => expect(input.textContent).toBe("Create an automation"));
@@ -75,12 +77,16 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     ).toBeTruthy();
   });
 
-  it("prefills the home composer when a fresh messageToSend is already set at mount (navigate race)", async () => {
+  it("prefills the home composer when its targeted message was queued before a delayed mount", async () => {
     // The launch flow sets the message in a 0ms timeout after navigate(); if
-    // the home route mounts after that timeout fires, the fresh value is
-    // already in the store on first render and must still be honored.
+    // route loading is delayed, the value must remain valid without a clock
+    // heuristic.
     useConversationStore.setState({
-      messageToSend: { text: "Create an automation", timestamp: Date.now() },
+      messageToSend: {
+        text: "Create an automation",
+        timestamp: Date.now() - 60_000,
+        targetConversationId: null,
+      },
     });
 
     render(<ComposerHarness />);
@@ -92,10 +98,14 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     );
   });
 
-  it("does not let a stale messageToSend clobber the restored home draft", async () => {
+  it("does not let a message targeted to another conversation clobber the restored home draft", async () => {
     sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, "half-typed draft");
     useConversationStore.setState({
-      messageToSend: { text: "stale leftover", timestamp: Date.now() - 60_000 },
+      messageToSend: {
+        text: "other conversation",
+        timestamp: Date.now(),
+        targetConversationId: "conv-other",
+      },
     });
 
     render(<ComposerHarness />);
@@ -104,13 +114,13 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     await waitFor(() => expect(input.textContent).toBe("half-typed draft"));
 
     // Give the useAutoResize value effect (including its rAF fallback) a
-    // chance to run: the stale value must never be applied.
+    // chance to run: a value for another composer must never be applied.
     await flushAnimationFrame();
     expect(input.textContent).toBe("half-typed draft");
 
-    // The stale value is ignored, not consumed.
+    // The intended conversation can still consume its one-shot value.
     expect(useConversationStore.getState().messageToSend?.text).toBe(
-      "stale leftover",
+      "other conversation",
     );
   });
 
@@ -120,6 +130,7 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
       messageToSend: {
         text: "resume this text",
         timestamp: Date.now() - 60_000,
+        targetConversationId: "conv-123",
       },
     });
 
@@ -127,5 +138,51 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     const input = screen.getByTestId("chat-input");
 
     await waitFor(() => expect(input.textContent).toBe("resume this text"));
+  });
+
+  it("restores a cancelled send only in its targeted conversation", async () => {
+    mockConversationId = "conv-123";
+    useConversationStore.setState({
+      messageRestoreIfEmpty: {
+        text: "cancelled send",
+        timestamp: Date.now(),
+        targetConversationId: "conv-123",
+      },
+    });
+
+    render(<ComposerHarness />);
+    const input = screen.getByTestId("chat-input");
+
+    await waitFor(() => expect(input.textContent).toBe("cancelled send"));
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageRestoreIfEmpty).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageToSend).toBeNull(),
+    );
+  });
+
+  it("retains a cancelled send targeted to another conversation", async () => {
+    mockConversationId = "conv-456";
+    useConversationStore.setState({
+      messageRestoreIfEmpty: {
+        text: "belongs elsewhere",
+        timestamp: Date.now(),
+        targetConversationId: "conv-123",
+      },
+    });
+
+    render(<ComposerHarness />);
+    const input = screen.getByTestId("chat-input");
+
+    await flushAnimationFrame();
+    expect(input.textContent).toBe("");
+    expect(useConversationStore.getState().messageToSend).toBeNull();
+    expect(useConversationStore.getState().messageRestoreIfEmpty).toMatchObject(
+      {
+        text: "belongs elsewhere",
+        targetConversationId: "conv-123",
+      },
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
   getCreateNewBranchPrompt,
 } from "#/utils/utils";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 
 import ArrowUpIcon from "#/icons/u-arrow-up.svg?react";
 import ArrowDownIcon from "#/icons/u-arrow-down.svg?react";
@@ -28,26 +29,33 @@ export function GitToolsSubmenu({ onClose }: GitToolsSubmenuProps) {
   const { t } = useTranslation("openhands");
   const { setMessageToSend } = useConversationStore();
   const { data: conversation } = useActiveConversation();
+  const { conversationId } = useOptionalConversationId();
 
   const currentGitProvider = conversation?.git_provider as Provider;
 
   const onGitPull = () => {
-    setMessageToSend(getGitPullPrompt());
+    setMessageToSend(getGitPullPrompt(), conversationId ?? null);
     onClose();
   };
 
   const onGitPush = () => {
-    setMessageToSend(getGitPushPrompt(currentGitProvider));
+    setMessageToSend(
+      getGitPushPrompt(currentGitProvider),
+      conversationId ?? null,
+    );
     onClose();
   };
 
   const onCreatePR = () => {
-    setMessageToSend(getCreatePRPrompt(currentGitProvider));
+    setMessageToSend(
+      getCreatePRPrompt(currentGitProvider),
+      conversationId ?? null,
+    );
     onClose();
   };
 
   const onCreateNewBranch = () => {
-    setMessageToSend(getCreateNewBranchPrompt());
+    setMessageToSend(getCreateNewBranchPrompt(), conversationId ?? null);
     onClose();
   };
 

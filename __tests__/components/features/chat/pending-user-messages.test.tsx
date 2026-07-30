@@ -100,7 +100,10 @@ describe("PendingUserMessages", () => {
       0,
     );
     expect(useConversationStore.getState().messageRestoreIfEmpty).toEqual(
-      expect.objectContaining({ text: "cancel me" }),
+      expect.objectContaining({
+        text: "cancel me",
+        targetConversationId: ACTIVE_CONVO,
+      }),
     );
   });
 

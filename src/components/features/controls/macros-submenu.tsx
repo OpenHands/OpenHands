@@ -10,6 +10,7 @@ import WaterIcon from "#/icons/u-water.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { REPO_SUGGESTIONS } from "#/utils/suggestions/repo-suggestions";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 
 const submenuListItemClassName = "!w-auto whitespace-nowrap";
 
@@ -20,21 +21,28 @@ interface MacrosSubmenuProps {
 export function MacrosSubmenu({ onClose }: MacrosSubmenuProps) {
   const { t } = useTranslation("openhands");
   const { setMessageToSend } = useConversationStore();
+  const { conversationId } = useOptionalConversationId();
 
   const onIncreaseTestCoverage = () => {
-    setMessageToSend(REPO_SUGGESTIONS.INCREASE_TEST_COVERAGE);
+    setMessageToSend(
+      REPO_SUGGESTIONS.INCREASE_TEST_COVERAGE,
+      conversationId ?? null,
+    );
     onClose();
   };
   const onFixReadme = () => {
-    setMessageToSend(REPO_SUGGESTIONS.FIX_README);
+    setMessageToSend(REPO_SUGGESTIONS.FIX_README, conversationId ?? null);
     onClose();
   };
   const onAutoMergePRs = () => {
-    setMessageToSend(REPO_SUGGESTIONS.AUTO_MERGE_PRS);
+    setMessageToSend(REPO_SUGGESTIONS.AUTO_MERGE_PRS, conversationId ?? null);
     onClose();
   };
   const onCleanDependencies = () => {
-    setMessageToSend(REPO_SUGGESTIONS.CLEAN_DEPENDENCIES);
+    setMessageToSend(
+      REPO_SUGGESTIONS.CLEAN_DEPENDENCIES,
+      conversationId ?? null,
+    );
     onClose();
   };
 

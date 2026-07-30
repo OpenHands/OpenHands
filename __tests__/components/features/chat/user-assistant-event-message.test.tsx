@@ -143,6 +143,7 @@ describe("UserAssistantEventMessage — branch action", () => {
     await waitFor(() =>
       expect(setMessageToSendMock).toHaveBeenCalledWith(
         expect.stringContaining("Hello world"),
+        "fork-123",
       ),
     );
   });

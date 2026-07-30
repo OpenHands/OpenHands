@@ -32,7 +32,13 @@ describe("useAutoResize — value application / onValueApplied", () => {
     expect(el.textContent).toBe("");
     expect(onValueApplied).not.toHaveBeenCalled();
 
-    rerender({ value: { text: "restored draft", timestamp: 1 } });
+    rerender({
+      value: {
+        text: "restored draft",
+        timestamp: 1,
+        targetConversationId: null,
+      },
+    });
 
     await waitFor(() => expect(el.textContent).toBe("restored draft"));
     expect(onValueApplied).toHaveBeenCalledTimes(1);

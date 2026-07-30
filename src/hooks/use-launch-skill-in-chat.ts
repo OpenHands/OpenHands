@@ -11,10 +11,8 @@ export function useLaunchSkillInChat() {
   return useCallback(
     (message: string, onClose?: () => void) => {
       onClose?.();
+      setMessageToSend(message, null);
       navigate("/conversations");
-      window.setTimeout(() => {
-        setMessageToSend(message);
-      }, 0);
     },
     [navigate, setMessageToSend],
   );

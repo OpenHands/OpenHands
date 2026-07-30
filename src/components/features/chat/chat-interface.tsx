@@ -369,7 +369,7 @@ export function ChatInterface() {
     // latest message even if the user had scrolled up. This also re-arms
     // autoScroll so the streamed agent reply auto-follows.
     scrollDomToBottom();
-    setMessageToSend("");
+    setMessageToSend("", conversationId ?? null);
 
     try {
       await send(
@@ -491,7 +491,9 @@ export function ChatInterface() {
           // setup button — so hide them and let the banner be the lone CTA.
           !llmBlocked && (
             <ChatSuggestions
-              onSuggestionsClick={(message) => setMessageToSend(message)}
+              onSuggestionsClick={(message) =>
+                setMessageToSend(message, conversationId ?? null)
+              }
             />
           )}
         {/* Note: We only hide chat suggestions when there's a user message */}

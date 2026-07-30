@@ -122,7 +122,10 @@ describe("SkillDetailModal", () => {
     expect(onClose).toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith(ADD_SKILL_EXAMPLE_COMMAND);
+      expect(setMessageToSend).toHaveBeenCalledWith(
+        ADD_SKILL_EXAMPLE_COMMAND,
+        null,
+      );
     });
   });
 

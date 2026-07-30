@@ -13,27 +13,24 @@ interface TestChatInputContainerProps {
 // Keep CustomChatInput and its hooks real. This narrow view double only
 // exposes the contentEditable ref and the canSubmit value that the production
 // ChatInputContainer passes to its send button.
-vi.mock(
-  "#/components/features/chat/components/chat-input-container",
-  () => ({
-    ChatInputContainer: ({
-      chatInputRef,
-      canSubmit,
-    }: TestChatInputContainerProps) => (
-      <>
-        <div
-          ref={chatInputRef}
-          contentEditable
-          suppressContentEditableWarning
-          data-testid="chat-input"
-        />
-        <button type="button" disabled={!canSubmit}>
-          Send
-        </button>
-      </>
-    ),
-  }),
-);
+vi.mock("#/components/features/chat/components/chat-input-container", () => ({
+  ChatInputContainer: ({
+    chatInputRef,
+    canSubmit,
+  }: TestChatInputContainerProps) => (
+    <>
+      <div
+        ref={chatInputRef}
+        contentEditable
+        suppressContentEditableWarning
+        data-testid="chat-input"
+      />
+      <button type="button" disabled={!canSubmit}>
+        Send
+      </button>
+    </>
+  ),
+}));
 
 describe("CustomChatInput — store-driven prefill", () => {
   beforeEach(() => {
@@ -61,7 +58,9 @@ describe("CustomChatInput — store-driven prefill", () => {
     expect(sendButton).toBeDisabled();
 
     act(() => {
-      useConversationStore.getState().setMessageToSend("Create an automation");
+      useConversationStore
+        .getState()
+        .setMessageToSend("Create an automation", null);
     });
 
     await waitFor(() => expect(input.textContent).toBe("Create an automation"));
