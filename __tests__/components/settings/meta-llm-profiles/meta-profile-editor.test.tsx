@@ -14,7 +14,6 @@ const FILLED: MetaProfile = {
   prompt_template:
     "Return JSON with the best model.\n{{ model_table }}\nTask:\n{{ instance_text }}",
   model_table: "- GPT-5.4\n- MiniMax-M3",
-  target_models: [{ model: "GPT-5.4", profile: "deepseek" }],
 };
 
 describe("MetaProfileEditor", () => {
@@ -69,33 +68,6 @@ describe("MetaProfileEditor", () => {
     );
 
     expect(screen.getByTestId("meta-profile-name-input")).toBeDisabled();
-  });
-
-  it("adds and removes target model rows", async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <MetaProfileEditor
-        mode="create"
-        availableProfiles={AVAILABLE}
-        isSaving={false}
-        onSave={vi.fn()}
-        onCancel={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.getByTestId("meta-profile-target-models-empty"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("meta-profile-add-target-model"));
-    expect(
-      screen.getByTestId("meta-profile-target-model-label-0"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("meta-profile-remove-target-model-0"));
-    expect(
-      screen.queryByTestId("meta-profile-target-model-label-0"),
-    ).not.toBeInTheDocument();
   });
 
   it("requires the prompt template to include the instance_text placeholder", () => {

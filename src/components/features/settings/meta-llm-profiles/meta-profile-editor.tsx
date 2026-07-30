@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Trash2 } from "lucide-react";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
 import { Typography } from "#/ui/typography";
@@ -10,10 +8,7 @@ import { isProfileNameValid } from "#/utils/derive-profile-name";
 import { cn } from "#/utils/utils";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { I18nKey } from "#/i18n/declaration";
-import type {
-  MetaProfile,
-  MetaProfileTargetModel,
-} from "#/api/meta-profiles-service/meta-profiles-service.api";
+import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 
 interface MetaProfileEditorProps {
   mode: "create" | "edit";
@@ -37,7 +32,6 @@ const EMPTY_CONFIG: MetaProfile = {
   default_model: "",
   prompt_template: "",
   model_table: "",
-  target_models: [],
 };
 
 const INSTANCE_TEXT_PLACEHOLDER = /{{\s*instance_text\s*}}/;
@@ -55,7 +49,6 @@ const normalizeConfig = (config?: MetaProfile): MetaProfile => ({
   classes: [],
   prompt_template: config?.prompt_template ?? "",
   model_table: config?.model_table ?? "",
-  target_models: config?.target_models ?? [],
 });
 
 export function MetaProfileEditor({
@@ -84,49 +77,12 @@ export function MetaProfileEditor({
   // In create mode, a name that already exists would overwrite that profile
   // (the backend save is create-or-overwrite), so reject it here.
   const isDuplicateName = !isEdit && existingNames.includes(name.trim());
-  const targetModelLabels = config.target_models.map((target) =>
-    target.model.trim().toLowerCase(),
-  );
-  const hasDuplicateTargetModelLabels =
-    new Set(targetModelLabels).size !== targetModelLabels.length;
   const canSave =
     nameValid &&
     !isDuplicateName &&
     config.classifier_model.trim().length > 0 &&
     config.default_model.trim().length > 0 &&
-    INSTANCE_TEXT_PLACEHOLDER.test(config.prompt_template ?? "") &&
-    config.target_models.length > 0 &&
-    !hasDuplicateTargetModelLabels &&
-    config.target_models.every(
-      (target) =>
-        target.model.trim().length > 0 && target.profile.trim().length > 0,
-    );
-
-  const updateTargetModel = (
-    index: number,
-    patch: Partial<MetaProfileTargetModel>,
-  ) => {
-    setConfig((prev) => ({
-      ...prev,
-      target_models: prev.target_models.map((target, i) =>
-        i === index ? { ...target, ...patch } : target,
-      ),
-    }));
-  };
-
-  const addTargetModel = () => {
-    setConfig((prev) => ({
-      ...prev,
-      target_models: [...prev.target_models, { model: "", profile: "" }],
-    }));
-  };
-
-  const removeTargetModel = (index: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      target_models: prev.target_models.filter((_, i) => i !== index),
-    }));
-  };
+    INSTANCE_TEXT_PLACEHOLDER.test(config.prompt_template ?? "");
 
   const handleSave = () => {
     if (!canSave || isSaving) return;
@@ -136,10 +92,6 @@ export function MetaProfileEditor({
       classes: [],
       prompt_template: (config.prompt_template ?? "").trim(),
       model_table: config.model_table?.trim() || null,
-      target_models: config.target_models.map((target) => ({
-        model: target.model.trim(),
-        profile: target.profile.trim(),
-      })),
     });
   };
 
@@ -282,97 +234,6 @@ export function MetaProfileEditor({
             model_table: MODEL_TABLE_PLACEHOLDER_TEXT,
           })}
         </p>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h3 className="text-base font-medium text-white">
-              {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS)}
-            </h3>
-            <p className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS_HELP)}
-            </p>
-          </div>
-          <BrandButton
-            testId="meta-profile-add-target-model"
-            type="button"
-            variant="secondary"
-            onClick={addTargetModel}
-            isDisabled={isSaving}
-          >
-            {t(I18nKey.SETTINGS$META_PROFILE_ADD_TARGET_MODEL)}
-          </BrandButton>
-        </div>
-
-        {config.target_models.length === 0 ? (
-          <p
-            data-testid="meta-profile-target-models-empty"
-            className="text-sm text-[var(--oh-muted)]"
-          >
-            {t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODELS_EMPTY)}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-4">
-            {config.target_models.map((target, index) => (
-              <li
-                key={index}
-                className="flex flex-col gap-2 sm:flex-row sm:items-end"
-              >
-                <div className="flex-1">
-                  <SettingsInput
-                    testId={`meta-profile-target-model-label-${index}`}
-                    label={t(I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_LABEL)}
-                    type="text"
-                    className="w-full"
-                    value={target.model}
-                    placeholder={t(
-                      I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_LABEL_PLACEHOLDER,
-                    )}
-                    onChange={(value) =>
-                      updateTargetModel(index, { model: value })
-                    }
-                    isDisabled={isSaving}
-                  />
-                </div>
-                <div className="flex-1">
-                  <SettingsDropdownInput
-                    testId={`meta-profile-target-model-profile-${index}`}
-                    name={`target_model_profile_${index}`}
-                    label={t(
-                      I18nKey.SETTINGS$META_PROFILE_TARGET_MODEL_PROFILE,
-                    )}
-                    items={profileItems}
-                    defaultSelectedKey={target.profile || undefined}
-                    allowsCustomValue
-                    isDisabled={isSaving}
-                    onInputChange={(value) =>
-                      updateTargetModel(index, { profile: value })
-                    }
-                    onSelectionChange={(key) =>
-                      updateTargetModel(index, {
-                        profile: key ? String(key) : "",
-                      })
-                    }
-                  />
-                </div>
-                <BrandButton
-                  testId={`meta-profile-remove-target-model-${index}`}
-                  type="button"
-                  variant="secondary"
-                  onClick={() => removeTargetModel(index)}
-                  isDisabled={isSaving}
-                  className="shrink-0"
-                >
-                  <Trash2 size={16} aria-hidden />
-                  <span className="sr-only">
-                    {t(I18nKey.SETTINGS$META_PROFILE_REMOVE_TARGET_MODEL)}
-                  </span>
-                </BrandButton>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       <div className="flex items-center gap-3">

@@ -158,7 +158,6 @@ describe("MetaLlmSettingsView", () => {
         classes: [],
         prompt_template: "Route this task.\n{{ instance_text }}",
         model_table: "- GPT-5.4",
-        target_models: [{ model: "GPT-5.4", profile: "deepseek" }],
       },
     });
     renderWithProviders(<MetaLlmSettingsView />);
