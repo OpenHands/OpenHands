@@ -493,6 +493,32 @@ describe("static-server.mjs", () => {
     });
   });
 
+  describe("--no-referrer-prefix", () => {
+    it("defaults to none", () => {
+      expect(parseArgs([]).noReferrerPrefixes).toEqual([]);
+    });
+
+    it("collects repeated prefixes", () => {
+      const config = parseArgs([
+        "--no-referrer-prefix",
+        "/vscode",
+        "--no-referrer-prefix",
+        "/editor",
+      ]);
+      expect(config.noReferrerPrefixes).toEqual(["/vscode", "/editor"]);
+    });
+
+    it("rejects a prefix without a leading slash", () => {
+      expect(() => parseArgs(["--no-referrer-prefix", "vscode"])).toThrow(
+        /must start with/,
+      );
+    });
+
+    // Behaviour on a live proxied response is covered in ingress.test.ts,
+    // which drives a real child process; an in-process proxy deadlocks against
+    // the MSW interceptor this suite installs globally.
+  });
+
   it("keeps paths confined to the static directory", async () => {
     const parentDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-parent-"));
     tempDirs.push(parentDir);

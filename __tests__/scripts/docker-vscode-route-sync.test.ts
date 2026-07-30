@@ -131,21 +131,45 @@ describe("docker editor route", () => {
     expect(dockerfile).toContain("'CONFIG_VSCODE_PORT=' + c.ports.vscode");
   });
 
-  it("registers the editor route on every static-server instance", () => {
+  it("registers the editor route on the normal static-server instance", () => {
     const invocations = staticServerInvocations();
-    // Normal + public-mode. If this count changes, the new invocation needs
-    // the route too.
+    // Normal + public-mode. If this count changes, decide deliberately which
+    // of the two the new instance resembles.
     expect(invocations).toHaveLength(2);
 
-    for (const invocation of invocations) {
-      expect(invocation).toContain('--route "$VSCODE_ROUTE"');
-    }
+    const [normal] = invocations;
+    expect(normal).toContain('--route "$VSCODE_ROUTE"');
 
-    // Both invocations name the same variable, and it is assigned once, beside
-    // the exports it is derived from. Two independently-built route strings are
-    // the drift this whole file exists to prevent.
+    // The route string is assigned once, beside the exports it is derived
+    // from. Two independently-built route strings are the drift this whole
+    // file exists to prevent.
     const assignments = entrypoint.match(/^VSCODE_ROUTE=/gm) ?? [];
     expect(assignments).toHaveLength(1);
+  });
+
+  it("keeps the editor off the public-mode (--auth-required) instance", () => {
+    // --auth-required only decides whether the session key is injected into
+    // the served HTML: the dispatcher matches routes before consulting it, so
+    // it does not gate proxied paths. The other routes are safe on that
+    // footing because agent-server checks the session key itself, but the
+    // editor's own credential is the connection token in its query string,
+    // and agent-server derives that from session_api_keys[0] — the same secret
+    // that authenticates /api. Routing it here would publish that secret in a
+    // browser-navigable URL on the origin whose whole purpose is to exercise
+    // the unauthenticated case.
+    const publicMode = staticServerInvocations().find((invocation) =>
+      invocation.includes("--auth-required"),
+    );
+    expect(publicMode).toBeDefined();
+    expect(publicMode).not.toContain("VSCODE_ROUTE");
+  });
+
+  it("sends Referrer-Policy: no-referrer on the editor path", () => {
+    // The advertised URL carries the connection token as a query parameter and
+    // the workbench loads webviews, previews and extension content from that
+    // document, so a Referer would carry the token to each of them.
+    const [normal] = staticServerInvocations();
+    expect(normal).toContain('--no-referrer-prefix "$VSCODE_BASE_PATH"');
   });
 
   it("routes the editor to its own port, not the agent-server", () => {
@@ -254,6 +278,54 @@ describe.skipIf(process.platform === "win32")(
       const resolved = resolveEditorConfig({ OH_VSCODE_BASE_PATH: "/" });
       expect(resolved.status).not.toBe(0);
       expect(resolved.stderr).toContain("site root");
+    });
+
+    // static-server keys its route table by prefix and the editor route is
+    // registered last, so a colliding prefix silently *replaces* the earlier
+    // route instead of failing. `/api` is the dangerous one: every API call
+    // would be proxied to the editor port, which reads as a total outage with
+    // no error to explain it. The "/" guard above does not catch these.
+    it.each([
+      "/api",
+      "/sockets",
+      "/server_info",
+      "/health",
+      "/openapi.json",
+      "/canvas",
+    ])("refuses %j, which would take over an existing route", (given) => {
+      const resolved = resolveEditorConfig({
+        AGENT_CANVAS_BASE_PATH: "/canvas",
+        OH_VSCODE_BASE_PATH: given,
+      });
+      expect(resolved.status).not.toBe(0);
+      expect(resolved.stderr).toContain("collides");
+    });
+
+    it.each([
+      // static-server's --route parser cuts at the *first* '=', so this parses
+      // as prefix "/vs" pointing at the garbage url "code=http://…" — a silent
+      // outage under /vs rather than a startup failure.
+      ["/vs=code", "may only contain"],
+      ["/a b", "may only contain"],
+      ["/x?y", "may only contain"],
+      ["/x#y", "may only contain"],
+      // Multi-segment prefixes are not wrong in principle, but agent-server
+      // strips the slashes when building the advertised URL, so the two sides
+      // would disagree. Reject rather than silently half-support it.
+      ["/deep/path", "single path segment"],
+      ["/../api", "single path segment"],
+    ])("refuses %j", (given, expectedMessage) => {
+      const resolved = resolveEditorConfig({ OH_VSCODE_BASE_PATH: given });
+      expect(resolved.status).not.toBe(0);
+      expect(resolved.stderr).toContain(expectedMessage);
+    });
+
+    it("refuses a non-numeric port", () => {
+      // The port is interpolated straight into a proxy target URL, so without
+      // this it fails on the first editor request instead of at startup.
+      const resolved = resolveEditorConfig({ OH_VSCODE_PORT: "not-a-port" });
+      expect(resolved.status).not.toBe(0);
+      expect(resolved.stderr).toContain("must be a number");
     });
   },
 );

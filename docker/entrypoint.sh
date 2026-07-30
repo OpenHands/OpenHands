@@ -17,7 +17,12 @@
 #   AGENT_SERVER_PORT    – Internal agent-server port (default: 18000)
 #   AUTOMATION_PORT      – Internal automation port (default: 18001)
 #   AGENT_CANVAS_BASE_PATH – Static frontend mount path (default: /canvas)
-#   VSCODE_PORT          – Internal editor port, never published (default: 8001)
+#   VSCODE_PORT          – Internal editor port (default: 8001). The image does
+#                          not EXPOSE it and the editor is reached through
+#                          VSCODE_BASE_PATH on $PORT, but openvscode-server
+#                          binds 0.0.0.0, so `docker run --network host` does
+#                          leave it directly reachable with only its connection
+#                          token in front of it.
 #   VSCODE_BASE_PATH     – Path prefix the editor is served under on $PORT
 #                          (default: /vscode). Exported to agent-server as
 #                          OH_VSCODE_BASE_PATH and routed by the static server.
@@ -99,6 +104,44 @@ if [ "$VSCODE_BASE_PATH" = "/" ]; then
   log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
   exit 1
 fi
+
+# static-server keys its route table by prefix and the editor route is
+# registered last, so a prefix that collides with an earlier route silently
+# replaces it rather than failing: OH_VSCODE_BASE_PATH=/api would send every
+# API call to the editor port. Reject collisions and anything that is not a
+# plain single-segment path — '=' would be mis-split by the --route parser
+# (it cuts at the first '='), and whitespace, '?', '#' or '..' have no
+# meaningful reading as a route prefix.
+VSCODE_PATH_SEGMENT="${VSCODE_BASE_PATH#/}"
+case "$VSCODE_PATH_SEGMENT" in
+  */*)
+    log_error "VSCODE_BASE_PATH must be a single path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+    exit 1
+    ;;
+  .|..)
+    log_error "VSCODE_BASE_PATH must not be a relative path segment (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+    exit 1
+    ;;
+  *[!A-Za-z0-9._-]*)
+    log_error "VSCODE_BASE_PATH may only contain letters, digits, '.', '_' and '-' (got '$VSCODE_BASE_PATH'). Use a prefix such as /vscode."
+    exit 1
+    ;;
+esac
+for reserved in /api /sockets /server_info /alive /health /ready /docs /redoc /openapi.json "${AGENT_CANVAS_BASE_PATH:-}"; do
+  if [ -n "$reserved" ] && [ "$VSCODE_BASE_PATH" = "$reserved" ]; then
+    log_error "VSCODE_BASE_PATH '$VSCODE_BASE_PATH' collides with an existing route and would take it over. Set a different prefix, such as /vscode."
+    exit 1
+  fi
+done
+
+# The port ends up in a proxy target URL, so a non-numeric value fails at the
+# first editor request instead of at startup. Catch it here.
+case "$VSCODE_PORT" in
+  ''|*[!0-9]*)
+    log_error "VSCODE_PORT must be a number (got '$VSCODE_PORT')."
+    exit 1
+    ;;
+esac
 
 export OH_VSCODE_PORT="$VSCODE_PORT"
 export OH_VSCODE_BASE_PATH="$VSCODE_BASE_PATH"
@@ -322,7 +365,8 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "$VSCODE_ROUTE" &
+  --route "$VSCODE_ROUTE" \
+  --no-referrer-prefix "$VSCODE_BASE_PATH" &
 STATIC_PID=$!
 PIDS+=("$STATIC_PID")
 
@@ -331,6 +375,18 @@ PIDS+=("$STATIC_PID")
 # serves the same frontend WITHOUT injecting the session key into the HTML
 # (--auth-required). This is used by auth-mode E2E tests to verify the
 # ApiKeyEntryScreen gate, key rotation recovery, etc.
+#
+# The editor route is deliberately NOT registered here. --auth-required only
+# controls whether the session key is injected into the served HTML; the
+# dispatcher matches routes before it reaches that flag, so proxied paths are
+# not gated by it. The routes above are safe on that footing because
+# agent-server enforces the session key itself, but the editor's own
+# credential is the connection token agent-server puts in the query string —
+# and agent-server derives that token from session_api_keys[0], so it is the
+# same secret that authenticates /api. Registering the route here would put
+# that secret in a browser-navigable URL on the origin that exists precisely
+# to test the unauthenticated case, where it would persist in history and
+# leak by Referer from the workbench's own subresources.
 if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
   log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
   node /opt/agent-canvas/static-server.mjs \
@@ -349,8 +405,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "$VSCODE_ROUTE" &
+    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
   PIDS+=($!)
 fi
 
