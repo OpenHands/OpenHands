@@ -37,6 +37,19 @@ const TRIGGER_PROPERTIES: Record<SetupTriggerKind, readonly string[]> = {
   event: ["on"],
 };
 
+/**
+ * Repository properties a form field may fill, read the same way
+ * {@link TRIGGER_PROPERTIES} is: a field whose name is listed here fills the
+ * `repos[]` property of the same name. `url` and `provider` are absent because
+ * neither is answered by a field of its own — they come from the repo-picker's
+ * value and from its declared provider.
+ *
+ * These two lists are the only field names the derivation knows; everything
+ * else it reads it finds by field type. An entry that wants a base branch in
+ * its request therefore has to name that field `ref`.
+ */
+const REPO_PROPERTIES: readonly string[] = ["ref"];
+
 const FORM_PLACEHOLDER_PATTERN = /\{\{form\.([A-Za-z0-9_.]+)\}\}/g;
 
 /** The repository input, which supplies `repos` and an event trigger's source. */
@@ -83,10 +96,11 @@ export function buildCreatePayload(
   };
 
   if (repository && repoPicker?.field.provider) {
+    const declared = REPO_PROPERTIES.filter((name) => name in values);
     payload.repos = [
       {
         url: repository,
-        ...("ref" in values && { ref: values.ref }),
+        ...Object.fromEntries(declared.map((name) => [name, values[name]])),
         provider: repoPicker.field.provider,
       },
     ];

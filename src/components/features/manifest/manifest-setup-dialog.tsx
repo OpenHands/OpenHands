@@ -377,6 +377,8 @@ function formatFieldError(
   t: (key: I18nKey, options?: Record<string, unknown>) => string,
 ): string {
   switch (error.code) {
+    case "required":
+      return t(I18nKey.SETUP$VALIDATION_REQUIRED);
     case "minLength":
       return t(I18nKey.SETUP$VALIDATION_MIN_LENGTH, { length: error.length });
     case "maxLength":
@@ -385,7 +387,11 @@ function formatFieldError(
       return t(I18nKey.SETUP$VALIDATION_INVALID_OPTION);
     case "unsafeExpressionLiteral":
       return t(I18nKey.SETUP$VALIDATION_UNSAFE_VALUE);
-    default:
-      return t(I18nKey.SETUP$VALIDATION_REQUIRED);
+    default: {
+      // A code added to `SetupFieldError` without a message here is a compile
+      // error rather than a field that silently reads "this field is required".
+      const exhaustive: never = error;
+      return exhaustive;
+    }
   }
 }
