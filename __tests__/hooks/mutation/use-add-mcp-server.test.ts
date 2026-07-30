@@ -86,4 +86,22 @@ describe("useAddMcpServer", () => {
       command: "npx",
     });
   });
+
+  it("fails instead of reporting a successful install before settings load", async () => {
+    useSettingsMock.mockReturnValue({ data: undefined });
+    const createSpy = vi.spyOn(SettingsService, "createMcpServer");
+    const { result } = renderHook(() => useAddMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await expect(
+      result.current.mutateAsync({
+        id: "",
+        type: "stdio",
+        name: "filesystem",
+        command: "npx",
+      }),
+    ).rejects.toThrow("MCP settings are still loading");
+    expect(createSpy).not.toHaveBeenCalled();
+  });
 });

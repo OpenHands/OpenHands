@@ -194,6 +194,32 @@ describe("MCPServerForm validation", () => {
     });
   });
 
+  it("keeps raw protocol headers in the pre-save connection-test candidate", () => {
+    const onTest = vi.fn();
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "docs",
+          type: "shttp",
+          name: "docs",
+          url: "https://docs.example/mcp",
+          headers: { "X-Workspace": "canvas" },
+        }}
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+        onTest={onTest}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    expect(onTest).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { "X-Workspace": "canvas" } }),
+    );
+  });
+
   it("rejects an sse/shttp server name with unsafe characters", () => {
     const onSubmit = vi.fn();
 

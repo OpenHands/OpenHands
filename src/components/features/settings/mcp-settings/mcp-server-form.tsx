@@ -372,6 +372,10 @@ export function MCPServerForm({
         ...baseConfig,
         ...(name && { name }),
         url: url!,
+        // Raw protocol headers are not editable in this form, but they are
+        // still required for the pre-save connection probe. Persistence uses
+        // a sparse patch and leaves them untouched.
+        ...(server?.headers && { headers: server.headers }),
         ...(auth && { auth }),
       };
 

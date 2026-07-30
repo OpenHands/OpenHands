@@ -24,7 +24,7 @@ export function useUpdateMcpServer() {
     }: {
       serverId: string;
       server: MCPServerConfig;
-    }): Promise<void> => {
+    }): Promise<string> => {
       const currentConfig =
         settings?.mcp_config ??
         parseMcpConfig(settings?.agent_settings?.mcp_config);
@@ -32,6 +32,27 @@ export function useUpdateMcpServer() {
       if (!previous) {
         throw new Error(`MCP server "${serverId}" no longer exists.`);
       }
+      const previousHealthKey = getMcpServerHealthKey({
+        id: serverId,
+        type:
+          previous.transport === "stdio"
+            ? "stdio"
+            : previous.transport === "sse"
+              ? "sse"
+              : "shttp",
+        name: serverId,
+        ...(previous.transport === "stdio"
+          ? {
+              command: previous.command,
+              args: previous.args ?? undefined,
+              env: previous.env ?? undefined,
+            }
+          : {
+              url: previous.url,
+              headers: previous.headers ?? undefined,
+              auth: previous.auth ?? undefined,
+            }),
+      });
 
       const nextKey = toMcpServerName(server.name || serverId);
       if (nextKey !== serverId) {
@@ -41,18 +62,20 @@ export function useUpdateMcpServer() {
         await SettingsService.patchMcpConfig(
           buildRenameMcpConfigPatch(serverId, nextKey, previous, server),
         );
-        return;
+        return previousHealthKey;
       }
 
       await SettingsService.patchMcpServer(
         serverId,
         buildMcpServerPatch(previous, server),
       );
+      return previousHealthKey;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (previousHealthKey, variables) => {
       // The stored config changed, so any prior health verdict for it is
       // stale. This hook-level reset runs before the caller's onSuccess,
       // letting save flows re-seed from their fresh pre-save test result.
+      clearMcpServerHealth(previousHealthKey);
       clearMcpServerHealth(getMcpServerHealthKey(variables.server));
       queryClient.invalidateQueries({
         queryKey: SETTINGS_QUERY_KEYS.personal(),

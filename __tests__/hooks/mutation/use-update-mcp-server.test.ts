@@ -239,4 +239,37 @@ describe("useUpdateMcpServer", () => {
 
     await waitFor(() => expect(getMcpHealthSnapshot()[key]).toBeUndefined());
   });
+
+  it("clears both old and new health keys after a rename", async () => {
+    vi.spyOn(SettingsService, "patchMcpConfig").mockResolvedValue(true);
+    const oldServer: MCPServerConfig = {
+      id: "docs",
+      type: "shttp",
+      name: "docs",
+      url: "https://docs.example/mcp",
+    };
+    const newServer: MCPServerConfig = { ...oldServer, name: "reference" };
+    const oldKey = getMcpServerHealthKey(oldServer);
+    const newKey = getMcpServerHealthKey(newServer);
+    setMcpServerHealth(oldKey, {
+      status: "healthy",
+      verification: "verified",
+      toolCount: 1,
+      checkedAt: 1,
+    });
+    setMcpServerHealth(newKey, {
+      status: "failed",
+      kind: "connection",
+      error: "stale",
+      checkedAt: 1,
+    });
+    const { result } = renderHook(() => useUpdateMcpServer(), {
+      wrapper: createWrapper(),
+    });
+
+    await result.current.mutateAsync({ serverId: "docs", server: newServer });
+
+    expect(getMcpHealthSnapshot()[oldKey]).toBeUndefined();
+    expect(getMcpHealthSnapshot()[newKey]).toBeUndefined();
+  });
 });

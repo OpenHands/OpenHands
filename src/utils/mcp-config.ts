@@ -369,6 +369,9 @@ const applyMcpServerPatch = (
   return apply(previous, patch) as MCPServer;
 };
 
+export const MCP_RENAME_CREDENTIAL_ERROR =
+  "Replace or clear the stored credential before renaming this MCP server.";
+
 // @spec MCP-003 — Settings map keys are stable MCP identities
 export function buildRenameMcpConfigPatch(
   oldKey: string,
@@ -381,9 +384,7 @@ export function buildRenameMcpConfigPatch(
       ? previous.env
       : { auth: previous.auth, headers: previous.headers };
   if (hasRedactedMcpSecretLeaf(previousSecrets)) {
-    throw new Error(
-      "Replace or clear the stored credential before renaming this MCP server.",
-    );
+    throw new Error(MCP_RENAME_CREDENTIAL_ERROR);
   }
   const renamedServer = applyMcpServerPatch(
     previous,

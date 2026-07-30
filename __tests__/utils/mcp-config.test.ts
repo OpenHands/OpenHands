@@ -4,6 +4,7 @@ import type { MCPServerConfig } from "#/types/mcp-server";
 import {
   buildMcpServerPatch,
   buildRenameMcpConfigPatch,
+  MCP_RENAME_CREDENTIAL_ERROR,
   parseMcpConfig,
   REDACTED_MCP_SECRET_VALUE,
   toCanonicalMcpServer,
@@ -365,7 +366,7 @@ describe("MCP sparse patches", () => {
         url: storedRemote.url,
         auth: storedRemote.auth ?? undefined,
       }),
-    ).toThrow(/credential/i);
+    ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
   });
 
   // @spec MCP-003 — Settings map keys are stable MCP identities

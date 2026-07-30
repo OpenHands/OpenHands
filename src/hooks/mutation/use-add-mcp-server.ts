@@ -16,7 +16,9 @@ export function useAddMcpServer() {
 
   return useMutation({
     mutationFn: async (server: MCPServerConfig): Promise<void> => {
-      if (!settings) return;
+      if (!settings) {
+        throw new Error("MCP settings are still loading. Please try again.");
+      }
 
       const currentConfig =
         settings.mcp_config ??
