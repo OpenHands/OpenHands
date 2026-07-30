@@ -553,6 +553,7 @@ describe("stack mode routing", () => {
         OH_CANVAS_SAFE_BACKEND_PORT: String(config.agentServerPort),
         OH_CANVAS_SAFE_VSCODE_PORT: String(config.vscodePort),
       }),
+      { vscodeBasePath: config.vscodeBasePath },
     );
 
     expect(env.OH_VSCODE_BASE_PATH).toBe(config.vscodeBasePath);

@@ -269,7 +269,9 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const busy = results.filter(({ free }) => !free);
   if (busy.length === 0) return;
 
-  const lines = busy.map(({ name, port }) => `   • ${name}: port ${port}`).join("\n");
+  const lines = busy
+    .map(({ name, port }) => `   • ${name}: port ${port}`)
+    .join("\n");
   throw new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
@@ -625,8 +627,7 @@ function buildConfigFromPorts(ports, cwd, env) {
   // ~/.openhands/agent-canvas/secret-key.txt. Persisting ensures dev mode
   // and Docker mode share the same encryption key when they mount the same
   // ~/.openhands directory (docker/entrypoint.sh reads/writes the same file).
-  const secretKeyPath =
-    env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
+  const secretKeyPath = env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
   const secretKey =
     env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
   // Use the user-provided LOCAL_BACKEND_API_KEY or fall back to a key
@@ -688,10 +689,26 @@ function buildConfigFromPorts(ports, cwd, env) {
  * This is exported so downstream consumers (e.g., automation service) can use
  * the same env vars without duplicating the mapping logic.
  *
+ * `vscodeBasePath` is an explicit opt-in rather than a field read off `config`,
+ * and that is deliberate. Setting it changes the URL `/api/vscode/url`
+ * advertises: agent-server appends the prefix to the browser origin the
+ * frontend sends, so the editor is only reachable if the same origin also
+ * routes that prefix to the editor port. A launcher that sets it without
+ * registering the route advertises `<origin>/vscode/…`, which serves the
+ * canvas SPA shell instead of the editor.
+ *
+ * Requiring the caller to name it makes the pairing greppable: every call site
+ * that passes `vscodeBasePath` must also register a matching route, and
+ * `__tests__/scripts/vscode-base-path-opt-in.test.ts` asserts that no launcher
+ * opts in without one.
+ *
  * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @param {{vscodeBasePath?: string | null}} [options] - Opt into prefix-mode by
+ *   passing the path prefix the caller also routes to `config.vscodePort`.
  * @returns {Record<string, string>} Environment variables for agent-server
  */
-export function buildAgentServerEnv(config) {
+export function buildAgentServerEnv(config, options = {}) {
+  const { vscodeBasePath = null } = options;
   return {
     // Force Python to use UTF-8 for all file I/O and streams.
     //
@@ -713,8 +730,10 @@ export function buildAgentServerEnv(config) {
     // Serve the editor under a path prefix on the canvas origin rather than on
     // its own published port. agent-server passes this to openvscode-server as
     // --server-base-path and includes it in the URL from /api/vscode/url, which
-    // matches the ingress route registered for the same prefix.
-    OH_VSCODE_BASE_PATH: config.vscodeBasePath,
+    // matches the ingress route the caller registers for the same prefix.
+    //
+    // Omitted unless the caller opts in — see the note on this function.
+    ...(vscodeBasePath ? { OH_VSCODE_BASE_PATH: vscodeBasePath } : {}),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
@@ -910,7 +929,12 @@ async function main() {
       cwd: config.cwd,
       env: {
         ...process.env,
-        ...buildAgentServerEnv(config),
+        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+        // URL resolves on the frontend origin the browser is actually on.
+        ...buildAgentServerEnv(config, {
+          vscodeBasePath: config.vscodeBasePath,
+        }),
       },
     },
   );
@@ -983,6 +1007,12 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
+      // This mode has no static server or ingress in front of Vite, so Vite's
+      // own proxy is the only thing that can serve the editor prefix on the
+      // frontend origin. The editor is a separate process on a port of its
+      // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
+      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
       // Inform the frontend (and downstream, the agent's system prompt) about
       // which services are available in this dev stack.
       VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),

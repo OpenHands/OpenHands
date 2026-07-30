@@ -62,6 +62,9 @@ import {
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
   buildConfig,
+  buildRouteArgs,
+  getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
 } from "./dev-with-automation.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -302,7 +305,12 @@ function startAgentServer(config) {
   });
 
   const agentServerEnv = {
-    ...buildAgentServerEnv(safeConfig),
+    // Opt into prefix-mode: both the static server and the ingress below build
+    // their route tables from `getLocalServiceRoutes`, which registers this
+    // same prefix against `config.vscodePort`.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+    }),
     ...buildAgentServerAutomationEnv(config),
   };
 
@@ -378,6 +386,12 @@ function startStaticServer(config) {
   // hitting :3001 directly behaves like Vite's dev server (e.g. /server_info
   // is forwarded to the agent-server instead of falling back to the SPA
   // shell). Without this, /server_info on :3001 returns index.html.
+  //
+  // Built from dev-with-automation's `getLocalServiceRoutes` rather than
+  // duplicated inline. The duplicate copy this replaces claimed to stay
+  // identical to that table but nothing enforced it, and it had already
+  // drifted — the editor prefix was missing here, so `/vscode` fell through
+  // to the SPA fallback and answered editor requests with the canvas shell.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   spawnService(
     "static",
@@ -396,26 +410,8 @@ function startStaticServer(config) {
       ...(config.sessionApiKey
         ? ["--session-api-key", config.sessionApiKey]
         : []),
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...getNoReferrerPrefixArgs(config),
     ],
     {
       cwd: config.canvasPath,
@@ -436,26 +432,8 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...getNoReferrerPrefixArgs(config),
       "--default",
       `http://localhost:${config.vitePort}`,
     ],
