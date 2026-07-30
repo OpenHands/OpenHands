@@ -31,6 +31,14 @@ const statusConfig: Record<
     label: I18nKey.AUTOMATIONS$DETAIL$RUNNING,
     style: "border-[var(--oh-border)] bg-surface-raised text-muted",
   },
+  [AutomationRunStatus.CANCELLED]: {
+    label: I18nKey.AUTOMATIONS$DETAIL$CANCELLED,
+    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+  },
+  [AutomationRunStatus.SKIPPED]: {
+    label: I18nKey.AUTOMATIONS$DETAIL$SKIPPED,
+    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+  },
 };
 
 function StatusIcon({ status }: { status: AutomationRunStatus }) {
@@ -58,7 +66,9 @@ function StatusIcon({ status }: { status: AutomationRunStatus }) {
 
 export function RunStatusBadge({ status }: RunStatusBadgeProps) {
   const { t } = useTranslation("openhands");
-  const config = statusConfig[status];
+  // Degrade instead of crashing on a status the backend added after this enum.
+  const config =
+    statusConfig[status] ?? statusConfig[AutomationRunStatus.PENDING];
 
   return (
     <span
