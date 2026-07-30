@@ -19,6 +19,7 @@ import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
 import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import {
   inferInitialView,
+  isValidSettingsUrl,
   type SettingsFormValues,
   type SettingsView,
 } from "#/utils/sdk-settings-schema";
@@ -193,6 +194,13 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
+      // Blank is valid — the field is optional — so only flag a value the save
+      // would reject, and flag it here so the user sees why before clicking.
+      const trimmedBaseUrlValue = baseUrlValue.trim();
+      const baseUrlError =
+        trimmedBaseUrlValue && !isValidSettingsUrl(trimmedBaseUrlValue)
+          ? t(I18nKey.SETTINGS$MCP_ERROR_URL_INVALID_PROTOCOL)
+          : undefined;
       const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
       const authType = resolveLlmAuthType(values[LLM_AUTH_TYPE_KEY]);
       const isSubscriptionAuth = authType === LLM_AUTH_TYPE_SUBSCRIPTION;
@@ -401,6 +409,7 @@ export function LlmSettingsScreen({
                     placeholder="https://api.openai.com"
                     onChange={(value) => onChange("llm.base_url", value)}
                     isDisabled={isDisabled}
+                    error={baseUrlError}
                   />
 
                   {renderApiKeyInput(

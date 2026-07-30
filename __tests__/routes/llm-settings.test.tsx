@@ -182,6 +182,52 @@ describe("LlmSettingsScreen", () => {
     expect(llmPayload).not.toHaveProperty("base_url");
   });
 
+  it("shows an inline error and blocks the save for a malformed base URL", async () => {
+    // Reported in #15774: "." was accepted with a success toast and only
+    // surfaced later as an opaque provider error.
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: { model: "openai/gpt-4o", api_key: null, base_url: "" },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    fireEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    fireEvent.change(screen.getByTestId("base-url-input"), {
+      target: { value: "." },
+    });
+
+    expect(
+      await screen.findByTestId("base-url-input-error"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("base-url-input-error")).toBeInTheDocument(),
+    );
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+
+    // Clearing the field must retract the error, not leave it stranded: the
+    // field is optional, so blank has to remain a saveable state.
+    fireEvent.change(screen.getByTestId("base-url-input"), {
+      target: { value: "" },
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("base-url-input-error")).toBeNull(),
+    );
+  });
+
   it("does not show a 'key set' indicator for a brand-new embedded profile even when a global key exists (bug #640)", async () => {
     // A global key exists, but a fresh profile form must look unset so the user
     // knows they have to enter one — otherwise the profile saves with no key.
