@@ -4,6 +4,7 @@ import TaskListTab from "#/routes/task-list-tab";
 import { useEventStore } from "#/stores/use-event-store";
 import type { OHEvent } from "#/stores/use-event-store";
 import { seedConversationEvents } from "../helpers/seed-conversation-events";
+import { NavigationProvider } from "#/context/navigation-context";
 
 // Mock i18n
 vi.mock("react-i18next", () => ({
@@ -51,13 +52,28 @@ function setTasks(tasks: TestTask[]) {
   seedConversationEvents("test-conversation-id", [event], [event]);
 }
 
+function renderTaskList() {
+  return render(
+    <NavigationProvider
+      value={{
+        currentPath: "/conversations/test-conversation-id",
+        conversationId: "test-conversation-id",
+        isNavigating: false,
+        navigate: vi.fn(),
+      }}
+    >
+      <TaskListTab />
+    </NavigationProvider>,
+  );
+}
+
 beforeEach(() => {
   useEventStore.getState().clearEvents();
 });
 
 describe("TaskListTab", () => {
   it("renders empty state with icon and message when there are no tasks", () => {
-    const { container } = render(<TaskListTab />);
+    const { container } = renderTaskList();
 
     expect(screen.getByText("No tasks yet")).toBeInTheDocument();
     // Empty state should show the check-circle icon (rendered as SVG)
@@ -65,7 +81,7 @@ describe("TaskListTab", () => {
   });
 
   it("renders empty state message in a centered caption", () => {
-    render(<TaskListTab />);
+    renderTaskList();
 
     const message = screen.getByText("No tasks yet");
     expect(message.tagName).toBe("P");
@@ -78,7 +94,7 @@ describe("TaskListTab", () => {
       { id: "3", title: "Deploy", status: "done" },
     ]);
 
-    const { container } = render(<TaskListTab />);
+    const { container } = renderTaskList();
 
     expect(screen.getByText("Implement feature")).toBeInTheDocument();
     expect(screen.getByText("Write tests")).toBeInTheDocument();
@@ -91,7 +107,7 @@ describe("TaskListTab", () => {
   it("does not display task IDs", () => {
     setTasks([{ id: "task-1", title: "First task", status: "todo" }]);
 
-    render(<TaskListTab />);
+    renderTaskList();
 
     expect(screen.queryByText(/task-1/)).not.toBeInTheDocument();
   });
@@ -103,7 +119,7 @@ describe("TaskListTab", () => {
       { id: "3", title: "Done task", status: "done" },
     ]);
 
-    render(<TaskListTab />);
+    renderTaskList();
 
     // Find each task item via its text, then check the wrapper div
     const activeWrapper = screen
@@ -133,7 +149,7 @@ describe("TaskListTab", () => {
       { id: "2", title: "Task without notes", status: "todo" },
     ]);
 
-    render(<TaskListTab />);
+    renderTaskList();
 
     expect(screen.getByText("Notes: Important note")).toBeInTheDocument();
     expect(screen.getAllByText(/^Notes:/)).toHaveLength(1);
@@ -148,9 +164,13 @@ describe("TaskListTab", () => {
       { id: "2", title: "New task", status: "in_progress" },
     ]);
 
-    seedConversationEvents("test-conversation-id", [event1, event2], [event1, event2]);
+    seedConversationEvents(
+      "test-conversation-id",
+      [event1, event2],
+      [event1, event2],
+    );
 
-    render(<TaskListTab />);
+    renderTaskList();
 
     expect(screen.queryByText("Old task")).not.toBeInTheDocument();
     expect(screen.getByText("Updated task")).toBeInTheDocument();
@@ -160,7 +180,7 @@ describe("TaskListTab", () => {
   it("renders as a scrollable main element when tasks exist", () => {
     setTasks([{ id: "1", title: "A task", status: "todo" }]);
 
-    render(<TaskListTab />);
+    renderTaskList();
 
     const main = screen.getByRole("main");
     expect(main).toBeInTheDocument();
