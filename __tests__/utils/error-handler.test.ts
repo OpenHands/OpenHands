@@ -27,7 +27,7 @@ describe("Error Handler", () => {
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
         error_source: "test",
         error_kind: "unknown",
-        error_telemetry: "outcome",
+        error_telemetry: "diagnostic",
       });
     });
 
@@ -38,6 +38,8 @@ describe("Error Handler", () => {
         metadata: {
           extra: "info",
           details: { foo: "bar" },
+          error_kind: "spoofed",
+          error_telemetry: "outcome",
         },
       };
 
@@ -46,7 +48,7 @@ describe("Error Handler", () => {
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
         error_source: "test",
         error_kind: "unknown",
-        error_telemetry: "outcome",
+        error_telemetry: "diagnostic",
         extra: "info",
         details: { foo: "bar" },
       });

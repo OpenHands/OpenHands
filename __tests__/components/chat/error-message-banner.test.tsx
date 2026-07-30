@@ -54,6 +54,19 @@ describe("ErrorMessageBanner", () => {
     expect(icon).toHaveStyle({ color: "var(--oh-status-error)" });
   });
 
+  it("uses a warning icon for recoverable outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Incorrect API key"
+        classification={{ kind: "auth", retryable: false, user_action: "settings" }}
+      />,
+    );
+
+    expect(screen.getByTestId("warning-message-banner-icon")).toHaveClass(
+      "text-yellow-500",
+    );
+  });
+
   it("uses greyscale theme tokens instead of red error styling", () => {
     render(<ErrorMessageBanner message="Something went wrong" />);
 
