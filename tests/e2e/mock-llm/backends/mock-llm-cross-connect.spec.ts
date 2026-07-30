@@ -151,6 +151,26 @@ async function suppressAnalytics(page: Page) {
   });
 }
 
+async function seedBackendAnalyticsConsent(backendUrl: string, apiKey: string) {
+  const response = await fetch(`${backendUrl}/api/settings`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-API-Key": apiKey,
+    },
+    body: JSON.stringify({
+      misc_settings_diff: {
+        app_preferences: { user_consents_to_analytics: false },
+      },
+    }),
+  });
+
+  expect(
+    response.ok,
+    `failed to seed analytics consent on ${backendUrl}: ${response.status}`,
+  ).toBe(true);
+}
+
 async function addBackendViaOnboarding(
   page: Page,
   opts: { name: string; host: string; apiKey: string },
@@ -251,6 +271,7 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
       beStatus,
       `Backend-only never ready.\nOutput: ${beOutput.get().slice(-800)}`,
     ).not.toBeNull();
+    await seedBackendAnalyticsConsent(beUrl, beEnv.sessionKey);
 
     // ── 4. Open browser to the frontend-only instance ─────────────────
     await suppressAnalytics(page);
@@ -297,12 +318,12 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
     ).toBe(true);
 
     // The manage-backends modal and auth screen must NOT be showing.
-    await expect(
-      page.getByTestId("manage-backends-modal"),
-    ).not.toBeVisible({ timeout: 2_000 });
-    await expect(
-      page.getByTestId("api-key-entry-screen"),
-    ).not.toBeVisible({ timeout: 2_000 });
+    await expect(page.getByTestId("manage-backends-modal")).not.toBeVisible({
+      timeout: 2_000,
+    });
+    await expect(page.getByTestId("api-key-entry-screen")).not.toBeVisible({
+      timeout: 2_000,
+    });
   });
 });
 
@@ -391,6 +412,10 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
     ]);
     expect(infoA).toHaveProperty("version");
     expect(infoB).toHaveProperty("version");
+    await Promise.all([
+      seedBackendAnalyticsConsent(beUrlA, beEnvA.sessionKey),
+      seedBackendAnalyticsConsent(beUrlB, beEnvB.sessionKey),
+    ]);
 
     // ── 4. Open browser to the frontend-only instance ─────────────────
     await suppressAnalytics(page);

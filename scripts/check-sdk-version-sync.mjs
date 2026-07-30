@@ -19,7 +19,7 @@
  *
  * Usage:
  *   node scripts/check-sdk-version-sync.mjs
- *   EXPECTED_SDK_VERSION=1.38.0 node scripts/check-sdk-version-sync.mjs
+ *   EXPECTED_SDK_VERSION=1.39.1 node scripts/check-sdk-version-sync.mjs
  *   node scripts/check-sdk-version-sync.mjs --check-pypi
  *
  * Environment variables:
@@ -77,8 +77,8 @@ Triggering from other repos:
   curl -X POST \\
     -H "Authorization: token \$GITHUB_TOKEN" \\
     -H "Accept: application/vnd.github.v3+json" \\
-    https://api.github.com/repos/OpenHands/agent-canvas/dispatches \\
-    -d '{"event_type": "sdk-version-check", "client_payload": {"version": "1.38.0"}}'
+    https://api.github.com/repos/OpenHands/OpenHands/dispatches \\
+    -d '{"event_type": "sdk-version-check", "client_payload": {"version": "1.39.1"}}'
 `);
   process.exit(0);
 }
@@ -260,9 +260,9 @@ async function fetchPyPIDependencies(packageName, version) {
  * Parse PyPI requires_dist array and extract SDK package versions
  *
  * PyPI returns dependencies in PEP 508 format like:
- *   "openhands-sdk>=1.38.0,<2.0.0"
- *   "openhands-tools==1.38.0"
- *   "openhands-workspace (>=1.38.0)"
+ *   "openhands-sdk>=1.39.1,<2.0.0"
+ *   "openhands-tools==1.39.1"
+ *   "openhands-workspace (>=1.39.1)"
  */
 function parseSdkVersionsFromRequiresDist(requiresDist) {
   const versions = {};
@@ -276,7 +276,7 @@ function parseSdkVersionsFromRequiresDist(requiresDist) {
       }
 
       // Extract the version number - look for patterns like:
-      // ">=1.38.0", "==1.38.0", "(>=1.38.0)", "~=1.38.0"
+      // ">=1.39.1", "==1.39.1", "(>=1.39.1)", "~=1.39.1"
       // After the package name and before any comma or closing paren
       const versionPattern = /[><=~!]+\s*([0-9]+(?:\.[0-9]+)*)/;
       const match = dep.match(versionPattern);
