@@ -58,7 +58,9 @@ vi.mock("#/hooks/query/use-unified-vscode-url", () => ({
   useUnifiedVSCodeUrl: () => ({
     data: { url: "http://localhost:8001", error: null },
     isLoading: false,
-    refetch: vi.fn().mockResolvedValue({ data: { url: "http://localhost:8001" } }),
+    refetch: vi
+      .fn()
+      .mockResolvedValue({ data: { url: "http://localhost:8001" } }),
   }),
 }));
 
@@ -548,6 +550,52 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Assert
       expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
+    });
+
+    it("re-measures the tab row when the vscode button's own width changes", () => {
+      // The button's width is folded into how many tabs fit inline, and its
+      // presence is now resolved asynchronously (the hook probes
+      // /api/vscode/status). It sits inside an `ml-auto shrink-0` wrapper, so
+      // it appearing or disappearing leaves the row's own box unchanged —
+      // observing only the row would leave the fit computed against a button
+      // that is no longer on screen, permanently costing an inline tab.
+      const observed: Element[] = [];
+      class RecordingResizeObserver {
+        observe = (el: Element) => {
+          observed.push(el);
+        };
+
+        unobserve = vi.fn();
+
+        disconnect = vi.fn();
+      }
+      // Swap only this global back afterwards: vi.unstubAllGlobals() would
+      // also drop the localStorage/ResizeObserver stubs vitest.setup.ts
+      // installs in beforeAll, breaking every later test in the file.
+      const originalResizeObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver =
+        RecordingResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        seedActiveBackend({
+          id: "local-test",
+          name: "Local Test",
+          host: "http://localhost:8000",
+          apiKey: "",
+          kind: "local",
+        });
+
+        render(<ConversationTabs />, {
+          wrapper: createWrapper(REAL_CONVERSATION_ID),
+        });
+
+        const vscodeWrapper =
+          screen.getByTestId("drawer-vscode-link").parentElement;
+        expect(vscodeWrapper).not.toBeNull();
+        expect(observed).toContain(vscodeWrapper);
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
     });
   });
 

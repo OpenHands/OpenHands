@@ -149,6 +149,11 @@ export const useUnifiedVSCodeUrl = () => {
     status = localQuery.status;
     error = statusQuery.error ?? localQuery.error;
     refetch = async () => {
+      // Load-bearing and easy to misread: this fires a real request even when
+      // the probe failed and left the URL query `enabled: false`. An observer's
+      // own `refetch()` does not consult `enabled` — only
+      // `queryClient.refetchQueries` skips disabled queries — so a click after
+      // a failed probe still retries rather than silently doing nothing.
       const result = await localQuery.refetch();
       return { data: result.data };
     };

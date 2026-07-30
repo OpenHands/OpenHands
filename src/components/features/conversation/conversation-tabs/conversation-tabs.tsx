@@ -214,6 +214,12 @@ export function ConversationTabs({
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(rowInner);
+    // The editor button's presence is resolved asynchronously (the hook probes
+    // /api/vscode/status), and it sits inside an `ml-auto shrink-0` wrapper, so
+    // it appearing or disappearing does not change `rowInner`'s own box and
+    // would not otherwise re-measure. Its width is folded into the fit
+    // calculation above, so a stale value permanently costs an inline tab.
+    ro.observe(vscodeEl);
     return () => ro.disconnect();
   }, [
     unpinnedSignature,
