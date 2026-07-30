@@ -24,6 +24,8 @@ __pycache__
 /playwright-report-mock-llm-docker/
 /blob-report/
 /playwright/.cache/
+/.stryker-tmp/
+/reports/
 .react-router/
 ralph/
 .vercel
