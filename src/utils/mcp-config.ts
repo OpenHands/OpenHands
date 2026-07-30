@@ -169,12 +169,22 @@ function getRemoteSecretFields(entry: {
   return fields;
 }
 
+/**
+ * Only an explicit ``false`` is carried. Every mutation round-trips the whole
+ * server map through these converters, so preserving the flag here is what
+ * stops adding or deleting one server from silently re-enabling another.
+ */
+function disabledField(server: { enabled?: boolean }) {
+  return server.enabled === false ? { enabled: false as const } : {};
+}
+
 function getRemoteServerFields(server: MCPServerConfig) {
   return {
     ...(server.name && { name: server.name }),
     url: server.url!,
     ...(server.headers && { headers: server.headers }),
     ...(server.auth && { auth: server.auth }),
+    ...disabledField(server),
   };
 }
 
@@ -195,6 +205,7 @@ export function toMcpStdioServer(server: MCPServerConfig): MCPStdioServer {
     command: server.command!,
     ...(server.args && { args: server.args }),
     ...(server.env && { env: server.env }),
+    ...disabledField(server),
   };
 }
 
@@ -263,6 +274,10 @@ export function parseMcpConfig(value: unknown): MCPConfig {
 
     const url = serverConfig.url as string | undefined;
 
+    // The SDK omits ``enabled`` while it holds its default (true), so only an
+    // explicit ``false`` marks a server as switched off.
+    const disabled = serverConfig.enabled === false;
+
     if (url) {
       const transport = serverConfig.transport as string | undefined;
       const auth = authCredentialFromServerConfig(serverConfig);
@@ -274,6 +289,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
         if (name) server.name = name;
         if (auth) server.auth = auth;
         if (headers) server.headers = headers;
+        if (disabled) server.enabled = false;
         sseServers.push(server);
       } else {
         const name = userGivenServerName(serverName, "shttp");
@@ -284,6 +300,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
         }
         if (auth) server.auth = auth;
         if (headers) server.headers = headers;
+        if (disabled) server.enabled = false;
         shttpServers.push(server);
       }
     } else {
@@ -298,6 +315,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
       if (serverConfig.env) {
         stdioServer.env = serverConfig.env as Record<string, string>;
       }
+      if (disabled) stdioServer.enabled = false;
       stdioServers.push(stdioServer);
     }
   }
@@ -320,6 +338,14 @@ export function parseMcpConfig(value: unknown): MCPConfig {
  * persisted ahead of it, and shift the suffix on every save as the count
  * of other server types changes. With per-base collision suffixing,
  * unrelated entries keep their human-meaningful names stable across edits.
+ *
+ * ``enabled`` is only emitted when a server is switched off — the SDK defaults
+ * it to true. Omitting it is what *clears* a previously persisted
+ * ``enabled: false``, and that only works because ``saveSettings`` pre-clears
+ * ``mcp_config`` to null before every write (see
+ * ``settings-service.api.ts``), turning the backend's RFC 7386 merge into a
+ * full replace. If that pre-clear is ever removed, re-enabling a server
+ * becomes a silent no-op.
  */
 export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
   const mcpConfig: SdkMcpConfig = {};
@@ -340,7 +366,7 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
     } else {
       name = entry.name;
       server.url = entry.url;
-      Object.assign(server, getRemoteSecretFields(entry));
+      Object.assign(server, getRemoteSecretFields(entry), disabledField(entry));
     }
     server.transport = "sse";
     mcpConfig[reserve(name || "sse")] = server;
@@ -354,7 +380,7 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
     } else {
       name = entry.name;
       server.url = entry.url;
-      Object.assign(server, getRemoteSecretFields(entry));
+      Object.assign(server, getRemoteSecretFields(entry), disabledField(entry));
       if (entry.timeout != null) server.timeout = entry.timeout;
     }
     mcpConfig[reserve(name || "shttp")] = server;
@@ -366,6 +392,7 @@ export function toSdkMcpConfig(config: MCPConfig): SdkMcpConfig | null {
     };
     if (entry.args) server.args = entry.args;
     if (entry.env) server.env = entry.env;
+    Object.assign(server, disabledField(entry));
     mcpConfig[reserve(entry.name || "stdio")] = server;
   }
 

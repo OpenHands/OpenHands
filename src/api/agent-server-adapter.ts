@@ -711,7 +711,10 @@ function buildBundledSkills(): BundledSkill[] {
   });
 }
 
-function buildAgentContext(agentSettings: SettingsRecord): SettingsRecord {
+function buildAgentContext(
+  agentSettings: SettingsRecord,
+  disabledSkills: string[] = [],
+): SettingsRecord {
   const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix();
   const existingContext = toRecord(agentSettings.agent_context);
 
@@ -720,7 +723,11 @@ function buildAgentContext(agentSettings: SettingsRecord): SettingsRecord {
   const existingSkills = Array.isArray(existingContext.skills)
     ? (existingContext.skills as SettingsRecord[])
     : [];
-  const mergedSkills = [...existingSkills, ...buildBundledSkills()];
+  const disabledSkillNames = new Set(disabledSkills);
+  const mergedSkills = [...existingSkills, ...buildBundledSkills()].filter(
+    (skill) =>
+      typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
+  );
 
   return {
     ...existingContext,
@@ -776,7 +783,7 @@ function buildConfiguredAcpAgentSettings(
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
     agent_kind: "acp",
-    agent_context: buildAgentContext(agentSettings),
+    agent_context: buildAgentContext(agentSettings, settings.disabled_skills),
   };
 
   // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a containerized
@@ -858,7 +865,7 @@ function buildConfiguredOpenHandsAgentSettings(
   return {
     ...agentSettings,
     llm,
-    agent_context: buildAgentContext(agentSettings),
+    agent_context: buildAgentContext(agentSettings, settings.disabled_skills),
     tools: getAgentTools(agentSettings),
   };
 }

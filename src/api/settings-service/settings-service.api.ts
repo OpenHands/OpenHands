@@ -259,6 +259,35 @@ const cloudCompatibleMcpConfig = (value: unknown): unknown => {
   return hasWrapper ? { ...value, mcpServers: converted } : converted;
 };
 
+/**
+ * Spell out every server's `enabled` flag.
+ *
+ * `toSdkMcpConfig` omits the flag while a server is enabled and relies on the
+ * pre-clear below to drop a previously persisted `enabled: false`. The one
+ * write that skips the pre-clear — a cloud update carrying redacted secrets —
+ * lands as an RFC 7386 merge instead, and a merge cannot clear a key by
+ * omitting it. Without this, re-enabling a server on cloud would silently do
+ * nothing.
+ */
+const withExplicitMcpEnabled = (value: unknown): unknown => {
+  if (!isRecord(value)) return value;
+
+  const hasWrapper = isRecord(value.mcpServers);
+  const serverMap: Record<string, unknown> = hasWrapper
+    ? (value.mcpServers as Record<string, unknown>)
+    : value;
+
+  const converted = Object.fromEntries(
+    Object.entries(serverMap).map(([name, server]) =>
+      isRecord(server)
+        ? [name, { ...server, enabled: server.enabled !== false }]
+        : [name, server],
+    ),
+  );
+
+  return hasWrapper ? { ...value, mcpServers: converted } : converted;
+};
+
 const hasRedactedMcpSecrets = (mcpConfig: unknown): boolean => {
   const servers = getSdkMcpServerMap(mcpConfig);
   if (!servers) return false;
@@ -628,10 +657,14 @@ class SettingsService {
       if (payload.agent_settings_diff) {
         cloudPayload.agent_settings_diff = { ...payload.agent_settings_diff };
         if ("mcp_config" in cloudPayload.agent_settings_diff) {
-          cloudPayload.agent_settings_diff.mcp_config =
-            cloudCompatibleMcpConfig(
-              cloudPayload.agent_settings_diff.mcp_config,
-            ) as SettingsValue;
+          const mcpConfig = cloudCompatibleMcpConfig(
+            cloudPayload.agent_settings_diff.mcp_config,
+          );
+          cloudPayload.agent_settings_diff.mcp_config = (
+            shouldUseCloudMergePatchForRedactedMcpSecrets
+              ? withExplicitMcpEnabled(mcpConfig)
+              : mcpConfig
+          ) as SettingsValue;
         }
       }
       if (payload.conversation_settings_diff) {
