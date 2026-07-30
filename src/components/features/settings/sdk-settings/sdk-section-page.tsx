@@ -299,9 +299,19 @@ export function SdkSectionPage({
           return { ...src, filteredSchema: null };
         }
         const sectionSet = new Set(src.sectionKeys);
+        // The agent schema can carry more than one section per key — e.g. the
+        // combined AgentSettings schema emits an "llm" section for both the
+        // "openhands" and "acp" variants. Only the first (openhands) is used,
+        // so keep the first section per key; otherwise every field renders
+        // twice and React sees duplicate section keys.
+        const seenKeys = new Set<string>();
         const filteredSchema: SettingsSchema = {
           ...schema,
-          sections: schema.sections.filter((s) => sectionSet.has(s.key)),
+          sections: schema.sections.filter((s) => {
+            if (!sectionSet.has(s.key) || seenKeys.has(s.key)) return false;
+            seenKeys.add(s.key);
+            return true;
+          }),
         };
         return { ...src, filteredSchema };
       }),
