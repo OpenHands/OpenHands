@@ -13,7 +13,7 @@
  * so any divergence is a hard 422 rather than a dropped field.
  */
 
-import { SKILLS_CATALOG } from "@openhands/extensions/skills";
+import { findAutomationCommand } from "#/utils/automation-catalog";
 import { collectFields } from "./manifest-local-validation";
 import { interpolateText } from "./manifest-template";
 import type {
@@ -144,10 +144,7 @@ export function buildAssistedMessage(
   entry: SetupEntry,
   values: SetupFormValues,
 ): string {
-  const skill = SKILLS_CATALOG.find(
-    (candidate) => candidate.name === (entry.skill ?? entry.id),
-  );
-  const command = skill?.triggers?.[0];
+  const command = findAutomationCommand(entry);
   const message = entry.setup.message
     ? interpolateText(entry.setup.message, { form: values, automation: entry })
     : "";
