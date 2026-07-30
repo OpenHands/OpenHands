@@ -1,5 +1,6 @@
 import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import { I18nKey } from "#/i18n/declaration";
+import { getRequiredIntegrationIds } from "#/utils/automation-catalog";
 import { PRODUCT_URL } from "#/utils/constants";
 
 /** OpenHands Cloud integrations page — where always-on responders are set up. */
@@ -15,12 +16,14 @@ const RESPONDER_INTEGRATION_IDS = ["github", "slack"];
 
 /**
  * Single source of truth for "does this automation get the deployment-choice
- * modal?" — true only for pure GitHub/Slack responders.
+ * modal?" — true only for pure GitHub/Slack responders. An integration the
+ * automation can start without does not decide where it runs, so only the
+ * required ones are classified.
  */
 export function isResponderAutomation(
   automation: RecommendedAutomation,
 ): boolean {
-  const ids = automation.requiredIntegrationIds;
+  const ids = getRequiredIntegrationIds(automation);
   return (
     ids.length > 0 && ids.every((id) => RESPONDER_INTEGRATION_IDS.includes(id))
   );

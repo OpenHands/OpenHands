@@ -18,10 +18,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
-import {
-  RecommendedAutomationsLauncher,
-  buildAutomationPrompt,
-} from "#/components/features/automations/recommended-automations-launcher";
+import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
   RecommendedAutomationsSection,
   getAutomationsByPopularity,
@@ -402,7 +399,31 @@ describe("recommended automations", () => {
     options.onSuccess({ conversation_id: "conversation-1" });
 
     const draft = getConversationState("conversation-1").draftMessage;
-    expect(draft).toBeTruthy();
+    expect(draft).toBe("/pr-reviewer:setup");
+  });
+
+  it("launches without waiting for an integration the automation can start without", () => {
+    // Arrange — Slack and Linear are connected; Notion, which the entry marks
+    // as connectable later, is not.
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        slack: { url: "https://mcp.slack.com/mcp" },
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    renderLauncher();
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId(
+        "recommended-automation-card-incident-retrospective-drafter",
+      ),
+    );
+
+    // Assert
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
   });
 
   it("prompts to install when the required MCP server is disabled", async () => {
@@ -515,16 +536,5 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("responder-deployment-modal"),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("buildAutomationPrompt", () => {
-  it("passes the prompt through verbatim", () => {
-    expect(buildAutomationPrompt("Do something useful")).toBe(
-      "Do something useful",
-    );
-    expect(buildAutomationPrompt("/slack-monitor:poll")).toBe(
-      "/slack-monitor:poll",
-    );
   });
 });
