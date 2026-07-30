@@ -77,7 +77,7 @@ Triggering from other repos:
   curl -X POST \\
     -H "Authorization: token \$GITHUB_TOKEN" \\
     -H "Accept: application/vnd.github.v3+json" \\
-    https://api.github.com/repos/OpenHands/agent-canvas/dispatches \\
+    https://api.github.com/repos/OpenHands/OpenHands/dispatches \\
     -d '{"event_type": "sdk-version-check", "client_payload": {"version": "1.39.0"}}'
 `);
   process.exit(0);
