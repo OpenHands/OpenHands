@@ -9,6 +9,10 @@ import { cn } from "#/utils/utils";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { I18nKey } from "#/i18n/declaration";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
+import {
+  LEGACY_92C0_META_PROFILE_DEFAULT,
+  LEGACY_92C0_META_PROFILE_NAME,
+} from "./default-meta-profile";
 
 interface MetaProfileEditorProps {
   mode: "create" | "edit";
@@ -53,7 +57,7 @@ const normalizeConfig = (config?: MetaProfile): MetaProfile => ({
 
 export function MetaProfileEditor({
   mode,
-  initialName = "",
+  initialName,
   initialConfig,
   availableProfiles,
   existingNames = [],
@@ -62,17 +66,20 @@ export function MetaProfileEditor({
   onCancel,
 }: MetaProfileEditorProps) {
   const { t } = useTranslation("openhands");
-  const [name, setName] = useState(initialName);
-  const [config, setConfig] = useState<MetaProfile>(() =>
-    normalizeConfig(initialConfig ?? EMPTY_CONFIG),
+  const isEdit = mode === "edit";
+  const startingConfig = normalizeConfig(
+    initialConfig ?? (isEdit ? EMPTY_CONFIG : LEGACY_92C0_META_PROFILE_DEFAULT),
   );
+  const [name, setName] = useState(
+    initialName ?? (isEdit ? "" : LEGACY_92C0_META_PROFILE_NAME),
+  );
+  const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
 
   const profileItems = useMemo(
     () => availableProfiles.map((p) => ({ key: p, label: p })),
     [availableProfiles],
   );
 
-  const isEdit = mode === "edit";
   const nameValid = isProfileNameValid(name, { isRequired: true });
   // In create mode, a name that already exists would overwrite that profile
   // (the backend save is create-or-overwrite), so reject it here.
@@ -129,7 +136,7 @@ export function MetaProfileEditor({
           name="classifier_model"
           label={t(I18nKey.SETTINGS$META_PROFILE_CLASSIFIER)}
           items={profileItems}
-          defaultSelectedKey={initialConfig?.classifier_model || undefined}
+          defaultSelectedKey={startingConfig.classifier_model || undefined}
           allowsCustomValue
           isDisabled={isSaving}
           onInputChange={(value) =>
@@ -153,7 +160,7 @@ export function MetaProfileEditor({
           name="default_model"
           label={t(I18nKey.SETTINGS$META_PROFILE_DEFAULT)}
           items={profileItems}
-          defaultSelectedKey={initialConfig?.default_model || undefined}
+          defaultSelectedKey={startingConfig.default_model || undefined}
           allowsCustomValue
           isDisabled={isSaving}
           onInputChange={(value) =>

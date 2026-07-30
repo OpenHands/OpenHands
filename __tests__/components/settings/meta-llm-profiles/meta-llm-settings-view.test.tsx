@@ -147,6 +147,7 @@ describe("MetaLlmSettingsView", () => {
     renderWithProviders(<MetaLlmSettingsView />);
 
     await user.click(screen.getByTestId("add-meta-profile"));
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
@@ -156,6 +157,9 @@ describe("MetaLlmSettingsView", () => {
     });
     fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
       target: { value: "Task:\n{{ instance_text }}" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+      target: { value: "" },
     });
     await user.click(screen.getByTestId("meta-profile-save"));
 
@@ -182,6 +186,7 @@ describe("MetaLlmSettingsView", () => {
     renderWithProviders(<MetaLlmSettingsView />);
 
     await user.click(screen.getByTestId("add-meta-profile"));
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },

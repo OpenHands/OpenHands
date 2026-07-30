@@ -4,8 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { MetaProfileEditor } from "#/components/features/settings/meta-llm-profiles";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
+import {
+  LEGACY_92C0_META_PROFILE_DEFAULT,
+  LEGACY_92C0_META_PROFILE_NAME,
+} from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
-const AVAILABLE = ["minimax", "gpt", "deepseek"];
+const AVAILABLE = ["minimax", "minimax-m3", "gpt", "deepseek"];
 
 const FILLED: MetaProfile = {
   classifier_model: "minimax",
@@ -17,18 +21,41 @@ const FILLED: MetaProfile = {
 };
 
 describe("MetaProfileEditor", () => {
-  it("disables Save in create mode until required fields are set", () => {
+  it("prefills create mode with the legacy Pareto router", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
     renderWithProviders(
       <MetaProfileEditor
         mode="create"
         availableProfiles={AVAILABLE}
         isSaving={false}
-        onSave={vi.fn()}
+        onSave={onSave}
         onCancel={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId("meta-profile-save")).toBeDisabled();
+    expect(screen.getByTestId("meta-profile-name-input")).toHaveValue(
+      LEGACY_92C0_META_PROFILE_NAME,
+    );
+    expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
+      "minimax-m3",
+    );
+    expect(screen.getByTestId("meta-profile-default-input")).toHaveValue(
+      "minimax-m3",
+    );
+    expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(
+      LEGACY_92C0_META_PROFILE_DEFAULT.prompt_template,
+    );
+    expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
+      LEGACY_92C0_META_PROFILE_DEFAULT.model_table,
+    );
+
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    expect(onSave).toHaveBeenCalledWith(
+      LEGACY_92C0_META_PROFILE_NAME,
+      LEGACY_92C0_META_PROFILE_DEFAULT,
+    );
   });
 
   it("enables Save in edit mode with a complete config and saves it", async () => {
@@ -104,6 +131,7 @@ describe("MetaProfileEditor", () => {
       />,
     );
 
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "balanced");
 
     expect(screen.getByTestId("meta-profile-name-taken")).toBeInTheDocument();
@@ -129,6 +157,7 @@ describe("MetaProfileEditor", () => {
       />,
     );
 
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "fast");
 
     expect(
