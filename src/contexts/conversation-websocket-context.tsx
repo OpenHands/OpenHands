@@ -504,8 +504,14 @@ export function ConversationWebSocketProvider({
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification: errorEvent.classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              errorEvent.classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -521,6 +527,7 @@ export function ConversationWebSocketProvider({
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 
@@ -711,8 +718,14 @@ export function ConversationWebSocketProvider({
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification: errorEvent.classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              errorEvent.classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -728,6 +741,7 @@ export function ConversationWebSocketProvider({
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 

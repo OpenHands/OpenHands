@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { trackError } from "#/utils/error-handler";
-import { trackException } from "#/services/telemetry";
+import { trackEvent } from "#/services/telemetry";
 
 vi.mock("#/services/telemetry", () => ({
-  trackException: vi.fn(),
+  trackEvent: vi.fn(),
 }));
 
 describe("Error Handler", () => {
@@ -24,10 +24,14 @@ describe("Error Handler", () => {
 
       trackError(error);
 
-      expect(trackException).toHaveBeenCalledWith(
-        new Error("Test error"),
+      expect(trackEvent).toHaveBeenCalledWith(
+        "error_outcome",
         {
           error_source: "test",
+          error_cause: "unknown",
+          error_impact: "run_stopped",
+          error_blame: "unknown",
+          error_telemetry: "diagnostic",
         },
       );
     });
@@ -44,10 +48,14 @@ describe("Error Handler", () => {
 
       trackError(error);
 
-      expect(trackException).toHaveBeenCalledWith(
-        new Error("Test error"),
+      expect(trackEvent).toHaveBeenCalledWith(
+        "error_outcome",
         {
           error_source: "test",
+          error_cause: "unknown",
+          error_impact: "run_stopped",
+          error_blame: "unknown",
+          error_telemetry: "diagnostic",
           extra: "info",
           details: { foo: "bar" },
         },

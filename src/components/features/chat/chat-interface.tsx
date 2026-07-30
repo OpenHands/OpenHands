@@ -64,8 +64,13 @@ function getEntryPoint(
 export function ChatInterface() {
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
   const { setMessageToSend } = useConversationStore();
-  const { errorMessage, errorCode, removeErrorMessage, setErrorMessage } =
-    useErrorMessageStore();
+  const {
+    errorMessage,
+    errorCode,
+    errorClassification,
+    removeErrorMessage,
+    setErrorMessage,
+  } = useErrorMessageStore();
   const navigate = useNavigate();
   const { isTask, taskStatus, taskDetail } = useTaskPolling();
   // Hide empty-state chrome for the entire `/conversations/task-{uuid}` route,
@@ -570,6 +575,7 @@ export function ChatInterface() {
             <ErrorMessageBanner
               message={errorMessage}
               code={errorCode}
+              classification={errorClassification}
               onDismiss={removeErrorMessage}
               onRetry={
                 errorMessage === SERVER_CONNECTION_ERROR_MESSAGE
