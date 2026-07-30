@@ -3,7 +3,10 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCloudCurrentUserId } from "#/hooks/query/use-cloud-current-user-id";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useTracking } from "#/hooks/use-tracking";
-import { setTelemetryCloudContext } from "#/services/telemetry";
+import {
+  setTelemetryCloudContext,
+  setTelemetryIdentity,
+} from "#/services/telemetry";
 
 const CLOUD_COOKIE_BACKEND_ADDED_SESSION_PREFIX =
   "agent_canvas_cloud_cookie_backend_added";
@@ -74,10 +77,12 @@ export const useTelemetryIdentity = () => {
 
     if (!userId) {
       setTelemetryCloudContext(null);
+      void setTelemetryIdentity(null);
       return;
     }
 
     setTelemetryCloudContext({ userId, email, orgId });
+    void setTelemetryIdentity(userId, email ? { email } : {});
 
     if (
       backend.authMode === "cookie" &&
@@ -94,6 +99,7 @@ export const useTelemetryIdentity = () => {
     }
   }, [
     backend.authMode,
+    backend.connectionRevision,
     backend.id,
     backend.kind,
     email,

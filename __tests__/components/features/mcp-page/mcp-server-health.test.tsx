@@ -41,10 +41,14 @@ const OAUTH_SERVER: MCPServerConfig = {
 
 function renderCard(
   server: MCPServerConfig,
-  { onEdit = vi.fn(), onDelete = vi.fn() } = {},
+  { onEdit = vi.fn(), onToggleEnabled = vi.fn() } = {},
 ) {
   render(
-    <InstalledServerCard server={server} onEdit={onEdit} onDelete={onDelete} />,
+    <InstalledServerCard
+      server={server}
+      onEdit={onEdit}
+      onToggleEnabled={onToggleEnabled}
+    />,
     {
       wrapper: ({ children }) => (
         <QueryClientProvider
@@ -57,7 +61,7 @@ function renderCard(
       ),
     },
   );
-  return { onEdit, onDelete };
+  return { onEdit, onToggleEnabled };
 }
 
 const healthDot = () => screen.getByTestId("mcp-health-dot");

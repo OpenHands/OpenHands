@@ -78,7 +78,7 @@ export function RecommendedAutomationsLauncher({
       flattenMcpConfig(
         settings?.mcp_config ??
           parseMcpConfig(settings?.agent_settings?.mcp_config),
-      ),
+      ).filter((server) => server.enabled !== false),
     [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 

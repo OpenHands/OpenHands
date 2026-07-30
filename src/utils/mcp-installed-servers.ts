@@ -1,5 +1,6 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 import type { MCPServerConfig } from "#/types/mcp-server";
+import { getMcpServerEnabled } from "./mcp-config";
 
 export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
   return Object.entries(config).map(([settingsKey, server]) =>
@@ -11,6 +12,7 @@ export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
           command: server.command,
           args: server.args ?? undefined,
           env: server.env ?? undefined,
+          enabled: getMcpServerEnabled(server),
         }
       : {
           id: settingsKey,
@@ -20,6 +22,7 @@ export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
           headers: server.headers ?? undefined,
           timeout: server.timeout ?? undefined,
           auth: server.auth ?? undefined,
+          enabled: getMcpServerEnabled(server),
         },
   );
 }

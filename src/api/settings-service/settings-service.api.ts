@@ -599,7 +599,6 @@ class SettingsService {
     }
 
     const isCloud = getActiveBackend().backend.kind === "cloud";
-
     if (isCloud) {
       const hasCloudWork =
         !!payload.agent_settings_diff ||

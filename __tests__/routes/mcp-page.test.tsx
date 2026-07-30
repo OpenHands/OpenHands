@@ -260,8 +260,8 @@ describe("MCPPage", () => {
 
     renderPage();
 
-    const deleteBtn = await screen.findByTestId("mcp-installed-toggle-slack");
-    fireEvent.click(deleteBtn);
+    fireEvent.click(await screen.findByTestId("mcp-server-item"));
+    fireEvent.click(await screen.findByTestId("mcp-custom-editor-delete"));
 
     const confirmBtn = await screen.findByTestId("confirm-button");
     fireEvent.click(confirmBtn);

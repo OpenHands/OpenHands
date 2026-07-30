@@ -356,6 +356,10 @@ export function MCPServerForm({
     const baseConfig = {
       id: server?.id || "",
       type: serverType,
+      // The form has no enable/disable control (that lives on the card), so
+      // carry the existing state forward — otherwise saving an edit to a
+      // disabled server would silently switch it back on.
+      ...(server?.enabled === false && { enabled: false }),
     };
 
     if (serverType === "sse" || serverType === "shttp") {

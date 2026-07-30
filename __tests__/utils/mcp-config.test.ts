@@ -85,6 +85,24 @@ describe("canonical MCP configuration", () => {
       },
     });
   });
+
+  it("preserves a disabled server while treating omitted enabled as true", () => {
+    const config = parseMcpConfig({
+      disabled: { command: "npx", enabled: false },
+      enabled: { command: "npx" },
+    });
+
+    expect(flattenMcpConfig(config)).toEqual([
+      expect.objectContaining({ id: "disabled", enabled: false }),
+      expect.objectContaining({ id: "enabled", enabled: undefined }),
+    ]);
+    expect(toCanonicalMcpServer({
+      id: "disabled",
+      type: "stdio",
+      command: "npx",
+      enabled: false,
+    })).toMatchObject({ enabled: false });
+  });
 });
 
 describe("MCP sparse patches", () => {

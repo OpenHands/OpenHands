@@ -50,6 +50,13 @@ export function hasRedactedMcpSecretLeaf(value: unknown): boolean {
   return false;
 }
 
+// Agent Server persists this optional field, but typescript-client 1.36.1
+// does not yet expose it in its generated MCP model types.
+export const getMcpServerEnabled = (server: MCPServer): boolean | undefined =>
+  (server as MCPServer & { enabled?: unknown }).enabled === false
+    ? false
+    : undefined;
+
 const normalizeTransport = (
   value: unknown,
 ): MCPServer["transport"] | undefined => {
@@ -94,6 +101,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
         ...(typeof candidate.timeout === "number" && {
           timeout: candidate.timeout,
         }),
+        ...(candidate.enabled === false && { enabled: false }),
       };
       continue;
     }
@@ -123,6 +131,7 @@ export function parseMcpConfig(value: unknown): MCPConfig {
       ...(typeof candidate.keep_alive === "boolean" && {
         keep_alive: candidate.keep_alive,
       }),
+      ...(candidate.enabled === false && { enabled: false }),
     };
   }
   return config;
@@ -137,6 +146,7 @@ export function toCanonicalMcpServer(server: MCPServerConfig): MCPServer {
       ...(server.env && Object.keys(server.env).length > 0
         ? { env: server.env }
         : {}),
+      ...(server.enabled === false && { enabled: false }),
     };
   }
 
@@ -150,8 +160,19 @@ export function toCanonicalMcpServer(server: MCPServerConfig): MCPServer {
     ...(server.type === "shttp" && server.timeout !== undefined
       ? { timeout: server.timeout }
       : {}),
+    ...(server.enabled === false && { enabled: false }),
   };
 }
+
+const buildEnabledPatch = (
+  previous: MCPServer,
+  edited: MCPServerConfig,
+): MCPServerPatch => {
+  if (edited.enabled === false) return { enabled: false } as MCPServerPatch;
+  return getMcpServerEnabled(previous) === false
+    ? ({ enabled: true } as MCPServerPatch)
+    : {};
+};
 
 const buildStringMapPatch = (
   previous: Record<string, string> | null | undefined,
@@ -277,6 +298,7 @@ export function buildMcpServerPatch(
   previous: MCPServer,
   edited: MCPServerConfig,
 ): MCPServerPatch {
+  const enabled = buildEnabledPatch(previous, edited);
   if (edited.type === "stdio") {
     const env = buildStringMapPatch(
       previous.transport === "stdio" ? previous.env : undefined,
@@ -291,6 +313,7 @@ export function buildMcpServerPatch(
           ? { args: null }
           : {}),
       ...(env !== undefined ? { env } : {}),
+      ...enabled,
     };
   }
 
@@ -298,6 +321,7 @@ export function buildMcpServerPatch(
   const patch: MCPServerPatch = {
     transport: edited.type === "sse" ? "sse" : "http",
     url: edited.url!,
+    ...enabled,
   };
 
   if (edited.type === "shttp") {

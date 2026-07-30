@@ -405,6 +405,30 @@ describe("recommended automations", () => {
     expect(draft).toBeTruthy();
   });
 
+  it("prompts to install when the required MCP server is disabled", async () => {
+    // A disabled server is withheld from the agent, so treating it as
+    // installed would launch an automation that then fails at runtime.
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        github: {
+          url: GITHUB_HOSTED_MCP_URL,
+          auth: { strategy: "bearer", value: "github-token" },
+          enabled: false,
+        },
+      }),
+    });
+
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
+
+    await screen.findByTestId("mcp-install-modal");
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
   it("ignores repeated launches once a responder deployment choice is in flight", () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),

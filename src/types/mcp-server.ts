@@ -21,6 +21,11 @@ export interface MCPServerConfig {
   args?: string[];
   env?: Record<string, string>;
   auth?: MCPAuthCredential;
+  /**
+   * Whether the agent may use this server. Absent means enabled — only an
+   * explicit `false` disables, so existing configs stay untouched.
+   */
+  enabled?: boolean;
 }
 
 export type MCPTestToolCall = AgentServerMCPToolCall;
