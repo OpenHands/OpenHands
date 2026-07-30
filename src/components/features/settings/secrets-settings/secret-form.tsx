@@ -69,9 +69,10 @@ export function SecretForm({
     secretToEdit: string,
     name: string,
     description?: string,
+    value?: string,
   ) => {
     updateSecret(
-      { secretToEdit, name, description },
+      { secretToEdit, name, description, value },
       {
         onSettled: onCancel,
         onSuccess: invalidateSecrets,
@@ -106,7 +107,12 @@ export function SecretForm({
 
         handleCreateSecret(name, value, description || undefined);
       } else if (mode === "edit" && selectedSecret) {
-        handleEditSecret(selectedSecret, name, description || undefined);
+        handleEditSecret(
+          selectedSecret,
+          name,
+          description || undefined,
+          value || undefined,
+        );
       }
     }
   };
@@ -133,23 +139,25 @@ export function SecretForm({
       />
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      {mode === "add" && (
-        <label className="flex flex-col gap-2.5 w-full min-w-0">
-          <span className="text-sm">{t(I18nKey.FORM$VALUE)}</span>
-          <textarea
-            data-testid="value-input"
-            name="secret-value"
-            required
-            className={cn(
-              "resize-none",
-              formControlMultilineFieldClassName,
-              "placeholder:italic",
-              "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
-            )}
-            rows={8}
-          />
-        </label>
-      )}
+      <label className="flex flex-col gap-2.5 w-full min-w-0">
+        <span className="text-sm">
+          {mode === "add"
+            ? t(I18nKey.FORM$VALUE)
+            : t(I18nKey.SECRETS$SECRET_VALUE_LEAVE_BLANK)}
+        </span>
+        <textarea
+          data-testid="value-input"
+          name="secret-value"
+          required={mode === "add"}
+          className={cn(
+            "resize-none",
+            formControlMultilineFieldClassName,
+            "placeholder:italic",
+            "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)] disabled:cursor-not-allowed",
+          )}
+          rows={8}
+        />
+      </label>
 
       <label className="flex flex-col gap-2.5 w-full min-w-0">
         <div className="flex items-center gap-2">

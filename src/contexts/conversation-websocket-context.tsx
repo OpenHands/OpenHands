@@ -863,13 +863,9 @@ export function ConversationWebSocketProvider({
       ? { resend_mode: "since", after_timestamp: initialAfterTimestamp }
       : { resend_mode: "all" };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
-
     return {
       queryParams,
+      sessionApiKey,
       reconnect: { enabled: true },
       onOpen: () => {
         setMainConnectionState("OPEN");
@@ -902,15 +898,13 @@ export function ConversationWebSocketProvider({
       resend_all: true,
     };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
-
     const planningAgentConversation = subConversations?.[0];
+    const planningApiKey =
+      planningAgentConversation?.session_api_key ?? sessionApiKey;
 
     return {
       queryParams,
+      sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
       onOpen: async () => {
         setPlanningConnectionState("OPEN");

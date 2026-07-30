@@ -345,6 +345,31 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         },
       ],
     },
+    {
+      // Curated agent_context section (SDK fields_opt_in): only load_memory
+      // is exposed, never the raw AgentContext model. ``label`` mirrors the
+      // server's literal string ("Memory"); the GUI names the page itself via
+      // the SCHEMA$AGENT_CONTEXT$SECTION_LABEL translation, which wins.
+      key: "agent_context",
+      label: "Memory",
+      fields: [
+        {
+          description:
+            "The agent keeps notes under .openhands/memory/ and loads them at the start of each new conversation, learning your codebase and preferences over time.",
+          key: "agent_context.load_memory",
+          label: "Persistent memory",
+          section: "agent_context",
+          section_label: "Memory",
+          value_type: "boolean",
+          default: false,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+      ],
+    },
   ],
 };
 
