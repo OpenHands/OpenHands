@@ -1,28 +1,14 @@
 export interface ErrorClassification {
-  origin:
-    | "sdk"
-    | "provider"
-    | "agent"
-    | "tool"
-    | "mcp"
-    | "environment"
+  kind:
+    | "auth"
+    | "quota"
+    | "rate_limit"
+    | "config"
+    | "transient"
+    | "agent_action"
+    | "internal"
     | "unknown";
-  cause: string;
-  blame:
-    | "user_configuration"
-    | "external"
-    | "agent_behavior"
-    | "product_defect"
-    | "unknown";
-  impact: "notice" | "step_failed" | "run_stopped" | "conversation_unusable";
-  retry: "none" | "immediate" | "after_backoff" | "after_user_action";
-  user_action:
-    | "none"
-    | "retry"
-    | "reauthenticate"
-    | "configure_llm"
-    | "select_model"
-    | "contact_support";
-  presentation: "info" | "warning" | "error";
-  telemetry: "none" | "outcome" | "diagnostic";
+  retryable: boolean;
+  user_action: "none" | "retry" | "settings";
+  error_id?: string | null;
 }

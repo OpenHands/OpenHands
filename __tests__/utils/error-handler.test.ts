@@ -24,16 +24,11 @@ describe("Error Handler", () => {
 
       trackError(error);
 
-      expect(trackEvent).toHaveBeenCalledWith(
-        "error_outcome",
-        {
-          error_source: "test",
-          error_cause: "unknown",
-          error_impact: "run_stopped",
-          error_blame: "unknown",
-          error_telemetry: "diagnostic",
-        },
-      );
+      expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        error_source: "test",
+        error_kind: "unknown",
+        error_telemetry: "outcome",
+      });
     });
 
     it("should include additional metadata in PostHog event", () => {
@@ -48,18 +43,13 @@ describe("Error Handler", () => {
 
       trackError(error);
 
-      expect(trackEvent).toHaveBeenCalledWith(
-        "error_outcome",
-        {
-          error_source: "test",
-          error_cause: "unknown",
-          error_impact: "run_stopped",
-          error_blame: "unknown",
-          error_telemetry: "diagnostic",
-          extra: "info",
-          details: { foo: "bar" },
-        },
-      );
+      expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        error_source: "test",
+        error_kind: "unknown",
+        error_telemetry: "outcome",
+        extra: "info",
+        details: { foo: "bar" },
+      });
     });
   });
 });
