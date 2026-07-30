@@ -1,6 +1,6 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
@@ -14,6 +14,23 @@ import { AddBackendModal } from "#/components/features/backends/add-backend-moda
 import * as telemetry from "#/services/telemetry";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+
+const deviceFlowMocks = vi.hoisted(() => ({
+  startDeviceFlow: vi.fn(),
+  pollForToken: vi.fn(),
+}));
+
+// Partial mock: only the network calls are stubbed so the rest of the module
+// (host classification) keeps its production behavior.
+vi.mock("#/api/device-flow-client", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/api/device-flow-client")>();
+  return {
+    ...actual,
+    startDeviceFlow: deviceFlowMocks.startDeviceFlow,
+    pollForToken: deviceFlowMocks.pollForToken,
+  };
+});
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   ServerClient: vi.fn(function ServerClientMock() {
@@ -61,6 +78,18 @@ beforeEach(() => {
   window.localStorage.clear();
   getServerInfoMock.mockReset();
   getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  deviceFlowMocks.startDeviceFlow.mockReset();
+  deviceFlowMocks.startDeviceFlow.mockResolvedValue({
+    device_code: "device-code",
+    user_code: "ABCD-EFGH",
+    verification_uri: "https://app.all-hands.dev/device",
+    verification_uri_complete:
+      "https://app.all-hands.dev/device?user_code=ABCD-EFGH",
+    expires_in: 600,
+    interval: 5,
+  });
+  deviceFlowMocks.pollForToken.mockReset();
+  deviceFlowMocks.pollForToken.mockImplementation(() => new Promise(() => {}));
   __resetActiveStoreForTests();
 });
 
@@ -70,8 +99,8 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("AddBackendModal – two-column layout", () => {
-  it("renders Cloud first and selected, with Agent-server as the second tab", () => {
+describe("AddBackendModal – connection chooser", () => {
+  it("renders OpenHands Cloud first with its brand mark", () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
     const tabs = screen.getAllByRole("tab");
@@ -83,10 +112,50 @@ describe("AddBackendModal – two-column layout", () => {
       "add-backend-option-agent-server",
     );
     expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+    expect(
+      within(tabs[0]).getByTestId("add-backend-option-cloud-logo"),
+    ).toBeInTheDocument();
+    expect(tabs[0]).toHaveTextContent("BACKEND$CLOUD_OPTION_DESCRIPTION");
+    expect(tabs[1]).toHaveTextContent(
+      "BACKEND$AGENT_SERVER_OPTION_DESCRIPTION",
+    );
 
     expect(screen.getByTestId("add-backend-cloud-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-cloud-title")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-login-button")).toBeInTheDocument();
+    expect(screen.getByTestId("add-backend-description")).toHaveTextContent(
+      "BACKEND$CHOOSER_DESCRIPTION",
+    );
+    expect(
+      screen.getByTestId("add-backend-deployment-options-link"),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/overview/introduction",
+    );
+    // Short inline link so the description reads as one flowing sentence.
+    expect(
+      screen.getByTestId("add-backend-deployment-options-link"),
+    ).toHaveTextContent("CTA$LEARN_MORE");
+  });
+
+  it("hides the Advanced host disclosure while authorization is pending", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "open").mockReturnValue({
+      closed: false,
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+
+    expect(screen.getByTestId("add-backend-advanced-toggle")).toBeVisible();
+
+    await user.click(screen.getByTestId("add-backend-login-button"));
+
+    expect(
+      await screen.findByTestId("add-backend-auth-awaiting"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-backend-advanced-toggle"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Local and Remote inside the Agent-server tab", async () => {
@@ -104,6 +173,16 @@ describe("AddBackendModal – two-column layout", () => {
       screen.getByTestId("add-backend-location-option-remote"),
     ).toHaveAttribute("aria-checked", "false");
     expect(
+      screen
+        .getByTestId("add-backend-location-option-local")
+        .querySelector("svg"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByTestId("add-backend-location-option-remote")
+        .querySelector("svg"),
+    ).not.toBeNull();
+    expect(
       screen.getByTestId("add-backend-local-guidance"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-local-docs-link")).toHaveAttribute(
@@ -112,9 +191,47 @@ describe("AddBackendModal – two-column layout", () => {
     );
     expect(screen.getByTestId("add-backend-name")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-host")).toBeInTheDocument();
-    expect(screen.getByTestId("add-backend-host-helper")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-api-key")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-submit")).toBeInTheDocument();
+  });
+
+  it("keeps the full setup guidance in a collapsible note", async () => {
+    renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
+    const user = await selectAgentServer();
+
+    expect(
+      screen.getByTestId("add-backend-local-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByTestId("add-backend-local-guidance-body"),
+    ).toHaveAttribute("aria-hidden", "true");
+
+    await user.click(screen.getByTestId("add-backend-local-guidance-toggle"));
+    expect(
+      screen.getByTestId("add-backend-local-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "true");
+    const localGuidance = screen.getByTestId("add-backend-local-guidance");
+    expect(localGuidance).toHaveTextContent("BACKEND$LOCAL_SETUP_DESCRIPTION");
+    expect(localGuidance).toHaveTextContent(
+      "agent-canvas --backend-only --port 8001",
+    );
+
+    await user.click(screen.getByTestId("add-backend-location-option-remote"));
+    expect(
+      screen.getByTestId("add-backend-remote-guidance-toggle"),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByTestId("add-backend-remote-guidance-body"),
+    ).toHaveAttribute("aria-hidden", "true");
+
+    await user.click(screen.getByTestId("add-backend-remote-guidance-toggle"));
+    const remoteGuidance = screen.getByTestId("add-backend-remote-guidance");
+    expect(remoteGuidance).toHaveTextContent(
+      "BACKEND$REMOTE_SETUP_DESCRIPTION",
+    );
+    expect(remoteGuidance).toHaveTextContent(
+      "BACKEND$REMOTE_CONNECTION_DESCRIPTION",
+    );
   });
 
   it("starts the Agent-server form with an empty host field", async () => {
@@ -305,21 +422,43 @@ describe("AddBackendModal – two-column layout", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps advanced host settings in the layout when collapsed", async () => {
+  it("hides advanced host settings until expanded while preserving what was typed", async () => {
     const user = userEvent.setup();
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
-    expect(screen.getByTestId("add-backend-cloud-host")).toBeInTheDocument();
+    // Collapsed: mounted so state survives, but collapsed to zero height and
+    // kept out of the tab order.
+    expect(screen.getByTestId("add-backend-advanced-panel")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
 
     await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+    expect(screen.getByTestId("add-backend-advanced-toggle")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(
+      screen.getByTestId("add-backend-advanced-panel"),
+    ).not.toHaveAttribute("aria-hidden", "true");
 
-    expect(screen.getByTestId("add-backend-cloud-host")).toBeInTheDocument();
+    await user.type(
+      screen.getByTestId("add-backend-cloud-host"),
+      "https://cloud.example.com",
+    );
+    await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+    await user.click(screen.getByTestId("add-backend-advanced-toggle"));
+
+    expect(screen.getByTestId("add-backend-cloud-host")).toHaveValue(
+      "https://cloud.example.com",
+    );
   });
 
   it("renders the cloud login button without a key icon prefix", () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
     const loginButton = screen.getByTestId("add-backend-login-button");
+    expect(loginButton).not.toHaveClass("w-full");
     expect(loginButton.textContent?.trim()).not.toMatch(/^🔑/);
     expect(loginButton.textContent).not.toContain("🔑");
   });

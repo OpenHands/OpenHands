@@ -29784,21 +29784,21 @@
     "ca": "Canviant a {{environment}}"
   },
   "BACKEND$LOGIN_WITH_OPENHANDS": {
-    "en": "Login with OpenHands Cloud",
-    "ja": "OpenHands Cloudでログイン",
-    "zh-CN": "使用 OpenHands Cloud 登录",
-    "zh-TW": "使用 OpenHands Cloud 登入",
-    "ko-KR": "OpenHands Cloud로 로그인",
-    "no": "Logg inn med OpenHands Cloud",
-    "it": "Accedi con OpenHands Cloud",
-    "pt": "Entrar com OpenHands Cloud",
-    "es": "Iniciar sesión con OpenHands Cloud",
-    "ar": "تسجيل الدخول باستخدام OpenHands Cloud",
-    "fr": "Se connecter avec OpenHands Cloud",
-    "tr": "OpenHands Cloud ile giriş yap",
-    "de": "Mit OpenHands Cloud anmelden",
-    "uk": "Увійти через OpenHands Cloud",
-    "ca": "Inicia sessió amb OpenHands Cloud"
+    "en": "Connect to OpenHands",
+    "ja": "OpenHands に接続",
+    "zh-CN": "连接到 OpenHands",
+    "zh-TW": "連線至 OpenHands",
+    "ko-KR": "OpenHands에 연결",
+    "no": "Koble til OpenHands",
+    "it": "Connetti a OpenHands",
+    "pt": "Conectar ao OpenHands",
+    "es": "Conectar con OpenHands",
+    "ar": "الاتصال بـ OpenHands",
+    "fr": "Se connecter à OpenHands",
+    "tr": "OpenHands'e bağlan",
+    "de": "Mit OpenHands verbinden",
+    "uk": "Підключитися до OpenHands",
+    "ca": "Connecta't a OpenHands"
   },
   "BACKEND$LOG_BACK_IN": {
     "en": "Log back in",
@@ -29869,7 +29869,7 @@
     "ca": "OpenHands Cloud"
   },
   "BACKEND$CLOUD_DESCRIPTION": {
-    "en": "Connect instantly to OpenHands Cloud to try out Agent Canvas",
+    "en": "Connect instantly to OpenHands Cloud to use Agent Canvas",
     "ja": "セットアップをスキップ — OpenHands Cloud アカウントですぐに接続できます。",
     "zh-CN": "跳过设置 — 使用您的 OpenHands Cloud 帐户即时连接。",
     "zh-TW": "跳過設定 — 使用您的 OpenHands Cloud 帳戶即時連線。",
