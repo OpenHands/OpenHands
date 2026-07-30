@@ -32,6 +32,7 @@ export const useChatInputLogic = () => {
     conversationId,
     chatInputRef,
   );
+  const previousPanelToggleRef = useRef(hasRightPanelToggled);
 
   // A one-shot prefill belongs to exactly one composer. Explicit targeting
   // avoids timing heuristics and prevents a value queued for home (or another
@@ -64,7 +65,13 @@ export const useChatInputLogic = () => {
 
   // Save current input value when drawer state changes (conversation view only)
   useEffect(() => {
-    if (!conversationId) return;
+    const panelToggleChanged =
+      previousPanelToggleRef.current !== hasRightPanelToggled;
+    previousPanelToggleRef.current = hasRightPanelToggled;
+
+    if (!conversationId || !panelToggleChanged) {
+      return;
+    }
     if (chatInputRef.current) {
       const currentText = getTextContent(chatInputRef.current);
       setMessageToSend(currentText, conversationId);

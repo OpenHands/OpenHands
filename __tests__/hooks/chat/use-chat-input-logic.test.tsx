@@ -37,6 +37,19 @@ const flushAnimationFrame = () =>
       }),
   );
 
+const setContentEditableText = (element: HTMLElement, text: string): void => {
+  // jsdom lacks innerText. Mirror the browser mapping so getTextContent and
+  // programmatic textContent writes observe the same value.
+  Object.defineProperty(element, "innerText", {
+    configurable: true,
+    get: () => element.textContent ?? "",
+    set: (value: string) => {
+      element.textContent = value;
+    },
+  });
+  element.innerText = text;
+};
+
 describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
   beforeEach(() => {
     mockConversationId = undefined;
@@ -54,8 +67,8 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
     const input = screen.getByTestId("chat-input");
     expect(input.textContent).toBe("");
 
-    // Simulate useLaunchSkillInChat: navigate("/conversations") has landed on
-    // the home composer, then setMessageToSend fires from a timeout.
+    // A home-targeted launch can arrive while the home composer is already
+    // mounted, so the store update itself must drive the prefill.
     act(() => {
       useConversationStore
         .getState()
@@ -71,16 +84,24 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
 
     // Caret sits at the end of the prefilled text.
     const selection = window.getSelection();
+    expect(document.activeElement).toBe(input);
     expect(selection?.isCollapsed).toBe(true);
+    expect(selection?.rangeCount).toBe(1);
+
+    const expectedEnd = document.createRange();
+    expectedEnd.selectNodeContents(input);
+    expectedEnd.collapse(false);
+    const actual = selection!.getRangeAt(0);
     expect(
-      selection?.focusNode && input.contains(selection.focusNode),
-    ).toBeTruthy();
+      actual.compareBoundaryPoints(Range.START_TO_START, expectedEnd),
+    ).toBe(0);
+    expect(actual.compareBoundaryPoints(Range.END_TO_END, expectedEnd)).toBe(0);
   });
 
   it("prefills the home composer when its targeted message was queued before a delayed mount", async () => {
-    // The launch flow sets the message in a 0ms timeout after navigate(); if
-    // route loading is delayed, the value must remain valid without a clock
-    // heuristic.
+    // The launch flow stores an explicitly home-targeted message before
+    // navigating. If route loading is delayed, that value must remain valid
+    // without a clock heuristic.
     useConversationStore.setState({
       messageToSend: {
         text: "Create an automation",
@@ -183,6 +204,76 @@ describe("useChatInputLogic — home composer prefill (messageToSend)", () => {
         text: "belongs elsewhere",
         targetConversationId: "conv-123",
       },
+    );
+  });
+
+  it("does not overwrite a non-empty input with a cancelled send", async () => {
+    mockConversationId = "conv-123";
+
+    render(<ComposerHarness />);
+    const input = screen.getByTestId("chat-input");
+    setContentEditableText(input, "existing draft");
+
+    act(() => {
+      useConversationStore.setState({
+        messageRestoreIfEmpty: {
+          text: "cancelled send",
+          timestamp: Date.now(),
+          targetConversationId: "conv-123",
+        },
+      });
+    });
+
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageRestoreIfEmpty).toBeNull(),
+    );
+    expect(input.textContent).toBe("existing draft");
+    expect(useConversationStore.getState().messageToSend).toBeNull();
+  });
+
+  it("treats whitespace-only input as empty for cancelled-send restore", async () => {
+    mockConversationId = "conv-123";
+
+    render(<ComposerHarness />);
+    const input = screen.getByTestId("chat-input");
+    setContentEditableText(input, "   ");
+
+    act(() => {
+      useConversationStore.setState({
+        messageRestoreIfEmpty: {
+          text: "cancelled send",
+          timestamp: Date.now(),
+          targetConversationId: "conv-123",
+        },
+      });
+    });
+
+    await waitFor(() => expect(input.textContent).toBe("cancelled send"));
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageRestoreIfEmpty).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageToSend).toBeNull(),
+    );
+  });
+
+  it("saves the current input when the drawer toggle changes after mount", async () => {
+    mockConversationId = "conv-123";
+
+    render(<ComposerHarness />);
+    const input = screen.getByTestId("chat-input");
+    setContentEditableText(input, "work in progress");
+
+    act(() => {
+      useConversationStore.setState({ hasRightPanelToggled: true });
+    });
+
+    await waitFor(() =>
+      expect(useConversationStore.getState().isRightPanelShown).toBe(true),
+    );
+    expect(input.textContent).toBe("work in progress");
+    await waitFor(() =>
+      expect(useConversationStore.getState().messageToSend).toBeNull(),
     );
   });
 });

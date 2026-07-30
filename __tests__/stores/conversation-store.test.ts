@@ -35,6 +35,8 @@ describe("conversation store", () => {
       shouldHideSuggestions: false,
       imagesMarkedUploadAsFile: [],
       pastedImageNames: [],
+      messageToSend: null,
+      messageRestoreIfEmpty: null,
     });
   });
 
@@ -46,6 +48,43 @@ describe("conversation store", () => {
       expect(mockSetConversationState).toHaveBeenCalledWith(CONV_ID, {
         conversationMode: "plan",
       });
+    });
+  });
+
+  describe("targeted one-shot messages", () => {
+    it("records an explicit composer target and clears the prefill", () => {
+      useConversationStore
+        .getState()
+        .setMessageToSend("Create an automation", null);
+
+      expect(useConversationStore.getState().messageToSend).toEqual({
+        text: "Create an automation",
+        timestamp: expect.any(Number),
+        targetConversationId: null,
+      });
+
+      useConversationStore.getState().clearMessageToSend();
+      expect(useConversationStore.getState().messageToSend).toBeNull();
+    });
+
+    it("records a conversation-targeted restore and clears it", () => {
+      useConversationStore
+        .getState()
+        .restoreMessageToInputIfEmpty("cancelled send", CONV_ID);
+
+      expect(useConversationStore.getState().messageRestoreIfEmpty).toEqual({
+        text: "cancelled send",
+        timestamp: expect.any(Number),
+        targetConversationId: CONV_ID,
+      });
+
+      // The action must merge into the store rather than replacing its other
+      // actions, because the matching composer consumes it asynchronously.
+      expect(
+        useConversationStore.getState().clearMessageRestoreIfEmpty,
+      ).toBeTypeOf("function");
+      useConversationStore.getState().clearMessageRestoreIfEmpty();
+      expect(useConversationStore.getState().messageRestoreIfEmpty).toBeNull();
     });
   });
 
