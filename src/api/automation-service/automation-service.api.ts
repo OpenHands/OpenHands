@@ -1,5 +1,6 @@
 import axios from "axios";
 import {
+  clearPendingLocalTelemetryRevocation,
   getTelemetryConsent,
   getTelemetryDistinctId,
   getTelemetryDistinctIdForConsentSync,
@@ -211,6 +212,9 @@ class AutomationService {
       },
       { timeout: 5000 },
     );
+    if (consent !== "granted" && frontendDistinctId) {
+      clearPendingLocalTelemetryRevocation(frontendDistinctId);
+    }
   }
 
   static async getSdkVersion(): Promise<string | null> {

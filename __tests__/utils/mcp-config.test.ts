@@ -323,6 +323,32 @@ describe("toSdkMcpConfig", () => {
   });
 });
 
+describe("parseMcpConfig / toSdkMcpConfig — enabled flag", () => {
+  it("round-trips a disabled server without flagging its enabled siblings", () => {
+    // Every mutation re-serializes the whole map, so a disabled server has to
+    // survive edits made to unrelated entries. An *enabled* server must come
+    // back out with no flag at all — the SDK defaults `enabled` to true, and
+    // omitting it is what clears a previously persisted `enabled: false`.
+    const persisted = {
+      off_remote: { url: "https://off.example/mcp", enabled: false },
+      on_remote: { url: "https://on.example/mcp" },
+      off_stdio: { command: "/bin/off", enabled: false },
+    };
+
+    const roundTripped = toSdkMcpConfig(parseMcpConfig(persisted));
+
+    expect(roundTripped).toEqual({
+      off_remote: {
+        url: "https://off.example/mcp",
+        transport: "http",
+        enabled: false,
+      },
+      on_remote: { url: "https://on.example/mcp", transport: "http" },
+      off_stdio: { command: "/bin/off", enabled: false },
+    });
+  });
+});
+
 describe("parseMcpConfig / toSdkMcpConfig — auth: oauth round-trip", () => {
   it("round-trips auth metadata and state for remote OAuth servers", () => {
     const persisted = {
