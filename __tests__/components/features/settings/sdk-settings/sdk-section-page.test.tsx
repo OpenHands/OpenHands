@@ -181,6 +181,53 @@ describe("SdkSectionPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders each field once when the schema has duplicate sections for a key", async () => {
+    // The combined AgentSettings schema emits an "llm" section for each agent
+    // variant ("openhands" and "acp") with identical field keys. Only the first
+    // is used; without de-duplication every field would render twice (and React
+    // would warn about duplicate keys).
+    const llmSection = {
+      key: "llm",
+      label: "LLM",
+      fields: [
+        {
+          key: "llm.api_version",
+          label: "API Version",
+          section: "llm",
+          section_label: "LLM",
+          value_type: "string" as const,
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "minor" as const,
+          secret: false,
+          required: false,
+        },
+      ],
+    };
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [llmSection, { ...llmSection }],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {},
+      }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      getInitialView: () => "all",
+    });
+
+    const fields = await screen.findAllByTestId("sdk-settings-llm.api_version");
+    expect(fields).toHaveLength(1);
+  });
+
   it("preserves the selected view when parent rerenders with the same settings", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
       model_name: "AgentSettings",
