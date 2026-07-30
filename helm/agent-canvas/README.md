@@ -1,6 +1,6 @@
 # agent-canvas Helm chart
 
-Helm chart for running the [OpenHands agent-canvas](https://github.com/OpenHands/agent-canvas)
+Helm chart for running the [OpenHands agent-canvas](https://github.com/OpenHands/OpenHands)
 all-in-one image (frontend + agent-server + automation) on Kubernetes as a
 `StatefulSet` with persistent storage, an `Ingress`, and optional in-cluster
 RBAC.

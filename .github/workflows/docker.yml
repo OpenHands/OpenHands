@@ -449,7 +449,7 @@ jobs:
             --arg automation_version "$AUTOMATION_VERSION" \
             --arg git_sha "$GIT_SHA" \
             --arg git_ref "$GIT_REF" \
-            --arg ghcr_url "https://github.com/OpenHands/agent-canvas/pkgs/container/agent-canvas" \
+            --arg ghcr_url "https://github.com/OpenHands/OpenHands/pkgs/container/agent-canvas" \
             '{image: $image, short_sha: $short_sha, all_tags: $all_tags, architectures: $archs, agent_server_image: $agent_server_image, automation_version: $automation_version, git_sha: $git_sha, git_ref: $git_ref, ghcr_package_url: $ghcr_url}')
 
           echo "Consolidated build summary:"
