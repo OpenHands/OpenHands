@@ -43,6 +43,7 @@ function useCreateLocalPlanningConversationMutation(options: {
 
 function restorePlanningConversationIds(options: {
   conversationId: string;
+  serverPlanningConversationId: string | null;
   subConversationTaskId: string | null;
   localPlanningConversationId: string | null;
   setSubConversationTaskId: (taskId: string | null) => void;
@@ -53,14 +54,18 @@ function restorePlanningConversationIds(options: {
     options.setSubConversationTaskId(storedState.subConversationTaskId);
   }
 
-  const metadata = getStoredConversationMetadata(options.conversationId);
-  if (
-    metadata?.local_planning_conversation_id &&
-    !options.localPlanningConversationId
-  ) {
-    options.setLocalPlanningConversationId(
-      metadata.local_planning_conversation_id,
-    );
+  // Server first: `sub_conversation_ids` is derived by the agent-server from
+  // the planner's `parent_conversation_id`, so it survives cleared site data
+  // and follows the user to another browser. The localStorage hint is only the
+  // fallback for agent-servers older than 1.37.1, which drop the parent link.
+  const restoredId =
+    options.serverPlanningConversationId ??
+    getStoredConversationMetadata(options.conversationId)
+      ?.local_planning_conversation_id ??
+    null;
+
+  if (restoredId && restoredId !== options.localPlanningConversationId) {
+    options.setLocalPlanningConversationId(restoredId);
   }
 }
 
@@ -96,13 +101,24 @@ export const useHandlePlanClick = () => {
     },
   });
 
+  // On local backends the agent-server reports the planner helper back on the
+  // parent's `sub_conversation_ids` (it was created with
+  // `parent_conversation_id`), so that is the authoritative handle. Cloud
+  // sub-conversations are driven by their own task/socket plumbing.
+  const serverPlanningConversationId =
+    backend.kind !== "cloud"
+      ? (conversation?.sub_conversation_ids?.[0] ?? null)
+      : null;
+
   // Restore planning conversation ids on conversation load. This handles page
-  // refreshes while cloud or local planning conversation creation is in progress.
+  // refreshes while cloud or local planning conversation creation is in
+  // progress, and recovers the local planner after browser storage is lost.
   useEffect(() => {
     if (!conversation?.id) return;
 
     restorePlanningConversationIds({
       conversationId: conversation.id,
+      serverPlanningConversationId,
       subConversationTaskId,
       localPlanningConversationId,
       setSubConversationTaskId,
@@ -110,6 +126,7 @@ export const useHandlePlanClick = () => {
     });
   }, [
     conversation?.id,
+    serverPlanningConversationId,
     localPlanningConversationId,
     setLocalPlanningConversationId,
     subConversationTaskId,
@@ -124,7 +141,14 @@ export const useHandlePlanClick = () => {
       setConversationMode("plan");
 
       if (backend.kind !== "cloud") {
-        if (!conversation?.id || localPlanningConversationId) {
+        // Guard on the server-reported helper as well as the store, so a
+        // browser that has never seen this conversation before adopts the
+        // existing planner instead of spawning a second hidden one.
+        if (
+          !conversation?.id ||
+          localPlanningConversationId ||
+          serverPlanningConversationId
+        ) {
           return;
         }
         createLocalPlanningConversation(conversation.id);
@@ -167,6 +191,7 @@ export const useHandlePlanClick = () => {
       createConversation,
       createLocalPlanningConversation,
       localPlanningConversationId,
+      serverPlanningConversationId,
       setConversationMode,
       setSubConversationTaskId,
       subConversationTaskId,

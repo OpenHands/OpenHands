@@ -617,15 +617,16 @@ export function ConversationWebSocketProvider({
             // chat-header switcher shows the right name after a reload, even
             // when several profiles share a model (#1082).
             const prevMetadata = getStoredConversationMetadata(conversationId);
+            // Full-object replace: spread the previous record so every field
+            // survives a profile switch (the plugins snapshot backing the
+            // in-conversation plugins view, the local planner id, and anything
+            // added to ConversationMetadata later).
             setStoredConversationMetadata(conversationId, {
-              selected_repository: prevMetadata?.selected_repository ?? null,
-              selected_branch: prevMetadata?.selected_branch ?? null,
-              git_provider: prevMetadata?.git_provider ?? null,
-              selected_workspace: prevMetadata?.selected_workspace ?? null,
+              selected_repository: null,
+              selected_branch: null,
+              git_provider: null,
+              ...(prevMetadata ?? {}),
               active_profile: switchLLMObservation.observation.profile_name,
-              // Full-object replace: carry the plugins snapshot forward so the
-              // in-conversation plugins view survives a profile switch.
-              plugins: prevMetadata?.plugins ?? null,
             });
 
             if (switchLLMObservation.observation.active_model) {
@@ -988,19 +989,28 @@ export function ConversationWebSocketProvider({
       const currentMode = useConversationStore.getState().conversationMode;
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
-      // In plan mode the message belongs to the planning conversation; keep the
-      // REST fallback consistent with the WebSocket routing above (else a first
-      // message sent before the planning socket opens hits the code agent).
+      // In plan mode the message belongs to the planning conversation. Target
+      // the planner *id* rather than the resolved `subConversations` entry: the
+      // id is known as soon as the planner is created, while the react-query
+      // fetch that resolves it lands a tick later. Routing on the resolved
+      // entry would leave a window where the first prompt fell through to the
+      // parent — the code agent — and got executed instead of planned.
+      const planningConversationId = subConversationIds?.[0] ?? null;
       const targetConversationId =
-        currentMode === "plan"
-          ? (subConversations?.[0]?.id ?? conversationId)
-          : conversationId;
+        currentMode === "plan" ? planningConversationId : conversationId;
 
       if (currentSocket?.readyState !== WebSocket.OPEN) {
         // WebSocket not connected - queue message via REST API
         // Message will be delivered automatically when conversation becomes ready
         if (!targetConversationId) {
-          const error = new Error("No conversation ID available");
+          // Never fall back to the parent in plan mode: without a planner
+          // target the message would run in the code agent, which is exactly
+          // the boundary plan mode exists to enforce.
+          const error = new Error(
+            currentMode === "plan"
+              ? "Planning conversation is not ready yet"
+              : "No conversation ID available",
+          );
           setErrorMessage(error.message);
           throw error;
         }
@@ -1044,7 +1054,7 @@ export function ConversationWebSocketProvider({
       planningAgentSocket,
       setErrorMessage,
       conversationId,
-      subConversations,
+      subConversationIds,
     ],
   );
 

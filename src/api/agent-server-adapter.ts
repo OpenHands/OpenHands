@@ -100,6 +100,16 @@ export interface DirectConversationInfo {
     agent_profile_id: string;
     revision: number;
   } | null;
+  /**
+   * Server-owned parent/child links (agent-server >= 1.37.1, SDK #4188). The
+   * agent-server derives ``sub_conversation_ids`` from its own catalog, so a
+   * conversation started with ``parent_conversation_id`` is discoverable from
+   * the parent on any browser — this is what makes the local planner's
+   * relationship server state rather than a browser-local hint. Both are
+   * absent on older agent-servers and on the cloud wire shape.
+   */
+  parent_conversation_id?: string | null;
+  sub_conversation_ids?: string[] | null;
 }
 
 const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
@@ -385,7 +395,7 @@ export function toAppConversation(
       working_dir: info.workspace?.working_dir ?? getAgentServerWorkingDir(),
     },
     public: false,
-    sub_conversation_ids: [],
+    sub_conversation_ids: info.sub_conversation_ids ?? [],
   };
 }
 
@@ -937,6 +947,7 @@ type RawAgentStartConversationPayload = StartConversationPayloadBase & {
   agent: SettingsRecord;
   agent_settings?: never;
   agent_profile_id?: never;
+  parent_conversation_id?: string;
 };
 
 export interface StartConversationOptions {
@@ -1205,6 +1216,17 @@ export function buildStartPlanningConversationRequest(options: {
     stuck_detection: true,
     autotitle: false,
     worktree: false,
+    // Two independent links to the parent, for two different jobs:
+    //
+    // - ``parent_conversation_id`` is the server-owned relationship (SDK
+    //   #4188, agent-server >= 1.37.1). The parent's ``sub_conversation_ids``
+    //   is derived from it, so the planner is recoverable from the server on
+    //   any browser and after storage loss. Older agent-servers ignore the
+    //   field (``StartConversationRequest`` does not forbid extras), which is
+    //   why the client-side metadata hint is still written as a fallback.
+    // - The tag is what hides the helper from the conversation list; it is
+    //   also the only marker on agent-servers too old for the parent link.
+    parent_conversation_id: options.parentConversationId,
     tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: options.parentConversationId },
     ...(initialMessage ? { initial_message: initialMessage } : {}),
   };
@@ -1221,9 +1243,60 @@ export function buildStartPlanningConversationRequest(options: {
   return payload;
 }
 
+/**
+ * Resolve the encrypted LLM config the given AgentProfile launches with, so a
+ * planner started from a conversation can run the *parent's* model rather than
+ * whatever profile happens to be globally active now. AgentProfiles hold a
+ * reference (`llm_profile_ref`), not credentials, so this is a two-hop lookup:
+ * profile id -> llm profile name -> encrypted LLM config.
+ *
+ * Returns `null` — caller falls back to global settings — when the profile is
+ * unknown, is an ACP profile (no LLM config of its own; the planner cannot run
+ * on an ACP agent anyway), has a dangling `llm_profile_ref`, or the lookup
+ * fails. A dangling reference should not block plan creation outright.
+ */
+async function resolveAgentProfileLlmSettings(
+  agentProfileId: string,
+): Promise<SettingsRecord | null> {
+  try {
+    const [{ default: AgentProfilesService }, { default: ProfilesService }] =
+      await Promise.all([
+        import("./agent-profiles-service/agent-profiles-service.api"),
+        import("./profiles-service/profiles-service.api"),
+      ]);
+
+    const { profiles } = await AgentProfilesService.listProfiles();
+    const summary = profiles.find(
+      (profile) => profile.id === agentProfileId && profile.llm_profile_ref,
+    );
+    if (!summary?.llm_profile_ref) return null;
+
+    // ``encrypted`` matches ``secrets_encrypted`` on the payload: the
+    // agent-server decrypts with the same cipher it encrypted with.
+    const detail = await ProfilesService.getProfile(
+      summary.llm_profile_ref,
+      "encrypted",
+    );
+    return isPlainRecord(detail.config) ? detail.config : null;
+  } catch (error) {
+    console.warn(
+      `Falling back to global agent settings: could not resolve the LLM for agent profile ${agentProfileId}`,
+      error,
+    );
+    return null;
+  }
+}
+
 export async function buildStartPlanningConversationRequestWithEncryptedSettings(options: {
   workingDir: string;
   parentConversationId: string;
+  /**
+   * ``launched_agent_profile.agent_profile_id`` of the parent conversation, when
+   * it was started from an AgentProfile. Pins the planner to the model the
+   * parent actually runs, so activating a different profile later does not
+   * silently change the planner's LLM, base URL, or credentials.
+   */
+  parentAgentProfileId?: string | null;
   initialMessage?: string;
 }): Promise<RawAgentStartConversationPayload> {
   const { SecretsService } = await import("./secrets-service");
@@ -1233,11 +1306,18 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
     SecretsService.getSecrets(),
   ]);
 
-  await assertSubscriptionAuthReady(settingsResult.agentSettings);
+  const profileLlm = options.parentAgentProfileId
+    ? await resolveAgentProfileLlmSettings(options.parentAgentProfileId)
+    : null;
+  const encryptedAgentSettings: Record<string, SettingsValue> = profileLlm
+    ? { ...settingsResult.agentSettings, llm: profileLlm as SettingsValue }
+    : settingsResult.agentSettings;
+
+  await assertSubscriptionAuthReady(encryptedAgentSettings);
 
   return buildStartPlanningConversationRequest({
     ...options,
-    encryptedAgentSettings: settingsResult.agentSettings,
+    encryptedAgentSettings,
     secretsEncrypted: settingsResult.secretsEncrypted,
     customSecrets,
   });

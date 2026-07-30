@@ -285,6 +285,57 @@ describe("useHandlePlanClick", () => {
       expect(displaySuccessToast).toHaveBeenCalled();
     });
 
+    it("recovers the planner from the server when browser storage was cleared", () => {
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      // Storage loss: no metadata hint, only the server-derived relationship.
+      vi.mocked(getStoredConversationMetadata).mockReturnValue(null);
+      vi.mocked(useActiveConversation).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+          data: makeConversation({ sub_conversation_ids: ["plan-conv-1"] }),
+          isLoading: false,
+          isPending: false,
+          isError: false,
+          error: null,
+          refetch: vi.fn(),
+        }),
+      );
+
+      renderPlanHook();
+
+      expect(mockSetLocalPlanningConversationId).toHaveBeenCalledWith(
+        "plan-conv-1",
+      );
+    });
+
+    it("adopts the server-reported planner instead of creating a second hidden one", () => {
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      vi.mocked(getStoredConversationMetadata).mockReturnValue(null);
+      vi.mocked(useActiveConversation).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+          data: makeConversation({ sub_conversation_ids: ["plan-conv-1"] }),
+          isLoading: false,
+          isPending: false,
+          isError: false,
+          error: null,
+          refetch: vi.fn(),
+        }),
+      );
+
+      const { result } = renderPlanHook();
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      expect(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).not.toHaveBeenCalled();
+    });
+
     it("does not create a duplicate local planning conversation", () => {
       vi.mocked(useActiveBackend).mockReturnValue({
         backend: { kind: "local" },

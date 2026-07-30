@@ -81,13 +81,15 @@ export const useSwitchLlmProfile = () => {
         // switcher shows the right name after a reload (the agent-server only
         // round-trips the model string). #1082
         const prev = getStoredConversationMetadata(conversationId);
+        // Spread `prev` first: the setter replaces the whole record, and
+        // enumerating fields silently drops any this call site doesn't know
+        // about (e.g. `local_planning_conversation_id`).
         setStoredConversationMetadata(conversationId, {
-          selected_repository: prev?.selected_repository ?? null,
-          selected_branch: prev?.selected_branch ?? null,
-          git_provider: prev?.git_provider ?? null,
-          selected_workspace: prev?.selected_workspace ?? null,
+          selected_repository: null,
+          selected_branch: null,
+          git_provider: null,
+          ...(prev ?? {}),
           active_profile: profileName,
-          plugins: prev?.plugins ?? null,
         });
       } else {
         // Home-page activate path (same server endpoint as

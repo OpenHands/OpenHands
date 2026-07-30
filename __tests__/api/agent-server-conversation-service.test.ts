@@ -513,6 +513,56 @@ describe("AgentServerConversationService", () => {
         "/api/conversations/conv-abc",
       );
     });
+
+    it("deletes the hidden planner helper reported by the server alongside its parent", async () => {
+      mockHttpDelete.mockResolvedValue({ data: undefined });
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            sub_conversation_ids: ["plan-abc"],
+          },
+        ],
+      });
+
+      await AgentServerConversationService.deleteConversation("conv-abc");
+
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/plan-abc",
+      );
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+      );
+    });
+
+    it("still deletes the parent when the planner helper is already gone", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            sub_conversation_ids: ["plan-abc"],
+          },
+        ],
+      });
+      mockHttpDelete.mockImplementation(async (path: string) => {
+        if (path === "/api/conversations/plan-abc") {
+          throw new Error("404 Not Found");
+        }
+        return { data: undefined };
+      });
+
+      await expect(
+        AgentServerConversationService.deleteConversation("conv-abc"),
+      ).resolves.toBeUndefined();
+
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+      );
+    });
   });
 
   describe("conversation update fallbacks", () => {
