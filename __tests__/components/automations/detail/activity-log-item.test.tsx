@@ -4,10 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
-import {
-  AutomationRunStatus,
-  type AutomationRun,
-} from "#/types/automation";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -25,27 +22,26 @@ const LOGS_BUTTON_NAME = (name: string) =>
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
 // they don't need to bring up the entire query stack.
-vi.mock(
-  "#/components/features/automations/detail/run-logs-modal",
-  () => ({
-    RunLogsModal: ({
-      isOpen,
-      onClose,
-      bashCommandId,
-    }: {
-      isOpen: boolean;
-      onClose: () => void;
-      bashCommandId: string | null;
-    }) =>
-      isOpen ? (
-        <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </div>
-      ) : null,
-  }),
-);
+vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
+  RunLogsModal: ({
+    isOpen,
+    onClose,
+    bashCommandId,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    bashCommandId: string | null;
+  }) =>
+    isOpen ? (
+      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+        <button
+          type="button"
+          data-testid="logs-modal-close"
+          onClick={onClose}
+        />
+      </div>
+    ) : null,
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -184,6 +180,24 @@ describe("ActivityLogItem — Conversation not created label", () => {
       screen.queryByText((content) => content.includes("NO_CONVERSATION")),
     ).toBeInTheDocument();
   });
+
+  it.each([AutomationRunStatus.CANCELLED, AutomationRunStatus.SKIPPED])(
+    "shows the 'Conversation not created' label when the run is %s without a conversation",
+    (status) => {
+      const run = makeRun({
+        status,
+        conversation_id: null,
+        bash_command_id: null,
+        completed_at: "2026-01-01T10:00:30Z",
+      });
+
+      renderItem(run);
+
+      expect(
+        screen.queryByText((content) => content.includes("NO_CONVERSATION")),
+      ).toBeInTheDocument();
+    },
+  );
 });
 
 describe("ActivityLogItem — timestamp fallback", () => {

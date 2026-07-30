@@ -50,7 +50,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   // state.
   const isTerminal =
     run.status === AutomationRunStatus.COMPLETED ||
-    run.status === AutomationRunStatus.FAILED;
+    run.status === AutomationRunStatus.FAILED ||
+    run.status === AutomationRunStatus.CANCELLED ||
+    run.status === AutomationRunStatus.SKIPPED;
   const showNoConversationLabel = !hasConversation && isTerminal;
   const [logsOpen, setLogsOpen] = useState(false);
   // The backend leaves started_at unset (epoch/zero) while a run is Pending

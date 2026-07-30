@@ -66,6 +66,8 @@ export enum AutomationRunStatus {
   RUNNING = "RUNNING",
   COMPLETED = "COMPLETED",
   FAILED = "FAILED",
+  CANCELLED = "CANCELLED",
+  SKIPPED = "SKIPPED",
 }
 
 export interface AutomationRun {

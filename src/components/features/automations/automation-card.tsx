@@ -92,7 +92,9 @@ export function AutomationCard({
             ) : (
               <ClockIcon className="size-4 shrink-0 text-muted" />
             )}
-            <span className="truncate">{automation.name}</span>
+            <span className="truncate" title={automation.name}>
+              {automation.name}
+            </span>
           </h3>
           {automation.prompt ? (
             <p className="line-clamp-2 text-xs leading-relaxed text-tertiary-light">

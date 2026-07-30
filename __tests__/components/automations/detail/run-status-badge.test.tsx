@@ -10,6 +10,8 @@ describe("RunStatusBadge", () => {
     [AutomationRunStatus.FAILED, I18nKey.AUTOMATIONS$DETAIL$FAILED],
     [AutomationRunStatus.PENDING, I18nKey.AUTOMATIONS$DETAIL$PENDING],
     [AutomationRunStatus.RUNNING, I18nKey.AUTOMATIONS$DETAIL$RUNNING],
+    [AutomationRunStatus.CANCELLED, I18nKey.AUTOMATIONS$DETAIL$CANCELLED],
+    [AutomationRunStatus.SKIPPED, I18nKey.AUTOMATIONS$DETAIL$SKIPPED],
   ])("renders the %s label for the matching status", (status, labelKey) => {
     render(<RunStatusBadge status={status} />);
 
@@ -21,6 +23,8 @@ describe("RunStatusBadge", () => {
     [AutomationRunStatus.FAILED, "run-status-icon-failed"],
     [AutomationRunStatus.PENDING, "run-status-icon-pending"],
     [AutomationRunStatus.RUNNING, "run-status-icon-pending"],
+    [AutomationRunStatus.CANCELLED, "run-status-icon-pending"],
+    [AutomationRunStatus.SKIPPED, "run-status-icon-pending"],
   ])(
     "renders the %s icon variant for the matching status",
     (status, testId) => {

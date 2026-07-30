@@ -23,6 +23,14 @@ const statusConfig: Record<
     label: I18nKey.AUTOMATIONS$DETAIL$FAILED,
     style: "border-[var(--oh-danger)]/50 bg-[var(--oh-danger)]/10 text-danger",
   },
+  [AutomationRunStatus.CANCELLED]: {
+    label: I18nKey.AUTOMATIONS$DETAIL$CANCELLED,
+    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+  },
+  [AutomationRunStatus.SKIPPED]: {
+    label: I18nKey.AUTOMATIONS$DETAIL$SKIPPED,
+    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+  },
   [AutomationRunStatus.PENDING]: {
     label: I18nKey.AUTOMATIONS$DETAIL$PENDING,
     style: "border-[var(--oh-border)] bg-surface-raised text-muted",
@@ -58,7 +66,8 @@ function StatusIcon({ status }: { status: AutomationRunStatus }) {
 
 export function RunStatusBadge({ status }: RunStatusBadgeProps) {
   const { t } = useTranslation("openhands");
-  const config = statusConfig[status];
+  const config =
+    statusConfig[status] ?? statusConfig[AutomationRunStatus.PENDING];
 
   return (
     <span

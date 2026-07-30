@@ -64,6 +64,13 @@ describe("AutomationCard", () => {
     expect(screen.getByTestId("automation-run-now-automation-1")).toHaveClass(
       "h-8",
     );
+    expect(screen.getByTestId("automation-run-now-automation-1")).toHaveClass(
+      "whitespace-nowrap",
+    );
+    expect(screen.getByText("Async Standup Digest")).toHaveAttribute(
+      "title",
+      "Async Standup Digest",
+    );
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
 
     await user.click(
