@@ -15,10 +15,9 @@ export function trackError({
 }: ErrorDetails) {
   void trackEvent("error_outcome", {
     error_source: source || "unknown",
-    error_cause: classification?.cause || "unknown",
-    error_impact: classification?.impact || "run_stopped",
-    error_blame: classification?.blame || "unknown",
-    error_telemetry: classification?.telemetry || "diagnostic",
+    error_kind: classification?.kind || "unknown",
+    error_telemetry:
+      classification?.kind === "internal" ? "diagnostic" : "outcome",
     ...metadata,
   });
 }
