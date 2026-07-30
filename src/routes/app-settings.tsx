@@ -20,6 +20,7 @@ import { AppSettingsInputsSkeleton } from "#/components/features/settings/app-se
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
@@ -28,6 +29,8 @@ export function AppSettingsScreen() {
 
   const { mutate: saveSettings, isPending } = useSaveSettings();
   const { data: settings, isLoading } = useSettings();
+  const activeBackend = useActiveBackend();
+  const isCloudBackend = activeBackend.backend.kind === "cloud";
   const { data: llmProfiles, isLoading: areLlmProfilesLoading } =
     useLlmProfiles();
 
@@ -84,8 +87,9 @@ export function AppSettingsScreen() {
     )?.value;
     const language = languageValue || DEFAULT_SETTINGS.language;
 
-    const enableAnalytics =
-      formData.get("enable-analytics-switch")?.toString() === "on";
+    const enableAnalytics = isCloudBackend
+      ? true
+      : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
 
@@ -99,7 +103,7 @@ export function AppSettingsScreen() {
     saveSettings(
       {
         language,
-        user_consents_to_analytics: enableAnalytics,
+        ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
         enable_sound_notifications: enableSoundNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
@@ -190,9 +194,17 @@ export function AppSettingsScreen() {
 
           <SettingsSwitch
             testId="enable-analytics-switch"
-            name="enable-analytics-switch"
-            defaultIsToggled={settings.user_consents_to_analytics ?? true}
-            onToggle={checkIfAnalyticsSwitchHasChanged}
+            name={isCloudBackend ? undefined : "enable-analytics-switch"}
+            defaultIsToggled={
+              isCloudBackend
+                ? true
+                : (settings.user_consents_to_analytics ?? true)
+            }
+            isToggled={isCloudBackend ? true : undefined}
+            isDisabled={isCloudBackend}
+            onToggle={
+              isCloudBackend ? undefined : checkIfAnalyticsSwitchHasChanged
+            }
           >
             {t(I18nKey.ANALYTICS$SEND_ANONYMOUS_DATA)}
           </SettingsSwitch>

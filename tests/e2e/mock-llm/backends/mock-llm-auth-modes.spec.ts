@@ -68,6 +68,16 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
       window.localStorage.setItem("openhands-telemetry-consent", "denied");
     });
 
+    const consentResp = await request.patch(`${BACKEND_URL}/api/settings`, {
+      headers: { "X-Session-API-Key": SESSION_API_KEY },
+      data: {
+        misc_settings_diff: {
+          app_preferences: { user_consents_to_analytics: false },
+        },
+      },
+    });
+    expect(consentResp.ok()).toBe(true);
+
     await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
 

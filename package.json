@@ -1,17 +1,17 @@
 {
   "name": "@openhands/agent-canvas",
-  "version": "1.6.1",
+  "version": "1.7.1",
   "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
   "license": "MIT",
   "private": false,
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenHands/agent-canvas"
+    "url": "https://github.com/OpenHands/OpenHands"
   },
-  "homepage": "https://github.com/OpenHands/agent-canvas#readme",
+  "homepage": "https://github.com/OpenHands/OpenHands#readme",
   "bugs": {
-    "url": "https://github.com/OpenHands/agent-canvas/issues"
+    "url": "https://github.com/OpenHands/OpenHands/issues"
   },
   "bin": {
     "agent-canvas": "bin/agent-canvas.mjs"
@@ -87,6 +87,9 @@
     "test:e2e:mock-llm": "playwright test --config=playwright.mock-llm.config.ts",
     "test:e2e:mock-llm:docker": "playwright test --config=playwright.mock-llm-docker.config.ts",
     "test:coverage": "npm run make-i18n && vitest run --coverage",
+    "test:mutation": "npm run make-i18n && stryker run",
+    "test:mutation:diff": "npm run make-i18n && node scripts/stryker-diff.mjs",
+    "test:mutation:incremental": "npm run make-i18n && stryker run --incremental",
     "dev_wsl": "VITE_WATCH_USE_POLLING=true vite",
     "preview": "vite preview",
     "make-i18n": "node scripts/make-i18n-translations.cjs",
@@ -102,8 +105,8 @@
     "build:docker": "node scripts/docker-build.mjs",
     "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
     "desktop": "npm run build:app && electron electron/main.mjs",
-    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs",
-    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs",
+    "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs --publish never",
+    "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
     "download-uv": "node scripts/download-uv.mjs",
     "download-node": "node scripts/download-node.mjs"
   },
@@ -125,6 +128,8 @@
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.59.1",
     "@react-router/dev": "7.17.0",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
     "@tailwindcss/typography": "0.5.19",
     "@tanstack/eslint-plugin-query": "5.100.9",
     "@testing-library/dom": "10.4.1",
