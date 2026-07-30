@@ -10,6 +10,8 @@ import * as useSaveMetaProfileHook from "#/hooks/mutation/use-save-meta-profile"
 import * as useActivateMetaProfileHook from "#/hooks/mutation/use-activate-meta-profile";
 import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-profile";
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { LEGACY_92C0_ROUTER_LLM_PROFILES } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
 vi.mock("#/hooks/query/use-meta-profiles");
 vi.mock("#/hooks/query/use-llm-profiles");
@@ -17,6 +19,7 @@ vi.mock("#/hooks/mutation/use-save-meta-profile");
 vi.mock("#/hooks/mutation/use-activate-meta-profile");
 vi.mock("#/hooks/mutation/use-delete-meta-profile");
 vi.mock("#/api/meta-profiles-service/meta-profiles-service.api");
+vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/utils/custom-toast-handlers");
 
 const mockMetaProfiles = [
@@ -88,6 +91,19 @@ describe("MetaLlmSettingsView", () => {
     vi.mocked(useDeleteMetaProfileHook.useDeleteMetaProfile).mockReturnValue(
       mockMutation(vi.fn()),
     );
+    vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+      name: "minimax",
+      api_key_set: true,
+      config: {
+        model: "litellm_proxy/template",
+        base_url: "https://llm-proxy.example",
+        api_key: "gAAAA_encrypted",
+      },
+    });
+    vi.mocked(ProfilesService.saveProfile).mockResolvedValue({
+      name: "created-profile",
+      message: "Profile saved",
+    });
   });
 
   it("renders the list of meta-profiles with an active badge", () => {
@@ -135,6 +151,35 @@ describe("MetaLlmSettingsView", () => {
     expect(screen.getByTestId("meta-profile-name-input")).toBeInTheDocument();
   });
 
+  it("creates missing router LLM profiles from the active profile before saving", async () => {
+    const user = userEvent.setup();
+    saveMutateAsync.mockResolvedValue({ name: "legacy_92c0" });
+    renderWithProviders(<MetaLlmSettingsView />);
+
+    await user.click(screen.getByTestId("add-meta-profile"));
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    await waitFor(() =>
+      expect(ProfilesService.getProfile).toHaveBeenCalledWith(
+        "minimax",
+        "encrypted",
+      ),
+    );
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(
+      LEGACY_92C0_ROUTER_LLM_PROFILES.length,
+    );
+    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("GPT-5.4", {
+      llm: {
+        model: "litellm_proxy/openai/gpt-5.4",
+        base_url: "https://llm-proxy.example",
+        api_key: "gAAAA_encrypted",
+        usage_id: "GPT-5.4",
+      },
+      include_secrets: true,
+    });
+    await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
+  });
+
   it("activates the first meta-profile after creating it", async () => {
     const user = userEvent.setup();
     vi.mocked(useMetaProfilesHook.useMetaProfiles).mockReturnValue({
@@ -149,6 +194,7 @@ describe("MetaLlmSettingsView", () => {
     await user.click(screen.getByTestId("add-meta-profile"));
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    await user.click(screen.getByTestId("meta-profile-create-router-profiles"));
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
     });
@@ -188,6 +234,7 @@ describe("MetaLlmSettingsView", () => {
     await user.click(screen.getByTestId("add-meta-profile"));
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
+    await user.click(screen.getByTestId("meta-profile-create-router-profiles"));
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
     });

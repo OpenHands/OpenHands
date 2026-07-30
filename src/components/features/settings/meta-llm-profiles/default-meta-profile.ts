@@ -2,6 +2,24 @@ import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-serv
 
 export const LEGACY_92C0_META_PROFILE_NAME = "legacy_92c0";
 
+export const LEGACY_92C0_ROUTER_LLM_PROFILES = [
+  { name: "GPT-5.4", model: "litellm_proxy/openai/gpt-5.4" },
+  { name: "GPT-5.5", model: "litellm_proxy/openai/gpt-5.5" },
+  { name: "MiniMax-M3", model: "litellm_proxy/minimax-m3" },
+  { name: "claude-opus-4-6", model: "litellm_proxy/claude-opus-4-6" },
+  { name: "claude-opus-4-7", model: "litellm_proxy/claude-opus-4-7" },
+  { name: "claude-opus-4-8", model: "litellm_proxy/claude-opus-4-8" },
+  { name: "claude-fable-5", model: "litellm_proxy/claude-fable-5" },
+  { name: "Kimi-K2.5", model: "litellm_proxy/kimi-k2.5" },
+  { name: "Kimi-K2.6", model: "litellm_proxy/kimi-k2.6" },
+  {
+    name: "DeepSeek-V3.2-Reasoner",
+    model: "litellm_proxy/deepseek-v3.2-reasoner",
+  },
+  { name: "claude-sonnet-4-5", model: "litellm_proxy/claude-sonnet-4-5" },
+  { name: "GPT-5.2-Codex", model: "litellm_proxy/openai/gpt-5.2-codex" },
+] as const;
+
 export const LEGACY_92C0_META_PROFILE_MODEL_TABLE = `- GPT-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
 - GPT-5.5: swe-bench: 78.20%/$1.52; swt-bench: 83.40%/$0.92; swe-bench-multimodal: 38.20%/$2.81; commit0: 43.80%/$5.56; gaia: 86.10%/$0.74
 - MiniMax-M3: swe-bench: 76.40%/$0.17; swt-bench: 81.10%/$0.11; swe-bench-multimodal: 36.80%/$0.35; commit0: 25.00%/$0.62; gaia: 66.70%/$0.35

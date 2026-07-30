@@ -27,7 +27,11 @@ interface MetaProfileEditorProps {
    */
   existingNames?: string[];
   isSaving: boolean;
-  onSave: (name: string, config: MetaProfile) => void;
+  onSave: (
+    name: string,
+    config: MetaProfile,
+    createMissingRouterProfiles: boolean,
+  ) => void;
   onCancel: () => void;
 }
 
@@ -74,6 +78,8 @@ export function MetaProfileEditor({
     initialName ?? (isEdit ? "" : LEGACY_92C0_META_PROFILE_NAME),
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
+  const [createMissingRouterProfiles, setCreateMissingRouterProfiles] =
+    useState(!isEdit);
 
   const profileItems = useMemo(
     () => availableProfiles.map((p) => ({ key: p, label: p })),
@@ -93,13 +99,17 @@ export function MetaProfileEditor({
 
   const handleSave = () => {
     if (!canSave || isSaving) return;
-    onSave(name.trim(), {
-      classifier_model: config.classifier_model.trim(),
-      default_model: config.default_model.trim(),
-      classes: [],
-      prompt_template: (config.prompt_template ?? "").trim(),
-      model_table: config.model_table?.trim() || null,
-    });
+    onSave(
+      name.trim(),
+      {
+        classifier_model: config.classifier_model.trim(),
+        default_model: config.default_model.trim(),
+        classes: [],
+        prompt_template: (config.prompt_template ?? "").trim(),
+        model_table: config.model_table?.trim() || null,
+      },
+      createMissingRouterProfiles,
+    );
   };
 
   return (
@@ -242,6 +252,33 @@ export function MetaProfileEditor({
           })}
         </p>
       </div>
+
+      {!isEdit ? (
+        <div className="flex items-start gap-2.5">
+          <input
+            id="meta-profile-create-router-profiles"
+            data-testid="meta-profile-create-router-profiles"
+            type="checkbox"
+            checked={createMissingRouterProfiles}
+            onChange={(event) =>
+              setCreateMissingRouterProfiles(event.target.checked)
+            }
+            disabled={isSaving}
+            className="mt-1 h-4 w-4 shrink-0 rounded"
+          />
+          <label
+            htmlFor="meta-profile-create-router-profiles"
+            className="flex cursor-pointer flex-col gap-1"
+          >
+            <span className="text-sm">
+              {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES)}
+            </span>
+            <span className="text-xs text-[var(--oh-muted)]">
+              {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
+            </span>
+          </label>
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-3">
         <BrandButton

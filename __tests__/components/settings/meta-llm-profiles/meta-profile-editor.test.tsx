@@ -49,12 +49,16 @@ describe("MetaProfileEditor", () => {
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
       LEGACY_92C0_META_PROFILE_DEFAULT.model_table,
     );
+    expect(
+      screen.getByTestId("meta-profile-create-router-profiles"),
+    ).toBeChecked();
 
     await user.click(screen.getByTestId("meta-profile-save"));
 
     expect(onSave).toHaveBeenCalledWith(
       LEGACY_92C0_META_PROFILE_NAME,
       LEGACY_92C0_META_PROFILE_DEFAULT,
+      true,
     );
   });
 
@@ -78,7 +82,7 @@ describe("MetaProfileEditor", () => {
 
     await user.click(save);
 
-    expect(onSave).toHaveBeenCalledWith("balanced", FILLED);
+    expect(onSave).toHaveBeenCalledWith("balanced", FILLED, false);
   });
 
   it("disables the name field in edit mode", () => {
@@ -167,7 +171,7 @@ describe("MetaProfileEditor", () => {
     expect(save).toBeEnabled();
 
     await user.click(save);
-    expect(onSave).toHaveBeenCalledWith("fast", FILLED);
+    expect(onSave).toHaveBeenCalledWith("fast", FILLED, true);
   });
 
   it("allows the existing name in edit mode (no duplicate warning)", () => {

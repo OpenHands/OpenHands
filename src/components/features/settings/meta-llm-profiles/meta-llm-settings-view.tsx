@@ -10,6 +10,9 @@ import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profi
 import MetaProfilesService, {
   type MetaProfile,
 } from "#/api/meta-profiles-service/meta-profiles-service.api";
+import ProfilesService, {
+  type SaveProfileRequest,
+} from "#/api/profiles-service/profiles-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -18,6 +21,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
+import { LEGACY_92C0_ROUTER_LLM_PROFILES } from "./default-meta-profile";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -36,6 +40,8 @@ export function MetaLlmSettingsView() {
   const [view, setView] = useState<ViewMode>("list");
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
   const [nameToDelete, setNameToDelete] = useState<string | null>(null);
+  const [isCreatingRouterProfiles, setIsCreatingRouterProfiles] =
+    useState(false);
 
   const metaProfiles = data?.meta_profiles ?? [];
   const active = data?.active_meta_profile ?? null;
@@ -76,9 +82,53 @@ export function MetaLlmSettingsView() {
     }
   };
 
-  const handleSave = async (name: string, config: MetaProfile) => {
+  const createMissingRouterLlmProfiles = async () => {
+    const existingProfileNames = new Set(
+      availableProfiles.map((profileName) => profileName.toLowerCase()),
+    );
+    const missingProfiles = LEGACY_92C0_ROUTER_LLM_PROFILES.filter(
+      (profile) => !existingProfileNames.has(profile.name.toLowerCase()),
+    );
+    if (missingProfiles.length === 0) return;
+
+    const activeProfile = llmProfilesData?.active_profile;
+    if (!activeProfile) {
+      throw new Error(
+        "Select an active LLM profile before creating router profiles.",
+      );
+    }
+
+    const template = await ProfilesService.getProfile(
+      activeProfile,
+      "encrypted",
+    );
+    const templateConfig = template.config as Record<string, unknown>;
+
+    await Promise.all(
+      missingProfiles.map((profile) =>
+        ProfilesService.saveProfile(profile.name, {
+          llm: {
+            ...templateConfig,
+            model: profile.model,
+            usage_id: profile.name,
+          } as SaveProfileRequest["llm"],
+          include_secrets: true,
+        }),
+      ),
+    );
+  };
+
+  const handleSave = async (
+    name: string,
+    config: MetaProfile,
+    createMissingRouterProfiles: boolean,
+  ) => {
     const shouldActivateAfterCreate = view === "create" && active === null;
     try {
+      if (view === "create" && createMissingRouterProfiles) {
+        setIsCreatingRouterProfiles(true);
+        await createMissingRouterLlmProfiles();
+      }
       await saveMetaProfile.mutateAsync({ name, config });
       if (shouldActivateAfterCreate) {
         await activateMetaProfile.mutateAsync(name);
@@ -92,6 +142,8 @@ export function MetaLlmSettingsView() {
           ? saveError.message
           : t(I18nKey.ERROR$GENERIC);
       displayErrorToast(message);
+    } finally {
+      setIsCreatingRouterProfiles(false);
     }
   };
 
@@ -119,7 +171,7 @@ export function MetaLlmSettingsView() {
         initialConfig={editing?.config}
         availableProfiles={availableProfiles}
         existingNames={existingNames}
-        isSaving={saveMetaProfile.isPending}
+        isSaving={saveMetaProfile.isPending || isCreatingRouterProfiles}
         onSave={handleSave}
         onCancel={handleCancel}
       />
