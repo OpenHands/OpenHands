@@ -80,7 +80,7 @@ ARG VITE_POSTHOG_API_KEY=""
 ARG AGENT_CANVAS_VERSION=dev
 LABEL org.opencontainers.image.title="agent-canvas"
 LABEL org.opencontainers.image.description="All-in-one agent-canvas: Agent Server + Automation + Frontend"
-LABEL org.opencontainers.image.source="https://github.com/OpenHands/agent-canvas"
+LABEL org.opencontainers.image.source="https://github.com/OpenHands/OpenHands"
 LABEL org.opencontainers.image.version="${AGENT_CANVAS_VERSION}"
 LABEL org.opencontainers.image.revision="${OPENHANDS_BUILD_GIT_SHA}"
 
