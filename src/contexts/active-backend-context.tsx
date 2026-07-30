@@ -50,6 +50,24 @@ function generateId(): string {
   return `backend-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function applyTelemetrySelectionBoundary(
+  previous: ResolvedActiveBackend,
+  next: ResolvedActiveBackend,
+): void {
+  const previousWasCloud = previous.backend.kind === "cloud";
+  const nextIsCloud = next.backend.kind === "cloud";
+  if (!previousWasCloud && !nextIsCloud) return;
+
+  setTelemetryCloudContext(null);
+
+  if (
+    nextIsCloud &&
+    (!previousWasCloud || previous.backend.id !== next.backend.id)
+  ) {
+    void setTelemetryIdentity(null);
+  }
+}
+
 export function ActiveBackendProvider({
   children,
 }: {
@@ -70,11 +88,22 @@ export function ActiveBackendProvider({
 
   const setActive = React.useCallback(
     (backendId: string, orgId?: string | null) => {
+      const currentSnapshot = getSnapshot();
       const prevBackendId = getActiveSelection()?.backendId ?? null;
       const prevOrgId = getActiveSelection()?.orgId ?? null;
       const nextOrgId = orgId ?? null;
 
       if (backendId === prevBackendId && nextOrgId === prevOrgId) return;
+
+      const registeredBackends = getRegisteredBackends();
+      const selectedBackend = registeredBackends.find(
+        (b) => b.id === backendId,
+      );
+      const nextActive: ResolvedActiveBackend = {
+        backend: selectedBackend ?? registeredBackends[0] ?? NO_BACKEND,
+        orgId: selectedBackend ? nextOrgId : null,
+      };
+      applyTelemetrySelectionBoundary(currentSnapshot.active, nextActive);
 
       const next: BackendSelection = { backendId, orgId: nextOrgId };
       setActiveSelection(next);
@@ -94,8 +123,13 @@ export function ActiveBackendProvider({
   // @spec BM-001 — Auto-switch to newly connected backend
   const addBackend = React.useCallback(
     (backend: BackendInput): Backend => {
+      const previousActive = getSnapshot().active;
       const next: Backend = { ...backend, id: generateId() };
       const list = [...getRegisteredBackends(), next];
+      applyTelemetrySelectionBoundary(previousActive, {
+        backend: next,
+        orgId: null,
+      });
       setRegisteredBackends(list);
       setActiveSelection({ backendId: next.id });
       retryBootstrapProbe();
