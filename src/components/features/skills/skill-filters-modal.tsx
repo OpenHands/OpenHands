@@ -1,8 +1,12 @@
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
-import { ModalBody } from "#/components/shared/modals/modal-body";
+import {
+  MODAL_MAX_WIDTH_VIEWPORT,
+  ModalBody,
+} from "#/components/shared/modals/modal-body";
 import { I18nKey } from "#/i18n/declaration";
+import { cn } from "#/utils/utils";
 import { SkillFacetRail } from "./skill-facet-rail";
 import type { SkillFacetGroup, SkillFacetGroupId } from "./skill-filter";
 
@@ -28,7 +32,10 @@ export function SkillFiltersModal({
       onClose={onClose}
       aria-label={t(I18nKey.SETTINGS$SKILLS_FILTERS_MODAL_TITLE)}
     >
-      <ModalBody testID="skill-filters-modal" className="items-stretch">
+      <ModalBody
+        testID="skill-filters-modal"
+        className={cn("items-stretch", MODAL_MAX_WIDTH_VIEWPORT)}
+      >
         <h3 className="text-lg font-semibold text-foreground">
           {t(I18nKey.SETTINGS$SKILLS_FILTERS_MODAL_TITLE)}
         </h3>
