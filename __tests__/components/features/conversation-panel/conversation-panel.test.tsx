@@ -181,6 +181,56 @@ describe("ConversationPanel", () => {
     expect(screen.getByTestId("load-more-conversations")).toBeInTheDocument();
   });
 
+  it("can reach an unarchived conversation on the next page after archiving every loaded row", async () => {
+    // Archiving filters rows out of the visible list without changing
+    // backend pagination. If every currently loaded conversation is archived
+    // while hasNextPage is still true, Load more must stay available and
+    // fetching the next page must surface the unarchived conversation.
+    const user = userEvent.setup();
+    const page1 = [
+      createMockConversation({ id: "archived-1", title: "Archived 1" }),
+      createMockConversation({ id: "archived-2", title: "Archived 2" }),
+    ];
+    const page2 = [
+      createMockConversation({
+        id: "visible-next",
+        title: "Unarchived on next page",
+      }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockImplementation(async (_limit, pageId) => {
+      if (pageId === "page-2") {
+        return { items: page2, next_page_id: null };
+      }
+      return { items: page1, next_page_id: "page-2" };
+    });
+
+    useArchivedConversationsStore.setState({
+      archivesByBackendId: {
+        "default-local": ["archived-1", "archived-2"],
+      },
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: false,
+    });
+
+    renderConversationPanel();
+
+    await screen.findByText("CONVERSATION$NO_CONVERSATIONS");
+    expect(screen.queryByText("Unarchived on next page")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("load-more-conversations"));
+
+    expect(
+      await screen.findByText("Unarchived on next page"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("CONVERSATION$NO_CONVERSATIONS"),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not flash the loading skeleton during a background refetch when the list is empty", async () => {
     // Arrange: first call (initial load) resolves with an empty list.
     // Second call (the background refetch) is kept in-flight so we can
@@ -1534,6 +1584,75 @@ describe("ConversationPanel", () => {
       });
       expect(deleteSpy).toHaveBeenCalledWith("recent-1");
       expect(deleteSpy).toHaveBeenCalledWith("recent-2");
+    });
+
+    it("delete-all still deletes hidden archived conversations", async () => {
+      // "Show archived" only controls rendering. Delete all must keep using
+      // the full loaded collection so archived server-side conversations are
+      // not silently left behind (or the action disabled when every loaded
+      // row is archived).
+      const user = userEvent.setup();
+      const deleteSpy = vi
+        .spyOn(AgentServerConversationService, "deleteConversation")
+        .mockResolvedValue();
+
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "visible-1",
+            title: "Visible 1",
+            updated_at: recentIso(),
+          }),
+          createMockConversation({
+            id: "archived-1",
+            title: "Archived 1",
+            updated_at: recentIso(),
+          }),
+          createMockConversation({
+            id: "archived-2",
+            title: "Archived 2",
+            updated_at: recentIso(),
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      useArchivedConversationsStore.setState({
+        archivesByBackendId: {
+          "default-local": ["archived-1", "archived-2"],
+        },
+      });
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: false,
+      });
+
+      renderConversationPanel();
+      const cards = await screen.findAllByTestId("conversation-card");
+      expect(cards).toHaveLength(1);
+      expect(screen.getByText("Visible 1")).toBeInTheDocument();
+      expect(screen.queryByText("Archived 1")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      const deleteAllButton = await screen.findByTestId(
+        "delete-all-conversations",
+      );
+      expect(deleteAllButton).toBeEnabled();
+
+      await user.click(deleteAllButton);
+      expect(
+        await screen.findByText(/CONVERSATION\$CONFIRM_DELETE_ALL_DESC/),
+      ).toBeInTheDocument();
+      await user.click(await screen.findByRole("button", { name: /confirm/i }));
+
+      await waitFor(() => {
+        expect(deleteSpy).toHaveBeenCalledTimes(3);
+      });
+      expect(deleteSpy).toHaveBeenCalledWith("visible-1");
+      expect(deleteSpy).toHaveBeenCalledWith("archived-1");
+      expect(deleteSpy).toHaveBeenCalledWith("archived-2");
     });
 
     it("navigates away after the active conversation is deleted successfully even when another deletion fails", async () => {

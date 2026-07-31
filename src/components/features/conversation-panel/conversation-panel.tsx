@@ -265,7 +265,10 @@ export function ConversationPanel({
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
 
-  const conversations = React.useMemo(() => {
+  // Deduped, archive-unaware collection of every conversation currently loaded
+  // from the backend. Bulk actions like "Delete all" must use this list so
+  // hiding archived rows from the UI never shrinks what gets deleted.
+  const allLoadedConversations = React.useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
     // The 10s background refetch re-fetches every loaded page with the
     // `UPDATED_AT_DESC` cursor. If a conversation's `updated_at` shifts between
@@ -277,15 +280,21 @@ export function ConversationPanel({
       if (seen.has(conversation.id)) {
         return false;
       }
-      // Archiving hides a conversation from the list; it never deletes it. The
-      // "Show archived" toggle brings those rows back so they stay restorable.
-      if (!showArchivedConversations && archivedIdSet.has(conversation.id)) {
-        return false;
-      }
       seen.add(conversation.id);
       return true;
     });
-  }, [archivedIdSet, data, showArchivedConversations]);
+  }, [data]);
+
+  // Display collection: same loaded pages, with archived rows filtered out
+  // unless the user has opted into "Show archived".
+  const conversations = React.useMemo(() => {
+    if (showArchivedConversations) {
+      return allLoadedConversations;
+    }
+    return allLoadedConversations.filter(
+      (conversation) => !archivedIdSet.has(conversation.id),
+    );
+  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -630,7 +639,10 @@ export function ConversationPanel({
   };
 
   const handleConfirmDeleteAll = async () => {
-    const idsToDelete = conversations.map((c) => c.id);
+    // Delete against the unfiltered loaded set so archived (currently hidden)
+    // conversations are still removed from the server — matching the action's
+    // "delete all conversations" label and confirmation count.
+    const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
       idsToDelete.map((conversationId) =>
         deleteConversationAsync({ conversationId }),
@@ -641,6 +653,10 @@ export function ConversationPanel({
       result.status === "fulfilled" ? [idsToDelete[index]] : [],
     );
     const failedCount = results.length - deletedIds.length;
+
+    for (const conversationId of deletedIds) {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    }
 
     if (
       currentConversationId !== null &&
@@ -888,7 +904,7 @@ export function ConversationPanel({
                 toggleShowTagsMetadata={toggleShowTagsMetadata}
                 showHoverMetadata={showHoverMetadata}
                 toggleShowHoverMetadata={toggleShowHoverMetadata}
-                totalConversationsCount={conversations.length}
+                totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
               />
             </div>
@@ -1045,7 +1061,7 @@ export function ConversationPanel({
         <ConfirmDeleteModal
           title={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_TITLE)}
           description={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
-            count: conversations.length,
+            count: allLoadedConversations.length,
           })}
           onConfirm={async () => {
             await handleConfirmDeleteAll();
