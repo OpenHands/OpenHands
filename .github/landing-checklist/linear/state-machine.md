@@ -52,7 +52,7 @@ issue rather than trying to reconstruct state from GitHub each time.
 | `stage:merged` | `stage:in-prod` | merge commit SHA found in production release/deploy | Automation 3 (cron) |
 | `stage:in-prod` | `stage:bug-bash-pending` | 3 business days elapsed with no bug bash scheduled | Automation 4 (cron) |
 | `stage:bug-bash-pending` | `stage:bug-bash-active` | child issues or structured `bug-bash-report` appears | Automation 4 (cron, next pass) |
-| `stage:bug-bash-active` | `stage:council-review` | valid 3+ attendee report, all findings fixed or explicitly moved to a named next cycle, checklist items 1-5 have evidence, and approval request is posted in `#tech-council` | Automation 5 (cron) |
+| `stage:bug-bash-active` | `stage:council-review` | valid 3+ attendee report (including Helm install-test evidence, and Replicated install-test evidence once that capability ships), all findings fixed or explicitly moved to a named next cycle, checklist items 1-5 have evidence, and approval request is posted in `#tech-council` | Automation 5 (cron) |
 | `stage:council-review` | `stage:council-approved` | two distinct human `#tech-council` members react `✅`, with no `🚫` from a channel member | Automation 6 (deterministic reaction poller) |
 | `stage:council-approved` | `stage:flag-on` | flag-enablement change independently confirmed in production | Production reconciler (not yet implemented) |
 | `stage:flag-on` | `stage:ga` | 3 months elapsed, flag removed in code, and supported public X/LinkedIn post URL recorded | Automation 7 (cron) |

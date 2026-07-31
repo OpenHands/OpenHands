@@ -121,6 +121,34 @@ Enterprise feature merge
 
 A release tag, image, or chart PR by itself is not sufficient.
 
+## Self-hosted install testing during the bug bash
+
+Checklist item 3 (flag + Helm/embedded-cluster wiring) is a pre-merge code
+check: it confirms the wiring exists, not that anyone has actually installed
+and exercised the feature that way. Real install testing happens during the
+mandatory bug bash instead, where 3+ people and a real environment are
+already required:
+
+- **Helm install test — required today.** A bug bash is not valid without a
+  non-empty `helm-test:` field in its `bug-bash-report`, recording a real
+  Helm-based install (against `OpenHands/OpenHands-Cloud`'s
+  `charts/openhands` chart) with the flag turned on.
+- **Replicated / embedded-cluster install test — required once that
+  capability ships.** `repos.yml`'s `capabilities.replicated_preview_supported`
+  gates this: while `false`, `n/a-pending-support` is accepted for the
+  `replicated-test:` field; once flipped to `true`, a real note/link is
+  required, same as `helm-test`.
+
+There is currently no scripted or documented equivalent, for either Helm or
+Replicated, of the SaaS-side feature-preview flow that
+`OpenHands/enterprise#92` added (which spins up a `saas-deploy` staging
+namespace via ArgoCD's PR-generator ApplicationSet — a different mechanism
+from a self-hosted Helm or Replicated install). Until an equivalent
+self-hosted preview tool exists, bug-bash participants stand up and tear down
+Helm installs by hand; this is a known gap worth closing with tooling similar
+in spirit to `enterprise#92`'s preview-environment skill, scoped to
+self-hosted rather than SaaS.
+
 ## Hidden documentation lifecycle
 
 Feature documentation is checked into `OpenHands/docs` during development with
@@ -148,6 +176,9 @@ See `docs-visibility.md` for details.
 - Enterprise-specific production release detection in Automation 3.
 - Post-release evidence checks for real docs, E2E coverage, self-hosted wiring,
   bug-bash completion, release availability, and social launch URL.
+- Explicit Helm install-test requirement (and a Replicated install-test
+  requirement, gated behind a `repos.yml` capability flag) wired into the
+  bug-bash report format and Automation 5's validation.
 - Hidden-doc verification and reveal lifecycle.
 
 Nothing is deployed, committed, or pushed from this workspace yet.

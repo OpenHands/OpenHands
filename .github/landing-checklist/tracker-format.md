@@ -56,7 +56,9 @@ carries the pending-vs-active distinction.
    1. Docs added
    2. E2E test added
    3. Flag gated + exposed via Helm/embedded-installer
-   4. Bug bash (3+ engineers)
+   4. Bug bash (3+ engineers) — includes a real Helm install test with the
+      flag ON, plus a Replicated/embedded-cluster install test once that
+      capability ships (see `repos.yml`'s `capabilities` block)
    5. Available in most recent release
    6. Included in an X/LinkedIn post
 4. A **footer** cross-linking every surface: PR, Linear ticket, and (once
@@ -89,7 +91,7 @@ Example comment body:
 - [x] Docs added for the feature on the website (hidden until flag-on - see docs-visibility.md)
 - [x] E2E test added covering regression / up-to-spec behavior
 - [x] Flag gated (`ENABLE_MY_FEATURE`) + exposed via Helm / embedded-installer
-- [ ] Bug bash (3+ engineers) - in progress, 2 issues open
+- [ ] Bug bash (3+ engineers) - in progress, 2 issues open (helm-test: pending, replicated-test: n/a-pending-support)
 - [x] Available in most recent release (`v1.7.0`, shipped 2026-06-10)
 - [ ] Included in an X / LinkedIn post
 
@@ -134,7 +136,7 @@ to reply in the same thread (every later automation). Requires a
     },
     {
       "type": "section",
-      "text": { "type": "mrkdwn", "text": "*Checklist*\nDocs: done (hidden until flag-on)\nE2E test: done\nFlag + Helm/embedded-installer: done\nBug bash (3+ engineers): pending - 2 issues open\nAvailable in latest release: done (v1.7.0)\nX/LinkedIn post: pending" }
+      "text": { "type": "mrkdwn", "text": "*Checklist*\nDocs: done (hidden until flag-on)\nE2E test: done\nFlag + Helm/embedded-installer: done\nBug bash (3+ engineers): pending - 2 issues open (helm-test pending, replicated-test n/a-pending-support)\nAvailable in latest release: done (v1.7.0)\nX/LinkedIn post: pending" }
     },
     {
       "type": "context",

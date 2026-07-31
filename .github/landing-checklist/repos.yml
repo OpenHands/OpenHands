@@ -16,6 +16,23 @@
 #   4. Done — no automation changes needed; automations resolve this file
 #      at run time rather than hard-coding the list.
 
+# Feature-preview / testing capabilities relevant to the landing checklist's
+# self-hosted item. Automations 4/5 read this instead of having a capability
+# hardcoded, so flipping one flag turns on the new requirement everywhere.
+capabilities:
+  # Helm-based self-hosted install testing (against OpenHands/OpenHands-Cloud's
+  # charts/openhands chart) is available today and is REQUIRED evidence in
+  # every bug bash's structured report (see automations/04 and 05).
+  helm_preview_supported: true
+  # Embedded-cluster / Replicated install testing is not yet supported by any
+  # documented or scripted preview mechanism (as opposed to the SaaS-side
+  # feature-preview flow added in OpenHands/enterprise#92, which only covers
+  # saas-deploy staging namespaces, not a self-hosted Replicated install).
+  # Flip this to true once that capability ships; Automations 4/5 will then
+  # require a non-empty `replicated-test:` field in the bug-bash report
+  # instead of accepting `n/a-pending-support`.
+  replicated_preview_supported: false
+
 production_repos:
   - repo: OpenHands/OpenHands
     release_mechanism: github-release   # tags like cloud-1.47.1; ships the

@@ -29,9 +29,15 @@ Use this body for the shared Linear `Feature Launches` issue template. Automatio
   independently verified flag-on.
 - E2E: test file and scenario that exercise the feature behavior.
 - Self-hosted: exact flag plus implementation and Helm / Replicated paths or
-  linked downstream PRs.
+  linked downstream PRs (code wiring, verified at review time).
 - Bug bash: `bug-bash-report: <date> | attendees: <three or more distinct
-  Linear users> | issues: <zero or child issue IDs>`.
+  Linear users> | issues: <zero or child issue IDs> | helm-test: <note or
+  link confirming a real Helm-based install test with the flag ON> |
+  replicated-test: <note or link confirming a real Replicated/embedded-cluster
+  install test with the flag ON, or n/a-pending-support if repos.yml's
+  capabilities.replicated_preview_supported is still false>`. The
+  `helm-test` field is always required; `replicated-test` becomes required
+  (not just `n/a-pending-support`) once that capability flag flips to true.
 - Release: release tag, image, chart, and production pin as applicable to the
   repository's rule in `repos.yml`.
 - Social: public `x.com`, `twitter.com`, or `linkedin.com` post URL.

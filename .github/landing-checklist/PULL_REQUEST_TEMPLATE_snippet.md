@@ -16,9 +16,11 @@ _Required before merge:_
   _(add the page to `OpenHands/docs`, but set `hidden: true` in its frontmatter — the feature isn't public yet. Automation removes `hidden: true` only after two tech-council approvals and independent verification that the flag is enabled in production.)_
 - [ ] E2E test added covering regression / up-to-spec behavior
 - [ ] Feature is gated by an ENABLE_<FEATURE> flag and exposed through the appropriate Helm / embedded-cluster configuration
+  _(this checks the flag and Helm/embedded-cluster wiring exist in code; the mandatory bug bash below independently tests a real Helm install — and, once that capability ships, a Replicated/embedded-cluster install — with the flag ON.)_
 
 _Tracked post-merge (do not check manually — automation updates these):_
 - [ ] Bug bash completed (3+ engineers), issues filed for next cycle
+  _(must include a Helm-based install test of the feature with the flag ON; a Replicated/embedded-cluster install test is also required once `repos.yml`'s `capabilities.replicated_preview_supported` is true. Automation 5 checks for `helm-test:`/`replicated-test:` fields in the bug-bash report.)_
 - [ ] Feature is available in the most recent release
 - [ ] Feature included in an X / LinkedIn post
 

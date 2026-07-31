@@ -80,8 +80,21 @@ and feature flags currently live in `frontend/src/utils/feature-flags.ts`.
   `stage:flag-on`.
 - Central artifacts live in `OpenHands/OpenHands` under
   `.github/landing-checklist/` and `.github/workflows/`.
+- The bug bash must include a real Helm install test of the feature with the
+  flag ON (`helm-test:` field in the bug-bash report, always required). A
+  Replicated/embedded-cluster install test is also required once
+  `repos.yml`'s `capabilities.replicated_preview_supported` flips to `true`;
+  until then, `n/a-pending-support` is accepted for `replicated-test:`.
 
 ## Remaining implementation gap
+
+No scripted or documented self-hosted preview mechanism exists yet for
+either Helm or Replicated/embedded-cluster install testing — unlike the
+SaaS-side feature-preview flow `OpenHands/enterprise#92` added (which spins
+up a `saas-deploy` staging namespace, a different, SaaS-only mechanism).
+Bug-bash participants currently install by hand; consider building an
+equivalent self-hosted preview skill before relying on this requirement at
+scale.
 
 The production reconciler for this transition is not yet built:
 
