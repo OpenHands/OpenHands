@@ -143,13 +143,24 @@ export function EventMessage({
   suppressThought = false,
 }: EventMessageProps) {
   const { data: config } = useConfig();
-  const { planContent } = useConversationStore();
+  const { planContent, localPlanningConversationId } = useConversationStore();
   const { curAgentState } = useAgentState();
+  // The plan is written by the (local) planner helper conversation, not the
+  // main one — its own run/idle status is what determines whether the plan
+  // is still being generated, so read it separately from the main agent's.
+  const { curAgentState: curPlanningAgentState } = useAgentState(
+    localPlanningConversationId ?? undefined,
+  );
+  const isPlanningAgentRunning =
+    !!localPlanningConversationId &&
+    (curPlanningAgentState === AgentState.RUNNING ||
+      curPlanningAgentState === AgentState.LOADING);
 
-  // Disable Build button while agent is running (streaming)
+  // Disable Build button while the main agent or the planner is running.
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING;
+    curAgentState === AgentState.LOADING ||
+    isPlanningAgentRunning;
 
   // Read isFromPlanningAgent directly from the event object
   const isFromPlanningAgent = event.isFromPlanningAgent || false;
@@ -262,9 +273,9 @@ export function EventMessage({
         planPreviewEventIds &&
         shouldShowPlanPreview(event.id, planPreviewEventIds)
       ) {
-        // Show shine effect only if this is the last message AND agent is running
+        // Show shine effect only if this is the last message AND the planner is running
         const isStreaming =
-          isLastMessage && curAgentState === AgentState.RUNNING;
+          isLastMessage && curPlanningAgentState === AgentState.RUNNING;
         return (
           <PlanPreview
             planContent={planContent}

@@ -63,7 +63,8 @@ function getEntryPoint(
 
 export function ChatInterface() {
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
-  const { setMessageToSend } = useConversationStore();
+  const { setMessageToSend, localPlanningConversationId } =
+    useConversationStore();
   const { errorMessage, errorCode, removeErrorMessage, setErrorMessage } =
     useErrorMessageStore();
   const navigate = useNavigate();
@@ -105,6 +106,13 @@ export function ChatInterface() {
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
+  const { curAgentState: curPlanningAgentState } = useAgentState(
+    localPlanningConversationId ?? undefined,
+  );
+  const isPlanningAgentRunning =
+    !!localPlanningConversationId &&
+    (curPlanningAgentState === AgentState.RUNNING ||
+      curPlanningAgentState === AgentState.LOADING);
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
@@ -623,7 +631,8 @@ export function ChatInterface() {
                       <ScrollToBottomButton onClick={scrollDomToBottom} />
                     </div>
                   ) : (
-                    curAgentState === AgentState.RUNNING && (
+                    (curAgentState === AgentState.RUNNING ||
+                      isPlanningAgentRunning) && (
                       <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
                         <TypingIndicator />
                       </div>

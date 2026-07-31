@@ -555,11 +555,17 @@ export function ConversationWebSocketProvider({
           // Handle conversation state updates
           // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
-            if (isFullStateConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value.execution_status);
+            if (
+              isFullStateConversationStateUpdateEvent(event) &&
+              conversationId
+            ) {
+              setExecutionStatus(conversationId, event.value.execution_status);
             }
-            if (isAgentStatusConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value);
+            if (
+              isAgentStatusConversationStateUpdateEvent(event) &&
+              conversationId
+            ) {
+              setExecutionStatus(conversationId, event.value);
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
@@ -762,11 +768,25 @@ export function ConversationWebSocketProvider({
           // Handle conversation state updates
           // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
-            if (isFullStateConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value.execution_status);
+            // Scope to the planning agent's own conversation id, not the main
+            // `conversationId` — this socket reports the planning helper
+            // conversation's run/idle transitions, which must never overwrite
+            // the main conversation's status in the shared store.
+            const planningConversationId = subConversations?.[0]?.id;
+            if (
+              isFullStateConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              setExecutionStatus(
+                planningConversationId,
+                event.value.execution_status,
+              );
             }
-            if (isAgentStatusConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value);
+            if (
+              isAgentStatusConversationStateUpdateEvent(event) &&
+              planningConversationId
+            ) {
+              setExecutionStatus(planningConversationId, event.value);
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
