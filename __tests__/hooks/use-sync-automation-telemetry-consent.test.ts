@@ -8,6 +8,7 @@ const state = {
   backendHost: "http://localhost:8000",
   backendApiKey: "key-1",
   consent: "pending" as "pending" | "granted" | "denied",
+  pendingRevocationId: null as string | null,
 };
 const listeners = new Set<() => void>();
 
@@ -30,6 +31,7 @@ vi.mock("#/contexts/active-backend-context", () => ({
 }));
 
 vi.mock("#/services/telemetry", () => ({
+  getPendingLocalTelemetryRevocationId: () => state.pendingRevocationId,
   getTelemetryConsent: () => state.consent,
   subscribeTelemetryConsent: (listener: () => void) => {
     listeners.add(listener);
@@ -51,12 +53,22 @@ describe("useSyncAutomationTelemetryConsent", () => {
 
     state.backendKind = "local";
     state.consent = "pending";
+    state.pendingRevocationId = null;
   });
 
   it("does not call the local automation consent API while consent is pending", () => {
     renderHook(() => useSyncAutomationTelemetryConsent());
 
     expect(syncTelemetryConsentMock).not.toHaveBeenCalled();
+  });
+
+  it("revokes the pre-reset actor after a privacy clear", () => {
+    state.pendingRevocationId = "user-before-reset";
+
+    renderHook(() => useSyncAutomationTelemetryConsent());
+
+    expect(syncTelemetryConsentMock).toHaveBeenCalledOnce();
+    expect(syncTelemetryConsentMock).toHaveBeenCalledWith("denied");
   });
 
   it("does not call the local automation consent API for cloud backends", () => {

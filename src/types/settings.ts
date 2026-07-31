@@ -21,6 +21,7 @@ export type MCPSSEServer = {
   url: string;
   headers?: Record<string, string>;
   auth?: MCPAuthCredential;
+  enabled?: boolean;
 };
 
 export type MCPStdioServer = {
@@ -28,6 +29,7 @@ export type MCPStdioServer = {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  enabled?: boolean;
 };
 
 export type MCPSHTTPServer = {
@@ -36,6 +38,7 @@ export type MCPSHTTPServer = {
   headers?: Record<string, string>;
   timeout?: number;
   auth?: MCPAuthCredential;
+  enabled?: boolean;
 };
 
 export type MCPConfig = {

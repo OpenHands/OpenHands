@@ -131,6 +131,54 @@ export const useTracking = () => {
     });
   };
 
+  /**
+   * The setup funnel: opened → validated → created, or failed.
+   *
+   * A manifest declares no analytics of its own, so the stages are the same for
+   * every entry and only the id it carries varies.
+   */
+  const trackAutomationSetupOpened = ({
+    automationId,
+  }: {
+    automationId: string;
+  }) => {
+    track("automation_setup_opened", { automation_id: automationId });
+  };
+
+  const trackAutomationSetupValidated = ({
+    automationId,
+  }: {
+    automationId: string;
+  }) => {
+    track("automation_setup_validated", { automation_id: automationId });
+  };
+
+  const trackAutomationSetupCreated = ({
+    automationId,
+    setupMode,
+  }: {
+    automationId: string;
+    setupMode: string;
+  }) => {
+    track("automation_setup_created", {
+      automation_id: automationId,
+      setup_mode: setupMode,
+    });
+  };
+
+  const trackAutomationSetupFailed = ({
+    automationId,
+    setupMode,
+  }: {
+    automationId: string;
+    setupMode: string;
+  }) => {
+    track("automation_setup_failed", {
+      automation_id: automationId,
+      setup_mode: setupMode,
+    });
+  };
+
   const trackInitialQuerySubmitted = ({
     entryPoint,
     queryCharacterLength,
@@ -342,6 +390,10 @@ export const useTracking = () => {
     trackCreatePrButtonClick,
     trackUserSignupCompleted,
     trackPrebuiltAutomationEnabled,
+    trackAutomationSetupOpened,
+    trackAutomationSetupValidated,
+    trackAutomationSetupCreated,
+    trackAutomationSetupFailed,
     trackInitialQuerySubmitted,
     trackUserMessageSent,
     trackDownloadVsCodeButtonClicked,

@@ -266,9 +266,10 @@ export function OnboardingModal({
     selectedAgentId,
   ]);
 
-  // Onboarding Completed — `onLaunched` runs only after a conversation is
-  // successfully created (the hello message or a recommended automation), so
-  // wrapping it captures completion exactly once before the modal closes.
+  // Onboarding Completed — `onLaunched` runs only once the user has committed
+  // to a launch: a created conversation for the hello message or a recommended
+  // automation, or the setup form for an automation that ships one. Wrapping it
+  // captures completion exactly once before the modal closes.
   const handleCompleted = () => {
     trackOnboardingCompleted({ agent: selectedAgentId });
     onClose();
