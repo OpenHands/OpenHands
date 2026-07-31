@@ -259,12 +259,22 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         };
       }
 
-      // For our own fetch we also rely on the workspace-session cookie
-      // (it travels because we opt in to credentialed requests). This
-      // matches the auth path the iframe / <img> uses, and avoids a CORS
-      // preflight for a custom header.
+      // Authenticate the text fetch with the `X-Session-API-Key` header
+      // rather than relying solely on the workspace-session cookie. The
+      // agent-server mints that cookie with the `Secure` flag, which
+      // browsers silently drop on plain-HTTP origins (a local dev/static
+      // stack is served over HTTP). Without the header, such a fetch
+      // carries no credential and the fileserver returns 401. The server
+      // also accepts the cookie (and CORS preflight permits this header),
+      // so we keep `credentials: "include"` as a belt-and-suspenders
+      // fallback for HTTPS deployments where the cookie does travel.
+      const resolvedApiKey =
+        sessionApiKey ?? getActiveBackend().backend.apiKey ?? undefined;
       const response = await fetch(staticUrl, {
         credentials: "include",
+        ...(resolvedApiKey
+          ? { headers: { "X-Session-API-Key": resolvedApiKey } }
+          : {}),
       });
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);

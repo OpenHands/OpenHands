@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, request as httpRequest, type Server } from "node:http";
 import { connect as netConnect, type AddressInfo, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -6,7 +6,9 @@ import { once } from "node:events";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+
+import { downgradeSecureCookie } from "../../scripts/proxy-utils.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -103,7 +105,7 @@ async function waitForPort(port: number, child?: ChildProcess) {
 }
 
 async function stopChild(child?: ChildProcess) {
-  if (!child || child.exitCode !== null) {
+  if (child?.exitCode !== null) {
     return;
   }
   child.kill("SIGTERM");
@@ -337,6 +339,107 @@ describe("ingress proxy functionality", () => {
     } finally {
       await stopChild(badIngress);
     }
+  });
+});
+
+describe("ingress Set-Cookie downgrade over HTTP", () => {
+  let backend: Server;
+  let ingressProcess: ChildProcess;
+  let backendPort: number;
+  let ingressPort: number;
+
+  beforeAll(async () => {
+    // Mock backend that returns a Secure cookie exactly the way the
+    // agent-server mints its workspace-session cookie.
+    backend = createServer((_req, res) => {
+      res.writeHead(200, {
+        "set-cookie":
+          "oh_workspace_session_key=abc; HttpOnly; Max-Age=315360000; Path=/api/conversations; SameSite=none; Secure; Partitioned",
+      });
+      res.end();
+    });
+    backendPort = await listenOnLoopback(backend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--default",
+        originForPort(backendPort),
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(backend);
+  });
+
+  it("strips Secure / Partitioned / SameSite=none so the cookie is usable over plain HTTP", async () => {
+    // Use Node's http client (not the jsdom-patched fetch) so the
+    // `set-cookie` response header is visible — jsdom's Headers.get()
+    // filters it out as a forbidden response-header name.
+    const cookie = await new Promise<string | string[] | undefined>(
+      (resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: loopbackHost,
+            port: ingressPort,
+            method: "POST",
+            path: "/api/auth/workspace-session",
+          },
+          (res) => {
+            res.resume();
+            resolve(res.headers["set-cookie"]);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      },
+    );
+    const cookieStr = Array.isArray(cookie) ? cookie.join("; ") : cookie;
+    expect(cookieStr).toBeTruthy();
+    expect(cookieStr!).not.toContain("Secure");
+    expect(cookieStr!).not.toContain("Partitioned");
+    expect(cookieStr!.toLowerCase()).not.toContain("samesite=none");
+    expect(cookieStr).toContain("oh_workspace_session_key=abc");
+    expect(cookieStr).toContain("SameSite=Lax");
+  });
+});
+
+describe("downgradeSecureCookie", () => {
+  it("strips Secure, Partitioned, and SameSite=none and adds SameSite=Lax", () => {
+    const cookie =
+      "oh_workspace_session_key=abc; HttpOnly; Max-Age=315360000; Path=/api/conversations; SameSite=none; Secure; Partitioned";
+    expect(downgradeSecureCookie(cookie)).toBe(
+      "oh_workspace_session_key=abc; HttpOnly; Max-Age=315360000; Path=/api/conversations; SameSite=Lax",
+    );
+  });
+
+  it("returns the cookie unchanged when it has no HTTP-incompatible attributes", () => {
+    const cookie = "sess=abc; HttpOnly; Path=/; SameSite=Lax";
+    expect(downgradeSecureCookie(cookie)).toBe(cookie);
+  });
+
+  it("does not duplicate SameSite when the source already had a non-none value", () => {
+    const cookie = "sess=abc; SameSite=Strict; Secure";
+    expect(downgradeSecureCookie(cookie)).toBe("sess=abc; SameSite=Strict");
+  });
+
+  it("handles empty/null input", () => {
+    expect(downgradeSecureCookie("")).toBe("");
+    expect(downgradeSecureCookie(undefined as unknown as string)).toBe(
+      undefined,
+    );
   });
 });
 

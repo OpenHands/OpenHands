@@ -35,6 +35,84 @@ export function isBenignSocketError(err) {
   return Boolean(err && BENIGN_SOCKET_ERRORS.has(err.code));
 }
 
+/**
+ * Rewrite a single `Set-Cookie` value so it is usable from a plain-HTTP
+ * origin. Browsers refuse to store a cookie carrying the `Secure` flag over
+ * HTTP, and `SameSite=none` is only valid with `Secure`, so strip both and
+ * drop the `Partitioned` attribute (which also requires `Secure`). Returns
+ * the rewritten cookie string, or the original string when it carries no
+ * HTTP-incompatible attributes.
+ *
+ * This is what makes the agent-server's workspace-session cookie
+ * (`oh_workspace_session_key`, minted with `Secure; SameSite=none;
+ * Partitioned`) actually reach the browser jar in a local dev / static stack
+ * served over plain HTTP — without it the file viewer's iframe / <img>
+ * requests to the static workspace fileserver have no credential and 401.
+ *
+ * @param {string} cookie
+ * @returns {string}
+ */
+export function downgradeSecureCookie(cookie) {
+  if (!cookie) return cookie;
+  const parts = cookie.split(/;\s*/).filter(Boolean);
+  if (
+    !parts.some(
+      (p) =>
+        p.toLowerCase() === "secure" ||
+        p.toLowerCase() === "partitioned" ||
+        p.toLowerCase().startsWith("samesite=none"),
+    )
+  ) {
+    return cookie;
+  }
+
+  // Drop HTTP-incompatible attributes. A non-none `SameSite` attribute (e.g.
+  // `SameSite=Lax`) survives the filter and must not be duplicated by the
+  // `SameSite=none` → `SameSite=Lax` replacement below, so we remember
+  // whether the source already had one.
+  let hasSameSite = false;
+  const rewritten = [];
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (
+      lower === "secure" ||
+      lower === "partitioned" ||
+      lower === "samesite=none"
+    ) {
+      continue;
+    }
+    if (lower.startsWith("samesite=")) {
+      hasSameSite = true;
+    }
+    rewritten.push(part);
+  }
+  if (!hasSameSite) rewritten.push("SameSite=Lax");
+  return rewritten.join("; ");
+}
+
+/**
+ * Install a `proxyRes` listener on an httpxy `ProxyServer` that downgrades
+ * every `Set-Cookie` response header to an HTTP-safe form when the incoming
+ * client request was made over plain HTTP (not TLS). Over HTTPS the cookies
+ * pass through untouched, preserving the server's `Secure` posture for
+ * production deployments.
+ *
+ * httpxy emits `proxyRes` *before* its outgoing middleware copies headers
+ * onto the downstream response, so mutating `proxyRes.headers["set-cookie"]`
+ * here is observed when the headers are written.
+ *
+ * @param {import("httpxy").ProxyServer} proxy
+ */
+export function installSecureCookieDowngrade(proxy) {
+  proxy.on("proxyRes", (proxyRes, req) => {
+    if (req.socket?.encrypted || req.connection?.encrypted) return;
+    const raw = proxyRes.headers["set-cookie"];
+    if (!raw) return;
+    const list = Array.isArray(raw) ? raw : [raw];
+    proxyRes.headers["set-cookie"] = list.map(downgradeSecureCookie);
+  });
+}
+
 function once(fn) {
   let called = false;
   return (...args) => {
@@ -58,6 +136,7 @@ export function createProxyHandlers({
   label = "proxy",
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
+  downgradeSecureCookieOverHttp = true,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
@@ -66,6 +145,15 @@ export function createProxyHandlers({
     timeout,
     proxyTimeout,
   });
+
+  // Downgrade the agent-server's `Secure; SameSite=none; Partitioned`
+  // workspace-session cookie to an HTTP-safe form when the client connects
+  // over plain HTTP. Without this the browser drops the cookie (it carries
+  // `Secure`), and iframe / <img> requests to the static workspace fileserver
+  // have no credential and 401. Disabled (no-op) over TLS.
+  if (downgradeSecureCookieOverHttp) {
+    installSecureCookieDowngrade(proxy);
+  }
   const metrics = {
     activeHttpRequests: 0,
     activeWebSockets: 0,
