@@ -42,13 +42,17 @@ describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
     const cmd = buildAutomationCommand({});
 
-    expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain("--from");
-    expect(cmd.args).toContain(
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toEqual([
+      "run",
+      "--no-project",
+      "--with",
       `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
-    );
-    expect(cmd.args).toContain("uvicorn");
-    expect(cmd.args).toContain("openhands.automation.app:app");
+      "python",
+      "-m",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ]);
     expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
   });
 
@@ -57,8 +61,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "feat/my-feature",
     });
 
-    expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain("--from");
+    expect(cmd.args).toContain("--refresh");
     expect(cmd.args).toContain(
       `git+${DEFAULT_AUTOMATION_REPO}@feat/my-feature`,
     );
@@ -71,7 +74,6 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "main",
     });
 
-    expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@main",
     );
@@ -83,7 +85,6 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "v1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@v1.0.0",
     );
@@ -95,7 +96,6 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "abc123def456",
     });
 
-    expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@abc123def456`);
     expect(cmd.source).toBe("git (abc123def456)");
   });
@@ -105,7 +105,6 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("PyPI (1.0.0)");
   });
@@ -116,7 +115,6 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");

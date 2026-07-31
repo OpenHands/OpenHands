@@ -4,7 +4,7 @@
  *
  * Runs the full Agent Canvas stack locally by default:
  * - Agent-server via uvx
- * - Automation backend via uvx
+ * - Automation backend via uv
  * - Pre-built static frontend
  *
  * This is the production equivalent of `npm run dev` - it runs the full stack
@@ -59,7 +59,7 @@ if (args.includes("-h") || args.includes("--help")) {
   console.log(`
 @openhands/agent-canvas - Run the Agent Canvas UI with agent-server
 
-Runs the full stack with agent-server and automation backend via uvx,
+Runs the full stack with agent-server and automation backend via uv,
 and serves pre-built static frontend assets.
 
 USAGE:

@@ -1,7 +1,7 @@
 /**
  * Electron Main Process — Agent Canvas Desktop
  *
- * Starts the full Agent Canvas stack (agent-server + automation via uvx,
+ * Starts the full Agent Canvas stack (agent-server via uvx, automation via uv,
  * static frontend, ingress proxy), then opens a native BrowserWindow once
  * the ingress is ready. Shows a loading screen while backends start.
  *
