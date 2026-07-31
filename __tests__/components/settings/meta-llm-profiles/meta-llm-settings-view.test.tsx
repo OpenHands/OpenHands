@@ -141,7 +141,7 @@ describe("MetaLlmSettingsView", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens the editor when clicking Add meta-profile", async () => {
+  it("opens the editor when clicking Add Model Router", async () => {
     const user = userEvent.setup();
     renderWithProviders(<MetaLlmSettingsView />);
 

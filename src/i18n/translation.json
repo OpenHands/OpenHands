@@ -5797,7 +5797,7 @@
     "ca": "Metaperfils disponibles"
   },
   "SETTINGS$ADD_META_PROFILE": {
-    "en": "Add meta-profile",
+    "en": "Add Model Router",
     "ja": "メタプロファイルを追加",
     "zh-CN": "添加元配置文件",
     "zh-TW": "新增中繼設定檔",
