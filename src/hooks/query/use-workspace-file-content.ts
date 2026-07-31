@@ -259,12 +259,47 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         };
       }
 
-      // For our own fetch we also rely on the workspace-session cookie
-      // (it travels because we opt in to credentialed requests). This
-      // matches the auth path the iframe / <img> uses, and avoids a CORS
-      // preflight for a custom header.
+      // Authenticate the text fetch with the `X-Session-API-Key` header
+      // rather than relying solely on the workspace-session cookie. The
+      // agent-server mints that cookie with the `Secure` flag, which
+      // browsers silently drop on plain-HTTP origins (a local dev/static
+      // stack is served over HTTP). Without the header, such a fetch
+      // carries no credential and the fileserver returns 401. The server
+      // also accepts the cookie (and CORS preflight permits this header),
+      // so we keep `credentials: "include"` as a belt-and-suspenders
+      // fallback for HTTPS deployments where the cookie does travel.
+      //
+      // `cache: "no-store"` is load-bearing: the agent-server's workspace
+      // fileserver (FileResponse, NOT StaticFiles) returns `ETag` /
+      // `Last-Modified` but **no `Cache-Control`**, and it never emits 304
+      // (FileResponse doesn't short-circuit conditional requests). Without
+      // an explicit cache directive the browser applies HTTP heuristic
+      // freshness — `(now - Last-Modified) * ~10%` per RFC 7234 — so a
+      // file that sat untouched for a while gets a long fresh window. Inside
+      // that window the browser serves the cached bytes WITHOUT contacting
+      // the server, so even when the agent rewrites the file (and the
+      // server's Last-Modified becomes "just now") the browser never learns
+      // of it until the heuristic window expires. React Query
+      // invalidation / the workspace-mutation-counter queryKey only force a
+      // new *fetch call*; they cannot make the browser bypass its HTTP
+      // cache when the fetch URL is unchanged. The iframe / <img> rich
+      // preview avoids this by appending `?v=<count>` to the URL, but this
+      // text fetch path has no cache-buster, so it must opt out of the HTTP
+      // cache entirely. `no-store` (rather than `no-cache`) is correct here
+      // precisely because the server never returns 304 — `no-cache` would
+      // send a conditional request that always comes back as a full 200,
+      // needlessly re-writing the cache. `no-store` neither reads nor writes
+      // the HTTP cache, so every fetch hits the network for fresh bytes; the
+      // React Query layer above (staleTime + queryKey dedup) absorbs the
+      // repeated-fetch cost.
+      const resolvedApiKey =
+        sessionApiKey ?? getActiveBackend().backend.apiKey ?? undefined;
       const response = await fetch(staticUrl, {
         credentials: "include",
+        cache: "no-store",
+        ...(resolvedApiKey
+          ? { headers: { "X-Session-API-Key": resolvedApiKey } }
+          : {}),
       });
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
