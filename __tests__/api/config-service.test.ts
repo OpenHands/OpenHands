@@ -89,4 +89,36 @@ describe("ConfigService", () => {
     const openrouter = page.items.find((p) => p.name === "openrouter");
     expect(openrouter).toEqual({ name: "openrouter", verified: false });
   });
+
+  it("does not treat bare or unknown-prefix model IDs as providers", async () => {
+    server.use(
+      http.get("/api/llm/providers", () =>
+        HttpResponse.json({ providers: ["anthropic"] }),
+      ),
+      http.get("/api/llm/models/verified", () =>
+        HttpResponse.json({
+          models: { anthropic: ["claude-opus-4-5-20251101"] },
+        }),
+      ),
+      http.get("/api/llm/models", () =>
+        HttpResponse.json({
+          models: [
+            "gpt-5.6",
+            "gpt-5.6-sol",
+            "us-east-1/gpt-4",
+            "openrouter/anthropic/claude-sonnet-4-5-20250929",
+          ],
+        }),
+      ),
+    );
+
+    const page = await ConfigService.searchProviders({ limit: 50 });
+    const names = page.items.map((provider) => provider.name);
+
+    expect(names).not.toContain("gpt-5.6");
+    expect(names).not.toContain("gpt-5.6-sol");
+    expect(names).not.toContain("us-east-1");
+    expect(names).toContain("openrouter");
+    expect(names).toContain("anthropic");
+  });
 });

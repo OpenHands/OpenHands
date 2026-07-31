@@ -2,6 +2,8 @@ import { LLMMetadataClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
+import { MAP_PROVIDER } from "#/utils/map-provider";
+import { extractModelAndProvider } from "#/utils/extract-model-and-provider";
 import type {
   LLMModel,
   LLMModelPage,
@@ -180,12 +182,25 @@ class ConfigService {
     ]);
 
     const verifiedProviders = new Set(Object.keys(verifiedMap ?? {}));
+    const knownProviders = new Set<string>([
+      ...Object.keys(MAP_PROVIDER),
+      ...verifiedProviders,
+      ...(providers ?? []),
+    ]);
     // Some local agent-servers expose a provider only through its model IDs
     // (e.g. `openrouter/...`) while omitting it from `/api/llm/providers`.
     // Surface those providers too so they appear in the Basic provider picker.
+    // Only accept slash-qualified IDs whose prefix is in the authoritative
+    // provider vocabulary — bare model IDs must not become providers.
     const modelProviders = new Set(
       (models ?? [])
-        .map((model) => model.split("/")[0])
+        .map((model) => {
+          const { provider } = extractModelAndProvider(model);
+          if (!provider || !knownProviders.has(provider)) {
+            return null;
+          }
+          return provider;
+        })
         .filter((provider): provider is string => Boolean(provider)),
     );
     const names = new Set<string>([

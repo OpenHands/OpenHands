@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMProvider } from "#/api/config-service/config-service.types";
 import {
+  LLM_MODELS_GC_TIME,
   LLM_MODELS_QUERY_KEY,
   LLM_MODELS_STALE_TIME,
   fetchLLMModels,
@@ -27,6 +28,7 @@ export const useSearchProviders = () =>
           queryKey: LLM_MODELS_QUERY_KEY,
           queryFn: fetchLLMModels,
           staleTime: LLM_MODELS_STALE_TIME,
+          gcTime: LLM_MODELS_GC_TIME,
         }),
       ]);
       // Providers are a small set; fetch all in one call with a high limit.

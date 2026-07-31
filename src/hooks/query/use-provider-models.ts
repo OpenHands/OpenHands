@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
 import {
+  LLM_MODELS_GC_TIME,
   LLM_MODELS_QUERY_KEY,
   LLM_MODELS_STALE_TIME,
   fetchLLMModels,
@@ -63,6 +64,7 @@ export const useProviderModels = (provider: string | null) =>
           queryKey: LLM_MODELS_QUERY_KEY,
           queryFn: fetchLLMModels,
           staleTime: LLM_MODELS_STALE_TIME,
+          gcTime: LLM_MODELS_GC_TIME,
         }),
       ]);
       return fetchPage(provider!, verifiedByProvider, models);
