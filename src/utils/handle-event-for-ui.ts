@@ -117,8 +117,18 @@ const getTrailingDeltas = (
   return deltas;
 };
 
-const getTrailingContentDeltas = (uiEvents: OpenHandsEvent[]) =>
-  getTrailingDeltas(uiEvents, (event) => (event.content?.length ?? 0) > 0);
+// Sender-scoped for the same reason as `getTrailingReasoningDeltas` (#1656):
+// a main-agent action must not strip the planning agent's live content.
+const getTrailingContentDeltas = (
+  uiEvents: OpenHandsEvent[],
+  finalEvent: OpenHandsEvent,
+) =>
+  getTrailingDeltas(
+    uiEvents,
+    (event) =>
+      (event.content?.length ?? 0) > 0 &&
+      isSameStreamingSender(finalEvent, event),
+  );
 
 // Sender-scoped: the main and planning sockets share this event store, so a
 // main-agent action must not strip the planning agent's live reasoning (#1656).
@@ -263,7 +273,7 @@ const supersedeStreamedThoughtWithAction = (
     return null;
   }
 
-  const contentDeltas = getTrailingContentDeltas(uiEvents);
+  const contentDeltas = getTrailingContentDeltas(uiEvents, action);
   if (contentDeltas.length === 0) {
     return null;
   }
