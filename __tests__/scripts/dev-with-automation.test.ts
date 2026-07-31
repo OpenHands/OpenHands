@@ -680,15 +680,20 @@ describe("dev-with-automation CLI", () => {
     const isWindows = process.platform === "win32";
     const stubBinDir = mkdtempSync(path.join(tmpdir(), "stub-bin-"));
     if (isWindows) {
+      writeFileSync(path.join(stubBinDir, "uv.cmd"), "@exit /b 0\r\n");
       writeFileSync(path.join(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
     } else {
-      writeFileSync(path.join(stubBinDir, "uvx"), "#!/bin/sh\nexit 0\n", {
-        mode: 0o755,
-      });
+      for (const command of ["uv", "uvx"]) {
+        writeFileSync(
+          path.join(stubBinDir, command),
+          "#!/bin/sh\nexit 0\n",
+          { mode: 0o755 },
+        );
+      }
     }
 
-    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uvx`
-    // is prepended to PATH so the prerequisite check passes; the validation
+    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uv`
+    // and `uvx` are prepended to PATH so prerequisite checks pass; validation
     // guard must trip *after* those checks but *before* port allocation, so
     // we can assert on both the error message and the absence of side effects.
     const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
