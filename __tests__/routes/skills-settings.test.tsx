@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   render,
   screen,
   within,
@@ -254,6 +255,36 @@ Full skill body.`,
 
     await screen.findByTestId("skill-card-prd");
     expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
+  });
+
+  it("restores the search text when history navigation changes the query", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", type: "knowledge", description: "A helper" }),
+      buildSkill({
+        name: "global-rules",
+        type: "repo",
+        description: "A helper",
+        triggers: [],
+        source: "/skills/global-rules.md",
+      }),
+    ]);
+
+    const router = renderSkillsSettingsScreen("/skills?q=helper");
+    await screen.findByTestId("skill-card-deno");
+    const search = screen.getByTestId("skills-search-input");
+
+    // Push a second entry, then drop the query from it, so going back lands on a URL whose `q` differs from the input.
+    await user.click(screen.getByTestId("skill-facet-type-repo"));
+    fireEvent.change(search, { target: { value: "" } });
+    await waitFor(() =>
+      expect(router.state.location.search).toBe("?type=repo"),
+    );
+
+    await act(() => router.navigate(-1));
+
+    await waitFor(() => expect(search).toHaveValue("helper"));
+    expect(router.state.location.search).toBe("?q=helper");
   });
 
   it("filters through the mobile filters modal", async () => {

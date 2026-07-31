@@ -49,6 +49,8 @@ function SkillsSettingsScreen() {
   const [queryInput, setQueryInput] = React.useState(
     () => searchParams.get(SKILL_FILTER_QUERY_PARAM) ?? "",
   );
+  // The last `q` this component put in the URL, which is what lets the sync effect below tell a history navigation apart from the lagging echo of its own debounced write.
+  const lastWrittenQuery = React.useRef(queryInput);
 
   const [disabledSet, setDisabledSet] = React.useState<Set<string>>(new Set());
   const [hasHydratedInitialSettings, setHasHydratedInitialSettings] =
@@ -100,12 +102,21 @@ function SkillsSettingsScreen() {
     );
   }, [disabledSet, hasHydratedInitialSettings, saveSettings, t]);
 
+  // Back and forward move `q` under a route that stays mounted, so the input has to take the URL's value back or it would keep showing — and debounce back — a query the user has already navigated away from.
+  React.useEffect(() => {
+    const current = searchParams.get(SKILL_FILTER_QUERY_PARAM) ?? "";
+    if (current === lastWrittenQuery.current) return;
+    lastWrittenQuery.current = current;
+    setQueryInput(current);
+  }, [searchParams]);
+
   // The search input owns its value and the URL only mirrors it, debounced: writing on every keystroke would push a history entry per character, and reading `q` back out mid-typing would bounce a stale value into the input.
   React.useEffect(() => {
     const current = searchParams.get(SKILL_FILTER_QUERY_PARAM) ?? "";
     if (current === queryInput) return undefined;
 
     const timeout = setTimeout(() => {
+      lastWrittenQuery.current = queryInput;
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
