@@ -74,7 +74,9 @@ describe("CommandMenu", () => {
       name: SEARCH_LABEL_KEY,
     });
     await waitFor(() => expect(searchInput).toHaveFocus());
-    expect(screen.getByTestId("command-menu")).toBeInTheDocument();
+    const dialog = screen.getByTestId("command-menu");
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute("id", "command-menu");
 
     await userEvent.keyboard("{Escape}");
 
@@ -192,6 +194,39 @@ describe("CommandMenu", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("command-menu")).not.toBeInTheDocument();
     });
+  });
+
+  it("surfaces a truncated-results hint when more than eight conversations match", async () => {
+    const conversations = Array.from({ length: 12 }, (_, index) =>
+      createMockConversation({
+        id: String(index + 1),
+        title: `Figma match ${index + 1}`,
+      }),
+    );
+    vi.spyOn(
+      searchMatchingConversationsModule,
+      "searchMatchingConversations",
+    ).mockResolvedValue(conversations);
+
+    useCommandMenuStore.getState().open();
+    renderCommandMenu();
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: SEARCH_LABEL_KEY }),
+      "figma",
+    );
+
+    const section = await screen.findByTestId(
+      "command-menu-conversations-section",
+      {},
+      { timeout: 2000 },
+    );
+    expect(
+      within(section).getByTestId("command-menu-conversations-truncated-hint"),
+    ).toHaveTextContent("COMMAND_MENU$SHOWING_FIRST_N");
+    expect(
+      within(section).getAllByTestId("command-menu-conversation-result"),
+    ).toHaveLength(8);
   });
 
   it("shows a no-results state when conversation search finds nothing", async () => {

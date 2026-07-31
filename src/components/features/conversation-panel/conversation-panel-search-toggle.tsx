@@ -6,7 +6,10 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { formatPrimaryModifierShortcut } from "#/utils/keyboard-shortcut";
 import { cn } from "#/utils/utils";
-import { CONVERSATION_PANEL_SEARCH_HOTKEY } from "./conversation-panel-search-constants";
+import {
+  COMMAND_MENU_ID,
+  CONVERSATION_PANEL_SEARCH_HOTKEY,
+} from "./conversation-panel-search-constants";
 
 export const conversationPanelSearchIconButtonClassName = cn(
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
@@ -14,8 +17,6 @@ export const conversationPanelSearchIconButtonClassName = cn(
   "hover:bg-[var(--oh-surface-raised)] hover:text-white",
   "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-border)]",
 );
-
-const COMMAND_MENU_TEST_ID = "command-menu";
 
 export function ConversationPanelSearchButton() {
   const { t } = useTranslation("openhands");
@@ -44,7 +45,7 @@ export function ConversationPanelSearchButton() {
         )}
         aria-label={t(I18nKey.CONVERSATION_PANEL$SEARCH_ARIA)}
         aria-expanded={isOpen}
-        aria-controls={COMMAND_MENU_TEST_ID}
+        aria-controls={COMMAND_MENU_ID}
         data-testid="conversation-panel-search-toggle"
         onClick={() => open()}
       >

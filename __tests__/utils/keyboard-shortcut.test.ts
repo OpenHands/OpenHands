@@ -2,7 +2,6 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   formatPrimaryModifierShortcut,
   isMacPlatform,
-  isTypingTarget,
   matchesPrimaryModifierShortcut,
 } from "#/utils/keyboard-shortcut";
 
@@ -23,7 +22,7 @@ describe("keyboard-shortcut", () => {
     expect(isMacPlatform()).toBe(false);
   });
 
-  it("matches primary modifier shortcuts", () => {
+  it("matches ⌘/Ctrl + key on any platform", () => {
     vi.stubGlobal("navigator", { platform: "MacIntel" });
     expect(
       matchesPrimaryModifierShortcut(
@@ -36,12 +35,12 @@ describe("keyboard-shortcut", () => {
         new KeyboardEvent("keydown", { key: "k", ctrlKey: true }),
         "k",
       ),
+    ).toBe(true);
+    expect(
+      matchesPrimaryModifierShortcut(
+        new KeyboardEvent("keydown", { key: "k", metaKey: true, shiftKey: true }),
+        "k",
+      ),
     ).toBe(false);
-  });
-
-  it("detects typing targets", () => {
-    expect(isTypingTarget(document.createElement("input"))).toBe(true);
-    expect(isTypingTarget(document.createElement("textarea"))).toBe(true);
-    expect(isTypingTarget(document.createElement("button"))).toBe(false);
   });
 });

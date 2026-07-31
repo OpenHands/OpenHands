@@ -11,7 +11,12 @@ import { HighlightSearchMatch } from "#/components/features/conversation-panel/h
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { formatTimeDelta } from "#/utils/format-time-delta";
+import { matchesPrimaryModifierShortcut } from "#/utils/keyboard-shortcut";
 import { cn } from "#/utils/utils";
+import {
+  COMMAND_MENU_ID,
+  CONVERSATION_PANEL_SEARCH_HOTKEY,
+} from "#/components/features/conversation-panel/conversation-panel-search-constants";
 import {
   COMMAND_MENU_GROUP_LABELS,
   COMMAND_MENU_GROUP_ORDER,
@@ -24,8 +29,6 @@ import {
 const COMMAND_MENU_SEARCH_INPUT_ID = "command-menu-search";
 const COMMAND_MENU_LISTBOX_ID = "command-menu-results";
 const COMMAND_MENU_OPTION_ID_PREFIX = "command-menu-option";
-const COMMAND_MENU_TEST_ID = "command-menu";
-const COMMAND_MENU_SHORTCUT_KEY = "k";
 const COMMAND_MENU_ARROW_DOWN_KEY = "ArrowDown";
 const COMMAND_MENU_ARROW_UP_KEY = "ArrowUp";
 const COMMAND_MENU_ENTER_KEY = "Enter";
@@ -119,12 +122,13 @@ export function CommandMenu() {
     () => conversationMatches.slice(0, CONVERSATION_RESULT_LIMIT),
     [conversationMatches],
   );
+  const hasMoreConversationMatches =
+    conversationMatches.length > CONVERSATION_RESULT_LIMIT;
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLocaleLowerCase() === COMMAND_MENU_SHORTCUT_KEY
+        matchesPrimaryModifierShortcut(event, CONVERSATION_PANEL_SEARCH_HOTKEY)
       ) {
         event.preventDefault();
         open();
@@ -270,8 +274,9 @@ export function CommandMenu() {
 
   return createPortal(
     <div
+      id={COMMAND_MENU_ID}
       className="fixed inset-0 z-[70] flex items-start justify-center px-3 pt-[10vh] sm:px-6"
-      data-testid={COMMAND_MENU_TEST_ID}
+      data-testid={COMMAND_MENU_ID}
       role="dialog"
       aria-modal="true"
       aria-label={t(I18nKey.COMMAND_MENU$ARIA_LABEL)}
@@ -358,8 +363,20 @@ export function CommandMenu() {
                     className="py-1"
                     data-testid="command-menu-conversations-section"
                   >
-                    <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-[var(--oh-text-dim)]">
-                      {t(COMMAND_MENU_GROUP_LABELS.conversations)}
+                    <div className="flex items-baseline justify-between gap-2 px-3 pb-1 pt-2">
+                      <span className="text-[11px] font-medium text-[var(--oh-text-dim)]">
+                        {t(COMMAND_MENU_GROUP_LABELS.conversations)}
+                      </span>
+                      {hasMoreConversationMatches ? (
+                        <span
+                          className="text-[10px] text-[var(--oh-text-dim)]"
+                          data-testid="command-menu-conversations-truncated-hint"
+                        >
+                          {t(I18nKey.COMMAND_MENU$SHOWING_FIRST_N, {
+                            count: CONVERSATION_RESULT_LIMIT,
+                          })}
+                        </span>
+                      ) : null}
                     </div>
                     {isFetchingConversations &&
                     conversationResults.length === 0 ? (

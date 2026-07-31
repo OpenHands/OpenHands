@@ -26,7 +26,7 @@ export function ConversationPanelNewThreadPicker({
   backendKind: BackendKind;
 }) {
   const { t } = useTranslation("openhands");
-  const ariaLabel = t(I18nKey.CONVERSATION_PANEL$NEW_THREAD_FOLDER_ARIA);
+  const ariaLabel = t(I18nKey.CONVERSATION_PANEL$NEW_CHAT_TOOLTIP);
 
   const triggerIcon = (
     <FolderPlus className="h-4 w-4 shrink-0" aria-hidden strokeWidth={2} />

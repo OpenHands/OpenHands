@@ -1,7 +1,5 @@
 import { cn } from "#/utils/utils";
 
-import { HighlightSearchMatch } from "../highlight-search-match";
-
 export type ConversationCardTitleMode = "view" | "edit";
 
 export type ConversationCardTitleProps = {
@@ -9,7 +7,6 @@ export type ConversationCardTitleProps = {
   title: string;
   onSave: (title: string) => void;
   isConversationArchived?: boolean;
-  searchQuery?: string;
 };
 
 export function ConversationCardTitle({
@@ -17,7 +14,6 @@ export function ConversationCardTitle({
   title,
   onSave,
   isConversationArchived,
-  searchQuery = "",
 }: ConversationCardTitleProps) {
   if (titleMode === "edit") {
     return (
@@ -57,11 +53,7 @@ export function ConversationCardTitle({
         isConversationArchived && "opacity-60",
       )}
     >
-      <HighlightSearchMatch
-        text={title}
-        query={searchQuery}
-        className={cn(isConversationArchived && "opacity-60")}
-      />
+      {title}
     </p>
   );
 }

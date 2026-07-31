@@ -10,7 +10,6 @@ interface ConversationCardHeaderProps {
   onTitleSave: (title: string) => void;
   executionStatus?: ExecutionStatus | null;
   sandboxStatus?: SandboxStatus | null;
-  searchQuery?: string;
 }
 
 export function ConversationCardHeader({
@@ -19,7 +18,6 @@ export function ConversationCardHeader({
   onTitleSave,
   executionStatus,
   sandboxStatus,
-  searchQuery,
 }: ConversationCardHeaderProps) {
   const isArchived = isArchivedSandboxStatus(sandboxStatus);
   return (
@@ -38,7 +36,6 @@ export function ConversationCardHeader({
         titleMode={titleMode}
         onSave={onTitleSave}
         isConversationArchived={isArchived}
-        searchQuery={searchQuery}
       />
     </div>
   );
