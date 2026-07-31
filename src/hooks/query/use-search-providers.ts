@@ -32,10 +32,6 @@ export const useSearchProviders = () =>
         }),
       ]);
       // Providers are a small set; fetch all in one call with a high limit.
-      // `models` is shared (via react-query, same key as useProviderModels) so
-      // the Basic provider picker can surface providers discoverable only from
-      // model IDs (e.g. `openrouter/...`) without a duplicate `/api/llm/models`
-      // fetch when the model list is already loaded.
       const page = await ConfigService.searchProviders(
         { limit: 100 },
         verifiedByProvider,

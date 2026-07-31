@@ -63,9 +63,7 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/models/search` directly (verified status is embedded in
    *   each returned item).
-   * @param prefetchedModels - Pre-fetched full model-id list used by the local
-   *   reconstruction path to avoid a duplicate `/api/llm/models` fetch when the
-   *   caller already retrieved it. Ignored for cloud backends.
+   * @param prefetchedModels - Optional pre-fetched model IDs (local only).
    */
   static async searchModels(
     params: SearchModelsParams = {},
@@ -141,9 +139,7 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/providers/search` directly (verified status is embedded in
    *   each returned item).
-   * @param prefetchedModels - Pre-fetched full model-id list used by the local
-   *   reconstruction path to avoid a duplicate `/api/llm/models` fetch when the
-   *   caller already retrieved it. Ignored for cloud backends.
+   * @param prefetchedModels - Optional pre-fetched model IDs (local only).
    */
   static async searchProviders(
     params: SearchProvidersParams = {},
@@ -187,11 +183,6 @@ class ConfigService {
       ...verifiedProviders,
       ...(providers ?? []),
     ]);
-    // Some local agent-servers expose a provider only through its model IDs
-    // (e.g. `openrouter/...`) while omitting it from `/api/llm/providers`.
-    // Surface those providers too so they appear in the Basic provider picker.
-    // Only accept slash-qualified IDs whose prefix is in the authoritative
-    // provider vocabulary — bare model IDs must not become providers.
     const modelProviders = new Set(
       (models ?? [])
         .map((model) => {

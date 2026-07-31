@@ -60,10 +60,6 @@ describe("ConfigService", () => {
   });
 
   it("surfaces providers discoverable only from model IDs when /api/llm/providers omits them", async () => {
-    // Regression for #15576: a local agent-server may expose a provider only
-    // through its model IDs (e.g. `openrouter/...`) while omitting it from
-    // `/api/llm/providers` (litellm-derived) and `/api/llm/models/verified`.
-    // The Basic LLM provider picker should still surface such a provider.
     server.use(
       http.get("/api/llm/providers", () =>
         HttpResponse.json({ providers: ["anthropic"] }),
