@@ -10,6 +10,7 @@ export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
       url: typeof server === "string" ? server : server.url,
       headers: typeof server === "object" ? server.headers : undefined,
       auth: typeof server === "object" ? server.auth : undefined,
+      enabled: typeof server === "object" ? server.enabled : undefined,
     })),
     ...config.stdio_servers.map((server, index) => ({
       id: `stdio-${index}`,
@@ -18,6 +19,7 @@ export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
       command: server.command,
       args: server.args,
       env: server.env,
+      enabled: server.enabled,
     })),
     ...config.shttp_servers.map((server, index) => ({
       id: `shttp-${index}`,
@@ -27,6 +29,7 @@ export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
       headers: typeof server === "object" ? server.headers : undefined,
       timeout: typeof server === "object" ? server.timeout : undefined,
       auth: typeof server === "object" ? server.auth : undefined,
+      enabled: typeof server === "object" ? server.enabled : undefined,
     })),
   ];
 }
