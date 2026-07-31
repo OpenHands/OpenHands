@@ -171,7 +171,7 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
           label: model.label,
         }))
       : key === "pi"
-        ? [{ id: "default", label: "Default" }]
+        ? [{ id: "default", label: "Default Model" }]
         : undefined,
     default_model:
       info?.default_model ?? (key === "pi" ? "default" : undefined),
