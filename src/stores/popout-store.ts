@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useEventStore } from "#/stores/use-event-store";
 
 export type PopoutMode = "expanded" | "minimized";
@@ -35,8 +37,9 @@ interface PopoutState {
 
 /**
  * Floating popouts docked at the bottom-right of the app. Session-only —
- * they do not persist across reloads. Closing one drops its event-store bucket
- * when the conversation is not the currently routed primary.
+ * they do not persist across reloads. Closing one drops its conversation-
+ * scoped event / runtime / composer buckets when the conversation is not the
+ * currently routed primary.
  */
 export const usePopoutStore = create<PopoutState>()((set, get) => ({
   popouts: [],
@@ -79,14 +82,17 @@ export const usePopoutStore = create<PopoutState>()((set, get) => ({
         (entry) => entry.conversationId !== conversationId,
       ),
     }));
-    // Free the event bucket unless the primary route still owns this id —
-    // the primary WS provider will re-seed if the user later navigates there.
+    // Free conversation-scoped buckets unless the primary route still owns
+    // this id — the primary WS provider will re-seed if the user later
+    // navigates there.
     const primaryPath = globalThis.location.pathname;
     const isPrimary =
       primaryPath === `/conversations/${conversationId}` ||
       primaryPath.startsWith(`/conversations/${conversationId}/`);
     if (!isPrimary) {
       useEventStore.getState().clearConversation(conversationId);
+      useConversationStateStore.getState().clearConversation(conversationId);
+      useConversationStore.getState().clearComposer(conversationId);
     }
   },
   minimizePopout: (conversationId) =>

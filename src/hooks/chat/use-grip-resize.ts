@@ -2,10 +2,9 @@ import type { RefObject, MouseEvent } from "react";
 import { useRef, useState, useCallback } from "react";
 import { useAutoResize } from "#/hooks/use-auto-resize";
 import { CHAT_INPUT } from "#/utils/constants";
-import {
-  IMessageToSend,
-  useConversationStore,
-} from "#/stores/conversation-store";
+import type { IMessageToSend } from "#/stores/conversation-store";
+import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 
 /**
  * Hook for managing grip resize functionality
@@ -17,8 +16,8 @@ export const useGripResize = (
   const [isGripVisible, setIsGripVisible] = useState(false);
   const [isGripDragging, setIsGripDragging] = useState(false);
 
-  const { setShouldHideSuggestions, clearMessageToSend } =
-    useConversationStore();
+  const { setShouldHideSuggestions } = useConversationStore();
+  const { clearMessageToSend } = useConversationComposer();
 
   const gripRef = useRef<HTMLDivElement | null>(null);
   /** After a real resize drag, swallow the synthetic click so it doesn't toggle `isGripVisible`. */

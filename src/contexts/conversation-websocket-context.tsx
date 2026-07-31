@@ -48,6 +48,7 @@ import type {
   ConversationErrorEvent,
   ServerErrorEvent,
 } from "#/types/agent-server/core/events/conversation-state-event";
+import type { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { handleActionEventCacheInvalidation } from "#/utils/cache-utils";
 import { buildWebSocketUrl } from "#/utils/websocket-url";
 import type {
@@ -163,14 +164,23 @@ export function ConversationWebSocketProvider({
   const consumeMatchingPendingMessage = useOptimisticUserMessageStore(
     (state) => state.consumeMatchingPendingMessage,
   );
-  const { setExecutionStatus: setSharedExecutionStatus } =
-    useConversationStateStore();
+  const setExecutionStatusInStore = useConversationStateStore(
+    (state) => state.setExecutionStatus,
+  );
   const { appendInput: appendSharedInput, appendOutput: appendSharedOutput } =
     useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
-  // Secondary conversations (popouts) write only to their event bucket;
-  // shared process-wide chrome stays owned by the primary route.
+  // Execution status is conversation-keyed (like the event store), so every
+  // provider — including secondary popouts — records status for its own id.
+  const setExecutionStatus = (status: ExecutionStatus) => {
+    if (conversationId) {
+      setExecutionStatusInStore(conversationId, status);
+    }
+  };
+
+  // Secondary conversations (popouts) write only to their event / status
+  // buckets; shared process-wide chrome stays owned by the primary route.
   const setErrorMessage = sharedSideEffects
     ? setSharedErrorMessage
     : () => undefined;
@@ -179,9 +189,6 @@ export function ConversationWebSocketProvider({
     : () => undefined;
   const clearConnectionError = sharedSideEffects
     ? clearSharedConnectionError
-    : () => undefined;
-  const setExecutionStatus = sharedSideEffects
-    ? setSharedExecutionStatus
     : () => undefined;
   const appendInput = sharedSideEffects ? appendSharedInput : () => undefined;
   const appendOutput = sharedSideEffects ? appendSharedOutput : () => undefined;

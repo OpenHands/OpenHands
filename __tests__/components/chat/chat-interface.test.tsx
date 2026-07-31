@@ -622,7 +622,9 @@ describe("ChatInterface - Pending message queue", () => {
     // ChatInterface's `onSubmit` handler. Driving that store directly is the
     // most reliable way to simulate "the user pressed send" in jsdom.
     act(() => {
-      useConversationStore.setState({ submittedMessage: text });
+      useConversationStore
+        .getState()
+        .setSubmittedMessage("test-conversation-id", text);
     });
   }
 
@@ -776,7 +778,9 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 
     // Act: submit a new prompt (same path InteractiveChatBox uses).
     act(() => {
-      useConversationStore.setState({ submittedMessage: "hello" });
+      useConversationStore
+        .getState()
+        .setSubmittedMessage("test-conversation-id", "hello");
     });
 
     // Assert: scrollDomToBottom landed scrollHeight onto scrollTop even
@@ -921,7 +925,9 @@ describe("ChatInterface - Tracking", () => {
     renderInterface();
 
     act(() => {
-      useConversationStore.setState({ submittedMessage: "my first task" });
+      useConversationStore
+        .getState()
+        .setSubmittedMessage("test-conversation-id", "my first task");
     });
 
     await waitFor(() => {
@@ -948,7 +954,9 @@ describe("ChatInterface - Tracking", () => {
     renderInterface();
 
     act(() => {
-      useConversationStore.setState({ submittedMessage: "follow-up" });
+      useConversationStore
+        .getState()
+        .setSubmittedMessage("test-conversation-id", "follow-up");
     });
 
     await waitFor(() => {

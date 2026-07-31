@@ -16,9 +16,8 @@ interface PopoutConversationProps {
 /**
  * Live chat for a popped-out conversation, scoped so it coexists with the
  * primary routed conversation: nested navigation supplies the id, the
- * render-scope
- * flag keeps process-wide singletons alone, and the WS provider writes only
- * into this conversation's event-store bucket.
+ * render-scope flag keeps process-wide singletons alone, and the WS provider
+ * writes only into this conversation's event / execution-status buckets.
  */
 export function PopoutConversation({
   conversationId,

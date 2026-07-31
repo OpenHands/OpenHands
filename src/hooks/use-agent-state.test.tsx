@@ -10,6 +10,15 @@ vi.mock("./query/use-active-conversation", () => ({
   useActiveConversation: vi.fn(),
 }));
 
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: vi.fn(() => ({
+    conversationId: "conv-primary",
+  })),
+  useConversationId: vi.fn(() => ({
+    conversationId: "conv-primary",
+  })),
+}));
+
 describe("useAgentState", () => {
   const mockUseActiveConversation = vi.mocked(useActiveConversation);
 
@@ -33,7 +42,7 @@ describe("useAgentState", () => {
     act(() => {
       useConversationStateStore
         .getState()
-        .setExecutionStatus(ExecutionStatus.RUNNING);
+        .setExecutionStatus("conv-primary", ExecutionStatus.RUNNING);
     });
 
     const { result } = renderHook(() => useAgentState());
@@ -57,5 +66,27 @@ describe("useAgentState", () => {
     expect(result.current.curAgentState).toBe(
       AgentState.AWAITING_USER_CONFIRMATION,
     );
+  });
+
+  it("does not leak another conversation's live execution status", () => {
+    mockUseActiveConversation.mockReturnValue({
+      data: {
+        execution_status: ExecutionStatus.IDLE,
+      },
+    } as ReturnType<typeof useActiveConversation>);
+
+    act(() => {
+      useConversationStateStore
+        .getState()
+        .setExecutionStatus(
+          "conv-other",
+          ExecutionStatus.WAITING_FOR_CONFIRMATION,
+        );
+    });
+
+    const { result } = renderHook(() => useAgentState());
+
+    expect(result.current.executionStatus).toBe(ExecutionStatus.IDLE);
+    expect(result.current.curAgentState).toBe(AgentState.AWAITING_USER_INPUT);
   });
 });

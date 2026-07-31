@@ -116,7 +116,10 @@ export function RecommendedAutomationsLauncher({
             }
             navigate?.(`/conversations/${conversation.conversation_id}`);
             onLaunched?.();
-            window.setTimeout(() => setMessageToSend(prompt), 0);
+            window.setTimeout(
+              () => setMessageToSend(conversation.conversation_id, prompt),
+              0,
+            );
           },
           onError: () => {
             launchInFlightRef.current = false;

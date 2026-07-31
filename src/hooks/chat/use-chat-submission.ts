@@ -3,7 +3,8 @@ import {
   clearTextContent,
   clearFileInput,
 } from "#/components/features/chat/utils/chat-input.utils";
-import { useConversationStore } from "#/stores/conversation-store";
+import { getConversationComposer } from "#/hooks/use-conversation-composer";
+import { useScopedConversationId } from "#/hooks/use-conversation-events";
 
 /**
  * Hook for handling chat message submission
@@ -15,11 +16,13 @@ export const useChatSubmission = (
   onSubmit: (message: string) => void,
   resetManualResize?: () => void,
 ) => {
+  const conversationId = useScopedConversationId();
+
   // Send button click handler
   const handleSubmit = useCallback(() => {
     const message = chatInputRef.current?.innerText || "";
     const trimmedMessage = message.trim();
-    const { images, files } = useConversationStore.getState();
+    const { images, files } = getConversationComposer(conversationId);
     const hasAttachments = images.length > 0 || files.length > 0;
 
     if (!trimmedMessage && !hasAttachments) {
@@ -37,7 +40,14 @@ export const useChatSubmission = (
 
     // Reset manual resize state for next message
     resetManualResize?.();
-  }, [chatInputRef, fileInputRef, smartResize, onSubmit, resetManualResize]);
+  }, [
+    chatInputRef,
+    fileInputRef,
+    smartResize,
+    onSubmit,
+    resetManualResize,
+    conversationId,
+  ]);
 
   // Handle stop button click
   const handleStop = useCallback((onStop?: () => void) => {

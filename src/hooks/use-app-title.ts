@@ -1,6 +1,9 @@
 import { useParams } from "react-router";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
-import { useConversationStateStore } from "#/stores/conversation-state-store";
+import {
+  getConversationExecutionStatus,
+  useConversationStateStore,
+} from "#/stores/conversation-state-store";
 import { getAgentStateEmoji } from "#/utils/agent-state-emoji";
 
 const APP_TITLE = "OpenHands";
@@ -8,8 +11,8 @@ const APP_TITLE = "OpenHands";
 export const useAppTitle = () => {
   const { conversationId } = useParams<{ conversationId: string }>();
   const { data: conversation } = useUserConversation(conversationId ?? null);
-  const liveExecutionStatus = useConversationStateStore(
-    (state) => state.execution_status,
+  const liveExecutionStatus = useConversationStateStore((state) =>
+    getConversationExecutionStatus(state, conversationId),
   );
 
   const conversationTitle = conversation?.title;
