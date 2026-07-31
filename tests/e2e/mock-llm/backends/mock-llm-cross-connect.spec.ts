@@ -451,6 +451,13 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
       timeout: 5_000,
     });
 
+    // The modal defaults to the Cloud tab; switch to Agent-server to access
+    // the manual connection form.
+    await page.getByTestId("add-backend-option-agent-server").click();
+    await expect(
+      page.getByTestId("add-backend-agent-server-panel"),
+    ).toBeVisible({ timeout: 5_000 });
+
     // Fill in Backend B details
     const nameInput = page.getByTestId("add-backend-name");
     await nameInput.click();

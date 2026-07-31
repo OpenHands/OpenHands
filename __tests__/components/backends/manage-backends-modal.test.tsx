@@ -502,6 +502,7 @@ describe("ManageBackendsModal", () => {
 
     await user.click(await screen.findByTestId("manage-backends-add"));
     await screen.findByTestId("add-backend-modal");
+    await user.click(screen.getByTestId("add-backend-option-agent-server"));
 
     await user.type(screen.getByTestId("add-backend-name"), "Local Extra");
     await user.type(
