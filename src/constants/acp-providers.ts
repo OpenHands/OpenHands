@@ -5,6 +5,7 @@ export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "pi"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -142,6 +143,10 @@ const ACP_PROVIDER_UI: Record<
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
   },
+  pi: {
+    icon: "pi",
+    description_key: I18nKey.ONBOARDING$AGENT_PI_DESCRIPTION,
+  },
 };
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
@@ -154,13 +159,22 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   const info = getClientAcpProvider(key);
   return {
     key,
-    display_name: info?.display_name ?? key,
-    default_command: info ? [...info.default_command] : [],
-    available_models: info?.available_models?.map((model) => ({
-      id: model.id,
-      label: model.label,
-    })),
-    default_model: info?.default_model ?? undefined,
+    display_name: info?.display_name ?? (key === "pi" ? "Pi" : key),
+    default_command: info
+      ? [...info.default_command]
+      : key === "pi"
+        ? ["npx", "-y", "pi-acp"]
+        : [],
+    available_models: info?.available_models
+      ? info.available_models.map((model) => ({
+          id: model.id,
+          label: model.label,
+        }))
+      : key === "pi"
+        ? [{ id: "default", label: "Default" }]
+        : undefined,
+    default_model:
+      info?.default_model ?? (key === "pi" ? "default" : undefined),
     description_key: ui.description_key,
     icon: ui.icon,
   };
@@ -518,7 +532,7 @@ export function buildAcpAgentSettingsDiff(
   // ``acp_command`` here, so no args are lost.
   return {
     agent_kind: "acp",
-    acp_server: providerKey,
+    acp_server: providerKey === "pi" ? "custom" : providerKey,
     acp_command: options.command ?? [],
     acp_args: [],
     acp_model: model ?? null,

@@ -64,7 +64,7 @@ export interface DirectConversationInfo {
     kind?: string | null;
     acp_model?: string | null;
     /**
-     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli``) from the
+     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli`` / ``pi``) from the
      * SDK's ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
      * ``acpserver`` tag is absent — e.g. a profile launch doesn't stamp the tag
      * client-side and the server may not repopulate it. Read by {@link toAppConversation}.
@@ -703,6 +703,12 @@ function isAcpAgent(settings: Settings): boolean {
 function getAcpServerTag(settings: Settings): string | undefined {
   const agentSettings = toRecord(settings.agent_settings);
   const value = agentSettings.acp_server;
+  if (value === "custom" || !value) {
+    const cmd = agentSettings.acp_command;
+    if (Array.isArray(cmd) && cmd.join(" ") === "npx -y pi-acp") {
+      return "pi";
+    }
+  }
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 

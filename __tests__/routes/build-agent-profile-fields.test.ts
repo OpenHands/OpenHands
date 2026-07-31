@@ -72,6 +72,23 @@ describe("buildAgentProfileFields — ACP", () => {
       expect(fields.acp_model).toBeNull();
     }
   });
+
+  it("maps the 'pi' preset to the 'custom' server identity to satisfy backend validation", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      selectedPreset: "pi",
+      isDefaultProviderCommand: true,
+      commandTokens: ["npx", "-y", "pi-acp"],
+      acpModel: "default",
+    });
+    expect(fields).toEqual({
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_model: "default",
+      acp_command: null,
+      acp_args: null,
+    });
+  });
 });
 
 describe("buildAgentProfileFields — OpenHands", () => {

@@ -13,6 +13,7 @@ import {
   getAcpPreferredDefaultModel,
 } from "#/constants/acp-providers";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
+import { type ACPServerKind } from "@openhands/typescript-client";
 import { type OnboardingAgentId } from "./choose-agent-step";
 
 interface SetupAcpSecretsStepProps {
@@ -125,7 +126,9 @@ export function SetupAcpSecretsStep({
       if (providerKey !== "openhands") {
         await applyAgentProfile({
           agent_kind: "acp",
-          acp_server: providerKey,
+          acp_server: (providerKey === "pi"
+            ? "custom"
+            : providerKey) as ACPServerKind,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
         });
       }

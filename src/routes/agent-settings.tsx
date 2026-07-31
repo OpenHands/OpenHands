@@ -159,7 +159,7 @@ export function buildAgentProfileFields(
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
     return {
       agent_kind: "acp",
-      acp_server: selectedPreset,
+      acp_server: selectedPreset === "pi" ? "custom" : selectedPreset,
       acp_model: acpModel.trim() || null,
       acp_command: isBuiltinDefault
         ? null

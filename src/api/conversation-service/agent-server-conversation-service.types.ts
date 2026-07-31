@@ -153,7 +153,7 @@ export interface AppConversation {
   /**
    * For ACP conversations, the registry key of the ACP CLI server the
    * conversation was launched against (e.g. ``"claude-code"``, ``"codex"``,
-   * ``"gemini-cli"``). Populated from ``info.tags.acpserver`` — see
+   * ``"gemini-cli"``, ``"pi"``). Populated from ``info.tags.acpserver`` — see
    * ``ACP_SERVER_TAG_KEY`` in ``agent-server-adapter.ts`` for the wire
    * format and the rationale behind the snake_case-incompatible
    * ``acpserver`` form. ``null`` for OpenHands conversations and for ACP

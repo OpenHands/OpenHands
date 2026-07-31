@@ -30684,6 +30684,23 @@
     "tr": "Google'ın Gemini CLI aracısı.",
     "uk": "Агент Gemini CLI від Google."
   },
+  "ONBOARDING$AGENT_PI_DESCRIPTION": {
+    "en": "Earendil's Pi Coding Agent.",
+    "ja": "Earendil の Pi コーディングエージェント。",
+    "zh-CN": "Earendil 的 Pi 编码智能体。",
+    "zh-TW": "Earendil 的 Pi 編碼代理。",
+    "ko-KR": "Earendil의 Pi 코딩 에이전트입니다.",
+    "no": "Earendils Pi-kodingsagent.",
+    "ar": "وكيل Pi للبرмجة من Earendil.",
+    "de": "Der Pi Coding Agent von Earendil.",
+    "fr": "L'agent de développement Pi d'Earendil.",
+    "it": "L'agente di sviluppo Pi di Earendil.",
+    "pt": "O agente de programação Pi da Earendil.",
+    "es": "El agente de codificación Pi de Earendil.",
+    "ca": "L'agent de codificació Pi d'Earendil.",
+    "tr": "Earendil'in Pi Kodlama aracısı.",
+    "uk": "Агент кодування Pi від Earendil."
+  },
   "ONBOARDING$BACKEND_TITLE": {
     "en": "Check your backend",
     "ja": "バックエンドを確認",
