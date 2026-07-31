@@ -8,7 +8,6 @@ import { useUnifiedResumeConversation } from "#/hooks/mutation/use-unified-start
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useUserProviders } from "#/hooks/use-user-providers";
 import { getStatusColor, cn } from "#/utils/utils";
-import { canHoverReliably } from "#/utils/hover-reveal-classes";
 import { AgentState } from "#/types/agent-state";
 import DebugStackframeDot from "#/icons/debug-stackframe-dot.svg?react";
 import { ServerStatusContextMenu } from "../controls/server-status-context-menu";
@@ -90,13 +89,15 @@ export function ConversationNameWithStatus() {
       <div className="flex items-center min-w-0">
         <div
           className="relative shrink-0"
-          onMouseEnter={() => {
-            if (canHoverReliably()) {
+          onPointerEnter={(event) => {
+            // Gate on this event's pointer, not device-primary matchMedia — hybrid
+            // laptops can emit compatibility mouseenter for touchscreen taps.
+            if (event.pointerType === "mouse") {
               setHoveredOpen(true);
             }
           }}
-          onMouseLeave={() => {
-            if (canHoverReliably()) {
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") {
               setHoveredOpen(false);
             }
           }}

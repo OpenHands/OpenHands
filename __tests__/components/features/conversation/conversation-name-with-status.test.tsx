@@ -1,6 +1,6 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ConversationNameWithStatus } from "#/components/features/conversation/conversation-name-with-status";
 import { AgentState } from "#/types/agent-state";
@@ -70,6 +70,10 @@ describe("ConversationNameWithStatus", () => {
     });
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("opens the server status menu on click and closes on outside click", async () => {
     const user = userEvent.setup();
 
@@ -84,7 +88,9 @@ describe("ConversationNameWithStatus", () => {
       screen.queryByTestId("server-status-context-menu"),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByTestId("server-status-menu-trigger"));
+    // fireEvent click avoids a preceding mouse pointerenter (hover-open), which
+    // models the touch/toggle path this assertion covers.
+    fireEvent.click(screen.getByTestId("server-status-menu-trigger"));
 
     expect(
       screen.getByTestId("server-status-context-menu"),
@@ -97,20 +103,64 @@ describe("ConversationNameWithStatus", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("toggles the server status menu closed when the trigger is clicked again", async () => {
-    const user = userEvent.setup();
-
+  it("toggles the server status menu closed when the trigger is clicked again", () => {
     renderWithProviders(<ConversationNameWithStatus />);
 
     const trigger = screen.getByTestId("server-status-menu-trigger");
-    await user.click(trigger);
+    fireEvent.click(trigger);
     expect(
       screen.getByTestId("server-status-context-menu"),
     ).toBeInTheDocument();
 
-    await user.click(trigger);
+    fireEvent.click(trigger);
     expect(
       screen.queryByTestId("server-status-context-menu"),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens on mouse pointerenter and dismisses on a following mouse click", () => {
+    renderWithProviders(<ConversationNameWithStatus />);
+
+    const trigger = screen.getByTestId("server-status-menu-trigger");
+    const hoverTarget = trigger.parentElement;
+    expect(hoverTarget).not.toBeNull();
+
+    fireEvent.pointerEnter(hoverTarget!, { pointerType: "mouse" });
+    expect(
+      screen.getByTestId("server-status-context-menu"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(
+      screen.queryByTestId("server-status-context-menu"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps click-toggle open after touch/compatibility hover events on fine-hover hardware", () => {
+    // Device-primary pointer reports fine hover, but the interaction is touch.
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockReturnValue({
+        matches: true,
+        media: "(hover: hover) and (pointer: fine)",
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+
+    renderWithProviders(<ConversationNameWithStatus />);
+
+    const trigger = screen.getByTestId("server-status-menu-trigger");
+    const hoverTarget = trigger.parentElement;
+    expect(hoverTarget).not.toBeNull();
+
+    // Compatibility mouseenter must not open-then-close against the tap.
+    fireEvent.mouseEnter(hoverTarget!);
+    fireEvent.pointerEnter(hoverTarget!, { pointerType: "touch" });
+    fireEvent.click(trigger);
+
+    expect(
+      screen.getByTestId("server-status-context-menu"),
+    ).toBeInTheDocument();
   });
 });

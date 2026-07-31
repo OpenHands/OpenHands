@@ -7,13 +7,45 @@ import { cn } from "#/utils/utils";
  */
 export const FINE_HOVER_MEDIA = "(hover: hover) and (pointer: fine)";
 
-/** Tailwind arbitrary-variant prefix scoped to {@link FINE_HOVER_MEDIA}. */
-export const fineHoverVariant =
-  "[@media(hover:hover)_and_(pointer:fine)]:" as const;
+/**
+ * Full Tailwind candidates for fine-hover media. Kept as complete string literals
+ * so the production CSS scanner can emit the arbitrary-variant rules (dynamic
+ * prefix concatenation is not discoverable).
+ */
+export const FINE_HOVER_ACTION_CLASSES = [
+  "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
+  "[@media(hover:hover)_and_(pointer:fine)]:invisible",
+  "[@media(hover:hover)_and_(pointer:fine)]:opacity-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:pointer-events-auto",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:pointer-events-auto",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:visible",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:opacity-100",
+] as const;
+
+export const FINE_HOVER_YIELD_CLASSES = [
+  "[@media(hover:hover)_and_(pointer:fine)]:opacity-100",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:opacity-0",
+] as const;
+
+export const FINE_HOVER_RESERVE_CLASSES = [
+  "[@media(hover:hover)_and_(pointer:fine)]:min-w-0",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:min-w-[3.75rem]",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:min-w-[3.75rem]",
+] as const;
+
+export const FINE_HOVER_PINNED_TIMESTAMP_CLASSES = [
+  "[@media(hover:hover)_and_(pointer:fine)]:flex",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-hover:hidden",
+  "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:hidden",
+] as const;
 
 /**
  * True when the primary pointer supports reliable hover (mouse/trackpad).
  * Touch-primary phones/tablets return false so callers can prefer click.
+ * Prefer per-event `pointerType` checks for open/close handlers on hybrid devices.
  */
 export function canHoverReliably(): boolean {
   if (
@@ -36,15 +68,7 @@ export function hoverRevealActionClassName(forceVisible = false): string {
 
   return cn(
     "pointer-events-auto visible opacity-100",
-    `${fineHoverVariant}pointer-events-none`,
-    `${fineHoverVariant}invisible`,
-    `${fineHoverVariant}opacity-0`,
-    `${fineHoverVariant}group-hover:pointer-events-auto`,
-    `${fineHoverVariant}group-hover:visible`,
-    `${fineHoverVariant}group-hover:opacity-100`,
-    `${fineHoverVariant}group-focus-within:pointer-events-auto`,
-    `${fineHoverVariant}group-focus-within:visible`,
-    `${fineHoverVariant}group-focus-within:opacity-100`,
+    ...FINE_HOVER_ACTION_CLASSES,
   );
 }
 
@@ -58,12 +82,7 @@ export function hoverRevealYieldClassName(forceHidden = false): string {
     return "opacity-0";
   }
 
-  return cn(
-    "opacity-0",
-    `${fineHoverVariant}opacity-100`,
-    `${fineHoverVariant}group-hover:opacity-0`,
-    `${fineHoverVariant}group-focus-within:opacity-0`,
-  );
+  return cn("opacity-0", ...FINE_HOVER_YIELD_CLASSES);
 }
 
 /**
@@ -75,12 +94,7 @@ export function hoverRevealReserveClassName(forceReserved = false): string {
     return "min-w-[3.75rem]";
   }
 
-  return cn(
-    "min-w-[3.75rem]",
-    `${fineHoverVariant}min-w-0`,
-    `${fineHoverVariant}group-hover:min-w-[3.75rem]`,
-    `${fineHoverVariant}group-focus-within:min-w-[3.75rem]`,
-  );
+  return cn("min-w-[3.75rem]", ...FINE_HOVER_RESERVE_CLASSES);
 }
 
 /**
@@ -95,10 +109,5 @@ export function hoverRevealPinnedTimestampClassName(
     return "hidden";
   }
 
-  return cn(
-    "hidden",
-    `${fineHoverVariant}flex`,
-    `${fineHoverVariant}group-hover:hidden`,
-    `${fineHoverVariant}group-focus-within:hidden`,
-  );
+  return cn("hidden", ...FINE_HOVER_PINNED_TIMESTAMP_CLASSES);
 }
