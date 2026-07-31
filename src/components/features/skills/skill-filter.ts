@@ -230,8 +230,8 @@ function matchesQuery(skill: SkillInfo, query: string): boolean {
 }
 
 /**
- * `exclude` omits one group's own selection, which is what makes each facet
- * row's count predict the result of clicking it.
+ * `exclude` omits one group's own selection so its rows stay counted against the other groups alone.
+ * A row therefore reads "this many skills carry this value, under your other filters" — the usual disjunctive facet count — and not "your result set will be this big": the group ORs its values together, so on a group that already has a selection the two differ.
  */
 function matchesFacets(
   skill: SkillInfo,
