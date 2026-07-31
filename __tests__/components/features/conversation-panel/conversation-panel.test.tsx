@@ -1722,7 +1722,7 @@ describe("ConversationPanel", () => {
       });
     });
 
-    it("loads hidden workspace folders without adding conversations to an exposed folder", async () => {
+    it("keeps collapsed folder previews stable while still exposing later-page conversations on expand", async () => {
       useConversationPanelPreferencesStore.setState({
         organizeMode: "grouped",
       });
@@ -1771,12 +1771,35 @@ describe("ConversationPanel", () => {
       expect(
         within(noWorkspaceFolder).getAllByTestId("conversation-card"),
       ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
 
+      // First click deepens the existing folder; the driver must stop instead of
+      // walking every remaining page looking for a brand-new folder.
       await user.click(screen.getByTestId("load-more-conversations"));
+      await waitFor(() => {
+        expect(searchSpy).toHaveBeenCalledTimes(2);
+      });
+      expect(
+        screen.queryByTestId("thread-folder-ws--workspace-alpha"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
 
+      // Second click discovers the next folder.
+      await user.click(screen.getByTestId("load-more-conversations"));
       await screen.findByTestId("thread-folder-ws--workspace-alpha");
       expect(searchSpy).toHaveBeenCalledTimes(3);
 
+      // Collapsed preview stays frozen; expanding reveals every loaded row.
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
       await user.click(
         within(noWorkspaceFolder).getByTestId(
           "thread-folder-view-more-__none_workspace",
@@ -1784,7 +1807,74 @@ describe("ConversationPanel", () => {
       );
       expect(
         within(noWorkspaceFolder).getAllByTestId("conversation-card"),
-      ).toHaveLength(6);
+      ).toHaveLength(8);
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 7"),
+      ).toBeInTheDocument();
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 8"),
+      ).toBeInTheDocument();
+    });
+
+    it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      )
+        .mockResolvedValueOnce({
+          items: Array.from({ length: 5 }, (_, index) =>
+            createMockConversation({
+              id: `alpha-${index + 1}`,
+              title: `Alpha ${index + 1}`,
+              selected_workspace: "/workspace/alpha",
+            }),
+          ),
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-active",
+              title: "Alpha Active",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel({
+        navigation: {
+          conversationId: "alpha-active",
+          currentPath: "/conversations/alpha-active",
+        },
+      });
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+      expect(
+        within(alphaFolder).queryByText("Alpha Active"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("load-more-conversations"));
+
+      await waitFor(() => {
+        expect(
+          within(
+            screen.getByTestId("thread-folder-ws--workspace-alpha"),
+          ).getByText("Alpha Active"),
+        ).toBeInTheDocument();
+      });
+      // Still a collapsed preview (limit 5), not the full expanded list.
+      expect(
+        within(
+          screen.getByTestId("thread-folder-ws--workspace-alpha"),
+        ).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
     });
   });
 
