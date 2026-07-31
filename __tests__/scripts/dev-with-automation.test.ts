@@ -61,6 +61,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "feat/my-feature",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain("--refresh");
     expect(cmd.args).toContain(
       `git+${DEFAULT_AUTOMATION_REPO}@feat/my-feature`,
@@ -74,6 +75,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "main",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@main",
     );
@@ -85,6 +87,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "v1.0.0",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@v1.0.0",
     );
@@ -96,6 +99,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "abc123def456",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@abc123def456`);
     expect(cmd.source).toBe("git (abc123def456)");
   });
@@ -105,6 +109,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("PyPI (1.0.0)");
   });
@@ -115,6 +120,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");
@@ -739,7 +745,7 @@ describe("dev-with-automation CLI", () => {
     }
   });
 
-  it("exits promptly when uvx is missing", async () => {
+  it("exits promptly when uv is missing", async () => {
     const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
       cwd: repoRoot,
       env: {
@@ -771,6 +777,6 @@ describe("dev-with-automation CLI", () => {
 
     expect(exitResult.timedOut).toBe(false);
     expect(exitResult.code).toBe(1);
-    expect(output).toContain("uvx");
+    expect(output).toContain("Failed to start uv.");
   });
 });

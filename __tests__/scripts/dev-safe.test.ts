@@ -379,6 +379,13 @@ describe("formatMissingUvxGuidance", () => {
     expect(guidance).toContain("npm run dev:frontend");
     expect(guidance).toContain("npm run dev:mock");
   });
+
+  it("names the missing uv executable when requested", () => {
+    const guidance = formatMissingUvxGuidance("/workspace/project", "uv");
+
+    expect(guidance).toContain("Failed to start uv.");
+    expect(guidance).toContain("command -v uv");
+  });
 });
 
 describe("buildAgentServerCommand", () => {

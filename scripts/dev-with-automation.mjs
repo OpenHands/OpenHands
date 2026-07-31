@@ -2,7 +2,7 @@
  * Development Stack with Automation Service
  *
  * Extends agent-canvas's dev-safe.mjs to additionally run the OpenHands Automation
- * backend via uvx. No cloning required - runs directly from git reference.
+ * backend via uv. No cloning required - runs directly from git reference.
  *
  * Uses a standalone ingress proxy to route traffic to multiple backends.
  *
@@ -17,7 +17,7 @@
  *          ▼                    ▼                         ▼
  *   ┌─────────────┐    ┌───────────────┐         ┌──────────────────┐
  *   │ Vite        │    │ Agent Server  │         │ Automation       │
- *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uvx)    │
+ *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uv)     │
  *   │             │    │               │         │ :18001           │
  *   └─────────────┘    └───────────────┘         └──────────────────┘
  *
@@ -466,20 +466,23 @@ function commandExists(cmd) {
 }
 
 function checkPrerequisites({
-  checkUvx = true,
+  checkUvTools = true,
   checkNpm = true,
   checkFrontendDependencies = true,
 } = {}) {
   logStep("1/2", "Checking prerequisites...");
 
-  if (checkUvx) {
-    if (!commandExists("uvx")) {
-      const uvxGuidance = formatMissingUvxGuidance(projectRoot);
-      console.error(uvxGuidance);
-      fileLog("error", stripAnsi(uvxGuidance));
+  if (checkUvTools) {
+    for (const executable of ["uv", "uvx"]) {
+      if (commandExists(executable)) {
+        logSuccess(`${executable} found`);
+        continue;
+      }
+      const guidance = formatMissingUvxGuidance(projectRoot, executable);
+      console.error(guidance);
+      fileLog("error", stripAnsi(guidance));
       process.exit(1);
     }
-    logSuccess("uvx found");
   }
 
   if (checkNpm) {
@@ -1296,7 +1299,7 @@ async function main(options = {}) {
 
   // Setup phase
   checkPrerequisites({
-    checkUvx: !args.frontendOnly,
+    checkUvTools: !args.frontendOnly,
     // Static-mode + backend-only has no frontend to build, so npm is not
     // required — unless the caller provides a custom buildStaticFrontend hook.
     // The Electron desktop launcher passes `skipNpmCheck: true` because the

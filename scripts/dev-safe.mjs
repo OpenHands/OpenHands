@@ -317,18 +317,21 @@ export async function findFreePorts(portConfigs, host = "127.0.0.1") {
   return result;
 }
 
-export function formatMissingUvxGuidance(cwd = process.cwd()) {
+export function formatMissingUvxGuidance(
+  cwd = process.cwd(),
+  executable = "uvx",
+) {
   const readmePath = path.join(cwd, "README.md");
 
   return [
-    "Failed to start uvx. Make sure uv is installed and on your PATH.",
+    `Failed to start ${executable}. Make sure uv is installed and on your PATH.`,
     "",
     "To fix this:",
     "1. Install uv:",
     "   curl -LsSf https://astral.sh/uv/install.sh | sh",
     "2. Make sure the uv bin dir is on your PATH:",
     '   export PATH="$HOME/.local/bin:$PATH"',
-    "   command -v uvx",
+    `   command -v ${executable}`,
     "",
     "Need Windows or another install method? https://docs.astral.sh/uv/getting-started/installation/",
     `See the local Quickstart for details: ${readmePath}`,
