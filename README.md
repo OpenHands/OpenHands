@@ -79,6 +79,17 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+Once all services are up, a banner summarizes where everything is running:
+
+```
+Agent Canvas + Automation Stack — started
+  Ingress:         http://localhost:8000/
+  Main UI:         http://localhost:8000/
+  API Docs:        http://localhost:8000/api/automation/docs
+```
+
+✅ **Next**: Open [http://localhost:8000](http://localhost:8000) in your browser, then see [Next steps](#next-steps).
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:
@@ -103,6 +114,16 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
+The container is ready when its logs show all services up:
+
+```
+[agent-canvas] Agent Server is ready on port 18000
+[agent-canvas] Automation Server is ready on port 18001
+[agent-canvas] All services started. Unified entry point: http://0.0.0.0:8000/
+```
+
+✅ **Next**: Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser (the Docker image serves the UI under `/canvas`), then see [Next steps](#next-steps).
+
 ### Option 3: From Source
 
 > [!WARNING]
@@ -117,9 +138,22 @@ npm install
 npm run dev
 ```
 
----
+This starts the same stack as Option 1 (with the Vite dev server instead of prebuilt assets) and prints the same startup banner.
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+✅ **Next**: Open [http://localhost:8000](http://localhost:8000) in your browser, then see [Next steps](#next-steps).
+
+## Next steps
+
+1. **Access the UI**: Navigate to [http://localhost:8000](http://localhost:8000) (npm/source launchers) or [http://localhost:8000/canvas](http://localhost:8000/canvas) (Docker image) in your web browser.
+2. **Configure an agent and LLM**: On first launch, the UI walks you through picking an agent and configuring your LLM provider and API key. LLM settings are managed in the web UI, not through environment variables.
+3. **Start your first conversation**: Create a new conversation and ask the agent to help with a task in one of your projects.
+4. **Add backends** (optional): You can add additional [agent backends](https://docs.openhands.dev/openhands/usage/agent-canvas/backends) — Docker containers, VMs, or cloud infrastructure — directly from the UI.
+
+**Troubleshooting:**
+
+- The launcher fails fast if a port it needs (8000, 18000, or 18001) is already in use — stop the conflicting process, or pass `--port <port>` to change the ingress port.
+- Option 1 and Option 3 need `uv` installed to launch the agent server; see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+- For anything else, see the [documentation index](./docs/README.md), [DEVELOPMENT.md](./docs/DEVELOPMENT.md), and [SELF_HOSTING.md](./docs/SELF_HOSTING.md), or ask in [Slack](https://go.openhands.dev/slack).
 
 # Architecture
 
