@@ -1,5 +1,6 @@
 import React, { createContext, useContext } from "react";
 import type { ExtraProps } from "react-markdown";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { openWorkspaceFile } from "#/services/canvas-ui";
@@ -59,12 +60,17 @@ function getPlainText(children: React.ReactNode): string | null {
   return null;
 }
 
-/** Only link paths that currently exist in the conversation workspace. */
+/**
+ * Only link paths that currently exist in the conversation workspace.
+ * workingDir comes from ConversationService — same source as navigate_to_file.
+ */
 function useExistingWorkspacePath(candidate: string): string | null {
   const files = useContext(WorkspaceFilesForChatContext);
   if (!files?.length || !looksLikeWorkspaceFilePath(candidate)) return null;
 
-  const normalized = toFilesTabPath(candidate);
+  const workingDir =
+    ConversationService.getCurrentConversation()?.workspace?.working_dir;
+  const normalized = toFilesTabPath(candidate, workingDir);
   if (!normalized) return null;
   return files.includes(normalized) ? normalized : null;
 }

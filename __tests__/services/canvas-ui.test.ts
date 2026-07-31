@@ -112,6 +112,23 @@ describe("handleCanvasUIAction", () => {
 
     expect(useFilesTabStore.getState().selectedPath).toBe("agentic_ai.docx");
   });
+
+  it("strips a nested /workspace working dir before selecting the file", () => {
+    ConversationService.setCurrentConversation({
+      id: "conv-nested",
+      workspace: { working_dir: "/workspace/project/packages/app" },
+    } as never);
+
+    handleCanvasUIAction(
+      action({
+        command: "navigate_to_file",
+        path: "/workspace/project/packages/app/src/index.ts",
+      }),
+      "conv-nested",
+    );
+
+    expect(useFilesTabStore.getState().selectedPath).toBe("src/index.ts");
+  });
 });
 
 describe("openWorkspaceFile", () => {

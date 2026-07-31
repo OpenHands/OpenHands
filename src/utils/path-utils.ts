@@ -20,8 +20,14 @@ export const stripWorkspacePrefix = (path: string): string => {
 };
 
 /**
- * Normalize a tool/chat path for the Files tab: strip `/workspace/…`,
- * the conversation working dir, and optional `:line` suffixes.
+ * Normalize a tool/chat path for the Files tab: strip the conversation
+ * working dir when known, otherwise the generic `/workspace/<name>/`
+ * prefix, plus optional `:line` suffixes.
+ *
+ * Working dir must be removed first. Nested roots such as
+ * `/workspace/project/packages/app` would otherwise be partially stripped
+ * by the two-segment `/workspace/<name>/` heuristic and leave a path that
+ * does not match `useWorkspaceFiles` entries.
  */
 export const toFilesTabPath = (
   path: string,
@@ -34,13 +40,13 @@ export const toFilesTabPath = (
   // the drive colon is at the start (`C:`), never at the end.
   result = result.replace(/:(\d+)(-\d+)?$/, "");
 
-  result = stripWorkspacePrefix(result);
-
   const wd = workingDir?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
   if (wd && result.startsWith(`${wd}/`)) {
     result = result.slice(wd.length + 1);
   } else if (wd && result === wd) {
     return "";
+  } else {
+    result = stripWorkspacePrefix(result);
   }
 
   return result.replace(/^\.\//, "");
