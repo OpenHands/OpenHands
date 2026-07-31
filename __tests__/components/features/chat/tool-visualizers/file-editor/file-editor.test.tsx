@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { fileEditorVisualizer } from "#/components/features/chat/tool-visualizers/file-editor/file-editor";
@@ -9,6 +9,15 @@ import {
   fileEditorAction,
   fileEditorObservation,
 } from "../test-utils";
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: {
+      id: "test-conversation-id",
+      workspace: { working_dir: "/workspace" },
+    },
+  }),
+}));
 
 const Body = fileEditorVisualizer.Body;
 
@@ -169,13 +178,35 @@ describe("fileEditorVisualizer", () => {
     await user.click(screen.getByRole("button", { name: "/workspace/app.ts" }));
 
     expect(useFilesTabStore.getState()).toMatchObject({
-      selectedPath: "/workspace/app.ts",
+      selectedPath: "app.ts",
       selectedConversationId: "test-conversation-id",
     });
     expect(useConversationStore.getState()).toMatchObject({
       hasRightPanelToggled: true,
       selectedTab: "files",
     });
+  });
+
+  it("keeps markdown view observations as a CodeBlock, not a rich preview", () => {
+    const { container } = renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "view",
+          path: "/workspace/README.md",
+          content: [
+            {
+              type: "text",
+              text: "Here's the result of running `cat -n`:\n     1\t# README",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("markdown-file-preview"),
+    ).not.toBeInTheDocument();
+    expect(container).toHaveTextContent("# README");
   });
 
   it("renders a height-clipped markdown preview with a View bar for .md creates", async () => {
@@ -238,5 +269,44 @@ describe("fileEditorVisualizer", () => {
       screen.queryByTestId("markdown-file-preview"),
     ).not.toBeInTheDocument();
     expect(container).toHaveTextContent("const x = 1;");
+  });
+
+  it("shows an in-flight markdown create preview without a View affordance", () => {
+    renderVisualizer(
+      <Body
+        action={fileEditorAction({
+          command: "create",
+          path: "/workspace/notes.md",
+          file_text: "# Draft",
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown-file-preview")).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("markdown-file-preview-view"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stores a workspace-relative path when View opens an absolute .md create", async () => {
+    const user = userEvent.setup();
+
+    renderVisualizer(
+      <Body
+        observation={fileEditorObservation({
+          command: "create",
+          path: "/workspace/docs/report.md",
+          new_content: "# Report",
+        })}
+      />,
+    );
+
+    await user.click(screen.getByTestId("markdown-file-preview-view"));
+
+    expect(useFilesTabStore.getState()).toMatchObject({
+      selectedPath: "docs/report.md",
+      selectedConversationId: "test-conversation-id",
+    });
   });
 });

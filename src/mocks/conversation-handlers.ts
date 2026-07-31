@@ -1,4 +1,4 @@
-import { http, delay, HttpResponse } from "msw";
+import { http, delay, HttpResponse, passthrough } from "msw";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -368,7 +368,9 @@ export const CONVERSATION_HANDLERS = [
           headers: { "Content-Type": "text/markdown; charset=utf-8" },
         });
       }
-      return HttpResponse.text("", { status: 404 });
+      // Leave every other workspace-file GET on its previous bypass behavior
+      // so this fixture handler does not force 404s for unrelated mocks.
+      return passthrough();
     },
   ),
 

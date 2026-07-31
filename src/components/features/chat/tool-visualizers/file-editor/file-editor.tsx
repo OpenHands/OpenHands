@@ -6,12 +6,15 @@
  * the edit is in flight): `create` → new content; `str_replace` → diff of the
  * replaced snippet; `view`/`undo_edit` → just the path + range.
  *
- * Markdown artifacts get a height-clipped rich preview with a View bar that
- * opens the Files drawer, instead of dumping the full source into a code block.
+ * Created Markdown artifacts get a height-clipped rich preview with a View bar
+ * that opens the Files drawer, instead of dumping the full source into a code
+ * block. Reads/edits of `.md` files keep the normal CodeBlock / DiffView path.
  */
 import React from "react";
 import { getLanguageFromPath } from "#/utils/get-language-from-path";
+import { toWorkspaceRelativePath } from "#/utils/workspace-relative-path";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type {
@@ -45,6 +48,7 @@ interface FileEditorCardBodyProps extends FileEditorCardProps {
   /**
    * Deep-links the file into the Files drawer. Absent outside a conversation
    * route, where there is no drawer to open; the card then stays read-only.
+   * Also omitted for in-flight creates so View does not open a missing file.
    */
   onOpenFile?: () => void;
 }
@@ -68,9 +72,11 @@ function FileEditorCardBody({
   ) : null;
 
   const renderFileContent = (content: string) => {
-    if (path && onOpenFile && isMarkdownFilePath(path)) {
-      // Markdown artifacts own their card (clipped preview + View bar), so
-      // skip the separate path chip to avoid a duplicate filename affordance.
+    // Only created Markdown artifacts get the rich preview — `view` returns
+    // `cat -n` numbered snippets that must stay in a CodeBlock.
+    if (path && command === "create" && isMarkdownFilePath(path)) {
+      // Markdown artifacts own their card (clipped preview + optional View),
+      // so skip the separate path chip to avoid a duplicate filename affordance.
       return {
         chip: null as React.ReactNode,
         body: (
@@ -163,16 +169,22 @@ function FileEditorCardWithDrawerLink({
 }: FileEditorCardProps & { conversationId: string }) {
   const { navigateToTab } = useSelectConversationTab();
   const setSelectedPath = useFilesTabStore((state) => state.setSelectedPath);
+  const { data: conversation } = useActiveConversation();
   const path = resolvePath(props);
+  const workingDir = conversation?.workspace?.working_dir;
 
-  // File events already carry the path the agent touched, so the chat card
-  // can deep-link into the existing Files drawer without another API call.
-  const onOpenFile = path
-    ? () => {
-        setSelectedPath(path, conversationId);
-        navigateToTab("files");
-      }
-    : undefined;
+  // Only deep-link once the observation exists — the file is not guaranteed
+  // to be on disk while the create action is still in flight.
+  const onOpenFile =
+    path && props.observation
+      ? () => {
+          setSelectedPath(
+            toWorkspaceRelativePath(path, workingDir),
+            conversationId,
+          );
+          navigateToTab("files");
+        }
+      : undefined;
 
   return <FileEditorCardBody {...props} onOpenFile={onOpenFile} />;
 }

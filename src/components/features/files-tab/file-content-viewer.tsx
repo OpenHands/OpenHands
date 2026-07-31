@@ -7,6 +7,7 @@ import {
   withWorkspaceCacheBuster,
 } from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { isMarkdownFilePath } from "#/utils/is-markdown-file-path";
 import { HighlightedSourceView } from "./highlighted-source-view";
 import type { ViewMode } from "./view-mode";
 
@@ -16,7 +17,6 @@ interface FileContentViewerProps {
 }
 
 const HTML_LIKE_EXTS = new Set(["html", "htm", "svg"]);
-const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
 
 // Office/document formats we can't preview inline. The label doubles as the
 // allow-list (a present entry => Office doc) and feeds a clear, format-named
@@ -181,7 +181,7 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
     );
   }
 
-  if (kind === "text" && MARKDOWN_EXTS.has(getExtension(path))) {
+  if (kind === "text" && isMarkdownFilePath(path)) {
     // Match the right-pane chrome color so the rich-rendered markdown
     // blends with the surrounding files tab instead of painting a stark
     // white card. `--oh-scroll-fade-from` keeps wide-table edge fades on

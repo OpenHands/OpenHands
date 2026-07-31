@@ -212,11 +212,34 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makePlanObs("o1", "a1"))).toBe(false);
   });
 
-  it("does not group markdown file-editor actions or observations", () => {
+  it("does not group markdown file-editor create actions or observations", () => {
     expect(isGroupableEvent(makeMarkdownFileEditorAction("a1"))).toBe(false);
     expect(
       isGroupableEvent(makeMarkdownFileEditorObservation("o1", "a1")),
     ).toBe(false);
+  });
+
+  it("still groups markdown file-editor view observations", () => {
+    const viewObservation = makeMarkdownFileEditorObservation("o1", "a1");
+    viewObservation.observation = {
+      ...viewObservation.observation,
+      command: "view",
+      output: "",
+      new_content: null,
+      content: [{ type: "text", text: "     1\t# README" }],
+    };
+    expect(isGroupableEvent(viewObservation)).toBe(true);
+  });
+
+  it("ungroups a markdown create observation when path comes from the action", () => {
+    const action = makeMarkdownFileEditorAction("a1");
+    const observation = makeMarkdownFileEditorObservation("o1", "a1");
+    observation.observation = {
+      ...observation.observation,
+      path: null,
+    };
+    expect(isGroupableEvent(observation)).toBe(true);
+    expect(isGroupableEvent(observation, action)).toBe(false);
   });
 
   it("does not group TaskTrackerObservation", () => {
