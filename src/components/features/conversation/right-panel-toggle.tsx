@@ -82,6 +82,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
         disabled={isArchivedConversation}
         className={cn(
           mobileTopBarIconButtonClassName,
+          "size-7 self-center",
           isArchivedConversation &&
             "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
           className,
@@ -91,7 +92,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
         aria-disabled={isArchivedConversation}
         data-testid="right-panel-toggle"
       >
-        <BlockDrawerLeftIcon className="w-5 h-5 -scale-x-100" />
+        <BlockDrawerLeftIcon className="size-5 -scale-x-100" />
       </button>
     </ChatActionTooltip>
   );

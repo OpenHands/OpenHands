@@ -35,7 +35,7 @@ export function FileQuickRow({
 
   return (
     <div
-      className="flex items-center gap-1.5 border-b border-[var(--oh-border)] px-2 py-1.5 min-h-[34px]"
+      className="flex h-[34px] shrink-0 items-center gap-1.5 overflow-y-hidden border-b border-[var(--oh-border)] px-2"
       data-testid="file-quick-row"
     >
       <button
@@ -63,7 +63,7 @@ export function FileQuickRow({
       </button>
 
       {sortedByPriority.length > 0 && (
-        <div className="flex flex-nowrap items-center gap-1.5 overflow-hidden flex-1 min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto overflow-y-hidden overscroll-y-none">
           {sortedByPriority.map((path) => {
             const isSelected = selectedPath === path;
             return (
