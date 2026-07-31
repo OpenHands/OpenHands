@@ -8,6 +8,7 @@ describe("dev-static", () => {
       {
         agentServerPort: 18000,
         ingressPort: 8000,
+        vitePort: 3001,
         sessionApiKey: "shared-session-key",
         stateDir: "/tmp/agent-canvas-state",
       },
@@ -23,5 +24,25 @@ describe("dev-static", () => {
         "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
       AUTOMATION_POSTHOG_HOST: "https://us.i.posthog.com",
     });
+  });
+
+  it("advertises the configured frontend port in CORS origins", () => {
+    const env = buildAutomationBackendEnv(
+      {
+        agentServerPort: 18000,
+        ingressPort: 8000,
+        vitePort: 3101,
+        sessionApiKey: "shared-session-key",
+        stateDir: "/tmp/agent-canvas-state",
+      },
+      {},
+    );
+
+    // The CORS allowlist follows the configured frontend port instead of
+    // hardcoding 3001, so a --frontend-port override keeps the browser
+    // origin authorized.
+    expect(env.AUTOMATION_CORS_ORIGINS).toBe(
+      "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3101,http://127.0.0.1:3101",
+    );
   });
 });
