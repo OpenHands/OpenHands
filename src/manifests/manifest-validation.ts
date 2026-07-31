@@ -310,6 +310,17 @@ function hasRepoPicker(form: unknown): boolean {
   );
 }
 
+function checkMessage(check: SetupChecker, message: unknown): void {
+  if (check.templateCopy(message, "setup.message")) {
+    if ((message as string).length > MAX_ASSISTED_MESSAGE_LENGTH) {
+      check.fail(
+        "setup.message",
+        `must be at most ${MAX_ASSISTED_MESSAGE_LENGTH} characters`,
+      );
+    }
+  }
+}
+
 function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   if (!isOneOf(setup.mode, SETUP_MODES)) {
     check.fail("setup.mode", "is not a supported mode");
@@ -318,12 +329,10 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
 
   if (setup.mode === "direct") {
     check.templateValue(setup.prompt, "setup.prompt");
-    check.absent(
-      setup,
-      "message",
-      "setup",
-      "is only allowed for assisted setup",
-    );
+    // A direct entry may carry a fallback-conversation seed for deployments
+    // that cannot run the direct path, held to the same rules as an assisted
+    // message.
+    if (setup.message !== undefined) checkMessage(check, setup.message);
 
     // The derivation reads a single trigger kind, and an event trigger takes
     // its source from the repository field's provider.
@@ -349,14 +358,7 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
     return;
   }
 
-  if (check.templateCopy(setup.message, "setup.message")) {
-    if ((setup.message as string).length > MAX_ASSISTED_MESSAGE_LENGTH) {
-      check.fail(
-        "setup.message",
-        `must be at most ${MAX_ASSISTED_MESSAGE_LENGTH} characters`,
-      );
-    }
-  }
+  checkMessage(check, setup.message);
   check.absent(setup, "prompt", "setup", "is only allowed for direct setup");
   check.absent(setup, "filter", "setup", "is only allowed for direct setup");
 }

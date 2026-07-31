@@ -50,9 +50,10 @@ export type AutomationSpec = Omit<
   "id" | "created_at" | "updated_at" | "last_triggered_at"
 >;
 
+/** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {
-  version: 1;
-  kind: "automation";
+  version: number;
+  kind: string;
   spec: AutomationSpec;
 }
 
