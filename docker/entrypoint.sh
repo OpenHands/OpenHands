@@ -69,7 +69,6 @@ fi
 PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
-AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
 
 # The bundled editor is reached through a path prefix on the proxy port rather
 # than a published port of its own. The same prefix has to reach agent-server
@@ -87,6 +86,11 @@ AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/ca
 # serves.
 # >>> vscode-config: this block is extracted and executed by
 # >>> __tests__/scripts/docker-vscode-route-sync.test.ts — keep the markers.
+# The canvas mount is resolved here rather than alongside the ports above
+# because the collision guard below compares the two prefixes: keeping both
+# inside the extracted block is what lets that comparison be tested against the
+# real defaults instead of only against values a test injects.
+AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
 VSCODE_PORT="${OH_VSCODE_PORT:-${VSCODE_PORT:-${CONFIG_VSCODE_PORT:-8001}}}"
 VSCODE_BASE_PATH="${OH_VSCODE_BASE_PATH:-${VSCODE_BASE_PATH:-${CONFIG_VSCODE_BASE_PATH:-/vscode}}}"
 
@@ -104,6 +108,16 @@ if [ "$VSCODE_BASE_PATH" = "/" ]; then
   log_error "VSCODE_BASE_PATH resolved to the site root — that would route the whole origin to the editor instead of the canvas. Set a prefix such as /vscode."
   exit 1
 fi
+
+# The canvas mount gets the same treatment, for the same reason and with the
+# same function. static-server normalizes whatever `--base-path` it is handed
+# (`canvas` and `/canvas/` both mount at `/canvas`), so comparing a normalized
+# editor prefix against a raw canvas one below would let `AGENT_CANVAS_BASE_PATH=canvas`
+# with `OH_VSCODE_BASE_PATH=/canvas` past the collision guard and then land both
+# on `/canvas` — where the editor route, registered after the SPA mount, takes
+# the application over. Normalizing here rather than at the comparison keeps the
+# value passed to `--base-path` further down identical to the one guarded.
+AGENT_CANVAS_BASE_PATH="$(normalize_base_path "$AGENT_CANVAS_BASE_PATH")"
 
 # static-server keys its route table by prefix and the editor route is
 # registered last, so a prefix that collides with an earlier route silently

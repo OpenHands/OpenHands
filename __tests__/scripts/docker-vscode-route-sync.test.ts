@@ -316,6 +316,44 @@ describe.skipIf(process.platform === "win32")(
       expect(resolved.stderr).toContain("collides");
     });
 
+    // The collision guard compares two prefixes, so both have to be normalized
+    // the same way or a noncanonical spelling walks straight past it.
+    // static-server normalizes whatever `--base-path` it is handed, so every
+    // spelling below mounts the canvas at `/canvas` — the guard has to be
+    // looking at the same value the router will.
+    it.each(["canvas", "/canvas", "/canvas/", "//canvas//"])(
+      "refuses an editor prefix colliding with AGENT_CANVAS_BASE_PATH spelled %j",
+      (canvasBasePath) => {
+        const resolved = resolveEditorConfig({
+          AGENT_CANVAS_BASE_PATH: canvasBasePath,
+          OH_VSCODE_BASE_PATH: "/canvas",
+        });
+        expect(resolved.status).not.toBe(0);
+        expect(resolved.stderr).toContain("collides");
+      },
+    );
+
+    it("guards the default canvas mount without being told it", () => {
+      // Resolving AGENT_CANVAS_BASE_PATH inside the extracted block is what
+      // makes this reachable: a deployment that moves only the editor onto the
+      // canvas's default mount never sets AGENT_CANVAS_BASE_PATH at all.
+      const resolved = resolveEditorConfig({ OH_VSCODE_BASE_PATH: "/canvas" });
+      expect(resolved.status).not.toBe(0);
+      expect(resolved.stderr).toContain("collides");
+    });
+
+    it("accepts a noncanonical canvas mount that does not collide", () => {
+      // The guard must reject overlap, not coexistence: normalizing both sides
+      // must not start rejecting layouts that are actually fine.
+      const resolved = resolveEditorConfig({
+        AGENT_CANVAS_BASE_PATH: "canvas/",
+        OH_VSCODE_BASE_PATH: "editor",
+      });
+      expect(resolved.status).toBe(0);
+      expectRouteMatchesAdvertised(resolved);
+      expect(resolved.advertisedBasePath).toBe("/editor");
+    });
+
     it.each([
       // static-server's --route parser cuts at the *first* '=', so this parses
       // as prefix "/vs" pointing at the garbage url "code=http://…" — a silent

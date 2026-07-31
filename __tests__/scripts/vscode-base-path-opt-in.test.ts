@@ -184,6 +184,33 @@ describe("every launcher that advertises the prefix also serves it", () => {
     );
   });
 
+  it("full-stack dev advertises the prefix only where Vite also proxies it", () => {
+    // This stack has two supported browser origins: the ingress, and Vite's own
+    // port — the latter is in AUTOMATION_CORS_ORIGINS precisely so it can be
+    // browsed directly. The ingress routes the prefix itself, but on the Vite
+    // origin only Vite's proxy can, and vite.config.ts registers that proxy
+    // only when it has a target as well as a prefix. Advertising the prefix
+    // without the target would put a visible button on the Vite origin whose
+    // URL falls through to the SPA — the dead button this gating exists to
+    // prevent. So the two env vars have to be set together, in one block.
+    const source = readScript("dev-with-automation.mjs");
+    // Matched to the block's closing brace at its own indent, so a `${...}`
+    // inside the body does not end the match early.
+    const block = source.match(
+      /if \(config\.launchAgentServer && config\.vscodeBasePath\) \{\n([\s\S]*?VITE_VSCODE[\s\S]*?)\n {2}\}/,
+    );
+    expect(
+      block,
+      "the viteEnv editor block is still recognizable",
+    ).not.toBeNull();
+    expect(block?.[1]).toContain("VITE_VSCODE_BASE_PATH = config.vscodeBasePath");
+    // The editor is its own process on its own port, so the proxy target is
+    // that port and not the backend/ingress host.
+    expect(block?.[1]).toContain(
+      "VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`",
+    );
+  });
+
   it("gates advertising on exactly the condition that adds the route", () => {
     // If these two guards ever disagree, one of the two failure modes returns:
     // an advertised prefix with no route (control opens the SPA), or a routed
