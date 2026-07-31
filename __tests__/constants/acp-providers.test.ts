@@ -53,7 +53,7 @@ describe("ACP provider registry", () => {
         expect(provider.display_name).toBe("Pi");
         expect(provider.default_command).toEqual(["npx", "-y", "pi-acp"]);
         expect(provider.available_models).toEqual([
-          { id: "default", label: "Default" },
+          { id: "default", label: "Default Model" },
         ]);
         expect(provider.default_model).toBe("default");
         expect(provider.icon).toBe("pi");
