@@ -67,6 +67,12 @@ RUN node -e " \
   require('fs').writeFileSync('/tmp/defaults.env', lines.join('\n') + '\n'); \
 "
 
+# ── Stage 1c: Pi ACP (Node 22+ required; avoid Debian apt nodejs) ─────────────
+FROM node:24-slim AS pi-acp-install
+RUN npm install -g --ignore-scripts \
+  @earendil-works/pi-coding-agent \
+  pi-acp
+
 # ── Stage 2: Combined image ──────────────────────────────────────────────────
 FROM ${AGENT_SERVER_IMAGE} AS final
 
@@ -93,23 +99,21 @@ USER root
 
 # Install system deps required by automation's transitive dependencies
 # (asyncpg needs libpq, which the agent-server base image may not include).
-# Also install Node/npm for Pi ACP (pi-acp spawns via npx; the pi coding-agent
-# CLI is a separate global npm package). Claude/Codex/Gemini ACP wrappers ship
-# in the agent-server base image; Pi is installed here for Docker parity.
 RUN if command -v apt-get >/dev/null 2>&1; then \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev nodejs npm && \
+      apt-get install -y --no-install-recommends libpq-dev && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
-# Pi coding agent + ACP adapter (stdio JSON-RPC → ``pi --mode rpc``).
-# ``--ignore-scripts`` matches upstream Pi install guidance; lifecycle scripts
-# are not required for headless ACP use.
-RUN if command -v npm >/dev/null 2>&1; then \
-      npm install -g --ignore-scripts \
-        @earendil-works/pi-coding-agent \
-        pi-acp; \
-    fi
+# Pi coding agent + ACP adapter. Claude/Codex/Gemini wrappers ship in the
+# agent-server base; Pi is third-party and installed via the Node 24 stage
+# above (pi-acp requires Node 22+).
+COPY --from=pi-acp-install /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi-acp-install /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=pi-acp-install /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=pi-acp-install /usr/local/bin/pi /usr/local/bin/pi
+COPY --from=pi-acp-install /usr/local/bin/pi-acp /usr/local/bin/pi-acp
+COPY --from=pi-acp-install /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 # Install automation server via pip.
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
