@@ -7,6 +7,8 @@ import {
   defaultAcpCommandForProvider,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  isPiAcpCommand,
+  PI_ACP_DOCKER_COMMAND,
   PI_ACP_PROVIDER_KEY,
   resolveEffectiveAcpModel,
   resolveUiAcpProviderKey,
@@ -720,24 +722,31 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
   const cmd = agentSettings.acp_command;
   const isEmpty = Array.isArray(cmd) && cmd.length === 0;
   const noCommand = cmd === undefined || cmd === null;
+  let resolved: unknown;
   if (!isEmpty && !noCommand) {
-    return cmd;
+    resolved = cmd;
+  } else {
+    const serverKey =
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined;
+    const uiKey = resolveUiAcpProviderKey(serverKey, cmd);
+    const provider = getAcpProvider(uiKey ?? serverKey);
+    if (provider) {
+      resolved = [...provider.default_command];
+    } else {
+      const piDefault = defaultAcpCommandForProvider(uiKey ?? serverKey ?? "");
+      resolved = piDefault.length > 0 ? piDefault : cmd;
+    }
   }
 
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const uiKey = resolveUiAcpProviderKey(serverKey, cmd);
-  const provider = getAcpProvider(uiKey ?? serverKey);
-  if (provider) {
-    return [...provider.default_command];
+  // Docker pre-installs pi-acp on PATH; npx -y pi-acp fails with a broken npm
+  // stack ("Class extends value undefined is not a constructor or null").
+  if (getDeploymentMode() === "docker" && isPiAcpCommand(resolved)) {
+    return [...PI_ACP_DOCKER_COMMAND];
   }
-  const piDefault = defaultAcpCommandForProvider(uiKey ?? serverKey ?? "");
-  if (piDefault.length > 0) {
-    return piDefault;
-  }
-  return cmd;
+
+  return resolved;
 }
 
 function buildConfiguredAcpAgentSettings(

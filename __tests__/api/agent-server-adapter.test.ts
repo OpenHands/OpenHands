@@ -1567,6 +1567,35 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.tags).toEqual({ acpserver: "pi" });
   });
 
+  it("rewrites the pi-acp npx launch to the preinstalled binary in Docker mode", () => {
+    vi.stubEnv(
+      "VITE_RUNTIME_SERVICES_INFO",
+      JSON.stringify({
+        mode: "docker",
+        services: {
+          agent_server: { url_from_agent: "http://127.0.0.1:18000" },
+        },
+      }),
+    );
+
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "custom",
+          acp_command: ["npx", "-y", "pi-acp"],
+          acp_model: "default",
+        },
+      },
+    }) as {
+      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
+    };
+
+    expect(payload.agent_settings.acp_command).toEqual(["pi-acp"]);
+  });
+
   it("leaves acp_command alone for an unknown acp_server key", () => {
     const payload = buildStartConversationRequest({
       settings: {

@@ -20,7 +20,11 @@ export const PI_ACP_DEFAULT_COMMAND: readonly string[] = [
   "pi-acp",
 ];
 
+/** Docker image pre-installs ``pi-acp`` on PATH; ``npx`` is unreliable there. */
+export const PI_ACP_DOCKER_COMMAND: readonly string[] = ["pi-acp"];
+
 const PI_ACP_DEFAULT_COMMAND_TEXT = PI_ACP_DEFAULT_COMMAND.join(" ");
+const PI_ACP_DOCKER_COMMAND_TEXT = PI_ACP_DOCKER_COMMAND.join(" ");
 
 function normalizeAcpCommandTokens(command: unknown): string[] {
   if (Array.isArray(command)) {
@@ -38,8 +42,10 @@ function normalizeAcpCommandTokens(command: unknown): string[] {
 
 /** True when ``command`` matches the built-in Pi preset launch argv/text. */
 export function isPiAcpCommand(command: unknown): boolean {
+  const normalized = normalizeAcpCommandTokens(command).join(" ");
   return (
-    normalizeAcpCommandTokens(command).join(" ") === PI_ACP_DEFAULT_COMMAND_TEXT
+    normalized === PI_ACP_DEFAULT_COMMAND_TEXT ||
+    normalized === PI_ACP_DOCKER_COMMAND_TEXT
   );
 }
 

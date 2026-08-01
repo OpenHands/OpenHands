@@ -18,6 +18,8 @@ describe("Pi ACP preset helpers", () => {
   it("detects the pi-acp launch argv and shell string", () => {
     expect(isPiAcpCommand(["npx", "-y", "pi-acp"])).toBe(true);
     expect(isPiAcpCommand("npx -y pi-acp")).toBe(true);
+    expect(isPiAcpCommand(["pi-acp"])).toBe(true);
+    expect(isPiAcpCommand("pi-acp")).toBe(true);
     expect(isPiAcpCommand(["npx", "-y", "pi-acp", "--flag"])).toBe(false);
   });
 
