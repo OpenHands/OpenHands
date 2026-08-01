@@ -69,7 +69,6 @@ export function handleStatusMessage(message: StatusMessage) {
     });
   } else if (message.type === "error") {
     trackError({
-      message: message.message,
       source: "chat",
       metadata: { msgId: message.id },
     });

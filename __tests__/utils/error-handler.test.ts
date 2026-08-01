@@ -18,7 +18,6 @@ describe("Error Handler", () => {
   describe("trackError", () => {
     it("should send error to PostHog with basic info", () => {
       const error = {
-        message: "Test error",
         source: "test",
       };
 
@@ -31,15 +30,15 @@ describe("Error Handler", () => {
       });
     });
 
-    it("should include additional metadata in PostHog event", () => {
+    it("merges metadata while reserving error outcome fields", () => {
       const error = {
-        message: "Test error",
         source: "test",
         metadata: {
           extra: "info",
           details: { foo: "bar" },
           error_kind: "spoofed",
           error_telemetry: "outcome",
+          error_id: "spoofed",
         },
       };
 
@@ -51,6 +50,25 @@ describe("Error Handler", () => {
         error_telemetry: "diagnostic",
         extra: "info",
         details: { foo: "bar" },
+      });
+    });
+
+    it("keeps a classified error ID without recording the message", () => {
+      trackError({
+        source: "agent",
+        classification: {
+          kind: "internal",
+          retryable: false,
+          user_action: "none",
+          error_id: "error-123",
+        },
+      });
+
+      expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        error_source: "agent",
+        error_kind: "internal",
+        error_id: "error-123",
+        error_telemetry: "diagnostic",
       });
     });
   });

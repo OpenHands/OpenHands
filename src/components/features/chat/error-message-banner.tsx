@@ -103,7 +103,7 @@ export function ErrorMessageBanner({
       {classification != null && classification.kind !== "internal" ? (
         <CircleAlert
           aria-hidden
-          className="h-4 w-4 shrink-0 text-yellow-500"
+          className="h-4 w-4 shrink-0 text-[var(--oh-warning)]"
           strokeWidth={2}
           data-testid="warning-message-banner-icon"
         />

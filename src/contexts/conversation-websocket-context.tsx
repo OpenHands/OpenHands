@@ -498,7 +498,6 @@ export function ConversationWebSocketProvider({
               | ConversationErrorEvent
               | ServerErrorEvent;
             trackError({
-              message: errorEvent.detail,
               source: "conversation",
               metadata: {
                 eventId: errorEvent.id,
@@ -520,7 +519,6 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "agent",
               metadata: {
                 eventId: event.id,
@@ -712,7 +710,6 @@ export function ConversationWebSocketProvider({
               | ConversationErrorEvent
               | ServerErrorEvent;
             trackError({
-              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
                 eventId: errorEvent.id,
@@ -734,7 +731,6 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "planning_agent",
               metadata: {
                 eventId: event.id,
