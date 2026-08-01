@@ -60,6 +60,10 @@ vi.mock("#/contexts/active-backend-context", () => ({
     },
     setActive: vi.fn(),
   }),
+  useActiveBackend: () => ({
+    backend: { id: "local", name: "Local", kind: "local" },
+    orgId: null,
+  }),
 }));
 
 vi.mock("#/hooks/query/use-backends-health", () => ({
