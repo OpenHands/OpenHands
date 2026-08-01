@@ -11,6 +11,26 @@ describe("FeaturedAutomationsDemo", () => {
     expect(
       screen.getByText("3 suggestions posted · 1 security check passed"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "I reviewed the pull request and posted three suggestions. The security check completed without findings.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open most recent conversation" }),
+    ).toHaveAttribute("href", "/conversations/automation-pr-review-16182");
+  });
+
+  it("shows the latest error when a failed automation is featured", () => {
+    render(<FeaturedAutomationsDemo />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Issue triage" }));
+
+    expect(
+      screen.getByText(
+        "Model provider rejected the repository lookup request: rate limit exceeded.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("links the final add control to Automations", () => {

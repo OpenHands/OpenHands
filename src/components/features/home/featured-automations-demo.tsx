@@ -13,6 +13,9 @@ interface DemoAutomation {
   detail: string;
   result: string;
   nextRun: string;
+  agentMessage: string;
+  error?: string;
+  conversationId: string;
 }
 
 const DEMO_AUTOMATIONS: DemoAutomation[] = [
@@ -24,6 +27,9 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
     detail: "Reviewed #16182 and left 3 actionable comments.",
     result: "3 suggestions posted · 1 security check passed",
     nextRun: "On next pull request",
+    agentMessage:
+      "I reviewed the pull request and posted three suggestions. The security check completed without findings.",
+    conversationId: "automation-pr-review-16182",
   },
   {
     id: "issue-triage",
@@ -33,6 +39,11 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
     detail: "The run completed, but the model provider rejected one request.",
     result: "18 issues classified · 1 retry needed",
     nextRun: "In 4 minutes",
+    agentMessage:
+      "I classified 18 incoming issues and queued the remaining repository lookup for retry.",
+    error:
+      "Model provider rejected the repository lookup request: rate limit exceeded.",
+    conversationId: "automation-issue-triage-20260801",
   },
   {
     id: "weekly-digest",
@@ -42,6 +53,9 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
     detail: "Collecting run quality, cost, and failure patterns for the team.",
     result: "Preparing this week's automation health summary",
     nextRun: "Monday at 9:00 AM",
+    agentMessage:
+      "I am collecting run quality, cost, and failure patterns for this week's summary.",
+    conversationId: "automation-weekly-digest-20260801",
   },
   {
     id: "repo-monitor",
@@ -51,6 +65,9 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
     detail: "Found no new dependency or workflow failures.",
     result: "42 checks scanned · no action required",
     nextRun: "In 59 minutes",
+    agentMessage:
+      "I scanned the configured repositories and found no dependency or workflow failures requiring action.",
+    conversationId: "automation-repository-monitor-20260801",
   },
 ];
 
@@ -65,6 +82,7 @@ const DEMO_COPY = {
   openAutomations: "Open automations",
   featured: "Featured",
   manageAutomations: "Add or manage automations",
+  recentConversation: "Open most recent conversation",
 };
 
 function AutomationStatus({ health }: { health: AutomationHealth }) {
@@ -213,6 +231,22 @@ export function FeaturedAutomationsDemo() {
                   <p className="mt-4 text-xs text-[var(--oh-text-secondary)]">
                     {automation.lastRun} · {automation.nextRun}
                   </p>
+                  <div className="mt-3 max-h-24 space-y-2 overflow-y-auto rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] p-3 text-sm">
+                    <p className="text-[var(--oh-text-secondary)]">
+                      {automation.agentMessage}
+                    </p>
+                    {automation.error ? (
+                      <p className="text-[var(--oh-status-error)]">
+                        {automation.error}
+                      </p>
+                    ) : null}
+                  </div>
+                  <a
+                    href={`/conversations/${automation.conversationId}`}
+                    className="mt-3 inline-flex text-xs text-[var(--oh-foreground)] underline underline-offset-4 hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                  >
+                    {DEMO_COPY.recentConversation}
+                  </a>
                 </article>
               );
             })}
