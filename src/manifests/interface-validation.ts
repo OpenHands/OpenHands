@@ -8,7 +8,11 @@
  * back to its own defaults rather than rendering a partially-trusted mix.
  */
 
-import type { EditableAutomationProperty, InterfaceRoutes } from "./types";
+import type {
+  AutomationAttributeName,
+  InterfaceAttributeType,
+  InterfaceRoutes,
+} from "./types";
 import { INTERFACE_VERSION } from "./types";
 
 /** Copy must never be able to inject markup into the host. */
@@ -25,20 +29,24 @@ const ENDPOINT_PATTERN = /^\/[A-Za-z0-9/{}_-]*$/;
 const ID_ENDPOINT_PATTERN = /^[^{}]*\{id\}[^{}]*$/;
 
 const GIT_PROVIDERS = ["github", "gitlab", "bitbucket"] as const;
-const EDIT_FIELD_TYPES = [
-  "text",
-  "textarea",
-  "number",
-  "llm-profile",
-  "schedule",
-] as const;
-const EDITABLE_PROPERTIES: readonly EditableAutomationProperty[] = [
-  "name",
-  "prompt",
-  "model",
-  "timeout",
-  "schedule",
-];
+/**
+ * The attribute semantics this host's edit dialog implements: the control it
+ * renders per property and the requiredness it enforces. Admission pins a
+ * declared attribute to exactly these, so an admitted manifest can never
+ * promise a control, a requiredness, or (below) a minimum the form would
+ * silently ignore.
+ */
+const HOST_ATTRIBUTES: Record<
+  AutomationAttributeName,
+  { type: InterfaceAttributeType; required: boolean }
+> = {
+  name: { type: "text", required: true },
+  prompt: { type: "textarea", required: false },
+  model: { type: "llm-profile", required: false },
+  timeout: { type: "number", required: false },
+  schedule: { type: "schedule", required: false },
+};
+const ATTRIBUTE_NAMES = Object.keys(HOST_ATTRIBUTES);
 const PLAIN_ENDPOINT_NAMES = [
   "list",
   "health",
@@ -141,7 +149,7 @@ function checkNavigation(check: InterfaceChecker, navigation: unknown): void {
 
 function checkPages(check: InterfaceChecker, pages: unknown): void {
   if (!check.record(pages, "pages")) return;
-  check.closed(pages, ["list", "detail"], "pages");
+  check.closed(pages, ["list", "detail", "edit"], "pages");
 
   if (check.record(pages.list, "pages.list")) {
     check.closed(pages.list, ["title", "subtitle"], "pages.list");
@@ -152,44 +160,57 @@ function checkPages(check: InterfaceChecker, pages: unknown): void {
     check.closed(pages.detail, ["backLabel"], "pages.detail");
     check.copy(pages.detail.backLabel, "pages.detail.backLabel");
   }
+  if (check.record(pages.edit, "pages.edit")) {
+    check.closed(pages.edit, ["title"], "pages.edit");
+    check.copy(pages.edit.title, "pages.edit.title");
+  }
 }
 
-function checkEditField(
+function checkAttribute(
   check: InterfaceChecker,
-  field: unknown,
+  host: { type: InterfaceAttributeType; required: boolean },
+  attribute: unknown,
   path: string,
 ): void {
-  if (!check.record(field, path)) return;
+  if (!check.record(attribute, path)) return;
   check.closed(
-    field,
+    attribute,
     ["type", "label", "help", "required", "constraints"],
     path,
   );
 
-  const { type, label, help, required, constraints } = field;
-  if (
-    typeof type !== "string" ||
-    !(EDIT_FIELD_TYPES as readonly string[]).includes(type)
-  ) {
-    check.fail(`${path}.type`, "is not a supported field type");
+  const { type, label, help, required, constraints } = attribute;
+  if (type !== host.type) {
+    check.fail(
+      `${path}.type`,
+      `must be "${host.type}", the control this host renders`,
+    );
   }
   check.copy(label, `${path}.label`);
   if (help !== undefined) check.copy(help, `${path}.help`);
-  if (typeof required !== "boolean") {
-    check.fail(`${path}.required`, "must be a boolean");
+  if (required !== host.required) {
+    check.fail(
+      `${path}.required`,
+      `must be ${host.required}, what this host enforces`,
+    );
   }
 
   if (constraints !== undefined) {
-    if (type !== "number") {
-      check.fail(`${path}.constraints`, "is only allowed on a number field");
+    if (host.type !== "number") {
+      check.fail(
+        `${path}.constraints`,
+        "is only allowed on a number attribute",
+      );
     } else if (check.record(constraints, `${path}.constraints`)) {
       check.closed(constraints, ["min", "max"], `${path}.constraints`);
       const { min, max } = constraints;
-      if (
-        min !== undefined &&
-        (!Number.isInteger(min) || (min as number) < 0)
-      ) {
-        check.fail(`${path}.constraints.min`, "must be a non-negative integer");
+      // The form validates a positive integer, i.e. an effective minimum of 1;
+      // any other declared minimum would be a promise it does not keep.
+      if (min !== undefined && min !== 1) {
+        check.fail(
+          `${path}.constraints.min`,
+          "must be the 1 this host enforces",
+        );
       }
       if (
         max !== undefined &&
@@ -197,29 +218,27 @@ function checkEditField(
       ) {
         check.fail(`${path}.constraints.max`, "must be a positive integer");
       }
-      if (typeof min === "number" && typeof max === "number" && min > max) {
-        check.fail(`${path}.constraints`, "min must not exceed max");
-      }
     }
   }
 }
 
-function checkEdit(check: InterfaceChecker, edit: unknown): void {
-  if (!check.record(edit, "edit")) return;
-  check.closed(edit, ["title", "fields"], "edit");
-  check.copy(edit.title, "edit.title");
-
-  if (!check.record(edit.fields, "edit.fields")) return;
-  const names = Object.keys(edit.fields);
+function checkAttributes(check: InterfaceChecker, attributes: unknown): void {
+  if (!check.record(attributes, "attributes")) return;
+  const names = Object.keys(attributes);
   if (names.length === 0) {
-    check.fail("edit.fields", "must declare at least one field");
+    check.fail("attributes", "must declare at least one attribute");
   }
   names.forEach((name) => {
-    if (!(EDITABLE_PROPERTIES as readonly string[]).includes(name)) {
-      check.fail(`edit.fields.${name}`, "is not an editable property");
+    if (!ATTRIBUTE_NAMES.includes(name)) {
+      check.fail(`attributes.${name}`, "is not a settable attribute");
       return;
     }
-    checkEditField(check, (edit.fields as Rec)[name], `edit.fields.${name}`);
+    checkAttribute(
+      check,
+      HOST_ATTRIBUTES[name as AutomationAttributeName],
+      attributes[name],
+      `attributes.${name}`,
+    );
   });
 }
 
@@ -335,7 +354,7 @@ const TOP_LEVEL_KEYS = [
   "navigation",
   "pages",
   "docsUrl",
-  "edit",
+  "attributes",
   "importExport",
   "endpoints",
   "featuredAutomationIds",
@@ -374,7 +393,7 @@ export function validateInterfaceManifest(
   ) {
     check.fail("docsUrl", `must start with ${DOCS_URL_PREFIX}`);
   }
-  checkEdit(check, candidate.edit);
+  checkAttributes(check, candidate.attributes);
   checkImportExport(check, candidate.importExport);
   checkEndpoints(check, candidate.endpoints);
 

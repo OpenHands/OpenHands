@@ -48,4 +48,17 @@ describe("validateAutomationTimeout", () => {
       errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED,
     });
   });
+
+  it("validates against a ceiling the interface manifest lowered", () => {
+    // Arrange / Act — a manifest max of 900 moves the boundary: 900 stays
+    // in range while 901, fine under the 1800 default, is now rejected.
+    const atCeiling = validateAutomationTimeout("900", 900);
+    const overCeiling = validateAutomationTimeout("901", 900);
+
+    // Assert
+    expect(atCeiling).toEqual({ value: 900 });
+    expect(overCeiling).toEqual({
+      errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED,
+    });
+  });
 });

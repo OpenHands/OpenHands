@@ -96,27 +96,27 @@ export function createInterfaceManifest(
     pages: {
       list: { title: "Widget automations", subtitle: "All of the widgets." },
       detail: { backLabel: "Back to the widgets" },
+      edit: { title: "Edit the widget automation" },
     },
     docsUrl: "https://docs.openhands.dev/widgets",
-    edit: {
-      title: "Edit the widget automation",
-      fields: {
-        name: { type: "text", label: "Widget name", required: true },
-        timeout: {
-          type: "number",
-          label: "Widget timeout",
-          required: false,
-          constraints: { min: 1, max: 900 },
-        },
+    attributes: {
+      name: { type: "text", label: "Widget name", required: true },
+      timeout: {
+        type: "number",
+        label: "Widget timeout",
+        required: false,
+        constraints: { min: 1, max: 900 },
       },
     },
+    // Every importExport datum differs from the host default, so a test that
+    // reads it back can tell manifest data from fallback data.
     importExport: {
-      fileKind: "automation",
+      fileKind: "widget",
       fileVersion: 1,
-      filenameSuffix: ".automation.json",
+      filenameSuffix: ".widget.json",
       importDefaults: {
-        repoProvider: "github",
-        placeholderEventSource: "agent-canvas-import",
+        repoProvider: "gitlab",
+        placeholderEventSource: "widget-import",
       },
     },
     endpoints: {
@@ -132,7 +132,7 @@ export function createInterfaceManifest(
       createPlugin: "/v1/preset/plugin",
     },
     featuredAutomationIds: ["github-pr-reviewer"],
-    responderIntegrationIds: ["github", "slack"],
+    responderIntegrationIds: ["github"],
     ...overrides,
   };
 }

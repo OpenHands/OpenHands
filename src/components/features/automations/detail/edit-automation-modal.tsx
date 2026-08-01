@@ -27,7 +27,7 @@ import {
   AUTOMATION_TIMEOUT_MAX_SECONDS,
 } from "#/utils/automation-timeout";
 import {
-  getEditFieldSpec,
+  getAttributeSpec,
   getInterfaceCopy,
 } from "#/manifests/automation-interface";
 import { cn } from "#/utils/utils";
@@ -125,15 +125,15 @@ export function EditAutomationModal({
 }: EditAutomationModalProps) {
   const { t } = useTranslation("openhands");
   const updateMutation = useUpdateAutomation();
-  // Which properties the dialog offers, and their copy, come from the
+  // Which attributes the dialog offers, and their copy, come from the
   // interface manifest; absent one, the host defaults reproduce today's form.
   const editTitle =
     getInterfaceCopy().editTitle ?? t(I18nKey.AUTOMATIONS$EDIT_TITLE);
-  const nameSpec = getEditFieldSpec("name");
-  const promptSpec = getEditFieldSpec("prompt");
-  const modelSpec = getEditFieldSpec("model");
-  const timeoutSpec = getEditFieldSpec("timeout");
-  const scheduleSpec = getEditFieldSpec("schedule");
+  const nameSpec = getAttributeSpec("name");
+  const promptSpec = getAttributeSpec("prompt");
+  const modelSpec = getAttributeSpec("model");
+  const timeoutSpec = getAttributeSpec("timeout");
+  const scheduleSpec = getAttributeSpec("schedule");
   const { data: profilesData, isLoading: isLoadingProfiles } = useLlmProfiles();
   const profiles = profilesData?.profiles ?? [];
   const modelItems = [

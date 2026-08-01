@@ -166,27 +166,28 @@ export interface ValidateDraftResponse {
 
 export const INTERFACE_VERSION = "1.0";
 
-/** The closed set of Automation properties the edit dialog may offer. */
-export type EditableAutomationProperty =
+/** The closed set of runtime-model properties a client may offer for setting. */
+export type AutomationAttributeName =
   | "name"
   | "prompt"
   | "model"
   | "timeout"
   | "schedule";
 
-export type InterfaceEditFieldType =
+export type InterfaceAttributeType =
   | "text"
   | "textarea"
   | "number"
   | "llm-profile"
   | "schedule";
 
-export interface InterfaceEditField {
-  type: InterfaceEditFieldType;
+/** How one settable attribute of an existing Automation is offered. */
+export interface InterfaceAttribute {
+  type: InterfaceAttributeType;
   label: string;
   help?: string;
   required: boolean;
-  /** Only a `number` field carries constraints. */
+  /** Only a `number` attribute carries constraints. */
   constraints?: { min?: number; max?: number };
 }
 
@@ -239,13 +240,15 @@ export interface InterfaceManifest {
   pages: {
     list: { title: string; subtitle: string };
     detail: { backLabel: string };
+    edit: { title: string };
   };
   docsUrl: string;
-  edit: {
-    title: string;
-    /** Keyed by the Automation property each field edits. */
-    fields: Partial<Record<EditableAutomationProperty, InterfaceEditField>>;
-  };
+  /**
+   * The input surface of an existing Automation, keyed by the runtime-model
+   * property the host sends. Rendering it as an edit dialog is this host's
+   * choice, not stated here.
+   */
+  attributes: Partial<Record<AutomationAttributeName, InterfaceAttribute>>;
   importExport: InterfaceImportExport;
   endpoints: InterfaceEndpoints;
   featuredAutomationIds: string[];

@@ -2,8 +2,9 @@
  * The automation interface seam.
  *
  * Every automation-specific datum the host's surfaces render — routes,
- * navigation and page copy, the edit form, the import/export envelope,
- * endpoint paths, the featured and responder id lists — is served from here.
+ * navigation and page copy, the settable attributes, the import/export
+ * envelope, endpoint paths, the featured and responder id lists — is served
+ * from here.
  * The published interface manifest supplies it when the pinned
  * `@openhands/extensions` ships one and it passes admission; otherwise the
  * host's own defaults do, which reproduce today's behavior exactly. Copy
@@ -15,7 +16,7 @@ import { AUTOMATION_TIMEOUT_MAX_SECONDS } from "#/utils/automation-timeout";
 import { validateInterfaceManifest } from "./interface-validation";
 import { AUTOMATION_INTERFACE_CANDIDATE } from "./manifest-sources";
 import type {
-  EditableAutomationProperty,
+  AutomationAttributeName,
   InterfaceEndpointName,
   InterfaceImportExport,
   InterfaceManifest,
@@ -75,7 +76,7 @@ const DEFAULT_RESPONDER_INTEGRATION_IDS: readonly string[] = [
   "slack",
 ];
 
-export interface EditFieldSpec {
+export interface AttributeSpec {
   present: boolean;
   /** Null means "render the host's own translation". */
   label: string | null;
@@ -85,7 +86,7 @@ export interface EditFieldSpec {
   max: number | null;
 }
 
-const ABSENT_EDIT_FIELD: EditFieldSpec = {
+const ABSENT_ATTRIBUTE: AttributeSpec = {
   present: false,
   label: null,
   help: null,
@@ -95,7 +96,7 @@ const ABSENT_EDIT_FIELD: EditFieldSpec = {
 };
 
 /** Today's edit dialog, restated as specs so absence of a manifest changes nothing. */
-const DEFAULT_EDIT_FIELDS: Record<EditableAutomationProperty, EditFieldSpec> = {
+const DEFAULT_ATTRIBUTES: Record<AutomationAttributeName, AttributeSpec> = {
   name: {
     present: true,
     label: null,
@@ -231,24 +232,22 @@ export function getInterfaceCopy(): InterfaceCopy {
     listTitle: ADMITTED.pages.list.title,
     listSubtitle: ADMITTED.pages.list.subtitle,
     detailBackLabel: ADMITTED.pages.detail.backLabel,
-    editTitle: ADMITTED.edit.title,
+    editTitle: ADMITTED.pages.edit.title,
   };
 }
 
-export function getEditFieldSpec(
-  property: EditableAutomationProperty,
-): EditFieldSpec {
-  if (!ADMITTED) return DEFAULT_EDIT_FIELDS[property];
+export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
+  if (!ADMITTED) return DEFAULT_ATTRIBUTES[name];
 
-  const field = ADMITTED.edit.fields[property];
-  if (!field) return ABSENT_EDIT_FIELD;
+  const attribute = ADMITTED.attributes[name];
+  if (!attribute) return ABSENT_ATTRIBUTE;
   return {
     present: true,
-    label: field.label,
-    help: field.help ?? null,
-    required: field.required,
-    min: field.constraints?.min ?? null,
-    max: field.constraints?.max ?? null,
+    label: attribute.label,
+    help: attribute.help ?? null,
+    required: attribute.required,
+    min: attribute.constraints?.min ?? null,
+    max: attribute.constraints?.max ?? null,
   };
 }
 

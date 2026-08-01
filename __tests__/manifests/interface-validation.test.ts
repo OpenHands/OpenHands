@@ -100,31 +100,61 @@ describe("validateInterfaceManifest", () => {
       { featuredAutomationIds: ["github-pr-reviewer", "unpublished-entry"] },
     ],
     [
-      "an edit field for a property the host cannot edit",
+      "an attribute the host cannot set",
       {
-        edit: {
-          title: "Edit automation",
-          fields: {
-            tarballPath: { type: "text", label: "Tarball", required: false },
+        attributes: {
+          tarballPath: { type: "text", label: "Tarball", required: false },
+        },
+      },
+    ],
+    [
+      "constraints on a non-number attribute",
+      {
+        attributes: {
+          name: {
+            type: "text",
+            label: "Name",
+            required: true,
+            constraints: { max: 50 },
+          },
+        },
+      },
+    ],
+    // The next three pin an admitted manifest to the semantics the edit
+    // dialog implements, so it can never promise a control, a requiredness,
+    // or a minimum the form would silently ignore.
+    [
+      "a control the host does not render for that attribute",
+      {
+        attributes: {
+          name: { type: "textarea", label: "Name", required: true },
+        },
+      },
+    ],
+    [
+      "a requiredness the host does not enforce",
+      {
+        attributes: {
+          prompt: { type: "textarea", label: "Prompt", required: true },
+        },
+      },
+    ],
+    [
+      "a minimum the host does not enforce",
+      {
+        attributes: {
+          timeout: {
+            type: "number",
+            label: "Timeout",
+            required: false,
+            constraints: { min: 60, max: 900 },
           },
         },
       },
     ],
     [
-      "constraints on a field that is not a number",
-      {
-        edit: {
-          title: "Edit automation",
-          fields: {
-            name: {
-              type: "text",
-              label: "Name",
-              required: true,
-              constraints: { max: 50 },
-            },
-          },
-        },
-      },
+      "a responder integration id that is not a lowercase slug",
+      { responderIntegrationIds: ["GitHub!"] },
     ],
     [
       "a key this host does not read",

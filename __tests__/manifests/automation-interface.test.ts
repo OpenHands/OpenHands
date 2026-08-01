@@ -33,8 +33,10 @@ describe("the automation interface seam", () => {
       detailPath: seam.automationDetailPath("a/b"),
       createEndpoint: seam.getAutomationEndpoint("createPrompt"),
       dispatchEndpoint: seam.getAutomationIdEndpoint("dispatch", "id-1"),
-      timeoutMax: seam.getEditFieldSpec("timeout").max,
+      timeoutMax: seam.getAttributeSpec("timeout").max,
+      filenameSuffix: seam.getImportExportSpec().filenameSuffix,
       featured: [...seam.getFeaturedAutomationIds()],
+      responders: [...seam.getResponderIntegrationIds()],
     }).toEqual({
       listTitle: null,
       sidebarLabel: null,
@@ -44,11 +46,13 @@ describe("the automation interface seam", () => {
       createEndpoint: "/v1/preset/prompt",
       dispatchEndpoint: "/v1/id-1/dispatch",
       timeoutMax: 1800,
+      filenameSuffix: ".automation.json",
       featured: [
         "github-pr-reviewer",
         "github-repo-monitor",
         "slack-channel-monitor",
       ],
+      responders: ["github", "slack"],
     });
   });
 
@@ -56,33 +60,45 @@ describe("the automation interface seam", () => {
     // Arrange
     const seam = await loadSeam(createInterfaceManifest());
 
-    // Act & Assert — copy, edit specs, and the id lists all come from the
-    // manifest.
+    // Act & Assert — copy, attribute specs, the import/export envelope, and
+    // the id lists all come from the manifest.
     expect({
       listTitle: seam.getInterfaceCopy().listTitle,
       sidebarLabel: seam.getInterfaceCopy().sidebarLabel,
       editTitle: seam.getInterfaceCopy().editTitle,
-      nameLabel: seam.getEditFieldSpec("name").label,
-      timeoutMax: seam.getEditFieldSpec("timeout").max,
+      nameLabel: seam.getAttributeSpec("name").label,
+      timeoutMax: seam.getAttributeSpec("timeout").max,
+      importExport: seam.getImportExportSpec(),
       docsUrl: seam.getAutomationsDocsUrl(),
       featured: [...seam.getFeaturedAutomationIds()],
+      responders: [...seam.getResponderIntegrationIds()],
     }).toEqual({
       listTitle: "Widget automations",
       sidebarLabel: "Automate everything",
       editTitle: "Edit the widget automation",
       nameLabel: "Widget name",
       timeoutMax: 900,
+      importExport: {
+        fileKind: "widget",
+        fileVersion: 1,
+        filenameSuffix: ".widget.json",
+        importDefaults: {
+          repoProvider: "gitlab",
+          placeholderEventSource: "widget-import",
+        },
+      },
       docsUrl: "https://docs.openhands.dev/widgets",
       featured: ["github-pr-reviewer"],
+      responders: ["github"],
     });
   });
 
-  it("hides an edit field the admitted manifest does not declare", async () => {
+  it("hides an attribute the admitted manifest does not declare", async () => {
     // Arrange — the factory manifest declares only `name` and `timeout`.
     const seam = await loadSeam(createInterfaceManifest());
 
     // Act
-    const spec = seam.getEditFieldSpec("prompt");
+    const spec = seam.getAttributeSpec("prompt");
 
     // Assert
     expect(spec.present).toBe(false);
