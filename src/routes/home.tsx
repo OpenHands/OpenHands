@@ -1,5 +1,6 @@
 import { PrefetchPageLinks, useLocation } from "react-router";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
+import { FeaturedAutomationsDemo } from "#/components/features/home/featured-automations-demo";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import {
   isOnboardingPreviewActive,
@@ -24,6 +25,12 @@ function HomeScreen() {
       <div className="flex flex-1 min-h-0 flex-col items-center justify-center">
         <HomeChatLauncher />
       </div>
+
+      {import.meta.env.VITE_FEATURED_AUTOMATIONS_DEMO === "true" ? (
+        <div className="pb-6 pt-2">
+          <FeaturedAutomationsDemo />
+        </div>
+      ) : null}
 
       {!isPreview ? <OnboardingHost /> : null}
     </div>
