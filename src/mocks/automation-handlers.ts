@@ -1,4 +1,10 @@
 import { http, HttpResponse, delay } from "msw";
+import capabilitiesFixture from "@openhands/extensions/testing/automations/capabilities.json";
+import type {
+  DeploymentCapabilities,
+  DraftValidationError,
+  ValidateDraftResponse,
+} from "#/manifests/types";
 import type {
   Automation,
   AutomationsResponse,
@@ -8,6 +14,79 @@ import type {
 import { AutomationRunStatus } from "#/types/automation";
 import { MOCK_AUTOMATIONS_RESPONSE } from "./automations.mock";
 import { MOCK_AUTOMATION_RUNS } from "./automation-runs.mock";
+
+// The "supported" deployment from the published contract fixtures. Discovery
+// and preflight answer with it, so the setup flow runs against the same
+// reference data the extensions contract is verified against.
+const CAPABILITIES: DeploymentCapabilities =
+  capabilitiesFixture.responses.supported.body;
+
+interface DraftTrigger {
+  type?: string;
+  schedule?: string;
+  on?: string;
+  source?: string;
+}
+
+// The schedules the mock can read: "* * * * *" and "*/N * * * *". Anything
+// else is assumed to satisfy the deployment minimum — this stands in for the
+// service's cron parser rather than reimplementing it.
+const STEP_SCHEDULE_PATTERN = /^(?:\*|\*\/(\d+)) \* \* \* \*$/;
+
+function cronIntervalSeconds(schedule: string): number | null {
+  const match = STEP_SCHEDULE_PATTERN.exec(schedule.trim());
+  if (!match) return null;
+  return (match[1] ? Number(match[1]) : 1) * 60;
+}
+
+// Event deliveries registered for the mock organization. Distinct from
+// CAPABILITIES.eventTypes on purpose: a deployment can support an event type
+// that no webhook is registered to deliver, and preflight is what catches
+// that gap — the fixtures' event-type-not-delivered scenario depends on one
+// supported type staying unregistered here.
+const REGISTERED_EVENT_TYPES = CAPABILITIES.eventTypes.filter(
+  (type) => type !== "pull_request_review_comment.created",
+);
+
+// The deployment checks the contract fixtures record: a cron schedule below
+// triggers.cron.minIntervalSeconds, and an event type no webhook delivers.
+// Errors address the draft by dotted path, exactly as the fixtures do.
+function validateDraftTrigger(
+  trigger: DraftTrigger | undefined,
+): DraftValidationError[] {
+  if (!trigger) return [];
+
+  const cron = CAPABILITIES.triggers.cron;
+  if (trigger.type === "cron" && trigger.schedule && cron) {
+    const interval = cronIntervalSeconds(trigger.schedule);
+    if (interval !== null && interval < cron.minIntervalSeconds) {
+      return [
+        {
+          field: "trigger.schedule",
+          code: "interval_too_short",
+          message: `Minimum interval for this deployment is ${cron.minIntervalSeconds / 60} minutes.`,
+        },
+      ];
+    }
+  }
+
+  if (
+    trigger.type === "event" &&
+    trigger.on &&
+    !REGISTERED_EVENT_TYPES.includes(trigger.on)
+  ) {
+    const source = trigger.source === "github" ? "GitHub" : trigger.source;
+    return [
+      {
+        field: "trigger.on",
+        code: "event_type_not_delivered",
+        message: `No ${source} webhook delivering ${trigger.on} is registered for this organization.`,
+      },
+    ];
+  }
+
+  return [];
+}
 
 // Mutable copy for CRUD operations within the mock session
 const automations = new Map<string, Automation>(
@@ -42,6 +121,31 @@ export const AUTOMATION_HANDLERS = [
     const response: AutomationsResponse = {
       automations: page,
       total: all.length,
+    };
+
+    return HttpResponse.json(response);
+  }),
+
+  // GET /api/automation/v1/capabilities — What this deployment supports
+  http.get("*/api/automation/v1/capabilities", async () => {
+    await delay(200);
+    return HttpResponse.json(CAPABILITIES);
+  }),
+
+  // POST /api/automation/v1/validate — Preflight a draft without creating it
+  http.post("*/api/automation/v1/validate", async ({ request }) => {
+    await delay(200);
+
+    const body = (await request.clone().json()) as {
+      automationId?: string;
+      endpoint?: string;
+      draft?: { trigger?: DraftTrigger };
+    };
+
+    const errors = validateDraftTrigger(body.draft?.trigger);
+    const response: ValidateDraftResponse = {
+      valid: errors.length === 0,
+      errors,
     };
 
     return HttpResponse.json(response);

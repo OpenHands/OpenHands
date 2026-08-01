@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
+import capabilitiesFixture from "@openhands/extensions/testing/automations/capabilities.json";
+import incidentFixture from "@openhands/extensions/testing/automations/incident-retrospective-drafter.json";
+import prReviewerFixture from "@openhands/extensions/testing/automations/github-pr-reviewer.json";
+import repoMonitorFixture from "@openhands/extensions/testing/automations/github-repo-monitor.json";
 import { assessCapabilityRequirements } from "#/manifests/manifest-capabilities";
+import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { DeploymentCapabilities } from "#/manifests/types";
 import { createSetup, createSetupEntry } from "./manifest-test-data";
 
@@ -76,4 +81,45 @@ describe("assessCapabilityRequirements", () => {
     // Assert — no single requirement is the reason, so none is named.
     expect(assessment).toEqual({ supported: false, unmet: [] });
   });
+});
+
+describe("the published contract fixtures", () => {
+  // Each fixture bundle lists in `blockedBy` exactly the published deployment
+  // shapes its entry cannot run under. The host's assessment must agree with
+  // that record for every entry × shape pair.
+  const shapes = Object.entries(capabilitiesFixture.responses).map(
+    ([shapeName, response]) => ({
+      shapeName,
+      capabilities: response.body as DeploymentCapabilities,
+    }),
+  );
+
+  const bundles = [prReviewerFixture, repoMonitorFixture, incidentFixture] as {
+    automationId: string;
+    blockedBy: string[];
+  }[];
+
+  it.each(
+    bundles.flatMap(({ automationId, blockedBy }) =>
+      shapes.map(({ shapeName, capabilities }) => ({
+        automationId,
+        shapeName,
+        capabilities,
+        blocked: blockedBy.includes(shapeName),
+      })),
+    ),
+  )(
+    "$automationId under the $shapeName deployment: blocked=$blocked",
+    ({ automationId, capabilities, blocked }) => {
+      // Arrange
+      const entry = SETUP_REGISTRY.findById(automationId);
+      if (!entry) throw new Error(`The registry did not admit ${automationId}`);
+
+      // Act
+      const assessment = assessCapabilityRequirements(entry, capabilities);
+
+      // Assert
+      expect(assessment.supported).toBe(!blocked);
+    },
+  );
 });
