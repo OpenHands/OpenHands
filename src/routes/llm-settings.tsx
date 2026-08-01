@@ -111,6 +111,7 @@ export function LlmSettingsScreen({
   hideSaveButton,
   suppressSuccessToast,
   onSaveControlChange,
+  apiKeyIsSet: storedApiKeyIsSet = false,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -125,6 +126,13 @@ export function LlmSettingsScreen({
   suppressSuccessToast?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /**
+   * For embedded profile forms: whether the profile being edited already has a
+   * stored API key. The stored (encrypted) key is never seeded into the form,
+   * so this flag is what surfaces the "<hidden>" placeholder and key-set
+   * indicator while the field stays blank. Ignored outside embedded mode.
+   */
+  apiKeyIsSet?: boolean;
 }) {
   const { t } = useTranslation("openhands");
 
@@ -208,8 +216,12 @@ export function LlmSettingsScreen({
       // `llm_api_key_set` flag is misleading: a brand-new profile would show a
       // "key set" indicator just because some other profile has a key. Reflect
       // the form's own key state instead so create mode starts visibly unset.
+      // When editing a profile that already has a stored key the form value is
+      // deliberately blank (the encrypted key must not be rendered back), so
+      // the caller's `storedApiKeyIsSet` flag keeps the "<hidden>" placeholder
+      // and key-set indicator visible until the user types a replacement.
       const apiKeyIsSet = embedded
-        ? apiKeyValue.length > 0
+        ? apiKeyValue.length > 0 || storedApiKeyIsSet
         : Boolean(settings?.llm_api_key_set);
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => (
@@ -421,6 +433,7 @@ export function LlmSettingsScreen({
       embedded,
       isWaitingForSubscriptionModels,
       settings?.llm_api_key_set,
+      storedApiKeyIsSet,
       subscriptionModels,
       t,
     ],

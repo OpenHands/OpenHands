@@ -175,6 +175,17 @@ export function LlmSettingsLocalView() {
           const flatKey = field.key.startsWith("llm.")
             ? field.key.slice("llm.".length)
             : field.key;
+          // Never surface the stored (encrypted) API key into the form: the
+          // password input would otherwise render dots as long as the
+          // encrypted token, which is much longer than the real key and makes
+          // the field look broken. The field stays blank and shows a
+          // "<hidden>" placeholder instead (see `hasStoredApiKey`); the
+          // encrypted token remains in `baseConfig` so an untouched save
+          // still preserves it.
+          if (field.key === "llm.api_key") {
+            initialValues[field.key] = "";
+            continue;
+          }
           initialValues[field.key] = normalizeFieldValue(
             field,
             config[flatKey],
@@ -185,7 +196,9 @@ export function LlmSettingsLocalView() {
         // unavailable, so editing still works without it.
         if (llmFields.length === 0) {
           initialValues["llm.model"] = (config.model as string) ?? "";
-          initialValues["llm.api_key"] = (config.api_key as string) ?? "";
+          // Same masking rule as the schema loop above: never seed the stored
+          // (encrypted) key into the form.
+          initialValues["llm.api_key"] = "";
           initialValues["llm.base_url"] = (config.base_url as string) ?? "";
           initialValues[LLM_AUTH_TYPE_KEY] = resolveLlmAuthType(
             config.auth_type,
@@ -376,6 +389,15 @@ export function LlmSettingsLocalView() {
     );
   }
 
+  // Whether the profile being edited has a stored API key. The encrypted
+  // key is never seeded into the form, so this flag drives the "<hidden>"
+  // placeholder and key-set indicator while the field stays blank.
+  const storedApiKey = editingProfile?.baseConfig.api_key;
+  const hasStoredApiKey =
+    viewMode === "edit" &&
+    typeof storedApiKey === "string" &&
+    storedApiKey.length > 0;
+
   const profileEditorTitle =
     viewMode === "edit"
       ? t(I18nKey.SETTINGS$EDIT_LLM_PROFILE)
@@ -436,6 +458,7 @@ export function LlmSettingsLocalView() {
                 [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
               }
         }
+        apiKeyIsSet={hasStoredApiKey}
         onSaveControlChange={handleSaveControlChange}
       />
 
