@@ -15,6 +15,19 @@ export interface SkinSecretDeclaration {
   description?: string;
 }
 
+/** Major theme colors a skin may declare in skin.yaml (`theme:`). */
+export interface SkinTheme {
+  accent?: string;
+  background?: string;
+  surface?: string;
+  text?: string;
+  muted?: string;
+  border?: string;
+  success?: string;
+  warning?: string;
+  danger?: string;
+}
+
 export interface SkinStatus {
   installed: boolean;
   running: boolean;
@@ -27,6 +40,13 @@ export interface SkinStatus {
   canvasVersion?: string;
   canvasVersionRange?: string | null;
   secrets?: SkinSecretDeclaration[];
+  theme?: SkinTheme | null;
+  /**
+   * Full set of CSS custom properties derived server-side from `theme`
+   * (single source of truth in scripts/skin-service.mjs). Applied verbatim
+   * to document.documentElement to retheme the whole Canvas UI.
+   */
+  themeVars?: Record<string, string> | null;
   error?: string | null;
 }
 

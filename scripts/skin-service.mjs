@@ -21,7 +21,8 @@
  *
  * Skin repo format (everything at the repo root):
  *   skin.yaml       — required. name, screenshot, canvas_version, secrets,
- *                     mcp_servers, skills, llm, settings.
+ *                     mcp_servers, skills, llm, settings, theme (major
+ *                     colors inherited by the whole Canvas UI).
  *   package.json    — required, must define a "start" script.
  *   automations/    — optional, one subdirectory per automation with its
  *                     definition (and Python code / tarball).
@@ -48,6 +49,111 @@ const RESTART_BACKOFF_MS = [1000, 2000, 5000, 10000, 30000];
 
 function log(...args) {
   console.log("[skin-service]", ...args);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skin theme (skin.yaml `theme:` block)
+//
+// A skin may declare a handful of major colors; the Canvas UI and the skin
+// app both inherit them. Validation is strict (hex colors only, known keys
+// only) because the values come from a user-supplied manifest and end up in
+// a stylesheet. Derivation of the full Canvas variable set lives here so
+// there is exactly one source of truth (the frontend applies the derived
+// map verbatim; /skin-api/theme.css serves the same map to the skin app).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const THEME_KEYS = [
+  "accent",
+  "background",
+  "surface",
+  "text",
+  "muted",
+  "border",
+  "success",
+  "warning",
+  "danger",
+];
+const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+/** Whitelist + hex-validate a raw `theme:` block. Returns null when the
+ * manifest has no usable theme. Unknown keys and non-hex values are
+ * dropped (never an error — a bad theme must not block a skin install). */
+export function sanitizeTheme(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const theme = {};
+  for (const key of THEME_KEYS) {
+    const value = raw[key];
+    if (typeof value === "string" && HEX_COLOR_RE.test(value.trim())) {
+      theme[key] = value.trim().toLowerCase();
+    }
+  }
+  return Object.keys(theme).length > 0 ? theme : null;
+}
+
+const mix = (a, pct, b) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+
+/** Expand the (partial) major-color theme into the full set of CSS custom
+ * properties the Canvas UI is built on. Missing anchors fall back to each
+ * other so a minimal `theme: {accent, background}` still works; shades in
+ * between are derived with color-mix() so we never do color math here. */
+export function themeVars(theme) {
+  const t = sanitizeTheme(theme);
+  if (!t) return null;
+
+  const background = t.background || t.surface || "#0b0e14";
+  const surface =
+    t.surface || (t.background ? mix(background, 82, "#ffffff") : "#21252f");
+  const text = t.text || "#eef2f7";
+  const muted = t.muted || mix(text, 55, background);
+  const border = t.border || mix(muted, 45, background);
+
+  /** @type {Record<string, string>} */
+  const vars = {
+    // Grey scale: anchors are the declared colors, steps between are mixes.
+    "--cool-grey-50": mix(text, 60, "#ffffff"),
+    "--cool-grey-100": text,
+    "--cool-grey-200": mix(text, 85, muted),
+    "--cool-grey-300": mix(text, 60, muted),
+    "--cool-grey-400": muted,
+    "--cool-grey-500": mix(muted, 75, border),
+    "--cool-grey-600": mix(muted, 45, border),
+    "--cool-grey-700": border,
+    "--cool-grey-800": mix(border, 55, surface),
+    "--cool-grey-900": mix(surface, 80, border),
+    "--cool-grey-925": surface,
+    "--cool-grey-950": background,
+    "--cool-grey-975": mix(background, 60, "#000000"),
+  };
+  if (t.accent) {
+    vars["--oh-color-primary"] = t.accent;
+    vars["--oh-color-logo"] = t.accent;
+    vars["--oh-accent"] = t.accent;
+    vars["--oh-accent-foreground"] = background;
+    vars["--oh-warning"] = t.warning || t.accent;
+    vars["--oh-warning-foreground"] = background;
+  } else if (t.warning) {
+    vars["--oh-warning"] = t.warning;
+    vars["--oh-warning-foreground"] = background;
+  }
+  if (t.success) {
+    vars["--oh-color-success"] = t.success;
+    vars["--oh-success"] = t.success;
+    vars["--oh-success-foreground"] = background;
+  }
+  if (t.danger) {
+    vars["--oh-color-danger"] = t.danger;
+    vars["--oh-danger"] = t.danger;
+  }
+  return vars;
+}
+
+/** Render the derived variables as a stylesheet for the skin app
+ * (`GET /skin-api/theme.css`). */
+export function themeCss(theme) {
+  const vars = themeVars(theme);
+  if (!vars) return "/* no skin theme declared */\n:root {}\n";
+  const lines = Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`);
+  return `:root {\n${lines.join("\n")}\n}\n`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -222,6 +328,8 @@ export class SkinService {
       canvasVersion: this.canvasVersion,
       canvasVersionRange: skin.canvas_version || null,
       secrets: Array.isArray(skin.secrets) ? skin.secrets : [],
+      theme: sanitizeTheme(skin.theme),
+      themeVars: themeVars(skin.theme),
       error: this.lastError,
     };
   }
@@ -285,7 +393,7 @@ export class SkinService {
     } catch {
       return "package.json is missing or invalid at the repository root.";
     }
-    if (!pkg.scripts || !pkg.scripts.start) {
+    if (!pkg.scripts?.start) {
       return "package.json must define a `start` script (the skin is launched with `npm run start`).";
     }
     if (!satisfiesCanvasVersion(this.canvasVersion, skin.canvas_version)) {
@@ -476,7 +584,7 @@ export class SkinService {
   /** Called after the agent modifies the skin; honors the auto-push flag. */
   async autoPushIfEnabled(message) {
     const settings = this.loadSettings();
-    if (!settings || !settings.autoPush) return { pushed: false };
+    if (!settings?.autoPush) return { pushed: false };
     try {
       return await this.push({ message });
     } catch (err) {
@@ -610,10 +718,7 @@ export class SkinService {
               this.automationUrl,
               `/api/automation/v1/${encodeURIComponent(automation.id)}/tarball`,
             );
-            writeFileSync(
-              join(dir, "automation.tar.gz"),
-              Buffer.from(tarball),
-            );
+            writeFileSync(join(dir, "automation.tar.gz"), Buffer.from(tarball));
           } catch (err) {
             report.skipped.push(
               `automation tarball ${automation.name}: ${err.message}`,
@@ -785,6 +890,21 @@ export function createSkinApiHandler(service) {
   return async function handleSkinApi(req, res, pathname) {
     try {
       const method = req.method || "GET";
+      const isThemeRead =
+        method === "GET" && pathname === "/skin-api/theme.css";
+      if (isThemeRead) {
+        // Public like /status: it's a <link> from the skin app, which can't
+        // send auth headers. Contains only sanitized colors, no secrets.
+        const skin = (service.isInstalled() && service.readSkinYaml()) || {};
+        const css = themeCss(skin.theme);
+        res.writeHead(200, {
+          "Content-Type": "text/css; charset=utf-8",
+          "Content-Length": Buffer.byteLength(css),
+          "Cache-Control": "no-cache",
+        });
+        res.end(css);
+        return;
+      }
       const isStatusRead = method === "GET" && pathname === "/skin-api/status";
       if (!isStatusRead && service.sessionApiKey) {
         const provided = req.headers["x-session-api-key"];

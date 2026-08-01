@@ -1,9 +1,103 @@
 import { describe, expect, it } from "vitest";
 import {
+  sanitizeTheme,
   satisfiesCanvasVersion,
   stripSecretValues,
-  // eslint-disable-next-line import/no-relative-packages
+  themeCss,
+  themeVars,
 } from "../scripts/skin-service.mjs";
+
+describe("sanitizeTheme", () => {
+  it("returns null for missing/empty/non-object themes", () => {
+    expect(sanitizeTheme(undefined)).toBeNull();
+    expect(sanitizeTheme(null)).toBeNull();
+    expect(sanitizeTheme({})).toBeNull();
+    expect(sanitizeTheme("green")).toBeNull();
+    expect(sanitizeTheme(["#fff"])).toBeNull();
+  });
+
+  it("keeps only known keys with valid hex colors, lowercased", () => {
+    expect(
+      sanitizeTheme({
+        accent: "#39D98A",
+        background: " #0b1614 ",
+        evil: "#123456",
+        surface: "url(javascript:alert(1))",
+        text: "red",
+      }),
+    ).toEqual({ accent: "#39d98a", background: "#0b1614" });
+  });
+
+  it("accepts 3-digit hex", () => {
+    expect(sanitizeTheme({ accent: "#0f0" })).toEqual({ accent: "#0f0" });
+  });
+
+  it("rejects css-injection attempts", () => {
+    expect(sanitizeTheme({ accent: "#fff;} body{display:none" })).toBeNull();
+  });
+});
+
+describe("themeVars", () => {
+  it("returns null when there is no usable theme", () => {
+    expect(themeVars(undefined)).toBeNull();
+    expect(themeVars({ accent: "not-a-color" })).toBeNull();
+  });
+
+  it("anchors the grey scale on declared colors", () => {
+    const vars = themeVars({
+      background: "#0b1614",
+      surface: "#11201c",
+      text: "#e6efe9",
+    })!;
+    expect(vars["--cool-grey-950"]).toBe("#0b1614");
+    expect(vars["--cool-grey-925"]).toBe("#11201c");
+    expect(vars["--cool-grey-100"]).toBe("#e6efe9");
+    // Derived steps use color-mix, never raw math.
+    expect(vars["--cool-grey-800"]).toContain("color-mix");
+    // No accent declared → accent variables untouched.
+    expect(vars["--oh-accent"]).toBeUndefined();
+  });
+
+  it("maps accent to primary/logo/accent and defaults warning to it", () => {
+    const vars = themeVars({ accent: "#39d98a", background: "#0b1614" })!;
+    expect(vars["--oh-accent"]).toBe("#39d98a");
+    expect(vars["--oh-color-primary"]).toBe("#39d98a");
+    expect(vars["--oh-color-logo"]).toBe("#39d98a");
+    expect(vars["--oh-warning"]).toBe("#39d98a");
+    expect(vars["--oh-accent-foreground"]).toBe("#0b1614");
+  });
+
+  it("honors explicit status colors", () => {
+    const vars = themeVars({
+      accent: "#39d98a",
+      success: "#4ade80",
+      warning: "#fbbf24",
+      danger: "#f87171",
+    })!;
+    expect(vars["--oh-success"]).toBe("#4ade80");
+    expect(vars["--oh-warning"]).toBe("#fbbf24");
+    expect(vars["--oh-danger"]).toBe("#f87171");
+  });
+
+  it("works from a minimal accent-only theme", () => {
+    const vars = themeVars({ accent: "#39d98a" })!;
+    expect(vars["--oh-accent"]).toBe("#39d98a");
+    expect(vars["--cool-grey-950"]).toBeTruthy();
+  });
+});
+
+describe("themeCss", () => {
+  it("renders an empty :root when no theme", () => {
+    expect(themeCss(undefined)).toContain(":root {}");
+  });
+
+  it("renders one declaration per derived variable", () => {
+    const css = themeCss({ accent: "#39d98a", background: "#0b1614" });
+    expect(css).toMatch(/^:root \{\n/);
+    expect(css).toContain("--oh-accent: #39d98a;");
+    expect(css).toContain("--cool-grey-950: #0b1614;");
+  });
+});
 
 describe("satisfiesCanvasVersion", () => {
   it("accepts any version when the range is empty or *", () => {
