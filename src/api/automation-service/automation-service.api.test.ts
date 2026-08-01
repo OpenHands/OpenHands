@@ -10,6 +10,7 @@ import AutomationService from "./automation-service.api";
 const {
   localAxios,
   callCloudProxy,
+  clearPendingLocalTelemetryRevocation,
   getTelemetryConsent,
   getTelemetryDistinctId,
   getTelemetryDistinctIdForConsentSync,
@@ -22,6 +23,7 @@ const {
     delete: vi.fn(),
   },
   callCloudProxy: vi.fn(),
+  clearPendingLocalTelemetryRevocation: vi.fn(),
   getTelemetryConsent: vi.fn(),
   getTelemetryDistinctId: vi.fn(),
   getTelemetryDistinctIdForConsentSync: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock("#/api/cloud/proxy", () => ({
 }));
 
 vi.mock("#/services/telemetry", () => ({
+  clearPendingLocalTelemetryRevocation,
   getTelemetryConsent,
   getTelemetryDistinctId,
   getTelemetryDistinctIdForConsentSync,
@@ -174,6 +177,9 @@ describe("AutomationService.syncTelemetryConsent", () => {
         frontend_distinct_id: "ph-fe-sync",
       },
       { timeout: 5000 },
+    );
+    expect(clearPendingLocalTelemetryRevocation).toHaveBeenCalledWith(
+      "ph-fe-sync",
     );
   });
 

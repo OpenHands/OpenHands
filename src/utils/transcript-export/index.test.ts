@@ -174,6 +174,7 @@ describe("conversation transcript export", () => {
     const errorEvent: AgentErrorEvent = {
       id: "error-1",
       timestamp,
+      kind: "AgentErrorEvent",
       source: "agent",
       tool_name: "terminal",
       tool_call_id: "tool-error",
