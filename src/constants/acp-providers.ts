@@ -272,9 +272,7 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
       : key === PI_ACP_PROVIDER_KEY
         ? [{ id: "default", label: "Default Model" }]
         : undefined,
-    default_model:
-      info?.default_model ??
-      (key === PI_ACP_PROVIDER_KEY ? "default" : undefined),
+    default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
   };
@@ -439,6 +437,9 @@ export function getAcpPreferredDefaultModel(
   key: string | null | undefined,
 ): string | null {
   if (key === "gemini-cli") return ACP_VERTEX_SAFE_MODEL;
+  // Pi models come from the pi CLI (~/.pi, ``pi --list-models``). Canvas must
+  // not invent a placeholder id — let pi-acp pick its configured default.
+  if (key === PI_ACP_PROVIDER_KEY) return null;
   return getAcpProvider(key)?.default_model ?? null;
 }
 

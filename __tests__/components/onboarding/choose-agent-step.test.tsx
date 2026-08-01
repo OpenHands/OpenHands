@@ -217,7 +217,7 @@ describe("ChooseAgentStep", () => {
       acp_server: "custom",
       acp_command: ["npx", "-y", "pi-acp"],
       acp_args: [],
-      acp_model: "default",
+      acp_model: null,
     });
   });
 

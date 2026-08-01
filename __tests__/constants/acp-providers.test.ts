@@ -88,7 +88,7 @@ describe("ACP provider registry", () => {
         expect(provider.available_models).toEqual([
           { id: "default", label: "Default Model" },
         ]);
-        expect(provider.default_model).toBe("default");
+        expect(provider.default_model).toBeUndefined();
         expect(provider.icon).toBe("pi");
         expect(provider.description_key).toBeTruthy();
         continue;
@@ -108,6 +108,7 @@ describe("ACP provider registry", () => {
 
   it("keeps every built-in default model in the UX suggestions", () => {
     for (const provider of ACP_PROVIDERS) {
+      if (provider.key === "pi") continue;
       expect(provider.default_model, provider.key).toBeTruthy();
       expect(provider.available_models, provider.key).toBeTruthy();
       expect(

@@ -28,14 +28,7 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
-import {
-  adaptPiAcpCommandForDeployment,
-  effectivePiAcpCommandTokens,
-  PI_ACP_PROVIDER_KEY,
-  resolveUiAcpProviderKey,
-} from "#/constants/acp-providers";
-import { getDeploymentMode } from "#/api/agent-server-adapter";
-import { parseCommand } from "#/utils/acp-command";
+import { buildInlinePiAcpAgentSettingsFromProfile } from "#/utils/inline-pi-acp-profile-settings";
 
 export interface CreateConversationVariables {
   query?: string;
@@ -201,52 +194,31 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Agent profiles launch server-side with the stored ``acp_command`` verbatim.
-      // Docker images pre-install ``pi-acp`` but ``npx -y pi-acp`` crashes, so
-      // inline the profile's ACP settings with a Docker-safe spawn argv instead
-      // of ``agent_profile_id`` (same enrichment boundary as the OpenHands
-      // ``default`` downgrade above).
-      let dockerPiAgentSettingsOverride:
-        | Record<string, SettingsValue>
-        | undefined;
+      // Pi profiles must launch via inlined agent_settings so the frontend can
+      // rewrite ``npx -y pi-acp`` → ``pi-acp`` in Docker (profile_id launch
+      // spawns the stored command verbatim on the agent-server).
+      let piAgentSettingsOverride: Record<string, SettingsValue> | undefined;
       if (
         !isCloud &&
         effectiveAgentProfileId &&
-        resolvedAgentProfile?.agent_kind === "acp" &&
-        getDeploymentMode() === "docker"
+        resolvedAgentProfile?.agent_kind === "acp"
       ) {
         try {
           const detail = await AgentProfilesService.getProfile(
             resolvedAgentProfile.name,
           );
-          const profile = detail.profile;
-          if (profile.agent_kind === "acp") {
-            const deploymentMode = "docker";
-            const commandTokens = profile.acp_command
-              ? parseCommand(profile.acp_command)
-              : effectivePiAcpCommandTokens(deploymentMode);
-            const uiKey = resolveUiAcpProviderKey(
-              profile.acp_server,
-              commandTokens,
+          if (detail.profile.agent_kind === "acp") {
+            const inlineSettings = buildInlinePiAcpAgentSettingsFromProfile(
+              detail.profile,
             );
-            if (uiKey === PI_ACP_PROVIDER_KEY) {
+            if (inlineSettings) {
               effectiveAgentProfileId = undefined;
-              dockerPiAgentSettingsOverride = {
-                schema_version: 1,
-                agent_kind: "acp",
-                acp_server: profile.acp_server,
-                acp_command: adaptPiAcpCommandForDeployment(
-                  commandTokens,
-                  deploymentMode,
-                ) as SettingsValue,
-                acp_model: profile.acp_model ?? null,
-                acp_args: profile.acp_args ?? [],
-              };
+              piAgentSettingsOverride = inlineSettings;
             }
           }
         } catch (error) {
           console.warn(
-            "Failed to inline Docker Pi agent profile settings; launching via profile id.",
+            "Failed to inline Pi agent profile settings; launching via profile id.",
             error,
           );
         }
@@ -277,7 +249,7 @@ export const useCreateConversation = () => {
           undefined,
           effectiveAgentProfileId,
           resolvedAgentProfile?.agent_kind,
-          dockerPiAgentSettingsOverride,
+          piAgentSettingsOverride,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the

@@ -162,6 +162,13 @@ function getRawRuntimeServicesInfo(): string | null {
     if (typeof injected === "string") {
       return injected.trim() || null;
     }
+    if (injected && typeof injected === "object") {
+      try {
+        return JSON.stringify(injected);
+      } catch {
+        return null;
+      }
+    }
   }
 
   return null;
@@ -807,7 +814,9 @@ function buildConfiguredAcpAgentSettings(
     configured: agentSettings.acp_model as string | null | undefined,
     providerDefault: getAcpPreferredDefaultModel(serverKey),
   });
-  if (effectiveModel) {
+  const piPlaceholderModel =
+    serverKey === PI_ACP_PROVIDER_KEY && effectiveModel === "default";
+  if (effectiveModel && !piPlaceholderModel) {
     payload.acp_model = effectiveModel;
   }
 
