@@ -95,7 +95,7 @@ export interface AutomationRunsResponse {
 
 export type ActivityLogExportFormat = "json" | "csv";
 
-/** One Activity Log export row (matches automation `/runs/export`). */
+/** Client-built Activity Log export row (from list runs + automation detail). */
 export interface AutomationRunExportRow {
   run_id: string;
   automation_id: string;
@@ -108,18 +108,4 @@ export interface AutomationRunExportRow {
   conversation_id: string | null;
   conversation_url: string | null;
   error: string | null;
-}
-
-export interface AutomationRunExportResponse {
-  runs: AutomationRunExportRow[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export interface AutomationRunExportParams {
-  limit?: number;
-  offset?: number;
-  /** Prefix for `conversation_url` in each row (e.g. window.location.origin). */
-  conversation_base_url?: string;
 }

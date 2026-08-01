@@ -322,35 +322,6 @@ describe("AutomationService", () => {
     });
   });
 
-  describe("exportAutomationRuns", () => {
-    it("requests a JSON export page", async () => {
-      const response = {
-        runs: [],
-        total: 0,
-        limit: 500,
-        offset: 0,
-      };
-      mockGet.mockResolvedValue({ data: response });
-
-      const result = await AutomationService.exportAutomationRuns("1", {
-        conversation_base_url: "http://localhost:8000",
-      });
-
-      expect(mockGet).toHaveBeenCalledWith(
-        "/api/automation/v1/1/runs/export",
-        expect.objectContaining({
-          params: expect.objectContaining({
-            format: "json",
-            limit: 500,
-            offset: 0,
-            conversation_base_url: "http://localhost:8000",
-          }),
-        }),
-      );
-      expect(result).toEqual(response);
-    });
-  });
-
   describe("toggleAutomation", () => {
     it("delegates to updateAutomation with enabled field", async () => {
       const toggled = { ...mockAutomation, enabled: false };

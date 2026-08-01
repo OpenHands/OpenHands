@@ -9,8 +9,6 @@ import {
 import type {
   Automation,
   AutomationRun,
-  AutomationRunExportParams,
-  AutomationRunExportResponse,
   AutomationSpec,
   AutomationTrigger,
   AutomationsResponse,
@@ -454,46 +452,6 @@ class AutomationService {
     offset = 0,
   ): Promise<AutomationRunsResponse> {
     return AutomationService.listAutomationRuns(id, { limit, offset });
-  }
-
-  /**
-   * One page of Activity Log export (JSON). UI pages this and builds CSV locally.
-   */
-  static async exportAutomationRuns(
-    id: string,
-    params: AutomationRunExportParams = {},
-  ): Promise<AutomationRunExportResponse> {
-    const { limit = 500, offset = 0, conversation_base_url } = params;
-    const active = getActiveBackend().backend;
-    const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs/export`;
-    const queryParams = {
-      format: "json" as const,
-      limit,
-      offset,
-      ...(conversation_base_url ? { conversation_base_url } : {}),
-    };
-
-    if (active.kind === "cloud") {
-      const search = new URLSearchParams();
-      search.set("format", "json");
-      search.set("limit", String(limit));
-      search.set("offset", String(offset));
-      if (conversation_base_url) {
-        search.set("conversation_base_url", conversation_base_url);
-      }
-      return callCloudProxy<AutomationRunExportResponse>({
-        backend: active,
-        method: "GET",
-        path: `${basePath}?${search.toString()}`,
-        headers: await buildAutomationRequestHeaders(),
-      });
-    }
-
-    const { data } =
-      await localAutomationAxios.get<AutomationRunExportResponse>(basePath, {
-        params: queryParams,
-      });
-    return data;
   }
 
   static async toggleAutomation(

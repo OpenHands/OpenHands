@@ -3,24 +3,44 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import {
   getActivityLogExportFilename,
   serializeActivityLogRowsCsv,
+  mapAutomationRunToExportRow,
   fetchAllActivityLogExportRows,
   downloadActivityLogExport,
 } from "#/utils/automation-activity-log-export";
 import {
   AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
   type AutomationRunExportRow,
 } from "#/types/automation";
 import { downloadBlob } from "#/utils/utils";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
-    exportAutomationRuns: vi.fn(),
+    listAutomationRuns: vi.fn(),
   },
 }));
 
 vi.mock("#/utils/utils", () => ({
   downloadBlob: vi.fn(),
 }));
+
+const automation: Pick<Automation, "id" | "name" | "trigger"> = {
+  id: "a1",
+  name: "Test",
+  trigger: { type: "cron", schedule: "0 9 * * *" },
+};
+
+const sampleRun = (overrides: Partial<AutomationRun> = {}): AutomationRun => ({
+  id: "r1",
+  status: AutomationRunStatus.FAILED,
+  conversation_id: "c1",
+  bash_command_id: null,
+  error_detail: "boom",
+  started_at: "2026-01-01T09:00:00Z",
+  completed_at: "2026-01-01T09:01:00Z",
+  ...overrides,
+});
 
 const sampleRow = (
   overrides: Partial<AutomationRunExportRow> = {},
@@ -59,6 +79,16 @@ describe("automation-activity-log-export", () => {
     ).toBe("abc-123.activity-log.csv");
   });
 
+  it("maps a list run into an export row with conversation URL and duration", () => {
+    expect(
+      mapAutomationRunToExportRow(
+        sampleRun(),
+        automation,
+        "http://localhost:8000",
+      ),
+    ).toEqual(sampleRow());
+  });
+
   it("serializes CSV with conversation URL and escaped fields", () => {
     const rows: AutomationRunExportRow[] = [
       sampleRow({
@@ -74,69 +104,60 @@ describe("automation-activity-log-export", () => {
     expect(csv).toContain('"{""type"":""cron"",""schedule"":""0 9 * * *""}"');
   });
 
-  it("pages the export endpoint until empty", async () => {
-    const page1 = sampleRow({ run_id: "r1" });
-    const page2 = sampleRow({ run_id: "r2", conversation_id: "c2" });
-
-    vi.mocked(AutomationService.exportAutomationRuns)
+  it("pages listAutomationRuns until complete", async () => {
+    vi.mocked(AutomationService.listAutomationRuns)
       .mockResolvedValueOnce({
-        runs: [page1],
+        runs: [sampleRun({ id: "r1" })],
         total: 2,
-        limit: 500,
-        offset: 0,
       })
       .mockResolvedValueOnce({
-        runs: [page2],
+        runs: [sampleRun({ id: "r2", conversation_id: "c2" })],
         total: 2,
-        limit: 500,
-        offset: 1,
       });
 
     const rows = await fetchAllActivityLogExportRows(
-      "a1",
+      automation,
       "http://localhost:8000",
     );
 
-    expect(rows).toEqual([page1, page2]);
-    expect(AutomationService.exportAutomationRuns).toHaveBeenCalledTimes(2);
-    expect(AutomationService.exportAutomationRuns).toHaveBeenNthCalledWith(
-      1,
-      "a1",
-      expect.objectContaining({
-        limit: 500,
-        offset: 0,
-        conversation_base_url: "http://localhost:8000",
-      }),
+    expect(rows).toHaveLength(2);
+    expect(rows[0].run_id).toBe("r1");
+    expect(rows[1].run_id).toBe("r2");
+    expect(rows[1].conversation_url).toBe(
+      "http://localhost:8000/conversations/c2",
     );
-    expect(AutomationService.exportAutomationRuns).toHaveBeenNthCalledWith(
-      2,
-      "a1",
-      expect.objectContaining({
-        offset: 1,
-      }),
-    );
+    expect(AutomationService.listAutomationRuns).toHaveBeenCalledTimes(2);
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(1, "a1", {
+      limit: 100,
+      offset: 0,
+    });
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(2, "a1", {
+      limit: 100,
+      offset: 1,
+    });
   });
 
-  it("downloads JSON after paging the export endpoint", async () => {
-    vi.mocked(AutomationService.exportAutomationRuns).mockResolvedValueOnce({
-      runs: [sampleRow({ status: AutomationRunStatus.COMPLETED, error: null })],
+  it("downloads JSON after paging list runs", async () => {
+    vi.mocked(AutomationService.listAutomationRuns).mockResolvedValueOnce({
+      runs: [
+        sampleRun({
+          status: AutomationRunStatus.COMPLETED,
+          error_detail: null,
+        }),
+      ],
       total: 1,
-      limit: 500,
-      offset: 0,
     });
 
     await downloadActivityLogExport({
-      automation: { id: "a1", name: "Test" },
+      automation,
       format: "json",
       conversationBaseUrl: "http://localhost:8000",
     });
 
-    expect(AutomationService.exportAutomationRuns).toHaveBeenCalledWith(
-      "a1",
-      expect.objectContaining({
-        conversation_base_url: "http://localhost:8000",
-      }),
-    );
+    expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith("a1", {
+      limit: 100,
+      offset: 0,
+    });
     expect(downloadBlob).toHaveBeenCalledWith(
       expect.any(Blob),
       "test.activity-log.json",
@@ -145,26 +166,22 @@ describe("automation-activity-log-export", () => {
     expect(blob.type).toBe("application/json");
   });
 
-  it("downloads CSV after paging the export endpoint", async () => {
-    vi.mocked(AutomationService.exportAutomationRuns).mockResolvedValueOnce({
-      runs: [sampleRow()],
+  it("downloads CSV after paging list runs", async () => {
+    vi.mocked(AutomationService.listAutomationRuns).mockResolvedValueOnce({
+      runs: [sampleRun()],
       total: 1,
-      limit: 500,
-      offset: 0,
     });
 
     await downloadActivityLogExport({
-      automation: { id: "a1", name: "Test" },
+      automation,
       format: "csv",
       conversationBaseUrl: "http://localhost:8000",
     });
 
-    expect(AutomationService.exportAutomationRuns).toHaveBeenCalledWith(
-      "a1",
-      expect.objectContaining({
-        conversation_base_url: "http://localhost:8000",
-      }),
-    );
+    expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith("a1", {
+      limit: 100,
+      offset: 0,
+    });
     expect(downloadBlob).toHaveBeenCalledWith(
       expect.any(Blob),
       "test.activity-log.csv",

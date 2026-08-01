@@ -1,12 +1,13 @@
 import type {
   ActivityLogExportFormat,
   Automation,
+  AutomationRun,
   AutomationRunExportRow,
 } from "#/types/automation";
 import { downloadBlob } from "#/utils/utils";
 import AutomationService from "#/api/automation-service/automation-service.api";
 
-const EXPORT_PAGE_SIZE = 500;
+const EXPORT_PAGE_SIZE = 100;
 
 const CSV_COLUMNS = [
   "run_id",
@@ -59,45 +60,88 @@ export function serializeActivityLogRowsCsv(
   return `${lines.join("\n")}\n`;
 }
 
+export function buildConversationUrl(
+  conversationId: string | null,
+  conversationBaseUrl?: string,
+): string | null {
+  if (!conversationId) return null;
+  const path = `/conversations/${conversationId}`;
+  if (!conversationBaseUrl) return path;
+  return `${conversationBaseUrl.replace(/\/$/, "")}${path}`;
+}
+
+export function mapAutomationRunToExportRow(
+  run: AutomationRun,
+  automation: Pick<Automation, "id" | "name" | "trigger">,
+  conversationBaseUrl?: string,
+): AutomationRunExportRow {
+  const start = run.started_at || null;
+  const end = run.completed_at;
+  let duration_seconds: number | null = null;
+  if (start && end) {
+    duration_seconds =
+      (new Date(end).getTime() - new Date(start).getTime()) / 1000;
+  }
+
+  return {
+    run_id: run.id,
+    automation_id: automation.id,
+    automation_name: automation.name,
+    trigger: automation.trigger,
+    start_time: start,
+    end_time: end,
+    duration_seconds,
+    status: run.status,
+    conversation_id: run.conversation_id,
+    conversation_url: buildConversationUrl(
+      run.conversation_id,
+      conversationBaseUrl,
+    ),
+    error: run.error_detail,
+  };
+}
+
 /**
- * Page the automation ``/runs/export`` JSON endpoint until complete.
- * Does not assemble from the UI list endpoint.
+ * Page ``GET /v1/{id}/runs`` until complete, then project export rows locally.
  */
 export async function fetchAllActivityLogExportRows(
-  id: string,
+  automation: Pick<Automation, "id" | "name" | "trigger">,
   conversationBaseUrl?: string,
 ): Promise<AutomationRunExportRow[]> {
-  const runs: AutomationRunExportRow[] = [];
+  const rows: AutomationRunExportRow[] = [];
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
-    const page = await AutomationService.exportAutomationRuns(id, {
+    const page = await AutomationService.listAutomationRuns(automation.id, {
       limit: EXPORT_PAGE_SIZE,
       offset,
-      conversation_base_url: conversationBaseUrl,
     });
 
-    runs.push(...page.runs);
+    for (const run of page.runs) {
+      rows.push(
+        mapAutomationRunToExportRow(run, automation, conversationBaseUrl),
+      );
+    }
     total = page.total;
     offset += page.runs.length;
     if (page.runs.length === 0) break;
   }
 
-  return runs;
+  return rows;
 }
 
 /**
- * Page the Activity Log export endpoint and download one CSV or JSON file.
+ * Page the runs list endpoint and download one CSV or JSON file.
  */
 export async function downloadActivityLogExport(options: {
-  automation: Pick<Automation, "id" | "name">;
+  automation: Pick<Automation, "id" | "name" | "trigger">;
   format: ActivityLogExportFormat;
   conversationBaseUrl?: string;
 }): Promise<void> {
   const { automation, format, conversationBaseUrl } = options;
   const rows = await fetchAllActivityLogExportRows(
-    automation.id,
+    automation,
     conversationBaseUrl,
   );
 
