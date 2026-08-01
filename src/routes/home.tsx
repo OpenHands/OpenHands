@@ -18,6 +18,12 @@ function HomeScreen() {
       data-testid="home-screen"
       className="custom-scrollbar-always flex h-full flex-col overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-[42px]"
     >
+      {import.meta.env.VITE_FEATURED_AUTOMATIONS_DEMO === "true" ? (
+        <div className="pb-3 pt-4">
+          <FeaturedAutomationsDemo />
+        </div>
+      ) : null}
+
       <div className="md:px-4 lg:px-0">
         <LlmNotConfiguredBanner />
       </div>
@@ -25,12 +31,6 @@ function HomeScreen() {
       <div className="flex flex-1 min-h-0 flex-col items-center justify-center">
         <HomeChatLauncher />
       </div>
-
-      {import.meta.env.VITE_FEATURED_AUTOMATIONS_DEMO === "true" ? (
-        <div className="pb-6 pt-2">
-          <FeaturedAutomationsDemo />
-        </div>
-      ) : null}
 
       {!isPreview ? <OnboardingHost /> : null}
     </div>

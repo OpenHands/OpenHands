@@ -1,9 +1,9 @@
-import { CheckCircle2, CircleAlert, Clock3, Sparkles } from "lucide-react";
+import { Clock3, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { cn } from "#/utils/utils";
 
-type AutomationHealth = "healthy" | "attention" | "running";
+type AutomationHealth = "success" | "failed" | "running";
 
 interface DemoAutomation {
   id: string;
@@ -19,7 +19,7 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
   {
     id: "pr-review",
     name: "PR reviewer",
-    health: "healthy",
+    health: "success",
     lastRun: "Succeeded 12 min ago",
     detail: "Reviewed #16182 and left 3 actionable comments.",
     result: "3 suggestions posted · 1 security check passed",
@@ -28,8 +28,8 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
   {
     id: "issue-triage",
     name: "Issue triage",
-    health: "attention",
-    lastRun: "Needs attention 28 min ago",
+    health: "failed",
+    lastRun: "Failed 28 min ago",
     detail: "The run completed, but the model provider rejected one request.",
     result: "18 issues classified · 1 retry needed",
     nextRun: "In 4 minutes",
@@ -46,7 +46,7 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
   {
     id: "repo-monitor",
     name: "Repository monitor",
-    health: "healthy",
+    health: "success",
     lastRun: "Succeeded 1 hr ago",
     detail: "Found no new dependency or workflow failures.",
     result: "42 checks scanned · no action required",
@@ -54,35 +54,52 @@ const DEMO_AUTOMATIONS: DemoAutomation[] = [
   },
 ];
 
-const HEALTH_STYLE: Record<
-  AutomationHealth,
-  { dot: string; icon: typeof CheckCircle2; label: string }
-> = {
-  healthy: {
-    dot: "bg-emerald-500",
-    icon: CheckCircle2,
-    label: "Last run succeeded",
-  },
-  attention: {
-    dot: "bg-amber-400",
-    icon: CircleAlert,
-    label: "Last run needs attention",
-  },
-  running: { dot: "bg-sky-500", icon: Clock3, label: "Run in progress" },
+const HEALTH_LABEL: Record<AutomationHealth, string> = {
+  success: "Last run succeeded",
+  failed: "Last run failed",
+  running: "Run in progress",
 };
 
-function AutomationTooltip({ automation }: { automation: DemoAutomation }) {
-  const health = HEALTH_STYLE[automation.health];
+function AutomationStatus({ health }: { health: AutomationHealth }) {
+  if (health === "success") {
+    return (
+      <svg
+        viewBox="0 0 12 12"
+        className="h-2.5 w-2.5 stroke-[var(--oh-status-success)]"
+        fill="none"
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-label={HEALTH_LABEL[health]}
+      >
+        <path d="M2.5 6.5 5 9l4.5-5.5" />
+      </svg>
+    );
+  }
 
   return (
-    <div className="w-64 space-y-2 p-1 text-left">
+    <span
+      aria-label={HEALTH_LABEL[health]}
+      className={cn(
+        "h-1.5 w-1.5 rounded-full",
+        health === "failed"
+          ? "bg-[var(--oh-status-error)]"
+          : "animate-pulse bg-[var(--oh-status-success)]",
+      )}
+    />
+  );
+}
+
+function AutomationTooltip({ automation }: { automation: DemoAutomation }) {
+  return (
+    <div className="w-64 space-y-2 p-1 text-left text-white">
       <p className="font-semibold">{automation.name}</p>
-      <p className="text-slate-600">{automation.detail}</p>
-      <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+      <p className="text-[var(--oh-text-secondary)]">{automation.detail}</p>
+      <div className="flex items-center justify-between border-t border-[var(--oh-border-subtle)] pt-2 text-[11px] text-[var(--oh-text-secondary)]">
         <span>{automation.lastRun}</span>
         <span className="flex items-center gap-1">
-          <span className={cn("h-1.5 w-1.5 rounded-full", health.dot)} />
-          {health.label}
+          <AutomationStatus health={automation.health} />
+          {HEALTH_LABEL[automation.health]}
         </span>
       </div>
     </div>
@@ -108,42 +125,31 @@ export function FeaturedAutomationsDemo() {
     <section
       aria-labelledby="featured-automations-heading"
       data-testid="featured-automations-demo"
-      className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur"
+      className="mx-auto w-full max-w-5xl rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] p-4"
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-600">
-            Agent workspace
-          </p>
-          <h2
-            id="featured-automations-heading"
-            className="mt-1 text-lg font-semibold text-slate-900"
-          >
-            How your automations are working
-          </h2>
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-          Demo data
-        </span>
-      </div>
+      <h2
+        id="featured-automations-heading"
+        className="mb-3 text-sm font-medium text-[var(--oh-foreground)]"
+      >
+        Automations
+      </h2>
 
       <div className="flex flex-wrap gap-2" aria-label="Open automations">
         {DEMO_AUTOMATIONS.map((automation) => {
-          const health = HEALTH_STYLE[automation.health];
-
           return (
             <StyledTooltip
               key={automation.id}
               content={<AutomationTooltip automation={automation} />}
               placement="bottom"
-              tooltipClassName="!max-w-none !bg-white"
+              tooltipClassName="!max-w-none !border !border-[var(--oh-border-subtle)] !bg-[var(--oh-surface)]"
             >
               <button
                 type="button"
+                aria-label={automation.name}
                 onClick={() => addFeatured(automation)}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-300 hover:bg-sky-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                className="inline-flex items-center gap-2 rounded-md border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 text-sm text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
               >
-                <span className={cn("h-2 w-2 rounded-full", health.dot)} />
+                <AutomationStatus health={automation.health} />
                 {automation.name}
               </button>
             </StyledTooltip>
@@ -151,56 +157,45 @@ export function FeaturedAutomationsDemo() {
         })}
       </div>
 
-      <div className="mt-5 border-t border-slate-100 pt-4">
-        <div className="mb-3 flex items-center gap-2">
-          <Sparkles size={16} className="text-sky-600" aria-hidden="true" />
-          <h3 className="font-medium text-slate-900">Featured automations</h3>
-        </div>
-        {featured.length === 0 ? (
-          <p className="rounded-xl bg-slate-50 px-4 py-6 text-sm text-slate-500">
-            Select an automation above to keep its latest result in view.
-          </p>
-        ) : (
+      {featured.length > 0 ? (
+        <div className="mt-4 border-t border-[var(--oh-border-subtle)] pt-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles
+              size={16}
+              className="text-[var(--oh-status-success)]"
+              aria-hidden="true"
+            />
+            <h3 className="text-sm font-medium text-[var(--oh-foreground)]">
+              Featured
+            </h3>
+          </div>
           <div className="grid gap-3 md:grid-cols-2">
             {featured.map((automation) => {
-              const health = HEALTH_STYLE[automation.health];
-              const Icon = health.icon;
-
               return (
                 <article
                   key={automation.id}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  className="rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h4 className="font-medium text-slate-900">
+                      <h4 className="font-medium text-[var(--oh-foreground)]">
                         {automation.name}
                       </h4>
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="mt-1 text-sm text-[var(--oh-text-secondary)]">
                         {automation.result}
                       </p>
                     </div>
-                    <Icon
-                      size={20}
-                      className={cn(
-                        automation.health === "healthy"
-                          ? "text-emerald-600"
-                          : automation.health === "attention"
-                            ? "text-amber-500"
-                            : "text-sky-500",
-                      )}
-                      aria-label={health.label}
-                    />
+                    <AutomationStatus health={automation.health} />
                   </div>
-                  <p className="mt-4 text-xs text-slate-500">
+                  <p className="mt-4 text-xs text-[var(--oh-text-secondary)]">
                     {automation.lastRun} · {automation.nextRun}
                   </p>
                 </article>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
