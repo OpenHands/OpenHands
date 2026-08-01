@@ -143,4 +143,40 @@ describe("Automation MSW Handlers", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe("GET /api/automation/v1/:id/runs/export", () => {
+    it("returns JSON export rows with conversation URLs", async () => {
+      const id = MOCK_AUTOMATIONS_RESPONSE.automations[0].id;
+      const res = await fetch(
+        `/api/automation/v1/${id}/runs/export?format=json&conversation_base_url=http://localhost:8000`,
+      );
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.total).toBeGreaterThan(0);
+      expect(data.runs[0]).toEqual(
+        expect.objectContaining({
+          run_id: expect.any(String),
+          automation_id: id,
+          conversation_url: expect.stringContaining(
+            "http://localhost:8000/conversations/",
+          ),
+        }),
+      );
+    });
+
+
+    it("returns CSV when format=csv", async () => {
+      const id = MOCK_AUTOMATIONS_RESPONSE.automations[0].id;
+      const res = await fetch(
+        `/api/automation/v1/${id}/runs/export?format=csv`,
+      );
+      const text = await res.text();
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toMatch(/text\/csv/);
+      expect(text.split("\n")[0]).toContain("conversation_url");
+      expect(text).toContain("FAILED");
+    });
+  });
 });

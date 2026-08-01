@@ -278,14 +278,11 @@ describe("AutomationService", () => {
   });
 
   describe("listAutomationRuns", () => {
-    it("fetches runs with params object", async () => {
+    it("fetches runs with limit and offset", async () => {
       const response: AutomationRunsResponse = { runs: [], total: 0 };
       mockGet.mockResolvedValue({ data: response });
 
-      const result = await AutomationService.listAutomationRuns("1", {
-        limit: 20,
-        offset: 10,
-      });
+      const result = await AutomationService.listAutomationRuns("1", 20, 10);
 
       expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1/runs", {
         params: { limit: 20, offset: 10 },
@@ -314,11 +311,62 @@ describe("AutomationService", () => {
 
       const result = await AutomationService.getAutomationRuns("1", 25, 5);
 
-      expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith("1", {
-        limit: 25,
-        offset: 5,
-      });
+      expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith(
+        "1",
+        25,
+        5,
+      );
       expect(result).toEqual(response);
+    });
+  });
+
+  describe("exportAutomationRuns", () => {
+    it("requests a JSON export page", async () => {
+      const response = {
+        runs: [],
+        total: 0,
+        limit: 500,
+        offset: 0,
+      };
+      mockGet.mockResolvedValue({ data: response });
+
+      const result = await AutomationService.exportAutomationRuns("1", {
+        format: "json",
+        conversation_base_url: "http://localhost:8000",
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1/1/runs/export",
+        expect.objectContaining({
+          params: expect.objectContaining({
+            format: "json",
+            limit: 500,
+            offset: 0,
+            conversation_base_url: "http://localhost:8000",
+          }),
+        }),
+      );
+      expect(result).toEqual(response);
+    });
+
+
+    it("requests CSV as a blob", async () => {
+      const blob = new Blob(["run_id\n"], { type: "text/csv" });
+      mockGet.mockResolvedValue({ data: blob });
+
+      const result = await AutomationService.exportAutomationRuns("1", {
+        format: "csv",
+        conversation_base_url: "http://localhost:8000",
+      });
+
+      expect(mockGet).toHaveBeenCalledWith(
+        "/api/automation/v1/1/runs/export",
+        expect.objectContaining({
+          params: expect.objectContaining({ format: "csv" }),
+          responseType: "blob",
+        }),
+      );
+      expect(result).toBe(blob);
     });
   });
 

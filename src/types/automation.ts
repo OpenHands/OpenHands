@@ -92,3 +92,35 @@ export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
 }
+
+export type ActivityLogExportFormat = "json" | "csv";
+
+/** One Activity Log export row (matches automation `/runs/export`). */
+export interface AutomationRunExportRow {
+  run_id: string;
+  automation_id: string;
+  automation_name: string;
+  trigger: AutomationTrigger | Record<string, unknown>;
+  start_time: string | null;
+  end_time: string | null;
+  duration_seconds: number | null;
+  status: AutomationRunStatus;
+  conversation_id: string | null;
+  conversation_url: string | null;
+  error: string | null;
+}
+
+export interface AutomationRunExportResponse {
+  runs: AutomationRunExportRow[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AutomationRunExportParams {
+  format: ActivityLogExportFormat;
+  limit?: number;
+  offset?: number;
+  /** Prefix for `conversation_url` in each row (e.g. window.location.origin). */
+  conversation_base_url?: string;
+}

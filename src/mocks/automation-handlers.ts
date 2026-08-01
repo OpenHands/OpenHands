@@ -95,6 +95,88 @@ export const AUTOMATION_HANDLERS = [
     return HttpResponse.json(automation, { status: 201 });
   }),
 
+  // GET /api/automation/v1/:id/runs/export — Activity Log export (before /runs)
+  http.get(
+    "*/api/automation/v1/:id/runs/export",
+    async ({ params, request }) => {
+      await delay(100);
+
+      const id = params.id as string;
+      const automation = automations.get(id);
+      if (!automation) {
+        return HttpResponse.json(
+          { detail: "Automation not found" },
+          { status: 404 },
+        );
+      }
+
+      const url = new URL(request.url);
+      const format = url.searchParams.get("format") ?? "json";
+      const limit = Number(url.searchParams.get("limit") ?? "500");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      const baseUrl = url.searchParams.get("conversation_base_url");
+
+      const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
+      const page = allRuns.slice(offset, offset + limit);
+      const rows = page.map((run) => {
+        const path = run.conversation_id
+          ? `/conversations/${run.conversation_id}`
+          : null;
+        const conversation_url =
+          path && baseUrl ? `${baseUrl.replace(/\/$/, "")}${path}` : path;
+        const start = run.started_at;
+        const end = run.completed_at;
+        const duration_seconds =
+          start && end
+            ? (new Date(end).getTime() - new Date(start).getTime()) / 1000
+            : null;
+        return {
+          run_id: run.id,
+          automation_id: id,
+          automation_name: automation.name,
+          trigger: automation.trigger,
+          start_time: start,
+          end_time: end,
+          duration_seconds,
+          status: run.status,
+          conversation_id: run.conversation_id,
+          conversation_url,
+          error: run.error_detail,
+        };
+      });
+
+      if (format === "csv") {
+        const header =
+          "run_id,automation_id,automation_name,trigger,start_time,end_time,duration_seconds,status,conversation_id,conversation_url,error";
+        const lines = rows.map((row) =>
+          [
+            row.run_id,
+            row.automation_id,
+            row.automation_name,
+            JSON.stringify(row.trigger),
+            row.start_time ?? "",
+            row.end_time ?? "",
+            row.duration_seconds ?? "",
+            row.status,
+            row.conversation_id ?? "",
+            row.conversation_url ?? "",
+            row.error ?? "",
+          ].join(","),
+        );
+        return new HttpResponse([header, ...lines].join("\n") + "\n", {
+          headers: { "Content-Type": "text/csv; charset=utf-8" },
+        });
+      }
+
+      return HttpResponse.json({
+        runs: rows,
+        total: allRuns.length,
+        limit,
+        offset,
+      });
+    },
+  ),
+
   // GET /api/automation/v1/:id/runs — List automation runs
   http.get("*/api/automation/v1/:id/runs", async ({ params, request }) => {
     await delay(200);
@@ -110,7 +192,6 @@ export const AUTOMATION_HANDLERS = [
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
-
     const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
     const page = allRuns.slice(offset, offset + limit);
 

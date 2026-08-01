@@ -9,6 +9,8 @@ import {
 import type {
   Automation,
   AutomationRun,
+  AutomationRunExportParams,
+  AutomationRunExportResponse,
   AutomationSpec,
   AutomationTrigger,
   AutomationsResponse,
@@ -424,9 +426,9 @@ class AutomationService {
 
   static async listAutomationRuns(
     id: string,
-    params: { limit?: number; offset?: number } = {},
+    limit = 50,
+    offset = 0,
   ): Promise<AutomationRunsResponse> {
-    const { limit = 50, offset = 0 } = params;
     const active = getActiveBackend().backend;
     const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs`;
 
@@ -441,7 +443,9 @@ class AutomationService {
 
     const { data } = await localAutomationAxios.get<AutomationRunsResponse>(
       basePath,
-      { params: { limit, offset } },
+      {
+        params: { limit, offset },
+      },
     );
     return data;
   }
@@ -451,7 +455,70 @@ class AutomationService {
     limit = 50,
     offset = 0,
   ): Promise<AutomationRunsResponse> {
-    return AutomationService.listAutomationRuns(id, { limit, offset });
+    return AutomationService.listAutomationRuns(id, limit, offset);
+  }
+
+  /**
+   * One page of Activity Log export (CSV blob or JSON body).
+   */
+  static async exportAutomationRuns(
+    id: string,
+    params: AutomationRunExportParams,
+  ): Promise<AutomationRunExportResponse | Blob> {
+    const { format, limit = 500, offset = 0, conversation_base_url } = params;
+    const active = getActiveBackend().backend;
+    const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs/export`;
+    const search = new URLSearchParams();
+    search.set("format", format);
+    search.set("limit", String(limit));
+    search.set("offset", String(offset));
+    if (conversation_base_url) {
+      search.set("conversation_base_url", conversation_base_url);
+    }
+    const query = search.toString();
+    const path = `${basePath}?${query}`;
+
+    if (format === "csv") {
+      if (active.kind === "cloud") {
+        return callCloudProxy<Blob>({
+          backend: active,
+          method: "GET",
+          path,
+          responseType: "blob",
+          headers: await buildAutomationRequestHeaders(),
+        });
+      }
+      const { data } = await localAutomationAxios.get<Blob>(basePath, {
+        params: {
+          format,
+          limit,
+          offset,
+          ...(conversation_base_url ? { conversation_base_url } : {}),
+        },
+        responseType: "blob",
+      });
+      return data;
+    }
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRunExportResponse>({
+        backend: active,
+        method: "GET",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.get<AutomationRunExportResponse>(basePath, {
+        params: {
+          format,
+          limit,
+          offset,
+          ...(conversation_base_url ? { conversation_base_url } : {}),
+        },
+      });
+    return data;
   }
 
   static async toggleAutomation(
