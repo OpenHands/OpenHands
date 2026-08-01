@@ -1537,6 +1537,36 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([]);
   });
 
+  it("resolves the pi-acp default when acp_server is custom with an empty command", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "custom",
+          acp_command: ["npx", "-y", "pi-acp"],
+          acp_model: "default",
+        },
+      },
+    }) as {
+      agent_settings: Record<string, unknown> & {
+        acp_command?: unknown[];
+        acp_model?: unknown;
+        tags?: Record<string, string>;
+      };
+      tags?: Record<string, string>;
+    };
+
+    expect(payload.agent_settings.acp_command).toEqual([
+      "npx",
+      "-y",
+      "pi-acp",
+    ]);
+    expect(payload.agent_settings.acp_model).toBe("default");
+    expect(payload.tags).toEqual({ acpserver: "pi" });
+  });
+
   it("leaves acp_command alone for an unknown acp_server key", () => {
     const payload = buildStartConversationRequest({
       settings: {

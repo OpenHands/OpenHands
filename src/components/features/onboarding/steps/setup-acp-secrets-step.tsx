@@ -11,6 +11,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   getAcpProviderDisplayName,
   getAcpPreferredDefaultModel,
+  wireAcpServerForProvider,
 } from "#/constants/acp-providers";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
 import { type ACPServerKind } from "@openhands/typescript-client";
@@ -126,9 +127,7 @@ export function SetupAcpSecretsStep({
       if (providerKey !== "openhands") {
         await applyAgentProfile({
           agent_kind: "acp",
-          acp_server: (providerKey === "pi"
-            ? "custom"
-            : providerKey) as ACPServerKind,
+          acp_server: wireAcpServerForProvider(providerKey) as ACPServerKind,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
         });
       }

@@ -36,6 +36,10 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  PI_ACP_DEFAULT_COMMAND,
+  PI_ACP_PROVIDER_KEY,
+  resolveUiAcpProviderKey,
+  wireAcpServerForProvider,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
@@ -155,15 +159,19 @@ export function buildAgentProfileFields(
     toolConcurrency,
   } = input;
   if (isAcp) {
-    const isBuiltinDefault =
-      isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
+    const usesRegistryDefaultCommand =
+      isDefaultProviderCommand &&
+      selectedPreset !== ACP_CUSTOM_PRESET_KEY &&
+      selectedPreset !== PI_ACP_PROVIDER_KEY;
     return {
       agent_kind: "acp",
-      acp_server: selectedPreset === "pi" ? "custom" : selectedPreset,
+      acp_server: wireAcpServerForProvider(selectedPreset),
       acp_model: acpModel.trim() || null,
-      acp_command: isBuiltinDefault
+      acp_command: usesRegistryDefaultCommand
         ? null
-        : formatCommand(commandTokens) || null,
+        : isDefaultProviderCommand && selectedPreset === PI_ACP_PROVIDER_KEY
+          ? formatCommand(PI_ACP_DEFAULT_COMMAND)
+          : formatCommand(commandTokens) || null,
       acp_args: null,
     };
   }
@@ -316,8 +324,10 @@ export function AgentSettingsScreen({
       const rawAcpServer = source?.acp_server;
       const acpServer =
         typeof rawAcpServer === "string" ? rawAcpServer : undefined;
-      const provider = getAcpProvider(acpServer);
       const storedCommand = toStringArray(source?.acp_command);
+      const uiProviderKey =
+        resolveUiAcpProviderKey(acpServer, storedCommand) ?? acpServer;
+      const provider = getAcpProvider(uiProviderKey);
       const effectiveBaseCommand =
         storedCommand.length > 0
           ? storedCommand
@@ -336,7 +346,9 @@ export function AgentSettingsScreen({
       const normalizedSavedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
       setAcpModel(
-        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
+        normalizedSavedModel ||
+          getAcpPreferredDefaultModel(uiProviderKey) ||
+          "",
       );
       setIsCustomAcpModel(
         !!normalizedSavedModel &&

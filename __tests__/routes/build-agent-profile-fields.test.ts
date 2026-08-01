@@ -73,7 +73,7 @@ describe("buildAgentProfileFields — ACP", () => {
     }
   });
 
-  it("maps the 'pi' preset to the 'custom' server identity to satisfy backend validation", () => {
+  it("pins the pi-acp command for the Pi preset because its wire acp_server is custom", () => {
     const fields = buildAgentProfileFields({
       ...baseAcp,
       selectedPreset: "pi",
@@ -85,7 +85,7 @@ describe("buildAgentProfileFields — ACP", () => {
       agent_kind: "acp",
       acp_server: "custom",
       acp_model: "default",
-      acp_command: null,
+      acp_command: "npx -y pi-acp",
       acp_args: null,
     });
   });

@@ -4,9 +4,12 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { AgentKind, Settings, SettingsValue } from "#/types/settings";
 import {
+  defaultAcpCommandForProvider,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  PI_ACP_PROVIDER_KEY,
   resolveEffectiveAcpModel,
+  resolveUiAcpProviderKey,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { isAgentServerToolAvailable } from "./agent-server-compatibility";
@@ -703,11 +706,12 @@ function isAcpAgent(settings: Settings): boolean {
 function getAcpServerTag(settings: Settings): string | undefined {
   const agentSettings = toRecord(settings.agent_settings);
   const value = agentSettings.acp_server;
-  if (value === "custom" || !value) {
-    const cmd = agentSettings.acp_command;
-    if (Array.isArray(cmd) && cmd.join(" ") === "npx -y pi-acp") {
-      return "pi";
-    }
+  const uiKey = resolveUiAcpProviderKey(
+    typeof value === "string" ? value : undefined,
+    agentSettings.acp_command,
+  );
+  if (uiKey === PI_ACP_PROVIDER_KEY) {
+    return PI_ACP_PROVIDER_KEY;
   }
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
@@ -715,7 +719,7 @@ function getAcpServerTag(settings: Settings): string | undefined {
 function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
   const cmd = agentSettings.acp_command;
   const isEmpty = Array.isArray(cmd) && cmd.length === 0;
-  const noCommand = cmd === undefined;
+  const noCommand = cmd === undefined || cmd === null;
   if (!isEmpty && !noCommand) {
     return cmd;
   }
@@ -724,8 +728,16 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
     typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
       : undefined;
-  const provider = getAcpProvider(serverKey);
-  return provider ? [...provider.default_command] : cmd;
+  const uiKey = resolveUiAcpProviderKey(serverKey, cmd);
+  const provider = getAcpProvider(uiKey ?? serverKey);
+  if (provider) {
+    return [...provider.default_command];
+  }
+  const piDefault = defaultAcpCommandForProvider(uiKey ?? serverKey ?? "");
+  if (piDefault.length > 0) {
+    return piDefault;
+  }
+  return cmd;
 }
 
 function buildConfiguredAcpAgentSettings(
@@ -775,9 +787,15 @@ function buildConfiguredAcpAgentSettings(
   // that, the form's displayed default would silently not take effect at
   // runtime until the user re-saved the page.
   const serverKey =
-    typeof agentSettings.acp_server === "string"
+    resolveUiAcpProviderKey(
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined,
+      agentSettings.acp_command,
+    ) ??
+    (typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
-      : undefined;
+      : undefined);
   const effectiveModel = resolveEffectiveAcpModel({
     configured: agentSettings.acp_model as string | null | undefined,
     providerDefault: getAcpPreferredDefaultModel(serverKey),

@@ -10,7 +10,25 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  isPiAcpCommand,
+  resolveUiAcpProviderKey,
 } from "#/constants/acp-providers";
+
+describe("Pi ACP preset helpers", () => {
+  it("detects the pi-acp launch argv and shell string", () => {
+    expect(isPiAcpCommand(["npx", "-y", "pi-acp"])).toBe(true);
+    expect(isPiAcpCommand("npx -y pi-acp")).toBe(true);
+    expect(isPiAcpCommand(["npx", "-y", "pi-acp", "--flag"])).toBe(false);
+  });
+
+  it("rehydrates the Canvas registry key from custom wire settings", () => {
+    expect(resolveUiAcpProviderKey("custom", ["npx", "-y", "pi-acp"])).toBe(
+      "pi",
+    );
+    expect(resolveUiAcpProviderKey("custom", [])).toBe("custom");
+    expect(resolveUiAcpProviderKey("claude-code", [])).toBe("claude-code");
+  });
+});
 
 describe("getAcpProviderDisplayName", () => {
   it("resolves the built-in registry keys to their human names", () => {
@@ -113,6 +131,9 @@ describe("ACP provider registry", () => {
         agent_kind: "acp",
         acp_server: provider.key === "pi" ? "custom" : provider.key,
         acp_model: getAcpPreferredDefaultModel(provider.key),
+        ...(provider.key === "pi"
+          ? { acp_command: ["npx", "-y", "pi-acp"] }
+          : { acp_command: [] }),
       });
     }
     expect(buildAcpAgentSettingsDiff("gemini-cli")).toMatchObject({
