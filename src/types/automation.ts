@@ -62,11 +62,14 @@ export interface AutomationsResponse {
   total: number;
 }
 
+/** Mirrors `RunStatus` in the automation service's OpenAPI schema. */
 export enum AutomationRunStatus {
   PENDING = "PENDING",
   RUNNING = "RUNNING",
   COMPLETED = "COMPLETED",
   FAILED = "FAILED",
+  CANCELLED = "CANCELLED",
+  SKIPPED = "SKIPPED",
 }
 
 export interface AutomationRun {
