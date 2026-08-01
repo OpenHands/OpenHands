@@ -164,6 +164,8 @@ export function FeaturedAutomationsDemo() {
         aria-label={DEMO_COPY.openAutomations}
       >
         {DEMO_AUTOMATIONS.map((automation) => {
+          const isFeatured = featured.some((item) => item.id === automation.id);
+
           return (
             <StyledTooltip
               key={automation.id}
@@ -174,8 +176,14 @@ export function FeaturedAutomationsDemo() {
               <button
                 type="button"
                 aria-label={automation.name}
+                aria-pressed={isFeatured}
                 onClick={() => addFeatured(automation)}
-                className="inline-flex items-center gap-2 rounded-md border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 text-sm text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-[var(--oh-foreground)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]",
+                  isFeatured
+                    ? "border-[var(--oh-focus)] bg-[var(--oh-interactive-selected)] shadow-inner"
+                    : "border-[var(--oh-border)] bg-[var(--oh-surface-raised)] hover:bg-[var(--oh-interactive-hover)]",
+                )}
               >
                 <AutomationStatus health={automation.health} />
                 {automation.name}
@@ -228,9 +236,18 @@ export function FeaturedAutomationsDemo() {
                     </div>
                     <AutomationStatus health={automation.health} />
                   </div>
-                  <p className="mt-4 text-xs text-[var(--oh-text-secondary)]">
-                    {automation.lastRun} · {automation.nextRun}
-                  </p>
+                  <div className="mt-4 flex items-center gap-1 text-xs text-[var(--oh-text-secondary)]">
+                    <span>
+                      {automation.lastRun} · {automation.nextRun}
+                    </span>
+                    <a
+                      href={`/conversations/${automation.conversationId}`}
+                      aria-label={DEMO_COPY.recentConversation}
+                      className="text-[var(--oh-foreground)] underline underline-offset-4 hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                    >
+                      &gt;&gt;
+                    </a>
+                  </div>
                   <div className="mt-3 max-h-24 space-y-2 overflow-y-auto rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] p-3 text-sm">
                     <p className="text-[var(--oh-text-secondary)]">
                       {automation.agentMessage}
@@ -241,12 +258,6 @@ export function FeaturedAutomationsDemo() {
                       </p>
                     ) : null}
                   </div>
-                  <a
-                    href={`/conversations/${automation.conversationId}`}
-                    className="mt-3 inline-flex text-xs text-[var(--oh-foreground)] underline underline-offset-4 hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
-                  >
-                    {DEMO_COPY.recentConversation}
-                  </a>
                 </article>
               );
             })}

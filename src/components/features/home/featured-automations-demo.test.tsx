@@ -19,6 +19,10 @@ describe("FeaturedAutomationsDemo", () => {
     expect(
       screen.getByRole("link", { name: "Open most recent conversation" }),
     ).toHaveAttribute("href", "/conversations/automation-pr-review-16182");
+    expect(screen.getByRole("button", { name: "PR reviewer" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("shows the latest error when a failed automation is featured", () => {
