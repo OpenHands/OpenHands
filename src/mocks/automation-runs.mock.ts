@@ -53,8 +53,9 @@ export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
   ],
   "a1000000-0000-0000-0000-000000000003": [
     makeRun("r3-01", AutomationRunStatus.COMPLETED, 1),
-    makeRun("r3-02", AutomationRunStatus.COMPLETED, 2),
-    makeRun("r3-03", AutomationRunStatus.COMPLETED, 3),
+    // Terminal statuses the backend emits besides COMPLETED/FAILED.
+    makeRun("r3-02", AutomationRunStatus.CANCELLED, 2),
+    makeRun("r3-03", AutomationRunStatus.SKIPPED, 3, 9, false),
   ],
   "a1000000-0000-0000-0000-000000000004": [
     makeRun("r4-01", AutomationRunStatus.FAILED, 14, 11, false), // Failed before sandbox creation
