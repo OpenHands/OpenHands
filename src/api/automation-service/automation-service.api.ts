@@ -426,9 +426,9 @@ class AutomationService {
 
   static async listAutomationRuns(
     id: string,
-    limit = 50,
-    offset = 0,
+    params: { limit?: number; offset?: number } = {},
   ): Promise<AutomationRunsResponse> {
+    const { limit = 50, offset = 0 } = params;
     const active = getActiveBackend().backend;
     const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs`;
 
@@ -443,9 +443,7 @@ class AutomationService {
 
     const { data } = await localAutomationAxios.get<AutomationRunsResponse>(
       basePath,
-      {
-        params: { limit, offset },
-      },
+      { params: { limit, offset } },
     );
     return data;
   }
@@ -455,7 +453,7 @@ class AutomationService {
     limit = 50,
     offset = 0,
   ): Promise<AutomationRunsResponse> {
-    return AutomationService.listAutomationRuns(id, limit, offset);
+    return AutomationService.listAutomationRuns(id, { limit, offset });
   }
 
   /**

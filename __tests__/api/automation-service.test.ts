@@ -278,11 +278,14 @@ describe("AutomationService", () => {
   });
 
   describe("listAutomationRuns", () => {
-    it("fetches runs with limit and offset", async () => {
+    it("fetches runs with params object", async () => {
       const response: AutomationRunsResponse = { runs: [], total: 0 };
       mockGet.mockResolvedValue({ data: response });
 
-      const result = await AutomationService.listAutomationRuns("1", 20, 10);
+      const result = await AutomationService.listAutomationRuns("1", {
+        limit: 20,
+        offset: 10,
+      });
 
       expect(mockGet).toHaveBeenCalledWith("/api/automation/v1/1/runs", {
         params: { limit: 20, offset: 10 },
@@ -311,11 +314,10 @@ describe("AutomationService", () => {
 
       const result = await AutomationService.getAutomationRuns("1", 25, 5);
 
-      expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith(
-        "1",
-        25,
-        5,
-      );
+      expect(AutomationService.listAutomationRuns).toHaveBeenCalledWith("1", {
+        limit: 25,
+        offset: 5,
+      });
       expect(result).toEqual(response);
     });
   });
