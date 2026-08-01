@@ -109,17 +109,12 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # agent-server base; Pi is third-party and installed via the Node 24 stage
 # above (pi-acp requires Node 22+).
 #
-# Copy the Node 24 toolchain, then re-run ``npm install -g`` in this stage.
-# Do NOT ``COPY`` /usr/local/bin/pi or pi-acp directly — Docker dereferences
-# npm global symlinks into flat scripts that break relative imports
-# (``config.js`` lives in the package dir, not next to bin/pi).
-COPY --from=pi-acp-install /usr/local/bin/node /usr/local/bin/node
-COPY --from=pi-acp-install /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=pi-acp-install /usr/local/bin/npx /usr/local/bin/npx
-COPY --from=pi-acp-install /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN npm install -g --ignore-scripts \
-  @earendil-works/pi-coding-agent \
-  pi-acp
+# Copy the whole Node prefix so npm global bin *symlinks* stay intact.
+# Never ``COPY`` /usr/local/bin/pi or pi-acp alone — Docker dereferences
+# symlinks into flat scripts that import ./config.js from bin/ instead of
+# the package directory under lib/node_modules.
+COPY --from=pi-acp-install /usr/local/ /opt/node24/
+ENV PATH="/opt/node24/bin:${PATH}"
 
 # Install automation server via pip.
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
