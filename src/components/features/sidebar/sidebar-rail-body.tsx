@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
+  Palette,
   Plus,
   Server,
   Settings,
@@ -18,6 +19,7 @@ import { BackendSelector } from "#/components/features/backends/backend-selector
 import { BackendStatusDot } from "#/components/features/backends/backend-status-dot";
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { SidebarConversationList } from "./sidebar-conversation-list";
+import { useSkinStatus } from "#/hooks/query/use-skin";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import {
   SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
@@ -77,6 +79,7 @@ export function SidebarRailBody({
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
   const backendCloseTimerRef = collapsedBackendCloseTimer;
+  const { data: skinStatus } = useSkinStatus();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -156,6 +159,18 @@ export function SidebarRailBody({
 
       <nav className={sidebarNavListClassName(collapsed)}>
         <CommandMenuTrigger collapsed={collapsed} />
+        {skinStatus?.installed ? (
+          // Auto-created menu item for the installed skin — always the
+          // topmost nav entry, labeled with the skin's name, opening the
+          // iframe tab that embeds the skin app.
+          <SidebarNavLink
+            to="/skin"
+            label={skinStatus.name || t(I18nKey.SKIN$TITLE)}
+            testId="sidebar-skin-link"
+            collapsed={collapsed}
+            icon={<Palette width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        ) : null}
         <SidebarNavLink
           to="/conversations"
           end

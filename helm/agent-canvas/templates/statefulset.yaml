@@ -66,6 +66,20 @@ spec:
             - name: AUTOMATION_DB_URL
               value: {{ .Values.config.automationDbUrl | quote }}
             {{- end }}
+            {{- with .Values.config.skin }}
+            {{- if .repo }}
+            - name: OPENHANDS_SKIN_REPO
+              value: {{ .repo | quote }}
+            {{- if .ref }}
+            - name: OPENHANDS_SKIN_REF
+              value: {{ .ref | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .port }}
+            - name: OPENHANDS_SKIN_PORT
+              value: {{ .port | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.secrets.ohSecretKey.existingSecret }}
             - name: OH_SECRET_KEY
               valueFrom:

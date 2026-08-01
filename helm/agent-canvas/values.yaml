@@ -138,6 +138,21 @@ config:
   # When empty, the entrypoint falls back to SQLite on the PVC.
   # automationDbUrl: "postgresql+asyncpg://user:pass@host/db"
   automationDbUrl: ""
+  # ── Skin ────────────────────────────────────────────────────────────────
+  # A skin is a git-backed package (GitHub repo) that reconfigures the
+  # instance (automations, skills, MCP servers, settings — secret names
+  # only, never values) and serves a custom web app that becomes the
+  # default tab of the Canvas UI. See docker/entrypoint.sh
+  # (OPENHANDS_SKIN_REPO / OPENHANDS_SKIN_REF / OPENHANDS_SKIN_PORT).
+  skin:
+    # GitHub repo URL of the skin to install on first boot. The default is
+    # the Agent Canvas Manager (ACM) skin, so a plain `helm install` yields
+    # an instance running ACM. Set to "" for a plain, unskinned Canvas.
+    repo: "https://github.com/OpenHands/app-acm"
+    # Optional branch or tag to pin.
+    ref: ""
+    # Internal port the skin app listens on (OPENHANDS_SKIN_PORT).
+    port: 18002
   # Extra environment variables to pass through to the container.
   # Each entry is `{ name: ..., value: ... }` or `{ name: ..., valueFrom: ... }`.
   extraEnv: []

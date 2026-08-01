@@ -8,6 +8,7 @@ import {
 export default [
   layout("routes/root-layout.tsx", [
     index("routes/index-home.tsx"),
+    route("skin", "routes/skin-tab.tsx"),
     route("conversations", "routes/home.tsx"),
     route(
       "conversations/:conversationId/panel",
@@ -29,6 +30,7 @@ export default [
       route("verification", "routes/verification-settings.tsx"),
       route("app", "routes/app-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
+      route("skin", "routes/skin-settings.tsx"),
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
