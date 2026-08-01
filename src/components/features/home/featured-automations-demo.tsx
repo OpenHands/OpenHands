@@ -60,6 +60,12 @@ const HEALTH_LABEL: Record<AutomationHealth, string> = {
   running: "Run in progress",
 };
 
+const DEMO_COPY = {
+  title: "Automations",
+  openAutomations: "Open automations",
+  featured: "Featured",
+};
+
 function AutomationStatus({ health }: { health: AutomationHealth }) {
   if (health === "success") {
     return (
@@ -131,10 +137,13 @@ export function FeaturedAutomationsDemo() {
         id="featured-automations-heading"
         className="mb-3 text-sm font-medium text-[var(--oh-foreground)]"
       >
-        Automations
+        {DEMO_COPY.title}
       </h2>
 
-      <div className="flex flex-wrap gap-2" aria-label="Open automations">
+      <div
+        className="flex flex-wrap gap-2"
+        aria-label={DEMO_COPY.openAutomations}
+      >
         {DEMO_AUTOMATIONS.map((automation) => {
           return (
             <StyledTooltip
@@ -166,7 +175,7 @@ export function FeaturedAutomationsDemo() {
               aria-hidden="true"
             />
             <h3 className="text-sm font-medium text-[var(--oh-foreground)]">
-              Featured
+              {DEMO_COPY.featured}
             </h3>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
