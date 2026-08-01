@@ -93,10 +93,22 @@ USER root
 
 # Install system deps required by automation's transitive dependencies
 # (asyncpg needs libpq, which the agent-server base image may not include).
+# Also install Node/npm for Pi ACP (pi-acp spawns via npx; the pi coding-agent
+# CLI is a separate global npm package). Claude/Codex/Gemini ACP wrappers ship
+# in the agent-server base image; Pi is installed here for Docker parity.
 RUN if command -v apt-get >/dev/null 2>&1; then \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
+      apt-get install -y --no-install-recommends libpq-dev nodejs npm && \
       rm -rf /var/lib/apt/lists/*; \
+    fi
+
+# Pi coding agent + ACP adapter (stdio JSON-RPC → ``pi --mode rpc``).
+# ``--ignore-scripts`` matches upstream Pi install guidance; lifecycle scripts
+# are not required for headless ACP use.
+RUN if command -v npm >/dev/null 2>&1; then \
+      npm install -g --ignore-scripts \
+        @earendil-works/pi-coding-agent \
+        pi-acp; \
     fi
 
 # Install automation server via pip.
