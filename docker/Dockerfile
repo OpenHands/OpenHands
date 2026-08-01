@@ -115,6 +115,8 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # the package directory under lib/node_modules.
 COPY --from=pi-acp-install /usr/local/ /opt/node24/
 ENV PATH="/opt/node24/bin:${PATH}"
+RUN test -x /opt/node24/bin/pi-acp && test -x /opt/node24/bin/pi && \
+    /opt/node24/bin/pi --version
 
 # Install automation server via pip.
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
