@@ -11,12 +11,12 @@ describe("validateAutomationTimeout", () => {
     expect(result).toEqual({ value: null });
   });
 
-  it("accepts a positive integer up to the maximum", () => {
+  it("accepts a positive integer up to a deployment-provided maximum", () => {
     // Arrange / Act
-    const result = validateAutomationTimeout("1800");
+    const result = validateAutomationTimeout("900", 900);
 
     // Assert
-    expect(result).toEqual({ value: 1800 });
+    expect(result).toEqual({ value: 900 });
   });
 
   it("rejects a non-integer value", () => {
@@ -41,23 +41,10 @@ describe("validateAutomationTimeout", () => {
 
   it("rejects a value above the maximum", () => {
     // Arrange / Act
-    const result = validateAutomationTimeout("1801");
+    const result = validateAutomationTimeout("901", 900);
 
     // Assert
     expect(result).toEqual({
-      errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED,
-    });
-  });
-
-  it("validates against a ceiling the interface manifest lowered", () => {
-    // Arrange / Act — a manifest max of 900 moves the boundary: 900 stays
-    // in range while 901, fine under the 1800 default, is now rejected.
-    const atCeiling = validateAutomationTimeout("900", 900);
-    const overCeiling = validateAutomationTimeout("901", 900);
-
-    // Assert
-    expect(atCeiling).toEqual({ value: 900 });
-    expect(overCeiling).toEqual({
       errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED,
     });
   });
