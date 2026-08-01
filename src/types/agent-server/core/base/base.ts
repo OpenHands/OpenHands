@@ -44,6 +44,7 @@ type ObservationEventType =
   | "TerminalObservation"
   | "GlobObservation"
   | "GrepObservation"
+  | "ClassifyAndSwitchLLMObservation"
   // Result of the `task` tool, which delegates work to a spawned subagent.
   | "TaskObservation"
   // Legacy and client-defined acknowledgements for Canvas UI dispatches.

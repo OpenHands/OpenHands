@@ -79,7 +79,8 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
     // look identical to `/model <profile>` confirmations. Failed switches
     // still render as observations so the error remains visible in chat.
     if (
-      event.observation.kind === "SwitchLLMObservation" &&
+      (event.observation.kind === "SwitchLLMObservation" ||
+        event.observation.kind === "ClassifyAndSwitchLLMObservation") &&
       !event.observation.is_error
     ) {
       return false;

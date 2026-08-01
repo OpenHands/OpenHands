@@ -14,6 +14,7 @@ import {
   isObservationEvent,
   isACPToolCallEvent,
   isCanvasUIActionEvent,
+  getSwitchLLMObservationProfileName,
 } from "#/types/agent-server/type-guards";
 import { MonoComponent } from "../../../features/chat/mono-component";
 import { PathComponent } from "../../../features/chat/path-component";
@@ -339,11 +340,12 @@ const getObservationEventTitle = (
       }
       return observationType.replace("Observation", "").toUpperCase();
     case "SwitchLLMObservation":
+    case "ClassifyAndSwitchLLMObservation":
       observationKey = event.observation.is_error
         ? "MODEL$SWITCH_FAILED"
         : "MODEL$SWITCHED_TO_PROFILE";
       observationValues = {
-        name: event.observation.profile_name,
+        name: getSwitchLLMObservationProfileName(event.observation),
       };
       break;
     case "BrowserObservation":

@@ -16,6 +16,8 @@ import {
   isObservationEvent,
   isStreamingDeltaEvent,
   isSwitchLLMObservationEvent,
+  getSwitchLLMObservationProfileName,
+  getSwitchLLMObservationReason,
 } from "#/types/agent-server/type-guards";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
@@ -104,6 +106,7 @@ const SAFE_OBSERVATION_DETAIL_KINDS = new Set([
   "MCPToolObservation",
   "StrReplaceEditorObservation",
   "SwitchLLMObservation",
+  "ClassifyAndSwitchLLMObservation",
   "TaskTrackerObservation",
   "TaskObservation",
   "TerminalObservation",
@@ -324,17 +327,18 @@ const buildTranscriptEntries = (
       if (narrationAction) addActionNarration(narrationAction);
 
       if (isSwitchLLMObservationEvent(event) && !event.observation.is_error) {
+        const reason = getSwitchLLMObservationReason(event.observation);
         entries.push({
           kind: "note",
           summary: translatePlain(I18nKey.MODEL$SWITCHED_TO_PROFILE, {
-            name: event.observation.profile_name,
+            name: getSwitchLLMObservationProfileName(event.observation),
           }),
           content: [
             event.observation.active_model
               ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$MODEL)}: ${event.observation.active_model}`
               : "",
-            event.observation.reason
-              ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${event.observation.reason}`
+            reason
+              ? `${i18n.t(I18nKey.TRANSCRIPT_EXPORT$REASON)}: ${reason}`
               : "",
           ]
             .filter(Boolean)

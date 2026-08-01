@@ -1,7 +1,10 @@
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
 import { useModelStore, SeededSwitch } from "#/stores/model-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import { isSwitchLLMObservationEvent } from "#/types/agent-server/type-guards";
+import {
+  getSwitchLLMObservationProfileName,
+  isSwitchLLMObservationEvent,
+} from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
@@ -48,7 +51,7 @@ export function seedModelSwitchesFromHistory(
       switches.push({
         id: `history-switch:${event.id}`,
         anchorEventId: lastRenderableId,
-        profileName: event.observation.profile_name,
+        profileName: getSwitchLLMObservationProfileName(event.observation),
       });
     }
     if (shouldRenderEvent(event)) {

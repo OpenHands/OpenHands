@@ -37,6 +37,7 @@ import {
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
+  getSwitchLLMObservationProfileName,
   isCanvasUIActionEvent,
 } from "#/types/agent-server/type-guards";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
@@ -607,10 +608,10 @@ export function ConversationWebSocketProvider({
             switchLLMObservation &&
             !switchLLMObservation.observation.is_error
           ) {
-            recordModelSwitchMessage(
-              conversationId,
-              switchLLMObservation.observation.profile_name,
+            const profileName = getSwitchLLMObservationProfileName(
+              switchLLMObservation.observation,
             );
+            recordModelSwitchMessage(conversationId, profileName);
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
@@ -621,7 +622,7 @@ export function ConversationWebSocketProvider({
               selected_branch: prevMetadata?.selected_branch ?? null,
               git_provider: prevMetadata?.git_provider ?? null,
               selected_workspace: prevMetadata?.selected_workspace ?? null,
-              active_profile: switchLLMObservation.observation.profile_name,
+              active_profile: profileName,
               // Full-object replace: carry the plugins snapshot forward so the
               // in-conversation plugins view survives a profile switch.
               plugins: prevMetadata?.plugins ?? null,

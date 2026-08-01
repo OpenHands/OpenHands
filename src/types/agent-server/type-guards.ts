@@ -14,6 +14,7 @@ import {
   TerminalObservation,
   BrowserObservation,
   BrowserNavigateAction,
+  ClassifyAndSwitchLLMObservation,
   SwitchLLMObservation,
   CanvasUIAction,
 } from "./core";
@@ -155,13 +156,29 @@ export const isBrowserObservationEvent = (
   isObservationEvent(event) && event.observation.kind === "BrowserObservation";
 
 /**
- * Type guard function to check if an observation event is a SwitchLLMObservation
+ * Type guard function to check if an observation event is a model-switch
+ * observation.
  */
 export const isSwitchLLMObservationEvent = (
   event: OpenHandsEvent,
-): event is ObservationEvent<SwitchLLMObservation> =>
+): event is ObservationEvent<
+  SwitchLLMObservation | ClassifyAndSwitchLLMObservation
+> =>
   isObservationEvent(event) &&
-  event.observation.kind === "SwitchLLMObservation";
+  (event.observation.kind === "SwitchLLMObservation" ||
+    event.observation.kind === "ClassifyAndSwitchLLMObservation");
+
+export const getSwitchLLMObservationProfileName = (
+  observation: SwitchLLMObservation | ClassifyAndSwitchLLMObservation,
+): string =>
+  observation.kind === "SwitchLLMObservation"
+    ? observation.profile_name
+    : observation.model;
+
+export const getSwitchLLMObservationReason = (
+  observation: SwitchLLMObservation | ClassifyAndSwitchLLMObservation,
+): string | null =>
+  observation.kind === "SwitchLLMObservation" ? observation.reason : null;
 
 /**
  * Type guard function to check if an action event is a BrowserNavigateAction
