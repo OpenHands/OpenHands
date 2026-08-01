@@ -73,7 +73,10 @@ import {
 } from "#/api/conversation-metadata-store";
 
 export type WebSocketConnectionState =
-  "CONNECTING" | "OPEN" | "CLOSED" | "CLOSING";
+  | "CONNECTING"
+  | "OPEN"
+  | "CLOSED"
+  | "CLOSING";
 
 interface SendMessageResult {
   queued: boolean; // true if message was queued for later delivery, false if sent immediately
@@ -492,7 +495,8 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              ConversationErrorEvent | ServerErrorEvent;
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
@@ -705,7 +709,8 @@ export function ConversationWebSocketProvider({
           // AgentErrorEvent errors are displayed inline in the chat, not as banners
           if (isDisplayableErrorEvent(event)) {
             const errorEvent = event as
-              ConversationErrorEvent | ServerErrorEvent;
+              | ConversationErrorEvent
+              | ServerErrorEvent;
             const classification =
               "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
