@@ -41,7 +41,8 @@
 #                          (default: ~/.openhands/workspaces)
 #   OPENHANDS_SKIN_PORT   – Port the installed skin app listens on
 #                          (default: 18002). The skin is reverse-proxied
-#                          under /skin-app and managed via /skin-api.
+#                          verbatim under /skin (and at / when installed);
+#                          managed via /skin-api.
 #   OPENHANDS_SKIN_REPO   – Optional GitHub repo URL of a skin to install on
 #                          first boot (skipped when a skin is already
 #                          installed). OPENHANDS_SKIN_REF pins a branch/tag.
@@ -66,7 +67,7 @@ AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/ca
 
 # Skin support: the single port the installed skin app must listen on.
 # The static-server starts the skin (npm run start) when one is installed
-# and reverse-proxies it under /skin-app.
+# and reverse-proxies it verbatim under /skin (also serving it at /).
 OPENHANDS_SKIN_PORT="${OPENHANDS_SKIN_PORT:-${CONFIG_SKIN_PORT:-18002}}"
 export OPENHANDS_SKIN_PORT
 

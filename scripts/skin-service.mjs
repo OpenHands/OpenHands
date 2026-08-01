@@ -7,13 +7,17 @@
  *     definitions, secret NAMES, LLM settings, agent profiles — never secret
  *     values, never conversations) into a `skin.yaml` + `automations/` layout,
  *   • ships an arbitrary web app started via `npm run start` on the single
- *     port given by the OPENHANDS_SKIN_PORT environment variable,
+ *     port given by the OPENHANDS_SKIN_PORT environment variable. The app
+ *     must serve its UI under /skin/ (index.html + static, with
+ *     <base href="/skin/">) and its own backend under /skin/api/* — the
+ *     host proxies /skin verbatim and serves the skin at / as the
+ *     instance's front page,
  *   • surfaces in the Canvas UI as an auto-created menu item (iframe tab).
  *
  * At most ONE skin can be installed per instance.
  *
  * This module is consumed by scripts/static-server.mjs, which mounts the
- * REST API under /skin-api and reverse-proxies /skin-app → the running skin.
+ * REST API under /skin-api and reverse-proxies /skin → the running skin.
  *
  * Skin repo format (everything at the repo root):
  *   skin.yaml       — required. name, screenshot, canvas_version, secrets,

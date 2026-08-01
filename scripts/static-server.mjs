@@ -42,7 +42,7 @@ import {
 import { SkinService, createSkinApiHandler } from "./skin-service.mjs";
 
 const SKIN_API_PREFIX = "/skin-api";
-const SKIN_APP_PREFIX = "/skin-app";
+const SKIN_APP_PREFIX = "/skin";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SPA fallback helpers
@@ -237,8 +237,13 @@ OPTIONS:
                                arbitrary web app from a GitHub skin repo)
                                is launched via \`npm run start\` with
                                OPENHANDS_SKIN_PORT=<port> and reverse-proxied
-                               under /skin-app. The skin management REST API
-                               is mounted at /skin-api.
+                               under /skin (prefix passed through verbatim:
+                               the skin serves its UI at /skin/ and its own
+                               backend at /skin/api/*). When a skin is
+                               installed, / is internally rewritten to
+                               /skin/ so the skin is the front page. The
+                               skin management REST API is mounted at
+                               /skin-api.
   --skin-agent-server-url <url>
                                Agent server the skin service uses for
                                instance-config (de)serialization.
@@ -578,9 +583,16 @@ export function startStaticServer(config) {
 
   // ── Optional skin support ──────────────────────────────────────────────
   // When --skin-port is given, the installed skin app (npm run start on
-  // OPENHANDS_SKIN_PORT) is reverse-proxied under /skin-app (prefix
-  // stripped, WebSockets included) and the management REST API is mounted
-  // at /skin-api.
+  // OPENHANDS_SKIN_PORT) is reverse-proxied under /skin — the prefix is
+  // passed through VERBATIM (HTTP + WebSockets), so the skin app serves
+  // its UI at /skin/ and its own backend at /skin/api/*. The public URL
+  // and the URL the skin sees are identical, which keeps absolute and
+  // relative URLs working both inside the Canvas iframe and standalone.
+  // Additionally, when a skin is installed, `/` is internally rewritten
+  // to /skin/ (no redirect — the address bar stays clean) so the skin UI
+  // is the instance's front page; skins ship <base href="/skin/"> so the
+  // same document works at both mount points. The management REST API
+  // (install/status/push) is host-owned and stays at /skin-api.
   let skinService = null;
   let skinApiHandler = null;
   let skinTarget = null;
@@ -604,9 +616,19 @@ export function startStaticServer(config) {
     }
   }
 
-  function stripSkinAppPrefix(req) {
-    const stripped = (req.url ?? "/").slice(SKIN_APP_PREFIX.length);
-    req.url = stripped.startsWith("/") ? stripped : `/${stripped}`;
+  // `/` (exactly, plus query) serves the skin UI when a skin is installed:
+  // rewrite to /skin/ and proxy. isInstalled() is a cheap fs check.
+  function rewriteRootToSkin(req) {
+    const url = req.url ?? "/";
+    if (
+      skinTarget &&
+      skinService?.isInstalled() &&
+      (url === "/" || url.startsWith("/?"))
+    ) {
+      req.url = `${SKIN_APP_PREFIX}/${url.slice(1)}`;
+      return true;
+    }
+    return false;
   }
 
   const injectionOpts = {
@@ -629,8 +651,21 @@ export function startStaticServer(config) {
       skinApiHandler(req, res, pathname);
       return;
     }
-    if (skinTarget && matchesPathPrefix(url, SKIN_APP_PREFIX)) {
-      stripSkinAppPrefix(req);
+    // Normalize bare /skin (no trailing slash) so individual skins don't
+    // have to handle both forms.
+    if (
+      skinTarget &&
+      (url === SKIN_APP_PREFIX || url.startsWith(`${SKIN_APP_PREFIX}?`))
+    ) {
+      const query = url.slice(SKIN_APP_PREFIX.length);
+      res.writeHead(308, { Location: `${SKIN_APP_PREFIX}/${query}` });
+      res.end();
+      return;
+    }
+    if (
+      skinTarget &&
+      (matchesPathPrefix(url, SKIN_APP_PREFIX) || rewriteRootToSkin(req))
+    ) {
       proxy.proxyHttp(req, res, skinTarget);
       return;
     }
@@ -658,7 +693,6 @@ export function startStaticServer(config) {
 
   server.on("upgrade", (req, socket, head) => {
     if (skinTarget && matchesPathPrefix(req.url ?? "/", SKIN_APP_PREFIX)) {
-      stripSkinAppPrefix(req);
       proxy.proxyWebSocket(req, socket, head, skinTarget);
       return;
     }
@@ -695,7 +729,9 @@ export function startStaticServer(config) {
         console.log(`  Backend setup locked to Cloud: ${config.lockToCloud}`);
       }
       if (skinTarget) {
-        console.log(`  ${SKIN_APP_PREFIX} -> ${skinTarget} (installed skin)`);
+        console.log(
+          `  ${SKIN_APP_PREFIX} -> ${skinTarget} (installed skin; / rewrites here when installed)`,
+        );
         console.log(`  ${SKIN_API_PREFIX} -> skin management API`);
       }
       console.log("  * (default) -> static files + SPA fallback");

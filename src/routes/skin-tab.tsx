@@ -5,7 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 /**
  * Default tab of a skinned instance: renders the installed skin's web app
- * (running on OPENHANDS_SKIN_PORT, reverse-proxied under /skin-app) in a
+ * (running on OPENHANDS_SKIN_PORT, reverse-proxied verbatim under /skin) in a
  * full-size iframe filling the main content area.
  */
 function SkinTab() {

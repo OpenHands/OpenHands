@@ -8,7 +8,7 @@
 import { getAgentServerSessionApiKey } from "./agent-server-config";
 
 export const SKIN_API_BASE = "/skin-api";
-export const SKIN_APP_BASE = "/skin-app";
+export const SKIN_APP_BASE = "/skin";
 
 export interface SkinSecretDeclaration {
   name: string;
