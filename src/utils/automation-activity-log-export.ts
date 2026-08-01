@@ -1,7 +1,6 @@
 import type {
   ActivityLogExportFormat,
   Automation,
-  AutomationRunExportResponse,
   AutomationRunExportRow,
 } from "#/types/automation";
 import { downloadBlob } from "#/utils/utils";
@@ -73,12 +72,11 @@ export async function fetchAllActivityLogExportRows(
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
-    const page = (await AutomationService.exportAutomationRuns(id, {
-      format: "json",
+    const page = await AutomationService.exportAutomationRuns(id, {
       limit: EXPORT_PAGE_SIZE,
       offset,
       conversation_base_url: conversationBaseUrl,
-    })) as AutomationRunExportResponse;
+    });
 
     runs.push(...page.runs);
     total = page.total;

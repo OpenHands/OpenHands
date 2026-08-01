@@ -103,7 +103,6 @@ describe("automation-activity-log-export", () => {
       1,
       "a1",
       expect.objectContaining({
-        format: "json",
         limit: 500,
         offset: 0,
         conversation_base_url: "http://localhost:8000",
@@ -113,7 +112,6 @@ describe("automation-activity-log-export", () => {
       2,
       "a1",
       expect.objectContaining({
-        format: "json",
         offset: 1,
       }),
     );
@@ -136,7 +134,6 @@ describe("automation-activity-log-export", () => {
     expect(AutomationService.exportAutomationRuns).toHaveBeenCalledWith(
       "a1",
       expect.objectContaining({
-        format: "json",
         conversation_base_url: "http://localhost:8000",
       }),
     );
@@ -165,7 +162,6 @@ describe("automation-activity-log-export", () => {
     expect(AutomationService.exportAutomationRuns).toHaveBeenCalledWith(
       "a1",
       expect.objectContaining({
-        format: "json",
         conversation_base_url: "http://localhost:8000",
       }),
     );

@@ -333,7 +333,6 @@ describe("AutomationService", () => {
       mockGet.mockResolvedValue({ data: response });
 
       const result = await AutomationService.exportAutomationRuns("1", {
-        format: "json",
         conversation_base_url: "http://localhost:8000",
       });
 
@@ -349,26 +348,6 @@ describe("AutomationService", () => {
         }),
       );
       expect(result).toEqual(response);
-    });
-
-
-    it("requests CSV as a blob", async () => {
-      const blob = new Blob(["run_id\n"], { type: "text/csv" });
-      mockGet.mockResolvedValue({ data: blob });
-
-      const result = await AutomationService.exportAutomationRuns("1", {
-        format: "csv",
-        conversation_base_url: "http://localhost:8000",
-      });
-
-      expect(mockGet).toHaveBeenCalledWith(
-        "/api/automation/v1/1/runs/export",
-        expect.objectContaining({
-          params: expect.objectContaining({ format: "csv" }),
-          responseType: "blob",
-        }),
-      );
-      expect(result).toBe(blob);
     });
   });
 

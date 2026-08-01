@@ -111,7 +111,6 @@ export const AUTOMATION_HANDLERS = [
       }
 
       const url = new URL(request.url);
-      const format = url.searchParams.get("format") ?? "json";
       const limit = Number(url.searchParams.get("limit") ?? "500");
       const offset = Number(url.searchParams.get("offset") ?? "0");
       const baseUrl = url.searchParams.get("conversation_base_url");
@@ -144,29 +143,6 @@ export const AUTOMATION_HANDLERS = [
           error: run.error_detail,
         };
       });
-
-      if (format === "csv") {
-        const header =
-          "run_id,automation_id,automation_name,trigger,start_time,end_time,duration_seconds,status,conversation_id,conversation_url,error";
-        const lines = rows.map((row) =>
-          [
-            row.run_id,
-            row.automation_id,
-            row.automation_name,
-            JSON.stringify(row.trigger),
-            row.start_time ?? "",
-            row.end_time ?? "",
-            row.duration_seconds ?? "",
-            row.status,
-            row.conversation_id ?? "",
-            row.conversation_url ?? "",
-            row.error ?? "",
-          ].join(","),
-        );
-        return new HttpResponse([header, ...lines].join("\n") + "\n", {
-          headers: { "Content-Type": "text/csv; charset=utf-8" },
-        });
-      }
 
       return HttpResponse.json({
         runs: rows,

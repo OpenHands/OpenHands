@@ -164,19 +164,5 @@ describe("Automation MSW Handlers", () => {
         }),
       );
     });
-
-
-    it("returns CSV when format=csv", async () => {
-      const id = MOCK_AUTOMATIONS_RESPONSE.automations[0].id;
-      const res = await fetch(
-        `/api/automation/v1/${id}/runs/export?format=csv`,
-      );
-      const text = await res.text();
-
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toMatch(/text\/csv/);
-      expect(text.split("\n")[0]).toContain("conversation_url");
-      expect(text).toContain("FAILED");
-    });
   });
 });

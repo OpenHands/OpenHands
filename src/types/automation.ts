@@ -118,7 +118,6 @@ export interface AutomationRunExportResponse {
 }
 
 export interface AutomationRunExportParams {
-  format: ActivityLogExportFormat;
   limit?: number;
   offset?: number;
   /** Prefix for `conversation_url` in each row (e.g. window.location.origin). */

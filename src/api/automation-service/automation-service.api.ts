@@ -457,64 +457,41 @@ class AutomationService {
   }
 
   /**
-   * One page of Activity Log export (CSV blob or JSON body).
+   * One page of Activity Log export (JSON). UI pages this and builds CSV locally.
    */
   static async exportAutomationRuns(
     id: string,
-    params: AutomationRunExportParams,
-  ): Promise<AutomationRunExportResponse | Blob> {
-    const { format, limit = 500, offset = 0, conversation_base_url } = params;
+    params: AutomationRunExportParams = {},
+  ): Promise<AutomationRunExportResponse> {
+    const { limit = 500, offset = 0, conversation_base_url } = params;
     const active = getActiveBackend().backend;
     const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs/export`;
-    const search = new URLSearchParams();
-    search.set("format", format);
-    search.set("limit", String(limit));
-    search.set("offset", String(offset));
-    if (conversation_base_url) {
-      search.set("conversation_base_url", conversation_base_url);
-    }
-    const query = search.toString();
-    const path = `${basePath}?${query}`;
-
-    if (format === "csv") {
-      if (active.kind === "cloud") {
-        return callCloudProxy<Blob>({
-          backend: active,
-          method: "GET",
-          path,
-          responseType: "blob",
-          headers: await buildAutomationRequestHeaders(),
-        });
-      }
-      const { data } = await localAutomationAxios.get<Blob>(basePath, {
-        params: {
-          format,
-          limit,
-          offset,
-          ...(conversation_base_url ? { conversation_base_url } : {}),
-        },
-        responseType: "blob",
-      });
-      return data;
-    }
+    const queryParams = {
+      format: "json" as const,
+      limit,
+      offset,
+      ...(conversation_base_url ? { conversation_base_url } : {}),
+    };
 
     if (active.kind === "cloud") {
+      const search = new URLSearchParams();
+      search.set("format", "json");
+      search.set("limit", String(limit));
+      search.set("offset", String(offset));
+      if (conversation_base_url) {
+        search.set("conversation_base_url", conversation_base_url);
+      }
       return callCloudProxy<AutomationRunExportResponse>({
         backend: active,
         method: "GET",
-        path,
+        path: `${basePath}?${search.toString()}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
 
     const { data } =
       await localAutomationAxios.get<AutomationRunExportResponse>(basePath, {
-        params: {
-          format,
-          limit,
-          offset,
-          ...(conversation_base_url ? { conversation_base_url } : {}),
-        },
+        params: queryParams,
       });
     return data;
   }
