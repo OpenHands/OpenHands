@@ -47,10 +47,14 @@
       "tests": ["files"]
     },
     {
-      "comment": "Automations lifecycle and preset cards",
+      "comment": "Automations lifecycle, preset cards, and the manifest setup host",
       "sources": [
         "src/components/features/automations/**",
-        "src/routes/automations*.tsx"
+        "src/components/features/manifest/**",
+        "src/manifests/**",
+        "src/mocks/automation-handlers.ts",
+        "src/routes/automations*.tsx",
+        "src/routes/automation-setup-route.tsx"
       ],
       "tests": ["automations"]
     },

@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
   condenser_max_size: 240,
   enable_sound_notifications: false,
   enable_desktop_notifications: false,
-  user_consents_to_analytics: false,
+  user_consents_to_analytics: null,
   enable_proactive_conversation_starters: false,
   enable_solvability_analysis: false,
   search_api_key: "",

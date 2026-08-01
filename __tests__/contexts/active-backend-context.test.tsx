@@ -2,6 +2,17 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { setTelemetryCloudContextMock, setTelemetryIdentityMock } = vi.hoisted(
+  () => ({
+    setTelemetryCloudContextMock: vi.fn(),
+    setTelemetryIdentityMock: vi.fn(),
+  }),
+);
+vi.mock("#/services/telemetry", () => ({
+  setTelemetryCloudContext: setTelemetryCloudContextMock,
+  setTelemetryIdentity: setTelemetryIdentityMock,
+}));
 import {
   __resetActiveStoreForTests,
   NO_BACKEND_ID,
@@ -35,6 +46,7 @@ beforeEach(() => {
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
   __resetHealthStoreForTests();
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -139,6 +151,85 @@ describe("ActiveBackendProvider", () => {
     expect(queryClient.getQueryData(["dummy"])).toEqual({ value: 1 });
   });
 
+  it("clears Cloud context but preserves identity when switching from Cloud to local", () => {
+    const { result } = renderHook(() => useActiveBackendContext(), {
+      wrapper: makeWrapper(),
+    });
+    act(() => {
+      result.current.addBackend({
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      });
+    });
+    vi.clearAllMocks();
+
+    act(() => {
+      result.current.setActive(SEEDED_DEFAULT_BACKEND_ID);
+    });
+
+    expect(result.current.active.backend.id).toBe(SEEDED_DEFAULT_BACKEND_ID);
+    expect(setTelemetryCloudContextMock).toHaveBeenCalledWith(null);
+    expect(setTelemetryIdentityMock).not.toHaveBeenCalled();
+  });
+
+  it("clears Cloud context without resetting identity when switching Cloud orgs", () => {
+    const { result } = renderHook(() => useActiveBackendContext(), {
+      wrapper: makeWrapper(),
+    });
+    let cloudId = "";
+    act(() => {
+      cloudId = result.current.addBackend({
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      }).id;
+    });
+    vi.clearAllMocks();
+
+    act(() => {
+      result.current.setActive(cloudId, "org-2");
+    });
+
+    expect(result.current.active.orgId).toBe("org-2");
+    expect(setTelemetryCloudContextMock).toHaveBeenCalledWith(null);
+    expect(setTelemetryIdentityMock).not.toHaveBeenCalled();
+  });
+
+  it("clears Cloud context and defers identity when switching Cloud backends", () => {
+    const { result } = renderHook(() => useActiveBackendContext(), {
+      wrapper: makeWrapper(),
+    });
+    let firstCloudId = "";
+    act(() => {
+      firstCloudId = result.current.addBackend({
+        name: "Cloud 1",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key-1",
+        kind: "cloud",
+      }).id;
+    });
+    act(() => {
+      result.current.addBackend({
+        name: "Cloud 2",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-key-2",
+        kind: "cloud",
+      });
+    });
+    vi.clearAllMocks();
+
+    act(() => {
+      result.current.setActive(firstCloudId);
+    });
+
+    expect(result.current.active.backend.id).toBe(firstCloudId);
+    expect(setTelemetryCloudContextMock).toHaveBeenCalledWith(null);
+    expect(setTelemetryIdentityMock).toHaveBeenCalledWith(null);
+  });
+
   // @spec BM-003 — Fallback on active backend removal
   it("removeBackend falls back to the seeded default when the active backend is removed", () => {
     const { result } = renderHook(() => useActiveBackendContext(), {
@@ -229,6 +320,54 @@ describe("ActiveBackendProvider", () => {
 
     // Assert
     expect(getBackendHealthEntry(id)).toBeNull();
+    expect(
+      result.current.backends.find((backend) => backend.id === id),
+    ).toHaveProperty("connectionRevision", 1);
+  });
+
+  it("clears identity and re-keys data when active Cloud credentials change", () => {
+    const { result } = renderHook(() => useActiveBackendContext(), {
+      wrapper: makeWrapper(),
+    });
+    let id = "";
+    act(() => {
+      id = result.current.addBackend({
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "old-key",
+        kind: "cloud",
+      }).id;
+    });
+
+    act(() => {
+      result.current.updateBackend(id, { apiKey: "new-key" });
+    });
+
+    expect(result.current.active.backend.connectionRevision).toBe(1);
+    expect(setTelemetryCloudContextMock).toHaveBeenCalledWith(null);
+    expect(setTelemetryIdentityMock).toHaveBeenCalledWith(null);
+  });
+
+  it("clears identity when the active Cloud backend is removed", () => {
+    const { result } = renderHook(() => useActiveBackendContext(), {
+      wrapper: makeWrapper(),
+    });
+    let id = "";
+    act(() => {
+      id = result.current.addBackend({
+        name: "Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "key",
+        kind: "cloud",
+      }).id;
+    });
+
+    act(() => {
+      result.current.removeBackend(id);
+    });
+
+    expect(setTelemetryCloudContextMock).toHaveBeenCalledWith(null);
+    expect(setTelemetryIdentityMock).toHaveBeenCalledWith(null);
   });
 
   it("removeBackend drops the backend's persisted health entry", () => {
