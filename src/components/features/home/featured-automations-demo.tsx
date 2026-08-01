@@ -1,4 +1,4 @@
-import { Clock3, Sparkles } from "lucide-react";
+import { Clock3, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { cn } from "#/utils/utils";
@@ -64,6 +64,7 @@ const DEMO_COPY = {
   title: "Automations",
   openAutomations: "Open automations",
   featured: "Featured",
+  manageAutomations: "Add or manage automations",
 };
 
 function AutomationStatus({ health }: { health: AutomationHealth }) {
@@ -164,6 +165,19 @@ export function FeaturedAutomationsDemo() {
             </StyledTooltip>
           );
         })}
+        <StyledTooltip
+          content={DEMO_COPY.manageAutomations}
+          placement="bottom"
+          tooltipClassName="!border !border-[var(--oh-border-subtle)] !bg-[var(--oh-surface)]"
+        >
+          <a
+            href="/automations"
+            aria-label={DEMO_COPY.manageAutomations}
+            className="inline-flex items-center justify-center rounded-md border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+          >
+            <Plus size={16} aria-hidden="true" />
+          </a>
+        </StyledTooltip>
       </div>
 
       {featured.length > 0 ? (

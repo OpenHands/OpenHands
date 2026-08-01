@@ -12,4 +12,12 @@ describe("FeaturedAutomationsDemo", () => {
       screen.getByText("3 suggestions posted · 1 security check passed"),
     ).toBeInTheDocument();
   });
+
+  it("links the final add control to Automations", () => {
+    render(<FeaturedAutomationsDemo />);
+
+    expect(
+      screen.getByRole("link", { name: "Add or manage automations" }),
+    ).toHaveAttribute("href", "/automations");
+  });
 });
