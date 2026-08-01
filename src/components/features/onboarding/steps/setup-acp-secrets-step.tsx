@@ -11,8 +11,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   getAcpProviderDisplayName,
   getAcpPreferredDefaultModel,
+  effectivePiAcpCommandTokens,
   wireAcpServerForProvider,
 } from "#/constants/acp-providers";
+import { getDeploymentMode } from "#/api/agent-server-adapter";
+import { formatCommand } from "#/utils/acp-command";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
 import { type ACPServerKind } from "@openhands/typescript-client";
 import { type OnboardingAgentId } from "./choose-agent-step";
@@ -129,6 +132,13 @@ export function SetupAcpSecretsStep({
           agent_kind: "acp",
           acp_server: wireAcpServerForProvider(providerKey) as ACPServerKind,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
+          ...(providerKey === "pi"
+            ? {
+                acp_command: formatCommand(
+                  effectivePiAcpCommandTokens(getDeploymentMode()),
+                ),
+              }
+            : {}),
         });
       }
       onNext();

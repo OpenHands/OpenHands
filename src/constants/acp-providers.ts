@@ -78,11 +78,34 @@ export function resolveUiAcpProviderKey(
  * sends an empty command. Built-ins rely on the agent-server registry; Pi
  * must pin ``pi-acp`` explicitly because its wire ``acp_server`` is ``custom``.
  */
-export function defaultAcpCommandForProvider(providerKey: string): string[] {
+export function defaultAcpCommandForProvider(
+  providerKey: string,
+  deploymentMode?: string | null,
+): string[] {
   if (providerKey === PI_ACP_PROVIDER_KEY) {
-    return [...PI_ACP_DEFAULT_COMMAND];
+    return effectivePiAcpCommandTokens(deploymentMode);
   }
   return [];
+}
+
+/** Pi spawn argv for a deployment mode (``npx`` locally, ``pi-acp`` in Docker). */
+export function effectivePiAcpCommandTokens(
+  deploymentMode?: string | null,
+): string[] {
+  return deploymentMode === "docker"
+    ? [...PI_ACP_DOCKER_COMMAND]
+    : [...PI_ACP_DEFAULT_COMMAND];
+}
+
+/** Rewrite Pi preset commands to the preinstalled binary in Docker images. */
+export function adaptPiAcpCommandForDeployment(
+  command: unknown,
+  deploymentMode?: string | null,
+): unknown {
+  if (deploymentMode === "docker" && isPiAcpCommand(command)) {
+    return [...PI_ACP_DOCKER_COMMAND];
+  }
+  return command;
 }
 
 // Sentinel ``agent.llm.model`` returned by older SDKs for ACP conversations
@@ -578,6 +601,7 @@ export function buildAcpAgentSettingsDiff(
     command?: string[];
     model?: string | null;
     allowUnknownServer?: boolean;
+    deploymentMode?: string | null;
   } = {},
 ): Record<string, unknown> | null {
   if (providerKey === "openhands") {
@@ -610,7 +634,7 @@ export function buildAcpAgentSettingsDiff(
   const command =
     options.command && options.command.length > 0
       ? options.command
-      : defaultAcpCommandForProvider(providerKey);
+      : defaultAcpCommandForProvider(providerKey, options.deploymentMode);
 
   return {
     agent_kind: "acp",

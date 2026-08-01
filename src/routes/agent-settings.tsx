@@ -34,14 +34,15 @@ import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
   buildAcpAgentSettingsDiff,
+  effectivePiAcpCommandTokens,
   getAcpPreferredDefaultModel,
   getAcpProvider,
-  PI_ACP_DEFAULT_COMMAND,
   PI_ACP_PROVIDER_KEY,
   resolveUiAcpProviderKey,
   wireAcpServerForProvider,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
+import { getDeploymentMode } from "#/api/agent-server-adapter";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 
 export const handle = { hideTitle: true };
@@ -125,6 +126,8 @@ export interface AgentProfileFieldsInput {
   subAgentsEnabled: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
+  /** Runtime mode from {@link getDeploymentMode}; affects Pi spawn argv. */
+  deploymentMode?: string | null;
 }
 
 /**
@@ -157,6 +160,7 @@ export function buildAgentProfileFields(
     subAgentsEnabled,
     toolConcurrencyField,
     toolConcurrency,
+    deploymentMode,
   } = input;
   if (isAcp) {
     const usesRegistryDefaultCommand =
@@ -170,7 +174,7 @@ export function buildAgentProfileFields(
       acp_command: usesRegistryDefaultCommand
         ? null
         : isDefaultProviderCommand && selectedPreset === PI_ACP_PROVIDER_KEY
-          ? formatCommand(PI_ACP_DEFAULT_COMMAND)
+          ? formatCommand(effectivePiAcpCommandTokens(deploymentMode))
           : formatCommand(commandTokens) || null,
       acp_args: null,
     };
@@ -455,6 +459,7 @@ export function AgentSettingsScreen({
       subAgentsEnabled,
       toolConcurrencyField,
       toolConcurrency,
+      deploymentMode: getDeploymentMode(),
     });
 
   // Dirty tracking: for OpenHands path, also check sub-agents toggle and the

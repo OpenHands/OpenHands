@@ -10,6 +10,8 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  adaptPiAcpCommandForDeployment,
+  effectivePiAcpCommandTokens,
   isPiAcpCommand,
   resolveUiAcpProviderKey,
 } from "#/constants/acp-providers";
@@ -21,6 +23,17 @@ describe("Pi ACP preset helpers", () => {
     expect(isPiAcpCommand(["pi-acp"])).toBe(true);
     expect(isPiAcpCommand("pi-acp")).toBe(true);
     expect(isPiAcpCommand(["npx", "-y", "pi-acp", "--flag"])).toBe(false);
+  });
+
+  it("selects the Docker-safe Pi spawn argv by deployment mode", () => {
+    expect(effectivePiAcpCommandTokens(null)).toEqual(["npx", "-y", "pi-acp"]);
+    expect(effectivePiAcpCommandTokens("docker")).toEqual(["pi-acp"]);
+    expect(adaptPiAcpCommandForDeployment(["npx", "-y", "pi-acp"], "docker")).toEqual(
+      ["pi-acp"],
+    );
+    expect(
+      adaptPiAcpCommandForDeployment(["npx", "-y", "pi-acp"], "dev:automation"),
+    ).toEqual(["npx", "-y", "pi-acp"]);
   });
 
   it("rehydrates the Canvas registry key from custom wire settings", () => {

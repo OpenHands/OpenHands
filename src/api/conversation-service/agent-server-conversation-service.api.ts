@@ -10,7 +10,7 @@ import {
   VSCodeClient,
 } from "@openhands/typescript-client/clients";
 import { v4 as uuidv4 } from "uuid";
-import { AgentKind, Provider } from "#/types/settings";
+import { AgentKind, Provider, SettingsValue } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import {
@@ -382,6 +382,7 @@ class AgentServerConversationService {
     // encrypted-settings builder; cloud sends it as a flat request field.
     agentProfileId?: string,
     agentProfileKind?: AgentKind,
+    agentSettingsOverride?: Record<string, SettingsValue>,
   ): Promise<AppConversationStartTask> {
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
@@ -443,6 +444,7 @@ class AgentServerConversationService {
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
+      agentSettingsOverride,
       titleLlmProfile,
     });
 

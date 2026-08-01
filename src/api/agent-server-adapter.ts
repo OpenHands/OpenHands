@@ -7,8 +7,7 @@ import {
   defaultAcpCommandForProvider,
   getAcpPreferredDefaultModel,
   getAcpProvider,
-  isPiAcpCommand,
-  PI_ACP_DOCKER_COMMAND,
+  adaptPiAcpCommandForDeployment,
   PI_ACP_PROVIDER_KEY,
   resolveEffectiveAcpModel,
   resolveUiAcpProviderKey,
@@ -735,18 +734,17 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
     if (provider) {
       resolved = [...provider.default_command];
     } else {
-      const piDefault = defaultAcpCommandForProvider(uiKey ?? serverKey ?? "");
+      const piDefault = defaultAcpCommandForProvider(
+        uiKey ?? serverKey ?? "",
+        getDeploymentMode(),
+      );
       resolved = piDefault.length > 0 ? piDefault : cmd;
     }
   }
 
   // Docker pre-installs pi-acp on PATH; npx -y pi-acp fails with a broken npm
   // stack ("Class extends value undefined is not a constructor or null").
-  if (getDeploymentMode() === "docker" && isPiAcpCommand(resolved)) {
-    return [...PI_ACP_DOCKER_COMMAND];
-  }
-
-  return resolved;
+  return adaptPiAcpCommandForDeployment(resolved, getDeploymentMode());
 }
 
 function buildConfiguredAcpAgentSettings(
@@ -1162,6 +1160,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentSettingsOverride?: Record<string, SettingsValue>;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
@@ -1171,8 +1170,9 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     SecretsService.getSecrets(),
   ]);
 
-  const { agentSettings, conversationSettings, secretsEncrypted } =
-    settingsResult;
+  const agentSettings =
+    options.agentSettingsOverride ?? settingsResult.agentSettings;
+  const { conversationSettings, secretsEncrypted } = settingsResult;
 
   // A profile launch resolves the LLM server-side, so the current-settings
   // subscription check doesn't apply (and can't see the profile's LLM).

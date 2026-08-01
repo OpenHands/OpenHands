@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider, SettingsValue } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -28,6 +28,14 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
+import {
+  adaptPiAcpCommandForDeployment,
+  effectivePiAcpCommandTokens,
+  PI_ACP_PROVIDER_KEY,
+  resolveUiAcpProviderKey,
+} from "#/constants/acp-providers";
+import { getDeploymentMode } from "#/api/agent-server-adapter";
+import { parseCommand } from "#/utils/acp-command";
 
 export interface CreateConversationVariables {
   query?: string;
@@ -193,21 +201,63 @@ export const useCreateConversation = () => {
         }
       }
 
+      // Agent profiles launch server-side with the stored ``acp_command`` verbatim.
+      // Docker images pre-install ``pi-acp`` but ``npx -y pi-acp`` crashes, so
+      // inline the profile's ACP settings with a Docker-safe spawn argv instead
+      // of ``agent_profile_id`` (same enrichment boundary as the OpenHands
+      // ``default`` downgrade above).
+      let dockerPiAgentSettingsOverride:
+        | Record<string, SettingsValue>
+        | undefined;
+      if (
+        !isCloud &&
+        effectiveAgentProfileId &&
+        resolvedAgentProfile?.agent_kind === "acp" &&
+        getDeploymentMode() === "docker"
+      ) {
+        try {
+          const detail = await AgentProfilesService.getProfile(
+            resolvedAgentProfile.name,
+          );
+          const profile = detail.profile;
+          if (profile.agent_kind === "acp") {
+            const deploymentMode = "docker";
+            const commandTokens = profile.acp_command
+              ? parseCommand(profile.acp_command)
+              : effectivePiAcpCommandTokens(deploymentMode);
+            const uiKey = resolveUiAcpProviderKey(
+              profile.acp_server,
+              commandTokens,
+            );
+            if (uiKey === PI_ACP_PROVIDER_KEY) {
+              effectiveAgentProfileId = undefined;
+              dockerPiAgentSettingsOverride = {
+                schema_version: 1,
+                agent_kind: "acp",
+                acp_server: profile.acp_server,
+                acp_command: adaptPiAcpCommandForDeployment(
+                  commandTokens,
+                  deploymentMode,
+                ) as SettingsValue,
+                acp_model: profile.acp_model ?? null,
+                acp_args: profile.acp_args ?? [],
+              };
+            }
+          }
+        } catch (error) {
+          console.warn(
+            "Failed to inline Docker Pi agent profile settings; launching via profile id.",
+            error,
+          );
+        }
+      }
+
       // Only extend the call with the profile tail when launching from a
       // profile, so a plain create stays byte-identical to the legacy
       // agent_settings path (#3727). sandboxId is unused here.
       // TODO(#1587): createConversation has grown to 11 positional params;
       // refactor it to an options object so this position-skipping tail isn't
       // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
-          : [];
-
       const conversation =
         await AgentServerConversationService.createConversation(
           query,
@@ -224,7 +274,10 @@ export const useCreateConversation = () => {
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
+          undefined,
+          effectiveAgentProfileId,
+          resolvedAgentProfile?.agent_kind,
+          dockerPiAgentSettingsOverride,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the
