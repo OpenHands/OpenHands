@@ -48,9 +48,9 @@ Agent Canvas supports several modes:
 
 | Mode | Purpose |
 |---|---|
-| `npm run dev:docker` | Starts the UI with an Agent Server in a Docker sandbox. This is the default safer local workflow. |
-| `npm run dev:dangerously-dockerless` | Starts the UI and Agent Server directly on the host. This is useful for servers and trusted environments, but the agent has host filesystem access. |
-| `npm run dev:automation` | Starts the local stack with an automation backend. |
+| `npm run dev` | Starts the full local stack directly on the host: agent-server and automation backend via `uvx`, the Vite dev server, and an ingress proxy. The agent has host filesystem access; use only in trusted environments. |
+| `npm run dev:minimal` | Starts just the agent-server plus Vite dev server, without the automation backend. |
+| `npm run dev:static` | Same as `dev`, but serves a production build of the frontend instead of the Vite dev server. |
 | `npm run dev:mock` | Runs the frontend against MSW mocks for UI development and tests. |
 | `npm run build` | Builds the standalone application. |
 | `npm run build:lib` | Builds library entrypoints for embedding Agent Canvas components. |

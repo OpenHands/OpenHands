@@ -194,7 +194,7 @@ export function ManageBackendsModal({
                   testIdRoot="manage-backends-reconnect-cloud"
                   idleButtonLabel={t(I18nKey.BACKEND$RECONNECT_CLOUD)}
                   className="w-full sm:w-auto"
-                  buttonClassName="sm:w-auto"
+                  buttonClassName="w-full sm:w-auto"
                   statusDisplay="modal"
                 />
               ) : null

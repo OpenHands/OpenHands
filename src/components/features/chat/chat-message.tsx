@@ -27,6 +27,7 @@ interface ChatMessageProps {
   isFromPlanningAgent?: boolean;
   pendingStatus?: ChatMessagePendingStatus;
   onRetry?: () => void;
+  onDismiss?: () => void;
   onStop?: () => void;
 }
 
@@ -38,6 +39,7 @@ export function ChatMessage({
   isFromPlanningAgent = false,
   pendingStatus,
   onRetry,
+  onDismiss,
   onStop,
 }: React.PropsWithChildren<ChatMessageProps>) {
   const { t } = useTranslation("openhands");
@@ -254,6 +256,16 @@ export function ChatMessage({
               data-testid="chat-message-retry"
             >
               {t(I18nKey.CHAT_INTERFACE$MESSAGE_RETRY)}
+            </button>
+          ) : null}
+          {onDismiss ? (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="cursor-pointer rounded-md border border-[var(--oh-border)] px-2 py-1 text-xs font-normal text-[var(--oh-foreground)] hover:bg-[var(--oh-interactive-hover)]"
+              data-testid="chat-message-dismiss"
+            >
+              {t(I18nKey.CHAT_INTERFACE$MESSAGE_DISMISS)}
             </button>
           ) : null}
         </div>

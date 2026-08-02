@@ -135,6 +135,31 @@ describe("PendingUserMessages", () => {
     expect(message).toHaveAttribute("data-pending-status", "error");
     expect(screen.getByTestId("chat-message-error")).toBeInTheDocument();
     expect(screen.getByTestId("chat-message-retry")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-message-dismiss")).toBeInTheDocument();
+  });
+
+  it("removes a failed message when dismiss is clicked", async () => {
+    const id = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "dismiss me",
+      });
+    useOptimisticUserMessageStore
+      .getState()
+      .markPendingMessageError(id, "Server unavailable");
+
+    renderWithProviders(<PendingUserMessages />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("chat-message-dismiss"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("user-message")).not.toBeInTheDocument();
+    });
+    expect(useOptimisticUserMessageStore.getState().pendingMessages).toHaveLength(
+      0,
+    );
   });
 
   it("re-sends and flips back to 'sending' when retry is clicked", async () => {

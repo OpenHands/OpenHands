@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { cn } from "#/utils/utils";
 
 interface SegmentedToggleOption<T extends string> {
   value: T;
   label: string;
+  icon?: ReactNode;
 }
 
 interface SegmentedToggleProps<T extends string> {
@@ -45,12 +47,17 @@ export function SegmentedToggle<T extends string>({
             }
             onClick={() => onChange(option.value)}
             className={cn(
-              "px-2 py-0.5 rounded cursor-pointer transition-colors",
+              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded cursor-pointer transition-colors",
               isActive
                 ? "bg-[var(--oh-interactive-hover)] text-white"
                 : "text-[var(--oh-muted)] hover:text-white",
             )}
           >
+            {option.icon ? (
+              <span className="inline-flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5">
+                {option.icon}
+              </span>
+            ) : null}
             {option.label}
           </button>
         );

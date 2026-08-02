@@ -93,6 +93,13 @@ export function PendingUserMessages() {
     [conversationId, restoreMessageToInputIfEmpty, removePendingMessage],
   );
 
+  const handleDismiss = React.useCallback(
+    (id: string) => {
+      removePendingMessage(id);
+    },
+    [removePendingMessage],
+  );
+
   if (visibleMessages.length === 0) {
     return null;
   }
@@ -108,6 +115,11 @@ export function PendingUserMessages() {
           onRetry={
             message.status === "error"
               ? () => handleRetry(message.id)
+              : undefined
+          }
+          onDismiss={
+            message.status === "error"
+              ? () => handleDismiss(message.id)
               : undefined
           }
           onStop={

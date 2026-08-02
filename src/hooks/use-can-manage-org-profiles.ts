@@ -30,12 +30,16 @@ export function useCanManageOrgProfiles(): boolean {
   const { backend, orgId } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
 
-  // `backend` is identified by `backend.id`, which is already in the key; we
-  // keep the key byte-identical to useCloudCurrentUserId so React Query shares
-  // the cached /me result instead of firing a second request.
+  // Keep the key byte-identical to useCloudCurrentUserId so React Query shares
+  // the cached /me result, including its connection-credential revision.
   // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const { data } = useQuery({
-    queryKey: ["cloud-current-user", backend.id, orgId],
+    queryKey: [
+      "cloud-current-user",
+      backend.id,
+      orgId,
+      backend.connectionRevision ?? 0,
+    ],
     queryFn: () => getCloudOrganizationMe(orgId!, backend),
     enabled: isCloud && !!orgId,
     staleTime: 1000 * 60 * 5,
