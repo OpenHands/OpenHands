@@ -4,9 +4,13 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { AgentKind, Settings, SettingsValue } from "#/types/settings";
 import {
+  defaultAcpCommandForProvider,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  adaptPiAcpCommandForDeployment,
+  PI_ACP_PROVIDER_KEY,
   resolveEffectiveAcpModel,
+  resolveUiAcpProviderKey,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { isAgentServerToolAvailable } from "./agent-server-compatibility";
@@ -64,7 +68,7 @@ export interface DirectConversationInfo {
     kind?: string | null;
     acp_model?: string | null;
     /**
-     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli``) from the
+     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli`` / ``pi``) from the
      * SDK's ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
      * ``acpserver`` tag is absent — e.g. a profile launch doesn't stamp the tag
      * client-side and the server may not repopulate it. Read by {@link toAppConversation}.
@@ -157,6 +161,13 @@ function getRawRuntimeServicesInfo(): string | null {
       .__AGENT_CANVAS_RUNTIME_SERVICES_INFO__;
     if (typeof injected === "string") {
       return injected.trim() || null;
+    }
+    if (injected && typeof injected === "object") {
+      try {
+        return JSON.stringify(injected);
+      } catch {
+        return null;
+      }
     }
   }
 
@@ -703,23 +714,44 @@ function isAcpAgent(settings: Settings): boolean {
 function getAcpServerTag(settings: Settings): string | undefined {
   const agentSettings = toRecord(settings.agent_settings);
   const value = agentSettings.acp_server;
+  const uiKey = resolveUiAcpProviderKey(
+    typeof value === "string" ? value : undefined,
+    agentSettings.acp_command,
+  );
+  if (uiKey === PI_ACP_PROVIDER_KEY) {
+    return PI_ACP_PROVIDER_KEY;
+  }
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
   const cmd = agentSettings.acp_command;
   const isEmpty = Array.isArray(cmd) && cmd.length === 0;
-  const noCommand = cmd === undefined;
+  const noCommand = cmd === undefined || cmd === null;
+  let resolved: unknown;
   if (!isEmpty && !noCommand) {
-    return cmd;
+    resolved = cmd;
+  } else {
+    const serverKey =
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined;
+    const uiKey = resolveUiAcpProviderKey(serverKey, cmd);
+    const provider = getAcpProvider(uiKey ?? serverKey);
+    if (provider) {
+      resolved = [...provider.default_command];
+    } else {
+      const piDefault = defaultAcpCommandForProvider(
+        uiKey ?? serverKey ?? "",
+        getDeploymentMode(),
+      );
+      resolved = piDefault.length > 0 ? piDefault : cmd;
+    }
   }
 
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const provider = getAcpProvider(serverKey);
-  return provider ? [...provider.default_command] : cmd;
+  // Docker pre-installs pi-acp on PATH; npx -y pi-acp fails with a broken npm
+  // stack ("Class extends value undefined is not a constructor or null").
+  return adaptPiAcpCommandForDeployment(resolved, getDeploymentMode());
 }
 
 function buildConfiguredAcpAgentSettings(
@@ -769,14 +801,22 @@ function buildConfiguredAcpAgentSettings(
   // that, the form's displayed default would silently not take effect at
   // runtime until the user re-saved the page.
   const serverKey =
-    typeof agentSettings.acp_server === "string"
+    resolveUiAcpProviderKey(
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined,
+      agentSettings.acp_command,
+    ) ??
+    (typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
-      : undefined;
+      : undefined);
   const effectiveModel = resolveEffectiveAcpModel({
     configured: agentSettings.acp_model as string | null | undefined,
     providerDefault: getAcpPreferredDefaultModel(serverKey),
   });
-  if (effectiveModel) {
+  const piPlaceholderModel =
+    serverKey === PI_ACP_PROVIDER_KEY && effectiveModel === "default";
+  if (effectiveModel && !piPlaceholderModel) {
     payload.acp_model = effectiveModel;
   }
 
@@ -1129,6 +1169,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentSettingsOverride?: Record<string, SettingsValue>;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
@@ -1138,8 +1179,9 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     SecretsService.getSecrets(),
   ]);
 
-  const { agentSettings, conversationSettings, secretsEncrypted } =
-    settingsResult;
+  const agentSettings =
+    options.agentSettingsOverride ?? settingsResult.agentSettings;
+  const { conversationSettings, secretsEncrypted } = settingsResult;
 
   // A profile launch resolves the LLM server-side, so the current-settings
   // subscription check doesn't apply (and can't see the profile's LLM).

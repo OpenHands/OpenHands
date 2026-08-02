@@ -8,6 +8,7 @@ import {
   getStoredConversationMetadata,
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { CREATE_CONVERSATION_DEFAULT_TAIL } from "../../helpers/create-conversation-call-args";
 
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
@@ -172,6 +173,7 @@ describe("useCreateConversation", () => {
         undefined,
         undefined,
         undefined,
+        ...CREATE_CONVERSATION_DEFAULT_TAIL,
       );
     });
   });

@@ -50,7 +50,7 @@ interface ConversationCardFooterProps {
   agentKind?: "openhands" | "acp" | null;
   /**
    * Registry key of the ACP CLI server (``"claude-code"`` / ``"codex"`` /
-   * ``"gemini-cli"`` / unknown / null). Resolved to a human display name
+   * ``"gemini-cli"`` / ``"pi"`` / unknown / null). Resolved to a human display name
    * via {@link getAcpProviderDisplayName}; unknown / null falls back to
    * a generic "ACP" label so a Custom-command preset still produces a
    * useful chip.

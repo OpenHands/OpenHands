@@ -10,13 +10,47 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  adaptPiAcpCommandForDeployment,
+  effectivePiAcpCommandTokens,
+  isPiAcpCommand,
+  resolveUiAcpProviderKey,
 } from "#/constants/acp-providers";
 
+describe("Pi ACP preset helpers", () => {
+  it("detects the pi-acp launch argv and shell string", () => {
+    expect(isPiAcpCommand(["npx", "-y", "pi-acp"])).toBe(true);
+    expect(isPiAcpCommand("npx -y pi-acp")).toBe(true);
+    expect(isPiAcpCommand(["pi-acp"])).toBe(true);
+    expect(isPiAcpCommand("pi-acp")).toBe(true);
+    expect(isPiAcpCommand(["npx", "-y", "pi-acp", "--flag"])).toBe(false);
+  });
+
+  it("selects the Docker-safe Pi spawn argv by deployment mode", () => {
+    expect(effectivePiAcpCommandTokens(null)).toEqual(["npx", "-y", "pi-acp"]);
+    expect(effectivePiAcpCommandTokens("docker")).toEqual(["pi-acp"]);
+    expect(adaptPiAcpCommandForDeployment(["npx", "-y", "pi-acp"], "docker")).toEqual(
+      ["pi-acp"],
+    );
+    expect(
+      adaptPiAcpCommandForDeployment(["npx", "-y", "pi-acp"], "dev:automation"),
+    ).toEqual(["npx", "-y", "pi-acp"]);
+  });
+
+  it("rehydrates the Canvas registry key from custom wire settings", () => {
+    expect(resolveUiAcpProviderKey("custom", ["npx", "-y", "pi-acp"])).toBe(
+      "pi",
+    );
+    expect(resolveUiAcpProviderKey("custom", [])).toBe("custom");
+    expect(resolveUiAcpProviderKey("claude-code", [])).toBe("claude-code");
+  });
+});
+
 describe("getAcpProviderDisplayName", () => {
-  it("resolves the three built-in registry keys to their human names", () => {
+  it("resolves the built-in registry keys to their human names", () => {
     expect(getAcpProviderDisplayName("claude-code")).toBe("Claude Code");
     expect(getAcpProviderDisplayName("codex")).toBe("Codex");
     expect(getAcpProviderDisplayName("gemini-cli")).toBe("Gemini CLI");
+    expect(getAcpProviderDisplayName("pi")).toBe("Pi");
   });
 
   it("returns null for the Custom-command preset so callers can fall back to the generic 'ACP' label", () => {
@@ -48,6 +82,17 @@ describe("ACP provider registry", () => {
     // (icon + description_key) is layered on locally.
     for (const provider of ACP_PROVIDERS) {
       const sdk = getClientAcpProvider(provider.key);
+      if (provider.key === "pi" && !sdk) {
+        expect(provider.display_name).toBe("Pi");
+        expect(provider.default_command).toEqual(["npx", "-y", "pi-acp"]);
+        expect(provider.available_models).toEqual([
+          { id: "default", label: "Default Model" },
+        ]);
+        expect(provider.default_model).toBeUndefined();
+        expect(provider.icon).toBe("pi");
+        expect(provider.description_key).toBeTruthy();
+        continue;
+      }
       expect(sdk, provider.key).not.toBeNull();
       expect(provider.display_name).toBe(sdk!.display_name);
       expect(provider.default_command).toEqual([...sdk!.default_command]);
@@ -63,6 +108,7 @@ describe("ACP provider registry", () => {
 
   it("keeps every built-in default model in the UX suggestions", () => {
     for (const provider of ACP_PROVIDERS) {
+      if (provider.key === "pi") continue;
       expect(provider.default_model, provider.key).toBeTruthy();
       expect(provider.available_models, provider.key).toBeTruthy();
       expect(
@@ -99,8 +145,11 @@ describe("ACP provider registry", () => {
     for (const provider of ACP_PROVIDERS) {
       expect(buildAcpAgentSettingsDiff(provider.key)).toMatchObject({
         agent_kind: "acp",
-        acp_server: provider.key,
+        acp_server: provider.key === "pi" ? "custom" : provider.key,
         acp_model: getAcpPreferredDefaultModel(provider.key),
+        ...(provider.key === "pi"
+          ? { acp_command: ["npx", "-y", "pi-acp"] }
+          : { acp_command: [] }),
       });
     }
     expect(buildAcpAgentSettingsDiff("gemini-cli")).toMatchObject({

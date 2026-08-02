@@ -25,7 +25,8 @@ export type OnboardingAgentId =
   | "openhands"
   | "claude-code"
   | "codex"
-  | "gemini-cli";
+  | "gemini-cli"
+  | "pi";
 
 function getAgentOptionIcon(id: string): AgentBrandIconKind {
   if (id === "openhands") return "openhands";

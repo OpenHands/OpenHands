@@ -13,6 +13,7 @@ import {
   getAcpProvider,
   labelForAcpModel,
   resolveEffectiveAcpModel,
+  resolveUiAcpProviderKey,
   type ACPModelOption,
 } from "#/constants/acp-providers";
 
@@ -51,10 +52,22 @@ export function useChatInputModelState(): ChatInputModelState {
     typeof settings?.agent_settings?.acp_server === "string"
       ? settings.agent_settings.acp_server
       : null;
+  const settingsUiAcpServerKey =
+    resolveUiAcpProviderKey(
+      settingsAcpServerKey,
+      settings?.agent_settings?.acp_command,
+    ) ?? settingsAcpServerKey;
+  const profileUiAcpServerKey =
+    activeAcpProfile?.acp_server != null
+      ? (resolveUiAcpProviderKey(
+          activeAcpProfile.acp_server,
+          activeAcpProfile.acp_command,
+        ) ?? activeAcpProfile.acp_server)
+      : null;
   const acpServerKey = isActiveAcpConversation
-    ? conversation?.acp_server
+    ? (conversation?.acp_server ?? settingsUiAcpServerKey)
     : isHomeAcp
-      ? (activeAcpProfile?.acp_server ?? settingsAcpServerKey)
+      ? (profileUiAcpServerKey ?? settingsUiAcpServerKey)
       : null;
   const acpProvider = isAcpContext ? getAcpProvider(acpServerKey) : undefined;
 

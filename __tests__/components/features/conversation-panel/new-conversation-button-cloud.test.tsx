@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { CREATE_CONVERSATION_DEFAULT_TAIL } from "../../../helpers/create-conversation-call-args";
 import { NewConversationButton } from "#/components/features/conversation-panel/new-conversation-button";
 import { GitRepository } from "#/types/git";
 
@@ -160,6 +161,7 @@ describe("NewConversationButton (cloud)", () => {
         undefined,
         undefined,
         undefined,
+        ...CREATE_CONVERSATION_DEFAULT_TAIL,
       );
     });
     await waitFor(() => {
@@ -203,6 +205,7 @@ describe("NewConversationButton (cloud)", () => {
         undefined,
         undefined,
         undefined,
+        ...CREATE_CONVERSATION_DEFAULT_TAIL,
       );
     });
   });

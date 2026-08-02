@@ -72,6 +72,41 @@ describe("buildAgentProfileFields — ACP", () => {
       expect(fields.acp_model).toBeNull();
     }
   });
+
+  it("pins the pi-acp command for the Pi preset because its wire acp_server is custom", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      selectedPreset: "pi",
+      isDefaultProviderCommand: true,
+      commandTokens: ["npx", "-y", "pi-acp"],
+      acpModel: "default",
+    });
+    expect(fields).toEqual({
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_model: "default",
+      acp_command: "npx -y pi-acp",
+      acp_args: null,
+    });
+  });
+
+  it("pins the preinstalled pi-acp binary for the Pi preset in Docker mode", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      selectedPreset: "pi",
+      isDefaultProviderCommand: true,
+      commandTokens: ["npx", "-y", "pi-acp"],
+      acpModel: "default",
+      deploymentMode: "docker",
+    });
+    expect(fields).toEqual({
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_model: "default",
+      acp_command: "pi-acp",
+      acp_args: null,
+    });
+  });
 });
 
 describe("buildAgentProfileFields — OpenHands", () => {

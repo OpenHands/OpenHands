@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider, SettingsValue } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -28,6 +28,7 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
+import { buildInlinePiAcpAgentSettingsFromProfile } from "#/utils/inline-pi-acp-profile-settings";
 
 export interface CreateConversationVariables {
   query?: string;
@@ -193,21 +194,42 @@ export const useCreateConversation = () => {
         }
       }
 
+      // Pi profiles must launch via inlined agent_settings so the frontend can
+      // rewrite ``npx -y pi-acp`` → ``pi-acp`` in Docker (profile_id launch
+      // spawns the stored command verbatim on the agent-server).
+      let piAgentSettingsOverride: Record<string, SettingsValue> | undefined;
+      if (
+        !isCloud &&
+        effectiveAgentProfileId &&
+        resolvedAgentProfile?.agent_kind === "acp"
+      ) {
+        try {
+          const detail = await AgentProfilesService.getProfile(
+            resolvedAgentProfile.name,
+          );
+          if (detail.profile.agent_kind === "acp") {
+            const inlineSettings = buildInlinePiAcpAgentSettingsFromProfile(
+              detail.profile,
+            );
+            if (inlineSettings) {
+              effectiveAgentProfileId = undefined;
+              piAgentSettingsOverride = inlineSettings;
+            }
+          }
+        } catch (error) {
+          console.warn(
+            "Failed to inline Pi agent profile settings; launching via profile id.",
+            error,
+          );
+        }
+      }
+
       // Only extend the call with the profile tail when launching from a
       // profile, so a plain create stays byte-identical to the legacy
       // agent_settings path (#3727). sandboxId is unused here.
       // TODO(#1587): createConversation has grown to 11 positional params;
       // refactor it to an options object so this position-skipping tail isn't
       // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
-          : [];
-
       const conversation =
         await AgentServerConversationService.createConversation(
           query,
@@ -224,7 +246,10 @@ export const useCreateConversation = () => {
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
+          undefined,
+          effectiveAgentProfileId,
+          resolvedAgentProfile?.agent_kind,
+          piAgentSettingsOverride,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the

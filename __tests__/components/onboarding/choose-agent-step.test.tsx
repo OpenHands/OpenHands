@@ -194,13 +194,31 @@ describe("ChooseAgentStep", () => {
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_server,
     ).toBe(expected);
-    // Canvas preselects the *preferred* default model — the registry default
-    // for Codex, but the Vertex-safe override (gemini-2.5-pro) for Gemini:
-    // gemini-cli re-resolves flash ids to its own default, which 404s on many
-    // Vertex projects (software-agent-sdk#3532).
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_model,
     ).toBe(getAcpPreferredDefaultModel(expected));
+  });
+
+  it("persists the pi-acp command for the Pi tile", async () => {
+    const save = vi.spyOn(SettingsService, "saveSettings");
+    renderStep("pi");
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("onboarding-agent-next"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(call.agent_settings_diff).toEqual({
+      agent_kind: "acp",
+      acp_server: "custom",
+      acp_command: ["npx", "-y", "pi-acp"],
+      acp_args: [],
+      acp_model: null,
+    });
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {

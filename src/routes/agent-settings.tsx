@@ -34,10 +34,15 @@ import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
   buildAcpAgentSettingsDiff,
+  effectivePiAcpCommandTokens,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  PI_ACP_PROVIDER_KEY,
+  resolveUiAcpProviderKey,
+  wireAcpServerForProvider,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
+import { getDeploymentMode } from "#/api/agent-server-adapter";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
 
 export const handle = { hideTitle: true };
@@ -121,6 +126,8 @@ export interface AgentProfileFieldsInput {
   subAgentsEnabled: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
+  /** Runtime mode from {@link getDeploymentMode}; affects Pi spawn argv. */
+  deploymentMode?: string | null;
 }
 
 /**
@@ -153,17 +160,22 @@ export function buildAgentProfileFields(
     subAgentsEnabled,
     toolConcurrencyField,
     toolConcurrency,
+    deploymentMode,
   } = input;
   if (isAcp) {
-    const isBuiltinDefault =
-      isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
+    const usesRegistryDefaultCommand =
+      isDefaultProviderCommand &&
+      selectedPreset !== ACP_CUSTOM_PRESET_KEY &&
+      selectedPreset !== PI_ACP_PROVIDER_KEY;
     return {
       agent_kind: "acp",
-      acp_server: selectedPreset,
+      acp_server: wireAcpServerForProvider(selectedPreset),
       acp_model: acpModel.trim() || null,
-      acp_command: isBuiltinDefault
+      acp_command: usesRegistryDefaultCommand
         ? null
-        : formatCommand(commandTokens) || null,
+        : isDefaultProviderCommand && selectedPreset === PI_ACP_PROVIDER_KEY
+          ? formatCommand(effectivePiAcpCommandTokens(deploymentMode))
+          : formatCommand(commandTokens) || null,
       acp_args: null,
     };
   }
@@ -316,8 +328,10 @@ export function AgentSettingsScreen({
       const rawAcpServer = source?.acp_server;
       const acpServer =
         typeof rawAcpServer === "string" ? rawAcpServer : undefined;
-      const provider = getAcpProvider(acpServer);
       const storedCommand = toStringArray(source?.acp_command);
+      const uiProviderKey =
+        resolveUiAcpProviderKey(acpServer, storedCommand) ?? acpServer;
+      const provider = getAcpProvider(uiProviderKey);
       const effectiveBaseCommand =
         storedCommand.length > 0
           ? storedCommand
@@ -336,7 +350,9 @@ export function AgentSettingsScreen({
       const normalizedSavedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
       setAcpModel(
-        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
+        normalizedSavedModel ||
+          getAcpPreferredDefaultModel(uiProviderKey) ||
+          "",
       );
       setIsCustomAcpModel(
         !!normalizedSavedModel &&
@@ -443,6 +459,7 @@ export function AgentSettingsScreen({
       subAgentsEnabled,
       toolConcurrencyField,
       toolConcurrency,
+      deploymentMode: getDeploymentMode(),
     });
 
   // Dirty tracking: for OpenHands path, also check sub-agents toggle and the

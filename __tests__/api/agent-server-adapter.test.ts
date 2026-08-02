@@ -6,6 +6,7 @@ import {
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
   getDefaultConversationTitle,
+  getDeploymentMode,
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
@@ -1235,6 +1236,18 @@ describe("buildRuntimeServicesSystemSuffix", () => {
     );
   });
 
+  it("accepts a parsed runtime-services object on window (not only a JSON string)", () => {
+    (
+      window as unknown as Record<string, unknown>
+    ).__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ = {
+      mode: "docker",
+      services: {
+        agent_server: { url_from_agent: "http://127.0.0.1:18000" },
+      },
+    };
+    expect(getDeploymentMode()).toBe("docker");
+  });
+
   it("prefers VITE_RUNTIME_SERVICES_INFO over the window fallback", () => {
     vi.stubEnv(
       "VITE_RUNTIME_SERVICES_INFO",
@@ -1535,6 +1548,65 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     };
 
     expect(payload.agent_settings.acp_command).toEqual([]);
+  });
+
+  it("resolves the pi-acp default when acp_server is custom with an empty command", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "custom",
+          acp_command: ["npx", "-y", "pi-acp"],
+          acp_model: "default",
+        },
+      },
+    }) as {
+      agent_settings: Record<string, unknown> & {
+        acp_command?: unknown[];
+        acp_model?: unknown;
+        tags?: Record<string, string>;
+      };
+      tags?: Record<string, string>;
+    };
+
+    expect(payload.agent_settings.acp_command).toEqual([
+      "npx",
+      "-y",
+      "pi-acp",
+    ]);
+    expect(payload.agent_settings.acp_model).toBeUndefined();
+    expect(payload.tags).toEqual({ acpserver: "pi" });
+  });
+
+  it("rewrites the pi-acp npx launch to the preinstalled binary in Docker mode", () => {
+    vi.stubEnv(
+      "VITE_RUNTIME_SERVICES_INFO",
+      JSON.stringify({
+        mode: "docker",
+        services: {
+          agent_server: { url_from_agent: "http://127.0.0.1:18000" },
+        },
+      }),
+    );
+
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "custom",
+          acp_command: ["npx", "-y", "pi-acp"],
+          acp_model: "default",
+        },
+      },
+    }) as {
+      agent_settings: Record<string, unknown> & { acp_command?: unknown[] };
+    };
+
+    expect(payload.agent_settings.acp_command).toEqual(["pi-acp"]);
   });
 
   it("leaves acp_command alone for an unknown acp_server key", () => {

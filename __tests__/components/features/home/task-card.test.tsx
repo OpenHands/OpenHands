@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import GitService from "#/api/git-service/git-service.api";
+import { CREATE_CONVERSATION_DEFAULT_TAIL } from "../../../helpers/create-conversation-call-args";
 import { TaskCard } from "#/components/features/home/tasks/task-card";
 import { GitRepository } from "#/types/git";
 import { SuggestedTask } from "#/utils/types";
@@ -143,6 +144,7 @@ describe("TaskCard", () => {
         undefined,
         undefined,
         undefined,
+        ...CREATE_CONVERSATION_DEFAULT_TAIL,
       );
     });
   });

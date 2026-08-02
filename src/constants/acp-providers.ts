@@ -5,9 +5,108 @@ export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "pi"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
+
+/** Canvas registry key for the Pi coding-agent ACP preset. */
+export const PI_ACP_PROVIDER_KEY = "pi";
+
+/** Default stdio spawn argv for {@link PI_ACP_PROVIDER_KEY} via ``pi-acp``. */
+export const PI_ACP_DEFAULT_COMMAND: readonly string[] = [
+  "npx",
+  "-y",
+  "pi-acp",
+];
+
+/** Docker image pre-installs ``pi-acp`` on PATH; ``npx`` is unreliable there. */
+export const PI_ACP_DOCKER_COMMAND: readonly string[] = ["pi-acp"];
+
+const PI_ACP_DEFAULT_COMMAND_TEXT = PI_ACP_DEFAULT_COMMAND.join(" ");
+const PI_ACP_DOCKER_COMMAND_TEXT = PI_ACP_DOCKER_COMMAND.join(" ");
+
+function normalizeAcpCommandTokens(command: unknown): string[] {
+  if (Array.isArray(command)) {
+    return command.filter(
+      (token): token is string => typeof token === "string",
+    );
+  }
+  if (typeof command === "string") {
+    const trimmed = command.trim();
+    if (!trimmed) return [];
+    return trimmed.split(/\s+/);
+  }
+  return [];
+}
+
+/** True when ``command`` matches the built-in Pi preset launch argv/text. */
+export function isPiAcpCommand(command: unknown): boolean {
+  const normalized = normalizeAcpCommandTokens(command).join(" ");
+  return (
+    normalized === PI_ACP_DEFAULT_COMMAND_TEXT ||
+    normalized === PI_ACP_DOCKER_COMMAND_TEXT
+  );
+}
+
+/**
+ * Map a Canvas UI/registry provider key to the ``acp_server`` value the
+ * released agent-server accepts. Pi is not in the SDK registry yet, so it
+ * travels as ``custom`` with an explicit ``acp_command``.
+ */
+export function wireAcpServerForProvider(providerKey: string): string {
+  return providerKey === PI_ACP_PROVIDER_KEY ? "custom" : providerKey;
+}
+
+/**
+ * Resolve the Canvas registry key from persisted agent settings. Pi is stored
+ * as ``acp_server: "custom"`` with the ``pi-acp`` command — this helper
+ * rehydrates ``"pi"`` for UI, model defaults, and conversation tags.
+ */
+export function resolveUiAcpProviderKey(
+  acpServer: string | null | undefined,
+  acpCommand: unknown,
+): string | null {
+  if (acpServer === PI_ACP_PROVIDER_KEY || isPiAcpCommand(acpCommand)) {
+    return PI_ACP_PROVIDER_KEY;
+  }
+  return acpServer ?? null;
+}
+
+/**
+ * Default ``acp_command`` tokens for a provider save/start when the caller
+ * sends an empty command. Built-ins rely on the agent-server registry; Pi
+ * must pin ``pi-acp`` explicitly because its wire ``acp_server`` is ``custom``.
+ */
+export function defaultAcpCommandForProvider(
+  providerKey: string,
+  deploymentMode?: string | null,
+): string[] {
+  if (providerKey === PI_ACP_PROVIDER_KEY) {
+    return effectivePiAcpCommandTokens(deploymentMode);
+  }
+  return [];
+}
+
+/** Pi spawn argv for a deployment mode (``npx`` locally, ``pi-acp`` in Docker). */
+export function effectivePiAcpCommandTokens(
+  deploymentMode?: string | null,
+): string[] {
+  return deploymentMode === "docker"
+    ? [...PI_ACP_DOCKER_COMMAND]
+    : [...PI_ACP_DEFAULT_COMMAND];
+}
+
+/** Rewrite Pi preset commands to the preinstalled binary in Docker images. */
+export function adaptPiAcpCommandForDeployment(
+  command: unknown,
+  deploymentMode?: string | null,
+): unknown {
+  if (deploymentMode === "docker" && isPiAcpCommand(command)) {
+    return [...PI_ACP_DOCKER_COMMAND];
+  }
+  return command;
+}
 
 // Sentinel ``agent.llm.model`` returned by older SDKs for ACP conversations
 // in lieu of a real model. Suppressed at every consumer that resolves a
@@ -142,6 +241,10 @@ const ACP_PROVIDER_UI: Record<
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
   },
+  pi: {
+    icon: "pi",
+    description_key: I18nKey.ONBOARDING$AGENT_PI_DESCRIPTION,
+  },
 };
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
@@ -154,12 +257,21 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   const info = getClientAcpProvider(key);
   return {
     key,
-    display_name: info?.display_name ?? key,
-    default_command: info ? [...info.default_command] : [],
-    available_models: info?.available_models?.map((model) => ({
-      id: model.id,
-      label: model.label,
-    })),
+    display_name:
+      info?.display_name ?? (key === PI_ACP_PROVIDER_KEY ? "Pi" : key),
+    default_command: info
+      ? [...info.default_command]
+      : key === PI_ACP_PROVIDER_KEY
+        ? [...PI_ACP_DEFAULT_COMMAND]
+        : [],
+    available_models: info?.available_models
+      ? info.available_models.map((model) => ({
+          id: model.id,
+          label: model.label,
+        }))
+      : key === PI_ACP_PROVIDER_KEY
+        ? [{ id: "default", label: "Default Model" }]
+        : undefined,
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
@@ -325,6 +437,9 @@ export function getAcpPreferredDefaultModel(
   key: string | null | undefined,
 ): string | null {
   if (key === "gemini-cli") return ACP_VERTEX_SAFE_MODEL;
+  // Pi models come from the pi CLI (~/.pi, ``pi --list-models``). Canvas must
+  // not invent a placeholder id — let pi-acp pick its configured default.
+  if (key === PI_ACP_PROVIDER_KEY) return null;
   return getAcpProvider(key)?.default_model ?? null;
 }
 
@@ -487,6 +602,7 @@ export function buildAcpAgentSettingsDiff(
     command?: string[];
     model?: string | null;
     allowUnknownServer?: boolean;
+    deploymentMode?: string | null;
   } = {},
 ): Record<string, unknown> | null {
   if (providerKey === "openhands") {
@@ -516,10 +632,15 @@ export function buildAcpAgentSettingsDiff(
   // payload from a textarea that already shows the merged command
   // (Settings → Agent) round-trip correctly — the merged tokens land in
   // ``acp_command`` here, so no args are lost.
+  const command =
+    options.command && options.command.length > 0
+      ? options.command
+      : defaultAcpCommandForProvider(providerKey, options.deploymentMode);
+
   return {
     agent_kind: "acp",
-    acp_server: providerKey,
-    acp_command: options.command ?? [],
+    acp_server: wireAcpServerForProvider(providerKey),
+    acp_command: command,
     acp_args: [],
     acp_model: model ?? null,
   };

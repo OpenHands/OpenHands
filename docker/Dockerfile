@@ -67,6 +67,12 @@ RUN node -e " \
   require('fs').writeFileSync('/tmp/defaults.env', lines.join('\n') + '\n'); \
 "
 
+# ── Stage 1c: Pi ACP (Node 22+ required; avoid Debian apt nodejs) ─────────────
+FROM node:24-slim AS pi-acp-install
+RUN npm install -g --ignore-scripts \
+  @earendil-works/pi-coding-agent \
+  pi-acp
+
 # ── Stage 2: Combined image ──────────────────────────────────────────────────
 FROM ${AGENT_SERVER_IMAGE} AS final
 
@@ -98,6 +104,19 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
       apt-get install -y --no-install-recommends libpq-dev && \
       rm -rf /var/lib/apt/lists/*; \
     fi
+
+# Pi coding agent + ACP adapter. Claude/Codex/Gemini wrappers ship in the
+# agent-server base; Pi is third-party and installed via the Node 24 stage
+# above (pi-acp requires Node 22+).
+#
+# Copy the whole Node prefix so npm global bin *symlinks* stay intact.
+# Never ``COPY`` /usr/local/bin/pi or pi-acp alone — Docker dereferences
+# symlinks into flat scripts that import ./config.js from bin/ instead of
+# the package directory under lib/node_modules.
+COPY --from=pi-acp-install /usr/local/ /opt/node24/
+ENV PATH="/opt/node24/bin:${PATH}"
+RUN test -x /opt/node24/bin/pi-acp && test -x /opt/node24/bin/pi && \
+    /opt/node24/bin/pi --version
 
 # Install automation server via pip.
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
