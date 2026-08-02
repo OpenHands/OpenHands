@@ -3,7 +3,6 @@
   "include-component-in-tag": false,
   "include-v-in-tag": true,
   "draft-pull-request": true,
-  "last-release-sha": "10ce762e920f70e121314c45ae2a65ecd569d0ce",
   "packages": {
     ".": {
       "release-type": "node",

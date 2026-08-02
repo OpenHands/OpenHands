@@ -137,6 +137,7 @@ export function proxyServerInfoRequest(
           );
 
           delete headers["content-length"];
+          delete headers["transfer-encoding"];
           headers["content-type"] = "application/json; charset=utf-8";
           headers["cache-control"] = "no-store";
           res.writeHead(statusCode, headers);

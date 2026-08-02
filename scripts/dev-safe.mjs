@@ -48,7 +48,7 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.37.0 leaves agent-client-protocol
+// Temporary transitive-dep pin: openhands-sdk 1.39.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
@@ -401,7 +401,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.37.0")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.39.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -968,6 +968,17 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
+      // dev:minimal deliberately does NOT supply runtime-services info (the
+      // frontend here talks straight to the agent-server over
+      // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
+      // of it to append `runtime_services` to `/server_info`, and the
+      // frontend's own VITE_RUNTIME_SERVICES_INFO env var is no longer read).
+      // It is a bare agent-server + Vite stack with no companion services to
+      // advertise, so `fetchBackendRuntimeServicesInfo()` correctly returns
+      // null and conversations simply omit the <RUNTIME_SERVICES> block.
+      // Stacks with automation/ingress/frontend services should use
+      // `npm run dev` / `dev:static`, which pass runtime-services info through
+      // ingress/static-server instead.
     },
   });
 

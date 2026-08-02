@@ -6,6 +6,7 @@ import type {
   BashOutput,
 } from "@openhands/typescript-client";
 import type { CommandResult } from "#/api/runtime-service/agent-server-runtime-service";
+import { sendWebSocketAuth } from "#/utils/websocket-auth";
 import { buildBashWebSocketUrl } from "#/utils/websocket-url";
 
 interface WaitingCommand {
@@ -54,8 +55,7 @@ function isBashError(event: BashEvent): event is BashError {
  * received from the server is paired with the oldest outstanding request in
  * the queue, and subsequent `BashOutput` events are matched by `command_id`.
  *
- * Commands queued while the socket is still in the CONNECTING state are
- * buffered and flushed automatically when the socket opens.
+ * Commands are buffered until the socket's open handler sends authentication.
  */
 export function useBashCommandRunner(
   conversationUrl: string | null | undefined,
@@ -63,8 +63,8 @@ export function useBashCommandRunner(
   enabled: boolean,
 ): BashCommandRunner {
   const wsRef = useRef<WebSocket | null>(null);
-  // Commands waiting for the socket to transition from CONNECTING → OPEN
-  const connectingQueueRef = useRef<WaitingCommand[]>([]);
+  const readyWsRef = useRef<WebSocket | null>(null);
+  const waitingQueueRef = useRef<WaitingCommand[]>([]);
   // Commands whose request was sent; waiting for the BashCommand echo to get command_id
   const pendingQueueRef = useRef<PendingCommand[]>([]);
   // Commands whose command_id is known; waiting for BashOutput with non-null exit_code
@@ -73,23 +73,25 @@ export function useBashCommandRunner(
   useEffect(() => {
     if (!enabled) return;
 
-    const wsUrl = buildBashWebSocketUrl(conversationUrl, sessionApiKey);
+    const wsUrl = buildBashWebSocketUrl(conversationUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
+    readyWsRef.current = null;
 
     ws.onopen = () => {
-      // Flush any commands that arrived while connecting
+      sendWebSocketAuth(ws, sessionApiKey);
+      readyWsRef.current = ws;
       for (const {
         command,
         cwd,
         timeout,
         resolve,
         reject,
-      } of connectingQueueRef.current) {
+      } of waitingQueueRef.current) {
         pendingQueueRef.current.push({ resolve, reject });
         ws.send(JSON.stringify({ command, cwd, timeout }));
       }
-      connectingQueueRef.current = [];
+      waitingQueueRef.current = [];
     };
 
     ws.onmessage = (event: MessageEvent) => {
@@ -131,8 +133,8 @@ export function useBashCommandRunner(
 
     function rejectAll(reason: string): void {
       const err = new Error(reason);
-      for (const { reject: rej } of connectingQueueRef.current) rej(err);
-      connectingQueueRef.current = [];
+      for (const { reject: rej } of waitingQueueRef.current) rej(err);
+      waitingQueueRef.current = [];
       for (const p of pendingQueueRef.current) p.reject(err);
       pendingQueueRef.current = [];
       for (const a of activeCommandsRef.current.values()) a.reject(err);
@@ -141,11 +143,13 @@ export function useBashCommandRunner(
 
     ws.onclose = () => {
       wsRef.current = null;
+      readyWsRef.current = null;
       rejectAll("Bash WebSocket closed");
     };
 
     ws.onerror = () => {
       wsRef.current = null;
+      readyWsRef.current = null;
       rejectAll("Bash WebSocket error");
     };
 
@@ -155,6 +159,7 @@ export function useBashCommandRunner(
       ws.onerror = null;
       ws.close();
       wsRef.current = null;
+      readyWsRef.current = null;
       rejectAll("Bash WebSocket unmounted");
     };
   }, [enabled, conversationUrl, sessionApiKey]);
@@ -171,8 +176,8 @@ export function useBashCommandRunner(
           reject(new Error("Bash WebSocket not available"));
           return;
         }
-        if (ws.readyState === WebSocket.CONNECTING) {
-          connectingQueueRef.current.push({
+        if (ws.readyState !== WebSocket.OPEN || readyWsRef.current !== ws) {
+          waitingQueueRef.current.push({
             command,
             cwd,
             timeout,

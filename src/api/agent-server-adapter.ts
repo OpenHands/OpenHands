@@ -667,6 +667,7 @@ function buildBundledSkills(): BundledSkill[] {
 function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  disabledSkills: string[] = [],
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -677,7 +678,11 @@ function buildAgentContext(
   const existingSkills = Array.isArray(existingContext.skills)
     ? (existingContext.skills as SettingsRecord[])
     : [];
-  const mergedSkills = [...existingSkills, ...buildBundledSkills()];
+  const disabledSkillNames = new Set(disabledSkills);
+  const mergedSkills = [...existingSkills, ...buildBundledSkills()].filter(
+    (skill) =>
+      typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
+  );
 
   return {
     ...existingContext,
@@ -734,7 +739,11 @@ function buildConfiguredAcpAgentSettings(
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
     agent_kind: "acp",
-    agent_context: buildAgentContext(agentSettings, runtimeServicesInfo),
+    agent_context: buildAgentContext(
+      agentSettings,
+      runtimeServicesInfo,
+      settings.disabled_skills,
+    ),
   };
 
   // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a containerized
@@ -846,7 +855,11 @@ function buildConfiguredOpenHandsAgentSettings(
   return {
     ...agentSettings,
     llm,
-    agent_context: buildAgentContext(agentSettings, runtimeServicesInfo),
+    agent_context: buildAgentContext(
+      agentSettings,
+      runtimeServicesInfo,
+      settings.disabled_skills,
+    ),
     tools: getAgentTools(agentSettings),
   };
 }
@@ -995,6 +1008,14 @@ export function buildStartConversationRequest(
     // Finish/Think). The dev ``RUNTIME_SERVICES`` system-message suffix remains
     // agent-settings-only; the Canvas UI tool is a top-level client tool and
     // therefore works on both inline-agent and profile launch paths.
+    //
+    // Persistent memory is NOT on that boundary: ``load_memory`` is a global
+    // user preference, so the agent-server stamps the stored
+    // ``agent_settings.agent_context.load_memory`` onto the profile-resolved
+    // agent the same way it already applies the global ``mcp_config``. The
+    // toggle therefore applies to both launch paths, and the client must not
+    // re-send it here (``agent_profile_id`` and ``agent_settings`` are
+    // mutually exclusive).
     ...(options.agentProfileId
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),

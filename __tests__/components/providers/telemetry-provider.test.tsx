@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+
+const useTelemetryMock = vi.hoisted(() => vi.fn());
+
+vi.mock("#/hooks/use-telemetry", () => ({
+  useTelemetry: useTelemetryMock,
+}));
+
 import { TelemetryProvider } from "#/components/providers/telemetry-provider";
 import * as telemetry from "#/services/telemetry";
 
@@ -24,6 +31,7 @@ describe("TelemetryProvider", () => {
     initializeClientMock = vi
       .spyOn(telemetry, "initializePostHogClient")
       .mockResolvedValue(null);
+    useTelemetryMock.mockClear();
     window.location.hash = "";
     sessionStorage.clear();
   });
@@ -77,6 +85,17 @@ describe("TelemetryProvider", () => {
     });
   });
 
+  it("mounts telemetry lifecycle when analytics are enabled", () => {
+    render(
+      <TelemetryProvider config={runtimeConfig}>
+        <div data-testid="child" />
+      </TelemetryProvider>,
+    );
+
+    expect(screen.getByTestId("child")).toBeInTheDocument();
+    expect(useTelemetryMock).toHaveBeenCalledOnce();
+  });
+
   it("keeps rendering children when eager initialization fails", async () => {
     initializeClientMock.mockRejectedValueOnce(new Error("unavailable"));
 
@@ -90,7 +109,7 @@ describe("TelemetryProvider", () => {
     await waitFor(() => expect(initializeClientMock).toHaveBeenCalledOnce());
   });
 
-  it("does not initialize when analytics are disabled", () => {
+  it("does not initialize telemetry lifecycle when analytics are disabled", () => {
     render(
       <TelemetryProvider config={false}>
         <div data-testid="child" />
@@ -100,5 +119,6 @@ describe("TelemetryProvider", () => {
     expect(screen.getByTestId("child")).toBeInTheDocument();
     expect(configureTelemetryMock).toHaveBeenCalledWith(false);
     expect(initializeClientMock).not.toHaveBeenCalled();
+    expect(useTelemetryMock).not.toHaveBeenCalled();
   });
 });

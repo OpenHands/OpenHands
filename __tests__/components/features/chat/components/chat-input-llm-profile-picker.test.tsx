@@ -35,6 +35,7 @@ function state(overrides = {}) {
     currentProfileModel: "openai/gpt-4o-mini",
     isLoading: false,
     isSwitching: false,
+    canSwitchProfile: true,
     selectProfile,
     ...overrides,
   };
@@ -76,6 +77,22 @@ describe("ChatInputLlmProfilePicker", () => {
     fireEvent.click(screen.getByTestId("chat-input-llm-profile-option-Fast"));
 
     expect(selectProfile).not.toHaveBeenCalled();
+  });
+
+  it("names the current profile without selectable options when switching is unavailable", () => {
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({ canSwitchProfile: false }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      screen.getByTestId("chat-input-llm-profile-current"),
+    ).toHaveTextContent("Fast");
+    expect(
+      screen.queryByTestId("chat-input-llm-profile-option-Smart"),
+    ).not.toBeInTheDocument();
   });
 
   it("links to the LLM profiles settings page", () => {

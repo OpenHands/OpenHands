@@ -84,9 +84,16 @@ export function useChatInputProfileState(): ChatInputProfileState {
         variables.plugins = metadata.plugins;
       }
 
-      createConversation.mutate(variables, {
-        onSuccess: (data) => navigate(`/conversations/${data.conversation_id}`),
-      });
+      // mutateAsync, not mutate-scoped callbacks: this hook lives inside the
+      // tools-menu content, which unmounts as soon as a profile is picked, and
+      // React Query drops mutate-scoped callbacks on unmount — the replacement
+      // conversation would be created without ever navigating to it. The
+      // promise (and the navigate closure) survive the unmount. Errors are
+      // already surfaced by the global mutation toast; swallow the rejection.
+      createConversation
+        .mutateAsync(variables)
+        .then((data) => navigate(`/conversations/${data.conversation_id}`))
+        .catch(() => {});
     },
     [
       activateProfile,

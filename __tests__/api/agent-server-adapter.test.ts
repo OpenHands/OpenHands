@@ -160,6 +160,11 @@ describe("buildStartConversationRequest", () => {
       load_user_skills: true,
       load_project_skills: true,
     });
+    // Persistent memory is opt-in: the key must be absent (not false) so the
+    // wire payload for un-opted users stays byte-identical to before.
+    expect(payload.agent_settings.agent_context).not.toHaveProperty(
+      "load_memory",
+    );
     // Bundled public skills are injected into agent_context.skills so the
     // SDK can perform trigger matching without cloning the extensions repo.
     expect(Array.isArray(payload.agent_settings.agent_context.skills)).toBe(
@@ -501,6 +506,53 @@ describe("buildStartConversationRequest", () => {
         headers: { "X-Session-API-Key": "session-key" },
       },
     });
+  });
+
+  it("passes a stored agent_context.load_memory through on an inline launch", () => {
+    // The persistent-memory toggle persists into
+    // ``agent_settings.agent_context.load_memory``; buildAgentContext spreads
+    // the stored context, so the flag needs no dedicated adapter wiring.
+    //
+    // This is the inline path only. A profile launch sends ``agent_profile_id``
+    // and no ``agent_settings`` at all (pinned in
+    // src/api/agent-server-adapter.test.ts), so there the agent-server reads the
+    // same stored preference itself — covered by the SDK's
+    // tests/agent_server/test_agent_profile_conv_start.py.
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_context: { load_memory: true },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+
+    expect(payload.agent_settings.agent_context.load_memory).toBe(true);
+  });
+
+  it("passes a stored agent_context.load_memory through on an inline ACP launch", () => {
+    // Inline ACP settings are the fallback used when no agent profile is
+    // available; a normal ACP conversation launches from a profile (see
+    // use-create-conversation.test.tsx) and never reaches this branch.
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          ...DEFAULT_SETTINGS.agent_settings,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          agent_context: { load_memory: true },
+        },
+      },
+    }) as {
+      agent_settings: { agent_context: Record<string, unknown> };
+    };
+
+    expect(payload.agent_settings.agent_context.load_memory).toBe(true);
   });
 
   it("does NOT mirror conversation secrets onto agent_context for ACP — request.secrets is the sole channel", () => {
