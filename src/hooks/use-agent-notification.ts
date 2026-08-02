@@ -42,6 +42,13 @@ export function useAgentNotification(
   // must not throw. Without it the notification still fires; only the
   // restore-originating-backend step on click is skipped.
   const activeBackend = useOptionalActiveBackendContext();
+  // Depend on these primitives, not on the context object. The provider
+  // memoises its value on the whole backend snapshot, so depending on the
+  // object would re-run the notification effect on every unrelated backend
+  // state change.
+  const originatingBackendId = activeBackend?.active.backend.id;
+  const originatingOrgId = activeBackend?.active.orgId;
+  const setActiveBackend = activeBackend?.setActive;
   const { data: settings } = useSettings();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
   const prevStateRef = useRef<AgentState | undefined>(undefined);
@@ -89,20 +96,19 @@ export function useAgentNotification(
     const notification = new Notification(conversationTitle || "OpenHands", {
       body: t(notificationBodyKey),
     });
-    const originatingBackendId = activeBackend?.active.backend.id;
-    const originatingOrgId = activeBackend?.active.orgId;
-    const setActive = activeBackend?.setActive;
     notification.onclick = () => {
       window.focus();
-      if (setActive && originatingBackendId) {
-        setActive(originatingBackendId, originatingOrgId);
+      if (setActiveBackend && originatingBackendId) {
+        setActiveBackend(originatingBackendId, originatingOrgId);
       }
       navigate(`/conversations/${conversationId}`);
       notification.close();
     };
   }, [
     areDesktopNotificationsEnabled,
-    activeBackend,
+    originatingBackendId,
+    originatingOrgId,
+    setActiveBackend,
     conversationId,
     conversationTitle,
     curAgentState,
