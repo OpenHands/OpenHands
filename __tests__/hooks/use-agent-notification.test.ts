@@ -6,6 +6,11 @@ import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
 
 const mockNavigate = vi.hoisted(() => vi.fn());
+const mockSetActive = vi.hoisted(() => vi.fn());
+const mockActive = vi.hoisted(() => ({
+  backendId: "backend-a",
+  orgId: "org-a",
+}));
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: vi.fn(),
@@ -15,6 +20,13 @@ vi.mock("#/context/navigation-context", () => ({
   useNavigation: () => ({
     conversationId: "conversation-123",
     navigate: mockNavigate,
+  }),
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackendContext: () => ({
+    active: { backend: { id: mockActive.backendId }, orgId: mockActive.orgId },
+    setActive: mockSetActive,
   }),
 }));
 
@@ -82,6 +94,8 @@ describe("useAgentNotification", () => {
     vi.clearAllMocks();
     MockNotification.instances.length = 0;
     MockNotification.permission = "granted";
+    mockActive.backendId = "backend-a";
+    mockActive.orgId = "org-a";
     mockUseSettings.mockReturnValue({
       data: {
         enable_sound_notifications: true,
@@ -192,8 +206,14 @@ describe("useAgentNotification", () => {
     expect(MockNotification.instances).toHaveLength(0);
   });
 
-  it("focuses the window and opens the conversation when clicked", () => {
+  it("restores the originating backend before opening the conversation", () => {
     const { rerender } = renderNotificationHook();
+    rerender({
+      state: AgentState.AWAITING_USER_CONFIRMATION,
+      conversationTitle,
+    });
+    mockActive.backendId = "backend-b";
+    mockActive.orgId = "org-b";
     rerender({
       state: AgentState.AWAITING_USER_CONFIRMATION,
       conversationTitle,
@@ -202,8 +222,12 @@ describe("useAgentNotification", () => {
     MockNotification.instances[0]?.onclick?.();
 
     expect(window.focus).toHaveBeenCalledTimes(1);
+    expect(mockSetActive).toHaveBeenCalledWith("backend-a", "org-a");
     expect(mockNavigate).toHaveBeenCalledWith(
       "/conversations/conversation-123",
+    );
+    expect(mockSetActive.mock.invocationCallOrder[0]).toBeLessThan(
+      mockNavigate.mock.invocationCallOrder[0],
     );
     expect(MockNotification.instances[0]?.close).toHaveBeenCalledTimes(1);
   });

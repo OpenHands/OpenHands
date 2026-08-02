@@ -5,6 +5,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import notificationSound from "#/assets/notification.mp3";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
 
 const NOTIFICATION_STATES: AgentState[] = [
   AgentState.AWAITING_USER_INPUT,
@@ -37,6 +38,7 @@ export function useAgentNotification(
 ) {
   const { t } = useTranslation("openhands");
   const { conversationId, navigate } = useNavigation();
+  const { active, setActive } = useActiveBackendContext();
   const { data: settings } = useSettings();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
   const prevStateRef = useRef<AgentState | undefined>(undefined);
@@ -84,18 +86,24 @@ export function useAgentNotification(
     const notification = new Notification(conversationTitle || "OpenHands", {
       body: t(notificationBodyKey),
     });
+    const originatingBackendId = active.backend.id;
+    const originatingOrgId = active.orgId;
     notification.onclick = () => {
       window.focus();
+      setActive(originatingBackendId, originatingOrgId);
       navigate(`/conversations/${conversationId}`);
       notification.close();
     };
   }, [
     areDesktopNotificationsEnabled,
+    active.backend.id,
+    active.orgId,
     conversationId,
     conversationTitle,
     curAgentState,
     isSoundEnabled,
     navigate,
+    setActive,
     t,
   ]);
 }
