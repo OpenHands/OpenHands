@@ -52,8 +52,14 @@ describe("themeVars", () => {
     expect(vars["--cool-grey-950"]).toBe("#0b1614");
     expect(vars["--cool-grey-925"]).toBe("#11201c");
     expect(vars["--cool-grey-100"]).toBe("#e6efe9");
-    // Derived steps use color-mix, never raw math.
-    expect(vars["--cool-grey-800"]).toContain("color-mix");
+    // Derived steps are concrete hex values (mixed in sRGB) so they can be
+    // re-encoded as HSL channels for HeroUI.
+    expect(vars["--cool-grey-800"]).toMatch(/^#[0-9a-f]{6}$/);
+    // HeroUI reads its own HSL-channel variables; the scale is mirrored there.
+    expect(vars["--heroui-background"]).toMatch(/^[\d.]+ [\d.]+% [\d.]+%$/);
+    expect(vars["--heroui-default-100"]).toBe(
+      vars["--heroui-background"], // both anchored at grey-950
+    );
     // No accent declared → accent variables untouched.
     expect(vars["--oh-accent"]).toBeUndefined();
   });

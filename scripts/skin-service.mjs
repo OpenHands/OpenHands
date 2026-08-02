@@ -90,12 +90,59 @@ export function sanitizeTheme(raw) {
   return Object.keys(theme).length > 0 ? theme : null;
 }
 
-const mix = (a, pct, b) => `color-mix(in srgb, ${a} ${pct}%, ${b})`;
+function hexToRgb(hex) {
+  let h = hex.replace("#", "");
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  const n = parseInt(h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex([r, g, b]) {
+  const c = (v) => Math.round(v).toString(16).padStart(2, "0");
+  return `#${c(r)}${c(g)}${c(b)}`;
+}
+
+/** Gamma-encoded per-channel lerp — same result as CSS
+ * `color-mix(in srgb, a pct%, b)`, but emitted as a concrete hex value so
+ * derived shades can be further converted (e.g. to HSL for HeroUI). */
+const mix = (a, pct, b) => {
+  const A = hexToRgb(a);
+  const B = hexToRgb(b);
+  const w = pct / 100;
+  return rgbToHex(A.map((v, i) => v * w + B[i] * (1 - w)));
+};
+
+/** "H S% L%" channel string — the format HeroUI stores colors in
+ * (`hsl(var(--heroui-*))`). */
+export function hexToHslChannels(hex) {
+  const [r, g, b] = hexToRgb(hex).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0;
+  let s = 0;
+  if (d !== 0) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return `${r2(h)} ${r2(s * 100)}% ${r2(l * 100)}%`;
+}
 
 /** Expand the (partial) major-color theme into the full set of CSS custom
  * properties the Canvas UI is built on. Missing anchors fall back to each
  * other so a minimal `theme: {accent, background}` still works; shades in
- * between are derived with color-mix() so we never do color math here. */
+ * between are derived by mixing the anchors. */
 export function themeVars(theme) {
   const t = sanitizeTheme(theme);
   if (!t) return null;
@@ -124,6 +171,47 @@ export function themeVars(theme) {
     "--cool-grey-950": background,
     "--cool-grey-975": mix(background, 60, "#000000"),
   };
+
+  // HeroUI reads colors from its own --heroui-* HSL-channel variables, not
+  // from our --cool-grey-* scale, so mirror the scale onto the same stop
+  // positions the stock themes use (see src/themes/color-themes.ts).
+  const g = (n) => hexToHslChannels(vars[`--cool-grey-${n}`]);
+  Object.assign(vars, {
+    "--heroui-background": g(950),
+    "--heroui-background-foreground": g(50),
+    "--heroui-foreground-50": g(975),
+    "--heroui-foreground-100": g(950),
+    "--heroui-foreground-200": g(925),
+    "--heroui-foreground-300": g(900),
+    "--heroui-foreground-400": g(800),
+    "--heroui-foreground-500": g(700),
+    "--heroui-foreground-600": g(600),
+    "--heroui-foreground-700": g(500),
+    "--heroui-foreground-800": g(400),
+    "--heroui-foreground-900": g(300),
+    "--heroui-foreground": g(300),
+    "--heroui-content1": g(925),
+    "--heroui-content1-foreground": g(100),
+    "--heroui-content2": g(900),
+    "--heroui-content2-foreground": g(200),
+    "--heroui-content3": g(800),
+    "--heroui-content3-foreground": g(300),
+    "--heroui-content4": g(700),
+    "--heroui-content4-foreground": g(400),
+    "--heroui-default-50": g(975),
+    "--heroui-default-100": g(950),
+    "--heroui-default-200": g(925),
+    "--heroui-default-300": g(900),
+    "--heroui-default-400": g(800),
+    "--heroui-default-500": g(700),
+    "--heroui-default-600": g(600),
+    "--heroui-default-700": g(500),
+    "--heroui-default-800": g(400),
+    "--heroui-default-900": g(300),
+    "--heroui-default-foreground": g(50),
+    "--heroui-default": g(800),
+  });
+
   if (t.accent) {
     vars["--oh-color-primary"] = t.accent;
     vars["--oh-color-logo"] = t.accent;
