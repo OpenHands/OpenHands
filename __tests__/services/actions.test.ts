@@ -94,7 +94,6 @@ describe("handleStatusMessage", () => {
 
     // Verify that trackError was called with the correct parameters
     expect(trackError).toHaveBeenCalledWith({
-      message: "Some error message",
       source: "chat",
       metadata: { msgId: "ERROR_ID" },
     });

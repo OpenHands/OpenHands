@@ -7,13 +7,26 @@ interface ErrorDetails {
   classification?: ErrorClassification | null;
 }
 
+const RESERVED_ERROR_KEYS = new Set([
+  "error_source",
+  "error_kind",
+  "error_id",
+  "error_telemetry",
+]);
+
 export function trackError({
   source,
   metadata = {},
   classification,
 }: ErrorDetails) {
+  // Reserved outcome fields are derived from `source`/`classification` and
+  // must not be overridable through arbitrary caller metadata.
+  const extra = Object.fromEntries(
+    Object.entries(metadata).filter(([key]) => !RESERVED_ERROR_KEYS.has(key)),
+  );
+
   void trackEvent("error_outcome", {
-    ...metadata,
+    ...extra,
     error_source: source || "unknown",
     error_kind: classification?.kind || "unknown",
     // Keep diagnostic errors correlatable without capturing raw messages.
