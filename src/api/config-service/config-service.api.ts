@@ -161,13 +161,26 @@ class ConfigService {
       verifiedByProvider !== undefined
         ? Promise.resolve(verifiedByProvider)
         : llmClient.getVerifiedModels();
-    const [providers, verifiedMap] = await Promise.all([
+    const [providers, models, verifiedMap] = await Promise.all([
       llmClient.getProviders(),
+      llmClient.getModels(),
       verifiedFetch,
     ]);
 
+    // /api/llm/providers can omit providers (e.g. "openrouter") whose models
+    // are still present in /api/llm/models as "<provider>/<model>" IDs, so
+    // derive those provider names from the model list as well.
+    const modelDerivedProviders = (models ?? [])
+      .filter((model) => model.includes("/"))
+      .map((model) => model.slice(0, model.indexOf("/")))
+      .filter((prefix) => prefix.length > 0);
+
     const verifiedProviders = new Set(Object.keys(verifiedMap ?? {}));
-    const names = new Set<string>([...verifiedProviders, ...(providers ?? [])]);
+    const names = new Set<string>([
+      ...verifiedProviders,
+      ...(providers ?? []),
+      ...modelDerivedProviders,
+    ]);
     const providerItems: LLMProvider[] = [...names].map((name) => ({
       name,
       verified: verifiedProviders.has(name),
