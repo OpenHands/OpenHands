@@ -1,18 +1,20 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
-import { SkillInfo } from "#/types/settings";
-import { Microagent } from "#/api/open-hands.types";
-import { BUILT_IN_COMMANDS, MODEL_COMMAND } from "#/utils/constants";
+import { MODEL_COMMAND } from "#/utils/constants";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { buildSlashCommandCatalog } from "#/utils/slash-command-catalog";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import type {
+  SlashCommandItem,
+  SlashCommandSkill,
+} from "#/types/slash-command";
+import { stripSlashCommandFormatting } from "#/utils/slash-command-text";
+import { useTranslation } from "react-i18next";
+import { getSlashCommandDescription } from "#/utils/slash-command-description";
 
-export type SlashCommandSkill = SkillInfo | Microagent;
-
-export interface SlashCommandItem {
-  skill: SlashCommandSkill;
-  /** The slash command string, e.g. "/random-number" */
-  command: string;
-}
+export type { SlashCommandItem, SlashCommandSkill };
 
 type SlashCompletionKind = "command" | "model-profile";
 
@@ -35,10 +37,22 @@ function getCursorOffset(element: HTMLElement): number {
 export const useSlashCommand = (
   chatInputRef: React.RefObject<HTMLDivElement | null>,
 ) => {
-  // Scope the skill catalog to this conversation's attached workspace so the
-  // slash menu lists the same project skills that were loaded into it.
+  const { t } = useTranslation("openhands");
+  // Scope command discovery to the active conversation/workspace. Loaded
+  // local resource reporting is intentionally owned by the serialized agent.
   const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
   const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { conversationId: routeConversationId } = useOptionalConversationId();
+  const { data: activeConversation } = useActiveConversation();
+  const conversationId = routeConversationId ?? activeConversation?.id ?? null;
+  const agentKind =
+    activeConversation?.id === conversationId
+      ? activeConversation.agent_kind
+      : undefined;
+  const supportsManualCondensation =
+    activeConversation?.id === conversationId
+      ? activeConversation.supports_manual_condensation
+      : undefined;
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
@@ -46,38 +60,23 @@ export const useSlashCommand = (
     useState<SlashCompletionKind>("command");
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // Build slash command items from built-in commands + skills:
-  // - Built-in commands (like /new) are included for V1 conversations
-  // - /new is cloud-only — local backends don't surface it
-  // - /model lists/switches LLM profiles; both local and cloud support them
-  // - Skills with explicit "/" triggers use those triggers
-  // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
-    const items: SlashCommandItem[] = BUILT_IN_COMMANDS.filter((cmd) => {
-      if (cmd.command === "/new") return isCloud;
-      return true;
+    return buildSlashCommandCatalog({
+      skills,
+      isSkillsLoading,
+      isCloud,
+      hasConversation: !!conversationId,
+      agentKind,
+      supportsManualCondensation,
     });
-
-    // Wait for skills to finish initial load so all commands appear together
-    if (isSkillsLoading) return items;
-
-    if (!skills) return items;
-    skills.forEach((skill) => {
-      const triggers = skill.triggers || [];
-      const slashTriggers = triggers.filter((t) => t.startsWith("/"));
-
-      if (slashTriggers.length > 0) {
-        // Skill has explicit slash triggers
-        slashTriggers.forEach((trigger) => {
-          items.push({ skill, command: trigger });
-        });
-      } else if (skill.type === "agentskills") {
-        // AgentSkills without slash triggers get a derived command
-        items.push({ skill, command: `/${skill.name}` });
-      }
-    });
-    return items;
-  }, [skills, isSkillsLoading, isCloud]);
+  }, [
+    skills,
+    isSkillsLoading,
+    isCloud,
+    conversationId,
+    agentKind,
+    supportsManualCondensation,
+  ]);
 
   const modelProfileItems = useMemo<SlashCommandItem[]>(() => {
     return (profilesData?.profiles ?? []).map((profile) => {
@@ -106,9 +105,9 @@ export const useSlashCommand = (
       (item) =>
         item.command.toLowerCase().includes(lower) ||
         item.skill.name.toLowerCase().includes(lower) ||
-        item.skill.content?.toLowerCase().includes(lower),
+        getSlashCommandDescription(item, t)?.toLowerCase().includes(lower),
     );
-  }, [completionKind, modelProfileItems, slashItems, filterText]);
+  }, [completionKind, modelProfileItems, slashItems, filterText, t]);
 
   // Keep refs in sync so handleSlashKeyDown always reads the latest values,
   // avoiding stale closures from React's batched state updates.
@@ -147,11 +146,15 @@ export const useSlashCommand = (
     if (cursor < 0) return null;
 
     const textBeforeCursor = text.slice(0, cursor);
+    const normalizedTextBeforeCursor =
+      stripSlashCommandFormatting(textBeforeCursor);
 
-    const modelMatch = textBeforeCursor.match(/(^|\s)(\/model(?:\s+\S*)?)$/);
+    const modelMatch = normalizedTextBeforeCursor.match(
+      /(^|\s)(\/model(?:\s+\S*)?)$/,
+    );
     if (modelMatch) {
       const modelCommand = modelMatch[2];
-      const start = textBeforeCursor.length - modelCommand.length;
+      const start = textBeforeCursor.lastIndexOf("/");
       const afterCursor = text.slice(cursor);
       const trailing = afterCursor.match(/^\S*/);
       const end = cursor + (trailing ? trailing[0].length : 0);
@@ -166,11 +169,11 @@ export const useSlashCommand = (
 
     // Match a "/" preceded by whitespace or at position 0, followed by
     // non-whitespace characters, ending right at the cursor.
-    const match = textBeforeCursor.match(/(^|\s)(\/\S*)$/);
+    const match = normalizedTextBeforeCursor.match(/(^|\s)(\/\S*)$/);
     if (!match) return null;
 
     const slashWord = match[2]; // e.g. "/hel"
-    const start = textBeforeCursor.length - slashWord.length;
+    const start = textBeforeCursor.lastIndexOf("/");
     // The end of the slash word extends past the cursor to include any
     // contiguous non-whitespace characters (covers the case where the
     // cursor sits in the middle of a word).
@@ -178,7 +181,12 @@ export const useSlashCommand = (
     const trailing = afterCursor.match(/^\S*/);
     const end = cursor + (trailing ? trailing[0].length : 0);
 
-    return { kind: "command", text: slashWord.slice(1), start, end }; // strip leading "/"
+    return {
+      kind: "command",
+      text: slashWord.slice(1),
+      start,
+      end,
+    }; // strip leading "/"
   }, [chatInputRef]);
 
   // Update the menu state based on current input

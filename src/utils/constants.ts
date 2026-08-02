@@ -1,4 +1,5 @@
-import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import type { BuiltInSlashCommandItem } from "#/types/slash-command";
+import { I18nKey } from "#/i18n/declaration";
 
 export const JSON_VIEW_THEME = {
   base00: "transparent", // background
@@ -44,45 +45,164 @@ export const MODEL_COMMAND = "/model";
 /** The /goal slash command — drives the agent toward an objective, judging completion each round. */
 export const GOAL_COMMAND = "/goal";
 
+export const NEW_COMMAND = "/new";
+export const HELP_COMMAND = "/help";
+export const HISTORY_COMMAND = "/history";
+export const SETTINGS_COMMAND = "/settings";
+export const CONFIRM_COMMAND = "/confirm";
+export const CONDENSE_COMMAND = "/condense";
+export const SKILLS_COMMAND = "/skills";
+export const FEEDBACK_COMMAND = "/feedback";
+export const FORK_COMMAND = "/fork";
+
+/**
+ * Commands shared with OpenHands CLI help, in the order used by the CLI.
+ * `/exit` is intentionally omitted because Canvas runs in the browser.
+ */
+export const CLI_HELP_COMMAND_ORDER = [
+  HELP_COMMAND,
+  NEW_COMMAND,
+  HISTORY_COMMAND,
+  SETTINGS_COMMAND,
+  CONFIRM_COMMAND,
+  CONDENSE_COMMAND,
+  SKILLS_COMMAND,
+  FEEDBACK_COMMAND,
+] as const;
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
-export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
+export const BUILT_IN_COMMANDS: BuiltInSlashCommandItem[] = [
+  {
+    skill: {
+      name: "help",
+      type: "agentskills",
+      source: null,
+      triggers: [HELP_COMMAND],
+    },
+    command: HELP_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
+  },
   {
     skill: {
       name: "new",
       type: "agentskills",
-      content: "Creates a new conversation using the same runtime",
-      triggers: ["/new"],
+      source: null,
+      triggers: [NEW_COMMAND],
     },
-    command: "/new",
+    command: NEW_COMMAND,
+    availability: "conversation",
+    descriptionKey: I18nKey.SLASH_COMMAND$NEW_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "history",
+      type: "agentskills",
+      source: null,
+      triggers: [HISTORY_COMMAND],
+    },
+    command: HISTORY_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$HISTORY_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "settings",
+      type: "agentskills",
+      source: null,
+      triggers: [SETTINGS_COMMAND],
+    },
+    command: SETTINGS_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$SETTINGS_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "confirm",
+      type: "agentskills",
+      source: null,
+      triggers: [CONFIRM_COMMAND],
+    },
+    command: CONFIRM_COMMAND,
+    availability: "confirmation",
+    descriptionKey: I18nKey.SLASH_COMMAND$CONFIRM_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "condense",
+      type: "agentskills",
+      source: null,
+      triggers: [CONDENSE_COMMAND],
+    },
+    command: CONDENSE_COMMAND,
+    availability: "manual-condensation-conversation",
+    descriptionKey: I18nKey.SLASH_COMMAND$CONDENSE_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "skills",
+      type: "agentskills",
+      source: null,
+      triggers: [SKILLS_COMMAND],
+    },
+    command: SKILLS_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$SKILLS_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "feedback",
+      type: "agentskills",
+      source: null,
+      triggers: [FEEDBACK_COMMAND],
+    },
+    command: FEEDBACK_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$FEEDBACK_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "fork",
+      type: "agentskills",
+      source: null,
+      triggers: [FORK_COMMAND],
+    },
+    command: FORK_COMMAND,
+    availability: "local-conversation",
+    descriptionKey: I18nKey.SLASH_COMMAND$FORK_DESCRIPTION,
   },
   {
     skill: {
       name: "btw",
       type: "agentskills",
-      content: "Ask the agent a side question without derailing the main task",
+      source: null,
       triggers: [BTW_COMMAND],
     },
     command: BTW_COMMAND,
+    availability: "conversation",
+    descriptionKey: I18nKey.SLASH_COMMAND$BTW_DESCRIPTION,
   },
   {
     skill: {
       name: "model",
       type: "agentskills",
-      content:
-        "List saved LLM profiles, or switch the conversation LLM profile with /model <name>",
+      source: null,
       triggers: [MODEL_COMMAND],
     },
     command: MODEL_COMMAND,
+    availability: "always",
+    descriptionKey: I18nKey.SLASH_COMMAND$MODEL_DESCRIPTION,
   },
   {
     skill: {
       name: "goal",
       type: "agentskills",
-      content:
-        "Drive the agent toward an objective until a judge says it's done — /goal <objective> or /goal --max <n> <objective>",
+      source: null,
       triggers: [GOAL_COMMAND],
     },
     command: GOAL_COMMAND,
+    availability: "conversation",
+    descriptionKey: I18nKey.SLASH_COMMAND$GOAL_DESCRIPTION,
   },
 ];
 

@@ -10,17 +10,36 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>();
+  const definitions = await import("#/i18n/translation.json");
+  const translations = definitions.default as Record<
+    string,
+    Record<string, string>
+  >;
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => translations[key]?.de ?? key,
+      i18n: { language: "de", exists: () => true },
+    }),
+  };
+});
+
 const mockSkills = vi.hoisted(() => ({
   data: undefined as unknown[] | undefined,
   isLoading: false,
 }));
 
 const mockConversation = vi.hoisted(() => ({
-  data: undefined as { conversation_version?: "V0" | "V1" } | undefined,
-}));
-
-vi.mock("#/hooks/query/use-skills", () => ({
-  useSkills: () => mockSkills,
+  data: undefined as
+    | {
+        id: string;
+        conversation_version?: "V0" | "V1";
+        agent_kind?: "openhands" | "acp" | null;
+        supports_manual_condensation?: boolean;
+      }
+    | undefined,
 }));
 
 const mockLlmProfiles = vi.hoisted(() => ({
@@ -63,11 +82,12 @@ function makeChatInputRef() {
 }
 
 function setInputText(element: HTMLDivElement, text: string) {
-  element.textContent = text;
-  element.innerText = text;
-  document.body.appendChild(element);
+  const target = element;
+  target.textContent = text;
+  target.innerText = text;
+  document.body.appendChild(target);
 
-  const textNode = element.firstChild;
+  const textNode = target.firstChild;
   if (!textNode) return;
 
   const range = document.createRange();
@@ -102,9 +122,14 @@ describe("useSlashCommand", () => {
     __resetActiveStoreForTests();
   });
 
-  it("excludes /new from the built-in commands on a local backend", () => {
+  it("includes local conversation commands on a local backend", () => {
     // Arrange — default active backend is the bundled local one.
-    mockConversation.data = { conversation_version: "V1" };
+    mockConversation.data = {
+      id: "local-conversation",
+      conversation_version: "V1",
+      agent_kind: "openhands",
+      supports_manual_condensation: true,
+    };
     mockSkills.data = [makeSkill("code-search", ["/code-search"])];
 
     // Act
@@ -113,15 +138,26 @@ describe("useSlashCommand", () => {
 
     // Assert
     const commands = result.current.filteredItems.map((i) => i.command);
-    expect(commands).not.toContain("/new");
-    expect(commands).toEqual(expect.arrayContaining(["/btw", "/code-search"]));
+    expect(commands).toEqual(
+      expect.arrayContaining([
+        "/new",
+        "/confirm",
+        "/condense",
+        "/fork",
+        "/btw",
+        "/code-search",
+      ]),
+    );
   });
 
-  it("includes /new in the built-in commands on a cloud backend", () => {
+  it("excludes commands without Cloud API support on a cloud backend", () => {
     // Arrange
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
-    mockConversation.data = { conversation_version: "V1" };
+    mockConversation.data = {
+      id: "cloud-conversation",
+      conversation_version: "V1",
+    };
     mockSkills.data = [];
 
     const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -133,7 +169,91 @@ describe("useSlashCommand", () => {
 
     // Assert
     const commands = result.current.filteredItems.map((i) => i.command);
+    expect(commands).toContain("/help");
     expect(commands).toContain("/new");
+    expect(commands).toContain("/confirm");
+    expect(commands).not.toContain("/condense");
+    expect(commands).not.toContain("/fork");
+  });
+
+  it("omits /confirm from local ACP conversations", () => {
+    mockConversation.data = {
+      id: "local-acp-conversation",
+      conversation_version: "V1",
+      agent_kind: "acp",
+      supports_manual_condensation: false,
+    };
+    mockSkills.data = [];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    expect(result.current.filteredItems.map((i) => i.command)).not.toContain(
+      "/confirm",
+    );
+    expect(result.current.filteredItems.map((i) => i.command)).not.toContain(
+      "/condense",
+    );
+  });
+
+  it("omits /condense when the local OpenHands condenser is incompatible", () => {
+    mockConversation.data = {
+      id: "local-conversation",
+      conversation_version: "V1",
+      agent_kind: "openhands",
+      supports_manual_condensation: false,
+    };
+    mockSkills.data = [];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    expect(result.current.filteredItems.map((i) => i.command)).not.toContain(
+      "/condense",
+    );
+  });
+
+  it("only includes context-free built-ins and skill commands before a conversation", () => {
+    mockSkills.data = [makeSkill("code-search", ["/code-search"])];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    expect(result.current.filteredItems.map((i) => i.command)).toEqual([
+      "/help",
+      "/history",
+      "/settings",
+      "/skills",
+      "/feedback",
+      "/model",
+      "/code-search",
+    ]);
+  });
+
+  it("matches /help despite contentEditable zero-width formatting characters", () => {
+    mockSkills.data = [];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "\u200B/he\u200Blp");
+    const { result } = renderHook(() => useSlashCommand(ref));
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.isMenuOpen).toBe(true);
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/help",
+    ]);
+  });
+
+  it("filters built-ins by their localized displayed description", () => {
+    mockSkills.data = [];
+    const ref = makeChatInputRef();
+    setInputText(ref.current, "/verfügbare");
+    const { result } = renderHook(() => useSlashCommand(ref));
+
+    act(() => result.current.updateSlashMenu());
+
+    expect(result.current.filteredItems.map((item) => item.command)).toEqual([
+      "/help",
+    ]);
   });
 
   it("suggests saved LLM profiles after /model on a local backend", () => {

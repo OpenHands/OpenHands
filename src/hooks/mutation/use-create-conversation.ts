@@ -47,12 +47,16 @@ export interface CreateConversationVariables {
   // active AgentProfile (if any) is used so home-composed conversations
   // launch from the user's selected profile (#3727).
   agentProfileId?: string;
+  // Reuse an existing sandbox/runtime while still going through the shared
+  // creation path (used by /new). This must remain independent of
+  // parentConversationId: /new creates a fresh conversation, not a fork.
+  sandboxId?: string;
   entryPoint?: string; // analytics only; not forwarded to the service
 }
 
 export const CREATE_CONVERSATION_MUTATION_KEY = ["create-conversation"];
 
-interface CreateConversationResponse {
+export interface CreateConversationResponse {
   conversation_id: string;
   session_api_key: string | null;
   url: string | null;
@@ -90,6 +94,7 @@ export const useCreateConversation = () => {
         parentConversationId,
         agentType,
         agentProfileId,
+        sandboxId,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
@@ -193,19 +198,20 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Only extend the call with the profile tail when launching from a
-      // profile, so a plain create stays byte-identical to the legacy
-      // agent_settings path (#3727). sandboxId is unused here.
+      // Only extend the call when a sandbox or profile is present, so a plain
+      // create stays byte-identical to the legacy agent_settings path (#3727).
+      // /new supplies sandboxId and still needs the same active-profile
+      // resolution as the New Chat button.
       // TODO(#1587): createConversation has grown to 11 positional params;
       // refactor it to an options object so this position-skipping tail isn't
       // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
+      const launchArgs:
+        | [string | undefined, string, AgentKind | undefined]
+        | [string]
+        | [] = effectiveAgentProfileId
+        ? [sandboxId, effectiveAgentProfileId, resolvedAgentProfile?.agent_kind]
+        : sandboxId
+          ? [sandboxId]
           : [];
 
       const conversation =
@@ -224,7 +230,7 @@ export const useCreateConversation = () => {
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
+          ...launchArgs,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the

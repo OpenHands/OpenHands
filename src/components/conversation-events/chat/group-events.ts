@@ -66,6 +66,7 @@ export const groupEvents = (
   events: OpenHandsEvent[],
   minSize: number = EVENT_GROUP_MIN_SIZE,
   allEvents: OpenHandsEvent[] = events,
+  breakBeforeEventIds: ReadonlySet<string> = new Set(),
 ): RenderedItem[] => {
   if (minSize < 1) {
     throw new Error("minSize must be at least 1");
@@ -92,6 +93,10 @@ export const groupEvents = (
   };
 
   events.forEach((event, index) => {
+    if (breakBeforeEventIds.has(String(event.id))) {
+      flushRun();
+    }
+
     if (isGroupableEvent(event)) {
       const thoughtAction = getThoughtSourceAction(event, allEvents);
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {

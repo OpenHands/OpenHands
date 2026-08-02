@@ -207,6 +207,39 @@ describe("useCreateConversation", () => {
     });
   });
 
+  it("preserves the active AgentProfile when reusing a sandbox for /new", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: "profile-abc",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        // This assertion is about launch arguments; leaving the local
+        // conversation unresolved avoids the unrelated plugin-metadata fetch.
+        app_conversation_id: null,
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({
+      sandboxId: "sandbox-abc",
+      entryPoint: "new_command",
+    });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(call?.[8]).toBe("sandbox-abc");
+    expect(call?.[9]).toBe("profile-abc");
+  });
+
   it("awaits the profiles fetch so an early send still launches from the active profile", async () => {
     // A send fired before the home profiles query resolves must block on the
     // fetch, not fall through to the agent_settings path (#1571 review F2).

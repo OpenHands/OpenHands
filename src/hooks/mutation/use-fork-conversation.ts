@@ -5,8 +5,8 @@ import { DirectConversationInfo } from "#/api/agent-server-adapter";
 interface ForkConversationVariables {
   /** The conversation being branched from. */
   sourceConversationId: string;
-  /** The message the action was invoked on. */
-  eventId: string;
+  /** The message the action was invoked on; omit to copy the whole conversation. */
+  eventId?: string;
   /** Set for an "edit message" branch: exclude the message and restore this text. */
   editText?: string | null;
   /** Optional title for the fork, so it reads distinctly from its source. */
@@ -20,10 +20,9 @@ interface ForkConversationResult {
 }
 
 /**
- * Branches a conversation from a message. Edit-mode (`editText` set) resolves
- * the message's parent (via getEventParentId) and branches there, excluding
- * the message; otherwise it branches at the message (inclusive). Local
- * agent-server only.
+ * Copies a whole conversation when `eventId` is omitted. Otherwise branches
+ * from that message; edit-mode (`editText` set) resolves the message's parent
+ * and excludes the edited message. Local agent-server only.
  */
 export const useForkConversation = () => {
   const queryClient = useQueryClient();
@@ -39,7 +38,7 @@ export const useForkConversation = () => {
       let fromEventId = eventId;
       let excluded = false;
 
-      if (editText != null) {
+      if (editText != null && eventId) {
         const parentId = await AgentServerConversationService.getEventParentId(
           sourceConversationId,
           eventId,
@@ -59,7 +58,7 @@ export const useForkConversation = () => {
       // Older agent-servers (< 1.31.0) ignore `from_event_id` and copy the
       // whole conversation. When honored, the fork's HEAD is `fromEventId`; if
       // not, the message wasn't excluded — don't prefill (would duplicate).
-      if (excluded) {
+      if (excluded && fromEventId) {
         const leafEventId = (info as { leaf_event_id?: string | null })
           .leaf_event_id;
         if (leafEventId !== fromEventId) {

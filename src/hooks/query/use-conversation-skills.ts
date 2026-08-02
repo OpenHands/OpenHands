@@ -2,12 +2,15 @@ import { useActiveConversation } from "./use-active-conversation";
 import { useSkills } from "./use-skills";
 
 /**
- * Skills catalog scoped to the active conversation's attached workspace, so
- * the slash-command menu and skills modal list the same project skills that
- * were loaded into the conversation. Falls back to the global workspace dir
- * for "No workspace" conversations (``selected_workspace`` is null).
+ * Skill metadata used for command discovery and the skills modal. Local
+ * conversations query the catalog available in their attached workspace.
+ * Conversation-loaded resources belong to `/skills` and deliberately use a
+ * separate service owner. "No workspace" falls back to the global working
+ * directory.
  */
 export const useConversationSkills = () => {
   const conversation = useActiveConversation();
-  return useSkills(conversation.data?.selected_workspace ?? undefined);
+  const projectDir = conversation.data?.selected_workspace ?? undefined;
+
+  return useSkills(projectDir);
 };

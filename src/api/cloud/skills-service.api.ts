@@ -8,6 +8,10 @@ interface CloudSkillsPage {
   next_page_id: string | null;
 }
 
+interface CloudConversationSkillsResponse {
+  skills?: Array<Omit<SkillInfo, "source"> & { source?: string | null }>;
+}
+
 const PAGE_LIMIT = 100;
 
 function getActiveCloudBackend(): Backend {
@@ -46,4 +50,27 @@ export async function fetchCloudSkills(): Promise<SkillInfo[]> {
   } while (pageId);
 
   return skills;
+}
+
+/**
+ * Fetch the skills actually loaded into a Cloud conversation.
+ *
+ * Unlike the sparse `/skills/search` catalog, this endpoint includes each
+ * skill's content, allowing callers to derive descriptions from AgentSkills
+ * frontmatter without inventing metadata for personal or project skills.
+ */
+export async function fetchCloudConversationSkills(
+  conversationId: string,
+): Promise<SkillInfo[]> {
+  const backend = getActiveCloudBackend();
+  const response = await callCloudProxy<CloudConversationSkillsResponse>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${encodeURIComponent(conversationId)}/skills`,
+  });
+
+  return (response.skills ?? []).map((skill) => ({
+    ...skill,
+    source: skill.source ?? null,
+  }));
 }

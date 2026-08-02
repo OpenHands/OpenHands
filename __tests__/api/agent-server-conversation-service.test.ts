@@ -12,6 +12,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { setSessionConfirmationPolicy } from "#/services/confirmation-policy-session";
 import {
   getFetchCall,
   getJsonBody,
@@ -27,6 +28,9 @@ const {
   mockSettingsClient,
   mockSwitchProfile,
   mockSwitchLLM,
+  mockGetConversation,
+  mockSetConfirmationPolicy,
+  mockCondenseConversation,
   mockGetSettings,
   mockGetSettingsForConversation,
   mockGetProfile,
@@ -41,6 +45,9 @@ const {
   mockSettingsClient: vi.fn(),
   mockSwitchProfile: vi.fn(),
   mockSwitchLLM: vi.fn(),
+  mockGetConversation: vi.fn(),
+  mockSetConfirmationPolicy: vi.fn(),
+  mockCondenseConversation: vi.fn(),
   mockGetSettings: vi.fn(),
   mockGetSettingsForConversation: vi.fn(),
   mockGetProfile: vi.fn(),
@@ -114,12 +121,16 @@ describe("AgentServerConversationService", () => {
     });
     mockSwitchProfile.mockReset();
     mockSwitchLLM.mockReset();
+    mockGetConversation.mockReset();
+    mockSetConfirmationPolicy.mockReset();
+    mockCondenseConversation.mockReset();
     fetchMock.mockReset();
     global.fetch = originalFetch;
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
+    setSessionConfirmationPolicy(null);
 
     mockConversationClient.mockReturnValue({
       createConversation: async (payload: unknown) => {
@@ -139,7 +150,9 @@ describe("AgentServerConversationService", () => {
         return response.data;
       },
       searchConversations: vi.fn(),
-      getConversation: vi.fn(),
+      getConversation: mockGetConversation,
+      setConfirmationPolicy: mockSetConfirmationPolicy,
+      condenseConversation: mockCondenseConversation,
       sendEvent: vi.fn(),
       updateConversation: vi.fn(),
       switchProfile: mockSwitchProfile,
@@ -166,6 +179,118 @@ describe("AgentServerConversationService", () => {
     });
     mockSettingsClient.mockReturnValue({
       listSecrets: vi.fn().mockResolvedValue({ secrets: [] }),
+    });
+  });
+
+  describe("confirmation policy", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("reads the policy from the running local conversation", async () => {
+      mockGetConversation.mockResolvedValue({
+        confirmation_policy: { kind: "ConfirmRisky", threshold: "HIGH" },
+      });
+
+      await expect(
+        AgentServerConversationService.getConfirmationPolicy(
+          "conv-1",
+          "http://runtime.example/api/conversations/conv-1",
+          "runtime-key",
+        ),
+      ).resolves.toEqual({ kind: "ConfirmRisky", threshold: "HIGH" });
+
+      expect(mockGetConversation).toHaveBeenCalledWith("conv-1");
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "runtime-key",
+        }),
+      );
+    });
+
+    it("applies a policy immediately to the running local conversation", async () => {
+      mockSetConfirmationPolicy.mockResolvedValue({ success: true });
+      const policy = { kind: "NeverConfirm" };
+
+      await AgentServerConversationService.setConfirmationPolicy(
+        "conv-1",
+        policy,
+        "http://runtime.example/api/conversations/conv-1",
+        "runtime-key",
+      );
+
+      expect(mockSetConfirmationPolicy).toHaveBeenCalledWith("conv-1", policy);
+    });
+
+    it("defensively rejects Cloud policy requests", async () => {
+      const cloudBackend: Backend = {
+        id: "prod-confirm",
+        name: "Production",
+        host: "https://app.all-hands.dev",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      };
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+
+      await expect(
+        AgentServerConversationService.setConfirmationPolicy("conv-1", {
+          kind: "AlwaysConfirm",
+        }),
+      ).rejects.toThrow("isn't supported on the cloud backend yet");
+      expect(mockSetConfirmationPolicy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("manual condensation", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("requests condensation from the running local conversation", async () => {
+      mockCondenseConversation.mockResolvedValue({ success: true });
+
+      await AgentServerConversationService.condenseConversation(
+        "conv-1",
+        "http://runtime.example/api/conversations/conv-1",
+        "runtime-key",
+      );
+
+      expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
+      expect(ConversationClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: "http://runtime.example",
+          apiKey: "runtime-key",
+        }),
+      );
+    });
+
+    it("defensively rejects Cloud condensation requests", async () => {
+      const cloudBackend: Backend = {
+        id: "prod-condense",
+        name: "Production",
+        host: "https://app.all-hands.dev",
+        apiKey: "bearer-token",
+        kind: "cloud",
+      };
+      setRegisteredBackends([cloudBackend]);
+      setActiveSelection({ backendId: cloudBackend.id });
+
+      await expect(
+        AgentServerConversationService.condenseConversation("conv-1"),
+      ).rejects.toThrow("isn't supported on the cloud backend yet");
+      expect(mockCondenseConversation).not.toHaveBeenCalled();
     });
   });
 
@@ -285,6 +410,64 @@ describe("AgentServerConversationService", () => {
       expect(mockHttpPost).toHaveBeenCalledWith(
         "/api/conversations",
         expect.objectContaining({ title_llm_profile: "Titles" }),
+      );
+    });
+
+    it("seeds later local conversations with the session confirmation policy", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-2",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+      setSessionConfirmationPolicy({ kind: "AlwaysConfirm" });
+
+      await AgentServerConversationService.createConversation();
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({
+          confirmation_policy: { kind: "AlwaysConfirm" },
+        }),
+      );
+    });
+
+    it("does not apply the session confirmation policy to an ACP launch", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { agent_kind: "acp" },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { agent_kind: "acp" },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "acp-conversation",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+      setSessionConfirmationPolicy({ kind: "AlwaysConfirm" });
+
+      await AgentServerConversationService.createConversation();
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.not.objectContaining({
+          confirmation_policy: { kind: "AlwaysConfirm" },
+        }),
       );
     });
 
@@ -735,6 +918,76 @@ describe("AgentServerConversationService", () => {
       // ``current_model_name`` wins the precedence chain in the adapter.
       expect(conversation?.agent_kind).toBe("acp");
       expect(conversation?.llm_model).toBe("Claude Opus 4.7");
+    });
+
+    it("derives manual-condensation support from the running agent's condenser", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-llm-condenser",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "Agent",
+              condenser: { kind: "LLMSummarizingCondenser" },
+            },
+          },
+          {
+            id: "conv-pipeline-condenser",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "Agent",
+              condenser: {
+                kind: "PipelineCondenser",
+                condensers: [
+                  { kind: "NoOpCondenser" },
+                  { kind: "LLMSummarizingCondenser" },
+                ],
+              },
+            },
+          },
+          {
+            id: "conv-noop-condenser",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "Agent",
+              condenser: { kind: "NoOpCondenser" },
+            },
+          },
+          {
+            id: "conv-custom-condenser",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "Agent",
+              condenser: { kind: "CustomCondenser" },
+            },
+          },
+          {
+            id: "conv-no-condenser",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: { kind: "ACPAgent", condenser: null },
+          },
+        ],
+      });
+
+      const conversations =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-llm-condenser",
+          "conv-pipeline-condenser",
+          "conv-noop-condenser",
+          "conv-custom-condenser",
+          "conv-no-condenser",
+        ]);
+
+      expect(
+        conversations.map(
+          (conversation) => conversation?.supports_manual_condensation,
+        ),
+      ).toEqual([true, true, false, false, false]);
     });
 
     it("sources acp_server from the agent when the acpserver tag is absent", async () => {

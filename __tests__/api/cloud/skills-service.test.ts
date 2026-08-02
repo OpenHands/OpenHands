@@ -8,6 +8,17 @@ import type { Backend } from "#/api/backend-registry/types";
 import SkillsService from "#/api/skills-service";
 import { getFetchCall, mockJsonResponse } from "./fetch-test-utils";
 
+vi.mock("@openhands/extensions/skills", () => ({
+  SKILLS_CATALOG: [
+    {
+      name: "bundled-skill",
+      description: "Bundled skill description",
+      triggers: ["/bundled"],
+      content: "Bundled skill content",
+    },
+  ],
+}));
+
 const cloudBackend: Backend = {
   id: "prod",
   name: "Production",
@@ -78,5 +89,131 @@ describe("SkillsService.getSkills against cloud backend", () => {
 
     expect(skills.map((s) => s.name)).toEqual(["alpha", "beta", "gamma"]);
     expect(skills[1]).toMatchObject({ triggers: ["foo"] });
+  });
+
+  it("adds bundled descriptions to matching sparse Cloud skills", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        items: [
+          {
+            name: "bundled-skill",
+            type: "knowledge",
+            source: "global",
+            triggers: ["/bundled"],
+          },
+          {
+            name: "custom-skill",
+            type: "knowledge",
+            source: "user",
+            triggers: ["/custom"],
+          },
+        ],
+        next_page_id: null,
+      }),
+    );
+
+    const skills = await SkillsService.getSkills();
+
+    expect(skills[0]).toMatchObject({
+      name: "bundled-skill",
+      source: "global",
+      description: "Bundled skill description",
+    });
+    expect(skills[0]).not.toHaveProperty("content");
+    expect(skills[1]).toEqual({
+      name: "custom-skill",
+      type: "knowledge",
+      source: "user",
+      triggers: ["/custom"],
+    });
+  });
+
+  it("does not enrich same-named user or project skills", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        items: [
+          {
+            name: "bundled-skill",
+            type: "knowledge",
+            source: "user",
+          },
+          {
+            name: "bundled-skill",
+            type: "knowledge",
+            source: "project",
+          },
+          {
+            name: "bundled-skill",
+            type: "knowledge",
+            source: "public",
+          },
+        ],
+        next_page_id: null,
+      }),
+    );
+
+    const skills = await SkillsService.getSkills();
+
+    expect(skills[0]).not.toHaveProperty("description");
+    expect(skills[1]).not.toHaveProperty("description");
+    expect(skills[2]).toMatchObject({
+      source: "public",
+      description: "Bundled skill description",
+    });
+  });
+
+  it("preserves descriptions supplied by Cloud", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        items: [
+          {
+            name: "bundled-skill",
+            type: "knowledge",
+            source: "global",
+            description: "Cloud description",
+          },
+        ],
+        next_page_id: null,
+      }),
+    );
+
+    await expect(SkillsService.getSkills()).resolves.toMatchObject([
+      { description: "Cloud description" },
+    ]);
+  });
+
+  it("normalizes conversation-loaded Cloud skills separately from the catalog", async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockJsonResponse({
+        skills: [
+          {
+            name: "custom-skill",
+            type: "agentskills",
+            content:
+              "---\nname: custom-skill\ndescription: Custom description\n---\nInstructions",
+            triggers: ["/custom"],
+          },
+        ],
+      }),
+    );
+
+    const skills =
+      await SkillsService.getConversationLoadedSkills("conversation/1");
+
+    const [url, init] = getFetchCall(fetchMock, 0);
+    expect(url).toBe(
+      "https://app.all-hands.dev/api/v1/app-conversations/conversation%2F1/skills",
+    );
+    expect(init).toMatchObject({
+      method: "GET",
+      headers: { Authorization: "Bearer bearer-token" },
+    });
+    expect(skills).toEqual([
+      {
+        name: "custom-skill",
+        source: null,
+        description: "Custom description",
+      },
+    ]);
   });
 });

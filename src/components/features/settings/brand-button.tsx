@@ -15,6 +15,7 @@ interface BrandButtonProps {
   ariaLabel?: string;
   /** Indicates busy/loading state for screen readers */
   "aria-busy"?: boolean;
+  "aria-pressed"?: boolean;
 }
 
 export const BrandButton = forwardRef<
@@ -33,6 +34,7 @@ export const BrandButton = forwardRef<
     startContent,
     ariaLabel,
     "aria-busy": ariaBusy,
+    "aria-pressed": ariaPressed,
   },
   ref,
 ) {
@@ -48,6 +50,7 @@ export const BrandButton = forwardRef<
       onClick={onClick}
       aria-label={ariaLabel}
       aria-busy={ariaBusy}
+      aria-pressed={ariaPressed}
       className={cn(
         formControlButtonClassName,
         variant === "primary" &&

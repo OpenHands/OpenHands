@@ -117,6 +117,16 @@ export const displaySuccessToast = (message: string) => {
   );
 };
 
+export const displayLoadingToast = (message: string) =>
+  toast.loading(
+    <span className="[word-break:break-word] [overflow-wrap:anywhere]">
+      {message}
+    </span>,
+    TOAST_OPTIONS,
+  );
+
+export const dismissToast = (toastId: string) => toast.dismiss(toastId);
+
 export const displaySuccessToastWithLink = (
   message: string,
   linkLabel: string,

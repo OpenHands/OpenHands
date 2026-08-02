@@ -149,6 +149,12 @@ export interface AppConversation {
    * carry the ACP subprocess model for display).
    */
   agent_kind?: "openhands" | "acp" | null;
+  /**
+   * Whether the running conversation's instantiated condenser accepts an
+   * explicit manual condensation request. Derived from the local Agent Server
+   * response; absent on backends that do not expose the capability.
+   */
+  supports_manual_condensation?: boolean;
   launched_agent_profile?: LaunchedAgentProfile | null;
   /**
    * For ACP conversations, the registry key of the ACP CLI server the

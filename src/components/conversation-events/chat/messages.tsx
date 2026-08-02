@@ -7,7 +7,10 @@ import { EventGroup } from "./event-message-components/event-group";
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { useModelStore } from "#/stores/model-store";
 import { ModelMessages } from "#/components/features/chat/model-messages";
+import { SlashCommandMessages } from "#/components/features/chat/slash-command-messages";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
+import { resolveSlashCommandOutputPlacements } from "./slash-command-output-placement";
 // TODO: Implement microagent functionality for V1 when APIs support V1 event IDs
 // import { AgentState } from "#/types/agent-state";
 // import MemoryIcon from "#/icons/memory_icon.svg?react";
@@ -41,6 +44,18 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       }
       return ids.size > 0 ? ids : null;
     }, [modelEntries]);
+    const slashCommandEntries = useSlashCommandOutputStore((state) =>
+      conversationId ? state.entriesByScope[conversationId] : undefined,
+    );
+    const slashCommandPlacements = React.useMemo(
+      () =>
+        resolveSlashCommandOutputPlacements(
+          slashCommandEntries ?? [],
+          allEvents,
+          messages,
+        ),
+      [slashCommandEntries, allEvents, messages],
+    );
 
     const maybeRenderModelMessages = (eventId: string | number | undefined) => {
       if (!modelAnchorIds || eventId === undefined) return null;
@@ -48,6 +63,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       if (!modelAnchorIds.has(key)) return null;
       return (
         <ModelMessages conversationId={conversationId} anchorEventId={key} />
+      );
+    };
+    const renderSlashCommandMessages = (
+      entries: NonNullable<typeof slashCommandEntries>,
+    ) => {
+      if (entries.length === 0) return null;
+      return (
+        <SlashCommandMessages
+          outputScopeId={conversationId}
+          outputs={entries}
+        />
       );
     };
 
@@ -58,9 +84,34 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // hoisted out as their own rendered item so they always show up in the
     // message pane and a thought between actions starts a fresh group.
     const renderedItems = React.useMemo(
-      () => groupEvents(messages, undefined, allEvents),
-      [messages, allEvents],
+      () =>
+        groupEvents(
+          messages,
+          undefined,
+          allEvents,
+          slashCommandPlacements.breakBeforeEventIds,
+        ),
+      [messages, allEvents, slashCommandPlacements.breakBeforeEventIds],
     );
+
+    const getRenderedItemStartEventId = (
+      item: (typeof renderedItems)[number],
+    ) =>
+      String(
+        item.kind === "single"
+          ? item.event.id
+          : item.kind === "thought"
+            ? item.action.id
+            : item.events[0]?.id,
+      );
+
+    const firstRenderedItemIndexByEventId = new Map<string, number>();
+    renderedItems.forEach((item, index) => {
+      const eventId = getRenderedItemStartEventId(item);
+      if (!firstRenderedItemIndexByEventId.has(eventId)) {
+        firstRenderedItemIndexByEventId.set(eventId, index);
+      }
+    });
 
     const renderEventMessage = (
       event: OpenHandsEvent,
@@ -81,9 +132,19 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     return (
       <>
         {renderedItems.map((item, itemIndex) => {
+          const itemStartEventId = getRenderedItemStartEventId(item);
+          const slashCommandOutputBeforeItem = renderSlashCommandMessages(
+            firstRenderedItemIndexByEventId.get(itemStartEventId) === itemIndex
+              ? (slashCommandPlacements.entriesBeforeEvent.get(
+                  itemStartEventId,
+                ) ?? [])
+              : [],
+          );
+
           if (item.kind === "single") {
             return (
               <React.Fragment key={`single-${item.event.id}`}>
+                {slashCommandOutputBeforeItem}
                 {/* Thoughts for singles are also hoisted as their own
                     "thought" item, so suppress the inline render to avoid
                     duplication. */}
@@ -96,6 +157,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           if (item.kind === "thought") {
             return (
               <React.Fragment key={`thought-${item.action.id}`}>
+                {slashCommandOutputBeforeItem}
                 <ThoughtEventMessage event={item.action} />
                 {maybeRenderModelMessages(item.action.id)}
               </React.Fragment>
@@ -110,6 +172,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
           const groupKey = item.events[0]?.id ?? `group-${item.startIndex}`;
           return (
             <React.Fragment key={`group-${groupKey}`}>
+              {slashCommandOutputBeforeItem}
               <EventGroup
                 events={item.events}
                 allEvents={allEvents}
@@ -120,13 +183,17 @@ export const Messages: React.FC<MessagesProps> = React.memo(
                 )}
               </EventGroup>
               {item.events.map((event) => (
-                <React.Fragment key={`model-${event.id}`}>
+                <React.Fragment key={`client-command-${event.id}`}>
                   {maybeRenderModelMessages(event.id)}
                 </React.Fragment>
               ))}
             </React.Fragment>
           );
         })}
+        {renderSlashCommandMessages(slashCommandPlacements.tailEntries)}
+        {renderSlashCommandMessages(
+          slashCommandPlacements.unresolvedActiveEntries,
+        )}
       </>
     );
   },

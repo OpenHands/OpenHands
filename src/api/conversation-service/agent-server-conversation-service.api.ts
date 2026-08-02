@@ -1,9 +1,12 @@
 import {
   ConversationSortOrder,
+  type ConfirmationPolicyBase,
+  type ConversationInfo,
   type ForkConversationRequest,
   type LLMConfig,
 } from "@openhands/typescript-client";
 import {
+  AgentServerClient,
   ConversationClient,
   FileClient,
   ProfilesClient,
@@ -23,6 +26,7 @@ import {
   getEffectiveLocalBackend,
 } from "../backend-registry/active-store";
 import { callCloudProxy } from "../cloud/proxy";
+import { fetchCloudConversationHooks } from "../cloud/hooks-service.api";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
@@ -57,6 +61,14 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import type { LoadedResources } from "#/types/slash-command";
+import {
+  parseLoadedResources,
+  toLoadedHookResources,
+} from "#/utils/loaded-resources";
+import SkillsService from "../skills-service";
+import { getSessionConfirmationPolicy } from "#/services/confirmation-policy-session";
+import { withPromiseDeadline } from "#/utils/promise-deadline";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -75,6 +87,8 @@ const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
+export const CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS = 30_000;
+const CLOUD_HOOKS_TRANSPORT_TIMEOUT_SECONDS = 30;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -135,6 +149,21 @@ function normalizeMetrics(value: unknown): MetricsSnapshot | null {
   };
 }
 
+/**
+ * Mirror `CondenserBase.handles_condensation_requests()` for the condenser
+ * variants serialized by the SDK. The instantiated conversation agent is the
+ * authority: current global settings can differ from a named profile or an
+ * existing conversation. Unknown/custom kinds are treated as unsupported.
+ */
+function supportsManualCondensation(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value.kind === "LLMSummarizingCondenser") return true;
+  if (value.kind !== "PipelineCondenser" || !Array.isArray(value.condensers)) {
+    return false;
+  }
+  return value.condensers.some(supportsManualCondensation);
+}
+
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
   if (!isRecord(value)) return null;
   const llm = isRecord(value.llm)
@@ -155,6 +184,7 @@ function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
     acp_server: stringOrNull(value.acp_server),
     acp_model: stringOrNull(value.acp_model),
     llm,
+    supports_manual_condensation: supportsManualCondensation(value.condenser),
   };
 }
 
@@ -445,6 +475,16 @@ class AgentServerConversationService {
       agentProfileKind,
       titleLlmProfile,
     });
+    const sessionConfirmationPolicy = getSessionConfirmationPolicy();
+    const settingsAgentKind = isRecord(settings.agent_settings)
+      ? settings.agent_settings.agent_kind
+      : undefined;
+    const isOpenHandsLaunch = agentProfileId
+      ? agentProfileKind === "openhands"
+      : settingsAgentKind !== "acp";
+    if (sessionConfirmationPolicy && isOpenHandsLaunch) {
+      payload.confirmation_policy = sessionConfirmationPolicy;
+    }
 
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
@@ -619,11 +659,59 @@ class AgentServerConversationService {
     );
   }
 
-  static async getHooks(conversationId: string): Promise<GetHooksResponse> {
+  static async getHooks(
+    conversationId: string,
+    timeoutSeconds?: number,
+  ): Promise<GetHooksResponse> {
     if (!conversationId) {
       return emptyHooksResponse();
     }
+    if (getActiveBackend().backend.kind === "cloud") {
+      return fetchCloudConversationHooks(conversationId, timeoutSeconds);
+    }
     return emptyHooksResponse();
+  }
+
+  /** Read resources loaded for the active conversation. */
+  static async getLoadedResources(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<LoadedResources> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud") {
+      const skillsPromise =
+        SkillsService.getConversationLoadedSkills(conversationId);
+      const hooksPromise = withPromiseDeadline(
+        this.getHooks(
+          conversationId,
+          CLOUD_HOOKS_TRANSPORT_TIMEOUT_SECONDS,
+        ).then(toLoadedHookResources),
+        CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS,
+        "Cloud hooks enrichment exceeded its optional deadline.",
+      ).catch(() => null);
+      const [skills, hooks] = await Promise.all([skillsPromise, hooksPromise]);
+      return { skills, hooks, mcps: null };
+    }
+
+    const client = new AgentServerClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    );
+    try {
+      // Skills are trimmed from conversation responses by default. `/skills`
+      // is an explicit, infrequent request for the authoritative loaded list,
+      // so opt into the full agent-context payload here.
+      const response = await client.get(
+        `/api/conversations/${conversationId}?include_skills=true`,
+      );
+      return parseLoadedResources(response);
+    } finally {
+      client.close();
+    }
   }
 
   static async getRuntimeConversation(
@@ -673,6 +761,59 @@ class AgentServerConversationService {
     };
   }
 
+  /** Read the policy attached to the running local conversation. */
+  static async getConfirmationPolicy(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<ConfirmationPolicyBase> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      throw new Error(
+        "Changing confirmation policy isn't supported on the cloud backend yet.",
+      );
+    }
+
+    const conversation = await new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).getConversation<ConversationInfo>(conversationId);
+    return conversation.confirmation_policy;
+  }
+
+  /** Apply a policy immediately to the running local conversation. */
+  static async setConfirmationPolicy(
+    conversationId: string,
+    policy: ConfirmationPolicyBase,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      throw new Error(
+        "Changing confirmation policy isn't supported on the cloud backend yet.",
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).setConfirmationPolicy(conversationId, policy);
+  }
+
+  /** Force condensation for a compatible running local conversation. */
+  static async condenseConversation(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      throw new Error(
+        "Conversation condensation isn't supported on the cloud backend yet.",
+      );
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).condenseConversation(conversationId);
+  }
+
   static async searchConversations(
     limit: number = 20,
     pageId?: string,
@@ -719,13 +860,13 @@ class AgentServerConversationService {
   }
 
   /**
-   * Forks a conversation, copying event history up to and including
-   * `fromEventId`. Local agent-server only; needs agent-server >= 1.31.0 for
-   * `from_event_id` (older backends copy the whole conversation).
+   * Forks a whole conversation, or copies its event history up to and
+   * including `fromEventId` when provided. Local agent-server only; slicing
+   * needs agent-server >= 1.31.0 (older backends copy the whole conversation).
    */
   static async forkConversation(
     sourceConversationId: string,
-    fromEventId: string,
+    fromEventId?: string,
     title?: string,
   ): Promise<DirectConversationInfo> {
     if (getActiveBackend().backend.kind === "cloud") {
@@ -734,16 +875,13 @@ class AgentServerConversationService {
       );
     }
 
-    // `from_event_id` is accepted by `/fork` but not yet typed in
-    // ForkConversationRequest (through client 1.32.0); the client forwards the
-    // body verbatim, so cast to carry it. A title also suppresses the backend
-    // auto-title, so the "(branch)" marker sticks.
+    // A title suppresses the backend auto-title so the fork marker sticks.
     const data = await new ConversationClient(
       getAgentServerClientOptions(),
     ).forkConversation<DirectConversationInfo>(sourceConversationId, {
-      from_event_id: fromEventId,
+      ...(fromEventId ? { from_event_id: fromEventId } : {}),
       ...(title ? { title } : {}),
-    } as ForkConversationRequest & { from_event_id: string });
+    } satisfies ForkConversationRequest);
 
     // Carry over the source's client-side metadata (repo/branch/workspace/
     // profile/plugins) so the fork hydrates its chat-page badges the same way.

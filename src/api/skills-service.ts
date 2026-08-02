@@ -6,8 +6,13 @@ import {
 import { SkillInfo } from "#/types/settings";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getActiveBackend } from "./backend-registry/active-store";
-import { fetchCloudSkills } from "./cloud/skills-service.api";
+import {
+  fetchCloudConversationSkills,
+  fetchCloudSkills,
+} from "./cloud/skills-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
+import type { LoadedResources } from "#/types/slash-command";
+import { toLoadedSkillResources } from "#/utils/loaded-resources";
 
 function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
   return {
@@ -31,11 +36,36 @@ function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
  * dependency and rebuilding.
  */
 const PUBLIC_SKILLS: SkillInfo[] = SKILLS_CATALOG.map(catalogEntryToSkillInfo);
+const PUBLIC_SKILLS_BY_NAME = new Map(
+  PUBLIC_SKILLS.map((skill) => [skill.name, skill]),
+);
+
+function addBundledDescription(skill: SkillInfo): SkillInfo {
+  // Cloud has used both `global` and `public` for its bundled catalog scope.
+  // Never enrich a same-named user/project/org skill with unrelated public
+  // metadata.
+  if (
+    skill.description ||
+    (skill.source !== "global" && skill.source !== "public")
+  ) {
+    return skill;
+  }
+
+  const bundledSkill = PUBLIC_SKILLS_BY_NAME.get(skill.name);
+  if (!bundledSkill?.description) return skill;
+
+  return { ...skill, description: bundledSkill.description };
+}
 
 class SkillsService {
   static async getSkills(projectDir?: string): Promise<SkillInfo[]> {
     if (getActiveBackend().backend.kind === "cloud") {
-      return fetchCloudSkills();
+      const cloudSkills = await fetchCloudSkills();
+
+      // Cloud skill search intentionally returns lightweight records without
+      // descriptions. Preserve that list and its scopes, but restore metadata
+      // for exact matches from the public catalog already bundled in Canvas.
+      return cloudSkills.map(addBundledDescription);
     }
 
     // Public skills come from the bundled @openhands/extensions npm package —
@@ -60,6 +90,17 @@ class SkillsService {
     }
 
     return [...localSkills, ...PUBLIC_SKILLS];
+  }
+
+  static async getConversationLoadedSkills(
+    conversationId: string,
+  ): Promise<LoadedResources["skills"]> {
+    if (getActiveBackend().backend.kind !== "cloud") {
+      throw new Error("Loaded Cloud skills require a cloud backend.");
+    }
+
+    const skills = await fetchCloudConversationSkills(conversationId);
+    return toLoadedSkillResources(skills);
   }
 }
 

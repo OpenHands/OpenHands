@@ -6,6 +6,9 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
+import { useUiCommandInterceptor } from "#/hooks/chat/use-cli-command-interceptor";
+import { SlashCommandMessages } from "#/components/features/chat/slash-command-messages";
+import { HOME_SLASH_COMMAND_SCOPE_ID } from "#/stores/slash-command-output-store";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
@@ -213,6 +216,10 @@ export function HomeChatLauncher() {
   // profile globally (null conversationId path) so the next conversation
   // launches with it.
   const handleSubmitWithModelGuard = useModelInterceptor(null, handleSubmit);
+  const handleSubmitWithCommandGuards = useUiCommandInterceptor(
+    handleSubmitWithModelGuard,
+    { outputScopeId: HOME_SLASH_COMMAND_SCOPE_ID },
+  );
 
   return (
     <div
@@ -224,8 +231,12 @@ export function HomeChatLauncher() {
       </div>
 
       <div className="w-full">
+        <SlashCommandMessages
+          outputScopeId={HOME_SLASH_COMMAND_SCOPE_ID}
+          timelineBoundaryEventId={null}
+        />
         <CustomChatInput
-          onSubmit={handleSubmitWithModelGuard}
+          onSubmit={handleSubmitWithCommandGuards}
           onFilesPaste={handleUpload}
           disabled={isCreating || llmBlocked}
         />

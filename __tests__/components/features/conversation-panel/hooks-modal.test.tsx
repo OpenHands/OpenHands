@@ -6,7 +6,24 @@ import { HookEventItem } from "#/components/features/conversation-panel/hook-eve
 import { HooksEmptyState } from "#/components/features/conversation-panel/hooks-empty-state";
 import { HooksLoadingState } from "#/components/features/conversation-panel/hooks-loading-state";
 import { HooksModalHeader } from "#/components/features/conversation-panel/hooks-modal-header";
+import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
 import { HookEvent } from "#/api/conversation-service/agent-server-conversation-service.types";
+
+const hookQuery = vi.hoisted(() => ({
+  data: undefined as HookEvent[] | undefined,
+  isLoading: false,
+  isError: false,
+  isRefetching: false,
+  refetch: vi.fn(),
+}));
+
+vi.mock("#/hooks/query/use-conversation-hooks", () => ({
+  useConversationHooks: () => hookQuery,
+}));
+
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: "stopped" }),
+}));
 
 // Mock react-i18next
 vi.mock("react-i18next", async () => {
@@ -125,6 +142,34 @@ describe("HooksModalHeader", () => {
   it("should disable refresh button when refetching", () => {
     render(<HooksModalHeader {...defaultProps} isRefetching={true} />);
     expect(screen.getByTestId("refresh-hooks")).toBeDisabled();
+  });
+});
+
+describe("HooksModal", () => {
+  it("renders the hook response supplied by the shared conversation hook", () => {
+    hookQuery.data = [
+      {
+        event_type: "pre_tool_use",
+        matchers: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "command",
+                command: "lint",
+                timeout: 60,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(<HooksModal onClose={vi.fn()} />);
+
+    expect(screen.getByTestId("hooks-modal")).toBeInTheDocument();
+    expect(screen.getByText("Pre Tool Use")).toBeInTheDocument();
+    expect(screen.getByText("1 hook")).toBeInTheDocument();
   });
 });
 

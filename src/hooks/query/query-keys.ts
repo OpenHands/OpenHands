@@ -26,6 +26,14 @@ export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
 } as const;
 
+export const CONVERSATION_HOOKS_QUERY_KEYS = {
+  detail: (
+    backendId: string,
+    orgId: string | null,
+    conversationId: string | null,
+  ) => ["conversation-hooks", backendId, orgId, conversationId] as const,
+} as const;
+
 /** Fail fast when older backends lack the profile endpoint. */
 export const AGENT_PROFILES_RETRY_OPTIONS = {
   retry: false,

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import toast from "react-hot-toast";
 import {
+  dismissToast,
+  displayLoadingToast,
   displaySuccessToast,
   displayErrorToast,
 } from "#/utils/custom-toast-handlers";
@@ -71,6 +73,21 @@ describe("custom-toast-handlers", () => {
       expect(actualDuration).toBeGreaterThan(5000);
       // But should not exceed the maximum 10000ms
       expect(actualDuration).toBeLessThanOrEqual(10000);
+    });
+  });
+
+  describe("displayLoadingToast", () => {
+    it("displays and dismisses an indefinite loading toast", () => {
+      toastMock.loading.mockReturnValue("toast-1");
+
+      const toastId = displayLoadingToast("Condensing conversation…");
+      dismissToast(toastId);
+
+      expect(toast.loading).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ position: "top-right" }),
+      );
+      expect(toast.dismiss).toHaveBeenCalledWith("toast-1");
     });
   });
 

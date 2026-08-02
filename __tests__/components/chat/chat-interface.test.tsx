@@ -31,6 +31,7 @@ import { useTaskPolling } from "#/hooks/query/use-task-polling";
 import { AgentState } from "#/types/agent-state";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { act } from "@testing-library/react";
 
 const mockSend = vi.fn();
@@ -116,6 +117,12 @@ const renderWithQueryClient = (
   );
 
 beforeEach(() => {
+  useEventStore.setState({
+    events: [],
+    eventIds: new Set(),
+    uiEvents: [],
+  });
+  useSlashCommandOutputStore.getState().clearAll();
   useParamsMock.mockReturnValue({ conversationId: "test-conversation-id" });
   vi.mocked(useConversationId).mockReturnValue({
     conversationId: "test-conversation-id",
@@ -233,6 +240,27 @@ describe("ChatInterface - Chat Suggestions", () => {
 
     // Check if ChatSuggestions is not rendered with optimistic user message
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+  });
+
+  test("should hide chat suggestions behind an unanchored slash result", () => {
+    useSlashCommandOutputStore
+      .getState()
+      .showSkills("test-conversation-id", null, {
+        skills: [
+          {
+            name: "review",
+            description: "Review the current changes",
+            source: "project",
+          },
+        ],
+        hooks: [],
+        mcps: [],
+      });
+
+    renderWithQueryClient(<ChatInterface />, queryClient);
+
+    expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("slash-command-skills-list")).toBeVisible();
   });
 
   test("should hide chat suggestions while a cloud start task is provisioning", () => {
@@ -625,6 +653,7 @@ describe("ChatInterface - Pending message queue", () => {
 
   afterEach(() => {
     useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useSlashCommandOutputStore.getState().clearAll();
   });
 
   function submitMessage(text: string) {
@@ -868,6 +897,157 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     await waitFor(() => {
       expect(scrollWrites).toContain(10000);
     });
+  });
+
+  it("follows a newly rendered slash-command result into view", async () => {
+    useSlashCommandOutputStore.getState().clearAll();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    const scrollWrites: number[] = [];
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => 9200,
+      set: (value: number) => {
+        scrollWrites.push(value);
+      },
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      value: 10000,
+    });
+    Object.defineProperty(scrollContainer, "clientHeight", {
+      configurable: true,
+      value: 800,
+    });
+    scrollWrites.length = 0;
+
+    act(() => {
+      useSlashCommandOutputStore
+        .getState()
+        .showHelp("test-conversation-id", null, [
+          {
+            command: "/help",
+            skill: {
+              name: "help",
+              type: "agentskills",
+              content: "Display available commands",
+              triggers: [],
+            },
+          },
+        ]);
+    });
+
+    await waitFor(() => {
+      expect(scrollWrites).toContain(10000);
+    });
+  });
+
+  it("follows /skills lifecycle updates only while pinned to the bottom", async () => {
+    useSlashCommandOutputStore.getState().clearAll();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    const scrollWrites: number[] = [];
+    let scrollTopRead = 9200;
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopRead,
+      set: (value: number) => {
+        scrollWrites.push(value);
+      },
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      value: 10000,
+    });
+    Object.defineProperty(scrollContainer, "clientHeight", {
+      configurable: true,
+      value: 800,
+    });
+
+    let entryId = "";
+    act(() => {
+      entryId = useSlashCommandOutputStore
+        .getState()
+        .beginSkills("test-conversation-id", null);
+    });
+    await waitFor(() => expect(scrollWrites).toContain(10000));
+
+    scrollWrites.length = 0;
+    act(() =>
+      useSlashCommandOutputStore
+        .getState()
+        .completeSkills("test-conversation-id", entryId, {
+          skills: [],
+          hooks: [],
+          mcps: [],
+        }),
+    );
+    await waitFor(() => expect(scrollWrites).toContain(10000));
+
+    fireEvent.scroll(scrollContainer);
+    scrollTopRead = 100;
+    fireEvent.scroll(scrollContainer);
+    scrollWrites.length = 0;
+    act(() => {
+      useSlashCommandOutputStore
+        .getState()
+        .beginSkills("test-conversation-id", null);
+    });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(scrollWrites).not.toContain(10000);
+  });
+
+  it("renders an active non-null /skills output even without renderable events", () => {
+    useSlashCommandOutputStore.getState().clearAll();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    act(() => {
+      useSlashCommandOutputStore
+        .getState()
+        .beginSkills("test-conversation-id", "filtered-raw-boundary");
+    });
+
+    expect(screen.getByTestId("slash-command-skills-loading")).toBeVisible();
   });
 });
 

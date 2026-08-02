@@ -73,6 +73,12 @@ export interface DirectConversationInfo {
     llm?: {
       model?: string | null;
     } | null;
+    /**
+     * Canvas-derived capability from the serialized condenser attached to the
+     * running agent. True only when it handles an explicit condensation
+     * request (LLMSummarizingCondenser, directly or in a pipeline).
+     */
+    supports_manual_condensation?: boolean;
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
@@ -327,6 +333,8 @@ export function toAppConversation(
     trigger: null,
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
+    supports_manual_condensation:
+      info.agent?.supports_manual_condensation === true,
     acp_server: acpServer,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,

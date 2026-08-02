@@ -8,8 +8,10 @@ import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
 import { GoalStatusBanner } from "./goal-status-banner";
 import { ModelMessages } from "./model-messages";
+import { SlashCommandMessages } from "./slash-command-messages";
 import { useModelStore } from "#/stores/model-store";
 import { useGoalStore } from "#/stores/goal-store";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { InteractiveChatBox } from "./interactive-chat-box";
 import { AgentState } from "#/types/agent-state";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
@@ -51,6 +53,8 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { NEW_COMMAND } from "#/utils/constants";
+import { normalizeUiCommand } from "#/utils/slash-command-text";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -164,6 +168,33 @@ export function ChatInterface() {
       ? s.statusByConversation[conversationId]
       : undefined;
     return goal?.active ? `${goal.iteration}:${goal.status}` : null;
+  });
+  const slashCommandOutputScrollKey = useSlashCommandOutputStore((state) => {
+    const entries = conversationId
+      ? state.entriesByScope[conversationId]
+      : undefined;
+    const entry = entries?.[entries.length - 1];
+    if (!entry) return null;
+    return entry.kind === "skills" ? `${entry.id}:${entry.status}` : entry.id;
+  });
+  const hasUnanchoredSlashCommandOutput = useSlashCommandOutputStore(
+    (state) => {
+      const entries = conversationId
+        ? state.entriesByScope[conversationId]
+        : undefined;
+      return (
+        entries?.some((entry) => entry.timelineBoundaryEventId === null) ??
+        false
+      );
+    },
+  );
+  const hasTimelineSlashCommandOutput = useSlashCommandOutputStore((state) => {
+    const entries = conversationId
+      ? state.entriesByScope[conversationId]
+      : undefined;
+    return (
+      entries?.some((entry) => entry.timelineBoundaryEventId !== null) ?? false
+    );
   });
   const { mutateAsync: uploadFiles } = useUnifiedUploadFiles();
 
@@ -288,7 +319,7 @@ export function ChatInterface() {
     originalFiles: File[],
   ) => {
     // Handle /new command for V1 conversations
-    if (content.trim() === "/new") {
+    if (normalizeUiCommand(content) === NEW_COMMAND) {
       if (!conversationId) {
         displayErrorToast(t(I18nKey.CONVERSATION$CLEAR_NO_ID));
         return;
@@ -412,6 +443,7 @@ export function ChatInterface() {
     renderableEvents.length,
     hasPendingUserMessages,
     activeGoalScrollKey,
+    slashCommandOutputScrollKey,
     scrollDomToBottom,
   ]);
 
@@ -485,6 +517,7 @@ export function ChatInterface() {
           !isProvisioningTask &&
           totalEvents === 0 &&
           !isArchivedConversation &&
+          !hasUnanchoredSlashCommandOutput &&
           // With no usable LLM the suggestions can't be acted on (the input is
           // disabled). They're also a `pointer-events-auto` overlay that would
           // sit over the LlmNotConfiguredBanner below and swallow clicks on its
@@ -540,13 +573,18 @@ export function ChatInterface() {
           {/* /model entries created before any event is rendered are
               anchored to `null` and live above the message list. */}
           <ModelMessages conversationId={conversationId} anchorEventId={null} />
+          <SlashCommandMessages
+            outputScopeId={conversationId}
+            timelineBoundaryEventId={null}
+          />
 
-          {showConversationMessages && renderableEvents.length > 0 && (
-            <Messages
-              messages={renderableEvents}
-              allEvents={allConversationEvents}
-            />
-          )}
+          {showConversationMessages &&
+            (renderableEvents.length > 0 || hasTimelineSlashCommandOutput) && (
+              <Messages
+                messages={renderableEvents}
+                allEvents={allConversationEvents}
+              />
+            )}
 
           {/*
             Render the local pending-message queue independently so messages

@@ -109,6 +109,23 @@ describe("SlashCommandMenu", () => {
     expect(screen.getByText("Initialize a project")).toBeInTheDocument();
   });
 
+  it("shows the full skill description in a tooltip on hover", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <SlashCommandMenu
+        items={defaultItems}
+        selectedIndex={0}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    await user.hover(screen.getAllByRole("option")[0]);
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Search code semantically.",
+    );
+  });
+
   it("has an accessible listbox role and translated aria-label", () => {
     renderWithProviders(
       <SlashCommandMenu

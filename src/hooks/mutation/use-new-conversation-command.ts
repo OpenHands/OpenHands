@@ -1,8 +1,7 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import { I18nKey } from "#/i18n/declaration";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -10,14 +9,13 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useTracking } from "#/hooks/use-tracking";
+import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 
 export const useNewConversationCommand = () => {
-  const queryClient = useQueryClient();
   const { navigate } = useNavigation();
   const { t } = useTranslation("openhands");
   const { data: conversation } = useActiveConversation();
-  const { trackConversationCreated } = useTracking();
+  const { mutateAsync: createConversation } = useCreateConversation();
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -25,40 +23,13 @@ export const useNewConversationCommand = () => {
         throw new Error("No active conversation");
       }
 
-      // /new reuses the parent conversation's sandbox (matches OpenHands
-      // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
-      // and agent_type stay undefined.
-      const startTask = await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        conversation.sandbox_id ?? undefined,
-      );
-
-      if (startTask.status === "ERROR") {
-        throw new Error(
-          startTask.detail || "Failed to create new conversation",
-        );
-      }
-
-      // Cloud returns a WORKING task (no app_conversation_id yet);
-      // navigate to /conversations/task-{id} so useTaskPolling drives it
-      // to READY. Local creates synchronously — app_conversation_id is
-      // already set, so we navigate straight to it.
-      const newConversationId = startTask.app_conversation_id
-        ? startTask.app_conversation_id
-        : `task-${startTask.id}`;
-
-      return {
-        newConversationId,
-        oldConversationId: conversation.id,
-        taskId: startTask.id,
-      };
+      // Reuse the current sandbox without creating a parent/child relation.
+      // Delegating to the shared New Chat mutation also preserves the active
+      // AgentProfile/LLM profile and its local conversation metadata.
+      return createConversation({
+        sandboxId: conversation.sandbox_id ?? undefined,
+        entryPoint: "new_command",
+      });
     },
     onMutate: () => {
       toast.loading(t(I18nKey.CONVERSATION$CLEARING), {
@@ -67,26 +38,9 @@ export const useNewConversationCommand = () => {
       });
     },
     onSuccess: (data) => {
-      trackConversationCreated({
-        conversationId: data.newConversationId,
-        taskId: data.taskId,
-        hasRepository: false,
-        hasWorkspace: false,
-        hasInitialQuery: false,
-        hasParentConversation: false,
-        entryPoint: "new_command",
-      });
-
       toast.dismiss("clear-conversation");
       displaySuccessToast(t(I18nKey.CONVERSATION$CLEAR_SUCCESS));
-      navigate(`/conversations/${data.newConversationId}`);
-
-      queryClient.invalidateQueries({
-        queryKey: ["user", "conversations"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["v1-batch-get-app-conversations"],
-      });
+      navigate(`/conversations/${data.conversation_id}`);
     },
     onError: (error) => {
       toast.dismiss("clear-conversation");

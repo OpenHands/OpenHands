@@ -32,8 +32,7 @@ export function SkillsModal({ onClose }: SkillsModalProps) {
   const [expandedAgents, setExpandedAgents] = useState<Record<string, boolean>>(
     {},
   );
-  // Scope the catalog to this conversation's attached workspace so the listed
-  // skills match the project skills actually loaded into the conversation.
+  // Scope available skill metadata to the active conversation/workspace.
   const {
     data: skills,
     isLoading,

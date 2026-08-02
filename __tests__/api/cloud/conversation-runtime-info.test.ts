@@ -5,7 +5,9 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService, {
+  CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   getFetchCall,
   getJsonBody,
@@ -53,10 +55,10 @@ const runtimeResponse = {
 const fetchMock = vi.fn();
 
 afterEach(() => {
+  vi.useRealTimers();
   window.localStorage.clear();
   __resetActiveStoreForTests();
   fetchMock.mockReset();
-  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -67,7 +69,7 @@ describe("AgentServerConversationService.getRuntimeConversation", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
       fetchMock.mockReset();
-      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
     });
 
     it("routes through /api/cloud-proxy targeting the conversation runtime host", async () => {
@@ -105,7 +107,7 @@ describe("AgentServerConversationService.getRuntimeConversation", () => {
       setRegisteredBackends([localBackend]);
       setActiveSelection({ backendId: localBackend.id });
       fetchMock.mockReset();
-      vi.stubGlobal("fetch", fetchMock);
+      vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
     });
 
     it("targets the conversation_url host (not the active backend host) and forwards X-Session-API-Key", async () => {
@@ -132,5 +134,263 @@ describe("AgentServerConversationService.getRuntimeConversation", () => {
       });
       expect(result.id).toBe("conv-abc");
     });
+  });
+});
+
+describe("AgentServerConversationService.getLoadedResources", () => {
+  const resourcesResponse = {
+    id: "conv-abc",
+    agent: {
+      agent_context: {
+        skills: [
+          {
+            name: "review",
+            description: "Review code",
+            source: "project/review/SKILL.md",
+          },
+        ],
+      },
+      mcp_config: {
+        github: { command: "npx" },
+      },
+    },
+    hook_config: {
+      pre_tool_use: [
+        { matcher: "*", hooks: [{ type: "command", command: "lint" }] },
+      ],
+    },
+  };
+
+  it("keeps the raw Cloud hooks response on the existing hooks owner", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    const response = {
+      hooks: [
+        {
+          event_type: "stop",
+          matchers: [
+            {
+              matcher: "*",
+              hooks: [
+                {
+                  type: "command",
+                  command: "notify",
+                  timeout: 60,
+                  async: false,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    fetchMock.mockResolvedValue(mockJsonResponse(response));
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    await expect(
+      AgentServerConversationService.getHooks("conv-abc"),
+    ).resolves.toEqual(response);
+    expect(getFetchCall(fetchMock)[0]).toBe(
+      "https://app.all-hands.dev/api/v1/app-conversations/conv-abc/hooks",
+    );
+  });
+
+  it("reads the active local conversation's loaded resources", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    fetchMock.mockResolvedValue(mockJsonResponse(resourcesResponse));
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    const resources = await AgentServerConversationService.getLoadedResources(
+      "conv-abc",
+      "http://192.168.1.42:8888/api/conversations/conv-abc",
+      "session-xyz",
+    );
+
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toBe(
+      "http://192.168.1.42:8888/api/conversations/conv-abc?include_skills=true",
+    );
+    expect(init.headers).toMatchObject({
+      "X-Session-API-Key": "session-xyz",
+    });
+    expect(resources).toMatchObject({
+      skills: [
+        {
+          name: "review",
+          description: "Review code",
+          source: "project/review/SKILL.md",
+        },
+      ],
+      hooks: [{ hookType: "pre_tool_use", commands: ["lint"] }],
+      mcps: [{ name: "github", transport: "stdio" }],
+    });
+  });
+
+  it("assembles Cloud skills and hooks through first-class app endpoints", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/skills")) {
+        return Promise.resolve(
+          mockJsonResponse({
+            skills: [
+              {
+                name: "review",
+                type: "agentskills",
+                content:
+                  "---\ndescription: Review the current changes\n---\nInstructions",
+                triggers: ["/review"],
+              },
+            ],
+          }),
+        );
+      }
+      if (url.endsWith("/hooks")) {
+        return Promise.resolve(
+          mockJsonResponse({
+            hooks: [
+              {
+                event_type: "pre_tool_use",
+                matchers: [
+                  {
+                    matcher: "*",
+                    hooks: [
+                      {
+                        type: "command",
+                        command: "lint",
+                        timeout: 60,
+                        async: false,
+                      },
+                      {
+                        type: "command",
+                        command: "test",
+                        timeout: 60,
+                        async: false,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }),
+        );
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    const resources = await AgentServerConversationService.getLoadedResources(
+      "conv-abc",
+      "http://abc123.runtime.all-hands.dev/api/conversations/conv-abc",
+      "session-xyz",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([
+        "https://app.all-hands.dev/api/v1/app-conversations/conv-abc/skills",
+        "https://app.all-hands.dev/api/v1/app-conversations/conv-abc/hooks",
+      ]),
+    );
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("/api/cloud-proxy")]),
+    );
+    expect(resources).toEqual({
+      skills: [
+        {
+          name: "review",
+          description: "Review the current changes",
+          source: null,
+        },
+      ],
+      hooks: [{ hookType: "pre_tool_use", commands: ["lint", "test"] }],
+      mcps: null,
+    });
+  });
+
+  it("keeps loaded skills when the optional Cloud hooks request fails", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input).endsWith("/skills")
+        ? Promise.resolve(
+            mockJsonResponse({
+              skills: [
+                {
+                  name: "review",
+                  type: "agentskills",
+                  content: "Review code.",
+                  triggers: ["/review"],
+                },
+              ],
+            }),
+          )
+        : Promise.resolve(mockJsonResponse({ error: "unavailable" }, 502)),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    await expect(
+      AgentServerConversationService.getLoadedResources("conv-abc"),
+    ).resolves.toEqual({
+      skills: [{ name: "review", description: "Review code.", source: null }],
+      hooks: null,
+      mcps: null,
+    });
+  });
+
+  it("keeps loaded skills when optional Cloud hooks never settle", async () => {
+    vi.useFakeTimers();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input).endsWith("/skills")
+        ? Promise.resolve(
+            mockJsonResponse({
+              skills: [
+                {
+                  name: "review",
+                  type: "agentskills",
+                  content: "Review code.",
+                  triggers: ["/review"],
+                },
+              ],
+            }),
+          )
+        : new Promise(() => {}),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    const resourcesPromise =
+      AgentServerConversationService.getLoadedResources("conv-abc");
+    await vi.advanceTimersByTimeAsync(CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS);
+
+    await expect(resourcesPromise).resolves.toEqual({
+      skills: [{ name: "review", description: "Review code.", source: null }],
+      hooks: null,
+      mcps: null,
+    });
+  });
+
+  it("fails Cloud loaded-resource assembly when the required skills request fails", async () => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    fetchMock.mockImplementation((input: RequestInfo | URL) =>
+      String(input).endsWith("/skills")
+        ? Promise.resolve(mockJsonResponse({ error: "unavailable" }, 500))
+        : Promise.resolve(mockJsonResponse({ hooks: [] })),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
+
+    await expect(
+      AgentServerConversationService.getLoadedResources("conv-abc"),
+    ).rejects.toThrow();
   });
 });
