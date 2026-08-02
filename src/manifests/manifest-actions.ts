@@ -46,7 +46,12 @@ export function useSetupAction() {
           draftMessage: message,
         });
       }
-      window.setTimeout(() => setMessageToSend(message), 0);
+      // Address the queued message at the conversation we just created, so
+      // only that composer can consume it.
+      window.setTimeout(
+        () => setMessageToSend(message, conversation.conversation_id),
+        0,
+      );
 
       return { response: { ...conversation } };
     },
