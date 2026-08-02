@@ -42,6 +42,7 @@ import {
 export const OPENHANDS_FEEDBACK_URL = "https://forms.gle/chHc5VdS3wty5DwW6";
 /** Slightly exceeds the Cloud client's 30-second transport timeout. */
 export const SKILLS_COMMAND_DEADLINE_MS = 35_000;
+export const HELP_COMMAND_DEADLINE_MS = 35_000;
 
 interface UiCommandContext {
   outputScopeId: string | null | undefined;
@@ -81,6 +82,11 @@ export const useUiCommandInterceptor = (
     (state) => state.completeSkills,
   );
   const failSkills = useSlashCommandOutputStore((state) => state.failSkills);
+  const beginHelp = useSlashCommandOutputStore((state) => state.beginHelp);
+  const completeHelp = useSlashCommandOutputStore(
+    (state) => state.completeHelp,
+  );
+  const failHelp = useSlashCommandOutputStore((state) => state.failHelp);
   const deactivateSkillsPlacementFallback = useSlashCommandOutputStore(
     (state) => state.deactivateSkillsPlacementFallback,
   );
@@ -100,40 +106,66 @@ export const useUiCommandInterceptor = (
 
   const showAvailableHelp = useCallback(
     (timelineBoundaryEventId: string | null, invocationOrder: number) => {
-      const render = (availableSkills: NonNullable<typeof skills>) =>
+      const buildCatalog = (availableSkills: NonNullable<typeof skills>) =>
+        buildSlashCommandCatalog({
+          // Sparse skill records are still commands. Help and autocomplete
+          // must consume the same catalog even without a description.
+          skills: availableSkills,
+          isCloud,
+          hasConversation: !!conversationId,
+          agentKind,
+          supportsManualCondensation,
+        });
+
+      if (skills) {
         showHelp(
           outputScopeId!,
           timelineBoundaryEventId,
-          buildSlashCommandCatalog({
-            // Sparse skill records are still commands. Help and autocomplete
-            // must consume the same catalog even without a description.
-            skills: availableSkills,
-            isCloud,
-            hasConversation: !!conversationId,
-            agentKind,
-            supportsManualCondensation,
-          }),
+          buildCatalog(skills),
           invocationOrder,
         );
-
-      if (skills) {
-        render(skills);
         return;
       }
-      refetchSkills({ throwOnError: true })
-        .then((result) => render(result.data ?? []))
-        .catch((error: unknown) => {
+
+      // Built-ins are frontend-owned, so accepting /help can always produce a
+      // visible card immediately while optional skill enrichment is pending.
+      const entryId = beginHelp(
+        outputScopeId!,
+        timelineBoundaryEventId,
+        buildCatalog([]),
+        invocationOrder,
+      );
+      withPromiseDeadline(
+        Promise.resolve().then(() => refetchSkills({ throwOnError: true })),
+        HELP_COMMAND_DEADLINE_MS,
+        "Skill catalog request exceeded the command deadline.",
+      ).then(
+        (result) =>
+          completeHelp(
+            outputScopeId!,
+            entryId,
+            buildCatalog(result.data ?? []),
+          ),
+        (error: unknown) => {
           // Built-ins are frontend-owned and remain useful when optional skill
           // enrichment fails. The warning is separate from the help output.
-          render([]);
+          failHelp(outputScopeId!, entryId);
           displayErrorToast(
-            error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
+            error instanceof PromiseDeadlineError
+              ? t(I18nKey.SLASH_COMMAND$RESOURCES_TIMEOUT)
+              : error instanceof Error
+                ? error.message
+                : t(I18nKey.ERROR$GENERIC),
           );
-        });
+        },
+      );
     },
     [
+      beginHelp,
+      completeHelp,
       conversationId,
       agentKind,
+      failHelp,
       isCloud,
       outputScopeId,
       refetchSkills,
@@ -282,11 +314,14 @@ export const useUiCommandInterceptor = (
     },
     [
       beginSkills,
+      beginHelp,
       agentKind,
       completeSkills,
+      completeHelp,
       conversationId,
       conversationUrl,
       failSkills,
+      failHelp,
       getTimelineBoundaryEventId,
       isCloud,
       isMobileSidebar,

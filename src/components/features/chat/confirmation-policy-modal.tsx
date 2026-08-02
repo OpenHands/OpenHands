@@ -11,8 +11,12 @@ import {
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalBody } from "#/components/shared/modals/modal-body";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { I18nKey } from "#/i18n/declaration";
-import { setSessionConfirmationPolicy } from "#/services/confirmation-policy-session";
+import {
+  getConfirmationPolicySessionScope,
+  setSessionConfirmationPolicy,
+} from "#/services/confirmation-policy-session";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -62,6 +66,7 @@ export function ConfirmationPolicyModal({
   onClose,
 }: ConfirmationPolicyModalProps) {
   const { t } = useTranslation("openhands");
+  const { backend } = useActiveBackend();
   const [currentMode, setCurrentMode] = useState<ConfirmationPolicyMode | null>(
     null,
   );
@@ -95,6 +100,10 @@ export function ConfirmationPolicyModal({
   }, [conversationId, conversationUrl, onClose, sessionApiKey, t]);
 
   const selectPolicy = (mode: ConfirmationPolicyMode) => {
+    // Capture the invoking connection before the async request begins. A
+    // backend switch while the request is in flight must not redirect the
+    // successful preference to the newly active backend.
+    const sessionScope = getConfirmationPolicySessionScope(backend);
     setIsSaving(true);
     AgentServerConversationService.setConfirmationPolicy(
       conversationId,
@@ -104,7 +113,7 @@ export function ConfirmationPolicyModal({
     ).then(
       () => {
         setCurrentMode(mode);
-        setSessionConfirmationPolicy(POLICY_BY_MODE[mode]);
+        setSessionConfirmationPolicy(sessionScope, POLICY_BY_MODE[mode]);
         displaySuccessToast(
           t(I18nKey.SLASH_COMMAND$CONFIRM_UPDATED, {
             mode: t(

@@ -956,7 +956,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     });
   });
 
-  it("follows /skills lifecycle updates only while pinned to the bottom", async () => {
+  it("follows slash-command lifecycle updates only while pinned to the bottom", async () => {
     useSlashCommandOutputStore.getState().clearAll();
 
     render(
@@ -1009,6 +1009,41 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
           hooks: [],
           mcps: [],
         }),
+    );
+    await waitFor(() => expect(scrollWrites).toContain(10000));
+
+    scrollWrites.length = 0;
+    let helpEntryId = "";
+    const fallbackHelp = [
+      {
+        command: "/help",
+        skill: {
+          name: "help",
+          type: "agentskills" as const,
+          source: null,
+        },
+      },
+    ];
+    act(() => {
+      helpEntryId = useSlashCommandOutputStore
+        .getState()
+        .beginHelp("test-conversation-id", null, fallbackHelp);
+    });
+    await waitFor(() => expect(scrollWrites).toContain(10000));
+
+    scrollWrites.length = 0;
+    act(() => {
+      useSlashCommandOutputStore
+        .getState()
+        .beginHelp("test-conversation-id", null, fallbackHelp);
+    });
+    await waitFor(() => expect(scrollWrites).toContain(10000));
+
+    scrollWrites.length = 0;
+    act(() =>
+      useSlashCommandOutputStore
+        .getState()
+        .completeHelp("test-conversation-id", helpEntryId, fallbackHelp),
     );
     await waitFor(() => expect(scrollWrites).toContain(10000));
 

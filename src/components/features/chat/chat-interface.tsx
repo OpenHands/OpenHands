@@ -173,9 +173,8 @@ export function ChatInterface() {
     const entries = conversationId
       ? state.entriesByScope[conversationId]
       : undefined;
-    const entry = entries?.[entries.length - 1];
-    if (!entry) return null;
-    return entry.kind === "skills" ? `${entry.id}:${entry.status}` : entry.id;
+    if (!entries?.length) return null;
+    return entries.map((entry) => `${entry.id}:${entry.status}`).join("|");
   });
   const hasUnanchoredSlashCommandOutput = useSlashCommandOutputStore(
     (state) => {

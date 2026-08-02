@@ -53,6 +53,7 @@ describe("slash-command localization", () => {
             {
               id: "help-output",
               kind: "help",
+              status: "ready",
               invocationOrder: 0,
               timelineBoundaryEventId: null,
               commands,

@@ -47,6 +47,58 @@ describe("SlashCommandMessages", () => {
     expect(screen.getByTestId("slash-command-skills-list")).toBeVisible();
   });
 
+  it("renders fallback help immediately and enriches the same DOM entry", () => {
+    const fallback = [
+      {
+        command: "/help",
+        skill: { name: "help", type: "agentskills" as const, source: null },
+      },
+    ];
+    let entryId = "";
+    act(() => {
+      entryId = useSlashCommandOutputStore
+        .getState()
+        .beginHelp("conversation-1", null, fallback);
+    });
+
+    render(
+      <SlashCommandMessages
+        outputScopeId="conversation-1"
+        timelineBoundaryEventId={null}
+      />,
+    );
+
+    const entry = screen.getByTestId(`slash-command-help-${entryId}`);
+    expect(entry).toHaveAttribute("data-status", "loading");
+    expect(screen.getByText("/help")).toBeVisible();
+    expect(screen.getByTestId("slash-command-help-loading")).toBeVisible();
+
+    act(() =>
+      useSlashCommandOutputStore
+        .getState()
+        .completeHelp("conversation-1", entryId, [
+          ...fallback,
+          {
+            command: "/review",
+            skill: {
+              name: "review",
+              type: "agentskills",
+              source: "project",
+              description: "Review code",
+            },
+          },
+        ]),
+    );
+
+    expect(screen.getByTestId(`slash-command-help-${entryId}`)).toBe(entry);
+    expect(entry).toHaveAttribute("data-status", "ready");
+    expect(
+      screen.queryByTestId("slash-command-help-loading"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("SLASH_COMMAND$SKILL_COMMANDS"));
+    expect(screen.getByText("/review")).toBeVisible();
+  });
+
   it.each([
     ["request", "SLASH_COMMAND$RESOURCES_FAILED", false],
     ["timeout", "SLASH_COMMAND$RESOURCES_TIMEOUT", true],

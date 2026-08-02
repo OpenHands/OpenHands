@@ -67,7 +67,10 @@ import {
   toLoadedHookResources,
 } from "#/utils/loaded-resources";
 import SkillsService from "../skills-service";
-import { getSessionConfirmationPolicy } from "#/services/confirmation-policy-session";
+import {
+  getConfirmationPolicySessionScope,
+  getSessionConfirmationPolicy,
+} from "#/services/confirmation-policy-session";
 import { withPromiseDeadline } from "#/utils/promise-deadline";
 import type {
   GetHooksResponse,
@@ -413,7 +416,8 @@ class AgentServerConversationService {
     agentProfileId?: string,
     agentProfileKind?: AgentKind,
   ): Promise<AppConversationStartTask> {
-    if (getActiveBackend().backend.kind === "cloud") {
+    const activeBackend = getActiveBackend().backend;
+    if (activeBackend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
       // AppConversationStartRequest, POST /api/v1/app-conversations
       // (returns a WORKING task), and let the conversation route's
@@ -475,7 +479,11 @@ class AgentServerConversationService {
       agentProfileKind,
       titleLlmProfile,
     });
-    const sessionConfirmationPolicy = getSessionConfirmationPolicy();
+    const localBackend = getEffectiveLocalBackend();
+    if (!localBackend) throw new NoBackendAvailableError();
+    const sessionConfirmationPolicy = getSessionConfirmationPolicy(
+      getConfirmationPolicySessionScope(localBackend),
+    );
     const settingsAgentKind = isRecord(settings.agent_settings)
       ? settings.agent_settings.agent_kind
       : undefined;
@@ -489,8 +497,6 @@ class AgentServerConversationService {
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>(payload);
-    const localBackend = getEffectiveLocalBackend();
-    if (!localBackend) throw new NoBackendAvailableError();
 
     if (metadata?.selected_repository || workingDirOverride) {
       // The agent-server runtime has no concept of selected repo/branch/

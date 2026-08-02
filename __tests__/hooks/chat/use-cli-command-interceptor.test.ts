@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  HELP_COMMAND_DEADLINE_MS,
   SKILLS_COMMAND_DEADLINE_MS,
   useCliCommandInterceptor,
   useUiCommandInterceptor,
@@ -17,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   beginSkills: vi.fn(),
   completeSkills: vi.fn(),
   failSkills: vi.fn(),
+  beginHelp: vi.fn(),
+  completeHelp: vi.fn(),
+  failHelp: vi.fn(),
   deactivateSkillsPlacementFallback: vi.fn(),
   showSkills: vi.fn(),
   showHelp: vi.fn(),
@@ -98,6 +102,9 @@ vi.mock("#/stores/slash-command-output-store", () => ({
       beginSkills: typeof mocks.beginSkills;
       completeSkills: typeof mocks.completeSkills;
       failSkills: typeof mocks.failSkills;
+      beginHelp: typeof mocks.beginHelp;
+      completeHelp: typeof mocks.completeHelp;
+      failHelp: typeof mocks.failHelp;
       deactivateSkillsPlacementFallback: typeof mocks.deactivateSkillsPlacementFallback;
       showSkills: typeof mocks.showSkills;
       showHelp: typeof mocks.showHelp;
@@ -108,6 +115,9 @@ vi.mock("#/stores/slash-command-output-store", () => ({
       beginSkills: mocks.beginSkills,
       completeSkills: mocks.completeSkills,
       failSkills: mocks.failSkills,
+      beginHelp: mocks.beginHelp,
+      completeHelp: mocks.completeHelp,
+      failHelp: mocks.failHelp,
       deactivateSkillsPlacementFallback:
         mocks.deactivateSkillsPlacementFallback,
       showSkills: mocks.showSkills,
@@ -182,6 +192,8 @@ describe("useCliCommandInterceptor", () => {
     mocks.getLoadedResources.mockResolvedValue(mocks.loadedResources);
     mocks.condenseConversation.mockResolvedValue(undefined);
     mocks.beginSkills.mockReturnValue("skills-entry-1");
+    let helpEntry = 0;
+    mocks.beginHelp.mockImplementation(() => `help-entry-${++helpEntry}`);
     let invocationOrder = 0;
     mocks.reserveInvocationOrder.mockImplementation(() => invocationOrder++);
   });
@@ -632,7 +644,15 @@ describe("useCliCommandInterceptor", () => {
     const { submit } = setup();
 
     act(() => submit("/help"));
+    expect(mocks.beginHelp).toHaveBeenCalledWith(
+      "conversation-1",
+      "event-7",
+      expect.arrayContaining([expect.objectContaining({ command: "/help" })]),
+      expect.any(Number),
+    );
+    expect(mocks.completeHelp).not.toHaveBeenCalled();
     mocks.timelineBoundaryEventId = "event-8";
+    await act(async () => Promise.resolve());
     act(() =>
       resolveSkills({
         data: [
@@ -647,15 +667,15 @@ describe("useCliCommandInterceptor", () => {
     );
 
     await waitFor(() =>
-      expect(mocks.showHelp).toHaveBeenCalledWith(
+      expect(mocks.completeHelp).toHaveBeenCalledWith(
         "conversation-1",
-        "event-7",
+        "help-entry-1",
         expect.arrayContaining([
           expect.objectContaining({ command: "/review" }),
         ]),
-        expect.any(Number),
       ),
     );
+    expect(mocks.showHelp).not.toHaveBeenCalled();
   });
 
   it("renders built-in help and warns when skill discovery fails", async () => {
@@ -667,20 +687,116 @@ describe("useCliCommandInterceptor", () => {
 
     act(() => submit("/help"));
 
-    await waitFor(() => expect(mocks.showHelp).toHaveBeenCalledOnce());
-    expect(mocks.showHelp).toHaveBeenCalledWith(
+    expect(mocks.beginHelp).toHaveBeenCalledWith(
       "conversation-1",
       "event-7",
       expect.arrayContaining([expect.objectContaining({ command: "/help" })]),
       expect.any(Number),
     );
-    expect(mocks.showHelp.mock.calls[0][2]).not.toEqual(
+    expect(mocks.beginHelp.mock.calls[0][2]).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ command: "/review" })]),
+    );
+    await waitFor(() =>
+      expect(mocks.failHelp).toHaveBeenCalledWith(
+        "conversation-1",
+        "help-entry-1",
+      ),
     );
     expect(mocks.displayErrorToast).toHaveBeenCalledWith(
       "Skill catalog unavailable",
     );
+    expect(mocks.completeHelp).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("terminates cold /help at the deadline and ignores a late success", async () => {
+    vi.useFakeTimers();
+    let resolveSkills!: (value: {
+      data: NonNullable<typeof mocks.skills>;
+    }) => void;
+    mocks.skills = undefined;
+    mocks.refetchSkills.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSkills = resolve;
+      }),
+    );
+    const { submit } = setup();
+
+    act(() => submit("/help"));
+    expect(mocks.beginHelp).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HELP_COMMAND_DEADLINE_MS);
+    });
+
+    expect(mocks.failHelp).toHaveBeenCalledWith(
+      "conversation-1",
+      "help-entry-1",
+    );
+    expect(mocks.displayErrorToast).toHaveBeenCalledOnce();
+
+    act(() =>
+      resolveSkills({
+        data: [
+          {
+            name: "review",
+            type: "agentskills",
+            source: "project",
+            description: "Review code",
+          },
+        ],
+      }),
+    );
+    await act(async () => Promise.resolve());
+
+    expect(mocks.completeHelp).not.toHaveBeenCalled();
+  });
+
+  it("keeps concurrent cold /help requests ordered when they resolve in reverse", async () => {
+    let resolveFirst!: (value: {
+      data: NonNullable<typeof mocks.skills>;
+    }) => void;
+    let resolveSecond!: (value: {
+      data: NonNullable<typeof mocks.skills>;
+    }) => void;
+    mocks.skills = undefined;
+    mocks.refetchSkills
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+    const { submit } = setup();
+
+    act(() => submit("/help"));
+    mocks.timelineBoundaryEventId = "event-8";
+    act(() => submit("/help"));
+    expect(mocks.beginHelp.mock.calls.map((call) => call[1])).toEqual([
+      "event-7",
+      "event-8",
+    ]);
+    await act(async () => Promise.resolve());
+
+    act(() => resolveSecond({ data: [] }));
+    await waitFor(() =>
+      expect(mocks.completeHelp).toHaveBeenCalledWith(
+        "conversation-1",
+        "help-entry-2",
+        expect.any(Array),
+      ),
+    );
+    act(() => resolveFirst({ data: [] }));
+    await waitFor(() =>
+      expect(mocks.completeHelp).toHaveBeenCalledWith(
+        "conversation-1",
+        "help-entry-1",
+        expect.any(Array),
+      ),
+    );
   });
 
   it("renders help from the same context-aware catalog as autocomplete", () => {
@@ -699,6 +815,7 @@ describe("useCliCommandInterceptor", () => {
       ]),
       expect.any(Number),
     );
+    expect(mocks.beginHelp).not.toHaveBeenCalled();
   });
 
   it("renders context-free help on the home composer", () => {

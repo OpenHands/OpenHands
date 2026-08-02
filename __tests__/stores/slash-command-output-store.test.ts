@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
+import type { SlashCommandItem } from "#/types/slash-command";
 
 const resources = {
   skills: [{ name: "review", description: "Review code", source: "project" }],
@@ -9,6 +10,15 @@ const resources = {
 
 const entries = (scopeId = "conversation-1") =>
   useSlashCommandOutputStore.getState().entriesByScope[scopeId] ?? [];
+
+const helpCommand = (command: string): SlashCommandItem => ({
+  command,
+  skill: {
+    name: command.slice(1),
+    type: "agentskills",
+    source: null,
+  },
+});
 
 describe("slash-command output store", () => {
   beforeEach(() => {
@@ -122,13 +132,76 @@ describe("slash-command output store", () => {
     });
   });
 
+  it("begins /help with fallback commands and completes the same entry", () => {
+    const store = useSlashCommandOutputStore.getState();
+    const fallback = [helpCommand("/help")];
+    const enriched = [...fallback, helpCommand("/review")];
+    const id = store.beginHelp("conversation-1", "event-1", fallback, 4);
+
+    expect(entries()).toEqual([
+      expect.objectContaining({
+        id,
+        kind: "help",
+        status: "loading",
+        commands: fallback,
+        invocationOrder: 4,
+        timelineBoundaryEventId: "event-1",
+      }),
+    ]);
+
+    store.completeHelp("conversation-1", id, enriched);
+
+    expect(entries()).toEqual([
+      expect.objectContaining({
+        id,
+        status: "ready",
+        commands: enriched,
+        invocationOrder: 4,
+        timelineBoundaryEventId: "event-1",
+      }),
+    ]);
+  });
+
+  it("keeps fallback help terminal after failure and ignores late completion", () => {
+    const store = useSlashCommandOutputStore.getState();
+    const fallback = [helpCommand("/help")];
+    const id = store.beginHelp("conversation-1", "event-1", fallback);
+
+    store.failHelp("conversation-1", id);
+    store.completeHelp("conversation-1", id, [
+      ...fallback,
+      helpCommand("/review"),
+    ]);
+
+    expect(entries()).toEqual([
+      expect.objectContaining({
+        id,
+        status: "ready",
+        commands: fallback,
+      }),
+    ]);
+  });
+
+  it("keeps concurrent /help entries ordered through reverse completion", () => {
+    const store = useSlashCommandOutputStore.getState();
+    const firstId = store.beginHelp("conversation-1", "event-1", []);
+    const secondId = store.beginHelp("conversation-1", "event-2", []);
+
+    store.completeHelp("conversation-1", secondId, [helpCommand("/second")]);
+    store.completeHelp("conversation-1", firstId, [helpCommand("/first")]);
+
+    expect(entries().map((entry) => entry.id)).toEqual([firstId, secondId]);
+    expect(entries().map((entry) => entry.invocationOrder)).toEqual([0, 1]);
+    expect(entries().map((entry) => entry.status)).toEqual(["ready", "ready"]);
+  });
+
   it("preserves /help and synchronous home /skills behavior", () => {
     const store = useSlashCommandOutputStore.getState();
     store.showHelp("home", null, []);
     store.showSkills("home", null, { skills: [], hooks: [], mcps: [] });
 
     expect(entries("home")).toEqual([
-      expect.objectContaining({ kind: "help" }),
+      expect.objectContaining({ kind: "help", status: "ready" }),
       expect.objectContaining({
         kind: "skills",
         status: "ready",

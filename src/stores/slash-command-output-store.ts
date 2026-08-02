@@ -29,13 +29,17 @@ export type SkillsCommandOutput =
       errorKind: "timeout" | "request";
     });
 
-export interface HelpCommandOutput {
+interface HelpCommandOutputBase {
   id: string;
   kind: "help";
   invocationOrder: number;
   timelineBoundaryEventId: string | null;
   commands: SlashCommandItem[];
 }
+
+export type HelpCommandOutput = HelpCommandOutputBase & {
+  status: "loading" | "ready";
+};
 
 export type SlashCommandOutput = SkillsCommandOutput | HelpCommandOutput;
 
@@ -58,6 +62,18 @@ interface SlashCommandOutputState {
     entryId: string,
     errorKind: "timeout" | "request",
   ) => void;
+  beginHelp: (
+    scopeId: string,
+    timelineBoundaryEventId: string | null,
+    commands: SlashCommandItem[],
+    invocationOrder?: number,
+  ) => string;
+  completeHelp: (
+    scopeId: string,
+    entryId: string,
+    commands: SlashCommandItem[],
+  ) => void;
+  failHelp: (scopeId: string, entryId: string) => void;
   deactivateSkillsPlacementFallback: (scopeId: string) => void;
   showSkills: (
     scopeId: string,
@@ -167,6 +183,90 @@ export const useSlashCommandOutputStore = create<SlashCommandOutputState>()(
             },
           };
         }),
+      beginHelp: (
+        scopeId,
+        timelineBoundaryEventId,
+        commands,
+        invocationOrder,
+      ) => {
+        const id = uuidv4();
+        set((state) => {
+          const order = invocationOrder ?? state.nextInvocationOrder;
+          const entry: HelpCommandOutput = {
+            id,
+            kind: "help",
+            status: "loading",
+            invocationOrder: order,
+            timelineBoundaryEventId,
+            commands,
+          };
+          const entries = [
+            ...(state.entriesByScope[scopeId] ?? []),
+            entry,
+          ].sort((left, right) => left.invocationOrder - right.invocationOrder);
+          return {
+            entriesByScope: {
+              ...state.entriesByScope,
+              [scopeId]: entries,
+            },
+            nextInvocationOrder:
+              invocationOrder === undefined
+                ? state.nextInvocationOrder + 1
+                : state.nextInvocationOrder,
+          };
+        });
+        return id;
+      },
+      completeHelp: (scopeId, entryId, commands) =>
+        set((state) => {
+          const existing = state.entriesByScope[scopeId];
+          if (!existing) return state;
+
+          let changed = false;
+          const entries = existing.map((entry): SlashCommandOutput => {
+            if (
+              entry.id !== entryId ||
+              entry.kind !== "help" ||
+              entry.status !== "loading"
+            ) {
+              return entry;
+            }
+            changed = true;
+            return { ...entry, status: "ready", commands };
+          });
+          if (!changed) return state;
+          return {
+            entriesByScope: {
+              ...state.entriesByScope,
+              [scopeId]: entries,
+            },
+          };
+        }),
+      failHelp: (scopeId, entryId) =>
+        set((state) => {
+          const existing = state.entriesByScope[scopeId];
+          if (!existing) return state;
+
+          let changed = false;
+          const entries = existing.map((entry): SlashCommandOutput => {
+            if (
+              entry.id !== entryId ||
+              entry.kind !== "help" ||
+              entry.status !== "loading"
+            ) {
+              return entry;
+            }
+            changed = true;
+            return { ...entry, status: "ready" };
+          });
+          if (!changed) return state;
+          return {
+            entriesByScope: {
+              ...state.entriesByScope,
+              [scopeId]: entries,
+            },
+          };
+        }),
       deactivateSkillsPlacementFallback: (scopeId) =>
         set((state) => {
           const existing = state.entriesByScope[scopeId];
@@ -226,6 +326,7 @@ export const useSlashCommandOutputStore = create<SlashCommandOutputState>()(
           const entry = {
             id: uuidv4(),
             kind: "help" as const,
+            status: "ready" as const,
             timelineBoundaryEventId,
             commands,
             invocationOrder: order,

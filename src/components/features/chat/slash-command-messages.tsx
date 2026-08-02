@@ -100,7 +100,13 @@ function HelpCommandGroup({
   );
 }
 
-function HelpCommandDetails({ commands }: { commands: SlashCommandItem[] }) {
+function HelpCommandDetails({
+  commands,
+  isLoading,
+}: {
+  commands: SlashCommandItem[];
+  isLoading: boolean;
+}) {
   const { t } = useTranslation("openhands");
   const cliCommands = commands.filter((item) =>
     CLI_HELP_COMMANDS.has(item.command),
@@ -135,6 +141,16 @@ function HelpCommandDetails({ commands }: { commands: SlashCommandItem[] }) {
         showDescriptions={false}
         collapsible
       />
+      {isLoading ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 text-sm text-neutral-400"
+          data-testid="slash-command-help-loading"
+        >
+          <LoadingSpinner size="small" />
+          <span>{t(I18nKey.SLASH_COMMAND$LOADING_RESOURCES)}</span>
+        </div>
+      ) : null}
       <p className="text-sm text-neutral-400">
         {t(I18nKey.SLASH_COMMAND$AUTOCOMPLETE_TIP)}
       </p>
@@ -341,14 +357,24 @@ export function SlashCommandMessages({
             )}
           </div>
         ) : (
-          <GenericEventMessage
+          <div
             key={entry.id}
-            title={t(I18nKey.SLASH_COMMAND$AVAILABLE_COMMANDS, {
-              count: entry.commands.length,
-            })}
-            details={<HelpCommandDetails commands={entry.commands} />}
-            initiallyExpanded
-          />
+            data-testid={`slash-command-help-${entry.id}`}
+            data-status={entry.status}
+          >
+            <GenericEventMessage
+              title={t(I18nKey.SLASH_COMMAND$AVAILABLE_COMMANDS, {
+                count: entry.commands.length,
+              })}
+              details={
+                <HelpCommandDetails
+                  commands={entry.commands}
+                  isLoading={entry.status === "loading"}
+                />
+              }
+              initiallyExpanded
+            />
+          </div>
         ),
       )}
     </div>

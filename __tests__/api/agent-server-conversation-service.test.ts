@@ -7,12 +7,17 @@ import {
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   __resetActiveStoreForTests,
+  getActiveBackend,
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { setSessionConfirmationPolicy } from "#/services/confirmation-policy-session";
+import {
+  clearSessionConfirmationPolicies,
+  getConfirmationPolicySessionScope,
+  setSessionConfirmationPolicy,
+} from "#/services/confirmation-policy-session";
 import {
   getFetchCall,
   getJsonBody,
@@ -130,7 +135,7 @@ describe("AgentServerConversationService", () => {
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
-    setSessionConfirmationPolicy(null);
+    clearSessionConfirmationPolicies();
 
     mockConversationClient.mockReturnValue({
       createConversation: async (payload: unknown) => {
@@ -430,7 +435,10 @@ describe("AgentServerConversationService", () => {
           updated_at: "2024-01-01",
         },
       });
-      setSessionConfirmationPolicy({ kind: "AlwaysConfirm" });
+      setSessionConfirmationPolicy(
+        getConfirmationPolicySessionScope(getActiveBackend().backend),
+        { kind: "AlwaysConfirm" },
+      );
 
       await AgentServerConversationService.createConversation();
 
@@ -440,6 +448,81 @@ describe("AgentServerConversationService", () => {
           confirmation_policy: { kind: "AlwaysConfirm" },
         }),
       );
+    });
+
+    it("isolates session confirmation policy by backend and connection revision", async () => {
+      const localA: Backend = {
+        id: "local-a",
+        name: "Local A",
+        host: "http://local-a.example",
+        apiKey: "key-a",
+        kind: "local",
+        connectionRevision: 0,
+      };
+      const localB: Backend = {
+        id: "local-b",
+        name: "Local B",
+        host: "http://local-b.example",
+        apiKey: "key-b",
+        kind: "local",
+        connectionRevision: 0,
+      };
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-2",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      try {
+        setRegisteredBackends([localA, localB]);
+        setActiveSelection({ backendId: localA.id });
+        setSessionConfirmationPolicy(
+          getConfirmationPolicySessionScope(localA),
+          { kind: "AlwaysConfirm" },
+        );
+
+        setActiveSelection({ backendId: localB.id });
+        await AgentServerConversationService.createConversation();
+        expect(mockHttpPost).toHaveBeenLastCalledWith(
+          "/api/conversations",
+          expect.not.objectContaining({
+            confirmation_policy: { kind: "AlwaysConfirm" },
+          }),
+        );
+
+        setActiveSelection({ backendId: localA.id });
+        await AgentServerConversationService.createConversation();
+        expect(mockHttpPost).toHaveBeenLastCalledWith(
+          "/api/conversations",
+          expect.objectContaining({
+            confirmation_policy: { kind: "AlwaysConfirm" },
+          }),
+        );
+
+        const revisedLocalA = { ...localA, connectionRevision: 1 };
+        setRegisteredBackends([revisedLocalA, localB]);
+        await AgentServerConversationService.createConversation();
+        expect(mockHttpPost).toHaveBeenLastCalledWith(
+          "/api/conversations",
+          expect.not.objectContaining({
+            confirmation_policy: { kind: "AlwaysConfirm" },
+          }),
+        );
+      } finally {
+        window.localStorage.clear();
+        __resetActiveStoreForTests();
+      }
     });
 
     it("does not apply the session confirmation policy to an ACP launch", async () => {
@@ -459,7 +542,10 @@ describe("AgentServerConversationService", () => {
           updated_at: "2024-01-01",
         },
       });
-      setSessionConfirmationPolicy({ kind: "AlwaysConfirm" });
+      setSessionConfirmationPolicy(
+        getConfirmationPolicySessionScope(getActiveBackend().backend),
+        { kind: "AlwaysConfirm" },
+      );
 
       await AgentServerConversationService.createConversation();
 

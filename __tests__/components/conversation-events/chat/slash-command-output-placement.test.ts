@@ -11,6 +11,7 @@ const helpOutput = (
 ): SlashCommandOutput => ({
   id,
   kind: "help",
+  status: "ready",
   invocationOrder,
   timelineBoundaryEventId,
   commands: [],
