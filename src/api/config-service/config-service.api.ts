@@ -61,10 +61,14 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/models/search` directly (verified status is embedded in
    *   each returned item).
+   * @param modelIds - Pre-fetched raw model-ID list from /api/llm/models, also
+   *   only used by the local reconstruction path. Lets callers share one fetch
+   *   across searchModels and searchProviders.
    */
   static async searchModels(
     params: SearchModelsParams = {},
     verifiedByProvider?: Record<string, string[]>,
+    modelIds?: string[],
   ): Promise<LLMModelPage> {
     const active = getActiveBackend();
 
@@ -90,8 +94,12 @@ class ConfigService {
       verifiedByProvider !== undefined
         ? Promise.resolve(verifiedByProvider)
         : llmClient.getVerifiedModels();
+    const modelsFetch =
+      modelIds !== undefined
+        ? Promise.resolve(modelIds)
+        : llmClient.getModels();
     const [models, verifiedMap] = await Promise.all([
-      llmClient.getModels(),
+      modelsFetch,
       verifiedFetch,
     ]);
 
@@ -133,10 +141,14 @@ class ConfigService {
    *   local reconstruction path. Ignored for cloud backends, which call
    *   `/api/v1/config/providers/search` directly (verified status is embedded in
    *   each returned item).
+   * @param modelIds - Pre-fetched raw model-ID list from /api/llm/models, also
+   *   only used by the local reconstruction path. Lets callers share one fetch
+   *   across searchModels and searchProviders.
    */
   static async searchProviders(
     params: SearchProvidersParams = {},
     verifiedByProvider?: Record<string, string[]>,
+    modelIds?: string[],
   ): Promise<ProviderPage> {
     const active = getActiveBackend();
 
@@ -161,9 +173,13 @@ class ConfigService {
       verifiedByProvider !== undefined
         ? Promise.resolve(verifiedByProvider)
         : llmClient.getVerifiedModels();
+    const modelsFetch =
+      modelIds !== undefined
+        ? Promise.resolve(modelIds)
+        : llmClient.getModels();
     const [providers, models, verifiedMap] = await Promise.all([
       llmClient.getProviders(),
-      llmClient.getModels(),
+      modelsFetch,
       verifiedFetch,
     ]);
 

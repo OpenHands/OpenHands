@@ -7,12 +7,14 @@ import {
   VERIFIED_MODELS_STALE_TIME,
   fetchVerifiedModelsByProvider,
 } from "./use-verified-models";
+import { LLM_MODELS_QUERY_KEY, fetchLlmModels } from "./use-llm-models";
 
 const MAX_PAGINATION_DEPTH = 10;
 
 async function fetchPage(
   provider: string,
   verifiedByProvider: Record<string, string[]>,
+  modelIds: string[],
   pageId?: string,
   depth = 0,
 ): Promise<LLMModel[]> {
@@ -27,12 +29,14 @@ async function fetchPage(
       page_id: pageId,
     },
     verifiedByProvider,
+    modelIds,
   );
 
   if (page.next_page_id) {
     const rest = await fetchPage(
       provider,
       verifiedByProvider,
+      modelIds,
       page.next_page_id,
       depth + 1,
     );
@@ -45,12 +49,19 @@ export const useProviderModels = (provider: string | null) =>
   useQuery({
     queryKey: ["config", "models", provider],
     queryFn: async ({ client }) => {
-      const verifiedByProvider = await client.fetchQuery({
-        queryKey: VERIFIED_MODELS_QUERY_KEY,
-        queryFn: fetchVerifiedModelsByProvider,
-        staleTime: VERIFIED_MODELS_STALE_TIME,
-      });
-      return fetchPage(provider!, verifiedByProvider);
+      const [verifiedByProvider, modelIds] = await Promise.all([
+        client.fetchQuery({
+          queryKey: VERIFIED_MODELS_QUERY_KEY,
+          queryFn: fetchVerifiedModelsByProvider,
+          staleTime: VERIFIED_MODELS_STALE_TIME,
+        }),
+        client.fetchQuery({
+          queryKey: LLM_MODELS_QUERY_KEY,
+          queryFn: fetchLlmModels,
+          staleTime: VERIFIED_MODELS_STALE_TIME,
+        }),
+      ]);
+      return fetchPage(provider!, verifiedByProvider, modelIds);
     },
     enabled: !!provider,
     staleTime: VERIFIED_MODELS_STALE_TIME,
