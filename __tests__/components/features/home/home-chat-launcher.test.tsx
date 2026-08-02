@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import { CREATE_CONVERSATION_DEFAULT_TAIL } from "../../../helpers/create-conversation-call-args";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -328,6 +329,7 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
@@ -376,6 +378,7 @@ describe("HomeChatLauncher", () => {
       "local_repo",
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
@@ -416,6 +419,7 @@ describe("HomeChatLauncher", () => {
       "new_worktree",
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
@@ -472,6 +476,7 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
@@ -498,6 +503,7 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     await waitFor(() =>
       expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1),
@@ -579,6 +585,7 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
     expect(sendMessageWithAttachments).not.toHaveBeenCalled();
     await waitFor(() =>
@@ -618,6 +625,7 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      ...CREATE_CONVERSATION_DEFAULT_TAIL,
     );
   });
 });

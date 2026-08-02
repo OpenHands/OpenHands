@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { CREATE_CONVERSATION_DEFAULT_TAIL } from "../../../helpers/create-conversation-call-args";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { LocalNewConversationMenu } from "#/components/features/conversation-panel/local-new-conversation-menu";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
@@ -187,6 +188,7 @@ describe("LocalNewConversationMenu", () => {
         undefined,
         undefined,
         undefined,
+        ...CREATE_CONVERSATION_DEFAULT_TAIL,
       );
     });
     await waitFor(() => {
