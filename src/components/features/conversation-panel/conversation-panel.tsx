@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -88,6 +89,7 @@ export function ConversationPanel({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend } = useActiveBackend();
+  const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -640,7 +642,7 @@ export function ConversationPanel({
           }
         >
           <NavigationLink
-            to={`/conversations/${conversation.id}`}
+            to={backendScopedPath(`/conversations/${conversation.id}`)}
             onClick={onClose}
             className={cn(
               "block rounded-md transition-colors",
@@ -832,7 +834,7 @@ export function ConversationPanel({
           startTasks?.map((task) => (
             <NavigationLink
               key={task.id}
-              to={`/conversations/task-${task.id}`}
+              to={backendScopedPath(`/conversations/task-${task.id}`)}
               onClick={onClose}
               className="block"
             >
