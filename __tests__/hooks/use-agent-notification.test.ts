@@ -28,6 +28,10 @@ vi.mock("#/contexts/active-backend-context", () => ({
     active: { backend: { id: mockActive.backendId }, orgId: mockActive.orgId },
     setActive: mockSetActive,
   }),
+  useOptionalActiveBackendContext: () => ({
+    active: { backend: { id: mockActive.backendId }, orgId: mockActive.orgId },
+    setActive: mockSetActive,
+  }),
 }));
 
 const mockPlay = vi.fn().mockResolvedValue(undefined);

@@ -5,7 +5,7 @@ import { useSettings } from "#/hooks/query/use-settings";
 import notificationSound from "#/assets/notification.mp3";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
-import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import { useOptionalActiveBackendContext } from "#/contexts/active-backend-context";
 
 const NOTIFICATION_STATES: AgentState[] = [
   AgentState.AWAITING_USER_INPUT,
@@ -38,7 +38,10 @@ export function useAgentNotification(
 ) {
   const { t } = useTranslation("openhands");
   const { conversationId, navigate } = useNavigation();
-  const { active, setActive } = useActiveBackendContext();
+  // AgentStatus renders in trees without an ActiveBackendProvider, so this
+  // must not throw. Without it the notification still fires; only the
+  // restore-originating-backend step on click is skipped.
+  const activeBackend = useOptionalActiveBackendContext();
   const { data: settings } = useSettings();
   const audioRef = useRef<HTMLAudioElement | undefined>(undefined);
   const prevStateRef = useRef<AgentState | undefined>(undefined);
@@ -86,24 +89,25 @@ export function useAgentNotification(
     const notification = new Notification(conversationTitle || "OpenHands", {
       body: t(notificationBodyKey),
     });
-    const originatingBackendId = active.backend.id;
-    const originatingOrgId = active.orgId;
+    const originatingBackendId = activeBackend?.active.backend.id;
+    const originatingOrgId = activeBackend?.active.orgId;
+    const setActive = activeBackend?.setActive;
     notification.onclick = () => {
       window.focus();
-      setActive(originatingBackendId, originatingOrgId);
+      if (setActive && originatingBackendId) {
+        setActive(originatingBackendId, originatingOrgId);
+      }
       navigate(`/conversations/${conversationId}`);
       notification.close();
     };
   }, [
     areDesktopNotificationsEnabled,
-    active.backend.id,
-    active.orgId,
+    activeBackend,
     conversationId,
     conversationTitle,
     curAgentState,
     isSoundEnabled,
     navigate,
-    setActive,
     t,
   ]);
 }
