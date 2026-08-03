@@ -147,6 +147,8 @@ defenseclaw setup guardrail --mode action --restart
 
 The DefenseClaw proxy handles Anthropic (`api.anthropic.com`), OpenAI (`api.openai.com`), OpenRouter, Azure OpenAI, Gemini, Ollama, and Bedrock. Provider detection is automatic based on the target URL.
 
+> **Note:** The same OpenAI-compatible `base_url` pattern works with multi-model gateways when you are not self-hosting — for example [DaoXE](https://daoxe.com) at `https://api.daoxe.com/v1`.
+
 ---
 
 ### C. Scan Skills Before Loading
