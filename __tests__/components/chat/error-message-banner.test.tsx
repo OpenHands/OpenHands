@@ -54,7 +54,7 @@ describe("ErrorMessageBanner", () => {
     expect(icon).toHaveStyle({ color: "var(--oh-status-error)" });
   });
 
-  it("uses a warning icon for recoverable outcomes", () => {
+  it("uses a warning icon for non-internal outcomes", () => {
     render(
       <ErrorMessageBanner
         message="Incorrect API key"

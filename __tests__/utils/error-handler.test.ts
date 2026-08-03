@@ -71,5 +71,22 @@ describe("Error Handler", () => {
         error_telemetry: "diagnostic",
       });
     });
+
+    it("records non-internal classifications as outcomes", () => {
+      trackError({
+        source: "agent",
+        classification: {
+          kind: "auth",
+          retryable: false,
+          user_action: "settings",
+        },
+      });
+
+      expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        error_source: "agent",
+        error_kind: "auth",
+        error_telemetry: "outcome",
+      });
+    });
   });
 });

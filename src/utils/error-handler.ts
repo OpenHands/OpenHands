@@ -24,19 +24,18 @@ export function trackError({
   const extra = Object.fromEntries(
     Object.entries(metadata).filter(([key]) => !RESERVED_ERROR_KEYS.has(key)),
   );
+  const kind = classification?.kind || "unknown";
 
   void trackEvent("error_outcome", {
     ...extra,
     error_source: source || "unknown",
-    error_kind: classification?.kind || "unknown",
+    error_kind: kind,
     // Keep diagnostic errors correlatable without capturing raw messages.
     ...(classification?.error_id != null
       ? { error_id: classification.error_id }
       : {}),
     error_telemetry:
-      classification == null ||
-      classification.kind === "internal" ||
-      classification.kind === "unknown"
+      kind === "internal" || kind === "unknown"
         ? "diagnostic"
         : "outcome",
   });

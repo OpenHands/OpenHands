@@ -35886,6 +35886,23 @@
     "uk": "Підтвердити та створити",
     "ca": "Confirma i crea"
   },
+  "SETUP$FALLBACK_CONVERSATION": {
+    "en": "Set up in a conversation",
+    "ja": "会話でセットアップ",
+    "zh-CN": "在对话中设置",
+    "zh-TW": "在對話中設定",
+    "ko-KR": "대화에서 설정하기",
+    "no": "Sett opp i en samtale",
+    "it": "Configura in una conversazione",
+    "pt": "Configurar em uma conversa",
+    "es": "Configurar en una conversación",
+    "ar": "الإعداد في محادثة",
+    "fr": "Configurer dans une conversation",
+    "tr": "Bir konuşmada kur",
+    "de": "In einer Unterhaltung einrichten",
+    "uk": "Налаштувати в розмові",
+    "ca": "Configura en una conversa"
+  },
   "SETUP$EMPTY_VALUE": {
     "en": "Not set",
     "ja": "未設定",

@@ -15,10 +15,12 @@ export type AutomationTimeoutValidation =
 /**
  * Validate a raw timeout string from the edit form. A blank string means "use
  * the server default" (resolved as `null`). Otherwise the value must be a
- * positive integer no greater than {@link AUTOMATION_TIMEOUT_MAX_SECONDS}.
+ * positive integer no greater than the ceiling, which the interface manifest
+ * may lower from {@link AUTOMATION_TIMEOUT_MAX_SECONDS}.
  */
 export function validateAutomationTimeout(
   raw: string,
+  maxSeconds: number = AUTOMATION_TIMEOUT_MAX_SECONDS,
 ): AutomationTimeoutValidation {
   const trimmed = raw.trim();
   if (!trimmed) return { value: null };
@@ -30,7 +32,7 @@ export function validateAutomationTimeout(
   if (seconds <= 0) {
     return { errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_POSITIVE };
   }
-  if (seconds > AUTOMATION_TIMEOUT_MAX_SECONDS) {
+  if (seconds > maxSeconds) {
     return { errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED };
   }
   return { value: seconds };
