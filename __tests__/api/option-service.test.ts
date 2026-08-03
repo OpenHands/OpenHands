@@ -119,8 +119,10 @@ describe("OptionService", () => {
 
     expect(models.models).toContain("openhands/claude-opus-4-5-20251101");
     expect(models.models).toContain("openai/gpt-5.5");
+    expect(models.models).toContain("openhands/minimax-m3");
     expect(models.verified_models).toContain("claude-opus-4-5-20251101");
     expect(models.verified_models).toContain("gpt-5.5");
+    expect(models.verified_models).toContain("minimax-m3");
     expect(models.verified_providers).toEqual([
       "anthropic",
       "openai",
