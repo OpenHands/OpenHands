@@ -7,6 +7,7 @@ import type { WebSocketConnectionState } from "#/contexts/conversation-websocket
 const setConversationMode = vi.fn();
 const handlePlanClick = vi.fn();
 let isCreatingConversation = false;
+let hasPlanner = false;
 let webSocketStatus: WebSocketConnectionState = "OPEN";
 
 vi.mock("#/stores/conversation-store", () => ({
@@ -16,6 +17,7 @@ vi.mock("#/stores/conversation-store", () => ({
 vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
     handlePlanClick,
+    hasPlanner,
     isCreatingConversation,
   }),
 }));
@@ -40,6 +42,7 @@ describe("usePlanModeInterceptor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     isCreatingConversation = false;
+    hasPlanner = false;
     webSocketStatus = "OPEN";
   });
 
@@ -54,7 +57,35 @@ describe("usePlanModeInterceptor", () => {
   it("enables plan mode for /plan", () => {
     const { intercept, onSubmit } = setup(CONV);
     intercept("/plan");
-    expect(handlePlanClick).toHaveBeenCalled();
+    expect(handlePlanClick).toHaveBeenCalledWith(undefined, undefined);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("creates the planner with the task as its initial message for /plan <task> when no planner exists yet", () => {
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/plan   Build a website about open source.  ");
+    expect(handlePlanClick).toHaveBeenCalledWith(
+      undefined,
+      "Build a website about open source.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(setConversationMode).not.toHaveBeenCalled();
+  });
+
+  it("sends the task straight to the existing planner for /plan <task> when a planner already exists", () => {
+    hasPlanner = true;
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/plan Build a website about open source.");
+    expect(setConversationMode).toHaveBeenCalledWith("plan");
+    expect(onSubmit).toHaveBeenCalledWith("Build a website about open source.");
+    expect(handlePlanClick).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a bare toggle for /plan with only whitespace after it", () => {
+    hasPlanner = true;
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/plan   ");
+    expect(handlePlanClick).toHaveBeenCalledWith(undefined, undefined);
     expect(onSubmit).not.toHaveBeenCalled();
   });
 

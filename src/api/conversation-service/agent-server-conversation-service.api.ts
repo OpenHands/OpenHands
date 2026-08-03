@@ -506,6 +506,7 @@ class AgentServerConversationService {
 
   static async createLocalPlanningConversation(
     parentConversationId: string,
+    initialMessage?: string,
   ): Promise<AppConversation> {
     if (getActiveBackend().backend.kind === "cloud") {
       throw new Error("Local planning conversations require a local backend.");
@@ -526,6 +527,7 @@ class AgentServerConversationService {
         // does not silently repoint the planner at a different model.
         parentAgentProfileId:
           parent?.launched_agent_profile?.agent_profile_id ?? null,
+        initialMessage,
       });
 
     const data = await new ConversationClient(

@@ -32,9 +32,13 @@ function useCreateLocalPlanningConversationMutation(options: {
 
   return useMutation({
     mutationKey: LOCAL_PLANNER_MUTATION_KEYS.create,
-    mutationFn: (parentConversationId: string) =>
+    mutationFn: (variables: {
+      parentConversationId: string;
+      initialMessage?: string;
+    }) =>
       AgentServerConversationService.createLocalPlanningConversation(
-        parentConversationId,
+        variables.parentConversationId,
+        variables.initialMessage,
       ),
     onSuccess: (planningConversation) => {
       options.onCreated(planningConversation.id);
@@ -151,8 +155,23 @@ export const useHandlePlanClick = () => {
     setSubConversationTaskId,
   ]);
 
+  const hasCloudPlanner = !!(
+    (conversation?.sub_conversation_ids &&
+      conversation.sub_conversation_ids.length > 0) ||
+    subConversationTaskId
+  );
+  // Whether a planner helper already exists for this conversation — callers
+  // (e.g. the `/plan <task>` interceptor) use this to decide whether they can
+  // send a message to the planner immediately, or must wait for creation.
+  const hasPlanner = isLocalBackend
+    ? !!(localPlanningConversationId || serverPlanningConversationId)
+    : hasCloudPlanner;
+
   const handlePlanClick = useCallback(
-    (event?: MouseEvent<HTMLButtonElement> | KeyboardEvent) => {
+    (
+      event?: MouseEvent<HTMLButtonElement> | KeyboardEvent,
+      initialMessage?: string,
+    ) => {
       event?.preventDefault();
       event?.stopPropagation();
 
@@ -169,16 +188,14 @@ export const useHandlePlanClick = () => {
         ) {
           return;
         }
-        createLocalPlanningConversation(conversation.id);
+        createLocalPlanningConversation({
+          parentConversationId: conversation.id,
+          initialMessage,
+        });
         return;
       }
 
-      if (
-        (conversation?.sub_conversation_ids &&
-          conversation.sub_conversation_ids.length > 0) ||
-        !conversation?.id ||
-        subConversationTaskId
-      ) {
+      if (hasCloudPlanner || !conversation?.id) {
         return;
       }
 
@@ -187,6 +204,7 @@ export const useHandlePlanClick = () => {
           parentConversationId: conversation.id,
           agentType: "plan",
           entryPoint: "plan_sub_conversation",
+          ...(initialMessage ? { query: initialMessage } : {}),
         },
         {
           onSuccess: (data) => {
@@ -208,17 +226,18 @@ export const useHandlePlanClick = () => {
       conversation,
       createConversation,
       createLocalPlanningConversation,
+      hasCloudPlanner,
       localPlanningConversationId,
       serverPlanningConversationId,
       setConversationMode,
       setSubConversationTaskId,
-      subConversationTaskId,
       t,
     ],
   );
 
   return {
     handlePlanClick,
+    hasPlanner,
     isCreatingConversation:
       isCreatingCloudConversation || isCreatingLocalPlanningConversation,
   };
