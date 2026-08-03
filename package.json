@@ -25,8 +25,8 @@
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.13.0",
     "@openhands/typescript-client": "1.36.1",
-    "@react-router/node": "7.17.0",
-    "@react-router/serve": "7.17.0",
+    "@react-router/node": "7.18.2",
+    "@react-router/serve": "7.18.2",
     "@tailwindcss/vite": "4.2.4",
     "@tanstack/react-query": "5.100.9",
     "@types/shell-quote": "1.7.5",
@@ -45,14 +45,14 @@
     "isbot": "5.1.39",
     "lucide-react": "1.25.0",
     "monaco-editor": "0.55.1",
-    "posthog-js": "1.372.6",
+    "posthog-js": "1.380.0",
     "react": "19.2.5",
     "react-dom": "19.2.5",
     "react-hot-toast": "2.6.0",
     "react-i18next": "17.0.6",
     "react-icons": "5.6.0",
     "react-markdown": "10.1.0",
-    "react-router": "7.17.0",
+    "react-router": "7.18.2",
     "react-syntax-highlighter": "16.1.1",
     "rehype-raw": "7.0.0",
     "rehype-sanitize": "6.0.0",
@@ -127,7 +127,7 @@
     "@eslint/js": "9.39.4",
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.59.1",
-    "@react-router/dev": "7.17.0",
+    "@react-router/dev": "7.18.2",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@tailwindcss/typography": "0.5.19",
@@ -147,7 +147,7 @@
     "@vitest/coverage-v8": "4.1.5",
     "cross-env": "10.1.0",
     "electron": "42.3.3",
-    "electron-builder": "26.8.1",
+    "electron-builder": "26.15.3",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.4",
@@ -183,7 +183,10 @@
     "@vercel/static-config": {
       "ajv": "8.20.0"
     },
-    "dompurify": "3.4.7"
+    "dompurify": "3.4.12",
+    "typed-rest-client": {
+      "qs": "6.15.3"
+    }
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -242,6 +245,6 @@
   "peerDependencies": {
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "react-router": "7.17.0"
+    "react-router": "7.18.2"
   }
 }
