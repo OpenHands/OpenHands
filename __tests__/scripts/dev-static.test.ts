@@ -1,8 +1,46 @@
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { buildAutomationBackendEnv } from "../../scripts/dev-static.mjs";
 
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+
 describe("dev-static", () => {
+  it("does not install signal handlers when imported", async () => {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-static.mjs"),
+    ).href;
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `const signals = ["SIGINT", "SIGTERM", "SIGHUP"]; const before = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)])); await import(${JSON.stringify(moduleUrl)}); const after = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)])); console.log(JSON.stringify({ before, after }));`,
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const [code] = await once(child, "exit");
+    expect(code).toBe(0);
+    expect(JSON.parse(output.trim())).toEqual({
+      before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+      after: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+    });
+  });
+
   it("uses the same session key for both agent-server and automation backend auth", () => {
     const env = buildAutomationBackendEnv(
       {
