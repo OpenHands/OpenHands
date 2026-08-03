@@ -29,7 +29,6 @@ import type { PluginSpec } from "#/api/conversation-service/agent-server-convers
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
 import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
-import { RecommendedAutomationsRail } from "./featured-automations/recommended-automations-rail";
 import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
 import { OpenLauncherButton } from "./open-launcher-button";
@@ -227,8 +226,6 @@ export function HomeChatLauncher() {
           <HomeHeaderTitle />
         </div>
 
-        <RecommendedAutomationsRail />
-
         <div className="w-full">
           <CustomChatInput
             onSubmit={handleSubmitWithModelGuard}
@@ -264,8 +261,10 @@ export function HomeChatLauncher() {
           />
         </div>
 
-        <PinnedAutomationsDashboard />
-        <RunningAutomationsList />
+        <div className="mt-8 flex w-full flex-col gap-8">
+          <PinnedAutomationsDashboard />
+          <RunningAutomationsList />
+        </div>
       </div>
 
       {isLocal ? (

@@ -1,5 +1,4 @@
 import { PrefetchPageLinks, useLocation } from "react-router";
-import { AutomationsToaster } from "#/components/features/home/featured-automations/automations-toaster";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
 import {
@@ -20,10 +19,6 @@ function HomeScreen() {
     >
       <div className="md:px-4 lg:px-0">
         <LlmNotConfiguredBanner />
-      </div>
-
-      <div className="mx-auto w-full max-w-[800px] pt-3 md:px-4">
-        <AutomationsToaster />
       </div>
 
       <HomeChatLauncher />

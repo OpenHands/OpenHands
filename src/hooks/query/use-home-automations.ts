@@ -16,7 +16,7 @@ export const UNKNOWN_RUN_STATE: LatestAutomationRunState = {
 
 /**
  * Shared home-page automation queries: health gate, enabled automations, and
- * latest-run state for the suggested rail and running list.
+ * latest-run state for the recent-activity list and pinned dashboard.
  */
 export function useHomeAutomations() {
   const { data: healthData, isLoading: isHealthLoading } =

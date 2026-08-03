@@ -1,5 +1,5 @@
 import { Pin } from "lucide-react";
-import { useLayoutEffect, useReducer, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
@@ -8,29 +8,28 @@ import { ConversationNameContextMenuIconText } from "#/components/features/conve
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import {
+  UNKNOWN_RUN_STATE,
+  useHomeAutomations,
+} from "#/hooks/query/use-home-automations";
 import { useHomePinnedAutomations } from "#/hooks/use-home-pinned-automations";
 import { I18nKey } from "#/i18n/declaration";
 import { ContextMenu } from "#/ui/context-menu";
 import {
-  HOME_AUTOMATION_ACTIVITY_EXAMPLES,
-  type HomeAutomationActivityExample,
-} from "./home-automation-activity-examples";
-
-function hrefForExample(example: HomeAutomationActivityExample): string {
-  return example.conversationId
-    ? `/conversations/${example.conversationId}`
-    : `/automations/${example.id}`;
-}
+  buildHomeAutomationActivityItems,
+  hrefForActivityItem,
+  type HomeAutomationActivityItem,
+} from "./home-automation-activity";
 
 interface RunningAutomationRowProps {
-  example: HomeAutomationActivityExample;
+  item: HomeAutomationActivityItem;
 }
 
-function RunningAutomationRow({ example }: RunningAutomationRowProps) {
+function RunningAutomationRow({ item }: RunningAutomationRowProps) {
   const { t } = useTranslation("openhands");
   const { isPinned, togglePin } = useHomePinnedAutomations();
   const [menuOpen, setMenuOpen] = useState(false);
-  const pinned = isPinned(example.id);
+  const pinned = isPinned(item.id);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [, bumpPosition] = useReducer((i: number) => i + 1, 0);
   const menuRef = useClickOutsideElement<HTMLUListElement>(
@@ -72,38 +71,40 @@ function RunningAutomationRow({ example }: RunningAutomationRowProps) {
   })();
 
   const portalTarget = typeof document !== "undefined" ? document.body : null;
+  const metaLine = [item.triggerSummary, item.whenLabel]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <li
-      data-testid={`running-automation-row-${example.id}`}
+      data-testid={`running-automation-row-${item.id}`}
       className="group relative flex items-stretch"
     >
       <NavigationLink
-        to={hrefForExample(example)}
-        aria-label={example.name}
+        to={hrefForActivityItem(item)}
+        aria-label={item.name}
         className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--oh-interactive-hover)] focus:outline-none focus-visible:bg-[var(--oh-interactive-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
       >
         <div className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-[var(--oh-foreground)]">
-            {example.name}
+            {item.name}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-[var(--oh-text-secondary)]">
-            {example.triggerSummary}
-            {}
-            {" · "}
-            {example.whenLabel}
-          </span>
+          {metaLine ? (
+            <span className="mt-0.5 block truncate text-xs text-[var(--oh-text-secondary)]">
+              {metaLine}
+            </span>
+          ) : null}
         </div>
 
-        <RunStatusBadge status={example.status} />
+        {item.status ? <RunStatusBadge status={item.status} /> : null}
       </NavigationLink>
 
       <div className="relative flex shrink-0 items-center pr-1.5">
         <EllipsisButton
           ref={anchorRef}
-          testId={`running-automation-menu-${example.id}`}
+          testId={`running-automation-menu-${item.id}`}
           ariaLabel={t(I18nKey.FEATURED_AUTOMATIONS$ROW_MENU_LABEL, {
-            name: example.name,
+            name: item.name,
           })}
           className="opacity-70 group-hover:opacity-100"
           onClick={(event) => {
@@ -117,7 +118,7 @@ function RunningAutomationRow({ example }: RunningAutomationRowProps) {
           ? createPortal(
               <ContextMenu
                 ref={menuRef}
-                testId={`running-automation-menu-panel-${example.id}`}
+                testId={`running-automation-menu-panel-${item.id}`}
                 theme="popover"
                 position="none"
                 alignment="none"
@@ -126,11 +127,11 @@ function RunningAutomationRow({ example }: RunningAutomationRowProps) {
                 className="min-w-40"
               >
                 <ContextMenuListItem
-                  testId={`running-automation-pin-${example.id}`}
+                  testId={`running-automation-pin-${item.id}`}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    togglePin(example.id);
+                    togglePin(item.id);
                     setMenuOpen(false);
                   }}
                 >
@@ -160,13 +161,35 @@ function RunningAutomationRow({ example }: RunningAutomationRowProps) {
 }
 
 /**
- * Prototype list of running + recently finished automations under the home
- * composer. Uses static example rows so the UI can be designed without the
- * automation backend.
+ * Recent automation activity under the home composer. Driven by live
+ * enabled automations + latest-run queries; self-gates when the automation
+ * service is unavailable or there are no enabled automations.
  */
 export function RunningAutomationsList() {
-  const { t } = useTranslation("openhands");
-  const examples = HOME_AUTOMATION_ACTIVITY_EXAMPLES;
+  const { t, i18n } = useTranslation("openhands");
+  const {
+    isBackendHealthy,
+    isHealthLoading,
+    isError,
+    enabledAutomations,
+    runStates,
+  } = useHomeAutomations();
+
+  const items = useMemo(
+    () =>
+      buildHomeAutomationActivityItems(
+        enabledAutomations,
+        runStates,
+        i18n.language,
+        t,
+        UNKNOWN_RUN_STATE,
+      ),
+    [enabledAutomations, runStates, i18n.language, t],
+  );
+
+  if (isHealthLoading || !isBackendHealthy || isError || items.length === 0) {
+    return null;
+  }
 
   return (
     <section
@@ -185,8 +208,8 @@ export function RunningAutomationsList() {
         aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
         className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
       >
-        {examples.map((example) => (
-          <RunningAutomationRow key={example.id} example={example} />
+        {items.map((item) => (
+          <RunningAutomationRow key={item.id} item={item} />
         ))}
       </ul>
     </section>
