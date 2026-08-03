@@ -239,9 +239,10 @@ OPTIONS:
                                OPENHANDS_SKIN_PORT=<port> and reverse-proxied
                                under /skin (prefix passed through verbatim:
                                the skin serves its UI at /skin/ and its own
-                               backend at /skin/api/*). When a skin is
-                               installed, / is internally rewritten to
-                               /skin/ so the skin is the front page. The
+                               backend at /skin/api/*). The Canvas frontend
+                               embeds the skin as its default tab (iframe at
+                               /skin/) — the skin is nested inside the
+                               Canvas UI, never served standalone at /. The
                                skin management REST API is mounted at
                                /skin-api.
   --skin-agent-server-url <url>
@@ -588,11 +589,12 @@ export function startStaticServer(config) {
   // its UI at /skin/ and its own backend at /skin/api/*. The public URL
   // and the URL the skin sees are identical, which keeps absolute and
   // relative URLs working both inside the Canvas iframe and standalone.
-  // Additionally, when a skin is installed, `/` is internally rewritten
-  // to /skin/ (no redirect — the address bar stays clean) so the skin UI
-  // is the instance's front page; skins ship <base href="/skin/"> so the
-  // same document works at both mount points. The management REST API
-  // (install/status/push) is host-owned and stays at /skin-api.
+  // The skin is NESTED inside the Canvas UI: the frontend's index route
+  // redirects to its /skin tab (an iframe pointing at /skin/) when a skin
+  // is installed, so the Canvas chrome (sidebar, settings, conversations)
+  // always frames the skin. `/` itself keeps serving the Canvas frontend.
+  // The management REST API (install/status/push) is host-owned and stays
+  // at /skin-api.
   let skinService = null;
   let skinApiHandler = null;
   let skinTarget = null;
@@ -614,21 +616,6 @@ export function startStaticServer(config) {
         console.error("Failed to start installed skin:", err);
       });
     }
-  }
-
-  // `/` (exactly, plus query) serves the skin UI when a skin is installed:
-  // rewrite to /skin/ and proxy. isInstalled() is a cheap fs check.
-  function rewriteRootToSkin(req) {
-    const url = req.url ?? "/";
-    if (
-      skinTarget &&
-      skinService?.isInstalled() &&
-      (url === "/" || url.startsWith("/?"))
-    ) {
-      req.url = `${SKIN_APP_PREFIX}/${url.slice(1)}`;
-      return true;
-    }
-    return false;
   }
 
   const injectionOpts = {
@@ -662,10 +649,7 @@ export function startStaticServer(config) {
       res.end();
       return;
     }
-    if (
-      skinTarget &&
-      (matchesPathPrefix(url, SKIN_APP_PREFIX) || rewriteRootToSkin(req))
-    ) {
+    if (skinTarget && matchesPathPrefix(url, SKIN_APP_PREFIX)) {
       proxy.proxyHttp(req, res, skinTarget);
       return;
     }

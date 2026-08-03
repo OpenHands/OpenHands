@@ -10,8 +10,8 @@
  *     port given by the OPENHANDS_SKIN_PORT environment variable. The app
  *     must serve its UI under /skin/ (index.html + static, with
  *     <base href="/skin/">) and its own backend under /skin/api/* — the
- *     host proxies /skin verbatim and serves the skin at / as the
- *     instance's front page,
+ *     host proxies /skin verbatim and the Canvas frontend embeds it as
+ *     its default tab (nested inside the Canvas UI, not standalone at /),
  *   • surfaces in the Canvas UI as an auto-created menu item (iframe tab).
  *
  * At most ONE skin can be installed per instance.
