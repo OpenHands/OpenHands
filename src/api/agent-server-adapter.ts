@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -9,7 +10,10 @@ import {
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
-import { isAgentServerToolAvailable } from "./agent-server-compatibility";
+import {
+  getCachedAgentServerInfo,
+  isAgentServerToolAvailable,
+} from "./agent-server-compatibility";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
 import { buildAuthHeaders } from "./backend-registry/auth";
@@ -121,15 +125,13 @@ function browserToolsEnabled() {
 }
 
 /**
- * Shape of the runtime services info (set by the dev launchers in
- * scripts/dev-*.mjs as `VITE_RUNTIME_SERVICES_INFO`, or injected at serve time
- * by `scripts/static-server.mjs` for static builds — see
- * `getRawRuntimeServicesInfo`). All URLs are written from the agent's point of
+ * Shape of the runtime services info served by Agent Canvas backends in
+ * `/server_info.runtime_services`. All URLs are written from the agent's point of
  * view, not the browser's. The block is rendered into the agent's system prompt
- * via `AgentContext.system_message_suffix` so the agent knows what's
- * reachable from inside its sandbox without having to probe.
+ * via `AgentContext.system_message_suffix` so the agent knows what's reachable
+ * from inside its sandbox without having to probe.
  */
-interface RuntimeServicesInfo {
+export interface RuntimeServicesInfo {
   mode?: string;
   agent_host_alias?: string;
   services?: {
@@ -154,66 +156,72 @@ interface RuntimeServicesInfo {
   };
 }
 
-/**
- * Return the raw runtime-services JSON string, consulting two sources in order
- * (mirrors `getBakedSessionApiKey` in agent-server-config.ts):
- *   1. `VITE_RUNTIME_SERVICES_INFO` — baked into the bundle at build time by
- *      the dev launchers (`npm run dev`, dev:static).
- *   2. `window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__` — injected into
- *      index.html at serve time by `scripts/static-server.mjs
- *      --runtime-services-info <json>`. This is the path used by static builds
- *      (the Docker image and the published binary), where the env var is empty
- *      in the prebuilt bundle. Without it the `<RUNTIME_SERVICES>` block is
- *      missing and the agent cannot reach the local automation backend.
- */
-function getRawRuntimeServicesInfo(): string | null {
-  const envRaw = import.meta.env.VITE_RUNTIME_SERVICES_INFO?.trim();
-  if (envRaw) return envRaw;
-
-  if (typeof window !== "undefined") {
-    const injected = (window as unknown as Record<string, unknown>)
-      .__AGENT_CANVAS_RUNTIME_SERVICES_INFO__;
-    if (typeof injected === "string") {
-      return injected.trim() || null;
+export function parseRuntimeServicesInfo(
+  value: unknown,
+): RuntimeServicesInfo | null {
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) return null;
+    try {
+      return parseRuntimeServicesInfo(JSON.parse(raw));
+    } catch {
+      return null;
     }
   }
 
-  return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const parsed = value as RuntimeServicesInfo;
+  if (!parsed.services || typeof parsed.services !== "object") return null;
+  return parsed;
 }
 
-function parseRuntimeServicesInfo(): RuntimeServicesInfo | null {
-  const raw = getRawRuntimeServicesInfo();
-  if (!raw) return null;
+export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServicesInfo | null> {
+  let clientOptions: ReturnType<typeof getAgentServerClientOptions>;
   try {
-    const parsed = JSON.parse(raw) as RuntimeServicesInfo;
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
+    clientOptions = getAgentServerClientOptions({ timeout: 3000 });
   } catch {
-    // Malformed JSON: ignore and fall back to no runtime info, rather than
-    // tearing down conversation creation over a misconfigured env var or
-    // injected value.
+    return null;
+  }
+
+  const cached = parseRuntimeServicesInfo(
+    getCachedAgentServerInfo({ host: clientOptions.host })?.runtime_services,
+  );
+  if (cached) return cached;
+
+  try {
+    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
+    return parseRuntimeServicesInfo(
+      (serverInfo as { runtime_services?: unknown }).runtime_services,
+    );
+  } catch {
     return null;
   }
 }
 
 /**
  * Return the deployment mode from the runtime services info, e.g. "docker",
- * "dev:automation", etc. Returns `null` when no runtime info is configured.
+ * "dev:automation", etc. Returns `null` when no runtime info is supplied.
  */
-export function getDeploymentMode(): string | null {
-  return parseRuntimeServicesInfo()?.mode ?? null;
+export function getDeploymentMode(
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
+): string | null {
+  return runtimeServicesInfo?.mode ?? null;
 }
 
 /**
  * Render the runtime services info into a markdown block suitable for
  * appending to the system prompt via `AgentContext.system_message_suffix`.
  *
- * Returns `undefined` when no runtime info is configured, so callers can
- * safely omit the field on production builds (where the launcher doesn't
- * set `VITE_RUNTIME_SERVICES_INFO`).
+ * Returns `undefined` when no runtime info is available, so callers can safely
+ * omit the field when the selected backend does not advertise runtime services.
  */
-export function buildRuntimeServicesSystemSuffix(): string | undefined {
-  const info = parseRuntimeServicesInfo();
+export function buildRuntimeServicesSystemSuffix(
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
+): string | undefined {
+  const info = parseRuntimeServicesInfo(runtimeServicesInfo);
   if (!info?.services) return undefined;
 
   const lines: string[] = [];
@@ -713,9 +721,11 @@ function buildBundledSkills(): BundledSkill[] {
 
 function buildAgentContext(
   agentSettings: SettingsRecord,
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
   disabledSkills: string[] = [],
 ): SettingsRecord {
-  const runtimeServicesSuffix = buildRuntimeServicesSystemSuffix();
+  const runtimeServicesSuffix =
+    buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
   const existingContext = toRecord(agentSettings.agent_context);
 
   // Merge bundled public skills with any skills already present in the
@@ -779,11 +789,16 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
 
 function buildConfiguredAcpAgentSettings(
   settings: Settings,
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
     agent_kind: "acp",
-    agent_context: buildAgentContext(agentSettings, settings.disabled_skills),
+    agent_context: buildAgentContext(
+      agentSettings,
+      runtimeServicesInfo,
+      settings.disabled_skills,
+    ),
   };
 
   // TODO(#1019): set ``acp_isolate_data_dir: true`` here for a containerized
@@ -840,6 +855,7 @@ function buildConfiguredAcpAgentSettings(
 
 function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -865,17 +881,22 @@ function buildConfiguredOpenHandsAgentSettings(
   return {
     ...agentSettings,
     llm,
-    agent_context: buildAgentContext(agentSettings, settings.disabled_skills),
+    agent_context: buildAgentContext(
+      agentSettings,
+      runtimeServicesInfo,
+      settings.disabled_skills,
+    ),
     tools: getAgentTools(agentSettings),
   };
 }
 
 function buildConfiguredAgentSettings(
   settings: Settings,
+  runtimeServicesInfo?: RuntimeServicesInfo | null,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(settings)
-    : buildConfiguredOpenHandsAgentSettings(settings);
+    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo)
+    : buildConfiguredOpenHandsAgentSettings(settings, runtimeServicesInfo);
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -974,6 +995,7 @@ export interface StartConversationOptions {
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
+  runtimeServicesInfo?: RuntimeServicesInfo | null;
 }
 
 /**
@@ -1021,7 +1043,10 @@ export function buildStartConversationRequest(
     : acpMode
       ? "acp"
       : "openhands";
-  const agentSettings = buildConfiguredAgentSettings(sourceAgentSettings);
+  const agentSettings = buildConfiguredAgentSettings(
+    sourceAgentSettings,
+    options.runtimeServicesInfo,
+  );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
     : undefined;
@@ -1365,10 +1390,12 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
 
-  const [settingsResult, customSecrets] = await Promise.all([
-    SettingsService.getSettingsForConversation(),
-    SecretsService.getSecrets(),
-  ]);
+  const [settingsResult, customSecrets, runtimeServicesInfo] =
+    await Promise.all([
+      SettingsService.getSettingsForConversation(),
+      SecretsService.getSecrets(),
+      fetchBackendRuntimeServicesInfo(),
+    ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
@@ -1385,6 +1412,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     encryptedConversationSettings: conversationSettings,
     secretsEncrypted,
     customSecrets,
+    runtimeServicesInfo,
   });
 }
 

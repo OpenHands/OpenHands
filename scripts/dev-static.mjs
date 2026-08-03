@@ -61,6 +61,7 @@ import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
   buildConfig,
 } from "./dev-with-automation.mjs";
 
@@ -379,6 +380,12 @@ function startStaticServer(config) {
   // is forwarded to the agent-server instead of falling back to the SPA
   // shell). Without this, /server_info on :3001 returns index.html.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
   spawnService(
     "static",
     "node",
@@ -396,6 +403,8 @@ function startStaticServer(config) {
       ...(config.sessionApiKey
         ? ["--session-api-key", config.sessionApiKey]
         : []),
+      "--runtime-services-info",
+      runtimeServicesInfo,
       "--route",
       `/api/automation=http://localhost:${config.autoBackendPort}`,
       "--route",
@@ -428,6 +437,12 @@ function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
 
   spawnService(
     "ingress",
@@ -436,6 +451,8 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      "--runtime-services-info",
+      runtimeServicesInfo,
       "--route",
       `/api/automation=http://localhost:${config.autoBackendPort}`,
       "--route",

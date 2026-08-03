@@ -633,8 +633,8 @@ export function ChatInterface() {
                   ) : (
                     (curAgentState === AgentState.RUNNING ||
                       isPlanningAgentRunning) && (
-                      <div className="absolute left-1/2 transform -translate-x-1/2 bottom-0 pointer-events-auto">
-                        <TypingIndicator />
+                      <div className="pointer-events-none absolute inset-x-9 bottom-0 flex justify-center">
+                        <TypingIndicator events={allConversationEvents} />
                       </div>
                     )
                   )}
