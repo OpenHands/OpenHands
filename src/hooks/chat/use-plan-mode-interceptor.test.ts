@@ -96,6 +96,21 @@ describe("usePlanModeInterceptor", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("switches to code mode and sends the task for /code <task>", () => {
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/code   fix the bug in auth.ts  ");
+    expect(setConversationMode).toHaveBeenCalledWith("code");
+    expect(onSubmit).toHaveBeenCalledWith("fix the bug in auth.ts");
+    expect(handlePlanClick).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a bare toggle for /code with only whitespace after it", () => {
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/code   ");
+    expect(setConversationMode).toHaveBeenCalledWith("code");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("passes through (no toggle) when there is no conversation", () => {
     const { intercept, onSubmit } = setup(null);
     intercept("/plan");

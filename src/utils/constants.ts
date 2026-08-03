@@ -104,7 +104,8 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "code",
       type: "agentskills",
-      content: "Switch the conversation back to Code mode",
+      content:
+        "Switch the conversation back to Code mode, or resume immediately with /code <task>",
       triggers: [CODE_COMMAND],
     },
     command: CODE_COMMAND,
