@@ -41,7 +41,7 @@ const TRIGGER_KINDS = ["cron", "event"] as const;
 const CONSTRAINT_FORMATS = ["safeExpressionLiteral"] as const;
 
 /** Setup context only, so this can never become a channel for runtime instructions. */
-const MAX_ASSISTED_MESSAGE_LENGTH = 2000;
+const MAX_MESSAGE_LENGTH = 2000;
 
 export interface SetupValidationResult {
   valid: boolean;
@@ -312,10 +312,10 @@ function hasRepoPicker(form: unknown): boolean {
 
 function checkMessage(check: SetupChecker, message: unknown): void {
   if (check.templateCopy(message, "setup.message")) {
-    if ((message as string).length > MAX_ASSISTED_MESSAGE_LENGTH) {
+    if ((message as string).length > MAX_MESSAGE_LENGTH) {
       check.fail(
         "setup.message",
-        `must be at most ${MAX_ASSISTED_MESSAGE_LENGTH} characters`,
+        `must be at most ${MAX_MESSAGE_LENGTH} characters`,
       );
     }
   }

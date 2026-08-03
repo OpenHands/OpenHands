@@ -37,6 +37,14 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// The pinned package may publish an interface manifest whose literal copy
+// replaces the host's translations. Pin the candidate to "not published" so
+// these tests exercise the host defaults whatever the package ships.
+vi.mock("#/manifests/manifest-sources", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
+  AUTOMATION_INTERFACE_CANDIDATE: undefined,
+}));
+
 // The interface seam resolves its manifest once at module load, so the
 // manifest-driven test overrides individual attribute specs here instead of
 // installing a whole manifest. Empty overrides leave the host defaults —
