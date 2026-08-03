@@ -1,3 +1,5 @@
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+
 export const PLAN_RELATIVE_PATH = ".agents_tmp/PLAN.md";
 export const PLANNING_SYSTEM_PROMPT_FILENAME = "system_prompt_planning.j2";
 export const PLANNING_FILE_EDITOR_TOOL_NAME = "planning_file_editor";
@@ -67,5 +69,25 @@ export function isPlanFilePath(path: string | null | undefined): boolean {
   return (
     normalized === PLAN_FILENAME_UPPER ||
     normalized.endsWith(`/${PLAN_FILENAME_UPPER}`)
+  );
+}
+
+/**
+ * Finds the planner helper among a conversation's fetched sub-conversations.
+ * `sub_conversation_ids` is the generic child list — the agent-server makes
+ * no promise that any entry (let alone index 0) is the planner, so identity
+ * comes from the `plannerparent` tag `createLocalPlanningConversation`
+ * stamps on creation, not from list position.
+ */
+export function findPlannerConversationId(
+  subConversations: (AppConversation | null)[] | null | undefined,
+  parentConversationId: string | null | undefined,
+): string | null {
+  if (!parentConversationId) return null;
+  return (
+    subConversations?.find(
+      (sub) =>
+        sub?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === parentConversationId,
+    )?.id ?? null
   );
 }

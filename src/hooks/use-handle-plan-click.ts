@@ -21,7 +21,7 @@ import {
   LOCAL_PLANNER_MUTATION_KEYS,
 } from "#/hooks/query/query-keys";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
-import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
+import { findPlannerConversationId } from "#/utils/plan-file";
 
 function useCreateLocalPlanningConversationMutation(options: {
   onCreated: (planningConversationId: string) => void;
@@ -124,18 +124,9 @@ export const useHandlePlanClick = () => {
     isLocalBackend ? conversation?.sub_conversation_ids : undefined,
   );
 
-  // `sub_conversation_ids` is the generic child list for this conversation —
-  // the agent-server makes no promise that any entry (let alone index 0) is
-  // the planner. Identify it explicitly via the `plannerparent` tag that
-  // `createLocalPlanningConversation` stamps on creation, rather than
-  // assuming list position implies type.
-  const serverPlanningConversationId =
-    isLocalBackend && conversation?.id
-      ? (rawSubConversations?.find(
-          (sub) =>
-            sub?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === conversation.id,
-        )?.id ?? null)
-      : null;
+  const serverPlanningConversationId = isLocalBackend
+    ? findPlannerConversationId(rawSubConversations, conversation?.id)
+    : null;
 
   // Restore planning conversation ids on conversation load. This handles page
   // refreshes while cloud or local planning conversation creation is in

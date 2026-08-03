@@ -5,7 +5,7 @@ import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
-import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
+import { findPlannerConversationId } from "#/utils/plan-file";
 
 interface WebSocketProviderWrapperProps {
   children: React.ReactNode;
@@ -57,17 +57,12 @@ export function WebSocketProviderWrapper({
   // that local planner creation stamps, rather than assuming list position
   // implies type. A pre-existing, unrelated child conversation must never be
   // adopted as the planner and fed events/routing meant for it.
-  const plannerConversationId = React.useMemo(() => {
-    if (!isLocalBackend) return null;
-    return (
-      subConversations?.find(
-        (sub) => sub?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === conversation?.id,
-      )?.id ?? null
-    );
-  }, [isLocalBackend, subConversations, conversation?.id]);
-
   const planningConversationIds = React.useMemo(() => {
     if (!isLocalBackend) return candidateConversationIds;
+    const plannerConversationId = findPlannerConversationId(
+      subConversations,
+      conversation?.id,
+    );
     if (plannerConversationId) return [plannerConversationId];
     // Tag data hasn't resolved yet (still loading, or no planner exists).
     // `localPlanningConversationId` is only ever set to a verified planner
@@ -79,7 +74,8 @@ export function WebSocketProviderWrapper({
   }, [
     isLocalBackend,
     candidateConversationIds,
-    plannerConversationId,
+    subConversations,
+    conversation?.id,
     localPlanningConversationId,
   ]);
 

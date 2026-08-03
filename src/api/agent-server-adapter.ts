@@ -123,6 +123,10 @@ const TASK_TOOL_SET_NAME = "task_tool_set";
 // configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
 const DEFAULT_MAX_ITERATIONS = 500;
 
+function resolveMaxIterations(value: unknown): number {
+  return typeof value === "number" ? value : DEFAULT_MAX_ITERATIONS;
+}
+
 function browserToolsEnabled() {
   return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
 }
@@ -1098,10 +1102,7 @@ export function buildStartConversationRequest(
       launchAgentKind === "openhands" ? [CANVAS_UI_CLIENT_TOOL] : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
-    max_iterations:
-      typeof conversationSettings.max_iterations === "number"
-        ? conversationSettings.max_iterations
-        : DEFAULT_MAX_ITERATIONS,
+    max_iterations: resolveMaxIterations(conversationSettings.max_iterations),
     stuck_detection: true,
     autotitle: true,
     ...(options.titleLlmProfile
@@ -1354,10 +1355,9 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
 
   // Mirror the code agent's configured cap (see DEFAULT_MAX_ITERATIONS) rather
   // than hardcoding a different value the planner could silently stop against.
-  const maxIterations =
-    typeof settingsResult.conversationSettings.max_iterations === "number"
-      ? settingsResult.conversationSettings.max_iterations
-      : DEFAULT_MAX_ITERATIONS;
+  const maxIterations = resolveMaxIterations(
+    settingsResult.conversationSettings.max_iterations,
+  );
 
   return buildStartPlanningConversationRequest({
     ...options,
