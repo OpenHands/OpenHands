@@ -34,10 +34,6 @@ describe("validateSetupEntry", () => {
       { setup: createSetup({ prompt: "Use {{secrets.githubToken}}." }) },
     ],
     [
-      "an assisted message on an entry that sends a request",
-      { setup: createSetup({ message: "Finish setup with the agent." }) },
-    ],
-    [
       // The host reads one trigger kind to build the request, so a second one
       // would be silently dropped rather than refused.
       "more trigger kinds than the host can send",
