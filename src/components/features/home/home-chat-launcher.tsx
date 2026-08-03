@@ -28,6 +28,9 @@ import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibilit
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
+import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
+import { RecommendedAutomationsRail } from "./featured-automations/recommended-automations-rail";
+import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
@@ -217,45 +220,52 @@ export function HomeChatLauncher() {
   return (
     <div
       data-testid="home-chat-launcher"
-      className="flex w-full max-w-[800px] flex-col gap-4 md:px-4"
+      className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
     >
-      <div className="flex w-full justify-center">
-        <HomeHeaderTitle />
-      </div>
+      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+        <div className="flex w-full justify-center">
+          <HomeHeaderTitle />
+        </div>
 
-      <div className="w-full">
-        <CustomChatInput
-          onSubmit={handleSubmitWithModelGuard}
-          onFilesPaste={handleUpload}
-          disabled={isCreating || llmBlocked}
-        />
-      </div>
+        <RecommendedAutomationsRail />
 
-      <div className="flex items-center justify-start gap-2">
-        {hasSelection ? (
-          <HomeGitControlBarPreview
-            workspace={pendingWorkspace}
-            repository={pendingRepository}
-            branch={pendingBranch}
-            provider={pendingProvider}
-            workspaceMode={workspaceMode}
-            backendKind={backend.kind}
-            onRepoClick={() => setIsDialogOpen(true)}
-            onWorkspaceModeChange={setWorkspaceMode}
+        <div className="w-full">
+          <CustomChatInput
+            onSubmit={handleSubmitWithModelGuard}
+            onFilesPaste={handleUpload}
+            disabled={isCreating || llmBlocked}
           />
-        ) : (
-          <OpenLauncherButton
-            kind={isLocal ? "local" : "cloud"}
-            onClick={() => setIsDialogOpen(true)}
-            disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
-            disabledTooltip={workspacesUnsupportedMessage}
+        </div>
+
+        <div className="flex items-center justify-start gap-2">
+          {hasSelection ? (
+            <HomeGitControlBarPreview
+              workspace={pendingWorkspace}
+              repository={pendingRepository}
+              branch={pendingBranch}
+              provider={pendingProvider}
+              workspaceMode={workspaceMode}
+              backendKind={backend.kind}
+              onRepoClick={() => setIsDialogOpen(true)}
+              onWorkspaceModeChange={setWorkspaceMode}
+            />
+          ) : (
+            <OpenLauncherButton
+              kind={isLocal ? "local" : "cloud"}
+              onClick={() => setIsDialogOpen(true)}
+              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabledTooltip={workspacesUnsupportedMessage}
+            />
+          )}
+          <PluginPickerTrigger
+            count={selectedPlugins.length}
+            onClick={() => setIsPluginPickerOpen(true)}
+            disabled={isCreating}
           />
-        )}
-        <PluginPickerTrigger
-          count={selectedPlugins.length}
-          onClick={() => setIsPluginPickerOpen(true)}
-          disabled={isCreating}
-        />
+        </div>
+
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
       </div>
 
       {isLocal ? (
