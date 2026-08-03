@@ -10,16 +10,22 @@ import {
   getConversationState,
   setConversationState,
 } from "#/utils/conversation-local-storage";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { useSubConversations } from "#/hooks/query/use-sub-conversations";
+import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 
 // Mock dependencies
 vi.mock("#/stores/conversation-store");
 vi.mock("#/hooks/query/use-active-conversation");
 vi.mock("#/hooks/mutation/use-create-conversation");
+vi.mock("#/hooks/query/use-sub-conversations");
 vi.mock("#/utils/conversation-local-storage");
 vi.mock("#/utils/custom-toast-handlers");
 vi.mock("#/contexts/active-backend-context");
@@ -94,6 +100,17 @@ function makeConversation(
   } as AppConversation;
 }
 
+/** Tags a fetched sub-conversation as the planner helper for `parentId`. */
+function makeTaggedPlannerConversation(
+  id: string,
+  parentId: string,
+): AppConversation {
+  return makeConversation({
+    id,
+    tags: { [LOCAL_PLANNER_PARENT_TAG_KEY]: parentId },
+  });
+}
+
 describe("useHandlePlanClick", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -119,6 +136,12 @@ describe("useHandlePlanClick", () => {
         isError: false,
         error: null,
         refetch: vi.fn(),
+      }),
+    );
+
+    vi.mocked(useSubConversations).mockReturnValue(
+      asMockReturnValue<ReturnType<typeof useSubConversations>>({
+        data: [],
       }),
     );
 
@@ -301,6 +324,11 @@ describe("useHandlePlanClick", () => {
           refetch: vi.fn(),
         }),
       );
+      vi.mocked(useSubConversations).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useSubConversations>>({
+          data: [makeTaggedPlannerConversation("plan-conv-1", "conv-123")],
+        }),
+      );
 
       renderPlanHook();
 
@@ -324,6 +352,11 @@ describe("useHandlePlanClick", () => {
           refetch: vi.fn(),
         }),
       );
+      vi.mocked(useSubConversations).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useSubConversations>>({
+          data: [makeTaggedPlannerConversation("plan-conv-1", "conv-123")],
+        }),
+      );
 
       const { result } = renderPlanHook();
 
@@ -334,6 +367,77 @@ describe("useHandlePlanClick", () => {
       expect(
         AgentServerConversationService.createLocalPlanningConversation,
       ).not.toHaveBeenCalled();
+    });
+
+    it("does not adopt an unrelated non-planner child conversation as the planner", async () => {
+      // Regression: sub_conversation_ids is the generic child list — an
+      // existing, non-planner child (e.g. a delegated sub-agent) must not be
+      // mistaken for the planner just because it's present in the list.
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      vi.mocked(getStoredConversationMetadata).mockReturnValue(null);
+      vi.mocked(useActiveConversation).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useActiveConversation>>({
+          data: makeConversation({ sub_conversation_ids: ["other-conv-1"] }),
+          isLoading: false,
+          isPending: false,
+          isError: false,
+          error: null,
+          refetch: vi.fn(),
+        }),
+      );
+      // Fetched, but untagged for this parent — not the planner.
+      vi.mocked(useSubConversations).mockReturnValue(
+        asMockReturnValue<ReturnType<typeof useSubConversations>>({
+          data: [makeConversation({ id: "other-conv-1", tags: null })],
+        }),
+      );
+      vi.mocked(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).mockResolvedValue(makeConversation({ id: "plan-conv-1" }));
+
+      const { result } = renderPlanHook();
+
+      // The unrelated child must never be restored as the planner.
+      expect(mockSetLocalPlanningConversationId).not.toHaveBeenCalledWith(
+        "other-conv-1",
+      );
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      // With no tagged planner found, clicking Plan creates a real one
+      // instead of silently adopting the unrelated child.
+      await waitFor(() => {
+        expect(
+          AgentServerConversationService.createLocalPlanningConversation,
+        ).toHaveBeenCalledWith("conv-123");
+      });
+    });
+
+    it("resets to code mode and shows an error toast when local planner creation fails", async () => {
+      vi.mocked(useActiveBackend).mockReturnValue({
+        backend: { kind: "local" },
+      } as ReturnType<typeof useActiveBackend>);
+      vi.mocked(
+        AgentServerConversationService.createLocalPlanningConversation,
+      ).mockRejectedValue(new Error("boom"));
+
+      const { result } = renderPlanHook();
+
+      act(() => {
+        result.current.handlePlanClick();
+      });
+
+      expect(mockSetConversationMode).toHaveBeenCalledWith("plan");
+
+      await waitFor(() => {
+        expect(mockSetConversationMode).toHaveBeenCalledWith("code");
+      });
+      expect(displayErrorToast).toHaveBeenCalled();
+      expect(mockSetLocalPlanningConversationId).not.toHaveBeenCalled();
     });
 
     it("does not create a duplicate local planning conversation", () => {

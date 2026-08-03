@@ -5,7 +5,10 @@ import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import {
   getConversationState,
   setConversationState,
@@ -17,10 +20,13 @@ import {
   CONVERSATION_QUERY_KEYS,
   LOCAL_PLANNER_MUTATION_KEYS,
 } from "#/hooks/query/query-keys";
+import { useSubConversations } from "#/hooks/query/use-sub-conversations";
+import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 
 function useCreateLocalPlanningConversationMutation(options: {
   onCreated: (planningConversationId: string) => void;
   onInitialized: () => void;
+  onFailed: () => void;
 }) {
   const queryClient = useQueryClient();
 
@@ -38,6 +44,7 @@ function useCreateLocalPlanningConversationMutation(options: {
       });
       options.onInitialized();
     },
+    onError: options.onFailed,
   });
 }
 
@@ -99,15 +106,35 @@ export const useHandlePlanClick = () => {
         t(I18nKey.PLANNING_AGENTT$PLANNING_AGENT_INITIALIZED),
       );
     },
+    // handlePlanClick sets conversationMode("plan") before this mutation
+    // starts. On failure, back out of that mode instead of stranding the
+    // user in plan mode with no planner to talk to.
+    onFailed: () => {
+      setConversationMode("code");
+      displayErrorToast(t(I18nKey.CONVERSATION$ERROR_STARTING_CONVERSATION));
+    },
   });
 
   // On local backends the agent-server reports the planner helper back on the
   // parent's `sub_conversation_ids` (it was created with
   // `parent_conversation_id`), so that is the authoritative handle. Cloud
   // sub-conversations are driven by their own task/socket plumbing.
+  const isLocalBackend = backend.kind !== "cloud";
+  const { data: rawSubConversations } = useSubConversations(
+    isLocalBackend ? conversation?.sub_conversation_ids : undefined,
+  );
+
+  // `sub_conversation_ids` is the generic child list for this conversation —
+  // the agent-server makes no promise that any entry (let alone index 0) is
+  // the planner. Identify it explicitly via the `plannerparent` tag that
+  // `createLocalPlanningConversation` stamps on creation, rather than
+  // assuming list position implies type.
   const serverPlanningConversationId =
-    backend.kind !== "cloud"
-      ? (conversation?.sub_conversation_ids?.[0] ?? null)
+    isLocalBackend && conversation?.id
+      ? (rawSubConversations?.find(
+          (sub) =>
+            sub?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === conversation.id,
+        )?.id ?? null)
       : null;
 
   // Restore planning conversation ids on conversation load. This handles page
