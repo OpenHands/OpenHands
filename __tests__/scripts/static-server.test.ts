@@ -1,4 +1,4 @@
-import type { Server } from "node:http";
+import { createServer, request, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -44,6 +44,66 @@ describe("static-server.mjs", () => {
     }
 
     return `http://127.0.0.1:${address.port}`;
+  }
+
+  async function startHttpServer(server: Server) {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Server did not bind to a TCP port");
+    }
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  async function getJson(url: string) {
+    return new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+      const req = request(url, { method: "GET" }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          try {
+            resolve({
+              status: res.statusCode ?? 0,
+              body: JSON.parse(body),
+            });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  async function getText(url: string) {
+    return new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const req = request(url, { method: "GET" }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          body += chunk;
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            body,
+          });
+        });
+      });
+      req.on("error", reject);
+      req.end();
+    });
   }
 
   describe("parseArgs", () => {
@@ -112,7 +172,7 @@ describe("static-server.mjs", () => {
     });
   });
 
-  describe("runtime services info injection", () => {
+  describe("runtime services info exposure", () => {
     async function startServerWithRuntimeInfo(
       dir: string,
       runtimeServicesInfo: string,
@@ -132,10 +192,9 @@ describe("static-server.mjs", () => {
       return `http://127.0.0.1:${address.port}`;
     }
 
-    // Regression test for the Docker / published-binary path: static builds
-    // have no VITE_RUNTIME_SERVICES_INFO baked in, so the agent's
-    // <RUNTIME_SERVICES> block is populated from this injected window global
-    // (see `parseRuntimeServicesInfo()` in src/api/agent-server-adapter.ts).
+    // Legacy compatibility for older Docker / published-binary frontend
+    // bundles, which read runtime services from this injected window global.
+    // New bundles read /server_info.runtime_services instead.
     it("exposes the JSON on window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__", async () => {
       const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
       tempDirs.push(buildDir);
@@ -154,8 +213,8 @@ describe("static-server.mjs", () => {
       const body = await (await fetch(`${origin}/`)).text();
 
       expect(body).toContain("window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__");
-      // Stored as a JSON *string* (note the escaped quotes) so the browser can
-      // JSON.parse it, exactly like the VITE_RUNTIME_SERVICES_INFO env var.
+      // Stored as a JSON *string* (note the escaped quotes) so older browser
+      // code can JSON.parse it.
       expect(body).toContain('\\"mode\\"');
       expect(body).toContain("docker");
     });
@@ -182,6 +241,82 @@ describe("static-server.mjs", () => {
 
       const body = await (await fetch(`${origin}/`)).text();
       expect(body).not.toContain("__AGENT_CANVAS_RUNTIME_SERVICES_INFO__");
+    });
+
+    it("adds runtime_services to proxied /server_info", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const upstreamOrigin = await startHttpServer(
+        createServer((_req, res) => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ version: "1.28.0" }));
+        }),
+      );
+      const runtimeServicesInfo = JSON.stringify({
+        mode: "docker",
+        services: {
+          agent_server: { url_from_agent: "http://127.0.0.1:18000" },
+        },
+      });
+
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: { "/server_info": upstreamOrigin },
+        runtimeServicesInfo,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No port");
+      const origin = `http://127.0.0.1:${address.port}`;
+
+      const response = await getJson(`${origin}/server_info`);
+      const body = response.body as {
+        version?: string;
+        runtime_services?: unknown;
+      };
+
+      expect(response.status).toBe(200);
+      expect(body.version).toBe("1.28.0");
+      expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
+    });
+
+    it("returns 502 when proxied /server_info target URL is invalid", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const runtimeServicesInfo = JSON.stringify({
+        mode: "docker",
+        services: {},
+      });
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: { "/server_info": "not-a-url" },
+        runtimeServicesInfo,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("No port");
+      const origin = `http://127.0.0.1:${address.port}`;
+
+      const response = await getText(`${origin}/server_info`);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid backend URL");
+      expect(server.listening).toBe(true);
     });
   });
 
@@ -506,5 +641,29 @@ describe("static-server.mjs", () => {
 
     expect(response.status).not.toBe(200);
     await expect(response.text()).resolves.not.toContain("secret");
+  });
+
+  it("returns 502 when backend target URL is invalid", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+    tempDirs.push(buildDir);
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+    const server = await startStaticServer({
+      port: 0,
+      host: "127.0.0.1",
+      dir: buildDir,
+      routes: { "/api/invalid": "not-a-url" },
+    });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const origin = `http://127.0.0.1:${address.port}`;
+
+    const response = await getText(`${origin}/api/invalid/test`);
+
+    expect(response.status).toBe(502);
+    expect(response.body).toContain("Bad Gateway");
+    expect(response.body).toContain("Invalid URL");
+    expect(server.listening).toBe(true);
   });
 });
