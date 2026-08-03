@@ -2,7 +2,7 @@
  * Development Stack with Automation Service
  *
  * Extends agent-canvas's dev-safe.mjs to additionally run the OpenHands Automation
- * backend via uvx. No cloning required - runs directly from git reference.
+ * backend via uv. No cloning required - runs directly from git reference.
  *
  * Uses a standalone ingress proxy to route traffic to multiple backends.
  *
@@ -17,7 +17,7 @@
  *          ▼                    ▼                         ▼
  *   ┌─────────────┐    ┌───────────────┐         ┌──────────────────┐
  *   │ Vite        │    │ Agent Server  │         │ Automation       │
- *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uvx)    │
+ *   │ :3001       │    │ (uvx) :18000  │         │ Backend (uv)     │
  *   │             │    │               │         │ :18001           │
  *   └─────────────┘    └───────────────┘         └──────────────────┘
  *
@@ -229,7 +229,7 @@ function showHelp() {
   console.log(`
 Agent Canvas + Automation Development Stack
 
-Runs agent-canvas with the automation backend (via uvx, no clone needed).
+Runs agent-canvas with the automation backend (via uv, no clone needed).
 Uses a standalone ingress proxy to route traffic.
 
 USAGE:
@@ -271,7 +271,7 @@ ACCESS POINTS:
 }
 
 /**
- * Build the uvx command for running automation backend.
+ * Build the uv command for running automation backend.
  *
  * Environment variables (highest precedence first):
  * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
@@ -286,43 +286,36 @@ function buildAutomationCommand(env = process.env) {
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
-  const uvxArgs = [];
+  let packageSource;
   let source = "";
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
-    const gitUrl = `git+${repoUrl}@${gitRef}`;
-    uvxArgs.push(
-      "--refresh",
-      "--from",
-      gitUrl,
-      "uvicorn",
-      "openhands.automation.app:app",
-    );
+    packageSource = `git+${repoUrl}@${gitRef}`;
     source = `git (${gitRef})`;
   } else if (version) {
     // Use specific PyPI version
-    uvxArgs.push(
-      "--from",
-      `${DEFAULT_AUTOMATION_PACKAGE}==${version}`,
-      "uvicorn",
-      "openhands.automation.app:app",
-    );
+    packageSource = `${DEFAULT_AUTOMATION_PACKAGE}==${version}`;
     source = `PyPI (${version})`;
   } else {
     // Default to released PyPI version
-    uvxArgs.push(
-      "--from",
-      `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
-      "uvicorn",
-      "openhands.automation.app:app",
-    );
+    packageSource = `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`;
     source = `PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`;
   }
 
   return {
-    command: "uvx",
-    args: uvxArgs,
+    command: "uv",
+    args: [
+      "run",
+      ...(gitRef ? ["--refresh"] : []),
+      "--no-project",
+      "--with",
+      packageSource,
+      "python",
+      "-m",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ],
     source,
   };
 }
@@ -473,20 +466,23 @@ function commandExists(cmd) {
 }
 
 function checkPrerequisites({
-  checkUvx = true,
+  checkUvTools = true,
   checkNpm = true,
   checkFrontendDependencies = true,
 } = {}) {
   logStep("1/2", "Checking prerequisites...");
 
-  if (checkUvx) {
-    if (!commandExists("uvx")) {
-      const uvxGuidance = formatMissingUvxGuidance(projectRoot);
-      console.error(uvxGuidance);
-      fileLog("error", stripAnsi(uvxGuidance));
+  if (checkUvTools) {
+    for (const executable of ["uv", "uvx"]) {
+      if (commandExists(executable)) {
+        logSuccess(`${executable} found`);
+        continue;
+      }
+      const guidance = formatMissingUvxGuidance(projectRoot, executable);
+      console.error(guidance);
+      fileLog("error", stripAnsi(guidance));
       process.exit(1);
     }
-    logSuccess("uvx found");
   }
 
   if (checkNpm) {
@@ -1300,7 +1296,7 @@ async function main(options = {}) {
 
   // Setup phase
   checkPrerequisites({
-    checkUvx: !args.frontendOnly,
+    checkUvTools: !args.frontendOnly,
     // Static-mode + backend-only has no frontend to build, so npm is not
     // required — unless the caller provides a custom buildStaticFrontend hook.
     // The Electron desktop launcher passes `skipNpmCheck: true` because the

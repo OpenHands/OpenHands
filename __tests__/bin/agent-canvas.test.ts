@@ -70,11 +70,14 @@ describe("agent-canvas CLI", () => {
       );
 
       if (isWindows) {
+        writeFileSync(resolve(stubBinDir, "uv.cmd"), "@exit /b 0\r\n");
         writeFileSync(resolve(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
       } else {
-        const uvxPath = resolve(stubBinDir, "uvx");
-        writeFileSync(uvxPath, "#!/bin/sh\nexit 0\n");
-        chmodSync(uvxPath, 0o755);
+        for (const command of ["uv", "uvx"]) {
+          const commandPath = resolve(stubBinDir, command);
+          writeFileSync(commandPath, "#!/bin/sh\nexit 0\n");
+          chmodSync(commandPath, 0o755);
+        }
       }
 
       const child = spawn(

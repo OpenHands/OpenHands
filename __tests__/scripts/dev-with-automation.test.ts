@@ -42,13 +42,17 @@ describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
     const cmd = buildAutomationCommand({});
 
-    expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain("--from");
-    expect(cmd.args).toContain(
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toEqual([
+      "run",
+      "--no-project",
+      "--with",
       `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
-    );
-    expect(cmd.args).toContain("uvicorn");
-    expect(cmd.args).toContain("openhands.automation.app:app");
+      "python",
+      "-m",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ]);
     expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
   });
 
@@ -57,8 +61,8 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "feat/my-feature",
     });
 
-    expect(cmd.command).toBe("uvx");
-    expect(cmd.args).toContain("--from");
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toContain("--refresh");
     expect(cmd.args).toContain(
       `git+${DEFAULT_AUTOMATION_REPO}@feat/my-feature`,
     );
@@ -71,7 +75,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "main",
     });
 
-    expect(cmd.command).toBe("uvx");
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@main",
     );
@@ -83,7 +87,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "v1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(
       "git+https://github.com/MyOrg/my-automation@v1.0.0",
     );
@@ -95,7 +99,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_GIT_REF: "abc123def456",
     });
 
-    expect(cmd.command).toBe("uvx");
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@abc123def456`);
     expect(cmd.source).toBe("git (abc123def456)");
   });
@@ -105,7 +109,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("PyPI (1.0.0)");
   });
@@ -116,7 +120,7 @@ describe("buildAutomationCommand", () => {
       OH_AUTOMATION_VERSION: "1.0.0",
     });
 
-    expect(cmd.command).toBe("uvx");
+    expect(cmd.command).toBe("uv");
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");
@@ -676,15 +680,20 @@ describe("dev-with-automation CLI", () => {
     const isWindows = process.platform === "win32";
     const stubBinDir = mkdtempSync(path.join(tmpdir(), "stub-bin-"));
     if (isWindows) {
+      writeFileSync(path.join(stubBinDir, "uv.cmd"), "@exit /b 0\r\n");
       writeFileSync(path.join(stubBinDir, "uvx.cmd"), "@exit /b 0\r\n");
     } else {
-      writeFileSync(path.join(stubBinDir, "uvx"), "#!/bin/sh\nexit 0\n", {
-        mode: 0o755,
-      });
+      for (const command of ["uv", "uvx"]) {
+        writeFileSync(
+          path.join(stubBinDir, command),
+          "#!/bin/sh\nexit 0\n",
+          { mode: 0o755 },
+        );
+      }
     }
 
-    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uvx`
-    // is prepended to PATH so the prerequisite check passes; the validation
+    // Act: spawn `dev-with-automation.mjs` with that path set. Stubbed `uv`
+    // and `uvx` are prepended to PATH so prerequisite checks pass; validation
     // guard must trip *after* those checks but *before* port allocation, so
     // we can assert on both the error message and the absence of side effects.
     const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
@@ -741,7 +750,7 @@ describe("dev-with-automation CLI", () => {
     }
   });
 
-  it("exits promptly when uvx is missing", async () => {
+  it("exits promptly when uv is missing", async () => {
     const child = spawn(process.execPath, ["scripts/dev-with-automation.mjs"], {
       cwd: repoRoot,
       env: {
@@ -773,6 +782,6 @@ describe("dev-with-automation CLI", () => {
 
     expect(exitResult.timedOut).toBe(false);
     expect(exitResult.code).toBe(1);
-    expect(output).toContain("uvx");
+    expect(output).toContain("Failed to start uv.");
   });
 });
