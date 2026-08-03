@@ -35,8 +35,6 @@ export function trackError({
       ? { error_id: classification.error_id }
       : {}),
     error_telemetry:
-      kind === "internal" || kind === "unknown"
-        ? "diagnostic"
-        : "outcome",
+      kind === "internal" || kind === "unknown" ? "diagnostic" : "outcome",
   });
 }
