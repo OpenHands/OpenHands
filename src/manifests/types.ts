@@ -75,7 +75,11 @@ export interface SetupBlock {
   prompt?: string;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
-  /** assisted only. Setup context for the conversation that finishes setup. */
+  /**
+   * Setup context for the conversation that finishes setup. Required for
+   * assisted mode. Optional for direct mode, where it seeds the fallback
+   * conversation offered when the deployment cannot run the direct path.
+   */
   message?: string;
 }
 
