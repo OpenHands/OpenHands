@@ -150,7 +150,7 @@
     "electron-builder": "26.8.1",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
-    "eslint-import-resolver-typescript": "4.4.4",
+    "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-i18next": "6.1.4",
     "eslint-plugin-import-x": "4.16.2",
     "eslint-plugin-jsx-a11y": "6.10.2",
