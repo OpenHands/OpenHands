@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { HttpError } from "@openhands/typescript-client";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
@@ -24,6 +25,9 @@ import {
   HISTORY_COMMAND,
   SETTINGS_COMMAND,
   SKILLS_COMMAND,
+  NEW_COMMAND,
+  GOAL_COMMAND,
+  BTW_COMMAND,
 } from "#/utils/constants";
 import {
   dismissToast,
@@ -34,6 +38,10 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { buildSlashCommandCatalog } from "#/utils/slash-command-catalog";
 import { normalizeUiCommand } from "#/utils/slash-command-text";
+import { buildSlashCommandOutputScopeId } from "#/utils/slash-command-output-scope";
+import type { ExecutionStatus } from "#/types/agent-server/core";
+import { isExecutionInProgress } from "#/utils/status";
+import { useAgentState } from "#/hooks/use-agent-state";
 import {
   PromiseDeadlineError,
   withPromiseDeadline,
@@ -44,6 +52,11 @@ export const OPENHANDS_FEEDBACK_URL = "https://forms.gle/chHc5VdS3wty5DwW6";
 export const SKILLS_COMMAND_DEADLINE_MS = 35_000;
 export const HELP_COMMAND_DEADLINE_MS = 35_000;
 
+// This set is deliberately module-scoped. A route change must not release an
+// indeterminate request and permit a second condensation against the same
+// backend/org/conversation.
+const condenseRequestsWithoutDefinitiveCompletion = new Set<string>();
+
 interface UiCommandContext {
   outputScopeId: string | null | undefined;
   conversationId?: string | null;
@@ -51,6 +64,7 @@ interface UiCommandContext {
   sessionApiKey?: string | null;
   agentKind?: "openhands" | "acp" | null;
   supportsManualCondensation?: boolean;
+  executionStatus?: ExecutionStatus | null;
   onOpenConfirmationPolicy?: () => void;
   getTimelineBoundaryEventId?: () => string | null;
 }
@@ -64,13 +78,15 @@ export const useUiCommandInterceptor = (
     sessionApiKey,
     agentKind,
     supportsManualCondensation,
+    executionStatus,
     onOpenConfirmationPolicy,
     getTimelineBoundaryEventId,
   }: UiCommandContext,
 ) => {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const isMobileSidebar = useBreakpoint(SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH);
   const toggleDesktopSidebar = useSidebarStore(
     (state) => state.toggleCollapsed,
@@ -95,7 +111,16 @@ export const useUiCommandInterceptor = (
   const reserveInvocationOrder = useSlashCommandOutputStore(
     (state) => state.reserveInvocationOrder,
   );
-  const condenseRequestsInFlight = useRef(new Set<string>());
+  const latestOutputScopeId = useRef(outputScopeId);
+  latestOutputScopeId.current = outputScopeId;
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(
     () => () => {
@@ -150,13 +175,18 @@ export const useUiCommandInterceptor = (
           // Built-ins are frontend-owned and remain useful when optional skill
           // enrichment fails. The warning is separate from the help output.
           failHelp(outputScopeId!, entryId);
-          displayErrorToast(
-            error instanceof PromiseDeadlineError
-              ? t(I18nKey.SLASH_COMMAND$RESOURCES_TIMEOUT)
-              : error instanceof Error
-                ? error.message
-                : t(I18nKey.ERROR$GENERIC),
-          );
+          if (
+            isMounted.current &&
+            latestOutputScopeId.current === outputScopeId
+          ) {
+            displayErrorToast(
+              error instanceof PromiseDeadlineError
+                ? t(I18nKey.SLASH_COMMAND$RESOURCES_TIMEOUT)
+                : error instanceof Error
+                  ? error.message
+                  : t(I18nKey.ERROR$GENERIC),
+            );
+          }
         },
       );
     },
@@ -179,6 +209,19 @@ export const useUiCommandInterceptor = (
   return useCallback(
     (message: string) => {
       const command = normalizeUiCommand(message);
+
+      if (
+        !conversationId &&
+        (command === NEW_COMMAND ||
+          command === FORK_COMMAND ||
+          command === GOAL_COMMAND ||
+          command.startsWith(`${GOAL_COMMAND} `) ||
+          command === BTW_COMMAND ||
+          command.startsWith(`${BTW_COMMAND} `))
+      ) {
+        displayErrorToast(t(I18nKey.SLASH_COMMAND$CONVERSATION_REQUIRED));
+        return;
+      }
 
       if (command === HELP_COMMAND) {
         if (!outputScopeId) {
@@ -224,28 +267,59 @@ export const useUiCommandInterceptor = (
           displayErrorToast(t(I18nKey.SLASH_COMMAND$CONDENSE_UNSUPPORTED));
           return;
         }
-        if (condenseRequestsInFlight.current.has(conversationId)) return;
+        if (isExecutionInProgress(executionStatus)) {
+          displayWarningToast(
+            t(I18nKey.SLASH_COMMAND$CONDENSE_WAIT_UNTIL_IDLE),
+          );
+          return;
+        }
+
+        const requestScopeId = outputScopeId ?? conversationId;
+        if (condenseRequestsWithoutDefinitiveCompletion.has(requestScopeId)) {
+          displayWarningToast(t(I18nKey.SLASH_COMMAND$CONDENSE_PENDING));
+          return;
+        }
 
         const toastId = displayLoadingToast(
           t(I18nKey.SLASH_COMMAND$CONDENSE_PENDING),
         );
-        condenseRequestsInFlight.current.add(conversationId);
+        condenseRequestsWithoutDefinitiveCompletion.add(requestScopeId);
         void (async () => {
           try {
             await AgentServerConversationService.condenseConversation(
               conversationId,
               conversationUrl,
               sessionApiKey,
+              backend,
             );
+            condenseRequestsWithoutDefinitiveCompletion.delete(requestScopeId);
             dismissToast(toastId);
-            displaySuccessToast(t(I18nKey.SLASH_COMMAND$CONDENSE_SUCCESS));
+            if (
+              isMounted.current &&
+              latestOutputScopeId.current === requestScopeId
+            ) {
+              displaySuccessToast(t(I18nKey.SLASH_COMMAND$CONDENSE_SUCCESS));
+            }
           } catch (error: unknown) {
+            // An HTTP response proves the request reached a terminal server
+            // result. A timeout/network failure does not prove the executor
+            // stopped, so retain the guard and block ambiguous retries.
+            if (error instanceof HttpError) {
+              condenseRequestsWithoutDefinitiveCompletion.delete(
+                requestScopeId,
+              );
+            }
             dismissToast(toastId);
-            displayErrorToast(
-              error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
-            );
-          } finally {
-            condenseRequestsInFlight.current.delete(conversationId);
+            if (
+              isMounted.current &&
+              latestOutputScopeId.current === requestScopeId
+            ) {
+              displayErrorToast(
+                error instanceof Error
+                  ? error.message
+                  : t(I18nKey.ERROR$GENERIC),
+              );
+            }
           }
         })();
         return;
@@ -283,6 +357,7 @@ export const useUiCommandInterceptor = (
             conversationId,
             conversationUrl,
             sessionApiKey,
+            backend,
           ),
           SKILLS_COMMAND_DEADLINE_MS,
           "Loaded-resource request exceeded the command deadline.",
@@ -316,6 +391,7 @@ export const useUiCommandInterceptor = (
       beginSkills,
       beginHelp,
       agentKind,
+      backend,
       completeSkills,
       completeHelp,
       conversationId,
@@ -338,6 +414,7 @@ export const useUiCommandInterceptor = (
       toggleDesktopSidebar,
       showAvailableHelp,
       supportsManualCondensation,
+      executionStatus,
     ],
   );
 };
@@ -349,8 +426,10 @@ export const useCliCommandInterceptor = (
 ) => {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
+  const { backend, orgId } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
   const { data: conversation } = useActiveConversation();
+  const { executionStatus } = useAgentState();
   const { mutate: forkConversation } = useForkConversation();
 
   const handleConversationCommand = useCallback(
@@ -358,9 +437,14 @@ export const useCliCommandInterceptor = (
       const command = normalizeUiCommand(message);
 
       if (command === FORK_COMMAND) {
-        if (!conversationId || isCloud) {
+        if (
+          !conversationId ||
+          isCloud ||
+          conversation?.id !== conversationId ||
+          conversation.agent_kind !== "openhands"
+        ) {
           displayErrorToast(
-            t(I18nKey.SLASH_COMMAND$LOCAL_CONVERSATION_REQUIRED),
+            t(I18nKey.SLASH_COMMAND$OPENHANDS_CONVERSATION_REQUIRED),
           );
           return;
         }
@@ -403,7 +487,13 @@ export const useCliCommandInterceptor = (
   );
 
   return useUiCommandInterceptor(handleConversationCommand, {
-    outputScopeId: conversationId,
+    outputScopeId: conversationId
+      ? buildSlashCommandOutputScopeId({
+          backendId: backend.id,
+          orgId,
+          conversationId,
+        })
+      : null,
     conversationId,
     conversationUrl: conversation?.conversation_url,
     sessionApiKey: conversation?.session_api_key,
@@ -415,7 +505,9 @@ export const useCliCommandInterceptor = (
       conversation && conversation.id === conversationId
         ? conversation.supports_manual_condensation
         : undefined,
+    executionStatus,
     onOpenConfirmationPolicy: options?.onOpenConfirmationPolicy,
-    getTimelineBoundaryEventId: getLastConversationTimelineEventId,
+    getTimelineBoundaryEventId: () =>
+      getLastConversationTimelineEventId(conversationId),
   });
 };

@@ -15,6 +15,8 @@ const mockClearAllFiles = vi.fn();
 const enqueueHomeTaskPendingMessage = vi.fn();
 const mockDisplayErrorToast = vi.fn();
 const mockUseLlmConfigured = vi.fn();
+const listAgentProfilesMock = vi.fn();
+const listInstalledPluginsMock = vi.fn();
 
 let mockImages: File[] = [];
 let mockFiles: File[] = [];
@@ -64,12 +66,40 @@ vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => mockUseActiveBackend(),
 }));
 
+vi.mock("#/api/backend-registry/active-store", () => ({
+  getActiveBackend: () => mockUseActiveBackend(),
+}));
+
 vi.mock("#/hooks/use-llm-configured", () => ({
   useLlmConfigured: () => mockUseLlmConfigured(),
 }));
 
 vi.mock("#/hooks/use-is-creating-conversation", () => ({
   useIsCreatingConversation: () => false,
+}));
+
+vi.mock("#/hooks/query/use-agent-profiles", () => ({
+  useAgentProfiles: () => ({ data: undefined }),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: () => ({ data: { active_profile: null } }),
+}));
+
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  __esModule: true,
+  default: {
+    listProfiles: (...args: unknown[]) => listAgentProfilesMock(...args),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+}));
+
+vi.mock("#/api/plugins-management-service", () => ({
+  __esModule: true,
+  default: {
+    listInstalledPlugins: (...args: unknown[]) =>
+      listInstalledPluginsMock(...args),
+  },
 }));
 
 vi.mock("#/hooks/use-tracking", () => ({
@@ -290,6 +320,11 @@ describe("HomeChatLauncher", () => {
       isConfigured: true,
       isLoading: false,
     });
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    });
+    listInstalledPluginsMock.mockResolvedValue([]);
     enqueueHomeTaskPendingMessage.mockResolvedValue(undefined);
     sendMessageWithAttachments.mockResolvedValue({
       text: "hello world",
@@ -328,6 +363,10 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: localBackend.backend, orgId: null },
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
@@ -376,6 +415,10 @@ describe("HomeChatLauncher", () => {
       "local_repo",
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: localBackend.backend, orgId: null },
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
@@ -416,6 +459,10 @@ describe("HomeChatLauncher", () => {
       "new_worktree",
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: localBackend.backend, orgId: null },
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
@@ -472,6 +519,10 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: cloudBackend.backend, orgId: null },
     );
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
@@ -498,6 +549,10 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: localBackend.backend, orgId: null },
     );
     await waitFor(() =>
       expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1),
@@ -579,6 +634,10 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: cloudBackend.backend, orgId: null },
     );
     expect(sendMessageWithAttachments).not.toHaveBeenCalled();
     await waitFor(() =>
@@ -618,6 +677,10 @@ describe("HomeChatLauncher", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      { backend: localBackend.backend, orgId: null },
     );
   });
 });

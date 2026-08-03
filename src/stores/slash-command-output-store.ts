@@ -3,7 +3,13 @@ import { devtools } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import type { LoadedResources, SlashCommandItem } from "#/types/slash-command";
 
-export const HOME_SLASH_COMMAND_SCOPE_ID = "__home__";
+const PENDING_USER_MESSAGE_BOUNDARY_PREFIX = "pending-user-message:";
+
+export const toPendingUserMessageBoundary = (pendingMessageId: string) =>
+  `${PENDING_USER_MESSAGE_BOUNDARY_PREFIX}${pendingMessageId}`;
+
+export const isPendingUserMessageBoundary = (boundary: string | null) =>
+  boundary?.startsWith(PENDING_USER_MESSAGE_BOUNDARY_PREFIX) ?? false;
 
 interface SkillsCommandOutputBase {
   id: string;
@@ -74,6 +80,10 @@ interface SlashCommandOutputState {
     commands: SlashCommandItem[],
   ) => void;
   failHelp: (scopeId: string, entryId: string) => void;
+  resolvePendingMessageBoundary: (
+    pendingMessageId: string,
+    eventId: string | null,
+  ) => void;
   deactivateSkillsPlacementFallback: (scopeId: string) => void;
   showSkills: (
     scopeId: string,
@@ -266,6 +276,25 @@ export const useSlashCommandOutputStore = create<SlashCommandOutputState>()(
               [scopeId]: entries,
             },
           };
+        }),
+      resolvePendingMessageBoundary: (pendingMessageId, eventId) =>
+        set((state) => {
+          const pendingBoundary =
+            toPendingUserMessageBoundary(pendingMessageId);
+          let changed = false;
+          const entriesByScope = Object.fromEntries(
+            Object.entries(state.entriesByScope).map(([scopeId, entries]) => [
+              scopeId,
+              entries.map((entry) => {
+                if (entry.timelineBoundaryEventId !== pendingBoundary) {
+                  return entry;
+                }
+                changed = true;
+                return { ...entry, timelineBoundaryEventId: eventId };
+              }),
+            ]),
+          );
+          return changed ? { entriesByScope } : state;
         }),
       deactivateSkillsPlacementFallback: (scopeId) =>
         set((state) => {

@@ -44,7 +44,10 @@ export const useSlashCommand = (
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { conversationId: routeConversationId } = useOptionalConversationId();
   const { data: activeConversation } = useActiveConversation();
-  const conversationId = routeConversationId ?? activeConversation?.id ?? null;
+  const conversationId =
+    routeConversationId && activeConversation?.id === routeConversationId
+      ? routeConversationId
+      : null;
   const agentKind =
     activeConversation?.id === conversationId
       ? activeConversation.agent_kind
@@ -65,7 +68,7 @@ export const useSlashCommand = (
       skills,
       isSkillsLoading,
       isCloud,
-      hasConversation: !!conversationId,
+      hasConversation: conversationId !== null,
       agentKind,
       supportsManualCondensation,
     });

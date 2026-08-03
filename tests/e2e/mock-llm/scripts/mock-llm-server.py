@@ -183,6 +183,14 @@ class MockLLMHandler(BaseHTTPRequestHandler):
 
         raw = response.raw_response.model_dump()
 
+        # TestLLM currently serializes scripted tool-call messages with a
+        # "stop" finish reason. OpenAI-compatible clients use "tool_calls" to
+        # decide whether to execute those calls, so normalize non-stream and
+        # stream responses before either response path consumes this payload.
+        choice = raw["choices"][0]
+        if choice["message"].get("tool_calls"):
+            choice["finish_reason"] = "tool_calls"
+
         if body.get("stream"):
             stream_options = body.get("stream_options") or {}
             self._send_streaming(

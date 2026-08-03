@@ -18,14 +18,20 @@ import { resolveSlashCommandOutputPlacements } from "./slash-command-output-plac
 interface MessagesProps {
   messages: OpenHandsEvent[]; // UI events (actions replaced by observations)
   allEvents: OpenHandsEvent[]; // Full event history (for action lookup)
+  slashCommandOutputScopeId?: string | null;
 }
 
 const getLastEventId = (events: OpenHandsEvent[]) => events.at(-1)?.id;
 const getLastEvent = (events: OpenHandsEvent[]) => events.at(-1);
 
 export const Messages: React.FC<MessagesProps> = React.memo(
-  ({ messages, allEvents }) => {
+  ({ messages, allEvents, slashCommandOutputScopeId }) => {
     const { conversationId } = useOptionalConversationId();
+    // The fallback keeps this reusable renderer backwards compatible for
+    // read-only/shared views and focused component tests. Interactive chat
+    // always passes the fully backend/org-qualified scope explicitly.
+    const effectiveSlashCommandOutputScopeId =
+      slashCommandOutputScopeId ?? conversationId;
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
@@ -45,7 +51,9 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       return ids.size > 0 ? ids : null;
     }, [modelEntries]);
     const slashCommandEntries = useSlashCommandOutputStore((state) =>
-      conversationId ? state.entriesByScope[conversationId] : undefined,
+      effectiveSlashCommandOutputScopeId
+        ? state.entriesByScope[effectiveSlashCommandOutputScopeId]
+        : undefined,
     );
     const slashCommandPlacements = React.useMemo(
       () =>
@@ -71,7 +79,7 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       if (entries.length === 0) return null;
       return (
         <SlashCommandMessages
-          outputScopeId={conversationId}
+          outputScopeId={effectiveSlashCommandOutputScopeId}
           outputs={entries}
         />
       );

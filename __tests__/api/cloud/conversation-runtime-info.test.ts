@@ -5,9 +5,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import AgentServerConversationService, {
-  CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS,
-} from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   getFetchCall,
   getJsonBody,
@@ -229,59 +227,11 @@ describe("AgentServerConversationService.getLoadedResources", () => {
     });
   });
 
-  it("assembles Cloud skills and hooks through first-class app endpoints", async () => {
+  it("reads Cloud loaded resources from the serialized runtime snapshot", async () => {
     __resetActiveStoreForTests();
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
-    fetchMock.mockImplementation((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.endsWith("/skills")) {
-        return Promise.resolve(
-          mockJsonResponse({
-            skills: [
-              {
-                name: "review",
-                type: "agentskills",
-                content:
-                  "---\ndescription: Review the current changes\n---\nInstructions",
-                triggers: ["/review"],
-              },
-            ],
-          }),
-        );
-      }
-      if (url.endsWith("/hooks")) {
-        return Promise.resolve(
-          mockJsonResponse({
-            hooks: [
-              {
-                event_type: "pre_tool_use",
-                matchers: [
-                  {
-                    matcher: "*",
-                    hooks: [
-                      {
-                        type: "command",
-                        command: "lint",
-                        timeout: 60,
-                        async: false,
-                      },
-                      {
-                        type: "command",
-                        command: "test",
-                        timeout: 60,
-                        async: false,
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          }),
-        );
-      }
-      throw new Error(`Unexpected URL: ${url}`);
-    });
+    fetchMock.mockResolvedValue(mockJsonResponse(resourcesResponse));
     vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
 
     const resources = await AgentServerConversationService.getLoadedResources(
@@ -290,107 +240,35 @@ describe("AgentServerConversationService.getLoadedResources", () => {
       "session-xyz",
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual(
-      expect.arrayContaining([
-        "https://app.all-hands.dev/api/v1/app-conversations/conv-abc/skills",
-        "https://app.all-hands.dev/api/v1/app-conversations/conv-abc/hooks",
-      ]),
-    );
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toEqual(
-      expect.arrayContaining([expect.stringContaining("/api/cloud-proxy")]),
-    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = getFetchCall(fetchMock);
+    expect(url).toMatch(/\/api\/cloud-proxy$/);
+    expect(getJsonBody(init)).toMatchObject({
+      host: "http://abc123.runtime.all-hands.dev",
+      method: "GET",
+      path: "/api/conversations/conv-abc?include_skills=true",
+      headers: { "X-Session-API-Key": "session-xyz" },
+    });
     expect(resources).toEqual({
       skills: [
         {
           name: "review",
-          description: "Review the current changes",
-          source: null,
+          description: "Review code",
+          source: "project/review/SKILL.md",
         },
       ],
-      hooks: [{ hookType: "pre_tool_use", commands: ["lint", "test"] }],
-      mcps: null,
+      hooks: [{ hookType: "pre_tool_use", commands: ["lint"] }],
+      mcps: [{ name: "github", transport: "stdio" }],
     });
   });
 
-  it("keeps loaded skills when the optional Cloud hooks request fails", async () => {
+  it("fails truthfully when the Cloud runtime is unavailable", async () => {
     __resetActiveStoreForTests();
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input).endsWith("/skills")
-        ? Promise.resolve(
-            mockJsonResponse({
-              skills: [
-                {
-                  name: "review",
-                  type: "agentskills",
-                  content: "Review code.",
-                  triggers: ["/review"],
-                },
-              ],
-            }),
-          )
-        : Promise.resolve(mockJsonResponse({ error: "unavailable" }, 502)),
-    );
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
-
     await expect(
       AgentServerConversationService.getLoadedResources("conv-abc"),
-    ).resolves.toEqual({
-      skills: [{ name: "review", description: "Review code.", source: null }],
-      hooks: null,
-      mcps: null,
-    });
-  });
-
-  it("keeps loaded skills when optional Cloud hooks never settle", async () => {
-    vi.useFakeTimers();
-    __resetActiveStoreForTests();
-    setRegisteredBackends([cloudBackend]);
-    setActiveSelection({ backendId: cloudBackend.id });
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input).endsWith("/skills")
-        ? Promise.resolve(
-            mockJsonResponse({
-              skills: [
-                {
-                  name: "review",
-                  type: "agentskills",
-                  content: "Review code.",
-                  triggers: ["/review"],
-                },
-              ],
-            }),
-          )
-        : new Promise(() => {}),
-    );
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
-
-    const resourcesPromise =
-      AgentServerConversationService.getLoadedResources("conv-abc");
-    await vi.advanceTimersByTimeAsync(CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS);
-
-    await expect(resourcesPromise).resolves.toEqual({
-      skills: [{ name: "review", description: "Review code.", source: null }],
-      hooks: null,
-      mcps: null,
-    });
-  });
-
-  it("fails Cloud loaded-resource assembly when the required skills request fails", async () => {
-    __resetActiveStoreForTests();
-    setRegisteredBackends([cloudBackend]);
-    setActiveSelection({ backendId: cloudBackend.id });
-    fetchMock.mockImplementation((input: RequestInfo | URL) =>
-      String(input).endsWith("/skills")
-        ? Promise.resolve(mockJsonResponse({ error: "unavailable" }, 500))
-        : Promise.resolve(mockJsonResponse({ hooks: [] })),
-    );
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
-
-    await expect(
-      AgentServerConversationService.getLoadedResources("conv-abc"),
-    ).rejects.toThrow();
+    ).rejects.toThrow("runtime is unavailable");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

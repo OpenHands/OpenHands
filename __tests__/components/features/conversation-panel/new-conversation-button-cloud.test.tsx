@@ -7,6 +7,22 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { NewConversationButton } from "#/components/features/conversation-panel/new-conversation-button";
 import { GitRepository } from "#/types/git";
 
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  __esModule: true,
+  default: {
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    }),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+}));
+
+vi.mock("#/api/plugins-management-service", () => ({
+  __esModule: true,
+  default: { listInstalledPlugins: vi.fn().mockResolvedValue([]) },
+}));
+
 const mockUseUserProviders = vi.fn();
 const mockUseActiveBackend = vi.fn();
 const mockUseGitRepositories = vi.fn();
@@ -160,6 +176,10 @@ describe("NewConversationButton (cloud)", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        { backend: { id: "cloud-1", kind: "cloud" }, orgId: null },
       );
     });
     await waitFor(() => {
@@ -203,6 +223,10 @@ describe("NewConversationButton (cloud)", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        { backend: { id: "cloud-1", kind: "cloud" }, orgId: null },
       );
     });
   });

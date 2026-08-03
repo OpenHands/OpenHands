@@ -25,6 +25,7 @@ import {
   getActiveBackend,
   getEffectiveLocalBackend,
 } from "../backend-registry/active-store";
+import type { Backend } from "../backend-registry/types";
 import { callCloudProxy } from "../cloud/proxy";
 import { fetchCloudConversationHooks } from "../cloud/hooks-service.api";
 import ProfilesService from "../profiles-service/profiles-service.api";
@@ -62,16 +63,11 @@ import {
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import type { LoadedResources } from "#/types/slash-command";
-import {
-  parseLoadedResources,
-  toLoadedHookResources,
-} from "#/utils/loaded-resources";
-import SkillsService from "../skills-service";
+import { parseLoadedResources } from "#/utils/loaded-resources";
 import {
   getConfirmationPolicySessionScope,
   getSessionConfirmationPolicy,
 } from "#/services/confirmation-policy-session";
-import { withPromiseDeadline } from "#/utils/promise-deadline";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -85,13 +81,14 @@ import type {
   SendMessageResponse,
 } from "./agent-server-conversation-service.types";
 
+/** Manual condensation can legitimately exceed the generic 60-second HTTP timeout. */
+export const CONDENSE_CONVERSATION_TIMEOUT_MS = 15 * 60 * 1000;
+
 const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
 // Creating the first conversation right after a cold agent-server boot (fresh
 // machine or the packaged desktop app, where uvx may still be warming caches)
 // can exceed the client's 60s default timeout.
 const CREATE_CONVERSATION_TIMEOUT_MS = 5 * 60 * 1000;
-export const CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS = 30_000;
-const CLOUD_HOOKS_TRANSPORT_TIMEOUT_SECONDS = 30;
 const INVALID_CONVERSATION_RESPONSE_MESSAGE =
   "Unable to load conversations because the selected agent server returned " +
   "data this UI does not understand. Check the backend URL/session key and " +
@@ -415,8 +412,22 @@ class AgentServerConversationService {
     // encrypted-settings builder; cloud sends it as a flat request field.
     agentProfileId?: string,
     agentProfileKind?: AgentKind,
+    invocation?: { backend: Backend; orgId: string | null },
   ): Promise<AppConversationStartTask> {
-    const activeBackend = getActiveBackend().backend;
+    const activeBackend = invocation?.backend ?? getActiveBackend().backend;
+    const assertInvocationIsActive = () => {
+      if (!invocation) return;
+      const current = getActiveBackend();
+      if (
+        current.backend.id !== invocation.backend.id ||
+        (current.orgId ?? null) !== invocation.orgId
+      ) {
+        throw new Error(
+          "Backend selection changed while creating conversation",
+        );
+      }
+    };
+    assertInvocationIsActive();
     if (activeBackend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
       // AppConversationStartRequest, POST /api/v1/app-conversations
@@ -442,13 +453,14 @@ class AgentServerConversationService {
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
       };
-      return createCloudAppConversation(request);
+      return createCloudAppConversation(request, activeBackend);
     }
 
     const [settings, profiles] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
     ]);
+    assertInvocationIsActive();
     const titleLlmProfile = resolveTitleLlmProfile(
       settings.title_llm_profile,
       profiles,
@@ -462,7 +474,11 @@ class AgentServerConversationService {
     // already absolute (it comes from `search_subdirs`).
     const workingDir = await resolveAbsoluteAgentServerPath(
       workingDirOverride ?? buildConversationWorkingDir(conversationId),
+      invocation
+        ? { host: activeBackend.host, apiKey: activeBackend.apiKey }
+        : undefined,
     );
+    assertInvocationIsActive();
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
 
@@ -479,7 +495,10 @@ class AgentServerConversationService {
       agentProfileKind,
       titleLlmProfile,
     });
-    const localBackend = getEffectiveLocalBackend();
+    assertInvocationIsActive();
+    const localBackend = invocation
+      ? activeBackend
+      : getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
     const sessionConfirmationPolicy = getSessionConfirmationPolicy(
       getConfirmationPolicySessionScope(localBackend),
@@ -495,7 +514,15 @@ class AgentServerConversationService {
     }
 
     const data = await new ConversationClient(
-      getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
+      getAgentServerClientOptions(
+        invocation
+          ? {
+              host: activeBackend.host,
+              apiKey: activeBackend.apiKey,
+              timeout: CREATE_CONVERSATION_TIMEOUT_MS,
+            }
+          : { timeout: CREATE_CONVERSATION_TIMEOUT_MS },
+      ),
     ).createConversation<DirectConversationInfo>(payload);
 
     if (metadata?.selected_repository || workingDirOverride) {
@@ -683,29 +710,34 @@ class AgentServerConversationService {
     conversationId: string,
     conversationUrl?: string | null,
     sessionApiKey?: string | null,
+    invokingBackend?: Backend,
   ): Promise<LoadedResources> {
-    const active = getActiveBackend().backend;
+    const active = invokingBackend ?? getActiveBackend().backend;
 
     if (active.kind === "cloud") {
-      const skillsPromise =
-        SkillsService.getConversationLoadedSkills(conversationId);
-      const hooksPromise = withPromiseDeadline(
-        this.getHooks(
-          conversationId,
-          CLOUD_HOOKS_TRANSPORT_TIMEOUT_SECONDS,
-        ).then(toLoadedHookResources),
-        CLOUD_HOOKS_ENRICHMENT_DEADLINE_MS,
-        "Cloud hooks enrichment exceeded its optional deadline.",
-      ).catch(() => null);
-      const [skills, hooks] = await Promise.all([skillsPromise, hooksPromise]);
-      return { skills, hooks, mcps: null };
+      if (!conversationUrl) {
+        throw new Error(
+          "The conversation runtime is unavailable, so loaded resources cannot be read.",
+        );
+      }
+
+      const response = await callCloudProxy<unknown>({
+        backend: active,
+        method: "GET",
+        hostOverride: buildHttpBaseUrl(conversationUrl),
+        path: `/api/conversations/${conversationId}?include_skills=true`,
+        authMode: "session-api-key",
+        sessionApiKey,
+      });
+      return parseLoadedResources(response);
     }
 
     const client = new AgentServerClient(
-      getAgentServerClientOptions({
-        conversationUrl,
-        sessionApiKey,
-      }),
+      getAgentServerClientOptions(
+        conversationUrl
+          ? { conversationUrl, sessionApiKey }
+          : { host: active.host, apiKey: active.apiKey },
+      ),
     );
     try {
       // Skills are trimmed from conversation responses by default. `/skills`
@@ -808,15 +840,29 @@ class AgentServerConversationService {
     conversationId: string,
     conversationUrl?: string | null,
     sessionApiKey?: string | null,
+    invokingBackend?: Backend,
   ): Promise<void> {
-    if (getActiveBackend().backend.kind === "cloud") {
+    const active = invokingBackend ?? getActiveBackend().backend;
+    if (active.kind === "cloud") {
       throw new Error(
         "Conversation condensation isn't supported on the cloud backend yet.",
       );
     }
 
     await new ConversationClient(
-      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+      getAgentServerClientOptions(
+        conversationUrl
+          ? {
+              conversationUrl,
+              sessionApiKey,
+              timeout: CONDENSE_CONVERSATION_TIMEOUT_MS,
+            }
+          : {
+              host: active.host,
+              apiKey: active.apiKey,
+              timeout: CONDENSE_CONVERSATION_TIMEOUT_MS,
+            },
+      ),
     ).condenseConversation(conversationId);
   }
 

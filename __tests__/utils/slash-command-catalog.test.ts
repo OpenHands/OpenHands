@@ -79,6 +79,27 @@ describe("buildSlashCommandCatalog", () => {
 
     expect(commands).not.toContain("/confirm");
     expect(commands).not.toContain("/condense");
+    expect(commands).not.toContain("/fork");
+  });
+
+  it("reserves unavailable built-in strings from dynamic skills", () => {
+    const commands = buildSlashCommandCatalog({
+      isCloud: false,
+      hasConversation: true,
+      agentKind: "acp",
+      skills: [
+        skill("condense", ["/condense"]),
+        skill("confirm", ["/confirm"]),
+        skill("fork", ["/fork"]),
+        skill("custom-one", ["/custom", "/custom"]),
+        skill("custom-two", ["/custom"]),
+      ],
+    }).map((item) => item.command);
+
+    expect(commands).not.toContain("/condense");
+    expect(commands).not.toContain("/confirm");
+    expect(commands).not.toContain("/fork");
+    expect(commands.filter((command) => command === "/custom")).toHaveLength(1);
   });
 
   it("only exposes local /condense for a compatible running condenser", () => {

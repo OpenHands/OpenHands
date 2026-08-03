@@ -33,10 +33,47 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { act } from "@testing-library/react";
+import { buildSlashCommandOutputScopeId } from "#/utils/slash-command-output-scope";
+
+const mockActiveBackendSelection = vi.hoisted(() => ({
+  backendId: "test-backend",
+  orgId: null as string | null,
+}));
+
+const TEST_SLASH_COMMAND_SCOPE = buildSlashCommandOutputScopeId({
+  backendId: "test-backend",
+  orgId: null,
+  conversationId: "test-conversation-id",
+});
+
+vi.mock("#/contexts/active-backend-context", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("#/contexts/active-backend-context")
+    >();
+  return {
+    ...actual,
+    useActiveBackend: () => ({
+      backend: {
+        id: mockActiveBackendSelection.backendId,
+        name: "Test",
+        host: "http://localhost:3000",
+        apiKey: "test-key",
+        kind: "local" as const,
+      },
+      orgId: mockActiveBackendSelection.orgId,
+    }),
+  };
+});
 
 const mockSend = vi.fn();
 vi.mock("#/hooks/use-send-message", () => ({
   useSendMessage: () => ({ send: mockSend }),
+}));
+
+const mockUseConversationWebSocket = vi.fn();
+vi.mock("#/contexts/conversation-websocket-context", () => ({
+  useConversationWebSocket: () => mockUseConversationWebSocket(),
 }));
 
 vi.mock("#/hooks/query/use-config");
@@ -117,6 +154,9 @@ const renderWithQueryClient = (
   );
 
 beforeEach(() => {
+  mockActiveBackendSelection.backendId = "test-backend";
+  mockActiveBackendSelection.orgId = null;
+  mockUseConversationWebSocket.mockReturnValue(null);
   useEventStore.setState({
     events: [],
     eventIds: new Set(),
@@ -245,7 +285,7 @@ describe("ChatInterface - Chat Suggestions", () => {
   test("should hide chat suggestions behind an unanchored slash result", () => {
     useSlashCommandOutputStore
       .getState()
-      .showSkills("test-conversation-id", null, {
+      .showSkills(TEST_SLASH_COMMAND_SCOPE, null, {
         skills: [
           {
             name: "review",
@@ -283,6 +323,10 @@ describe("ChatInterface - Chat Suggestions", () => {
     renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "false",
+    );
   });
 
   test("should hide chat suggestions on a task route even when the task is READY", () => {
@@ -305,6 +349,21 @@ describe("ChatInterface - Chat Suggestions", () => {
     renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "false",
+    );
+  });
+
+  test("disables the composer while initial conversation history is unresolved", () => {
+    mockUseConversationWebSocket.mockReturnValue({ isLoadingHistory: true });
+
+    renderWithQueryClient(<ChatInterface />, queryClient);
+
+    expect(screen.getByTestId("chat-input")).toHaveAttribute(
+      "contenteditable",
+      "false",
+    );
   });
 });
 
@@ -433,6 +492,9 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     await new Promise((r) => {
       setTimeout(r, 0);
     });
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
     loadOlder.mockClear();
 
     fireEvent.scroll(scrollContainer!);
@@ -444,16 +506,201 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     expect(loadOlder).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps older-page scroll restoration through slash lifecycle updates", async () => {
+    const loadOlder = setupPaginationTest();
+    renderWithQueryClient(<ChatInterface />, queryClient);
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+
+    // Let the short-content mount probe finish before starting the controlled
+    // request under test.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+
+    let resolveOlder!: () => void;
+    loadOlder.mockClear();
+    loadOlder.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOlder = resolve;
+        }),
+    );
+
+    let scrollHeight = 5000;
+    let scrollTop = 40;
+    const scrollWrites: number[] = [];
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+        scrollWrites.push(value);
+      },
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(scrollContainer, "clientHeight", {
+      configurable: true,
+      get: () => 800,
+    });
+
+    fireEvent.scroll(scrollContainer);
+    expect(loadOlder).toHaveBeenCalledOnce();
+    scrollWrites.length = 0;
+
+    act(() => {
+      const entryId = useSlashCommandOutputStore
+        .getState()
+        .beginSkills(TEST_SLASH_COMMAND_SCOPE, "msg-seed");
+      useSlashCommandOutputStore
+        .getState()
+        .completeSkills(TEST_SLASH_COMMAND_SCOPE, entryId, {
+          skills: [],
+          hooks: [],
+          mcps: [],
+        });
+      useSlashCommandOutputStore
+        .getState()
+        .showHelp(TEST_SLASH_COMMAND_SCOPE, "msg-seed", []);
+      useOptimisticUserMessageStore.getState().enqueuePendingMessage({
+        conversationId: "test-conversation-id",
+        text: "pending while history loads",
+      });
+    });
+    expect(scrollWrites).toEqual([]);
+
+    scrollHeight = 7000;
+    act(() => resolveOlder());
+    await waitFor(() => expect(scrollWrites).toContain(2040));
+  });
+
+  it("does not restore an older-page snapshot into a different backend scope", async () => {
+    const loadOlder = setupPaginationTest();
+    const renderTree = () => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path="/:conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const rendered = render(renderTree());
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+
+    let resolveOlder!: () => void;
+    loadOlder.mockClear();
+    loadOlder.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOlder = resolve;
+        }),
+    );
+
+    let scrollHeight = 5000;
+    let scrollTop = 40;
+    const scrollWrites: number[] = [];
+    Object.defineProperty(scrollContainer, "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+        scrollWrites.push(value);
+      },
+    });
+    Object.defineProperty(scrollContainer, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(scrollContainer, "clientHeight", {
+      configurable: true,
+      get: () => 800,
+    });
+
+    fireEvent.scroll(scrollContainer);
+    expect(loadOlder).toHaveBeenCalledOnce();
+
+    mockActiveBackendSelection.backendId = "other-backend";
+    rendered.rerender(renderTree());
+    scrollWrites.length = 0;
+    scrollHeight = 7000;
+
+    act(() => resolveOlder());
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    expect(scrollWrites).toEqual([]);
+  });
+
+  it("clears an empty older-page snapshot so the user can retry", async () => {
+    const loadOlder = setupPaginationTest();
+    renderWithQueryClient(<ChatInterface />, queryClient);
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    setScrollMetrics(scrollContainer, {
+      scrollTop: 0,
+      scrollHeight: 5000,
+      clientHeight: 800,
+    });
+    loadOlder.mockClear();
+
+    fireEvent.scroll(scrollContainer);
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    fireEvent.scroll(scrollContainer);
+
+    expect(loadOlder).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a failed older-page snapshot so the user can retry", async () => {
+    const loadOlder = setupPaginationTest();
+    renderWithQueryClient(<ChatInterface />, queryClient);
+    const scrollContainer = screen.getByTestId("chat-scroll-container");
+
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    setScrollMetrics(scrollContainer, {
+      scrollTop: 0,
+      scrollHeight: 5000,
+      clientHeight: 800,
+    });
+    loadOlder.mockClear();
+    loadOlder
+      .mockRejectedValueOnce(new Error("temporary pagination failure"))
+      .mockResolvedValueOnce(undefined);
+
+    fireEvent.scroll(scrollContainer);
+    expect(
+      await screen.findByText("temporary pagination failure"),
+    ).toBeInTheDocument();
+    fireEvent.scroll(scrollContainer);
+
+    expect(loadOlder).toHaveBeenCalledTimes(2);
+  });
+
   it("auto-loads older events when the chat content does not overflow the viewport", async () => {
     // No overflow ⇒ no scrollbar ⇒ user can't trigger loadOlder by
     // scrolling. The component must auto-trigger via useEffect.
     const loadOlder = setupPaginationTest();
     renderWithQueryClient(<ChatInterface />, queryClient);
 
-    // Allow the on-mount auto-trigger useEffect to fire.
-    await new Promise((r) => {
-      setTimeout(r, 0);
-    });
+    // Allow the on-mount effect's post-layout overflow check to fire.
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
 
     expect(loadOlder).toHaveBeenCalled();
   });
@@ -481,6 +728,9 @@ describe("ChatInterface - Scroll-up loads older events", () => {
     await new Promise((r) => {
       setTimeout(r, 0);
     });
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
     loadOlder.mockClear();
 
     // User is pinned at the top and wheels upward — no scroll event
@@ -542,11 +792,14 @@ describe("ChatInterface - Scroll-up loads older events", () => {
 
     const eventServiceModule =
       await import("#/api/event-service/event-service.api");
-    vi.spyOn(eventServiceModule.default, "searchEvents").mockRejectedValue(
-      new Error("Older events request failed"),
-    );
+    const searchEventsSpy = vi
+      .spyOn(eventServiceModule.default, "searchEvents")
+      .mockRejectedValue(new Error("Older events request failed"));
 
     renderWithQueryClient(<ChatInterface />, queryClient);
+
+    await waitFor(() => expect(searchEventsSpy).toHaveBeenCalled());
+    searchEventsSpy.mockClear();
 
     const scrollContainer = document.querySelector(
       "[data-testid='chat-scroll-container']",
@@ -564,7 +817,10 @@ describe("ChatInterface - Scroll-up loads older events", () => {
       value: 5000,
     });
 
-    scrollContainer!.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await waitFor(() => {
+      scrollContainer!.dispatchEvent(new Event("scroll", { bubbles: true }));
+      expect(searchEventsSpy).toHaveBeenCalled();
+    });
 
     expect(
       await screen.findByText("Older events request failed"),
@@ -938,7 +1194,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       useSlashCommandOutputStore
         .getState()
-        .showHelp("test-conversation-id", null, [
+        .showHelp(TEST_SLASH_COMMAND_SCOPE, null, [
           {
             command: "/help",
             skill: {
@@ -996,7 +1252,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       entryId = useSlashCommandOutputStore
         .getState()
-        .beginSkills("test-conversation-id", null);
+        .beginSkills(TEST_SLASH_COMMAND_SCOPE, null);
     });
     await waitFor(() => expect(scrollWrites).toContain(10000));
 
@@ -1004,7 +1260,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() =>
       useSlashCommandOutputStore
         .getState()
-        .completeSkills("test-conversation-id", entryId, {
+        .completeSkills(TEST_SLASH_COMMAND_SCOPE, entryId, {
           skills: [],
           hooks: [],
           mcps: [],
@@ -1027,7 +1283,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       helpEntryId = useSlashCommandOutputStore
         .getState()
-        .beginHelp("test-conversation-id", null, fallbackHelp);
+        .beginHelp(TEST_SLASH_COMMAND_SCOPE, null, fallbackHelp);
     });
     await waitFor(() => expect(scrollWrites).toContain(10000));
 
@@ -1035,7 +1291,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       useSlashCommandOutputStore
         .getState()
-        .beginHelp("test-conversation-id", null, fallbackHelp);
+        .beginHelp(TEST_SLASH_COMMAND_SCOPE, null, fallbackHelp);
     });
     await waitFor(() => expect(scrollWrites).toContain(10000));
 
@@ -1043,7 +1299,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() =>
       useSlashCommandOutputStore
         .getState()
-        .completeHelp("test-conversation-id", helpEntryId, fallbackHelp),
+        .completeHelp(TEST_SLASH_COMMAND_SCOPE, helpEntryId, fallbackHelp),
     );
     await waitFor(() => expect(scrollWrites).toContain(10000));
 
@@ -1054,7 +1310,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       useSlashCommandOutputStore
         .getState()
-        .beginSkills("test-conversation-id", null);
+        .beginSkills(TEST_SLASH_COMMAND_SCOPE, null);
     });
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
@@ -1079,7 +1335,7 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
     act(() => {
       useSlashCommandOutputStore
         .getState()
-        .beginSkills("test-conversation-id", "filtered-raw-boundary");
+        .beginSkills(TEST_SLASH_COMMAND_SCOPE, "filtered-raw-boundary");
     });
 
     expect(screen.getByTestId("slash-command-skills-loading")).toBeVisible();

@@ -209,4 +209,35 @@ describe("slash-command output store", () => {
       }),
     ]);
   });
+
+  it("reanchors every command after an optimistic message to its server echo", () => {
+    const store = useSlashCommandOutputStore.getState();
+    const boundary = "pending-user-message:pending-1";
+    store.beginHelp("scope-a", boundary, [], 0);
+    store.beginSkills("scope-a", boundary, 1);
+    store.beginHelp("scope-b", "event-b", [], 2);
+
+    store.resolvePendingMessageBoundary("pending-1", "event-42");
+
+    expect(entries("scope-a").map((entry) => entry.timelineBoundaryEventId)).toEqual(
+      ["event-42", "event-42"],
+    );
+    expect(entries("scope-b")[0].timelineBoundaryEventId).toBe("event-b");
+  });
+
+  it("keeps late completion isolated in its original scope", () => {
+    const store = useSlashCommandOutputStore.getState();
+    const id = store.beginSkills("backend-a", "event-1");
+    store.showHelp("backend-b", "event-2", []);
+
+    store.completeSkills("backend-a", id, resources);
+
+    expect(entries("backend-a")[0]).toMatchObject({
+      id,
+      status: "ready",
+    });
+    expect(entries("backend-b")).toEqual([
+      expect.objectContaining({ kind: "help" }),
+    ]);
+  });
 });

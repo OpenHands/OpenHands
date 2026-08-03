@@ -8,9 +8,13 @@ import {
 } from "#/hooks/chat/use-cli-command-interceptor";
 import { normalizeUiCommand } from "#/utils/slash-command-text";
 import { buildSlashCommandCatalog } from "#/utils/slash-command-catalog";
+import { buildSlashCommandOutputScopeId } from "#/utils/slash-command-output-scope";
+import { ExecutionStatus } from "#/types/agent-server/core";
+import { HttpError } from "@openhands/typescript-client";
 
 const mocks = vi.hoisted(() => ({
   backendKind: "local" as "local" | "cloud",
+  executionStatus: "idle" as ExecutionStatus,
   isMobile: false,
   navigate: vi.fn(),
   toggleDesktopSidebar: vi.fn(),
@@ -67,7 +71,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
-    backend: { kind: mocks.backendKind },
+    backend: { id: "backend-1", kind: mocks.backendKind },
+    orgId: null,
   }),
 }));
 vi.mock("#/context/navigation-context", () => ({
@@ -89,6 +94,9 @@ vi.mock("#/components/features/sidebar/sidebar-mobile-nav-context", () => ({
 }));
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: mocks.conversation }),
+}));
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ executionStatus: mocks.executionStatus }),
 }));
 vi.mock("#/hooks/query/use-conversation-skills", () => ({
   useConversationSkills: () => ({
@@ -169,6 +177,11 @@ vi.mock("react-i18next", async () => {
 });
 
 describe("useCliCommandInterceptor", () => {
+  const conversationOutputScopeId = buildSlashCommandOutputScopeId({
+    backendId: "backend-1",
+    orgId: null,
+    conversationId: "conversation-1",
+  });
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -176,6 +189,7 @@ describe("useCliCommandInterceptor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.backendKind = "local";
+    mocks.executionStatus = ExecutionStatus.IDLE;
     mocks.isMobile = false;
     mocks.conversation.agent_kind = "openhands";
     mocks.conversation.supports_manual_condensation = true;
@@ -301,12 +315,25 @@ describe("useCliCommandInterceptor", () => {
       "conversation-1",
       "http://runtime.example",
       "runtime-key",
+      expect.objectContaining({ id: "backend-1", kind: "local" }),
     );
     expect(mocks.displayLoadingToast).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(mocks.displaySuccessToast).toHaveBeenCalledOnce(),
     );
     expect(mocks.dismissToast).toHaveBeenCalledWith("toast-1");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not condense while the agent is executing", () => {
+    mocks.executionStatus = ExecutionStatus.RUNNING;
+    const { submit, onSubmit } = setup();
+
+    act(() => submit("/condense"));
+
+    expect(mocks.condenseConversation).not.toHaveBeenCalled();
+    expect(mocks.displayLoadingToast).not.toHaveBeenCalled();
+    expect(mocks.displayWarningToast).toHaveBeenCalledOnce();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -337,7 +364,7 @@ describe("useCliCommandInterceptor", () => {
 
   it("replaces condensation loading feedback with the request error", async () => {
     mocks.condenseConversation.mockRejectedValue(
-      new Error("Condensation failed"),
+      new HttpError(500, "Server Error", null, "Condensation failed"),
     );
     const { submit } = setup();
 
@@ -386,6 +413,32 @@ describe("useCliCommandInterceptor", () => {
 
     expect(mocks.forkConversation).not.toHaveBeenCalled();
     expect(mocks.displayErrorToast).toHaveBeenCalledOnce();
+  });
+
+  it("does not fork an ACP conversation", () => {
+    mocks.conversation.agent_kind = "acp";
+    const { submit, onSubmit } = setup();
+
+    act(() => submit("/fork"));
+
+    expect(mocks.forkConversation).not.toHaveBeenCalled();
+    expect(mocks.displayErrorToast).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("retains the guard after an ambiguous condensation failure", async () => {
+    mocks.condenseConversation.mockRejectedValue(
+      new Error("Request timeout after 900000ms"),
+    );
+    const { submit } = setup();
+
+    act(() => submit("/condense"));
+    await waitFor(() => expect(mocks.displayErrorToast).toHaveBeenCalledOnce());
+
+    act(() => submit("/condense"));
+
+    expect(mocks.condenseConversation).toHaveBeenCalledOnce();
+    expect(mocks.displayWarningToast).toHaveBeenCalledOnce();
   });
 
   it("keeps /condense and /fork out of Cloud help", () => {
@@ -447,16 +500,17 @@ describe("useCliCommandInterceptor", () => {
       "conversation-1",
       "http://runtime.example",
       "runtime-key",
+      expect.objectContaining({ id: "backend-1", kind: "local" }),
     );
     expect(mocks.beginSkills).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "event-7",
       expect.any(Number),
     );
     expect(mocks.refetchSkills).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(mocks.completeSkills).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "skills-entry-1",
         mocks.loadedResources,
       ),
@@ -488,10 +542,11 @@ describe("useCliCommandInterceptor", () => {
       "conversation-1",
       "http://runtime.example",
       "runtime-key",
+      expect.objectContaining({ id: "backend-1", kind: "cloud" }),
     );
     await waitFor(() =>
       expect(mocks.completeSkills).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "skills-entry-1",
         cloudResources,
       ),
@@ -510,7 +565,7 @@ describe("useCliCommandInterceptor", () => {
 
     await waitFor(() =>
       expect(mocks.failSkills).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "skills-entry-1",
         "request",
       ),
@@ -535,7 +590,7 @@ describe("useCliCommandInterceptor", () => {
 
     await waitFor(() =>
       expect(mocks.completeSkills).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "skills-entry-1",
         mocks.loadedResources,
       ),
@@ -549,7 +604,7 @@ describe("useCliCommandInterceptor", () => {
     act(() => submit("/skills"));
 
     expect(mocks.beginSkills).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "event-7",
       expect.any(Number),
     );
@@ -569,7 +624,7 @@ describe("useCliCommandInterceptor", () => {
     });
 
     expect(mocks.failSkills).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "skills-entry-1",
       "timeout",
     );
@@ -613,7 +668,7 @@ describe("useCliCommandInterceptor", () => {
     await act(async () => Promise.resolve());
 
     expect(mocks.completeSkills).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "skills-entry-2",
       mocks.loadedResources,
     );
@@ -623,7 +678,7 @@ describe("useCliCommandInterceptor", () => {
     });
 
     expect(mocks.failSkills).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "skills-entry-1",
       "timeout",
     );
@@ -645,7 +700,7 @@ describe("useCliCommandInterceptor", () => {
 
     act(() => submit("/help"));
     expect(mocks.beginHelp).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "event-7",
       expect.arrayContaining([expect.objectContaining({ command: "/help" })]),
       expect.any(Number),
@@ -668,7 +723,7 @@ describe("useCliCommandInterceptor", () => {
 
     await waitFor(() =>
       expect(mocks.completeHelp).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "help-entry-1",
         expect.arrayContaining([
           expect.objectContaining({ command: "/review" }),
@@ -688,7 +743,7 @@ describe("useCliCommandInterceptor", () => {
     act(() => submit("/help"));
 
     expect(mocks.beginHelp).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "event-7",
       expect.arrayContaining([expect.objectContaining({ command: "/help" })]),
       expect.any(Number),
@@ -698,7 +753,7 @@ describe("useCliCommandInterceptor", () => {
     );
     await waitFor(() =>
       expect(mocks.failHelp).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "help-entry-1",
       ),
     );
@@ -729,7 +784,7 @@ describe("useCliCommandInterceptor", () => {
     });
 
     expect(mocks.failHelp).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "help-entry-1",
     );
     expect(mocks.displayErrorToast).toHaveBeenCalledOnce();
@@ -784,7 +839,7 @@ describe("useCliCommandInterceptor", () => {
     act(() => resolveSecond({ data: [] }));
     await waitFor(() =>
       expect(mocks.completeHelp).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "help-entry-2",
         expect.any(Array),
       ),
@@ -792,7 +847,7 @@ describe("useCliCommandInterceptor", () => {
     act(() => resolveFirst({ data: [] }));
     await waitFor(() =>
       expect(mocks.completeHelp).toHaveBeenCalledWith(
-        "conversation-1",
+        conversationOutputScopeId,
         "help-entry-1",
         expect.any(Array),
       ),
@@ -805,7 +860,7 @@ describe("useCliCommandInterceptor", () => {
     act(() => submit("/help"));
 
     expect(mocks.showHelp).toHaveBeenCalledWith(
-      "conversation-1",
+      conversationOutputScopeId,
       "event-7",
       expect.arrayContaining([
         expect.objectContaining({ command: "/help" }),
@@ -838,6 +893,20 @@ describe("useCliCommandInterceptor", () => {
     );
     expect(commands).not.toContain("/new");
     expect(commands).not.toContain("/fork");
+  });
+
+  it("consumes conversation-only built-ins on the home composer", () => {
+    const { submit, onSubmit } = setupHome();
+
+    act(() => {
+      submit("/new");
+      submit("/fork");
+      submit("/goal audit this");
+      submit("/btw what changed?");
+    });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mocks.displayErrorToast).toHaveBeenCalledTimes(4);
   });
 
   it("renders the canonical empty /skills state on the home composer", () => {

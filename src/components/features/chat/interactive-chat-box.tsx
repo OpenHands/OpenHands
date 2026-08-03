@@ -37,7 +37,10 @@ export function InteractiveChatBox({
   const { curAgentState } = useAgentState();
   const { data: conversation } = useActiveConversation();
   const { conversationId: routeConversationId } = useOptionalConversationId();
-  const conversationId = routeConversationId ?? conversation?.id ?? null;
+  const conversationId =
+    routeConversationId && conversation?.id === routeConversationId
+      ? routeConversationId
+      : null;
   const [isConfirmationPolicyModalOpen, setConfirmationPolicyModalOpen] =
     useState(false);
   const openConfirmationPolicyModal = useCallback(
@@ -70,20 +73,31 @@ export function InteractiveChatBox({
     conversationId,
     handleAfterModel,
   );
-  const handleSubmit = useCliCommandInterceptor(
+  const handleInterceptedSubmit = useCliCommandInterceptor(
     conversationId,
     handleAfterCliCommands,
     { onOpenConfirmationPolicy: openConfirmationPolicyModal },
   );
 
-  const handleSuggestionsClick = (suggestion: string) => {
-    handleSubmit(suggestion);
-  };
-
   const isDisabled =
     disabled ||
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
     isTaskPolling(subConversationTaskStatus);
+
+  // CustomChatInput suppresses ordinary disabled submissions, but keep the
+  // full interceptor chain behind the same guard so programmatic suggestion
+  // clicks and current callbacks cannot create slash output or call a
+  // conversation API while initial history/task state is unresolved.
+  const handleSubmit = useCallback(
+    (message: string) => {
+      if (!isDisabled) handleInterceptedSubmit(message);
+    },
+    [handleInterceptedSubmit, isDisabled],
+  );
+
+  const handleSuggestionsClick = (suggestion: string) => {
+    handleSubmit(suggestion);
+  };
 
   return (
     <>

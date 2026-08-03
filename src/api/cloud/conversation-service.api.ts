@@ -120,8 +120,9 @@ export async function batchGetCloudConversations(
  */
 export async function createCloudAppConversation(
   request: AppConversationStartRequest,
+  invokingBackend?: Backend,
 ): Promise<AppConversationStartTask> {
-  const backend = getActiveCloudBackend();
+  const backend = invokingBackend ?? getActiveCloudBackend();
   const data = await callCloudProxy<AppConversationStartTask>({
     backend,
     method: "POST",

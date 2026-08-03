@@ -168,7 +168,7 @@ export const BUILT_IN_COMMANDS: BuiltInSlashCommandItem[] = [
       triggers: [FORK_COMMAND],
     },
     command: FORK_COMMAND,
-    availability: "local-conversation",
+    availability: "local-openhands-conversation",
     descriptionKey: I18nKey.SLASH_COMMAND$FORK_DESCRIPTION,
   },
   {

@@ -8,10 +8,26 @@ import { TaskCard } from "#/components/features/home/tasks/task-card";
 import { GitRepository } from "#/types/git";
 import { SuggestedTask } from "#/utils/types";
 
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  __esModule: true,
+  default: {
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    }),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+}));
+
+vi.mock("#/api/plugins-management-service", () => ({
+  __esModule: true,
+  default: { listInstalledPlugins: vi.fn().mockResolvedValue([]) },
+}));
+
 vi.mock("#/hooks/query/use-settings", async () => {
-  const actual = await vi.importActual<typeof import("#/hooks/query/use-settings")>(
-    "#/hooks/query/use-settings",
-  );
+  const actual = await vi.importActual<
+    typeof import("#/hooks/query/use-settings")
+  >("#/hooks/query/use-settings");
   return {
     ...actual,
     getSettingsQueryFn: vi.fn().mockResolvedValue({}),
@@ -31,7 +47,12 @@ const MOCK_RESPOSITORIES: GitRepository[] = [
   { id: "2", full_name: "repo2", git_provider: "github", is_public: true },
   { id: "3", full_name: "repo3", git_provider: "gitlab", is_public: true },
   { id: "4", full_name: "repo4", git_provider: "gitlab", is_public: true },
-  { id: "5", full_name: "repo5", git_provider: "azure_devops", is_public: true },
+  {
+    id: "5",
+    full_name: "repo5",
+    git_provider: "azure_devops",
+    is_public: true,
+  },
 ];
 
 const renderTaskCard = (task = MOCK_TASK_1, navigate = vi.fn()) =>
@@ -130,19 +151,28 @@ describe("TaskCard", () => {
       const launchButton = screen.getByTestId("task-launch-button");
       await userEvent.click(launchButton);
 
-      expect(createConversationSpy).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-        {
-          selected_repository: MOCK_TASK_1.repo,
-          selected_branch: null,
-          git_provider: MOCK_TASK_1.git_provider,
-        },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+      await waitFor(() =>
+        expect(createConversationSpy).toHaveBeenCalledWith(
+          undefined,
+          undefined,
+          undefined,
+          {
+            selected_repository: MOCK_TASK_1.repo,
+            selected_branch: null,
+            git_provider: MOCK_TASK_1.git_provider,
+          },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          expect.objectContaining({
+            backend: expect.objectContaining({ kind: "local" }),
+            orgId: null,
+          }),
+        ),
       );
     });
   });
@@ -150,7 +180,10 @@ describe("TaskCard", () => {
   it("should navigate to the conversation page after creating a conversation", async () => {
     const navigate = vi.fn();
 
-    vi.spyOn(AgentServerConversationService, "createConversation").mockResolvedValue({
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue({
       id: "task-id",
       created_by_user_id: null,
       status: "READY",

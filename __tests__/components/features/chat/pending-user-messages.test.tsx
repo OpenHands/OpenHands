@@ -6,6 +6,8 @@ import { renderWithProviders } from "test-utils";
 import { PendingUserMessages } from "#/components/features/chat/pending-user-messages";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
+import { toPendingUserMessageBoundary } from "#/hooks/chat/slash-command-timeline-boundary";
 
 const ACTIVE_CONVO = "conv-active";
 
@@ -27,6 +29,7 @@ describe("PendingUserMessages", () => {
       messageRestoreIfEmpty: null,
       messageToSend: null,
     });
+    useSlashCommandOutputStore.getState().clearAll();
   });
 
   afterEach(() => {
@@ -60,6 +63,30 @@ describe("PendingUserMessages", () => {
     expect(screen.getAllByTestId("chat-message-sending")).toHaveLength(2);
   });
 
+  it("renders a later slash command immediately after its pending prompt", () => {
+    const pendingId = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "first message",
+      });
+    useSlashCommandOutputStore.getState().showHelp(
+      "scope-a",
+      toPendingUserMessageBoundary(pendingId),
+      [],
+    );
+
+    renderWithProviders(
+      <PendingUserMessages slashCommandOutputScopeId="scope-a" />,
+    );
+
+    const prompt = screen.getByTestId("user-message");
+    const output = screen.getByTestId("slash-command-messages");
+    expect(
+      prompt.compareDocumentPosition(output) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("ignores pending entries belonging to a different conversation", () => {
     useOptimisticUserMessageStore.getState().enqueuePendingMessage({
       conversationId: ACTIVE_CONVO,
@@ -79,12 +106,19 @@ describe("PendingUserMessages", () => {
   });
 
   it("removes a sending message when stop is clicked", async () => {
-    useOptimisticUserMessageStore.getState().enqueuePendingMessage({
-      conversationId: ACTIVE_CONVO,
-      text: "cancel me",
-    });
+    const id = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "cancel me",
+      });
+    useSlashCommandOutputStore
+      .getState()
+      .showHelp("scope-a", toPendingUserMessageBoundary(id), []);
 
-    renderWithProviders(<PendingUserMessages />);
+    renderWithProviders(
+      <PendingUserMessages slashCommandOutputScopeId="scope-a" />,
+    );
 
     const message = screen.getByTestId("user-message");
     fireEvent.mouseEnter(message);
@@ -102,6 +136,44 @@ describe("PendingUserMessages", () => {
     expect(useConversationStore.getState().messageRestoreIfEmpty).toEqual(
       expect.objectContaining({ text: "cancel me" }),
     );
+    expect(
+      useSlashCommandOutputStore.getState().entriesByScope["scope-a"][0]
+        .timelineBoundaryEventId,
+    ).toBeNull();
+  });
+
+  it("keeps a released slash boundary after an earlier pending prompt", async () => {
+    const firstId = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "still pending",
+      });
+    const secondId = useOptimisticUserMessageStore
+      .getState()
+      .enqueuePendingMessage({
+        conversationId: ACTIVE_CONVO,
+        text: "cancel later prompt",
+      });
+    useSlashCommandOutputStore
+      .getState()
+      .showHelp("scope-a", toPendingUserMessageBoundary(secondId), []);
+
+    renderWithProviders(
+      <PendingUserMessages slashCommandOutputScopeId="scope-a" />,
+    );
+
+    const messages = screen.getAllByTestId("user-message");
+    fireEvent.mouseEnter(messages[1]);
+    fireEvent.click(screen.getAllByTestId("chat-message-stop")[1]);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("user-message")).toHaveLength(1);
+    });
+    expect(
+      useSlashCommandOutputStore.getState().entriesByScope["scope-a"][0]
+        .timelineBoundaryEventId,
+    ).toBe(toPendingUserMessageBoundary(firstId));
   });
 
   it("keeps the stop button out of the bubble layout while sending", () => {

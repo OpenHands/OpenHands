@@ -42,6 +42,14 @@ const mockConversation = vi.hoisted(() => ({
     | undefined,
 }));
 
+const mockRoute = vi.hoisted(() => ({ conversationId: null as string | null }));
+
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({
+    conversationId: mockRoute.conversationId,
+  }),
+}));
+
 const mockLlmProfiles = vi.hoisted(() => ({
   data: undefined as
     | {
@@ -114,6 +122,7 @@ describe("useSlashCommand", () => {
     mockLlmProfiles.data = undefined;
     mockLlmProfiles.isLoading = false;
     mockConversation.data = undefined;
+    mockRoute.conversationId = null;
   });
 
   afterEach(() => {
@@ -130,6 +139,7 @@ describe("useSlashCommand", () => {
       agent_kind: "openhands",
       supports_manual_condensation: true,
     };
+    mockRoute.conversationId = "local-conversation";
     mockSkills.data = [makeSkill("code-search", ["/code-search"])];
 
     // Act
@@ -158,6 +168,7 @@ describe("useSlashCommand", () => {
       id: "cloud-conversation",
       conversation_version: "V1",
     };
+    mockRoute.conversationId = "cloud-conversation";
     mockSkills.data = [];
 
     const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -183,6 +194,7 @@ describe("useSlashCommand", () => {
       agent_kind: "acp",
       supports_manual_condensation: false,
     };
+    mockRoute.conversationId = "local-acp-conversation";
     mockSkills.data = [];
 
     const ref = makeChatInputRef();
@@ -203,6 +215,7 @@ describe("useSlashCommand", () => {
       agent_kind: "openhands",
       supports_manual_condensation: false,
     };
+    mockRoute.conversationId = "local-conversation";
     mockSkills.data = [];
 
     const ref = makeChatInputRef();
@@ -228,6 +241,23 @@ describe("useSlashCommand", () => {
       "/model",
       "/code-search",
     ]);
+  });
+
+  it("does not treat a task route as a running conversation", () => {
+    mockRoute.conversationId = "task-abc";
+    mockConversation.data = undefined;
+    mockSkills.data = [];
+
+    const ref = makeChatInputRef();
+    const { result } = renderHook(() => useSlashCommand(ref));
+    const commands = result.current.filteredItems.map((item) => item.command);
+
+    expect(commands).not.toContain("/new");
+    expect(commands).not.toContain("/confirm");
+    expect(commands).not.toContain("/condense");
+    expect(commands).not.toContain("/fork");
+    expect(commands).not.toContain("/goal");
+    expect(commands).not.toContain("/btw");
   });
 
   it("matches /help despite contentEditable zero-width formatting characters", () => {

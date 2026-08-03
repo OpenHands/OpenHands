@@ -15,7 +15,8 @@ export type SlashCommandAvailability =
   | "conversation"
   | "confirmation"
   | "manual-condensation-conversation"
-  | "local-conversation";
+  | "local-conversation"
+  | "local-openhands-conversation";
 
 export interface BuiltInSlashCommandItem extends SlashCommandItem {
   availability: SlashCommandAvailability;

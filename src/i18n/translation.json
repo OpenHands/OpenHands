@@ -36617,6 +36617,23 @@
     "uk": "Стискання розмови…",
     "ca": "Condensant la conversa…"
   },
+  "SLASH_COMMAND$CONDENSE_WAIT_UNTIL_IDLE": {
+    "en": "Wait until the agent is idle before condensing.",
+    "ja": "エージェントがアイドル状態になるまで待ってから会話を要約してください。",
+    "zh-CN": "请等待代理空闲后再压缩会话。",
+    "zh-TW": "請等待代理閒置後再壓縮對話。",
+    "ko-KR": "에이전트가 유휴 상태가 될 때까지 기다린 후 대화를 압축하세요.",
+    "no": "Vent til agenten er inaktiv før du kondenserer.",
+    "it": "Attendi che l'agente sia inattivo prima di condensare.",
+    "pt": "Aguarde até que o agente esteja ocioso antes de condensar.",
+    "es": "Espera a que el agente esté inactivo antes de condensar.",
+    "ar": "انتظر حتى يصبح الوكيل خاملاً قبل التكثيف.",
+    "fr": "Attendez que l'agent soit inactif avant de condenser.",
+    "tr": "Yoğunlaştırmadan önce aracının boşta olmasını bekleyin.",
+    "de": "Warte mit dem Komprimieren, bis der Agent inaktiv ist.",
+    "uk": "Зачекайте, доки агент не перейде в режим очікування, перш ніж стискати розмову.",
+    "ca": "Espera que l'agent estigui inactiu abans de condensar."
+  },
   "SLASH_COMMAND$CONDENSE_SUCCESS": {
     "en": "Conversation condensed.",
     "ja": "会話を要約しました。",

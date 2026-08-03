@@ -16,6 +16,16 @@ export function isExecutionActive(
   return !!status && ACTIVE_EXECUTION_STATUSES.has(status);
 }
 
+/** True only while the agent may still be mutating conversation history. */
+export function isExecutionInProgress(
+  status: ExecutionStatus | null | undefined,
+): boolean {
+  return (
+    status === ExecutionStatus.RUNNING ||
+    status === ExecutionStatus.WAITING_FOR_CONFIRMATION
+  );
+}
+
 export function isExecutionPaused(
   status: ExecutionStatus | null | undefined,
 ): boolean {

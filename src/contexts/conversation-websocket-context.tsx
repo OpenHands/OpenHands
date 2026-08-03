@@ -16,6 +16,7 @@ import { SERVER_CONNECTION_ERROR_MESSAGE } from "#/constants/server-connection-e
 import { useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useBrowserStore } from "#/stores/browser-store";
@@ -147,6 +148,9 @@ export function ConversationWebSocketProvider({
     useErrorMessageStore();
   const consumeMatchingPendingMessage = useOptimisticUserMessageStore(
     (state) => state.consumeMatchingPendingMessage,
+  );
+  const resolvePendingMessageBoundary = useSlashCommandOutputStore(
+    (state) => state.resolvePendingMessageBoundary,
   );
   const { setExecutionStatus } = useConversationStateStore();
   const { appendInput, appendOutput } = useCommandStore();
@@ -282,10 +286,16 @@ export function ConversationWebSocketProvider({
 
       for (const event of preloadedHistory.events) {
         if (isUserMessageEvent(event)) {
-          consumeMatchingPendingMessage(
+          const consumedPendingMessage = consumeMatchingPendingMessage(
             conversationId,
             extractMessageEventText(event),
           );
+          if (consumedPendingMessage) {
+            resolvePendingMessageBoundary(
+              consumedPendingMessage.id,
+              String(event.id),
+            );
+          }
         }
       }
     }
@@ -294,6 +304,7 @@ export function ConversationWebSocketProvider({
     addEvents,
     conversationId,
     consumeMatchingPendingMessage,
+    resolvePendingMessageBoundary,
   ]);
 
   /**
@@ -531,10 +542,16 @@ export function ConversationWebSocketProvider({
           // out-of-order delivery between conversations or sub-agents.
           if (isUserMessageEvent(event)) {
             if (conversationId) {
-              consumeMatchingPendingMessage(
+              const consumedPendingMessage = consumeMatchingPendingMessage(
                 conversationId,
                 extractMessageEventText(event),
               );
+              if (consumedPendingMessage) {
+                resolvePendingMessageBoundary(
+                  consumedPendingMessage.id,
+                  String(event.id),
+                );
+              }
               // Clear draft from localStorage - message was successfully delivered
               setConversationState(conversationId, { draftMessage: null });
             }
@@ -653,6 +670,7 @@ export function ConversationWebSocketProvider({
       addEvent,
       setErrorMessage,
       consumeMatchingPendingMessage,
+      resolvePendingMessageBoundary,
       queryClient,
       conversationId,
       setExecutionStatus,

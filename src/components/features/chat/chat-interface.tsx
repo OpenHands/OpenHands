@@ -55,6 +55,8 @@ import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
 import { NEW_COMMAND } from "#/utils/constants";
 import { normalizeUiCommand } from "#/utils/slash-command-text";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { buildSlashCommandOutputScopeId } from "#/utils/slash-command-output-scope";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -157,6 +159,14 @@ export function ChatInterface() {
 
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
+  const { backend, orgId } = useActiveBackend();
+  const slashCommandOutputScopeId = conversationId
+    ? buildSlashCommandOutputScopeId({
+        backendId: backend.id,
+        orgId,
+        conversationId,
+      })
+    : null;
 
   // The live goal banner renders in the scroll stream but advances via store
   // updates (in-progress goal events are filtered out of `renderableEvents`),
@@ -170,16 +180,16 @@ export function ChatInterface() {
     return goal?.active ? `${goal.iteration}:${goal.status}` : null;
   });
   const slashCommandOutputScrollKey = useSlashCommandOutputStore((state) => {
-    const entries = conversationId
-      ? state.entriesByScope[conversationId]
+    const entries = slashCommandOutputScopeId
+      ? state.entriesByScope[slashCommandOutputScopeId]
       : undefined;
     if (!entries?.length) return null;
     return entries.map((entry) => `${entry.id}:${entry.status}`).join("|");
   });
   const hasUnanchoredSlashCommandOutput = useSlashCommandOutputStore(
     (state) => {
-      const entries = conversationId
-        ? state.entriesByScope[conversationId]
+      const entries = slashCommandOutputScopeId
+        ? state.entriesByScope[slashCommandOutputScopeId]
         : undefined;
       return (
         entries?.some((entry) => entry.timelineBoundaryEventId === null) ??
@@ -188,8 +198,8 @@ export function ChatInterface() {
     },
   );
   const hasTimelineSlashCommandOutput = useSlashCommandOutputStore((state) => {
-    const entries = conversationId
-      ? state.entriesByScope[conversationId]
+    const entries = slashCommandOutputScopeId
+      ? state.entriesByScope[slashCommandOutputScopeId]
       : undefined;
     return (
       entries?.some((entry) => entry.timelineBoundaryEventId !== null) ?? false
@@ -221,12 +231,46 @@ export function ChatInterface() {
   //                 server runs out of older events.
   const SCROLL_TOP_THRESHOLD_PX = 80;
   const preserveScrollPosition = React.useRef<{
+    requestId: number;
     scrollHeight: number;
     scrollTop: number;
   } | null>(null);
+  const paginationReadyRef = React.useRef(false);
+  const olderLoadRequestId = React.useRef(0);
+  React.useLayoutEffect(() => {
+    // Invalidate an older-page completion captured for the previous
+    // backend/org/conversation. Conversation UUIDs are not globally unique,
+    // so the complete qualified scope—not only the route ID—owns this state.
+    olderLoadRequestId.current += 1;
+    preserveScrollPosition.current = null;
+    paginationReadyRef.current = false;
+  }, [slashCommandOutputScopeId]);
+  React.useLayoutEffect(() => {
+    if (
+      paginationReadyRef.current ||
+      conversationWebSocket?.isLoadingHistory === true ||
+      allConversationEvents.length === 0
+    ) {
+      return;
+    }
+    const target = scrollRef.current;
+    if (target && autoScroll) target.scrollTop = target.scrollHeight;
+    paginationReadyRef.current = true;
+  }, [
+    allConversationEvents.length,
+    autoScroll,
+    conversationWebSocket?.isLoadingHistory,
+    slashCommandOutputScopeId,
+  ]);
   const maybeLoadOlder = React.useCallback(
     (target: HTMLElement) => {
-      if (isProvisioningTask || isLoadingOlderEvents || !hasMoreOlderEvents) {
+      if (
+        isProvisioningTask ||
+        isLoadingOlderEvents ||
+        !paginationReadyRef.current ||
+        preserveScrollPosition.current ||
+        !hasMoreOlderEvents
+      ) {
         return;
       }
 
@@ -235,18 +279,40 @@ export function ChatInterface() {
         target.scrollHeight <= target.clientHeight + SCROLL_TOP_THRESHOLD_PX;
       if (!atTop && !noOverflow) return;
 
+      const requestId = ++olderLoadRequestId.current;
       preserveScrollPosition.current = {
+        requestId,
         scrollHeight: target.scrollHeight,
         scrollTop: target.scrollTop,
       };
-      loadOlder().catch((error) => {
-        preserveScrollPosition.current = null;
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : t(I18nKey.ERROR$GENERIC);
-        setErrorMessage(message);
-      });
+      loadOlder().then(
+        () => {
+          // The query/store update occurs before loadOlder resolves. Restore
+          // on the next paint so React has committed the prepended page. No
+          // unrelated slash/goal/pending render is allowed to consume this
+          // request-owned snapshot in the meantime.
+          requestAnimationFrame(() => {
+            const snapshot = preserveScrollPosition.current;
+            if (snapshot?.requestId !== requestId) return;
+            const dom = scrollRef.current;
+            if (dom) {
+              const delta = dom.scrollHeight - snapshot.scrollHeight;
+              if (delta > 0) dom.scrollTop = snapshot.scrollTop + delta;
+            }
+            preserveScrollPosition.current = null;
+          });
+        },
+        (error) => {
+          if (preserveScrollPosition.current?.requestId === requestId) {
+            preserveScrollPosition.current = null;
+          }
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : t(I18nKey.ERROR$GENERIC);
+          setErrorMessage(message);
+        },
+      );
     },
     [
       hasMoreOlderEvents,
@@ -317,6 +383,12 @@ export function ChatInterface() {
     originalImages: File[],
     originalFiles: File[],
   ) => {
+    // The visible composer is disabled in both states, but retain a hard
+    // execution guard for programmatic draft submission and stale callbacks.
+    // A task route is not an Agent Server conversation ID, and unresolved
+    // history is not yet a safe placement/sending context.
+    if (isProvisioningTask || isHistoryLoading) return;
+
     // Handle /new command for V1 conversations
     if (normalizeUiCommand(content) === NEW_COMMAND) {
       if (!conversationId) {
@@ -419,23 +491,16 @@ export function ChatInterface() {
   // grows `renderableEvents`, and we don't want to yank the user back to the
   // bottom in that case.
   React.useEffect(() => {
-    // If a "load older" was just triggered, restore the scroll position so
-    // the conversation appears to extend upward instead of jumping.
-    if (preserveScrollPosition.current && scrollRef.current) {
-      const { scrollHeight: prevHeight, scrollTop: prevTop } =
-        preserveScrollPosition.current;
-      const dom = scrollRef.current;
-      const delta = dom.scrollHeight - prevHeight;
-      if (delta > 0) {
-        dom.scrollTop = prevTop + delta;
-      }
-      preserveScrollPosition.current = null;
-      return;
-    }
+    // A pending older-page request owns the viewport until its own completion
+    // restores it. Ordinary lifecycle renders must neither clear the snapshot
+    // nor yank the user to the bottom.
+    if (preserveScrollPosition.current) return undefined;
 
     if (autoScroll) {
       scrollDomToBottom();
     }
+
+    return undefined;
     // Note: We intentionally exclude autoScroll from deps because we only want
     // to scroll when message content changes, not when autoScroll state changes.
   }, [
@@ -461,9 +526,15 @@ export function ChatInterface() {
     maybeLoadOlderRef.current = maybeLoadOlder;
   });
   React.useEffect(() => {
-    const target = scrollRef.current;
-    if (!target) return;
-    maybeLoadOlderRef.current(target);
+    const frameId = requestAnimationFrame(() => {
+      const target = scrollRef.current;
+      if (!target) return;
+      const noOverflow =
+        target.scrollHeight <= target.clientHeight + SCROLL_TOP_THRESHOLD_PX;
+      if (!noOverflow) return;
+      maybeLoadOlderRef.current(target);
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [renderableEvents.length, hasMoreOlderEvents]);
 
   // Create a ScrollProvider with the scroll hook values
@@ -573,7 +644,7 @@ export function ChatInterface() {
               anchored to `null` and live above the message list. */}
           <ModelMessages conversationId={conversationId} anchorEventId={null} />
           <SlashCommandMessages
-            outputScopeId={conversationId}
+            outputScopeId={slashCommandOutputScopeId}
             timelineBoundaryEventId={null}
           />
 
@@ -582,6 +653,7 @@ export function ChatInterface() {
               <Messages
                 messages={renderableEvents}
                 allEvents={allConversationEvents}
+                slashCommandOutputScopeId={slashCommandOutputScopeId}
               />
             )}
 
@@ -593,7 +665,9 @@ export function ChatInterface() {
             UserMessageEvent echoes back over the WebSocket, so this never
             double-renders alongside the real event list.
           */}
-          <PendingUserMessages />
+          <PendingUserMessages
+            slashCommandOutputScopeId={slashCommandOutputScopeId}
+          />
 
           {/* Goal-loop status sits at the end of the message flow — above the
               composer and its typing indicator — so progress stays in view. */}
@@ -671,7 +745,12 @@ export function ChatInterface() {
 
               <InteractiveChatBox
                 onSubmit={handleSendMessage}
-                disabled={isNewConversationPending || llmBlocked}
+                disabled={
+                  isNewConversationPending ||
+                  llmBlocked ||
+                  isProvisioningTask ||
+                  isHistoryLoading
+                }
                 hasStartedConversation={hasStartedConversation}
               />
             </div>

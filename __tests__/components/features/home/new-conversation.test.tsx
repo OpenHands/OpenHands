@@ -5,10 +5,26 @@ import { renderWithProviders } from "test-utils";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { NewConversation } from "#/components/features/home/new-conversation/new-conversation";
 
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  __esModule: true,
+  default: {
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    }),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+}));
+
+vi.mock("#/api/plugins-management-service", () => ({
+  __esModule: true,
+  default: { listInstalledPlugins: vi.fn().mockResolvedValue([]) },
+}));
+
 vi.mock("#/hooks/query/use-settings", async () => {
-  const actual = await vi.importActual<typeof import("#/hooks/query/use-settings")>(
-    "#/hooks/query/use-settings",
-  );
+  const actual = await vi.importActual<
+    typeof import("#/hooks/query/use-settings")
+  >("#/hooks/query/use-settings");
   return {
     ...actual,
     getSettingsQueryFn: vi.fn().mockResolvedValue({}),
@@ -76,7 +92,7 @@ describe("NewConversation", () => {
     const launchButton = screen.getByTestId("launch-new-conversation-button");
     await userEvent.click(launchButton);
 
-    expect(createConversationSpy).toHaveBeenCalledOnce();
+    await waitFor(() => expect(createConversationSpy).toHaveBeenCalledOnce());
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-123");
     });
@@ -84,9 +100,10 @@ describe("NewConversation", () => {
 
   it("should change the launch button text to 'Loading...' when creating a conversation", async () => {
     // Mock V1 API to never resolve, keeping the mutation in loading state
-    vi.spyOn(AgentServerConversationService, "createConversation").mockImplementation(
-      () => new Promise(() => {}),
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockImplementation(() => new Promise(() => {}));
 
     renderNewConversation();
 

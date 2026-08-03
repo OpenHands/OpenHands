@@ -37,10 +37,11 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({ data: state.conversation }),
 }));
 
-function makeWrapper() {
-  const queryClient = new QueryClient({
+function makeWrapper(
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -132,6 +133,53 @@ describe("useConversationSkills", () => {
 
     await waitFor(() => expect(catalogSpy).toHaveBeenCalledWith(undefined));
     expect(conversationSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not substitute the global catalog while conversation metadata loads", async () => {
+    state.routeConversationId = "conversation-1";
+    state.conversation = undefined;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      ["skills", "backend-1", null, "workspace", null],
+      [
+        {
+          name: "cached-home-skill",
+          type: "agentskills",
+          source: "user",
+          triggers: ["/cached-home-skill"],
+        },
+      ],
+    );
+    const catalogSpy = vi
+      .spyOn(SkillsService, "getSkills")
+      .mockResolvedValue([]);
+
+    const { result } = renderHook(() => useConversationSkills(), {
+      wrapper: makeWrapper(queryClient),
+    });
+
+    await Promise.resolve();
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(result.current.data).toBeUndefined();
+    expect(catalogSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not query a catalog for a provisioning task route", async () => {
+    state.routeConversationId = "task-abc";
+    state.conversation = undefined;
+    const catalogSpy = vi
+      .spyOn(SkillsService, "getSkills")
+      .mockResolvedValue([]);
+
+    const { result } = renderHook(() => useConversationSkills(), {
+      wrapper: makeWrapper(),
+    });
+
+    await Promise.resolve();
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(catalogSpy).not.toHaveBeenCalled();
   });
 
   it("fetches a distinct available catalog when the Cloud organization changes", async () => {

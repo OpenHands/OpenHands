@@ -31,6 +31,9 @@ const isAvailable = (
   if (availability === "local-conversation") {
     return !isCloud && hasConversation;
   }
+  if (availability === "local-openhands-conversation") {
+    return !isCloud && hasConversation && agentKind === "openhands";
+  }
   return false;
 };
 
@@ -71,7 +74,10 @@ export const buildSlashCommandCatalog = ({
   );
   if (isSkillsLoading) return builtIns;
 
-  const seen = new Set(builtIns.map((item) => item.command));
+  // Interceptors reserve every frontend-owned command even when it is not
+  // advertised in the current context. Letting a skill claim an unavailable
+  // built-in would advertise a command that the frontend later swallows.
+  const seen = new Set(BUILT_IN_COMMANDS.map((item) => item.command));
   const skillItems = getSkillSlashCommandItems(skills)
     .filter((item) => {
       if (seen.has(item.command)) return false;

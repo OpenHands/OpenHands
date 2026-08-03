@@ -12,7 +12,9 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentServerConversationService, {
+  CONDENSE_CONVERSATION_TIMEOUT_MS,
+} from "#/api/conversation-service/agent-server-conversation-service.api";
 import {
   clearSessionConfirmationPolicies,
   getConfirmationPolicySessionScope,
@@ -277,6 +279,7 @@ describe("AgentServerConversationService", () => {
         expect.objectContaining({
           host: "http://runtime.example",
           apiKey: "runtime-key",
+          timeout: CONDENSE_CONVERSATION_TIMEOUT_MS,
         }),
       );
     });

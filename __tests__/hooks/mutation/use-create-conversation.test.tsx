@@ -9,9 +9,13 @@ import {
   removeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 
+const { trackConversationCreatedMock } = vi.hoisted(() => ({
+  trackConversationCreatedMock: vi.fn(),
+}));
+
 vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({
-    trackConversationCreated: vi.fn(),
+    trackConversationCreated: trackConversationCreatedMock,
   }),
 }));
 
@@ -29,6 +33,16 @@ const mockUseActiveBackend = vi.fn<() => MockActiveBackend>(() => ({
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => mockUseActiveBackend(),
 }));
+vi.mock("#/api/backend-registry/active-store", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("#/api/backend-registry/active-store")
+    >();
+  return {
+    ...actual,
+    getActiveBackend: () => mockUseActiveBackend(),
+  };
+});
 
 // The hook stamps the active LLM profile onto the conversation (#1082).
 // Mock it so the captured value is deterministic — the real hook fires a
@@ -79,6 +93,7 @@ listLlmProfilesMock.mockResolvedValue({ profiles: [], active_profile: null });
 
 describe("useCreateConversation", () => {
   afterEach(() => {
+    trackConversationCreatedMock.mockClear();
     // Restore the default (no active AgentProfile) so the overrides below
     // don't leak into the other create-call assertions.
     mockUseActiveBackend.mockReturnValue({
@@ -172,8 +187,116 @@ describe("useCreateConversation", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          backend: { id: "local-1", kind: "local" },
+          orgId: null,
+        },
       );
     });
+  });
+
+  it("does not send creation to a backend selected during profile loading", async () => {
+    let resolveProfiles!: (value: {
+      profiles: never[];
+      active_agent_profile_id: null;
+    }) => void;
+    listAgentProfilesMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveProfiles = resolve;
+      }),
+    );
+    const createConversationSpy = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    createConversationSpy.mockClear();
+    const queryClient = new QueryClient();
+    const { result, rerender } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    const pending = result.current.mutateAsync({});
+    await waitFor(() => expect(listAgentProfilesMock).toHaveBeenCalled());
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "local-2", kind: "local" },
+      orgId: null,
+    });
+    rerender();
+    resolveProfiles({ profiles: [], active_agent_profile_id: null });
+
+    await expect(pending).rejects.toThrow("Backend selection changed");
+    expect(createConversationSpy).not.toHaveBeenCalled();
+    expect(trackConversationCreatedMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects an immediate Cloud ERROR task before reporting success", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue({
+      id: "failed-task",
+      status: "ERROR",
+      detail: "quota exceeded",
+      app_conversation_id: null,
+      agent_server_url: null,
+    } as never);
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await expect(result.current.mutateAsync({})).rejects.toThrow(
+      "quota exceeded",
+    );
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(trackConversationCreatedMock).not.toHaveBeenCalled();
+  });
+
+  it("uses a stable fallback for an immediate Cloud ERROR without detail", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue({
+      id: "failed-task",
+      status: "ERROR",
+      detail: "   ",
+      app_conversation_id: null,
+      agent_server_url: null,
+    } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await expect(result.current.mutateAsync({})).rejects.toThrow(
+      "Failed to create new conversation",
+    );
+    expect(trackConversationCreatedMock).not.toHaveBeenCalled();
   });
 
   it("launches new local conversations from the active AgentProfile (#3727)", async () => {

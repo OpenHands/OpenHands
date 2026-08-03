@@ -52,60 +52,80 @@ export function toLoadedHookResources(
 
 /** Extract hooks and MCPs persisted with a conversation. */
 export function parseLoadedResources(response: unknown): LoadedResources {
-  const root = isRecord(response) ? response : {};
-  const agent = isRecord(root.agent) ? root.agent : {};
-  const agentContext = isRecord(agent.agent_context) ? agent.agent_context : {};
+  if (!isRecord(response) || !isRecord(response.agent)) {
+    throw new Error("Loaded resource data is unavailable in this runtime.");
+  }
+  const root = response;
+  const agent = response.agent;
+  const agentContext = isRecord(agent.agent_context)
+    ? agent.agent_context
+    : null;
 
-  const skills = Array.isArray(agentContext.skills)
-    ? agentContext.skills
-        .flatMap((skill) => {
-          if (!isRecord(skill) || typeof skill.name !== "string") return [];
-          return [
-            {
-              name: skill.name,
-              description:
-                typeof skill.description === "string"
-                  ? skill.description
-                  : null,
-              source: typeof skill.source === "string" ? skill.source : null,
-            },
-          ];
-        })
-        .sort((left, right) => left.name.localeCompare(right.name))
-    : [];
+  // `include_skills=true` promises this serialized field. If it is absent,
+  // treating the response as an authoritative empty snapshot would hide a
+  // stopped/older/incompatible runtime as "no resources".
+  if (!agentContext || !Array.isArray(agentContext.skills)) {
+    throw new Error("Loaded skill data is unavailable in this runtime.");
+  }
 
+  const skills = agentContext.skills
+    .flatMap((skill) => {
+      if (!isRecord(skill) || typeof skill.name !== "string") return [];
+      return [
+        {
+          name: skill.name,
+          description:
+            typeof skill.description === "string" ? skill.description : null,
+          source: typeof skill.source === "string" ? skill.source : null,
+        },
+      ];
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+
+  const hasSerializedHookConfig = Object.prototype.hasOwnProperty.call(
+    root,
+    "hook_config",
+  );
   const hookConfig = isRecord(root.hook_config) ? root.hook_config : {};
-  const hooks = HOOK_TYPES.flatMap((hookType) => {
-    const matchers = hookConfig[hookType];
-    if (!Array.isArray(matchers)) return [];
+  const hooks = hasSerializedHookConfig
+    ? HOOK_TYPES.flatMap((hookType) => {
+        const matchers = hookConfig[hookType];
+        if (!Array.isArray(matchers)) return [];
 
-    const commands = matchers.flatMap((matcher) => {
-      if (!isRecord(matcher) || !Array.isArray(matcher.hooks)) return [];
-      return matcher.hooks.flatMap((hook) =>
-        isRecord(hook) && typeof hook.command === "string" && hook.command
-          ? [hook.command]
-          : [],
-      );
-    });
+        const commands = matchers.flatMap((matcher) => {
+          if (!isRecord(matcher) || !Array.isArray(matcher.hooks)) return [];
+          return matcher.hooks.flatMap((hook) =>
+            isRecord(hook) && typeof hook.command === "string" && hook.command
+              ? [hook.command]
+              : [],
+          );
+        });
 
-    return commands.length > 0 ? [{ hookType, commands }] : [];
-  });
-
-  const mcpServerMap = getSdkMcpServerMap(agent.mcp_config);
-  const mcps = mcpServerMap
-    ? Object.entries(mcpServerMap).flatMap(([name, value]) => {
-        if (!isRecord(value) || value.enabled === false) return [];
-        const transport =
-          typeof value.transport === "string"
-            ? value.transport
-            : typeof value.command === "string"
-              ? "stdio"
-              : typeof value.url === "string"
-                ? "http"
-                : null;
-        return [{ name, transport }];
+        return commands.length > 0 ? [{ hookType, commands }] : [];
       })
-    : [];
+    : null;
+
+  const hasSerializedMcpConfig = Object.prototype.hasOwnProperty.call(
+    agent,
+    "mcp_config",
+  );
+  const mcpServerMap = getSdkMcpServerMap(agent.mcp_config);
+  const mcps = hasSerializedMcpConfig
+    ? mcpServerMap
+      ? Object.entries(mcpServerMap).flatMap(([name, value]) => {
+          if (!isRecord(value) || value.enabled === false) return [];
+          const transport =
+            typeof value.transport === "string"
+              ? value.transport
+              : typeof value.command === "string"
+                ? "stdio"
+                : typeof value.url === "string"
+                  ? "http"
+                  : null;
+          return [{ name, transport }];
+        })
+      : []
+    : null;
 
   return { skills, hooks, mcps };
 }

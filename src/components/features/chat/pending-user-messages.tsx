@@ -9,6 +9,10 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { matchesPendingConversationId } from "#/utils/pending-task-message-link";
 import { ImageCarousel } from "#/components/features/images/image-carousel";
 import { ChatMessage } from "./chat-message";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
+import { useEventStore } from "#/stores/use-event-store";
+import { SlashCommandMessages } from "./slash-command-messages";
+import { toPendingUserMessageBoundary } from "#/hooks/chat/slash-command-timeline-boundary";
 
 /**
  * Renders the queue of locally-tracked user messages that have been submitted
@@ -22,7 +26,11 @@ import { ChatMessage } from "./chat-message";
  * active conversation, so switching conversations never carries pending
  * bubbles over.
  */
-export function PendingUserMessages() {
+export function PendingUserMessages({
+  slashCommandOutputScopeId,
+}: {
+  slashCommandOutputScopeId?: string | null;
+}) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
   const pendingMessages = useOptimisticUserMessageStore(
@@ -41,6 +49,46 @@ export function PendingUserMessages() {
     (state) => state.restoreMessageToInputIfEmpty,
   );
   const { send } = useSendMessage();
+  const slashCommandEntries = useSlashCommandOutputStore((state) =>
+    slashCommandOutputScopeId
+      ? state.entriesByScope[slashCommandOutputScopeId]
+      : undefined,
+  );
+  const resolvePendingMessageBoundary = useSlashCommandOutputStore(
+    (state) => state.resolvePendingMessageBoundary,
+  );
+
+  const releasePendingBoundary = React.useCallback(
+    (id: string) => {
+      const pendingMessages =
+        useOptimisticUserMessageStore.getState().pendingMessages;
+      const pendingIndex = pendingMessages.findIndex(
+        (message) => message.id === id,
+      );
+      const precedingPendingMessage =
+        pendingIndex > 0 && conversationId
+          ? pendingMessages
+              .slice(0, pendingIndex)
+              .reverse()
+              .find((message) =>
+                matchesPendingConversationId(
+                  conversationId,
+                  message.conversationId,
+                ),
+              )
+          : undefined;
+      const lastEventId = useEventStore.getState().events.at(-1)?.id;
+      resolvePendingMessageBoundary(
+        id,
+        precedingPendingMessage
+          ? toPendingUserMessageBoundary(precedingPendingMessage.id)
+          : lastEventId === undefined || lastEventId === null
+            ? null
+            : String(lastEventId),
+      );
+    },
+    [conversationId, resolvePendingMessageBoundary],
+  );
 
   const visibleMessages = React.useMemo(
     () =>
@@ -87,16 +135,22 @@ export function PendingUserMessages() {
   const handleStop = React.useCallback(
     (id: string, text: string) => {
       restoreMessageToInputIfEmpty(text);
+      releasePendingBoundary(id);
       removePendingMessage(id);
     },
-    [restoreMessageToInputIfEmpty, removePendingMessage],
+    [
+      restoreMessageToInputIfEmpty,
+      releasePendingBoundary,
+      removePendingMessage,
+    ],
   );
 
   const handleDismiss = React.useCallback(
     (id: string) => {
+      releasePendingBoundary(id);
       removePendingMessage(id);
     },
-    [removePendingMessage],
+    [releasePendingBoundary, removePendingMessage],
   );
 
   if (visibleMessages.length === 0) {
@@ -106,31 +160,40 @@ export function PendingUserMessages() {
   return (
     <>
       {visibleMessages.map((message) => (
-        <ChatMessage
-          key={message.id}
-          type="user"
-          message={message.text}
-          pendingStatus={message.status}
-          onRetry={
-            message.status === "error"
-              ? () => handleRetry(message.id)
-              : undefined
-          }
-          onDismiss={
-            message.status === "error"
-              ? () => handleDismiss(message.id)
-              : undefined
-          }
-          onStop={
-            message.status === "sending"
-              ? () => handleStop(message.id, message.text)
-              : undefined
-          }
-        >
-          {message.imageUrls.length > 0 && (
-            <ImageCarousel size="small" images={message.imageUrls} />
-          )}
-        </ChatMessage>
+        <React.Fragment key={message.id}>
+          <ChatMessage
+            type="user"
+            message={message.text}
+            pendingStatus={message.status}
+            onRetry={
+              message.status === "error"
+                ? () => handleRetry(message.id)
+                : undefined
+            }
+            onDismiss={
+              message.status === "error"
+                ? () => handleDismiss(message.id)
+                : undefined
+            }
+            onStop={
+              message.status === "sending"
+                ? () => handleStop(message.id, message.text)
+                : undefined
+            }
+          >
+            {message.imageUrls.length > 0 && (
+              <ImageCarousel size="small" images={message.imageUrls} />
+            )}
+          </ChatMessage>
+          <SlashCommandMessages
+            outputScopeId={slashCommandOutputScopeId}
+            outputs={(slashCommandEntries ?? []).filter(
+              (entry) =>
+                entry.timelineBoundaryEventId ===
+                toPendingUserMessageBoundary(message.id),
+            )}
+          />
+        </React.Fragment>
       ))}
     </>
   );

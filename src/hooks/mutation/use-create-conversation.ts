@@ -1,8 +1,9 @@
+import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -77,6 +78,14 @@ export const useCreateConversation = () => {
   // cold cache into the agent_settings fallback would silently launch the
   // wrong agent.
   const { backend, orgId } = useActiveBackend();
+  const activeSelectionRef = useRef({
+    backendId: backend.id,
+    orgId: orgId ?? null,
+  });
+  activeSelectionRef.current = {
+    backendId: backend.id,
+    orgId: orgId ?? null,
+  };
   useAgentProfiles();
 
   return useMutation({
@@ -198,21 +207,22 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Only extend the call when a sandbox or profile is present, so a plain
-      // create stays byte-identical to the legacy agent_settings path (#3727).
-      // /new supplies sandboxId and still needs the same active-profile
-      // resolution as the New Chat button.
-      // TODO(#1587): createConversation has grown to 11 positional params;
-      // refactor it to an options object so this position-skipping tail isn't
-      // needed.
-      const launchArgs:
-        | [string | undefined, string, AgentKind | undefined]
-        | [string]
-        | [] = effectiveAgentProfileId
-        ? [sandboxId, effectiveAgentProfileId, resolvedAgentProfile?.agent_kind]
-        : sandboxId
-          ? [sandboxId]
-          : [];
+      // Pin the selection across all asynchronous profile/settings work. The
+      // service receives the same captured backend so its eventual POST cannot
+      // drift to a newly selected backend or Cloud organization.
+      const invocation = { backend, orgId: orgId ?? null };
+      const isInvocationActive = () => {
+        const current = activeSelectionRef.current;
+        return (
+          current.backendId === invocation.backend.id &&
+          current.orgId === invocation.orgId
+        );
+      };
+      if (!isInvocationActive()) {
+        throw new Error(
+          "Backend selection changed while creating conversation",
+        );
+      }
 
       const conversation =
         await AgentServerConversationService.createConversation(
@@ -230,8 +240,25 @@ export const useCreateConversation = () => {
           workspaceMode,
           parentConversationId,
           agentType,
-          ...launchArgs,
+          sandboxId,
+          effectiveAgentProfileId,
+          effectiveAgentProfileId
+            ? resolvedAgentProfile?.agent_kind
+            : undefined,
+          invocation,
         );
+
+      if (!isInvocationActive()) {
+        throw new Error(
+          "Backend selection changed while creating conversation",
+        );
+      }
+
+      if (conversation.status === "ERROR") {
+        throw new Error(
+          conversation.detail?.trim() || "Failed to create new conversation",
+        );
+      }
 
       // Stamp the active LLM profile onto the (local) conversation so the
       // chat switcher shows the exact profile even when several profiles
@@ -258,6 +285,11 @@ export const useCreateConversation = () => {
           });
         } catch {
           // Best-effort: never let plugin lookup block conversation creation.
+        }
+        if (!isInvocationActive()) {
+          throw new Error(
+            "Backend selection changed while creating conversation",
+          );
         }
         const seen = new Set(explicitPlugins.map(pluginReferenceKey));
         const enabledInstalled = installed
@@ -317,7 +349,15 @@ export const useCreateConversation = () => {
         task_id: conversation.id,
       };
     },
-    onSuccess: async (data, variables) => {
+    onMutate: () => ({ backendId: backend.id, orgId: orgId ?? null }),
+    onSuccess: async (data, variables, invocation) => {
+      const current = activeSelectionRef.current;
+      if (
+        current.backendId !== invocation.backendId ||
+        current.orgId !== invocation.orgId
+      ) {
+        return;
+      }
       trackConversationCreated({
         conversationId: data.conversation_id,
         taskId: data.task_id,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
@@ -8,7 +8,6 @@ import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useUiCommandInterceptor } from "#/hooks/chat/use-cli-command-interceptor";
 import { SlashCommandMessages } from "#/components/features/chat/slash-command-messages";
-import { HOME_SLASH_COMMAND_SCOPE_ID } from "#/stores/slash-command-output-store";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
@@ -36,12 +35,32 @@ import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
+import { buildSlashCommandOutputScopeId } from "#/utils/slash-command-output-scope";
 
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
   const { navigate } = useNavigation();
   const isLocal = backend.kind === "local";
+  const slashCommandOutputScopeId = buildSlashCommandOutputScopeId({
+    backendId: backend.id,
+    orgId,
+  });
+  const activeSelectionRef = useRef({
+    backendId: backend.id,
+    orgId: orgId ?? null,
+  });
+  activeSelectionRef.current = {
+    backendId: backend.id,
+    orgId: orgId ?? null,
+  };
+  const isMountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      isMountedRef.current = false;
+    },
+    [],
+  );
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [pendingWorkspace, setPendingWorkspace] =
@@ -133,9 +152,21 @@ export function HomeChatLauncher() {
     );
 
     void (async () => {
+      const invokingSelection = {
+        backendId: backend.id,
+        orgId: orgId ?? null,
+      };
       try {
         const data = await createConversation(variables);
         toast.dismiss(toastId);
+        const active = activeSelectionRef.current;
+        if (
+          !isMountedRef.current ||
+          active.backendId !== invokingSelection.backendId ||
+          (active.orgId ?? null) !== invokingSelection.orgId
+        ) {
+          return;
+        }
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
@@ -206,6 +237,14 @@ export function HomeChatLauncher() {
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
         toast.dismiss(toastId);
+        const active = activeSelectionRef.current;
+        if (
+          !isMountedRef.current ||
+          active.backendId !== invokingSelection.backendId ||
+          (active.orgId ?? null) !== invokingSelection.orgId
+        ) {
+          return;
+        }
         displayErrorToast(error instanceof Error ? error.message : null);
       }
     })();
@@ -218,7 +257,7 @@ export function HomeChatLauncher() {
   const handleSubmitWithModelGuard = useModelInterceptor(null, handleSubmit);
   const handleSubmitWithCommandGuards = useUiCommandInterceptor(
     handleSubmitWithModelGuard,
-    { outputScopeId: HOME_SLASH_COMMAND_SCOPE_ID },
+    { outputScopeId: slashCommandOutputScopeId },
   );
 
   return (
@@ -232,7 +271,7 @@ export function HomeChatLauncher() {
 
       <div className="w-full">
         <SlashCommandMessages
-          outputScopeId={HOME_SLASH_COMMAND_SCOPE_ID}
+          outputScopeId={slashCommandOutputScopeId}
           timelineBoundaryEventId={null}
         />
         <CustomChatInput

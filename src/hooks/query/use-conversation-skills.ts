@@ -1,5 +1,6 @@
 import { useActiveConversation } from "./use-active-conversation";
 import { useSkills } from "./use-skills";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 
 /**
  * Skill metadata used for command discovery and the skills modal. Local
@@ -9,8 +10,26 @@ import { useSkills } from "./use-skills";
  * directory.
  */
 export const useConversationSkills = () => {
+  const { conversationId: routeConversationId } = useOptionalConversationId();
   const conversation = useActiveConversation();
-  const projectDir = conversation.data?.selected_workspace ?? undefined;
+  const hasConversationRoute = !!routeConversationId;
+  const hasResolvedConversation =
+    !!routeConversationId && conversation.data?.id === routeConversationId;
+  const projectDir = hasResolvedConversation
+    ? (conversation.data?.selected_workspace ?? undefined)
+    : undefined;
 
-  return useSkills(projectDir);
+  // A task route and a real conversation route whose metadata has not loaded
+  // yet have no authoritative workspace. Querying with `undefined` in those
+  // states would silently substitute the global catalog and briefly advertise
+  // commands from the wrong workspace.
+  return useSkills(projectDir, {
+    enabled: !hasConversationRoute || hasResolvedConversation,
+    // A disabled query can still expose cached data. Give unresolved routes a
+    // distinct key so a warm home/global catalog cannot leak into /help or
+    // autocomplete while conversation metadata is still loading.
+    ...(!hasConversationRoute || hasResolvedConversation
+      ? {}
+      : { queryScope: `unresolved:${routeConversationId}` }),
+  });
 };

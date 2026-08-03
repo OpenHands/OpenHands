@@ -120,11 +120,37 @@ describe("parseLoadedResources", () => {
     ).toEqual([{ hookType: "pre_tool_use", commands: ["lint", "test"] }]);
   });
 
-  it("returns an explicit empty snapshot for missing fields", () => {
-    expect(parseLoadedResources({})).toEqual({
+  it("keeps unsupported serialized categories unavailable", () => {
+    expect(
+      parseLoadedResources({
+        agent: { agent_context: { skills: [] } },
+      }),
+    ).toEqual({
+      skills: [],
+      hooks: null,
+      mcps: null,
+    });
+  });
+
+  it("preserves explicitly empty serialized categories", () => {
+    expect(
+      parseLoadedResources({
+        agent: { agent_context: { skills: [] }, mcp_config: {} },
+        hook_config: {},
+      }),
+    ).toEqual({
       skills: [],
       hooks: [],
       mcps: [],
     });
+  });
+
+  it("rejects a missing serialized skill snapshot", () => {
+    expect(() => parseLoadedResources({})).toThrow(
+      "Loaded resource data is unavailable",
+    );
+    expect(() => parseLoadedResources({ agent: {} })).toThrow(
+      "Loaded skill data is unavailable",
+    );
   });
 });

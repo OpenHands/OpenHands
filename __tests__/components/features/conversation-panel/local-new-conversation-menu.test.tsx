@@ -8,6 +8,22 @@ import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { LocalNewConversationMenu } from "#/components/features/conversation-panel/local-new-conversation-menu";
 import { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  __esModule: true,
+  default: {
+    listProfiles: vi.fn().mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    }),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
+}));
+
+vi.mock("#/api/plugins-management-service", () => ({
+  __esModule: true,
+  default: { listInstalledPlugins: vi.fn().mockResolvedValue([]) },
+}));
+
 const { mockSearchSubdirectories } = vi.hoisted(() => ({
   mockSearchSubdirectories: vi.fn(),
 }));
@@ -100,7 +116,10 @@ const renderMenu = ({
 describe("LocalNewConversationMenu", () => {
   beforeEach(() => {
     mockSearchSubdirectories.mockReset();
-    mockSearchSubdirectories.mockResolvedValue({ items: [], next_page_id: null });
+    mockSearchSubdirectories.mockResolvedValue({
+      items: [],
+      next_page_id: null,
+    });
   });
 
   afterEach(() => {
@@ -187,6 +206,13 @@ describe("LocalNewConversationMenu", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        expect.objectContaining({
+          backend: expect.objectContaining({ kind: "local" }),
+          orgId: null,
+        }),
       );
     });
     await waitFor(() => {

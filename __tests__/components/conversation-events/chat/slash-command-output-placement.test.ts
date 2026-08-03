@@ -111,6 +111,25 @@ describe("resolveSlashCommandOutputPlacements", () => {
     ]);
   });
 
+  it("leaves optimistic-message boundaries to the pending-message renderer", () => {
+    const recent = createUserMessageEvent("recent");
+    const placements = resolveSlashCommandOutputPlacements(
+      [
+        skillsOutput(
+          "skills",
+          "pending-user-message:pending-1",
+          "loading",
+        ),
+      ],
+      [recent],
+      [recent],
+    );
+
+    expect(placements.entriesBeforeEvent.size).toBe(0);
+    expect(placements.tailEntries).toEqual([]);
+    expect(placements.unresolvedActiveEntries).toEqual([]);
+  });
+
   it("keeps a ready result visible until the active-view fallback is deactivated", () => {
     const recent = createUserMessageEvent("recent");
     const active = resolveSlashCommandOutputPlacements(

@@ -441,6 +441,19 @@ test.describe("UI regressions", () => {
     test.setTimeout(60_000);
     await routeSessionApiKey(page);
     await routePaginationConversation(page);
+    const eventSearchRequestUrls: string[] = [];
+    page.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        request
+          .url()
+          .includes(
+            `/api/conversations/${PAGINATION_CONVERSATION_ID}/events/search`,
+          )
+      ) {
+        eventSearchRequestUrls.push(request.url());
+      }
+    });
 
     const initialRequestPromise = page.waitForRequest((req: Request) => {
       if (req.method() !== "GET") return false;
@@ -474,18 +487,20 @@ test.describe("UI regressions", () => {
     ).toHaveCount(0);
 
     // Scroll to top to trigger older-event loading.
-    const olderRequestPromise = page.waitForRequest((req: Request) => {
-      if (req.method() !== "GET") return false;
-      if (
-        !req
-          .url()
-          .includes(
-            `/api/conversations/${PAGINATION_CONVERSATION_ID}/events/search`,
-          )
-      )
-        return false;
-      return new URL(req.url()).searchParams.has("timestamp__lt");
-    });
+    const preloadedOlderPage = eventSearchRequestUrls.some((url) =>
+      new URL(url).searchParams.has("timestamp__lt"),
+    );
+    const pretriggerScrollState = await (await getChatScroller(page)).evaluate(
+      (element) => ({
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      }),
+    );
+    expect(
+      preloadedOlderPage,
+      `Older page loaded before user scroll: ${JSON.stringify(pretriggerScrollState)}`,
+    ).toBe(false);
 
     await triggerOlderEventLoad(page);
 
@@ -493,8 +508,20 @@ test.describe("UI regressions", () => {
       "Fetching older messages",
     );
 
-    const olderRequest = await olderRequestPromise;
-    const olderUrl = new URL(olderRequest.url());
+    await expect
+      .poll(
+        () =>
+          eventSearchRequestUrls.find((url) =>
+            new URL(url).searchParams.has("timestamp__lt"),
+          ) ?? null,
+        { timeout: 15_000 },
+      )
+      .not.toBeNull();
+    const olderUrl = new URL(
+      eventSearchRequestUrls.find((url) =>
+        new URL(url).searchParams.has("timestamp__lt"),
+      )!,
+    );
     expect(olderUrl.searchParams.get("limit")).toBe(String(PAGE_SIZE));
     expect(olderUrl.searchParams.get("sort_order")).toBe("TIMESTAMP_DESC");
     expect(olderUrl.searchParams.get("timestamp__lt")).toBe(

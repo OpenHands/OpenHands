@@ -1,5 +1,6 @@
 import type { OpenHandsEvent } from "#/types/agent-server/core";
 import type { SlashCommandOutput } from "#/stores/slash-command-output-store";
+import { isPendingUserMessageBoundary } from "#/hooks/chat/slash-command-timeline-boundary";
 
 export interface SlashCommandOutputPlacements {
   entriesBeforeEvent: Map<string, SlashCommandOutput[]>;
@@ -42,6 +43,10 @@ export const resolveSlashCommandOutputPlacements = (
 
   for (const entry of entries) {
     if (entry.timelineBoundaryEventId === null) continue;
+    // Optimistic-message boundaries are rendered beside their pending bubble,
+    // then atomically re-anchored to the server echo. Treating them as an
+    // ordinary unresolved history ID would place `/skills` before the prompt.
+    if (isPendingUserMessageBoundary(entry.timelineBoundaryEventId)) continue;
 
     const boundaryIndex = rawIndexById.get(entry.timelineBoundaryEventId);
 
