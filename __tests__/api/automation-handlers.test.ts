@@ -1,11 +1,44 @@
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import capabilitiesFixture from "@openhands/extensions/testing/automations/capabilities.json";
+import prReviewerFixture from "@openhands/extensions/testing/automations/github-pr-reviewer.json";
+import repoMonitorFixture from "@openhands/extensions/testing/automations/github-repo-monitor.json";
 import {
   AUTOMATION_HANDLERS,
   resetAutomationMockData,
 } from "#/mocks/automation-handlers";
 import { MOCK_AUTOMATIONS_RESPONSE } from "#/mocks/automations.mock";
+
+interface PreflightExchange {
+  request: { method: string; path: string; body: unknown };
+  response: { status: number; body: unknown };
+}
+
+interface FixtureBundle {
+  automationId: string;
+  scenarios: { id: string; preflight?: PreflightExchange }[];
+}
+
+/**
+ * Every preflight exchange the published contract fixtures record. The mock
+ * backend must reproduce each one, so the setup flow exercised against it is
+ * exercised against the reference contract.
+ */
+const PREFLIGHT_EXCHANGES = (
+  [prReviewerFixture, repoMonitorFixture] as FixtureBundle[]
+).flatMap((bundle) =>
+  bundle.scenarios.flatMap((scenario) =>
+    scenario.preflight
+      ? [
+          {
+            name: `${bundle.automationId}/${scenario.id}`,
+            exchange: scenario.preflight,
+          },
+        ]
+      : [],
+  ),
+);
 
 const server = setupServer(...AUTOMATION_HANDLERS);
 
@@ -36,6 +69,95 @@ describe("Automation MSW Handlers", () => {
       expect(res.status).toBe(200);
       expect(data.automations).toHaveLength(2);
       expect(data.automations[0].name).toBe("Docs Sync on Push");
+    });
+  });
+
+  describe("GET /api/automation/v1/capabilities", () => {
+    it("answers with the contract fixtures' supported deployment", async () => {
+      // Act
+      const res = await fetch("/api/automation/v1/capabilities");
+      const data = await res.json();
+
+      // Assert
+      expect({ status: res.status, body: data }).toEqual({
+        status: 200,
+        body: capabilitiesFixture.responses.supported.body,
+      });
+    });
+  });
+
+  describe("POST /api/automation/v1/validate", () => {
+    it.each(PREFLIGHT_EXCHANGES)(
+      "reproduces the $name exchange from the contract fixtures",
+      async ({ exchange }) => {
+        // Act
+        const res = await fetch(`/api/automation${exchange.request.path}`, {
+          method: exchange.request.method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(exchange.request.body),
+        });
+        const data = await res.json();
+
+        // Assert
+        expect({ status: res.status, body: data }).toEqual({
+          status: exchange.response.status,
+          body: exchange.response.body,
+        });
+      },
+    );
+
+    it("rejects an every-minute schedule below the deployment minimum", async () => {
+      // Arrange
+      const draft = {
+        trigger: { type: "cron", schedule: "* * * * *", timezone: "UTC" },
+      };
+
+      // Act
+      const res = await fetch("/api/automation/v1/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          automationId: "github-pr-reviewer",
+          endpoint: "/v1/preset/prompt",
+          draft,
+        }),
+      });
+      const data = await res.json();
+
+      // Assert
+      expect(data).toEqual({
+        valid: false,
+        errors: [
+          {
+            field: "trigger.schedule",
+            code: "interval_too_short",
+            message: "Minimum interval for this deployment is 5 minutes.",
+          },
+        ],
+      });
+    });
+
+    it("passes a schedule shape its cron reader does not model", async () => {
+      // Arrange — "0 0 31 2 *" can never fire, but only the real service can
+      // say so; the fixtures record that rejection at the create stage.
+      const draft = {
+        trigger: { type: "cron", schedule: "0 0 31 2 *", timezone: "UTC" },
+      };
+
+      // Act
+      const res = await fetch("/api/automation/v1/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          automationId: "github-pr-reviewer",
+          endpoint: "/v1/preset/prompt",
+          draft,
+        }),
+      });
+      const data = await res.json();
+
+      // Assert
+      expect(data).toEqual({ valid: true, errors: [] });
     });
   });
 

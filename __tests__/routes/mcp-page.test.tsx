@@ -236,7 +236,7 @@ describe("MCPPage", () => {
     expect(await screen.findByTestId("mcp-custom-editor")).toBeInTheDocument();
   });
 
-  it("deletes an installed stdio server through the confirmation modal", async () => {
+  it("deletes an installed stdio server through the editor", async () => {
     // Pre-install a Slack stdio server via the SDK-shaped mcp_config
     // the route reads from agent_settings.mcp_config.
     const settingsWithSlack = buildSettings({
@@ -260,8 +260,10 @@ describe("MCPPage", () => {
 
     renderPage();
 
-    const deleteBtn = await screen.findByTestId("mcp-installed-toggle-stdio-0");
-    fireEvent.click(deleteBtn);
+    // The card toggle is enable/disable now — removing goes through the
+    // editor, opened by clicking the card itself.
+    fireEvent.click(await screen.findByTestId("mcp-server-item"));
+    fireEvent.click(await screen.findByTestId("mcp-custom-editor-delete"));
 
     const confirmBtn = await screen.findByTestId("confirm-button");
     fireEvent.click(confirmBtn);
@@ -272,6 +274,88 @@ describe("MCPPage", () => {
     // Server gets pulled out of mcp_config entirely (parseMcpConfig
     // emits `null` once the last entry is removed).
     expect(sent.mcp_config).toBeNull();
+  });
+
+  it("disables an installed server from its card, keeping its credentials", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          mcp_config: {
+            slack: {
+              command: "npx",
+              args: ["-y", "@zencoderai/slack-mcp-server"],
+              env: { SLACK_BOT_TOKEN: "xoxb-abc" },
+            },
+            acme_internal: {
+              command: "npx",
+              args: ["-y", "@acme/internal-mcp-server"],
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("mcp-installed-toggle-stdio-0"));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
+      .agent_settings_diff as { mcp_config: unknown };
+    // Disabling is not deleting: the entry keeps its command and secrets, and
+    // the already-disabled sibling is not touched on the way through.
+    expect(sent.mcp_config).toEqual({
+      slack: {
+        command: "npx",
+        args: ["-y", "@zencoderai/slack-mcp-server"],
+        env: { SLACK_BOT_TOKEN: "xoxb-abc" },
+        enabled: false,
+      },
+      acme_internal: {
+        command: "npx",
+        args: ["-y", "@acme/internal-mcp-server"],
+        enabled: false,
+      },
+    });
+  });
+
+  it("re-enables a disabled server from its card, clearing the stored flag", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          mcp_config: {
+            acme_internal: {
+              command: "npx",
+              args: ["-y", "@acme/internal-mcp-server"],
+              enabled: false,
+            },
+          },
+        },
+      }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderPage();
+
+    fireEvent.click(await screen.findByTestId("mcp-installed-toggle-stdio-0"));
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
+      .agent_settings_diff as { mcp_config: unknown };
+    expect(sent.mcp_config).toEqual({
+      acme_internal: {
+        command: "npx",
+        args: ["-y", "@acme/internal-mcp-server"],
+      },
+    });
   });
 
   it("shows the catalog description and URL on installed server cards", async () => {

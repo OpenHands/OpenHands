@@ -288,6 +288,39 @@ describe("MCPServerForm validation", () => {
     });
   });
 
+  it("keeps a disabled server disabled when its configuration is edited", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "stdio-0",
+          type: "stdio",
+          name: "github",
+          command: "docker",
+          enabled: false,
+        }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "podman" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // Enable/disable lives on the card, not in this form, so an edit must
+    // carry the existing state forward instead of switching the server on.
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      command: "podman",
+      enabled: false,
+    });
+  });
+
   it("rejects duplicate URLs across sse/shttp types", () => {
     const onSubmit = vi.fn();
 

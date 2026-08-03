@@ -6,9 +6,7 @@ src/i18n/declaration.ts
 node_modules/
 build/
 logs/
-/.tmp/live-e2e-state/
-/.tmp/mock-llm-state/
-/.tmp/mock-llm-skill-repos/
+/.tmp/
 dist/
 __pycache__
 
@@ -24,6 +22,8 @@ __pycache__
 /playwright-report-mock-llm-docker/
 /blob-report/
 /playwright/.cache/
+/.stryker-tmp/
+/reports/
 .react-router/
 ralph/
 .vercel
