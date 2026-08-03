@@ -1,10 +1,8 @@
 import { useLoaderData, useLocation, useNavigate } from "react-router";
 import { Route } from "./+types/automation-setup-route";
+import { automationListPath } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
-
-/** Where dismissing lands when the dialog was opened by a cold deep link. */
-const FALLBACK_PATH = "/automations";
 
 /**
  * Setup for one catalog entry.
@@ -33,8 +31,10 @@ export default function AutomationSetupRoute() {
   if (!entry) return null;
 
   const handleClose = () => {
-    // "default" is the initial history entry, so there is nothing to go back to.
-    if (location.key === "default") navigate(FALLBACK_PATH, { replace: true });
+    // "default" is the initial history entry, so there is nothing to go back
+    // to; dismissing a cold deep link lands on the list instead.
+    if (location.key === "default")
+      navigate(automationListPath(), { replace: true });
     else navigate(-1);
   };
 

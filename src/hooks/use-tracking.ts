@@ -82,7 +82,7 @@ export const useTracking = () => {
     hasParentConversation: boolean;
     entryPoint?: string;
   }) => {
-    track("conversation_created", {
+    track("conversation_start_requested", {
       conversation_id: conversationId,
       task_id: taskId,
       is_start_task: conversationId.startsWith("task-"),

@@ -17,6 +17,7 @@ import {
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
+import { automationListPath } from "#/manifests/automation-interface";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
@@ -148,7 +149,7 @@ export default function AutomationDetail() {
   const handleDelete = () => {
     deleteMutation.mutate(automation.id, {
       onSuccess: () => {
-        navigate?.("/automations");
+        navigate?.(automationListPath());
       },
     });
   };

@@ -32,8 +32,15 @@ import {
   normalizeServiceErrors,
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
+import { automationDetailPath } from "#/manifests/automation-interface";
+import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
-import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import type {
+  SetupEntry,
+  SetupFormValues,
+  SetupMode,
+  SetupRequestBody,
+} from "#/manifests/types";
 import { SetupFormField } from "./manifest-form-field";
 import { SetupPrerequisitesStep } from "./manifest-prerequisites-step";
 import { SetupReviewStep } from "./manifest-review-step";
@@ -59,7 +66,7 @@ function getDestination(response: Record<string, unknown>): string | null {
   if (typeof response.conversation_id === "string") {
     return `/conversations/${response.conversation_id}`;
   }
-  if (typeof response.id === "string") return `/automations/${response.id}`;
+  if (typeof response.id === "string") return automationDetailPath(response.id);
   return null;
 }
 
@@ -185,13 +192,16 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     setStep("review");
   };
 
-  const handleConfirm = async () => {
+  const submitAction = async (
+    actionPayload: SetupRequestBody | null,
+    setupMode: SetupMode,
+  ) => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(entry, values, payload);
+      const { response } = await runAction(entry, values, actionPayload);
       trackAutomationSetupCreated({
         automationId: entry.id,
-        setupMode: entry.setup.mode,
+        setupMode,
       });
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
@@ -199,10 +209,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     } catch (error) {
       trackAutomationSetupFailed({
         automationId: entry.id,
-        setupMode: entry.setup.mode,
+        setupMode,
       });
       const mapped = mapServiceErrors(
-        normalizeServiceErrors(getApiErrorBody(error), payload),
+        normalizeServiceErrors(getApiErrorBody(error), actionPayload),
         errorMap,
       );
       setServiceErrors(
@@ -218,6 +228,17 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       setIsSubmitting(false);
     }
   };
+
+  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+
+  // A direct entry whose deployment cannot run the direct path degrades to the
+  // assisted outcome: the skill command and the entry's fallback message seed
+  // a conversation that finishes setup instead.
+  const handleFallbackConversation = () => submitAction(null, "assisted");
+  const canFallBackToConversation =
+    entry.setup.mode === "direct" &&
+    (findAutomationCommand(entry) !== null ||
+      entry.setup.message !== undefined);
 
   const resolveFieldError = (name: string): string | undefined => {
     const local = localErrors[name];
@@ -344,9 +365,27 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           )}
 
           {isUnsupported ? (
-            <BrandButton type="button" variant="secondary" onClick={onClose}>
-              {t(I18nKey.BUTTON$CLOSE)}
-            </BrandButton>
+            <>
+              <BrandButton
+                type="button"
+                variant="secondary"
+                isDisabled={isSubmitting}
+                onClick={onClose}
+              >
+                {t(I18nKey.BUTTON$CLOSE)}
+              </BrandButton>
+              {canFallBackToConversation && (
+                <BrandButton
+                  testId="setup-fallback-conversation"
+                  type="button"
+                  variant="primary"
+                  isDisabled={isSubmitting}
+                  onClick={handleFallbackConversation}
+                >
+                  {t(I18nKey.SETUP$FALLBACK_CONVERSATION)}
+                </BrandButton>
+              )}
+            </>
           ) : (
             <BrandButton
               testId="setup-continue-button"
