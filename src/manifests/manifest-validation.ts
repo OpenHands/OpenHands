@@ -41,7 +41,7 @@ const TRIGGER_KINDS = ["cron", "event"] as const;
 const CONSTRAINT_FORMATS = ["safeExpressionLiteral"] as const;
 
 /** Setup context only, so this can never become a channel for runtime instructions. */
-const MAX_ASSISTED_MESSAGE_LENGTH = 2000;
+const MAX_MESSAGE_LENGTH = 2000;
 
 export interface SetupValidationResult {
   valid: boolean;
@@ -312,10 +312,10 @@ function hasRepoPicker(form: unknown): boolean {
 
 function checkMessage(check: SetupChecker, message: unknown): void {
   if (check.templateCopy(message, "setup.message")) {
-    if ((message as string).length > MAX_ASSISTED_MESSAGE_LENGTH) {
+    if ((message as string).length > MAX_MESSAGE_LENGTH) {
       check.fail(
         "setup.message",
-        `must be at most ${MAX_ASSISTED_MESSAGE_LENGTH} characters`,
+        `must be at most ${MAX_MESSAGE_LENGTH} characters`,
       );
     }
   }
@@ -329,9 +329,8 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
 
   if (setup.mode === "direct") {
     check.templateValue(setup.prompt, "setup.prompt");
-    // A direct entry may carry a fallback-conversation seed for deployments
-    // that cannot run the direct path, held to the same rules as an assisted
-    // message.
+    // Optional here: it seeds the fallback conversation offered when the
+    // deployment cannot run the direct path.
     if (setup.message !== undefined) checkMessage(check, setup.message);
 
     // The derivation reads a single trigger kind, and an event trigger takes
