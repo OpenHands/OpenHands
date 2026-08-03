@@ -32,6 +32,10 @@ const wsCapture = vi.hoisted(() => ({
   }>,
 }));
 
+const errorHandlerMocks = vi.hoisted(() => ({
+  trackError: vi.fn(),
+}));
+
 // Keep the units under test real (the provider, `useConversationHistory`, the
 // event store). Only the network is stubbed: the WebSocket transport and the
 // REST service the history query depends on.
@@ -54,6 +58,9 @@ vi.mock("#/hooks/use-websocket", () => ({
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: vi.fn(),
+}));
+vi.mock("#/utils/error-handler", () => ({
+  trackError: errorHandlerMocks.trackError,
 }));
 
 const AGENT_REPLY_ID = "evt-agent-reply";
@@ -354,13 +361,22 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       },
     });
 
-    const makeConversationError = (id: string, detail: string) => ({
+    const makeConversationError = (
+      id: string,
+      detail: string,
+      classification?: {
+        kind: "auth";
+        retryable: boolean;
+        user_action: "settings";
+      },
+    ) => ({
       id,
       timestamp: new Date().toISOString(),
       source: "environment",
       kind: "ConversationErrorEvent",
       detail,
       code: "SomeError",
+      ...(classification ? { classification } : {}),
     });
 
     const renderCaptured = async () => {
@@ -418,6 +434,35 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // It must stay dismissed.
       deliver(errorEvent);
       expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    });
+
+    it("forwards error classifications to the banner store and telemetry", async () => {
+      await renderCaptured();
+      const classification = {
+        kind: "auth" as const,
+        retryable: false,
+        user_action: "settings" as const,
+      };
+
+      deliver(
+        makeConversationError(
+          "conv-error-2",
+          "Authentication failed",
+          classification,
+        ),
+      );
+
+      expect(useErrorMessageStore.getState().errorClassification).toEqual(
+        classification,
+      );
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "conversation",
+        metadata: {
+          eventId: "conv-error-2",
+          errorCode: "SomeError",
+        },
+        classification,
+      });
     });
   });
 
