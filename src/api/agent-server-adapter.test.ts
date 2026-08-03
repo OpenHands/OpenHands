@@ -188,6 +188,33 @@ describe("buildStartConversationRequest", () => {
     expect(payload.parent_conversation_id).toBe("parent-1");
   });
 
+  it("defaults the planner's max_iterations to 500 when not provided", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+      },
+      workingDir: "/workspace/project",
+      parentConversationId: "parent-1",
+    });
+
+    expect(payload.max_iterations).toBe(500);
+  });
+
+  it("uses the caller-provided max_iterations instead of the hardcoded default", () => {
+    const payload = buildStartPlanningConversationRequest({
+      encryptedAgentSettings: {
+        agent_kind: "openhands",
+        llm: { model: "openhands/minimax-m2.7" },
+      },
+      workingDir: "/workspace/project",
+      parentConversationId: "parent-1",
+      maxIterations: 250,
+    });
+
+    expect(payload.max_iterations).toBe(250);
+  });
+
   it("omits local planner helper conversations from paginated conversation results", () => {
     const page = toConversationPage({
       items: [
@@ -380,6 +407,31 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     expect(payload.agent.llm).toMatchObject({
       model: "openhands/globally-active-model",
     });
+  });
+
+  it("mirrors the parent's configured max_iterations instead of hardcoding a lower cap", async () => {
+    vi.mocked(SettingsService.getSettingsForConversation).mockResolvedValue({
+      ...globallyActiveSettings,
+      conversationSettings: { max_iterations: 1000 },
+    });
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+      });
+
+    expect(payload.max_iterations).toBe(1000);
+  });
+
+  it("falls back to 500 when the parent has no configured max_iterations", async () => {
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+      });
+
+    expect(payload.max_iterations).toBe(500);
   });
 });
 

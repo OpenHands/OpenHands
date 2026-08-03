@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
+import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
 import { AgentState } from "#/types/agent-state";
 import { PLAN_COMMAND, CODE_COMMAND } from "#/utils/constants";
 
@@ -12,10 +13,11 @@ import { PLAN_COMMAND, CODE_COMMAND } from "#/utils/constants";
  * Passthrough when `conversationId` is null.
  *
  * Swallows the command (no toggle, no chat message) while the agent is
- * running or a planning conversation is already being created — the same
- * conditions that disable the Code/Plan button — since flipping the mode
- * mid-run would leave it out of sync with which conversation the in-flight
- * run is actually targeting.
+ * running, a planning conversation is already being created, or the
+ * websocket is disconnected — the same conditions that disable the
+ * Code/Plan button — since flipping the mode mid-run, or before the socket
+ * can carry it, would leave it out of sync with which conversation the
+ * in-flight run is actually targeting.
  */
 export const usePlanModeInterceptor = (
   conversationId: string | null | undefined,
@@ -26,6 +28,7 @@ export const usePlanModeInterceptor = (
     (s) => s.setConversationMode,
   );
   const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
+  const isWebSocketConnected = useUnifiedWebSocketStatus() === "OPEN";
 
   return useCallback(
     (message: string) => {
@@ -37,7 +40,11 @@ export const usePlanModeInterceptor = (
         return;
       }
 
-      if (curAgentState === AgentState.RUNNING || isCreatingConversation) {
+      if (
+        curAgentState === AgentState.RUNNING ||
+        isCreatingConversation ||
+        !isWebSocketConnected
+      ) {
         return;
       }
 
@@ -51,6 +58,7 @@ export const usePlanModeInterceptor = (
       conversationId,
       curAgentState,
       isCreatingConversation,
+      isWebSocketConnected,
       onSubmit,
       handlePlanClick,
       setConversationMode,

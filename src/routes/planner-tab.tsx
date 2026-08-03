@@ -32,10 +32,15 @@ function PlannerTab() {
   const { mutate: readConversationFile } = useReadConversationFile();
 
   React.useEffect(() => {
-    if (!conversation?.id || planContent) return;
+    // Prefer the planner helper's own id — it's where PLAN.md is canonically
+    // read from (see conversation-websocket-context.tsx). The parent id is
+    // only a fallback for local planners created before the working_dir was
+    // shared, where both ids happen to resolve to the same file.
+    const readConversationId = localPlanningConversationId ?? conversation?.id;
+    if (!readConversationId || planContent !== null) return;
 
     readConversationFile(
-      { conversationId: conversation.id },
+      { conversationId: readConversationId },
       {
         onSuccess: (fileContent) => {
           setPlanContent(fileContent);
@@ -45,7 +50,13 @@ function PlannerTab() {
         },
       },
     );
-  }, [conversation?.id, planContent, readConversationFile, setPlanContent]);
+  }, [
+    conversation?.id,
+    localPlanningConversationId,
+    planContent,
+    readConversationFile,
+    setPlanContent,
+  ]);
 
   // Auto-scroll to bottom when plan content changes
   React.useEffect(() => {

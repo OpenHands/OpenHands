@@ -119,6 +119,9 @@ export interface DirectConversationInfo {
 const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
 const BROWSER_TOOL_SET_NAME = "browser_tool_set";
 const TASK_TOOL_SET_NAME = "task_tool_set";
+// Falls back to the same default the code agent uses when the user has not
+// configured `conversation_settings.max_iterations` (see buildConfiguredConversationSettings).
+const DEFAULT_MAX_ITERATIONS = 500;
 
 function browserToolsEnabled() {
   return import.meta.env.VITE_ENABLE_BROWSER_TOOLS !== "false";
@@ -1098,7 +1101,7 @@ export function buildStartConversationRequest(
     max_iterations:
       typeof conversationSettings.max_iterations === "number"
         ? conversationSettings.max_iterations
-        : 500,
+        : DEFAULT_MAX_ITERATIONS,
     stuck_detection: true,
     autotitle: true,
     ...(options.titleLlmProfile
@@ -1179,6 +1182,8 @@ export function buildStartPlanningConversationRequest(options: {
   initialMessage?: string;
   secretsEncrypted?: boolean;
   customSecrets?: Array<{ name: string; description?: string }>;
+  /** Mirrors the parent's configured `conversation_settings.max_iterations` — see DEFAULT_MAX_ITERATIONS. */
+  maxIterations?: number;
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1244,7 +1249,7 @@ export function buildStartPlanningConversationRequest(options: {
     // away from the plan the user is reading.
     client_tools: [],
     confirmation_policy: { kind: "NeverConfirm" },
-    max_iterations: 500,
+    max_iterations: options.maxIterations ?? DEFAULT_MAX_ITERATIONS,
     stuck_detection: true,
     autotitle: false,
     worktree: false,
@@ -1347,11 +1352,19 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
 
   await assertSubscriptionAuthReady(encryptedAgentSettings);
 
+  // Mirror the code agent's configured cap (see DEFAULT_MAX_ITERATIONS) rather
+  // than hardcoding a different value the planner could silently stop against.
+  const maxIterations =
+    typeof settingsResult.conversationSettings.max_iterations === "number"
+      ? settingsResult.conversationSettings.max_iterations
+      : DEFAULT_MAX_ITERATIONS;
+
   return buildStartPlanningConversationRequest({
     ...options,
     encryptedAgentSettings,
     secretsEncrypted: settingsResult.secretsEncrypted,
     customSecrets,
+    maxIterations,
   });
 }
 
