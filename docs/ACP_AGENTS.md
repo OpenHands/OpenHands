@@ -93,6 +93,10 @@ CLI at a different endpoint (a proxy or gateway) and *does* take effect even
 under a login — for Gemini it rides the ACP `gateway` param. It's an advanced
 override, not needed for normal use.
 
+The same pattern works with OpenAI-compatible multi-model gateways when you set
+a custom OpenAI base URL — for example [DaoXE](https://daoxe.com) at
+`https://api.daoxe.com/v1` (pair with the gateway API key and an exact model id).
+
 ## Onboarding an ACP agent
 
 First-time users get a four-step onboarding modal. To onboard an ACP agent:
