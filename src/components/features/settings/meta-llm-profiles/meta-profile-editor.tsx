@@ -10,8 +10,8 @@ import { formControlMultilineFieldClassName } from "#/utils/form-control-classes
 import { I18nKey } from "#/i18n/declaration";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 import {
-  LEGACY_92C0_META_PROFILE_DEFAULT,
-  LEGACY_92C0_META_PROFILE_NAME,
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
 } from "./default-meta-profile";
 
 interface MetaProfileEditorProps {
@@ -72,10 +72,11 @@ export function MetaProfileEditor({
   const { t } = useTranslation("openhands");
   const isEdit = mode === "edit";
   const startingConfig = normalizeConfig(
-    initialConfig ?? (isEdit ? EMPTY_CONFIG : LEGACY_92C0_META_PROFILE_DEFAULT),
+    initialConfig ??
+      (isEdit ? EMPTY_CONFIG : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT),
   );
   const [name, setName] = useState(
-    initialName ?? (isEdit ? "" : LEGACY_92C0_META_PROFILE_NAME),
+    initialName ?? (isEdit ? "" : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME),
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
   const [createMissingRouterProfiles, setCreateMissingRouterProfiles] =

@@ -1,8 +1,9 @@
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 
-export const LEGACY_92C0_META_PROFILE_NAME = "legacy_92c0";
+export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME =
+  "default-max-score-pareto";
 
-export const LEGACY_92C0_ROUTER_LLM_PROFILES = [
+export const DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES = [
   { name: "GPT-5.4", model: "litellm_proxy/openai/gpt-5.4" },
   { name: "GPT-5.5", model: "litellm_proxy/openai/gpt-5.5" },
   { name: "MiniMax-M3", model: "litellm_proxy/minimax-m3" },
@@ -20,7 +21,7 @@ export const LEGACY_92C0_ROUTER_LLM_PROFILES = [
   { name: "GPT-5.2-Codex", model: "litellm_proxy/openai/gpt-5.2-codex" },
 ] as const;
 
-export const LEGACY_92C0_META_PROFILE_MODEL_TABLE = `- GPT-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
+export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE = `- GPT-5.4: swe-bench: 75.60%/$0.63; swt-bench: 70.40%/$0.47; swe-bench-multimodal: 36.80%/$1.45; commit0: 56.20%/$4.04; gaia: 82.40%/$0.61
 - GPT-5.5: swe-bench: 78.20%/$1.52; swt-bench: 83.40%/$0.92; swe-bench-multimodal: 38.20%/$2.81; commit0: 43.80%/$5.56; gaia: 86.10%/$0.74
 - MiniMax-M3: swe-bench: 76.40%/$0.17; swt-bench: 81.10%/$0.11; swe-bench-multimodal: 36.80%/$0.35; commit0: 25.00%/$0.62; gaia: 66.70%/$0.35
 - claude-opus-4-6: swe-bench: 76.80%/$0.77; swt-bench: 78.80%/$0.43; swe-bench-multimodal: 41.80%/$2.37; commit0: 56.20%/$7.69; gaia: 80.00%/$0.44
@@ -33,7 +34,7 @@ export const LEGACY_92C0_META_PROFILE_MODEL_TABLE = `- GPT-5.4: swe-bench: 75.60
 - claude-sonnet-4-5: swe-bench: 74.20%/$1.19; swt-bench: 68.80%/$0.98; swe-bench-multimodal: 36.80%/$1.89; commit0: 12.50%/$3.23; gaia: 72.70%/$0.87
 - GPT-5.2-Codex: swe-bench: 73.80%/$0.94; swt-bench: 67.00%/$0.66; swe-bench-multimodal: 35.90%/$2.97; commit0: 43.80%/$5.50; gaia: 70.90%/$0.55`;
 
-export const LEGACY_92C0_META_PROFILE_PROMPT = `You are a model router for an autonomous software agent. Your job is to pick exactly one model for the task below. Do not solve the task; never answer it.
+export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT = `You are a model router for an autonomous software agent. Your job is to pick exactly one model for the task below. Do not solve the task; never answer it.
 
 Step 1 — Classify the task into exactly one category:
 - BUG-FIX / CODE REPAIR: fix a defect or implement a change in an existing, mature repository (SWE-bench-like).
@@ -90,10 +91,10 @@ Return ONLY valid JSON in this exact shape, with the model field containing an e
 Task:
 {{ instance_text }}`;
 
-export const LEGACY_92C0_META_PROFILE_DEFAULT: MetaProfile = {
+export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   classifier_model: "minimax-m3",
   default_model: "minimax-m3",
   classes: [],
-  prompt_template: LEGACY_92C0_META_PROFILE_PROMPT,
-  model_table: LEGACY_92C0_META_PROFILE_MODEL_TABLE,
+  prompt_template: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT,
+  model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
 };

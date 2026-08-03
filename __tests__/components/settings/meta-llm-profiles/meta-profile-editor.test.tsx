@@ -5,8 +5,8 @@ import { renderWithProviders } from "test-utils";
 import { MetaProfileEditor } from "#/components/features/settings/meta-llm-profiles";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
 import {
-  LEGACY_92C0_META_PROFILE_DEFAULT,
-  LEGACY_92C0_META_PROFILE_NAME,
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
 } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
 const AVAILABLE = ["minimax", "minimax-m3", "gpt", "deepseek"];
@@ -35,7 +35,7 @@ describe("MetaProfileEditor", () => {
     );
 
     expect(screen.getByTestId("meta-profile-name-input")).toHaveValue(
-      LEGACY_92C0_META_PROFILE_NAME,
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
     );
     expect(screen.getByTestId("meta-profile-classifier-input")).toHaveValue(
       "minimax-m3",
@@ -44,10 +44,10 @@ describe("MetaProfileEditor", () => {
       "minimax-m3",
     );
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue(
-      LEGACY_92C0_META_PROFILE_DEFAULT.prompt_template,
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.prompt_template,
     );
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
-      LEGACY_92C0_META_PROFILE_DEFAULT.model_table,
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.model_table,
     );
     expect(
       screen.getByTestId("meta-profile-create-router-profiles"),
@@ -56,8 +56,8 @@ describe("MetaProfileEditor", () => {
     await user.click(screen.getByTestId("meta-profile-save"));
 
     expect(onSave).toHaveBeenCalledWith(
-      LEGACY_92C0_META_PROFILE_NAME,
-      LEGACY_92C0_META_PROFILE_DEFAULT,
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
       true,
     );
   });

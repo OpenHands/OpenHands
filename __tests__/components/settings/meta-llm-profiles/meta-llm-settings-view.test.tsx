@@ -11,7 +11,7 @@ import * as useActivateMetaProfileHook from "#/hooks/mutation/use-activate-meta-
 import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-profile";
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
-import { LEGACY_92C0_ROUTER_LLM_PROFILES } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
+import { DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
 
 vi.mock("#/hooks/query/use-meta-profiles");
 vi.mock("#/hooks/query/use-llm-profiles");
@@ -153,7 +153,7 @@ describe("MetaLlmSettingsView", () => {
 
   it("creates missing router LLM profiles from the active profile before saving", async () => {
     const user = userEvent.setup();
-    saveMutateAsync.mockResolvedValue({ name: "legacy_92c0" });
+    saveMutateAsync.mockResolvedValue({ name: "default-max-score-pareto" });
     renderWithProviders(<MetaLlmSettingsView />);
 
     await user.click(screen.getByTestId("add-meta-profile"));
@@ -166,7 +166,7 @@ describe("MetaLlmSettingsView", () => {
       ),
     );
     expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(
-      LEGACY_92C0_ROUTER_LLM_PROFILES.length,
+      DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES.length,
     );
     expect(ProfilesService.saveProfile).toHaveBeenCalledWith("GPT-5.4", {
       llm: {

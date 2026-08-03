@@ -21,7 +21,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
-import { LEGACY_92C0_ROUTER_LLM_PROFILES } from "./default-meta-profile";
+import { DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES } from "./default-meta-profile";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -86,7 +86,7 @@ export function MetaLlmSettingsView() {
     const existingProfileNames = new Set(
       availableProfiles.map((profileName) => profileName.toLowerCase()),
     );
-    const missingProfiles = LEGACY_92C0_ROUTER_LLM_PROFILES.filter(
+    const missingProfiles = DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES.filter(
       (profile) => !existingProfileNames.has(profile.name.toLowerCase()),
     );
     if (missingProfiles.length === 0) return;
