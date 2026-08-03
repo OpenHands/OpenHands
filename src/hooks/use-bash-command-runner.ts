@@ -18,6 +18,10 @@ interface WaitingCommand {
 }
 
 interface PendingCommand {
+  // Kept so a `BashCommand` echo can be matched back to the request that
+  // produced it — see `takeMatchingPending`.
+  command: string;
+  cwd: string;
   resolve: (result: CommandResult) => void;
   reject: (error: Error) => void;
 }
@@ -46,14 +50,64 @@ function isBashError(event: BashEvent): event is BashError {
 }
 
 /**
+ * Remove and return the queued request that a `BashCommand` echo belongs to,
+ * or `null` when the echo is not ours.
+ *
+ * The agent-server subscribes every `/sockets/bash-events` connection to one
+ * shared `BashEventService`, and `start_bash_command` publishes to all
+ * subscribers regardless of origin — including commands started through
+ * `POST /api/bash/start_bash_command` by an automation run, another tab, or
+ * the SDK. So an echo arriving here is *not* necessarily a reply to us, and
+ * pairing echoes with the oldest outstanding request by position alone let a
+ * foreign command capture our promise and resolve it with its own output
+ * (a filename would surface as the git branch — #15543).
+ *
+ * `command` is the match key: it is the only field the protocol marks as
+ * required (`BashCommand extends ExecuteBashRequest`) and the server echoes it
+ * verbatim, since it is the literal string it has to execute. `cwd` is a
+ * tiebreaker rather than part of the key — it is optional in the protocol, so
+ * requiring it to match would strand the promise forever against any server
+ * that omitted it. The tiebreaker matters when two conversations probe
+ * different workspaces with the same script: without it, one could adopt the
+ * other's result.
+ *
+ * Two of *our own* in-flight requests sharing a command and cwd are
+ * interchangeable, so taking the oldest is correct. A foreign command that
+ * happens to be byte-identical to ours (a second tab running the same git
+ * probe) can still be adopted, which is harmless: identical command, identical
+ * cwd, equivalent output.
+ */
+function takeMatchingPending(
+  queue: PendingCommand[],
+  echo: BashCommand,
+): PendingCommand | null {
+  const matchesCommand = (pending: PendingCommand) =>
+    pending.command === echo.command;
+
+  let index = queue.findIndex(
+    (pending) => matchesCommand(pending) && pending.cwd === echo.cwd,
+  );
+  if (index === -1) {
+    index = queue.findIndex(matchesCommand);
+  }
+  if (index === -1) {
+    return null;
+  }
+
+  const [pending] = queue.splice(index, 1);
+  return pending;
+}
+
+/**
  * Maintains a persistent WebSocket connection to the agent-server's
  * `/sockets/bash-events` endpoint and exposes a `runCommand` function that
  * executes a bash command and returns a Promise that resolves when the
  * final `BashOutput` (non-null `exit_code`) arrives.
  *
- * Commands are correlated using a FIFO queue: each `BashCommand` echo
- * received from the server is paired with the oldest outstanding request in
- * the queue, and subsequent `BashOutput` events are matched by `command_id`.
+ * The socket is a shared broadcast, not a private channel, so each
+ * `BashCommand` echo is matched back to the request that produced it by
+ * command text (see `takeMatchingPending`) rather than by queue position;
+ * subsequent `BashOutput` events are then matched by `command_id`.
  *
  * Commands are buffered until the socket's open handler sends authentication.
  */
@@ -88,7 +142,7 @@ export function useBashCommandRunner(
         resolve,
         reject,
       } of waitingQueueRef.current) {
-        pendingQueueRef.current.push({ resolve, reject });
+        pendingQueueRef.current.push({ command, cwd, resolve, reject });
         ws.send(JSON.stringify({ command, cwd, timeout }));
       }
       waitingQueueRef.current = [];
@@ -103,8 +157,9 @@ export function useBashCommandRunner(
       }
 
       if (isBashCommand(data)) {
-        // Associate the next pending request with the server-assigned command_id
-        const pending = pendingQueueRef.current.shift();
+        // Associate the matching pending request with the server-assigned
+        // command_id. Echoes for commands we did not send are ignored.
+        const pending = takeMatchingPending(pendingQueueRef.current, data);
         if (pending) {
           activeCommandsRef.current.set(data.id, {
             ...pending,
@@ -185,7 +240,7 @@ export function useBashCommandRunner(
             reject,
           });
         } else {
-          pendingQueueRef.current.push({ resolve, reject });
+          pendingQueueRef.current.push({ command, cwd, resolve, reject });
           ws.send(JSON.stringify({ command, cwd, timeout }));
         }
       }),
