@@ -18,17 +18,22 @@ import { AUTOMATION_RUNS_QUERY_KEY } from "./use-automation-detail";
  */
 const IN_FLIGHT_POLL_INTERVAL_MS = 15_000;
 
+/** Recent runs fetched for the home activity sparkline (newest-first page size). */
+export const AUTOMATION_RUN_ACTIVITY_LIMIT = 12;
+
 export interface LatestAutomationRunState {
   /** Newest run of the automation, or null while loading / on error / when none exist. */
   latestRun: AutomationRun | null;
+  /** Newest-first recent runs for the activity sparkline (may be empty). */
+  recentRuns: AutomationRun[];
   isLoading: boolean;
   isError: boolean;
 }
 
 /**
- * Fetch the latest run for each automation. The runs endpoint returns runs
- * newest-first, so a limit-1 page is exactly the latest run. Each query uses
- * the same key shape as `useAutomationRuns` (distinct `{limit, offset}` part,
+ * Fetch recent runs for each automation (newest-first). The first item is the
+ * latest run; the page feeds the home activity sparkline. Each query uses the
+ * same key shape as `useAutomationRuns` (distinct `{limit, offset}` part,
  * shared `[...AUTOMATION_RUNS_QUERY_KEY, id]` prefix), so dispatch mutations
  * that invalidate an automation's runs reach these entries too.
  */
@@ -42,11 +47,16 @@ export function useLatestAutomationRuns(
       queryKey: [
         ...AUTOMATION_RUNS_QUERY_KEY,
         automation.id,
-        { limit: 1, offset: 0 },
+        { limit: AUTOMATION_RUN_ACTIVITY_LIMIT, offset: 0 },
         active.backend.id,
         active.orgId,
       ],
-      queryFn: () => AutomationService.getAutomationRuns(automation.id, 1, 0),
+      queryFn: () =>
+        AutomationService.getAutomationRuns(
+          automation.id,
+          AUTOMATION_RUN_ACTIVITY_LIMIT,
+          0,
+        ),
       staleTime: 60 * 1000,
       // No retries: the home section settles into its degraded "unknown"
       // indicator instead of hammering an unhealthy automation service.
@@ -71,8 +81,10 @@ export function useLatestAutomationRuns(
   const runStates = new Map<string, LatestAutomationRunState>();
   automations.forEach((automation, i) => {
     const result = results[i];
+    const recentRuns = result?.data?.runs ?? [];
     runStates.set(automation.id, {
-      latestRun: result?.data?.runs[0] ?? null,
+      latestRun: recentRuns[0] ?? null,
+      recentRuns,
       isLoading: result?.isPending ?? true,
       isError: result?.isError ?? false,
     });

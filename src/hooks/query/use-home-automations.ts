@@ -4,12 +4,21 @@ import {
   useLatestAutomationRuns,
   type LatestAutomationRunState,
 } from "#/hooks/query/use-latest-automation-runs";
+import {
+  HOME_AUTOMATIONS_DEMO_AUTOMATIONS,
+  HOME_AUTOMATIONS_DEMO_RUN_STATES,
+  isHomeAutomationsDemoEnabled,
+} from "#/fixtures/home-automations-demo";
+
+/** Initial visible rows in the home automations list before "View more". */
+export const HOME_AUTOMATIONS_PREVIEW_LIMIT = 10;
 
 /** Bounds the per-automation latest-run request fan-out on the home page. */
 export const MAX_HOME_AUTOMATION_CHIPS = 20;
 
 export const UNKNOWN_RUN_STATE: LatestAutomationRunState = {
   latestRun: null,
+  recentRuns: [],
   isLoading: true,
   isError: false,
 };
@@ -19,6 +28,7 @@ export const UNKNOWN_RUN_STATE: LatestAutomationRunState = {
  * latest-run state for the recent-activity list and pinned dashboard.
  */
 export function useHomeAutomations() {
+  const demo = isHomeAutomationsDemoEnabled();
   const { data: healthData, isLoading: isHealthLoading } =
     useAutomationHealth();
   const isBackendHealthy = healthData?.status === "ok";
@@ -29,14 +39,35 @@ export function useHomeAutomations() {
   } = useAutomations({
     limit: 50,
     offset: 0,
-    enabled: isBackendHealthy,
+    enabled: !demo && isBackendHealthy,
   });
 
-  const enabledAutomations = (automationsData?.automations ?? [])
+  const allAutomations = demo
+    ? HOME_AUTOMATIONS_DEMO_AUTOMATIONS
+    : (automationsData?.automations ?? []);
+
+  const enabledAutomations = allAutomations
     .filter((automation) => automation.enabled)
     .slice(0, MAX_HOME_AUTOMATION_CHIPS);
 
-  const runStates = useLatestAutomationRuns(enabledAutomations);
+  const knownAutomationIds = new Set(
+    allAutomations.map((automation) => automation.id),
+  );
+
+  const liveRunStates = useLatestAutomationRuns(demo ? [] : enabledAutomations);
+  const runStates = demo ? HOME_AUTOMATIONS_DEMO_RUN_STATES : liveRunStates;
+
+  if (demo) {
+    return {
+      isBackendHealthy: true,
+      isHealthLoading: false,
+      isError: false,
+      isAutomationsLoading: false,
+      enabledAutomations,
+      knownAutomationIds,
+      runStates,
+    };
+  }
 
   return {
     isBackendHealthy,
@@ -44,6 +75,7 @@ export function useHomeAutomations() {
     isError,
     isAutomationsLoading,
     enabledAutomations,
+    knownAutomationIds,
     runStates,
   };
 }

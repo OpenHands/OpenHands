@@ -48,17 +48,77 @@ export function getRunHealthLabelKey(health: AutomationRunHealth): I18nKey {
   }
 }
 
+/** Known event sources rendered with brand casing; others title-case. */
+const TRIGGER_SOURCE_LABELS: Record<string, string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  slack: "Slack",
+  linear: "Linear",
+  jira: "Jira",
+};
+
+export function formatTriggerSourceLabel(source: string): string {
+  const key = source.trim().toLowerCase();
+  if (!key) return source;
+  return (
+    TRIGGER_SOURCE_LABELS[key] ??
+    key.replace(/\b\w/g, (char) => char.toUpperCase())
+  );
+}
+
+export function getTriggerEventLabel(automation: Automation): string | null {
+  const { trigger } = automation;
+  if (trigger.type !== "event") return null;
+  return trigger.on ? formatEventOn(trigger.on) : null;
+}
+
+export function getTriggerSource(automation: Automation): string | null {
+  const { trigger } = automation;
+  if (trigger.type !== "event") return null;
+  return trigger.source?.trim() || null;
+}
+
+export function getTriggerScheduleLabel(automation: Automation): string | null {
+  const { trigger } = automation;
+  if (trigger.type === "event") return null;
+  return trigger.schedule_human || trigger.schedule || trigger.type || null;
+}
+
 export function getTriggerSummary(automation: Automation): string {
   const { trigger } = automation;
   if (trigger.type === "event") {
+    const source = getTriggerSource(automation);
     return [
-      trigger.on ? formatEventOn(trigger.on) : "",
-      trigger.source ? `(${trigger.source})` : "",
+      getTriggerEventLabel(automation) ?? "",
+      source ? `(${formatTriggerSourceLabel(source)})` : "",
     ]
       .filter(Boolean)
       .join(" ");
   }
-  return trigger.schedule_human || trigger.schedule || trigger.type;
+  return getTriggerScheduleLabel(automation) ?? trigger.type;
+}
+
+/** Inline status-row preview length (keeps the status area to one line). */
+const ERROR_DETAIL_INLINE_MAX = 48;
+
+/**
+ * Short preview for the pinned-card status row. Prefer the first sentence,
+ * then hard-truncate so the row stays single-line.
+ */
+export function shortenAutomationErrorDetail(detail: string): string {
+  const trimmed = detail.trim().replace(/\s+/g, " ");
+  if (!trimmed) return trimmed;
+  const firstSentence = trimmed.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? trimmed;
+  if (firstSentence.length <= ERROR_DETAIL_INLINE_MAX) return firstSentence;
+  return `${firstSentence.slice(0, ERROR_DETAIL_INLINE_MAX - 1).trimEnd()}…`;
+}
+
+/** True when the inline preview is shortened and the full message belongs in a hovercard. */
+export function shouldShowAutomationErrorHovercard(
+  detail: string,
+  shortDetail: string = shortenAutomationErrorDetail(detail),
+): boolean {
+  return detail.trim().replace(/\s+/g, " ") !== shortDetail;
 }
 
 /**

@@ -432,6 +432,27 @@ class AutomationService {
     return data;
   }
 
+  /**
+   * Cancel a pending or running automation run.
+   * Backend: POST /api/automation/v1/runs/{run_id}/cancel
+   */
+  static async cancelAutomationRun(runId: string): Promise<AutomationRun> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/runs/${encodeURIComponent(runId)}/cancel`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<AutomationRun>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<AutomationRun>(path);
+    return data;
+  }
+
   static async listAutomationRuns(
     id: string,
     params: { limit?: number; offset?: number } = {},

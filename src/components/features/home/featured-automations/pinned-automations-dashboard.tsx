@@ -1,18 +1,16 @@
-import { Pin } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
-import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   UNKNOWN_RUN_STATE,
   useHomeAutomations,
 } from "#/hooks/query/use-home-automations";
-import { useHomePinnedAutomations } from "#/hooks/use-home-pinned-automations";
-import { I18nKey } from "#/i18n/declaration";
 import {
-  buildHomeAutomationActivityItems,
-  hrefForActivityItem,
-} from "./home-automation-activity";
+  HOME_PINNED_PREVIEW_LIMIT,
+  useHomePinnedAutomations,
+} from "#/hooks/use-home-pinned-automations";
+import { I18nKey } from "#/i18n/declaration";
+import type { Automation } from "#/types/automation";
+import { PinnedAutomationCard } from "./pinned-automation-card";
 
 /**
  * Dashboard grid of pinned automations rendered above Recent Automation
@@ -20,41 +18,50 @@ import {
  * currently enabled live automations.
  */
 export function PinnedAutomationsDashboard() {
-  const { t, i18n } = useTranslation("openhands");
-  const { pinnedIds, unpin } = useHomePinnedAutomations();
+  const { t } = useTranslation("openhands");
+  const { pinnedIds, unpin, reorder, pruneMissing } =
+    useHomePinnedAutomations();
   const {
     isBackendHealthy,
     isHealthLoading,
     isError,
     enabledAutomations,
+    knownAutomationIds,
     runStates,
   } = useHomeAutomations();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(
+    null,
+  );
 
-  const itemsById = useMemo(() => {
-    const items = buildHomeAutomationActivityItems(
-      enabledAutomations,
-      runStates,
-      i18n.language,
-      t,
-      UNKNOWN_RUN_STATE,
-    );
-    return new Map(items.map((item) => [item.id, item]));
-  }, [enabledAutomations, runStates, i18n.language, t]);
+  useEffect(() => {
+    if (knownAutomationIds.size === 0) return;
+    pruneMissing(knownAutomationIds);
+  }, [knownAutomationIds, pruneMissing]);
 
-  // Stored ids that no longer match an enabled automation (deleted, disabled,
-  // or from another backend/org) are kept in storage but not rendered.
-  const pinnedItems = pinnedIds
-    .map((id) => itemsById.get(id))
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const enabledById = new Map(
+    enabledAutomations.map((automation) => [automation.id, automation]),
+  );
+  const pinnedAutomations = pinnedIds
+    .map((id) => enabledById.get(id))
+    .filter((automation): automation is Automation => Boolean(automation));
 
   if (
     isHealthLoading ||
     !isBackendHealthy ||
     isError ||
-    pinnedItems.length === 0
+    pinnedAutomations.length === 0
   ) {
     return null;
   }
+
+  const visibleAutomations =
+    isExpanded || pinnedAutomations.length <= HOME_PINNED_PREVIEW_LIMIT
+      ? pinnedAutomations
+      : pinnedAutomations.slice(0, HOME_PINNED_PREVIEW_LIMIT);
+  const canExpand = pinnedAutomations.length > HOME_PINNED_PREVIEW_LIMIT;
 
   return (
     <section
@@ -66,54 +73,52 @@ export function PinnedAutomationsDashboard() {
         {t(I18nKey.FEATURED_AUTOMATIONS$PINNED_TITLE)}
       </h2>
 
-      <div role="list" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {pinnedItems.map((item) => {
-          const metaLine = [item.triggerSummary, item.whenLabel]
-            .filter(Boolean)
-            .join(" · ");
-
-          return (
-            <article
-              key={item.id}
-              role="listitem"
-              data-testid={`pinned-automation-card-${item.id}`}
-              className="relative flex flex-col gap-2 rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <NavigationLink
-                  to={hrefForActivityItem(item)}
-                  className="min-w-0 flex-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
-                >
-                  <span className="block truncate text-sm font-medium text-[var(--oh-foreground)]">
-                    {item.name}
-                  </span>
-                  {metaLine ? (
-                    <span className="mt-0.5 block truncate text-xs text-[var(--oh-text-secondary)]">
-                      {metaLine}
-                    </span>
-                  ) : null}
-                </NavigationLink>
-
-                <button
-                  type="button"
-                  data-testid={`unpin-automation-${item.id}`}
-                  aria-label={t(I18nKey.FEATURED_AUTOMATIONS$UNPIN)}
-                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--oh-muted)] transition-colors hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)]"
-                  onClick={() => unpin(item.id)}
-                >
-                  <Pin className="size-3.5 fill-current" aria-hidden="true" />
-                </button>
-              </div>
-
-              {item.status ? (
-                <div className="mt-auto">
-                  <RunStatusBadge status={item.status} />
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
+      <div role="list" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {visibleAutomations.map((automation) => (
+          <PinnedAutomationCard
+            key={automation.id}
+            automation={automation}
+            runState={runStates.get(automation.id) ?? UNKNOWN_RUN_STATE}
+            onUnpin={unpin}
+            onDragStart={setDraggedId}
+            onDragOver={(id, position) => {
+              setDropTargetId(id);
+              setDropPosition(position);
+            }}
+            onDrop={(targetId) => {
+              if (draggedId && dropPosition) {
+                reorder(draggedId, targetId, dropPosition);
+              }
+              setDraggedId(null);
+              setDropTargetId(null);
+              setDropPosition(null);
+            }}
+            onDragEnd={() => {
+              setDraggedId(null);
+              setDropTargetId(null);
+              setDropPosition(null);
+            }}
+            isDropTarget={dropTargetId === automation.id}
+            dropPosition={dropTargetId === automation.id ? dropPosition : null}
+            isDragging={draggedId === automation.id}
+          />
+        ))}
       </div>
+
+      {canExpand ? (
+        <div className="mt-2 flex justify-start">
+          <button
+            type="button"
+            data-testid="pinned-automations-view-more"
+            onClick={() => setIsExpanded((value) => !value)}
+            className="text-xs text-[var(--oh-text-secondary)] hover:text-[var(--oh-foreground)]"
+          >
+            {t(
+              isExpanded ? I18nKey.COMMON$VIEW_LESS : I18nKey.COMMON$VIEW_MORE,
+            )}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
