@@ -6,7 +6,10 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import { SetupDialog } from "#/components/features/manifest/manifest-setup-dialog";
 import type { SetupPrerequisitesResult } from "#/hooks/query/use-manifest-prerequisites";
 import type { SetupEntry } from "#/manifests/types";
-import { createSetupEntry } from "../../manifests/manifest-test-data";
+import {
+  createSetup,
+  createSetupEntry,
+} from "../../manifests/manifest-test-data";
 
 /**
  * The dialog is the part of setup that is not pure: it owns the step order, the
@@ -18,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   runAction: vi.fn(),
   prerequisites: vi.fn(),
+  capabilities: vi.fn(),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
     trackAutomationSetupValidated: vi.fn(),
@@ -41,12 +45,7 @@ vi.mock("#/contexts/active-backend-context", () => ({
 }));
 
 vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
-  useSetupCapabilities: () => ({
-    capabilities: null,
-    supported: "unknown",
-    unmet: [],
-    isLoading: false,
-  }),
+  useSetupCapabilities: () => mocks.capabilities(),
 }));
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
@@ -74,7 +73,7 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 
 const ENTRY: SetupEntry = createSetupEntry();
 
-function renderDialog() {
+function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
   render(
     <QueryClientProvider
@@ -82,7 +81,7 @@ function renderDialog() {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <SetupDialog entry={ENTRY} onClose={vi.fn()} />
+      <SetupDialog entry={entry} onClose={vi.fn()} />
     </QueryClientProvider>,
   );
   return { user };
@@ -100,11 +99,25 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
+  mocks.capabilities.mockReturnValue({
+    capabilities: null,
+    supported: "unknown",
+    unmet: [],
+    isLoading: false,
+  });
   vi.mocked(AutomationService.validateDraft).mockResolvedValue({
     valid: true,
     errors: [],
   });
 });
+
+/** A deployment that answered discovery and came up short. */
+const UNSUPPORTED = {
+  capabilities: null,
+  supported: false as const,
+  unmet: ["webhookDelivery"],
+  isLoading: false,
+};
 
 describe("SetupDialog", () => {
   it("asks about an unconnected integration before it asks anything else", async () => {
@@ -172,6 +185,43 @@ describe("SetupDialog", () => {
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+  });
+
+  it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {
+    // Arrange — capabilities answered and came up short, and the entry ships
+    // a fallback-conversation seed.
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    mocks.runAction.mockResolvedValue({
+      response: { conversation_id: "conv-1" },
+    });
+    const entry = createSetupEntry({
+      setup: createSetup({
+        message: "Set this up in a conversation instead.",
+      }),
+    });
+    const { user } = renderDialog(entry);
+
+    // Act
+    await user.click(screen.getByTestId("setup-fallback-conversation"));
+
+    // Assert — the action runs with no payload, the assisted outcome, and
+    // setup lands in the conversation that will finish it.
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith("/conversations/conv-1", {
+        replace: true,
+      }),
+    );
+    expect(mocks.runAction).toHaveBeenCalledWith(entry, expect.anything(), null);
+  });
+
+  it("keeps the unsupported screen close-only when there is nothing to fall back to", () => {
+    // Arrange — no skill command resolves for this entry and it declares no
+    // fallback message, so a conversation would open empty-handed.
+    mocks.capabilities.mockReturnValue(UNSUPPORTED);
+    renderDialog();
+
+    // Assert
+    expect(screen.queryByTestId("setup-fallback-conversation")).toBeNull();
   });
 
   it("returns a rejected create to the field the service blamed", async () => {

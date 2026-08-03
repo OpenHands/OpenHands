@@ -36,6 +36,33 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// The pinned package may publish an interface manifest whose literal copy
+// replaces the host's translations. Pin the candidate to "not published" so
+// these tests exercise the host defaults whatever the package ships.
+vi.mock("#/manifests/manifest-sources", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
+  AUTOMATION_INTERFACE_CANDIDATE: undefined,
+}));
+
+// The interface seam resolves its manifest once at module load, so the
+// manifest-driven test overrides individual attribute specs here instead of
+// installing a whole manifest. Empty overrides leave the host defaults —
+// today's form — in force for every other test.
+const specOverrides = vi.hoisted(() => ({
+  current: {} as Record<string, object>,
+}));
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    getAttributeSpec: (name: Parameters<typeof actual.getAttributeSpec>[0]) => ({
+      ...actual.getAttributeSpec(name),
+      ...specOverrides.current[name],
+    }),
+  };
+});
+
 const localBackend: Backend = {
   id: "local-1",
   name: "Local",
@@ -117,6 +144,7 @@ function renderModal(automation: Automation) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  specOverrides.current = {};
   __resetActiveStoreForTests();
   setRegisteredBackends([localBackend]);
   setActiveSelection({ backendId: localBackend.id });
@@ -421,6 +449,22 @@ describe("EditAutomationModal", () => {
     expect(
       screen.getByTestId("edit-automation-timeout-error"),
     ).toBeInTheDocument();
+  });
+
+  it("renders only the attributes the interface manifest declares, with its copy", async () => {
+    // Arrange — an admitted manifest that omits `prompt` and relabels `name`.
+    specOverrides.current = {
+      prompt: { present: false },
+      name: { label: "Widget name" },
+    };
+    renderModal(dailyAutomation);
+
+    // Assert — the prompt control is gone and the manifest's label shows in
+    // place of the host translation.
+    expect(
+      screen.queryByTestId("edit-automation-prompt"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Widget name")).toBeInTheDocument();
   });
 
   it("omits the timeout from the payload when it is left unchanged", async () => {

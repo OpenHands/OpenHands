@@ -243,12 +243,10 @@ log "Starting frontend + proxy on port $PORT..."
 # Describe the local runtime services so the frontend can populate the agent's
 # <RUNTIME_SERVICES> system-prompt block (without it the agent does not know how
 # to reach the local automation backend and falls back to the cloud API). These
-# URLs are runtime config (overridable at `docker run`), so unlike the dev
-# launchers we cannot bake VITE_RUNTIME_SERVICES_INFO into the image at build
-# time — we build the JSON here from the sandbox-facing URLs the entrypoint
-# already exports and inject it at serve time via
-# static-server.mjs --runtime-services-info. The shape comes from the same
-# builder the dev stack uses (scripts/runtime-services-info.mjs).
+# URLs are runtime config (overridable at `docker run`), so build the JSON here
+# from the sandbox-facing URLs the entrypoint already exports. static-server.mjs
+# appends it to /server_info as runtime_services and also injects the legacy
+# window global for older frontend bundles.
 RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --mode docker \
   --agent-host-alias 127.0.0.1 \
