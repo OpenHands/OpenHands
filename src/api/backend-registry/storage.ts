@@ -31,7 +31,11 @@ function isValidBackend(value: unknown): value is Backend {
     typeof v.host === "string" &&
     typeof v.apiKey === "string" &&
     isValidKind(v.kind) &&
-    isValidAuthMode(v.authMode)
+    isValidAuthMode(v.authMode) &&
+    (v.connectionRevision === undefined ||
+      (typeof v.connectionRevision === "number" &&
+        Number.isSafeInteger(v.connectionRevision) &&
+        v.connectionRevision >= 0))
   );
 }
 

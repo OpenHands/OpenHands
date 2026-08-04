@@ -51,12 +51,12 @@ describe("Telemetry bootstrap identity migration", () => {
       .__AGENT_CANVAS_LOCK_TO_CLOUD__;
   });
 
-  it("clears a legacy identified user when no OAuth bootstrap is present", async () => {
+  it("preserves an identified user while Cloud identity is unresolved", async () => {
     const { telemetry, mockPosthog } = await loadTelemetryWithLegacyUser();
 
     await telemetry.setTelemetryConsent("granted");
 
-    expect(mockPosthog.reset).toHaveBeenCalledWith(false);
+    expect(mockPosthog.reset).not.toHaveBeenCalled();
     expect(mockPosthog.opt_in_capturing).toHaveBeenCalled();
     expect(mockPosthog.identify).not.toHaveBeenCalled();
   });

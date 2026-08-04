@@ -122,6 +122,34 @@ If the updated package was uploaded **within the last 7 days**, treat it as a re
 - **Server-Side Cleanup**: Endpoints that create persistent state (directories, files) must have rollback logic for partial failures — see the [Server Error Handling](#server-side-error-handling) section below
 - **Cross-File Data Flow**: When new code calls existing APIs (constructors, factory methods), trace 1–2 levels into those APIs to verify the caller uses them correctly. Bugs often hide at layer boundaries where the caller's assumptions don't match the callee's behavior
 
+## Agent-Server Event Wire Contracts — Blocking Review Checkpoint
+
+For events received from the agent-server (REST history or WebSocket), the SDK
+Pydantic event model is the sole wire-contract authority. The TypeScript client
+must mirror that SDK contract, and Canvas must consume the client type.
+
+**Do not approve** a PR when any of the following is true:
+
+1. Canvas adds or retains a local interface for an event already exported by
+   `@openhands/typescript-client`, including a partial redeclaration,
+   intersection type, module augmentation, or Canvas-only optional field.
+2. A Canvas change adds a field to an SDK event shape without first adding it
+   to the SDK Pydantic model and then to the TypeScript client contract.
+3. A TypeScript-client event change was inferred from Canvas fixtures instead
+   of being verified against the SDK model serialization/schema.
+4. Canvas consumes an unreleased client commit or changes its client pin before
+   the corresponding client package has been published.
+
+When an event contract changes, require this order and evidence in the PR:
+
+1. SDK model/schema and serialization test.
+2. TypeScript-client mirror plus a fixture derived from the SDK JSON payload.
+3. Published client release and Canvas dependency update.
+4. Canvas rendering/telemetry test using the canonical client type.
+
+Canvas-only presentation state belongs in a separate view-model, keyed by an
+event ID; it must never be appended to the wire-event interface.
+
 ## Event Type Deprecation - Critical Review Checkpoint
 
 When reviewing PRs that modify event types (e.g., `TextContent`, `Message`, `Event`, or any Pydantic model used in event serialization), **DO NOT APPROVE** until the following are verified:

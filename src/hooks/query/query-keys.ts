@@ -54,6 +54,11 @@ export const PLUGINS_QUERY_KEYS = {
   local: ["plugins-local"] as const,
 } as const;
 
+export const SETUP_QUERY_KEYS = {
+  /** What the deployment supports. The same answer for every setup entry. */
+  capabilities: () => ["setup-capabilities"] as const,
+} as const;
+
 export const APP_UPDATE_QUERY_KEYS = {
   /** Latest published @openhands/agent-canvas version (npm `latest` dist-tag). */
   latestVersion: ["agent-canvas-latest-version"] as const,
