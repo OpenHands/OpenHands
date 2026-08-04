@@ -36990,5 +36990,39 @@
     "tr": "Ücretsiz katman",
     "uk": "Безкоштовний рівень",
     "ca": "Nivell gratuït"
+  },
+  "CHAT_INTERFACE$CONTEXT_WINDOW_METER_LABEL": {
+    "en": "Context window usage",
+    "zh-CN": "上下文窗口用量",
+    "zh-TW": "上下文視窗用量",
+    "de": "Kontextfenster-Nutzung",
+    "ko-KR": "컨텍스트 윈도우 사용량",
+    "no": "Kontekstvindu-bruk",
+    "it": "Utilizzo finestra di contesto",
+    "pt": "Uso da janela de contexto",
+    "es": "Uso de la ventana de contexto",
+    "ar": "استخدام نافذة السياق",
+    "fr": "Utilisation de la fenêtre de contexte",
+    "tr": "Bağlam penceresi kullanımı",
+    "ja": "コンテキストウィンドウ使用量",
+    "uk": "Використання вікна контексту",
+    "ca": "Ús de la finestra de context"
+  },
+  "CHAT_INTERFACE$SHOW_CONTEXT": {
+    "en": "Show Context",
+    "zh-CN": "显示上下文",
+    "zh-TW": "顯示上下文",
+    "de": "Kontext anzeigen",
+    "ko-KR": "컨텍스트 표시",
+    "no": "Vis kontekst",
+    "it": "Mostra contesto",
+    "pt": "Mostrar contexto",
+    "es": "Mostrar contexto",
+    "ar": "إظهار السياق",
+    "fr": "Afficher le contexte",
+    "tr": "Bağlamı göster",
+    "ja": "コンテキストを表示",
+    "uk": "Показати контекст",
+    "ca": "Mostra el context"
   }
 }
