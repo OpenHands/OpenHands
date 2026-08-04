@@ -33,6 +33,7 @@ import { HookExecutionEvent } from "./core/events/hook-execution-event";
 import { ACPToolCallEvent } from "./core/events/acp-tool-call-event";
 import { StreamingDeltaEvent } from "./core/events/streaming-delta-event";
 import { SystemPromptEvent } from "./core/events/system-event";
+import { CondensationEvent } from "./core/events/condensation-event";
 
 /**
  * Type guard to check if an unknown value is a valid BaseEvent
@@ -264,6 +265,14 @@ export const isStreamingDeltaEvent = (
   event: OpenHandsEvent,
 ): event is StreamingDeltaEvent =>
   "kind" in event && event.kind === "StreamingDeltaEvent";
+
+/**
+ * Type guard for condensation completion events (history was compacted).
+ */
+export const isCondensationEvent = (
+  event: OpenHandsEvent,
+): event is CondensationEvent =>
+  "kind" in event && event.kind === "Condensation";
 
 // =============================================================================
 // COMPATIBILITY TYPE GUARDS

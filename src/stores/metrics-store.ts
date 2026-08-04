@@ -24,4 +24,10 @@ const useMetricsStore = create<MetricsStore>((set) => ({
   setMetrics: (metrics) => set(metrics),
 }));
 
+if (typeof window !== "undefined" && import.meta.env.DEV) {
+  (
+    window as unknown as { __OH_METRICS_STORE__?: typeof useMetricsStore }
+  ).__OH_METRICS_STORE__ = useMetricsStore;
+}
+
 export default useMetricsStore;
