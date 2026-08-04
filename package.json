@@ -137,7 +137,7 @@
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
     "@types/mdast": "4.0.4",
-    "@types/node": "25.6.0",
+    "@types/node": "26.1.2",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/react-syntax-highlighter": "15.5.13",
