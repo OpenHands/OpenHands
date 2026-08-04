@@ -12,8 +12,18 @@ import type {
   AutomationAttributeName,
   InterfaceAttributeType,
   InterfaceRoutes,
+  OverviewMetric,
 } from "./types";
-import { INTERFACE_VERSION } from "./types";
+import {
+  DASHBOARD_FILTER_IDS,
+  DASHBOARD_FILTER_VALUES,
+  DASHBOARD_SORT_VALUES,
+  INTERFACE_ICON_SLUGS,
+  INTERFACE_SUB_PAGE_IDS,
+  INTERFACE_VERSION,
+  OVERVIEW_METRICS,
+  OVERVIEW_TILE_PLACEHOLDERS,
+} from "./types";
 
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
@@ -75,6 +85,15 @@ function isRecord(value: unknown): value is Rec {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isOneOf<T extends readonly string[]>(
+  value: unknown,
+  values: T,
+): value is T[number] {
+  return (
+    typeof value === "string" && (values as readonly string[]).includes(value)
+  );
+}
+
 class InterfaceChecker {
   readonly errors: string[] = [];
 
@@ -114,7 +133,7 @@ function checkRoutes(
   mounted: InterfaceRoutes,
 ): void {
   if (!check.record(routes, "routes")) return;
-  check.closed(routes, ["list", "setup", "detail"], "routes");
+  check.closed(routes, ["list", "setup", "detail", "templates"], "routes");
 
   // The host serves what it has registrations for, so a declared route must be
   // exactly the mounted shape — the manifest owns link construction, not the
@@ -124,11 +143,60 @@ function checkRoutes(
       check.fail(`routes.${name}`, `must be "${mounted[name]}"`);
     }
   });
+  if (
+    routes.templates !== undefined &&
+    routes.templates !== mounted.templates
+  ) {
+    check.fail(
+      "routes.templates",
+      mounted.templates === undefined
+        ? "is not a route this host mounts"
+        : `must be "${mounted.templates}"`,
+    );
+  }
+}
+
+function checkSubPages(check: InterfaceChecker, subPages: unknown): void {
+  if (!Array.isArray(subPages) || subPages.length === 0) {
+    check.fail("navigation.subPages", "must be a non-empty array");
+    return;
+  }
+  const seen = new Set<string>();
+  subPages.forEach((item: unknown, index) => {
+    const path = `navigation.subPages[${index}]`;
+    if (!check.record(item, path)) return;
+    check.closed(item, ["page", "label", "icon"], path);
+
+    const { page, label, icon } = item;
+    if (!isOneOf(page, INTERFACE_SUB_PAGE_IDS)) {
+      check.fail(`${path}.page`, "is not a sub-page this host serves");
+    } else if (seen.has(page)) {
+      check.fail(`${path}.page`, "repeats a page");
+    } else {
+      seen.add(page);
+    }
+    check.copy(label, `${path}.label`);
+    checkIconSlug(check, icon, `${path}.icon`);
+  });
+}
+
+function checkIconSlug(
+  check: InterfaceChecker,
+  icon: unknown,
+  path: string,
+): void {
+  if (!isOneOf(icon, INTERFACE_ICON_SLUGS)) {
+    check.fail(path, "is not an icon this host ships");
+  }
 }
 
 function checkNavigation(check: InterfaceChecker, navigation: unknown): void {
   if (!check.record(navigation, "navigation")) return;
-  check.closed(navigation, ["sidebar", "commandMenu"], "navigation");
+  check.closed(
+    navigation,
+    ["sidebar", "commandMenu", "subPages"],
+    "navigation",
+  );
 
   if (check.record(navigation.sidebar, "navigation.sidebar")) {
     check.closed(navigation.sidebar, ["label"], "navigation.sidebar");
@@ -145,16 +213,35 @@ function checkNavigation(check: InterfaceChecker, navigation: unknown): void {
     check.copy(menu.description, "navigation.commandMenu.description");
     check.copy(menu.keywords, "navigation.commandMenu.keywords");
   }
+  if (navigation.subPages !== undefined) {
+    checkSubPages(check, navigation.subPages);
+  }
 }
 
 function checkPages(check: InterfaceChecker, pages: unknown): void {
   if (!check.record(pages, "pages")) return;
-  check.closed(pages, ["list", "detail", "edit"], "pages");
+  check.closed(pages, ["list", "detail", "edit", "templates"], "pages");
 
   if (check.record(pages.list, "pages.list")) {
-    check.closed(pages.list, ["title", "subtitle"], "pages.list");
+    check.closed(
+      pages.list,
+      ["title", "subtitle", "overview", "filters", "sort", "insights"],
+      "pages.list",
+    );
     check.copy(pages.list.title, "pages.list.title");
     check.copy(pages.list.subtitle, "pages.list.subtitle");
+    if (pages.list.overview !== undefined) {
+      checkOverview(check, pages.list.overview);
+    }
+    if (pages.list.filters !== undefined) {
+      checkFilters(check, pages.list.filters);
+    }
+    if (pages.list.sort !== undefined) {
+      checkSort(check, pages.list.sort);
+    }
+    if (pages.list.insights !== undefined) {
+      checkInsights(check, pages.list.insights);
+    }
   }
   if (check.record(pages.detail, "pages.detail")) {
     check.closed(pages.detail, ["backLabel"], "pages.detail");
@@ -164,6 +251,244 @@ function checkPages(check: InterfaceChecker, pages: unknown): void {
     check.closed(pages.edit, ["title"], "pages.edit");
     check.copy(pages.edit.title, "pages.edit.title");
   }
+  if (pages.templates !== undefined) {
+    checkTemplatesPage(check, pages.templates);
+  }
+}
+
+function checkOverview(check: InterfaceChecker, overview: unknown): void {
+  const path = "pages.list.overview";
+  if (!check.record(overview, path)) return;
+  check.closed(overview, ["label", "tiles"], path);
+  check.copy(overview.label, `${path}.label`);
+
+  const { tiles } = overview;
+  if (!Array.isArray(tiles) || tiles.length === 0) {
+    check.fail(`${path}.tiles`, "must be a non-empty array");
+    return;
+  }
+  const seen = new Set<string>();
+  tiles.forEach((tile: unknown, index) => {
+    checkOverviewTile(check, tile, seen, `${path}.tiles[${index}]`);
+  });
+}
+
+function checkOverviewTile(
+  check: InterfaceChecker,
+  tile: unknown,
+  seen: Set<string>,
+  path: string,
+): void {
+  if (!check.record(tile, path)) return;
+  check.closed(tile, ["metric", "label", "detail", "zeroDetail", "icon"], path);
+
+  const { metric, label, detail, zeroDetail, icon } = tile;
+  check.copy(label, `${path}.label`);
+  checkIconSlug(check, icon, `${path}.icon`);
+  if (!isOneOf(metric, OVERVIEW_METRICS)) {
+    check.fail(`${path}.metric`, "is not a metric this host computes");
+    check.copy(detail, `${path}.detail`);
+    if (zeroDetail !== undefined) check.copy(zeroDetail, `${path}.zeroDetail`);
+    return;
+  }
+  if (seen.has(metric)) {
+    check.fail(`${path}.metric`, "repeats a metric");
+  } else {
+    seen.add(metric);
+  }
+  checkTileCopy(check, detail, metric, `${path}.detail`);
+  if (zeroDetail !== undefined) {
+    checkTileCopy(check, zeroDetail, metric, `${path}.zeroDetail`);
+  }
+}
+
+/**
+ * Tile copy may embed `{{name}}` placeholders, but only the names the metric
+ * exposes — plain substitution, never an expression.
+ */
+function checkTileCopy(
+  check: InterfaceChecker,
+  value: unknown,
+  metric: OverviewMetric,
+  path: string,
+): void {
+  if (!check.copy(value, path)) return;
+  const exposed = OVERVIEW_TILE_PLACEHOLDERS[metric];
+  const unknownPlaceholder =
+    exposed.length === 0
+      ? /\{\{/
+      : new RegExp(`\\{\\{(?!(?:${exposed.join("|")})\\}\\})`);
+  if (unknownPlaceholder.test(value as string)) {
+    check.fail(path, "uses a placeholder this metric does not expose");
+  }
+}
+
+function checkFilters(check: InterfaceChecker, filters: unknown): void {
+  const path = "pages.list.filters";
+  if (!Array.isArray(filters) || filters.length === 0) {
+    check.fail(path, "must be a non-empty array");
+    return;
+  }
+  const seen = new Set<string>();
+  filters.forEach((filter: unknown, index) => {
+    checkFilter(check, filter, seen, `${path}[${index}]`);
+  });
+}
+
+function checkFilter(
+  check: InterfaceChecker,
+  filter: unknown,
+  seen: Set<string>,
+  path: string,
+): void {
+  if (!check.record(filter, path)) return;
+  check.closed(filter, ["id", "label", "options"], path);
+
+  const { id, label, options } = filter;
+  check.copy(label, `${path}.label`);
+  if (!isOneOf(id, DASHBOARD_FILTER_IDS)) {
+    check.fail(`${path}.id`, "is not a filter this host implements");
+    return;
+  }
+  if (seen.has(id)) {
+    check.fail(`${path}.id`, "repeats a filter");
+  } else {
+    seen.add(id);
+  }
+  checkFilterOptions(
+    check,
+    options,
+    DASHBOARD_FILTER_VALUES[id],
+    `${path}.options`,
+  );
+}
+
+function checkFilterOptions(
+  check: InterfaceChecker,
+  options: unknown,
+  values: readonly string[],
+  path: string,
+): void {
+  if (!Array.isArray(options) || options.length < 2) {
+    check.fail(path, "must offer at least two options");
+    return;
+  }
+  const seen = new Set<string>();
+  options.forEach((option: unknown, index) => {
+    const optionPath = `${path}[${index}]`;
+    if (!check.record(option, optionPath)) return;
+    check.closed(option, ["value", "label"], optionPath);
+
+    const { value, label } = option;
+    if (!isOneOf(value, values)) {
+      check.fail(`${optionPath}.value`, "is not a value this host implements");
+    } else if (seen.has(value)) {
+      check.fail(`${optionPath}.value`, "repeats a value");
+    } else {
+      seen.add(value);
+    }
+    check.copy(label, `${optionPath}.label`);
+  });
+  // "all" is the host's initial selection and what Clear filters resets to,
+  // so a filter that does not offer it could never be neutral.
+  if (!seen.has("all")) {
+    check.fail(path, 'must offer the "all" option');
+  }
+}
+
+function checkSort(check: InterfaceChecker, sort: unknown): void {
+  const path = "pages.list.sort";
+  if (!check.record(sort, path)) return;
+  check.closed(sort, ["label", "options", "default"], path);
+
+  const { label, options, default: defaultValue } = sort;
+  check.copy(label, `${path}.label`);
+  const declared = new Set<string>();
+  if (!Array.isArray(options) || options.length === 0) {
+    check.fail(`${path}.options`, "must be a non-empty array");
+  } else {
+    options.forEach((option: unknown, index) => {
+      const optionPath = `${path}.options[${index}]`;
+      if (!check.record(option, optionPath)) return;
+      check.closed(option, ["value", "label"], optionPath);
+
+      if (!isOneOf(option.value, DASHBOARD_SORT_VALUES)) {
+        check.fail(`${optionPath}.value`, "is not a sort this host implements");
+      } else if (declared.has(option.value)) {
+        check.fail(`${optionPath}.value`, "repeats a value");
+      } else {
+        declared.add(option.value);
+      }
+      check.copy(option.label, `${optionPath}.label`);
+    });
+  }
+  if (typeof defaultValue !== "string" || !declared.has(defaultValue)) {
+    check.fail(`${path}.default`, "must be one of the declared option values");
+  }
+}
+
+/** Every insight state and stat the host renders must have a caption. */
+const INSIGHTS_SHAPE = {
+  health: ["healthy", "failing", "running", "disabled", "neverRun", "checking"],
+  lastRun: ["label", "never", "justNow"],
+  stats: ["runs", "recentSuccess", "averageDuration"],
+} as const;
+
+function checkInsights(check: InterfaceChecker, insights: unknown): void {
+  const path = "pages.list.insights";
+  if (!check.record(insights, path)) return;
+  check.closed(insights, Object.keys(INSIGHTS_SHAPE), path);
+
+  (Object.keys(INSIGHTS_SHAPE) as (keyof typeof INSIGHTS_SHAPE)[]).forEach(
+    (section) => {
+      const sectionPath = `${path}.${section}`;
+      const value = insights[section];
+      if (!check.record(value, sectionPath)) return;
+      const keys = INSIGHTS_SHAPE[section];
+      check.closed(value, keys, sectionPath);
+      keys.forEach((key) => {
+        check.copy(value[key], `${sectionPath}.${key}`);
+      });
+    },
+  );
+}
+
+function checkTemplatesPage(check: InterfaceChecker, templates: unknown): void {
+  const path = "pages.templates";
+  if (!check.record(templates, path)) return;
+  check.closed(templates, ["title", "description"], path);
+  check.copy(templates.title, `${path}.title`);
+  check.copy(templates.description, `${path}.description`);
+}
+
+/**
+ * The sub-page surface is declared whole or not at all. Navigation that points
+ * at an unrouted page, or a dashboard with filters but no insight captions,
+ * would be a partially-trusted mix, and the host refuses those wholesale.
+ */
+function checkSubPageGroup(check: InterfaceChecker, candidate: Rec): void {
+  const routes = isRecord(candidate.routes) ? candidate.routes : {};
+  const navigation = isRecord(candidate.navigation) ? candidate.navigation : {};
+  const pages = isRecord(candidate.pages) ? candidate.pages : {};
+  const list = isRecord(pages.list) ? pages.list : {};
+
+  const pieces: [string, unknown][] = [
+    ["routes.templates", routes.templates],
+    ["navigation.subPages", navigation.subPages],
+    ["pages.templates", pages.templates],
+    ["pages.list.overview", list.overview],
+    ["pages.list.filters", list.filters],
+    ["pages.list.sort", list.sort],
+    ["pages.list.insights", list.insights],
+  ];
+  const missing = pieces
+    .filter(([, value]) => value === undefined)
+    .map(([name]) => name);
+  if (missing.length === 0 || missing.length === pieces.length) return;
+  check.fail(
+    "interface",
+    `the sub-page surface must be declared whole; missing ${missing.join(", ")}`,
+  );
 }
 
 function checkAttribute(
@@ -411,6 +736,8 @@ export function validateInterfaceManifest(
     candidate.responderIntegrationIds,
     "responderIntegrationIds",
   );
+
+  checkSubPageGroup(check, candidate);
 
   return { valid: check.errors.length === 0, errors: check.errors };
 }
