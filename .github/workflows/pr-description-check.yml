@@ -3,10 +3,21 @@ name: PR Description Check
 
 # Use pull_request_target so fork PR descriptions can be checked, but only run
 # trusted validation code from the base branch checkout below.
+#
+# `synchronize` is included so the check re-runs whenever the PR head is updated
+# (e.g. a new commit or a merge from main), not only on open/edit/reopen.
+# `workflow_dispatch` lets maintainers re-validate an already-open PR on demand
+# without having to close/reopen it.
 
 on:
     pull_request_target:
-        types: [opened, edited, reopened, ready_for_review]
+        types: [opened, edited, reopened, ready_for_review, synchronize]
+    workflow_dispatch:
+        inputs:
+            pr_number:
+                description: "PR number to validate"
+                required: true
+                type: string
 
 permissions:
     contents: read
@@ -18,15 +29,37 @@ jobs:
         # Draft PRs may still have incomplete descriptions; validate when review starts.
         # Bots (dependabot, release-please) write their own bodies and can't follow
         # the HUMAN/AGENT template, so exempt them rather than failing every such PR.
+        # The pull_request guards are skipped for manual workflow_dispatch runs.
         if: >-
-            github.event.pull_request.draft == false
-            && github.event.pull_request.user.type != 'Bot'
+            github.event_name == 'workflow_dispatch'
+            || (github.event.pull_request.draft == false
+                && github.event.pull_request.user.type != 'Bot')
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
               uses: actions/checkout@v7
               with:
-                  ref: ${{ github.event.pull_request.base.sha }}
+                  # For pull_request_target, validate against the PR's base commit.
+                  # For workflow_dispatch, check out the dispatched branch (default: main).
+                  ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || github.event.pull_request.base.sha }}
+
+            - name: Resolve PR number
+              id: pr
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                      echo "number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Fetch PR description body
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  gh pr view "${{ steps.pr.outputs.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --json body -q .body > pr-body.txt
 
             - name: Fetch changed file paths
               id: pr_files
@@ -34,11 +67,14 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
               run: |
                   set -euo pipefail
-                  gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                  gh api "repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.number }}/files" \
                       --paginate --jq '.[].filename' > pr-files.txt
                   echo "count=$(wc -l < pr-files.txt)" >> "$GITHUB_OUTPUT"
 
             - name: Validate HUMAN note, PR template, and frontend evidence
               env:
                   GITHUB_TOKEN: ${{ github.token }}
-              run: python .github/scripts/check_pr_description.py --files-file pr-files.txt
+              run: |
+                  python .github/scripts/check_pr_description.py \
+                      --body-file pr-body.txt \
+                      --files-file pr-files.txt
