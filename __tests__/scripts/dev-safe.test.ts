@@ -34,6 +34,7 @@ import {
   resetPersistedSessionApiKeyCache,
 } from "../../scripts/dev-safe.mjs";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -954,6 +955,94 @@ describe("dev-safe CLI startup", () => {
     expect(output).toContain("npm run dev:mock");
     expect(output).toContain("spawn uvx ENOENT");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "cleans up the detached agent-server when the launcher receives SIGHUP",
+    async () => {
+      // Services are spawned detached (getProcessTreeSpawnOptions), so killing
+      // the launcher does not kill them. Drive the real launcher with a stub
+      // agent-server, then SIGHUP the launcher and assert the stub's port is
+      // released rather than held by a survivor.
+      const stubDir = mkdtempSync(path.join(tmpdir(), "dev-safe-sighup-"));
+      const stubJs = path.join(stubDir, "stub-agent-server.mjs");
+      const uvxStub = path.join(stubDir, "uvx");
+
+      writeFileSync(
+        stubJs,
+        [
+          'import net from "node:net";',
+          'const portIndex = process.argv.indexOf("--port");',
+          "const port = Number(process.argv[portIndex + 1]);",
+          "const server = net.createServer(() => {});",
+          'server.listen(port, "127.0.0.1", () => {',
+          '  console.log("STUB_LISTENING", process.pid, port);',
+          "});",
+          "setInterval(() => {}, 1_000);",
+        ].join("\n"),
+      );
+      writeFileSync(
+        uvxStub,
+        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(stubJs)} "$@"\n`,
+      );
+      chmodSync(uvxStub, 0o755);
+
+      const backendPort = await findFreePort(0);
+      const isPortListening = async () =>
+        new Promise<boolean>((resolve) => {
+          const socket = net
+            .connect(backendPort, "127.0.0.1")
+            .on("connect", () => {
+              socket.destroy();
+              resolve(true);
+            })
+            .on("error", () => resolve(false));
+        });
+
+      const launcher = spawn(process.execPath, ["scripts/dev-safe.mjs"], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PATH: `${stubDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          OH_CANVAS_SAFE_BACKEND_PORT: String(backendPort),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let output = "";
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+      };
+      launcher.stdout.on("data", capture);
+      launcher.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 20_000;
+        let listening = false;
+        while (!listening && Date.now() < readyDeadline) {
+          if (launcher.exitCode !== null) break;
+          listening = await isPortListening();
+          if (!listening) await delay(100);
+        }
+        expect(listening, output).toBe(true);
+
+        launcher.kill("SIGHUP");
+        await Promise.race([once(launcher, "exit"), delay(10_000)]);
+
+        // shutdown() forwards SIGTERM, then SIGKILLs after 3s.
+        const freeDeadline = Date.now() + 12_000;
+        let stillListening = true;
+        while (stillListening && Date.now() < freeDeadline) {
+          stillListening = await isPortListening();
+          if (stillListening) await delay(200);
+        }
+        expect(stillListening, output).toBe(false);
+      } finally {
+        if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    },
+    45_000,
+  );
 });
 
 interface RuntimeServiceEntry {
