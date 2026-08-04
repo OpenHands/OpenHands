@@ -7,8 +7,9 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { CostSection } from "../metrics-modal/cost-section";
 import { UsageSection } from "../metrics-modal/usage-section";
 import { CompactContextButton } from "./compact-context-button";
-import { ContextMeter, getContextFillPercent } from "./context-meter";
+import { ContextMeter } from "./context-meter";
 import { ProviderBalanceCard } from "./provider-balance-card";
+import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
 
 /**
  * "Usage" right-panel tab: context-fill meter with a manual "Compact
@@ -50,7 +51,7 @@ export function UsagePanel() {
               contextWindow={usage.context_window}
             />
             <CompactContextButton
-              fillPercent={getContextFillPercent(
+              fillPercent={getContextWindowUsagePercentage(
                 usage.per_turn_token,
                 usage.context_window,
               )}

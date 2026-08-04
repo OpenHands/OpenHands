@@ -1,21 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ContextMeter, getContextFillPercent } from "./context-meter";
+import { ContextMeter } from "./context-meter";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-describe("getContextFillPercent", () => {
-  it("computes the fill percentage", () => {
-    expect(getContextFillPercent(50_000, 200_000)).toBe(25);
-  });
-
-  it("returns 0 when the context window is unknown", () => {
-    expect(getContextFillPercent(50_000, 0)).toBe(0);
-  });
-});
-
+// The percentage math itself (zero-window guard, 100% cap) is covered by
+// __tests__/utils/format-token-count.test.ts; these tests cover rendering.
 describe("ContextMeter", () => {
   it("renders the raw token numbers", () => {
     render(<ContextMeter perTurnToken={17994} contextWindow={1000000} />);

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { getContextWindowUsagePercentage } from "#/utils/format-token-count";
 
 /** Context fill percentage above which the meter warns and the compact CTA becomes prominent. */
 export const CONTEXT_FILL_WARNING_PERCENT = 70;
@@ -8,13 +9,6 @@ export const CONTEXT_FILL_WARNING_PERCENT = 70;
 export const CONTEXT_FILL_DANGER_PERCENT = 90;
 
 export type ContextFillTone = "neutral" | "warning" | "danger";
-
-export function getContextFillPercent(
-  perTurnToken: number,
-  contextWindow: number,
-): number {
-  return contextWindow > 0 ? (perTurnToken / contextWindow) * 100 : 0;
-}
 
 export function getContextFillTone(usagePercentage: number): ContextFillTone {
   if (usagePercentage > CONTEXT_FILL_DANGER_PERCENT) {
@@ -48,8 +42,12 @@ export function ContextMeter({
   // raw token count without a misleading "x / 0" or "0.0% used" readout.
   const isWindowUnknown = contextWindow <= 0;
 
-  const usagePercentage = getContextFillPercent(perTurnToken, contextWindow);
-  const progressWidth = Math.min(100, usagePercentage);
+  // Capped at 100 by getContextWindowUsagePercentage, so the bar width and
+  // the label never read above a full window.
+  const usagePercentage = getContextWindowUsagePercentage(
+    perTurnToken,
+    contextWindow,
+  );
   const tone = getContextFillTone(usagePercentage);
   const isWarning = tone === "warning";
   const isDanger = tone === "danger";
@@ -90,7 +88,7 @@ export function ContextMeter({
                 : "bg-foreground",
           )}
           // runtime usage-percentage width
-          style={{ width: `${progressWidth}%` }}
+          style={{ width: `${usagePercentage}%` }}
         />
       </div>
       <div className="flex justify-end">

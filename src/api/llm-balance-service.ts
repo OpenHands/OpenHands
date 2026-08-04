@@ -52,6 +52,10 @@ class LLMBalanceService {
    * UI in that case. Other HTTP failures throw.
    */
   static async getBalance(): Promise<LLMBalance | null> {
+    // Raw fetch is deliberate: /api/llm/balance has no typed client in
+    // @openhands/typescript-client yet. The file is listed in
+    // ALLOWED_AD_HOC_HTTP_FILES (no-direct-agent-server-calls.test.ts) with
+    // this justification.
     const { host, apiKey } = getAgentServerClientOptions();
     const headers = new Headers({ Accept: "application/json" });
     if (apiKey) {

@@ -52,7 +52,7 @@ export function ProviderBalanceCard() {
             aria-label={t(I18nKey.BUTTON$REFRESH)}
             disabled={isFetching}
             onClick={() => refetch()}
-            className="cursor-pointer text-[var(--oh-muted)] hover:text-white disabled:cursor-default"
+            className="cursor-pointer text-[var(--oh-muted)] hover:text-[var(--oh-foreground)] disabled:cursor-default"
           >
             <RefreshCw
               className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
