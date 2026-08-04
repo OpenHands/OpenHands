@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
 import {
   buildAgentServerAutomationEnv,
@@ -480,7 +480,7 @@ describe("stack mode routing", () => {
     });
   });
 
-  it("routes only agent-server and automation in backend-only mode", async () => {
+  it("routes only local services through IPv4 in backend-only mode", async () => {
     const config = await buildConfig(
       { backendOnly: true },
       envWithIsolatedKeyPath(),
@@ -494,19 +494,19 @@ describe("stack mode routing", () => {
     const routes = getLocalServiceRoutes(config);
     expect(routes).toContainEqual([
       "/api/automation",
-      `http://localhost:${config.autoBackendPort}`,
+      `http://127.0.0.1:${config.autoBackendPort}`,
     ]);
     expect(routes).toContainEqual([
       "/api",
-      `http://localhost:${config.agentServerPort}`,
+      `http://127.0.0.1:${config.agentServerPort}`,
     ]);
 
     const routeArgs = buildRouteArgs(routes);
     expect(routeArgs).toContain(
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
+      `/api/automation=http://127.0.0.1:${config.autoBackendPort}`,
     );
     expect(routeArgs).toContain(
-      `/server_info=http://localhost:${config.agentServerPort}`,
+      `/server_info=http://127.0.0.1:${config.agentServerPort}`,
     );
     expect(routeArgs).not.toContain("--default");
   });
@@ -631,6 +631,104 @@ describe("setServiceLogListener", () => {
 });
 
 describe("dev-with-automation CLI", () => {
+  it.skipIf(process.platform === "win32")(
+    "cleans up detached services when the launcher receives SIGHUP",
+    async () => {
+      const moduleUrl = pathToFileURL(
+        path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+      ).href;
+      const fixtureSource = [
+        'import net from "node:net";',
+        "const server = net.createServer(() => {});",
+        'server.listen(0, "127.0.0.1", () => console.log("READY", process.pid, server.address().port));',
+      ].join("\n");
+      const supervisorSource = [
+        `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+        `const fixture = spawnService("fixture", process.execPath, ["--input-type=module", "--eval", ${JSON.stringify(fixtureSource)}]);`,
+        'console.log("SPAWNED", fixture.pid);',
+        "setInterval(() => {}, 1_000);",
+      ].join("\n");
+
+      const supervisor = spawn(
+        process.execPath,
+        ["--input-type=module", "--eval", supervisorSource],
+        {
+          cwd: repoRoot,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let output = "";
+      let fixturePid: number | undefined;
+      let fixturePort: number | undefined;
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+        const spawnedMatch = output.match(/SPAWNED (\d+)/);
+        const readyMatch = output.match(/READY \d+ (\d+)/);
+        if (spawnedMatch) fixturePid = Number(spawnedMatch[1]);
+        if (readyMatch) fixturePort = Number(readyMatch[1]);
+      };
+      supervisor.stdout.on("data", capture);
+      supervisor.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 5_000;
+        while (!fixturePort && Date.now() < readyDeadline) {
+          if (supervisor.exitCode !== null) break;
+          await delay(25);
+        }
+        expect(fixturePid, output).toBeDefined();
+        expect(fixturePort, output).toBeDefined();
+
+        supervisor.kill("SIGHUP");
+        const exitResult = await Promise.race([
+          once(supervisor, "exit").then(([code, signal]) => ({
+            code,
+            signal,
+            timedOut: false,
+          })),
+          delay(6_000).then(() => ({
+            code: null,
+            signal: null,
+            timedOut: true,
+          })),
+        ]);
+
+        expect(exitResult.timedOut).toBe(false);
+        expect(exitResult).toMatchObject({ code: 0, signal: null });
+
+        const releaseDeadline = Date.now() + 2_000;
+        let portIsOpen = true;
+        while (portIsOpen && Date.now() < releaseDeadline) {
+          portIsOpen = await new Promise<boolean>((resolve) => {
+            const socket = net.connect(fixturePort!, "127.0.0.1");
+            socket.setTimeout(250);
+            socket.once("connect", () => {
+              socket.destroy();
+              resolve(true);
+            });
+            socket.once("error", () => resolve(false));
+            socket.once("timeout", () => {
+              socket.destroy();
+              resolve(false);
+            });
+          });
+          if (portIsOpen) await delay(50);
+        }
+        expect(portIsOpen).toBe(false);
+      } finally {
+        if (supervisor.exitCode === null) supervisor.kill("SIGKILL");
+        if (fixturePid) {
+          try {
+            process.kill(-fixturePid, "SIGKILL");
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+          }
+        }
+      }
+    },
+    15_000,
+  );
+
   it("shows help with --help flag", async () => {
     const child = spawn(
       process.execPath,

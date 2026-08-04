@@ -137,9 +137,10 @@ describe("useNewConversationCommand", () => {
       app_conversation_id: null,
     });
 
-    vi.spyOn(AgentServerConversationService, "createConversation").mockResolvedValue(
-      errorTask as never,
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(errorTask as never);
 
     const { result } = renderHook(() => useNewConversationCommand(), {
       wrapper,
@@ -155,9 +156,10 @@ describe("useNewConversationCommand", () => {
       app_conversation_id: null,
     });
 
-    vi.spyOn(AgentServerConversationService, "createConversation").mockResolvedValue(
-      workingTask as never,
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(workingTask as never);
 
     const { result } = renderHook(() => useNewConversationCommand(), {
       wrapper,
@@ -175,9 +177,10 @@ describe("useNewConversationCommand", () => {
   it("invalidates conversation list queries on success", async () => {
     const readyTask = makeStartTask();
 
-    vi.spyOn(AgentServerConversationService, "createConversation").mockResolvedValue(
-      readyTask as never,
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(readyTask as never);
 
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
@@ -230,9 +233,10 @@ describe("useNewConversationCommand", () => {
   it("shows a loading toast and dismisses it on success", async () => {
     const readyTask = makeStartTask();
 
-    vi.spyOn(AgentServerConversationService, "createConversation").mockResolvedValue(
-      readyTask as never,
-    );
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(readyTask as never);
 
     const { result } = renderHook(() => useNewConversationCommand(), {
       wrapper,
@@ -249,7 +253,7 @@ describe("useNewConversationCommand", () => {
     });
   });
 
-  it("emits conversation_created on success with the /new no-context payload", async () => {
+  it("emits conversation_start_requested on success with the /new no-context payload", async () => {
     const readyTask = makeStartTask();
     vi.spyOn(
       AgentServerConversationService,
@@ -264,7 +268,7 @@ describe("useNewConversationCommand", () => {
 
     await waitFor(() => {
       expect(captureMock).toHaveBeenCalledWith(
-        "conversation_created",
+        "conversation_start_requested",
         expect.objectContaining({
           conversation_id: "new-conv-999",
           task_id: "task-789",

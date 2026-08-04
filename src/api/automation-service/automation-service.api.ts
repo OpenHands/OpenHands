@@ -15,6 +15,11 @@ import type {
   AutomationRunsResponse,
 } from "#/types/automation";
 import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
+import {
+  getAutomationEndpoint,
+  getAutomationIdEndpoint,
+  getImportExportSpec,
+} from "#/manifests/automation-interface";
 import type {
   DeploymentCapabilities,
   SetupRequestBody,
@@ -152,19 +157,24 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
     throw new Error("An automation prompt is required for import.");
   }
 
+  const { importDefaults } = getImportExportSpec();
   const repos = spec.repository
     ? [
         {
           url: spec.repository,
           ...(spec.branch && { ref: spec.branch }),
           ...(!spec.repository.includes("://") &&
-            !spec.repository.startsWith("git@") && { provider: "github" }),
+            !spec.repository.startsWith("git@") && {
+              provider: importDefaults.repoProvider,
+            }),
         },
       ]
     : undefined;
 
   return {
-    path: `${AUTOMATION_BASE_PATH}/v1/preset/${spec.plugins?.length ? "plugin" : "prompt"}`,
+    path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint(
+      spec.plugins?.length ? "createPlugin" : "createPrompt",
+    )}`,
     body: {
       name: spec.name,
       prompt: spec.prompt,
@@ -173,7 +183,7 @@ function buildCreateAutomationRequest(spec: AutomationSpec) {
       // together in the follow-up PATCH.
       trigger: {
         type: "event",
-        source: "agent-canvas-import",
+        source: importDefaults.placeholderEventSource,
         on: generatePendingImportEvent(),
       },
       ...(spec.model && { model: spec.model }),
@@ -261,13 +271,13 @@ class AutomationService {
       return callCloudProxy<AutomationsResponse>({
         backend: active,
         method: "GET",
-        path: `${AUTOMATION_BASE_PATH}/v1?${buildPaginationQuery(limit, offset)}`,
+        path: `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}?${buildPaginationQuery(limit, offset)}`,
         headers: await buildAutomationRequestHeaders(),
       });
     }
 
     const { data } = await localAutomationAxios.get<AutomationsResponse>(
-      `${AUTOMATION_BASE_PATH}/v1`,
+      `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("list")}`,
       { params: { limit, offset } },
     );
     return data;
@@ -282,7 +292,7 @@ class AutomationService {
 
   static async getAutomation(id: string): Promise<Automation> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Automation>({
@@ -319,7 +329,7 @@ class AutomationService {
       created = data;
     }
 
-    const updatePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(created.id)}`;
+    const updatePath = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", created.id)}`;
     const updateBody: Partial<Automation> = {
       trigger: buildImportedTrigger(spec),
       enabled: false,
@@ -372,7 +382,7 @@ class AutomationService {
     body: Partial<Automation>,
   ): Promise<Automation> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Automation>({
@@ -390,7 +400,7 @@ class AutomationService {
 
   static async deleteAutomation(id: string): Promise<void> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("detail", id)}`;
 
     if (active.kind === "cloud") {
       await callCloudProxy<unknown>({
@@ -407,7 +417,7 @@ class AutomationService {
 
   static async dispatchAutomation(id: string): Promise<AutomationRun> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/dispatch`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("dispatch", id)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<AutomationRun>({
@@ -428,7 +438,7 @@ class AutomationService {
   ): Promise<AutomationRunsResponse> {
     const { limit = 50, offset = 0 } = params;
     const active = getActiveBackend().backend;
-    const basePath = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/runs`;
+    const basePath = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("runs", id)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<AutomationRunsResponse>({
@@ -463,7 +473,7 @@ class AutomationService {
 
   static async downloadTarball(id: string, name: string): Promise<void> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/${encodeURIComponent(id)}/tarball`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationIdEndpoint("tarball", id)}`;
 
     let blob: Blob;
     if (active.kind === "cloud") {
@@ -497,7 +507,7 @@ class AutomationService {
    */
   static async getCapabilities(): Promise<DeploymentCapabilities> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/capabilities`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("capabilities")}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<DeploymentCapabilities>({
@@ -521,7 +531,7 @@ class AutomationService {
     body: SetupRequestBody,
   ): Promise<ValidateDraftResponse> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/v1/validate`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("validate")}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<ValidateDraftResponse>({
@@ -571,7 +581,7 @@ class AutomationService {
 
   static async checkHealth(): Promise<AutomationHealthResponse> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}/health`;
+    const path = `${AUTOMATION_BASE_PATH}${getAutomationEndpoint("health")}`;
 
     try {
       if (active.kind === "cloud") {
