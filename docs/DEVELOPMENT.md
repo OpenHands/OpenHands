@@ -149,6 +149,33 @@ threshold.
 Stryker does not cover the small Python surface in this repository; mutating it
 would need a Python test harness and Python-specific mutation tool.
 
+## Design doc for non-trivial PRs
+
+For a non-trivial PR — a new or changed public API, a new subsystem, a behavior change in
+core logic, or a migration — a reviewer often has to reconstruct the design from the diff
+alone. That is slow. You are encouraged (not required) to add a short design doc so reviewers
+grasp the proposal at a glance.
+
+The convention:
+
+1. Write a **self-contained HTML** page (inline CSS/SVG, opens by double-click) that covers
+   the code/API design and a **before/after** of your change, grounded to the actual code.
+2. Commit it under the temporary **`.pr/`** directory, e.g. `.pr/design.html`. This directory
+   is for PR-only artifacts and is **removed automatically when the PR is approved**
+   (`.github/workflows/pr-artifacts.yml`), so it never lands in `main`.
+3. Link it near the top of the PR description via htmlpreview, pointing at the fork and branch
+   the PR is opened from so it renders before the PR is merged:
+
+   ```
+   https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<your-branch>/.pr/design.html
+   ```
+
+Skip this for trivial PRs (a typo, a one-line guard, a dependency bump) — there, a design doc
+is just noise. htmlpreview only works for public repos and self-contained pages.
+
+The `pr-design-doc` skill in the [OpenHands extensions](https://github.com/OpenHands/extensions)
+repo can generate the page for you.
+
 ## CSS isolation and host-app customization
 
 The standalone app and the exported provider/root wrapper now scope all bundled CSS under a dedicated shell element with the `data-agent-server-ui` attribute. That means Tailwind utilities, HeroUI component styles, xterm styles, and local CSS only apply inside the OpenHands UI subtree instead of leaking into a host app.
