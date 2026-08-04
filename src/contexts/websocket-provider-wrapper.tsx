@@ -57,12 +57,29 @@ export function WebSocketProviderWrapper({
   // that local planner creation stamps, rather than assuming list position
   // implies type. A pre-existing, unrelated child conversation must never be
   // adopted as the planner and fed events/routing meant for it.
+  //
+  // Resolved as its own memo, kept to a primitive (string | null), rather than
+  // inlined into planningConversationIds below: ConversationWebSocketProvider
+  // resets its planning-history tracking whenever the `subConversationIds`
+  // array it receives changes *by reference* (see the comment on
+  // candidateConversationIds above). `subConversations` gets a new array
+  // reference on every refetch (e.g. the default refetchOnWindowFocus) even
+  // when the planner id hasn't changed — e.g. only `execution_status` ticked.
+  // Deriving planningConversationIds directly from `subConversations` would
+  // rebuild its own array on every such refetch and wipe the
+  // ConversationWebSocketProvider live once the tag lookup falls out of the
+  // dependency chain, leaving the Planner tab stuck showing stale content
+  // until a full reload. Keeping this as a separate memo means
+  // planningConversationIds only depends on the resolved *id* (a primitive,
+  // stable across reference-only refetches), so its own array stays stable
+  // too.
+  const plannerConversationId = React.useMemo(() => {
+    if (!isLocalBackend) return null;
+    return findPlannerConversationId(subConversations, conversation?.id);
+  }, [isLocalBackend, subConversations, conversation?.id]);
+
   const planningConversationIds = React.useMemo(() => {
     if (!isLocalBackend) return candidateConversationIds;
-    const plannerConversationId = findPlannerConversationId(
-      subConversations,
-      conversation?.id,
-    );
     if (plannerConversationId) return [plannerConversationId];
     // Tag data hasn't resolved yet (still loading, or no planner exists).
     // `localPlanningConversationId` is only ever set to a verified planner
@@ -74,8 +91,7 @@ export function WebSocketProviderWrapper({
   }, [
     isLocalBackend,
     candidateConversationIds,
-    subConversations,
-    conversation?.id,
+    plannerConversationId,
     localPlanningConversationId,
   ]);
 
