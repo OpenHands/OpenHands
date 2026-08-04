@@ -9,6 +9,15 @@ import {
 } from "#/types/automation";
 import { AUTOMATION_RUNS_QUERY_KEY } from "./use-automation-detail";
 
+/**
+ * Poll interval while a run is non-terminal. Deliberately slower than the 3s
+ * used by `useAutomationRuns`: that hook polls a single automation on its
+ * detail page, whereas this one issues one request *per automation* (up to
+ * MAX_AUTOMATION_CHIPS). At 15s a fully in-flight home section costs about the
+ * same request rate as one open detail page.
+ */
+const IN_FLIGHT_POLL_INTERVAL_MS = 15_000;
+
 export interface LatestAutomationRunState {
   /** Newest run of the automation, or null while loading / on error / when none exist. */
   latestRun: AutomationRun | null;
@@ -42,6 +51,9 @@ export function useLatestAutomationRuns(
       // No retries: the home section settles into its degraded "unknown"
       // indicator instead of hammering an unhealthy automation service.
       retry: false,
+      // One request per automation already fans out on mount; refetching the
+      // whole set again on every tab focus is not worth the run-health delta.
+      refetchOnWindowFocus: false,
       // Poll while the latest run is non-terminal so status and
       // conversation_id transitions appear without a manual refresh.
       refetchInterval: (query: {
@@ -51,7 +63,7 @@ export function useLatestAutomationRuns(
         const isInFlight =
           latest?.status === AutomationRunStatus.PENDING ||
           latest?.status === AutomationRunStatus.RUNNING;
-        return isInFlight ? 3000 : false;
+        return isInFlight ? IN_FLIGHT_POLL_INTERVAL_MS : false;
       },
     })),
   });
