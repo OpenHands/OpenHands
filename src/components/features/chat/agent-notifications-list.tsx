@@ -40,9 +40,11 @@ interface AgentNotificationsListProps {
   agentNotifications: AgentNotification[];
   onSubmit: (selectedIds: string[]) => void;
   onRemove?: (id: string) => void;
+  onDismiss?: () => void;
   disabled?: boolean;
   isSubmitting?: boolean;
   submitTestId?: string;
+  dismissTestId?: string;
   listItemTestIdPrefix?: string;
 }
 
@@ -103,6 +105,10 @@ function AgentNotificationListItem({
           <span className="min-w-0 truncate text-sm font-medium text-content">
             {agentNotification.name}
           </span>
+          <AgentNotificationKindPill
+            kind={agentNotification.kind}
+            testId={`${listItemTestIdPrefix}-kind-pill-${agentNotification.id}`}
+          />
         </label>
         {onRemove ? (
           <button
@@ -159,13 +165,11 @@ function AgentNotificationListItem({
         <div
           id={detailsId}
           data-testid={`${listItemTestIdPrefix}-details-${agentNotification.id}`}
-          className="flex flex-col gap-2 border-t border-[var(--oh-border)] bg-[var(--oh-surface)]/50 px-3 py-2 pl-11"
+          className="border-t border-[var(--oh-border)] bg-[var(--oh-surface)]/50 px-3 py-2 pl-11"
         >
-          <AgentNotificationKindPill
-            kind={agentNotification.kind}
-            testId={`${listItemTestIdPrefix}-kind-pill-${agentNotification.id}`}
-          />
-          <p className="text-xs text-muted">{agentNotification.prompt}</p>
+          <p className="max-h-32 overflow-y-auto break-words text-xs text-muted custom-scrollbar">
+            {agentNotification.prompt}
+          </p>
         </div>
       ) : null}
     </li>
@@ -176,9 +180,11 @@ export function AgentNotificationsList({
   agentNotifications,
   onSubmit,
   onRemove,
+  onDismiss,
   disabled = false,
   isSubmitting = false,
   submitTestId = "agent-notifications-submit",
+  dismissTestId = "agent-notifications-dismiss-action",
   listItemTestIdPrefix = "agent-notification",
 }: AgentNotificationsListProps) {
   const { t } = useTranslation("openhands");
@@ -262,7 +268,19 @@ export function AgentNotificationsList({
         ))}
       </ul>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex justify-end gap-2">
+        {onDismiss ? (
+          <BrandButton
+            testId={dismissTestId}
+            type="button"
+            variant="secondary"
+            isDisabled={controlsDisabled}
+            className={formControlButtonCompactClassName}
+            onClick={onDismiss}
+          >
+            {t(I18nKey.CHAT_INTERFACE$MESSAGE_DISMISS)}
+          </BrandButton>
+        ) : null}
         <BrandButton
           testId={submitTestId}
           type="button"

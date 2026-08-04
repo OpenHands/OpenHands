@@ -67,9 +67,11 @@ export function AgentNotifications({
         agentNotifications={agentNotifications}
         onSubmit={onCreateAll}
         onRemove={onRemove}
+        onDismiss={onDismiss}
         disabled={disabled}
         isSubmitting={isCreating}
         submitTestId="agent-notifications-create-all"
+        dismissTestId="agent-notifications-dismiss-action"
         listItemTestIdPrefix="agent-notification"
       />
     </section>

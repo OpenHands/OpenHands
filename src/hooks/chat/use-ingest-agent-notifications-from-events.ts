@@ -26,9 +26,21 @@ function hasSubstantiveAgentActions(events: OHEvent[]): boolean {
 }
 
 /**
+ * Agent statuses where the turn is idle enough to surface recommendations.
+ * Cloud (and local) often end a turn on FINISHED after FinishAction; IDLE
+ * maps to AWAITING_USER_INPUT when the agent stops without finishing.
+ */
+function isHeuristicIngestReady(state: AgentState): boolean {
+  return (
+    state === AgentState.AWAITING_USER_INPUT || state === AgentState.FINISHED
+  );
+}
+
+/**
  * Ingests agent-notification recommendations from the live conversation:
  * - fenced blocks in new assistant messages (detection-skill contract)
- * - heuristic detection when the agent returns to AWAITING_USER_INPUT
+ * - heuristic detection when the agent returns to AWAITING_USER_INPUT or
+ *   FINISHED (Cloud FinishAction ends)
  *
  * Pass ``enabled: false`` for automation / resolver conversations so we never
  * invent suggestions outside interactive FE sessions.
@@ -96,7 +108,7 @@ export function useIngestAgentNotificationsFromEvents(
       return;
     }
 
-    if (curAgentState !== AgentState.AWAITING_USER_INPUT) {
+    if (!isHeuristicIngestReady(curAgentState)) {
       return;
     }
 

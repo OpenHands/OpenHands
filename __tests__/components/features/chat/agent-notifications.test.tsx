@@ -154,29 +154,17 @@ describe("AgentNotifications", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Workflow helper"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-notification-kind-pill-skill"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-notification-kind-pill-workflow"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-notification-kind-pill-routine"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-notification-kind-pill-responder"),
-    ).not.toBeInTheDocument();
-
+    expect(screen.getByText("Workflow helper")).toBeInTheDocument();
     for (const id of ["skill", "workflow", "routine", "responder"] as const) {
-      await user.click(screen.getByTestId(`agent-notification-expand-${id}`));
       expect(
         screen.getByTestId(`agent-notification-kind-pill-${id}`),
       ).toBeInTheDocument();
     }
 
+    await user.click(screen.getByTestId("agent-notification-expand-workflow"));
+    expect(
+      screen.getByTestId("agent-notification-details-workflow"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Create workflow.")).toBeInTheDocument();
   });
 
@@ -196,8 +184,8 @@ describe("AgentNotifications", () => {
       screen.queryByTestId("agent-notification-details-skill-standup"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("agent-notification-kind-pill-skill-standup"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("agent-notification-kind-pill-skill-standup"),
+    ).toBeInTheDocument();
 
     await user.click(
       screen.getByTestId("agent-notification-expand-skill-standup"),
@@ -209,9 +197,26 @@ describe("AgentNotifications", () => {
     expect(
       screen.getByText('Save a reusable skill named "Standup digest helper".'),
     ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("agent-notification-kind-pill-skill-standup"),
-    ).toBeInTheDocument();
+  });
+
+  it("calls onDismiss when the footer dismiss button is clicked", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <AgentNotifications
+        agentNotifications={agentNotifications}
+        onCreateAll={onCreateAll}
+        onDismiss={onDismiss}
+        onRemove={onRemove}
+      />,
+    );
+
+    await user.click(
+      screen.getByTestId("agent-notifications-dismiss-action"),
+    );
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onCreateAll).not.toHaveBeenCalled();
   });
 
   it("calls onDismiss when the dismiss button is clicked", async () => {
