@@ -1282,6 +1282,35 @@ export function buildStartPlanningConversationRequest(options: {
 }
 
 /**
+ * Resolve the encrypted LLM config for a named LLM profile, so a planner
+ * started from a conversation can run whatever model that conversation is
+ * *currently* on (its `active_profile` — the profile it launched with, or the
+ * one it was last switched to via `/model` or `SwitchLLMTool`) rather than
+ * re-deriving a possibly-stale value from its launch-time agent profile.
+ *
+ * Returns `null` — caller falls back further — when the profile is unknown
+ * or the lookup fails.
+ */
+async function resolveLlmProfileSettings(
+  profileName: string,
+): Promise<SettingsRecord | null> {
+  try {
+    const { default: ProfilesService } =
+      await import("./profiles-service/profiles-service.api");
+    // ``encrypted`` matches ``secrets_encrypted`` on the payload: the
+    // agent-server decrypts with the same cipher it encrypted with.
+    const detail = await ProfilesService.getProfile(profileName, "encrypted");
+    return isPlainRecord(detail.config) ? detail.config : null;
+  } catch (error) {
+    console.warn(
+      `Falling back: could not resolve LLM profile ${profileName}`,
+      error,
+    );
+    return null;
+  }
+}
+
+/**
  * Resolve the encrypted LLM config the given AgentProfile launches with, so a
  * planner started from a conversation can run the *parent's* model rather than
  * whatever profile happens to be globally active now. AgentProfiles hold a
@@ -1297,11 +1326,8 @@ async function resolveAgentProfileLlmSettings(
   agentProfileId: string,
 ): Promise<SettingsRecord | null> {
   try {
-    const [{ default: AgentProfilesService }, { default: ProfilesService }] =
-      await Promise.all([
-        import("./agent-profiles-service/agent-profiles-service.api"),
-        import("./profiles-service/profiles-service.api"),
-      ]);
+    const { default: AgentProfilesService } =
+      await import("./agent-profiles-service/agent-profiles-service.api");
 
     const { profiles } = await AgentProfilesService.listProfiles();
     const summary = profiles.find(
@@ -1309,13 +1335,7 @@ async function resolveAgentProfileLlmSettings(
     );
     if (!summary?.llm_profile_ref) return null;
 
-    // ``encrypted`` matches ``secrets_encrypted`` on the payload: the
-    // agent-server decrypts with the same cipher it encrypted with.
-    const detail = await ProfilesService.getProfile(
-      summary.llm_profile_ref,
-      "encrypted",
-    );
-    return isPlainRecord(detail.config) ? detail.config : null;
+    return await resolveLlmProfileSettings(summary.llm_profile_ref);
   } catch (error) {
     console.warn(
       `Falling back to global agent settings: could not resolve the LLM for agent profile ${agentProfileId}`,
@@ -1329,10 +1349,22 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
   workingDir: string;
   parentConversationId: string;
   /**
+   * The parent conversation's current LLM profile name (`AppConversation.active_profile`)
+   * — the profile it launched with, or the one it was last switched to via
+   * `/model` or the agent's own `SwitchLLMTool`. Takes priority over
+   * `parentAgentProfileId` below so switching the *parent conversation's*
+   * model actually carries over to a planner created afterward, while a
+   * *different* conversation (or the home page) activating another profile
+   * globally still does not repoint this planner — `active_profile` only
+   * changes when this specific conversation's own model does.
+   */
+  parentActiveProfileName?: string | null;
+  /**
    * ``launched_agent_profile.agent_profile_id`` of the parent conversation, when
-   * it was started from an AgentProfile. Pins the planner to the model the
-   * parent actually runs, so activating a different profile later does not
-   * silently change the planner's LLM, base URL, or credentials.
+   * it was started from an AgentProfile. Fallback for when
+   * `parentActiveProfileName` can't be resolved (e.g. an ACP parent, whose
+   * `active_profile` reflects the globally-active LLM profile at launch time
+   * rather than anything the ACP agent itself runs).
    */
   parentAgentProfileId?: string | null;
   initialMessage?: string;
@@ -1344,9 +1376,13 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
     SecretsService.getSecrets(),
   ]);
 
-  const profileLlm = options.parentAgentProfileId
-    ? await resolveAgentProfileLlmSettings(options.parentAgentProfileId)
-    : null;
+  const profileLlm =
+    (options.parentActiveProfileName
+      ? await resolveLlmProfileSettings(options.parentActiveProfileName)
+      : null) ??
+    (options.parentAgentProfileId
+      ? await resolveAgentProfileLlmSettings(options.parentAgentProfileId)
+      : null);
   const encryptedAgentSettings: Record<string, SettingsValue> = profileLlm
     ? { ...settingsResult.agentSettings, llm: profileLlm as SettingsValue }
     : settingsResult.agentSettings;

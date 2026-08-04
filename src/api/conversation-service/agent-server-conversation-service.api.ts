@@ -522,9 +522,12 @@ class AgentServerConversationService {
       await buildStartPlanningConversationRequestWithEncryptedSettings({
         workingDir,
         parentConversationId,
-        // Pin the planner to the agent profile the parent launched with rather
-        // than the currently active one, so switching profiles mid-conversation
-        // does not silently repoint the planner at a different model.
+        // Pin the planner to the parent conversation's own current model —
+        // its active_profile, which tracks /model switches and the agent's
+        // own SwitchLLMTool calls — rather than some other conversation (or
+        // the home page) activating a different profile globally.
+        parentActiveProfileName: parent?.active_profile ?? null,
+        // Fallback when active_profile can't be resolved (e.g. an ACP parent).
         parentAgentProfileId:
           parent?.launched_agent_profile?.agent_profile_id ?? null,
         initialMessage,

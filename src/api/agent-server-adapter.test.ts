@@ -390,6 +390,81 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     });
   });
 
+  it("prefers the parent conversation's current active_profile over its launched agent profile", async () => {
+    // The conversation launched under "parent-profile" (-> "parent-llm"), but
+    // was later switched to a different LLM profile via /model or the
+    // agent's own SwitchLLMTool — active_profile tracks that switch.
+    vi.mocked(ProfilesService.getProfile).mockImplementation(async (name) =>
+      name === "switched-llm"
+        ? {
+            name: "switched-llm",
+            api_key_set: true,
+            config: {
+              model: "openhands/switched-model",
+              api_key: "gAAAAAswitched-key",
+              base_url: "https://switched.example.com",
+            },
+          }
+        : {
+            name: "parent-llm",
+            api_key_set: true,
+            config: {
+              model: "openhands/parent-profile-model",
+              api_key: "gAAAAAparent-key",
+              base_url: "https://parent.example.com",
+            },
+          },
+    );
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+        parentActiveProfileName: "switched-llm",
+        parentAgentProfileId: "profile-parent",
+      });
+
+    expect(ProfilesService.getProfile).toHaveBeenCalledWith(
+      "switched-llm",
+      "encrypted",
+    );
+    // The launched agent profile must not even be consulted once
+    // active_profile resolves successfully.
+    expect(AgentProfilesService.listProfiles).not.toHaveBeenCalled();
+    expect(payload.agent.llm).toMatchObject({
+      model: "openhands/switched-model",
+      api_key: "gAAAAAswitched-key",
+      base_url: "https://switched.example.com",
+    });
+  });
+
+  it("falls back to the launched agent profile when active_profile can't be resolved", async () => {
+    vi.mocked(ProfilesService.getProfile).mockImplementation(async (name) => {
+      if (name === "dangling-llm") throw new Error("not found");
+      return {
+        name: "parent-llm",
+        api_key_set: true,
+        config: {
+          model: "openhands/parent-profile-model",
+          api_key: "gAAAAAparent-key",
+          base_url: "https://parent.example.com",
+        },
+      };
+    });
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+        parentActiveProfileName: "dangling-llm",
+        parentAgentProfileId: "profile-parent",
+      });
+
+    expect(payload.agent.llm).toMatchObject({
+      model: "openhands/parent-profile-model",
+    });
+  });
+
   it("falls back to global settings when the parent's profile reference dangles", async () => {
     vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
       profiles: [],
