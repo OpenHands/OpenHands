@@ -266,6 +266,28 @@ const withAuthStrategyReplacementDeletes = <T extends MCPAuthCredential>(
   return replacement as T;
 };
 
+type HeaderAuthCredential = Extract<MCPAuthCredential, { strategy: "header" }>;
+
+export const MCP_HEADER_REMOVAL_ERROR =
+  "Removing an individual header from header authentication is not supported yet. Replace the credential or clear authentication, then re-enter the headers you want to keep.";
+
+const buildHeaderAuthCredentialPatch = (
+  previous: MCPAuthCredential | null | undefined,
+  edited: HeaderAuthCredential,
+): NonNullable<MCPServerPatch["auth"]> | undefined => {
+  const previousHeaders =
+    previous?.strategy === "header" ? previous.headers : undefined;
+  const headersPatch = buildStringMapPatch(previousHeaders, edited.headers);
+  if (!headersPatch) return undefined;
+  if (Object.values(headersPatch).some((value) => value === null)) {
+    throw new Error(MCP_HEADER_REMOVAL_ERROR);
+  }
+  return {
+    strategy: "header",
+    headers: headersPatch as Record<string, string>,
+  };
+};
+
 const buildOAuthCredentialPatch = (
   previous: MCPAuthCredential | null | undefined,
   edited: OAuthCredential,
@@ -332,6 +354,15 @@ export function buildMcpServerPatch(
   if (edited.auth) {
     if (edited.auth.strategy === "oauth2") {
       const auth = buildOAuthCredentialPatch(previousRemote?.auth, edited.auth);
+      if (auth !== undefined) patch.auth = auth;
+    } else if (
+      edited.auth.strategy === "header" &&
+      previousRemote?.auth?.strategy === "header"
+    ) {
+      const auth = buildHeaderAuthCredentialPatch(
+        previousRemote.auth,
+        edited.auth,
+      );
       if (auth !== undefined) patch.auth = auth;
     } else if (!hasRedactedMcpSecretLeaf(edited.auth)) {
       patch.auth = withAuthStrategyReplacementDeletes(

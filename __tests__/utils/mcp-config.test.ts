@@ -4,6 +4,7 @@ import type { MCPServerConfig } from "#/types/mcp-server";
 import {
   buildMcpServerPatch,
   buildRenameMcpConfigPatch,
+  MCP_HEADER_REMOVAL_ERROR,
   MCP_RENAME_CREDENTIAL_ERROR,
   parseMcpConfig,
   REDACTED_MCP_SECRET_VALUE,
@@ -208,6 +209,69 @@ describe("MCP sparse patches", () => {
       authentication: { type: "oauth", scopes: "mail.read" },
       headers: null,
     });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("applies added and changed header-auth headers while preserving redacted leaves", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "us-east-1",
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "header",
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "eu-west-1",
+          "X-Trace": "on",
+        },
+      },
+    };
+
+    expect(buildMcpServerPatch(stored, edited).auth).toEqual({
+      strategy: "header",
+      headers: { "X-Region": "eu-west-1", "X-Trace": "on" },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("rejects removing an individual header from header auth", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "us-east-1",
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "header",
+        headers: { "X-Region": "eu-west-1" },
+      },
+    };
+
+    expect(() => buildMcpServerPatch(stored, edited)).toThrow(
+      MCP_HEADER_REMOVAL_ERROR,
+    );
   });
 
   it("patches OAuth metadata and a replacement secret without sending redacted state", () => {
