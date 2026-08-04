@@ -97,8 +97,8 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       <div className="flex items-center gap-3">
         <span className="text-sm text-content">{formattedTimestamp}</span>
         {showNoConversationLabel && (
-          <span className="text-xs text-muted italic">
-            ({t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)})
+          <span className="text-xs text-muted">
+            {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
           </span>
         )}
       </div>

@@ -12,6 +12,11 @@
  *   2. **Multiple backends**: A frontend-only instance connects to
  *      two separate backend-only instances and switches between them.
  *
+ *   3. **Pinned backend on sidebar links**: cmd/ctrl-clicking a sidebar
+ *      conversation opens the new tab on the backend that owns the
+ *      conversation, not on whichever backend localStorage happens to
+ *      name (#15573).
+ *
  * These tests spawn their own child processes (not the webServer
  * entries in playwright.mock-llm.config.ts) so each test controls
  * exactly which partial-stack flags and ports are used.
@@ -169,6 +174,119 @@ async function seedBackendAnalyticsConsent(backendUrl: string, apiKey: string) {
     response.ok,
     `failed to seed analytics consent on ${backendUrl}: ${response.status}`,
   ).toBe(true);
+}
+
+/**
+ * Create a conversation directly on a backend, bypassing the UI.
+ *
+ * `POST /api/conversations` requires an agent config but never contacts the
+ * LLM at creation time, so a placeholder `base_url` is enough — this seeds a
+ * sidebar row without any LLM traffic or credentials.
+ */
+async function seedConversation(
+  backendUrl: string,
+  apiKey: string,
+): Promise<string> {
+  const response = await fetch(`${backendUrl}/api/conversations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-API-Key": apiKey,
+    },
+    body: JSON.stringify({
+      workspace: { kind: "LocalWorkspace", working_dir: tmpdir() },
+      agent_settings: {
+        llm: {
+          model: "openai/mock-test-model",
+          api_key: "mock-api-key-for-testing",
+          base_url: "http://127.0.0.1:9/v1",
+        },
+      },
+    }),
+  });
+
+  expect(
+    response.ok,
+    `failed to seed conversation on ${backendUrl}: ${response.status}`,
+  ).toBe(true);
+
+  const { id } = (await response.json()) as { id: string };
+  return id;
+}
+
+/** Add a backend through the sidebar dropdown (post-onboarding path). */
+async function addBackendViaDropdown(
+  page: Page,
+  opts: { name: string; host: string; apiKey: string },
+) {
+  await page.getByTestId("backend-selector").click();
+  await page.getByTestId("add-backend-menu-item").click();
+
+  await expect(page.getByTestId("add-backend-modal")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  // The modal defaults to the Cloud tab; switch to the manual form.
+  await page.getByTestId("add-backend-option-agent-server").click();
+  await expect(page.getByTestId("add-backend-agent-server-panel")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  const nameInput = page.getByTestId("add-backend-name");
+  await nameInput.click();
+  await nameInput.fill(opts.name);
+
+  const hostInput = page.getByTestId("add-backend-host");
+  await hostInput.click();
+  await hostInput.fill(opts.host);
+
+  const keyInput = page.getByTestId("add-backend-api-key");
+  await keyInput.click();
+  await keyInput.fill(opts.apiKey);
+
+  await page.getByTestId("add-backend-submit").click();
+
+  await expect(page.getByTestId("add-backend-modal")).not.toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+/** Switch the active backend through the sidebar selector. */
+async function switchBackendViaSelector(page: Page, name: string) {
+  await page.getByTestId("backend-selector").click();
+  await page.getByRole("option", { name: new RegExp(name, "i") }).click();
+  await page.waitForLoadState("domcontentloaded", { timeout: 20_000 });
+  await dismissAnalyticsModal(page);
+}
+
+/**
+ * Read the active backend id a tab would resolve from a given storage.
+ * `session` is what the current tab uses; `local` is the fallback a
+ * brand-new tab inherits.
+ */
+async function readActiveBackendId(
+  page: Page,
+  scope: "session" | "local",
+): Promise<string | null> {
+  return page.evaluate((which) => {
+    const store =
+      which === "session" ? window.sessionStorage : window.localStorage;
+    const raw = store.getItem("openhands-active-backend");
+    return raw ? (JSON.parse(raw) as { backendId: string }).backendId : null;
+  }, scope);
+}
+
+/** Read the registry id the frontend assigned to a backend, by host. */
+async function readBackendIdByHost(
+  page: Page,
+  host: string,
+): Promise<string | undefined> {
+  return page.evaluate((wanted) => {
+    const raw = window.localStorage.getItem("openhands-backends");
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as { id: string; host: string }[];
+    return parsed.find((b) => b.host === wanted)?.id;
+  }, host);
 }
 
 async function addBackendViaOnboarding(
@@ -526,5 +644,207 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
     const list = page.getByTestId("manage-backends-list");
     await expect(list.getByText("Backend A")).toBeVisible({ timeout: 5_000 });
     await expect(list.getByText("Backend B")).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// 3. Sidebar links pin the backend that owns the conversation (#15573)
+// ───────────────────────────────────────────────────────────────────────
+
+test.describe("cross-connect: sidebar links pin their backend", () => {
+  const children: ChildProcess[] = [];
+  const stateDirs: string[] = [];
+
+  test.afterEach(async () => {
+    await Promise.all(children.map(killChild));
+    children.length = 0;
+    for (const dir of stateDirs) rmSync(dir, { recursive: true, force: true });
+    stateDirs.length = 0;
+  });
+
+  test("cmd-clicking a sidebar conversation opens it on the owning backend", async ({
+    page,
+    context,
+  }) => {
+    // Two backend-only instances via uvx — very slow
+    test.setTimeout(360_000);
+
+    test.skip(
+      !existsSync(join(PROJECT_ROOT, "build/index.html")),
+      "build/index.html missing — skipped (run `npm run build:app` or use the npm e2e config)",
+    );
+
+    // ── 1. Spawn both backends and the frontend ───────────────────────
+    const beEnvA = createIsolatedEnv(CROSS_BE_A_PORT);
+    const beEnvB = createIsolatedEnv(CROSS_BE_B_PORT);
+    const feEnv = createIsolatedEnv(CROSS_FE_PORT);
+    stateDirs.push(beEnvA.stateDir, beEnvB.stateDir, feEnv.stateDir);
+
+    const beOutputA = collectOutput(
+      (() => {
+        const child = spawnAgentCanvas(["--backend-only"], beEnvA.env);
+        children.push(child);
+        return child;
+      })(),
+    );
+    const beOutputB = collectOutput(
+      (() => {
+        const child = spawnAgentCanvas(["--backend-only"], beEnvB.env);
+        children.push(child);
+        return child;
+      })(),
+    );
+    const feOutput = collectOutput(
+      (() => {
+        const child = spawnAgentCanvas(["--frontend-only"], feEnv.env);
+        children.push(child);
+        return child;
+      })(),
+    );
+
+    const feUrl = `http://localhost:${CROSS_FE_PORT}`;
+    const beUrlA = `http://localhost:${CROSS_BE_A_PORT}`;
+    const beUrlB = `http://localhost:${CROSS_BE_B_PORT}`;
+
+    const [feStatus, beStatusA, beStatusB] = await Promise.all([
+      pollUrl(`${feUrl}/`, 60_000),
+      pollUrl(`${beUrlA}/server_info`, 180_000),
+      pollUrl(`${beUrlB}/server_info`, 180_000),
+    ]);
+
+    expect(
+      feStatus,
+      `Frontend-only never ready.\nOutput: ${feOutput.get().slice(-500)}`,
+    ).toBe(200);
+    expect(
+      beStatusA,
+      `Backend A never ready.\nOutput: ${beOutputA.get().slice(-800)}`,
+    ).not.toBeNull();
+    expect(
+      beStatusB,
+      `Backend B never ready.\nOutput: ${beOutputB.get().slice(-800)}`,
+    ).not.toBeNull();
+
+    await Promise.all([
+      seedBackendAnalyticsConsent(beUrlA, beEnvA.sessionKey),
+      seedBackendAnalyticsConsent(beUrlB, beEnvB.sessionKey),
+    ]);
+
+    // ── 2. Seed a conversation that exists ONLY on backend A ──────────
+    const conversationId = await seedConversation(beUrlA, beEnvA.sessionKey);
+
+    // The whole bug depends on this id being unresolvable on B.
+    const onB = await fetch(`${beUrlB}/api/conversations/${conversationId}`, {
+      headers: { "X-Session-API-Key": beEnvB.sessionKey },
+    });
+    expect(onB.status, "seeded conversation must not exist on backend B").toBe(
+      404,
+    );
+
+    // ── 3. Onboard the frontend onto backend A ────────────────────────
+    await suppressAnalytics(page);
+    await page.goto(feUrl, { waitUntil: "domcontentloaded" });
+
+    await addBackendViaOnboarding(page, {
+      name: "Backend A",
+      host: beUrlA,
+      apiKey: beEnvA.sessionKey,
+    });
+    await page.getByTestId("onboarding-skip").click();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await dismissAnalyticsModal(page);
+    await expect(page.getByTestId("home-chat-launcher")).toBeVisible({
+      timeout: 20_000,
+    });
+
+    // ── 4. Register backend B too ─────────────────────────────────────
+    await addBackendViaDropdown(page, {
+      name: "Backend B",
+      host: beUrlB,
+      apiKey: beEnvB.sessionKey,
+    });
+
+    const backendAId = await readBackendIdByHost(page, beUrlA);
+    expect(backendAId, "backend A should be in the registry").toBeTruthy();
+
+    // Adding a backend auto-switches to it (@spec BM-001), so put tab 1
+    // back on A — that is the tab the user cmd-clicks from.
+    await switchBackendViaSelector(page, "Backend A");
+    await expect
+      .poll(() => readActiveBackendId(page, "session"), {
+        message: "tab 1 should be back on backend A",
+        timeout: 20_000,
+      })
+      .toBe(backendAId);
+
+    // ── 5. Reproduce the cross-tab precondition ───────────────────────
+    // The active backend is tab-scoped: reads prefer sessionStorage and
+    // fall back to localStorage. Selecting B in a second tab leaves
+    // localStorage naming B while tab 1's sessionStorage still says A —
+    // and a cmd-clicked tab starts with empty sessionStorage, so it
+    // boots from that localStorage fallback.
+    const otherTab = await context.newPage();
+    await suppressAnalytics(otherTab);
+    await otherTab.goto(feUrl, { waitUntil: "domcontentloaded" });
+    await dismissAnalyticsModal(otherTab);
+
+    await switchBackendViaSelector(otherTab, "Backend B");
+
+    await expect
+      .poll(() => readActiveBackendId(otherTab, "local"), {
+        message: "localStorage should now point at backend B",
+        timeout: 20_000,
+      })
+      .not.toBe(backendAId);
+
+    // Tab 1 must be unaffected — that asymmetry is the whole bug.
+    expect(
+      await readActiveBackendId(page, "session"),
+      "tab 1's session-scoped backend should still be A",
+    ).toBe(backendAId);
+
+    // ── 6. Cmd-click the conversation in tab 1's sidebar ──────────────
+    await page.bringToFront();
+    // Match on the conversation id in the href rather than the title: the
+    // agent-server assigns its own generated title.
+    const card = page
+      .getByTestId("conversation-panel")
+      .locator(`a[href*="${conversationId}"]`)
+      .first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+
+    const href = await card.getAttribute("href");
+
+    const newTabPromise = context.waitForEvent("page");
+    await card.click({ modifiers: ["ControlOrMeta"] });
+    const newTab = await newTabPromise;
+
+    // ── 7. The new tab must resolve the conversation on backend A ─────
+    // A freshly opened tab starts at about:blank, so wait for the real
+    // navigation before reading the URL.
+    await newTab.waitForURL(/\/conversations\//, { timeout: 30_000 });
+    await newTab.waitForLoadState("domcontentloaded", { timeout: 20_000 });
+    await dismissAnalyticsModal(newTab);
+
+    // The user-visible symptom: resolved against B the id 404s, so the
+    // route toasts CONVERSATION$NOT_EXIST_OR_NO_PERMISSION and redirects
+    // to /conversations. Staying put means it resolved against A.
+    await expect
+      .poll(() => new URL(newTab.url()).pathname, {
+        message:
+          "new tab should open the conversation on its owning backend, not bounce home",
+        timeout: 20_000,
+      })
+      .toBe(`/conversations/${conversationId}`);
+
+    await expect(newTab.getByTestId("chat-interface")).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // ── 8. And the mechanism: the link named the owning backend ───────
+    expect(
+      new URL(href ?? "", feUrl).searchParams.get("backend"),
+      "sidebar link should pin backend A",
+    ).toBe(backendAId);
   });
 });

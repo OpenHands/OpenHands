@@ -171,6 +171,7 @@ describe("recommended automations", () => {
       "linear-triage-assistant",
       "jira-issue-to-pr",
       "research-brief-writer",
+      "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
   });
@@ -195,7 +196,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("5")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
