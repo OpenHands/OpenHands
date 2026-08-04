@@ -33,4 +33,12 @@ describe("RunStatusBadge", () => {
       expect(screen.getByTestId(testId)).toBeInTheDocument();
     },
   );
+
+  it("renders a neutral badge for a status the backend added later", () => {
+    const unknownStatus = "ARCHIVED" as AutomationRunStatus;
+
+    render(<RunStatusBadge status={unknownStatus} />);
+
+    expect(screen.getByTestId("run-status-icon-pending")).toBeInTheDocument();
+  });
 });

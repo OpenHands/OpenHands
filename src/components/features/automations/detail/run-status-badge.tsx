@@ -66,6 +66,7 @@ function StatusIcon({ status }: { status: AutomationRunStatus }) {
 
 export function RunStatusBadge({ status }: RunStatusBadgeProps) {
   const { t } = useTranslation("openhands");
+  // Degrade instead of crashing on a status the backend added after this enum.
   const config =
     statusConfig[status] ?? statusConfig[AutomationRunStatus.PENDING];
 

@@ -22,6 +22,11 @@ import {
   getMarketplaceEntryById,
   getMcpMarketplaceCatalog,
 } from "#/utils/mcp-marketplace-utils";
+import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
+import {
+  getAutomationLaunchPrompt,
+  getIntegrationIds,
+} from "#/utils/automation-catalog";
 import { cn } from "#/utils/utils";
 import {
   extensionModuleCardInteractiveClassName,
@@ -55,24 +60,22 @@ export function getAutomationsByPopularity(
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 
-/**
- * Launch allowlist — proven automations featured above the Beta group.
- * NOT derived from popularityRank (slack-standup-digest@94 outranks
- * slack-channel-monitor@92 yet is Beta). A future flag could swap this set.
- */
-export const PROVEN_AUTOMATION_IDS = [
-  "github-pr-reviewer",
-  "github-repo-monitor",
-  "slack-channel-monitor",
-] as const;
-
+// Proven automations are featured above the Beta group. The set is owned by
+// the interface manifest (falling back to the host default), not derived from
+// popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
+// yet is Beta.
 function isProvenAutomation(automation: RecommendedAutomation): boolean {
-  return (PROVEN_AUTOMATION_IDS as readonly string[]).includes(automation.id);
+  return getFeaturedAutomationIds().includes(automation.id);
 }
 
-function getRequiredEntries(automation: RecommendedAutomation) {
+/**
+ * Every integration the automation declares, including the ones it is willing
+ * to start without: the card describes what the automation uses, so an
+ * optional integration still belongs on it.
+ */
+function getIntegrationEntries(automation: RecommendedAutomation) {
   const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
-  return automation.requiredIntegrationIds
+  return getIntegrationIds(automation)
     .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
     .filter((entry): entry is MarketplaceEntry => !!entry);
 }
@@ -88,7 +91,7 @@ function automationMatchesQuery(
     automation.name,
     automation.category,
     automation.description,
-    automation.prompt,
+    getAutomationLaunchPrompt(automation),
     ...entries.map((entry) => entry.name),
     ...entries.flatMap((entry) => entry.keywords ?? []),
   ]
@@ -98,24 +101,24 @@ function automationMatchesQuery(
 }
 
 /**
- * Returns true only when at least one of the automation's required integration
- * IDs resolves to a known marketplace entry.  An empty result means none of
- * the required integrations are in our catalog (or the array itself is empty),
+ * Returns true only when at least one of the automation's integration IDs
+ * resolves to a known marketplace entry.  An empty result means none of the
+ * automation's integrations are in our catalog (or it declares none at all),
  * so there is nothing for the user to set up — hide the card.
  * NOTE: intentionally no local/cloud backend availability filter; every entry
  * with a catalog match is shown regardless of runtimeAvailability.
  */
 function isAutomationAvailable(automation: RecommendedAutomation) {
-  return getRequiredEntries(automation).length > 0;
+  return getIntegrationEntries(automation).length > 0;
 }
 
 function buildRecommendedAutomationPills(
-  requiredEntries: MarketplaceEntry[],
+  integrationEntries: MarketplaceEntry[],
   installedServers: MCPServerConfig[],
   missingCount: number,
   translate: TFunction,
 ): SkillCardPill[] {
-  const pills: SkillCardPill[] = requiredEntries.map((entry) => {
+  const pills: SkillCardPill[] = integrationEntries.map((entry) => {
     const installed = !!findInstalledEntryMatch(entry, installedServers);
 
     return {
@@ -166,8 +169,8 @@ function AutomationCardGrid({
   return (
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
       {automations.map((automation) => {
-        const requiredEntries = getRequiredEntries(automation);
-        const missingCount = requiredEntries.filter(
+        const integrationEntries = getIntegrationEntries(automation);
+        const missingCount = integrationEntries.filter(
           (entry) => !findInstalledEntryMatch(entry, installedServers),
         ).length;
 
@@ -184,7 +187,7 @@ function AutomationCardGrid({
           >
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <McpLogoStackBadge
-                entries={requiredEntries}
+                entries={integrationEntries}
                 testId={`recommended-automation-icon-${automation.id}`}
               />
               <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -207,7 +210,7 @@ function AutomationCardGrid({
 
                 <SkillCardPillRow
                   pills={buildRecommendedAutomationPills(
-                    requiredEntries,
+                    integrationEntries,
                     installedServers,
                     missingCount,
                     translate,
@@ -233,10 +236,10 @@ export function RecommendedAutomationsSection({
   const { t } = useTranslation("openhands");
 
   const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) => {
-    const requiredEntries = getRequiredEntries(automation);
+    const integrationEntries = getIntegrationEntries(automation);
     return (
       isAutomationAvailable(automation) &&
-      automationMatchesQuery(automation, requiredEntries, query)
+      automationMatchesQuery(automation, integrationEntries, query)
     );
   });
 
