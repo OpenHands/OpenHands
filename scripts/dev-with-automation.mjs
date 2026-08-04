@@ -957,9 +957,17 @@ function shutdown() {
   }, 3000);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-process.on("SIGHUP", shutdown);
+// Signal handlers are process-global, so registering them at module scope means
+// merely importing this file for its helpers takes over the importer's signal
+// behaviour. dev-static.mjs, static-build.mjs, bin/agent-canvas.mjs and
+// electron/main.mjs all import from here; the ones that own their own lifecycle
+// end up with two shutdown paths racing on the same signal. Register only when a
+// process actually owns the lifecycle, by calling this from main().
+function installSignalHandlers(handler = shutdown) {
+  process.on("SIGINT", handler);
+  process.on("SIGTERM", handler);
+  process.on("SIGHUP", handler);
+}
 
 function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
@@ -1278,6 +1286,12 @@ async function main(options = {}) {
   // `spawnService` call (e.g. by future setup steps) are also captured.
   setServiceLogListener(onServiceLog);
 
+  // Registered here rather than at module scope: from this point on the process
+  // owns the lifecycle, and the services spawned below are detached
+  // process-group leaders that would otherwise outlive it. Ahead of the
+  // prerequisite checks, which can exit before any service starts.
+  installSignalHandlers();
+
   const args = parseArgs();
 
   // Allow options to override CLI args for public mode
@@ -1500,6 +1514,7 @@ export {
   buildViteBackendEnv,
   getFrontendBackend,
   getLocalServiceRoutes,
+  installSignalHandlers,
   main,
   registerShutdownHook,
   spawnService,

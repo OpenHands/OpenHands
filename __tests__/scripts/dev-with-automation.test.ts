@@ -630,6 +630,80 @@ describe("setServiceLogListener", () => {
   });
 });
 
+describe("dev-with-automation signal handler ownership", () => {
+  const moduleUrl = pathToFileURL(
+    path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+  ).href;
+
+  const runChild = async (source: string) => {
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", source],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
+    await once(child, "exit");
+    return output;
+  };
+
+  const PRELUDE = [
+    'import { writeSync } from "node:fs";',
+    'const signals = ["SIGINT", "SIGTERM", "SIGHUP"];',
+    "const counts = () =>",
+    "  Object.fromEntries(signals.map((s) => [s, process.listenerCount(s)]));",
+  ].join("\n");
+
+  it("does not install signal handlers when the module is only imported", async () => {
+    const output = await runChild(
+      [
+        PRELUDE,
+        "const before = counts();",
+        `await import(${JSON.stringify(moduleUrl)});`,
+        'writeSync(1, "COUNTS " + JSON.stringify({ before, after: counts() }) + "\\n");',
+      ].join("\n"),
+    );
+    const match = output.match(/COUNTS (\{.*\})/);
+    expect(match, output).not.toBeNull();
+    expect(JSON.parse(match![1])).toEqual({
+      before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+      after: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+    });
+  });
+
+  // Guards the wiring, not just the helper: deleting the installSignalHandlers()
+  // call from main() must turn this red. Counts are reported from an `exit` hook
+  // because main() can exit synchronously on a failed prerequisite check before
+  // control returns here, and installSignalHandlers() runs ahead of that.
+  it("installs signal handlers when main() runs", async () => {
+    const output = await runChild(
+      [
+        PRELUDE,
+        `const mod = await import(${JSON.stringify(moduleUrl)});`,
+        "const before = counts();",
+        "process.on('exit', () => {",
+        '  writeSync(1, "COUNTS " + JSON.stringify({ before, after: counts() }) + "\\n");',
+        "});",
+        "try {",
+        "  const pending = mod.main({});",
+        '  if (pending && typeof pending.catch === "function") pending.catch(() => {});',
+        "} catch {}",
+        "process.exit(0);",
+      ].join("\n"),
+    );
+    const match = output.match(/COUNTS (\{.*\})/);
+    expect(match, output).not.toBeNull();
+    expect(JSON.parse(match![1])).toEqual({
+      before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+      after: { SIGINT: 1, SIGTERM: 1, SIGHUP: 1 },
+    });
+  });
+});
+
 describe("dev-with-automation CLI", () => {
   it.skipIf(process.platform === "win32")(
     "cleans up detached services when the launcher receives SIGHUP",
@@ -643,7 +717,11 @@ describe("dev-with-automation CLI", () => {
         'server.listen(0, "127.0.0.1", () => console.log("READY", process.pid, server.address().port));',
       ].join("\n");
       const supervisorSource = [
-        `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
+        `import { spawnService, installSignalHandlers } from ${JSON.stringify(moduleUrl)};`,
+        // main() would start the real stack, so install the same handlers it
+        // installs. That the shipped main() actually calls this is covered by
+        // "installs signal handlers when main() runs" above.
+        "installSignalHandlers();",
         `const fixture = spawnService("fixture", process.execPath, ["--input-type=module", "--eval", ${JSON.stringify(fixtureSource)}]);`,
         'console.log("SPAWNED", fixture.pid);',
         "setInterval(() => {}, 1_000);",
