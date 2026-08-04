@@ -7,17 +7,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { FeaturedAutomationsSection } from "#/components/features/home/featured-automations/featured-automations-section";
+import { PinnedAutomationsDashboard } from "#/components/features/home/featured-automations/pinned-automations-dashboard";
+import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
 import { NavigationProvider } from "#/context/navigation-context";
+import { HOME_PINNED_AUTOMATIONS_KEY } from "#/hooks/use-home-pinned-automations";
 import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { name?: string; count?: number }) => {
+      if (options?.name) return `${key}:${options.name}`;
+      if (options?.count != null) return `${key}:${options.count}`;
+      return key;
+    },
     i18n: { language: "en" },
   }),
 }));
@@ -27,7 +34,15 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
     checkHealth: vi.fn(),
     getAutomations: vi.fn(),
     getAutomationRuns: vi.fn(),
+    dispatchAutomation: vi.fn(),
+    toggleAutomation: vi.fn(),
+    cancelAutomationRun: vi.fn(),
   },
+}));
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
 }));
 
 vi.mock(
@@ -90,7 +105,15 @@ function makeConversation(id: string, title: string | null): AppConversation {
   };
 }
 
-function renderSection() {
+/** Pins are stored under a backend/org-scoped key; find it by prefix. */
+function getStoredPinnedIds(): string | null {
+  const key = Object.keys(window.localStorage).find((storageKey) =>
+    storageKey.startsWith(HOME_PINNED_AUTOMATIONS_KEY),
+  );
+  return key ? window.localStorage.getItem(key) : null;
+}
+
+function renderHomeAutomations(ui: React.ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -104,7 +127,7 @@ function renderSection() {
           navigate: vi.fn(),
         }}
       >
-        <FeaturedAutomationsSection />
+        {ui}
       </NavigationProvider>
     </QueryClientProvider>,
   );
@@ -112,7 +135,7 @@ function renderSection() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.sessionStorage.clear();
+  window.localStorage.clear();
   vi.mocked(AutomationService.checkHealth).mockResolvedValue({ status: "ok" });
   vi.mocked(AutomationService.getAutomations).mockResolvedValue({
     automations: [makeAutomation()],
@@ -122,26 +145,28 @@ beforeEach(() => {
     runs: [makeRun()],
     total: 1,
   });
+  vi.mocked(AutomationService.dispatchAutomation).mockResolvedValue(makeRun());
+  vi.mocked(AutomationService.toggleAutomation).mockResolvedValue(
+    makeAutomation({ enabled: false }),
+  );
   vi.mocked(
     AgentServerConversationService.batchGetAppConversations,
   ).mockResolvedValue([]);
 });
 
-describe("FeaturedAutomationsSection", () => {
-  it("exposes a chip with accessible last-run health per enabled automation and omits disabled ones", async () => {
+describe("home automations composer layout", () => {
+  it("lists rows with accessible health labels and a manage control", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [
         makeAutomation({ id: "auto-1", name: "Daily digest" }),
         makeAutomation({ id: "auto-2", name: "PR review" }),
-        makeAutomation({ id: "auto-3", name: "Nightly sweep" }),
-        makeAutomation({ id: "auto-4", name: "Repo monitor" }),
         makeAutomation({
-          id: "auto-5",
+          id: "auto-3",
           name: "Disabled sweep",
           enabled: false,
         }),
       ],
-      total: 5,
+      total: 3,
     });
     vi.mocked(AutomationService.getAutomationRuns).mockImplementation(
       async (id: string) => {
@@ -157,44 +182,27 @@ describe("FeaturedAutomationsSection", () => {
             total: 1,
           };
         }
-        if (id === "auto-3") {
-          return {
-            runs: [
-              makeRun({ id: "run-3", status: AutomationRunStatus.CANCELLED }),
-            ],
-            total: 1,
-          };
-        }
-        if (id === "auto-4") {
-          return { runs: [], total: 0 };
-        }
         return { runs: [makeRun()], total: 1 };
       },
     );
 
-    renderSection();
+    renderHomeAutomations(<RunningAutomationsList />);
 
     expect(
-      await screen.findByRole("button", {
+      await screen.findByRole("link", {
         name: /Daily digest\s*FEATURED_AUTOMATIONS\$LAST_RUN_SUCCEEDED/,
       }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", {
+      await screen.findByRole("link", {
         name: /PR review\s*FEATURED_AUTOMATIONS\$LAST_RUN_FAILED/,
       }),
     ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", {
-        name: /Nightly sweep\s*FEATURED_AUTOMATIONS\$STATUS_UNKNOWN/,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", {
-        name: /Repo monitor\s*AUTOMATIONS\$DETAIL\$NO_RUNS/,
-      }),
-    ).toBeInTheDocument();
     expect(screen.queryByText("Disabled sweep")).not.toBeInTheDocument();
+    expect(screen.getByTestId("home-automations-manage")).toHaveAttribute(
+      "href",
+      "/automations",
+    );
   });
 
   it("renders nothing when the automation service is unavailable", async () => {
@@ -203,13 +211,13 @@ describe("FeaturedAutomationsSection", () => {
       message: "unreachable",
     });
 
-    renderSection();
+    renderHomeAutomations(<RunningAutomationsList />);
 
     await waitFor(() =>
       expect(AutomationService.checkHealth).toHaveBeenCalledTimes(1),
     );
     expect(
-      screen.queryByTestId("featured-automations-section"),
+      screen.queryByTestId("running-automations-list"),
     ).not.toBeInTheDocument();
     expect(AutomationService.getAutomations).not.toHaveBeenCalled();
   });
@@ -220,17 +228,136 @@ describe("FeaturedAutomationsSection", () => {
       total: 1,
     });
 
-    renderSection();
+    renderHomeAutomations(<RunningAutomationsList />);
 
     await waitFor(() =>
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1),
     );
     expect(
-      screen.queryByTestId("featured-automations-section"),
+      screen.queryByTestId("running-automations-list"),
     ).not.toBeInTheDocument();
   });
 
-  it("featuring an automation shows an expanded card linking to the run's conversation", async () => {
+  it("lists enabled automations with live run status and conversation links", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [
+        makeAutomation({ id: "auto-1", name: "Daily digest" }),
+        makeAutomation({
+          id: "auto-2",
+          name: "PR review",
+          trigger: {
+            type: "event",
+            source: "github",
+            on: "pull_request.opened",
+          },
+        }),
+      ],
+      total: 2,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockImplementation(
+      async (id: string) => {
+        if (id === "auto-2") {
+          return {
+            runs: [
+              makeRun({
+                id: "run-2",
+                status: AutomationRunStatus.PENDING,
+                conversation_id: null,
+                started_at: "1970-01-01T00:00:00Z",
+                completed_at: null,
+              }),
+            ],
+            total: 1,
+          };
+        }
+        return { runs: [makeRun()], total: 1 };
+      },
+    );
+
+    renderHomeAutomations(<RunningAutomationsList />);
+
+    expect(
+      await screen.findByTestId("running-automations-list"),
+    ).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: /Daily digest/ })).toHaveAttribute(
+      "href",
+      "/conversations/conv-1",
+    );
+    expect(screen.getByRole("link", { name: /PR review/ })).toHaveAttribute(
+      "href",
+      "/automations/auto-2",
+    );
+    expect(
+      screen.getByText("Daily at 09:00", { exact: false }),
+    ).toBeInTheDocument();
+  });
+
+  it("previews 10 rows, expands with View more, then offers View All at 20", async () => {
+    const automations = Array.from({ length: 20 }, (_, index) =>
+      makeAutomation({
+        id: `auto-${index + 1}`,
+        name: `Automation ${index + 1}`,
+      }),
+    );
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations,
+      total: 20,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [makeRun()],
+      total: 1,
+    });
+    const user = userEvent.setup();
+
+    renderHomeAutomations(<RunningAutomationsList />);
+
+    expect(
+      await screen.findByTestId("running-automations-list"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Automation 1")).toBeInTheDocument();
+    expect(screen.getByText("Automation 10")).toBeInTheDocument();
+    expect(screen.queryByText("Automation 11")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("home-automations-view-more"));
+
+    expect(screen.getByText("Automation 11")).toBeInTheDocument();
+    expect(screen.getByText("Automation 20")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("home-automations-view-more"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("home-automations-view-all")).toHaveAttribute(
+      "href",
+      "/automations",
+    );
+  });
+
+  it("pins from the row menu into a rich dashboard card with conversation title and failure detail", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [
+        makeAutomation({ id: "auto-1", name: "Daily digest" }),
+        makeAutomation({ id: "auto-2", name: "PR review" }),
+      ],
+      total: 2,
+    });
+    vi.mocked(AutomationService.getAutomationRuns).mockImplementation(
+      async (id: string) => {
+        if (id === "auto-2") {
+          return {
+            runs: [
+              makeRun({
+                id: "run-2",
+                status: AutomationRunStatus.FAILED,
+                conversation_id: null,
+                error_detail: "sandbox timeout",
+              }),
+            ],
+            total: 1,
+          };
+        }
+        return { runs: [makeRun()], total: 1 };
+      },
+    );
     vi.mocked(
       AgentServerConversationService.batchGetAppConversations,
     ).mockResolvedValue([
@@ -238,87 +365,102 @@ describe("FeaturedAutomationsSection", () => {
     ]);
     const user = userEvent.setup();
 
-    renderSection();
-    const chip = await screen.findByRole("button", { name: /Daily digest/ });
-    await user.click(chip);
-
-    expect(chip).toHaveAttribute("aria-pressed", "true");
-    const conversationLink = await screen.findByRole("link", {
-      name: "Reviewed the release PR",
-    });
-    expect(conversationLink).toHaveAttribute("href", "/conversations/conv-1");
-  });
-
-  it("clicking a featured chip again removes its card", async () => {
-    const user = userEvent.setup();
-
-    renderSection();
-    const chip = await screen.findByRole("button", { name: /Daily digest/ });
-    await user.click(chip);
-    await screen.findByRole("article");
-
-    await user.click(chip);
-
-    expect(chip).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByRole("article")).not.toBeInTheDocument();
-  });
-
-  it("shows the error detail and missing-conversation note for a failed run", async () => {
-    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
-      runs: [
-        makeRun({
-          status: AutomationRunStatus.FAILED,
-          conversation_id: null,
-          bash_command_id: null,
-          error_detail: "Process exited with code 1",
-        }),
-      ],
-      total: 1,
-    });
-    const user = userEvent.setup();
-
-    renderSection();
-    await user.click(
-      await screen.findByRole("button", { name: /Daily digest/ }),
+    renderHomeAutomations(
+      <>
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
+      </>,
     );
 
-    const card = await screen.findByRole("article");
     expect(
-      within(card).getByText("Process exited with code 1"),
+      await screen.findByTestId("running-automations-list"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    expect(
+      screen.getByTestId("running-automation-run-auto-1"),
     ).toBeInTheDocument();
     expect(
-      within(card).getByText(/AUTOMATIONS\$DETAIL\$NO_CONVERSATION/),
+      screen.getByTestId("running-automation-view-auto-1"),
     ).toBeInTheDocument();
     expect(
-      within(card).queryByRole("link", {
-        name: "FEATURED_AUTOMATIONS$VIEW_CONVERSATION",
+      screen.getByTestId("running-automation-edit-auto-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("running-automation-turn-off-auto-1"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
+
+    const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    expect(
+      within(dashboard).getByTestId("pinned-automation-card-auto-1"),
+    ).toBeInTheDocument();
+    expect(
+      await within(dashboard).findByRole("link", {
+        name: "Reviewed the release PR",
       }),
+    ).toHaveAttribute("href", "/conversations/conv-1");
+
+    await user.click(screen.getByTestId("running-automation-menu-auto-2"));
+    await user.click(screen.getByTestId("running-automation-pin-auto-2"));
+    expect(
+      await within(dashboard).findByText("sandbox timeout"),
+    ).toBeInTheDocument();
+    expect(
+      within(dashboard).getByText("AUTOMATIONS$DETAIL$NO_CONVERSATION"),
+    ).toBeInTheDocument();
+
+    expect(getStoredPinnedIds()).toContain("auto-1");
+
+    await user.click(screen.getByTestId("pinned-automation-menu-auto-1"));
+    expect(
+      screen.getByTestId("pinned-automation-run-auto-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("pinned-automation-view-auto-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("pinned-automation-edit-auto-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("pinned-automation-turn-off-auto-1"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("pinned-automation-run-auto-1"));
+    await waitFor(() => {
+      expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith(
+        "auto-1",
+      );
+    });
+
+    await user.click(screen.getByTestId("pinned-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("unpin-automation-auto-1"));
+    expect(
+      screen.queryByTestId("pinned-automation-card-auto-1"),
     ).not.toBeInTheDocument();
   });
 
-  it("keeps the featured selection for the session across remounts", async () => {
+  it("shows an error toast when turning an automation off fails", async () => {
+    vi.mocked(AutomationService.toggleAutomation).mockRejectedValue(
+      new Error("backend unavailable"),
+    );
     const user = userEvent.setup();
 
-    const { unmount } = renderSection();
-    await user.click(
-      await screen.findByRole("button", { name: /Daily digest/ }),
-    );
-    await screen.findByRole("article");
-    unmount();
+    renderHomeAutomations(<RunningAutomationsList />);
 
-    renderSection();
+    await screen.findByTestId("running-automations-list");
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-turn-off-auto-1"));
+    await user.click(screen.getByTestId("turn-off-automation-confirm"));
 
-    const chip = await screen.findByRole("button", { name: /Daily digest/ });
-    await waitFor(() => expect(chip).toHaveAttribute("aria-pressed", "true"));
-    expect(await screen.findByRole("article")).toBeInTheDocument();
-  });
-
-  it("links the add control to the automations page", async () => {
-    renderSection();
-
-    const manageLink = await screen.findByRole("link", {
-      name: "FEATURED_AUTOMATIONS$MANAGE",
+    await waitFor(() => {
+      expect(AutomationService.toggleAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        false,
+      );
     });
-    expect(manageLink).toHaveAttribute("href", "/automations");
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalled();
+    });
   });
 });
