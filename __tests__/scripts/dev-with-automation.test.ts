@@ -675,6 +675,63 @@ describe("dev-with-automation CLI", () => {
     });
   });
 
+  it("installs signal handlers when main is called", async () => {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const stateDir = mkdtempSync(
+      path.join(tmpdir(), "agent-canvas-main-handlers-"),
+    );
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+const before = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)]));
+const { main } = await import(${JSON.stringify(moduleUrl)});
+process.argv = [process.execPath, "dev-with-automation.mjs", "--frontend-only", "--backend-only"];
+let mainError;
+try {
+  await main({});
+} catch (error) {
+  mainError = error;
+}
+if (!mainError?.message.includes("cannot be used together")) {
+  throw mainError ?? new Error("Expected mutually exclusive launch modes to reject");
+}
+const after = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)]));
+process.stdout.write(` +
+          "`\n${JSON.stringify({ before, after })}\n`" +
+          `);`,
+      ],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, OH_CANVAS_SAFE_STATE_DIR: stateDir },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      const [code] = await once(child, "exit");
+      expect(code, output).toBe(0);
+      const result = JSON.parse(output.trim().split("\n").at(-1) ?? "");
+      expect(result).toEqual({
+        before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+        after: { SIGINT: 1, SIGTERM: 1, SIGHUP: 1 },
+      });
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === "win32")(
     "cleans up detached services when the launcher receives SIGHUP",
     async () => {
