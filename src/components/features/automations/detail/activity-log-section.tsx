@@ -2,9 +2,14 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useAutomationRuns } from "#/hooks/query/use-automation-detail";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useTracking } from "#/hooks/use-tracking";
 import ActivityIcon from "#/icons/activity.svg?react";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import { downloadActivityLogExport } from "#/utils/automation-activity-log-export";
+import type { ActivityLogExportFormat, Automation } from "#/types/automation";
 import { ActivityLogItem } from "./activity-log-item";
-import type { Automation } from "#/types/automation";
 
 interface ActivityLogSectionProps {
   automation: Automation;
@@ -14,7 +19,10 @@ const PAGE_SIZE = 20;
 
 export function ActivityLogSection({ automation }: ActivityLogSectionProps) {
   const { t } = useTranslation("openhands");
+  const active = useActiveBackend();
+  const { trackAutomationActivityLogExported } = useTracking();
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const [isExporting, setIsExporting] = useState(false);
   const { data, isLoading } = useAutomationRuns({
     id: automation.id,
     limit,
@@ -22,6 +30,32 @@ export function ActivityLogSection({ automation }: ActivityLogSectionProps) {
   });
 
   const hasMore = data ? data.total > data.runs.length : false;
+  const canExport = !isLoading && (data?.total ?? 0) > 0 && !isExporting;
+
+  const handleExport = async (format: ActivityLogExportFormat) => {
+    if (!canExport) return;
+    setIsExporting(true);
+    try {
+      await downloadActivityLogExport({
+        automation,
+        format,
+        conversationBaseUrl: window.location.origin,
+      });
+      trackAutomationActivityLogExported({
+        backendKind: active.backend.kind,
+        format,
+      });
+    } catch (error) {
+      displayErrorToast(
+        getApiErrorMessage(
+          error,
+          t(I18nKey.AUTOMATIONS$DETAIL$EXPORT_ACTIVITY_LOG_ERROR),
+        ),
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-[var(--oh-border)] bg-[var(--oh-surface)]">
@@ -32,6 +66,26 @@ export function ActivityLogSection({ automation }: ActivityLogSectionProps) {
         <h3 className="text-sm font-medium text-content">
           {t(I18nKey.AUTOMATIONS$DETAIL$ACTIVITY_LOG)}
         </h3>
+        <div className="ml-auto flex items-center gap-3">
+          <button
+            type="button"
+            data-testid="activity-log-export-json"
+            disabled={!canExport}
+            onClick={() => void handleExport("json")}
+            className="text-sm text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t(I18nKey.AUTOMATIONS$DETAIL$EXPORT_JSON)}
+          </button>
+          <button
+            type="button"
+            data-testid="activity-log-export-csv"
+            disabled={!canExport}
+            onClick={() => void handleExport("csv")}
+            className="text-sm text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t(I18nKey.AUTOMATIONS$DETAIL$EXPORT_CSV)}
+          </button>
+        </div>
       </div>
 
       {isLoading && (

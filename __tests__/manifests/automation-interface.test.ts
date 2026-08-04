@@ -45,7 +45,7 @@ describe("the automation interface seam", () => {
       detailPath: "/automations/a%2Fb",
       createEndpoint: "/v1/preset/prompt",
       dispatchEndpoint: "/v1/id-1/dispatch",
-      timeoutMax: 1800,
+      timeoutMax: null,
       filenameSuffix: ".automation.json",
       featured: [
         "github-pr-reviewer",
@@ -116,8 +116,9 @@ describe("the automation interface seam", () => {
 
     // Assert — nothing from the rejected manifest leaks through, and the
     // rejection is reported rather than silent.
-    expect({ listTitle: copy.listTitle, warned: warn.mock.calls.length }).toEqual(
-      { listTitle: null, warned: 1 },
-    );
+    expect({
+      listTitle: copy.listTitle,
+      warned: warn.mock.calls.length,
+    }).toEqual({ listTitle: null, warned: 1 });
   });
 });
