@@ -24,6 +24,9 @@ const useMetricsStore = create<MetricsStore>((set) => ({
   setMetrics: (metrics) => set(metrics),
 }));
 
+// Dev-only console handle for inspecting the live WS metrics while
+// debugging the usage meter (window.__OH_METRICS_STORE__.getState()).
+// Gated on import.meta.env.DEV so it never reaches production builds.
 if (typeof window !== "undefined" && import.meta.env.DEV) {
   (
     window as unknown as { __OH_METRICS_STORE__?: typeof useMetricsStore }
