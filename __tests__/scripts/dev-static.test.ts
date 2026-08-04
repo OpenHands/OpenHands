@@ -66,7 +66,9 @@ describe("dev-static signal handler ownership", () => {
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    await once(child, "exit");
+    // "close" rather than "exit": exit can fire before the stdio pipes are
+    // drained, and this test parses the child's stdout for its result.
+    await once(child, "close");
 
     const match = output.match(/COUNTS (\{.*\})/);
     expect(match, output).not.toBeNull();

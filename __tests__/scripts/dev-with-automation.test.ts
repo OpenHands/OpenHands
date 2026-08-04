@@ -647,7 +647,9 @@ describe("dev-with-automation signal handler ownership", () => {
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => (output += chunk.toString()));
     child.stderr.on("data", (chunk: Buffer) => (output += chunk.toString()));
-    await once(child, "exit");
+    // "close" rather than "exit": exit can fire before the stdio pipes are
+    // drained, and these tests parse the child's stdout for their result.
+    await once(child, "close");
     return output;
   };
 
