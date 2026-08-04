@@ -329,8 +329,9 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
 
   if (setup.mode === "direct") {
     check.templateValue(setup.prompt, "setup.prompt");
-    // Optional here: it seeds the fallback conversation offered when the
-    // deployment cannot run the direct path.
+    // A direct entry may carry a fallback-conversation seed for deployments
+    // that cannot run the direct path, held to the same rules as an assisted
+    // message.
     if (setup.message !== undefined) checkMessage(check, setup.message);
 
     // The derivation reads a single trigger kind, and an event trigger takes

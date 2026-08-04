@@ -11,12 +11,12 @@ describe("validateAutomationTimeout", () => {
     expect(result).toEqual({ value: null });
   });
 
-  it("accepts a positive integer up to the maximum", () => {
+  it("accepts a positive integer up to a deployment-provided maximum", () => {
     // Arrange / Act
-    const result = validateAutomationTimeout("1800");
+    const result = validateAutomationTimeout("900", 900);
 
     // Assert
-    expect(result).toEqual({ value: 1800 });
+    expect(result).toEqual({ value: 900 });
   });
 
   it("rejects a non-integer value", () => {
@@ -41,7 +41,7 @@ describe("validateAutomationTimeout", () => {
 
   it("rejects a value above the maximum", () => {
     // Arrange / Act
-    const result = validateAutomationTimeout("1801");
+    const result = validateAutomationTimeout("901", 900);
 
     // Assert
     expect(result).toEqual({

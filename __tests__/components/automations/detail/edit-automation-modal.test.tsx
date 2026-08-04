@@ -22,6 +22,7 @@ import type { Backend } from "#/api/backend-registry/types";
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     updateAutomation: vi.fn(),
+    getCapabilities: vi.fn(),
   },
 }));
 
@@ -56,7 +57,9 @@ vi.mock("#/manifests/automation-interface", async (importOriginal) => {
     await importOriginal<typeof import("#/manifests/automation-interface")>();
   return {
     ...actual,
-    getAttributeSpec: (name: Parameters<typeof actual.getAttributeSpec>[0]) => ({
+    getAttributeSpec: (
+      name: Parameters<typeof actual.getAttributeSpec>[0],
+    ) => ({
       ...actual.getAttributeSpec(name),
       ...specOverrides.current[name],
     }),
@@ -131,11 +134,7 @@ function renderModal(automation: Automation) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <EditAutomationModal
-          automation={automation}
-          isOpen
-          onClose={onClose}
-        />
+        <EditAutomationModal automation={automation} isOpen onClose={onClose} />
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
@@ -152,6 +151,15 @@ beforeEach(() => {
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
     active_profile: null,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    maxAutomationTimeoutSeconds: 900,
+    triggerKinds: ["cron"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+    features: [],
   });
 });
 
@@ -386,7 +394,7 @@ describe("EditAutomationModal", () => {
     // Arrange — automation currently times out after 600s.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       ...timeoutAutomation,
-      timeout: 1800,
+      timeout: 900,
     });
     const user = userEvent.setup();
     renderModal(timeoutAutomation);
@@ -397,9 +405,9 @@ describe("EditAutomationModal", () => {
     ) as HTMLInputElement;
     expect(timeoutInput.value).toBe("600");
 
-    // Act — raise the timeout to the 1800s maximum and save.
+    // Act — raise the timeout to the deployment's 900-second maximum and save.
     await user.clear(timeoutInput);
-    await user.type(timeoutInput, "1800");
+    await user.type(timeoutInput, "900");
     await user.click(screen.getByTestId("edit-automation-save"));
 
     // Assert — the PATCH carries just the new timeout.
@@ -407,7 +415,7 @@ describe("EditAutomationModal", () => {
       expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
     });
     expect(AutomationService.updateAutomation).toHaveBeenCalledWith("auto-4", {
-      timeout: 1800,
+      timeout: 900,
     });
   });
 
@@ -437,11 +445,17 @@ describe("EditAutomationModal", () => {
     // Arrange
     const user = userEvent.setup();
     renderModal(timeoutAutomation);
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "900",
+      );
+    });
 
-    // Act — enter a timeout beyond the 1800s cap and try to save.
+    // Act — enter a timeout beyond the deployment's cap and try to save.
     const timeoutInput = screen.getByTestId("edit-automation-timeout");
     await user.clear(timeoutInput);
-    await user.type(timeoutInput, "2000");
+    await user.type(timeoutInput, "901");
     await user.click(screen.getByTestId("edit-automation-save"));
 
     // Assert — no PATCH fired, inline error appears.
@@ -449,6 +463,34 @@ describe("EditAutomationModal", () => {
     expect(
       screen.getByTestId("edit-automation-timeout-error"),
     ).toBeInTheDocument();
+  });
+
+  it("never lets the manifest raise the deployment timeout ceiling", async () => {
+    // Arrange — the manifest offers 1200 seconds while the service owns 900.
+    specOverrides.current = { timeout: { max: 1200 } };
+    renderModal(timeoutAutomation);
+
+    // Assert — the service value is the effective maximum.
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "900",
+      );
+    });
+  });
+
+  it("lets the manifest lower the deployment timeout ceiling", async () => {
+    // Arrange — this automation surface imposes a stricter product policy.
+    specOverrides.current = { timeout: { max: 600 } };
+    renderModal(timeoutAutomation);
+
+    // Assert — the lower manifest value wins over the service maximum.
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "600",
+      );
+    });
   });
 
   it("renders only the attributes the interface manifest declares, with its copy", async () => {

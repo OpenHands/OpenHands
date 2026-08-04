@@ -129,6 +129,8 @@ export type SetupFormValues = Record<string, string>;
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
   ready: boolean;
+  /** Absolute timeout ceiling enforced by this deployment's automation API. */
+  maxAutomationTimeoutSeconds?: number;
   triggerKinds: string[];
   eventSources: string[];
   eventTypes: string[];

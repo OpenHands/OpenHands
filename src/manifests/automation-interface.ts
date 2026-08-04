@@ -12,7 +12,6 @@
  */
 
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
-import { AUTOMATION_TIMEOUT_MAX_SECONDS } from "#/utils/automation-timeout";
 import { validateInterfaceManifest } from "./interface-validation";
 import { AUTOMATION_INTERFACE_CANDIDATE } from "./manifest-sources";
 import type {
@@ -127,7 +126,7 @@ const DEFAULT_ATTRIBUTES: Record<AutomationAttributeName, AttributeSpec> = {
     help: null,
     required: false,
     min: 1,
-    max: AUTOMATION_TIMEOUT_MAX_SECONDS,
+    max: null,
   },
   schedule: {
     present: true,
