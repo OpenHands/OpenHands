@@ -1,9 +1,30 @@
+import React from "react";
 import { describe, expect, it, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { NavigationProvider } from "#/context/navigation-context";
 import { useTaskList } from "#/hooks/use-task-list";
 import { useEventStore } from "#/stores/use-event-store";
 import type { OHEvent } from "#/stores/use-event-store";
 import type { MessageEvent } from "#/types/agent-server/core";
+import { seedConversationEvents } from "../helpers/seed-conversation-events";
+
+
+const CONVERSATION_ID = "test-conversation-id";
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <NavigationProvider
+      value={{
+        currentPath: `/conversations/${CONVERSATION_ID}`,
+        conversationId: CONVERSATION_ID,
+        isNavigating: false,
+        navigate: () => undefined,
+      }}
+    >
+      {children}
+    </NavigationProvider>
+  );
+}
 
 function createTaskTrackerObservation(
   id: string,
@@ -45,16 +66,12 @@ function createUserMessage(id: string): MessageEvent {
 }
 
 beforeEach(() => {
-  useEventStore.setState({
-    events: [],
-    eventIds: new Set(),
-    uiEvents: [],
-  });
+  useEventStore.getState().clearEvents();
 });
 
 describe("useTaskList", () => {
   it("returns empty taskList and hasTaskList=false when no events exist", () => {
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([]);
     expect(result.current.hasTaskList).toBe(false);
@@ -62,13 +79,9 @@ describe("useTaskList", () => {
 
   it("returns empty taskList when no task tracking observations exist", () => {
     const event = createUserMessage("1");
-    useEventStore.setState({
-      events: [event],
-      eventIds: new Set(["1"]),
-      uiEvents: [],
-    });
+    seedConversationEvents("test-conversation-id", [event], []);
 
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([]);
     expect(result.current.hasTaskList).toBe(false);
@@ -85,13 +98,9 @@ describe("useTaskList", () => {
     ];
     const event = createTaskTrackerObservation("1", "plan", tasks);
 
-    useEventStore.setState({
-      events: [event],
-      eventIds: new Set(["1"]),
-      uiEvents: [event],
-    });
+    seedConversationEvents("test-conversation-id", [event], [event]);
 
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([
       { id: "1", title: "First task", notes: undefined, status: "todo" },
@@ -109,13 +118,9 @@ describe("useTaskList", () => {
     const tasks = [{ title: "First task", notes: "", status: "todo" as const }];
     const event = createTaskTrackerObservation("1", "view", tasks);
 
-    useEventStore.setState({
-      events: [event],
-      eventIds: new Set(["1"]),
-      uiEvents: [event],
-    });
+    seedConversationEvents("test-conversation-id", [event], [event]);
 
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([]);
     expect(result.current.hasTaskList).toBe(false);
@@ -133,13 +138,9 @@ describe("useTaskList", () => {
     const event1 = createTaskTrackerObservation("1", "plan", earlyTasks);
     const event2 = createTaskTrackerObservation("2", "plan", lateTasks);
 
-    useEventStore.setState({
-      events: [event1, event2],
-      eventIds: new Set(["1", "2"]),
-      uiEvents: [event1, event2],
-    });
+    seedConversationEvents("test-conversation-id", [event1, event2], [event1, event2]);
 
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([
       { id: "1", title: "First task", notes: undefined, status: "done" },
@@ -149,7 +150,7 @@ describe("useTaskList", () => {
   });
 
   it("updates when new events are added to the store", () => {
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.hasTaskList).toBe(false);
 
@@ -157,11 +158,7 @@ describe("useTaskList", () => {
     const event = createTaskTrackerObservation("1", "plan", tasks);
 
     act(() => {
-      useEventStore.setState({
-        events: [event],
-        eventIds: new Set(["1"]),
-        uiEvents: [event],
-      });
+      seedConversationEvents("test-conversation-id", [event], [event]);
     });
 
     expect(result.current.taskList).toEqual([
@@ -173,13 +170,9 @@ describe("useTaskList", () => {
   it("returns hasTaskList=false when the latest plan has an empty task list", () => {
     const event = createTaskTrackerObservation("1", "plan", []);
 
-    useEventStore.setState({
-      events: [event],
-      eventIds: new Set(["1"]),
-      uiEvents: [event],
-    });
+    seedConversationEvents("test-conversation-id", [event], [event]);
 
-    const { result } = renderHook(() => useTaskList());
+    const { result } = renderHook(() => useTaskList(), { wrapper });
 
     expect(result.current.taskList).toEqual([]);
     expect(result.current.hasTaskList).toBe(false);

@@ -1,6 +1,6 @@
 import React from "react";
 import { useConversationWebSocket } from "#/contexts/conversation-websocket-context";
-import { useEventStore } from "#/stores/use-event-store";
+import { EMPTY_EVENTS, useEventStore } from "#/stores/use-event-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { isAgentServerEvent } from "#/types/agent-server/type-guards";
@@ -24,8 +24,17 @@ export function ConnectionStatusComponent() {
 /**
  * Test component to access and display event store values
  */
-export function EventStoreComponent() {
-  const { events, uiEvents } = useEventStore();
+export function EventStoreComponent({
+  conversationId = "test-conversation-id",
+}: {
+  conversationId?: string;
+}) {
+  const events = useEventStore(
+    (state) => state.byConversation[conversationId]?.events ?? EMPTY_EVENTS,
+  );
+  const uiEvents = useEventStore(
+    (state) => state.byConversation[conversationId]?.uiEvents ?? EMPTY_EVENTS,
+  );
   return (
     <div>
       <div data-testid="events-count">{events.length}</div>

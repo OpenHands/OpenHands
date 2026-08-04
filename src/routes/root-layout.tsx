@@ -37,6 +37,11 @@ const CommandMenu = React.lazy(() =>
     default: m.CommandMenu,
   })),
 );
+const PopoutHost = React.lazy(() =>
+  import("#/components/features/popout/popout-host").then((m) => ({
+    default: m.PopoutHost,
+  })),
+);
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -142,6 +147,7 @@ export default function MainApp() {
         <React.Suspense fallback={null}>
           <EnvironmentSwitchOverlay />
           <CommandMenu />
+          <PopoutHost />
         </React.Suspense>
         {showOnboardingPreview ? <OnboardingHost /> : null}
       </SidebarMobileNavProvider>

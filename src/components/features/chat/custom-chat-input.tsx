@@ -9,6 +9,7 @@ import { ChatInputGrip } from "./components/chat-input-grip";
 import { ChatInputContainer } from "./components/chat-input-container";
 import { HiddenFileInput } from "./components/hidden-file-input";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 import { cn } from "#/utils/utils";
 
 export interface CustomChatInputProps {
@@ -40,14 +41,14 @@ export function CustomChatInput({
   buttonClassName = "",
 }: CustomChatInputProps) {
   const [canSubmit, setCanSubmit] = React.useState(false);
+  const { setShouldHideSuggestions } = useConversationStore();
   const {
     submittedMessage,
     clearAllFiles,
-    setShouldHideSuggestions,
     setSubmittedMessage,
     images,
     files,
-  } = useConversationStore();
+  } = useConversationComposer();
 
   // Note: we intentionally do NOT disable the input when the conversation is
   // in an ERROR/STUCK execution state. Users should be able to send a follow-up

@@ -5,7 +5,10 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { PendingUserMessages } from "#/components/features/chat/pending-user-messages";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  getComposerBucket,
+  useConversationStore,
+} from "#/stores/conversation-store";
 
 const ACTIVE_CONVO = "conv-active";
 
@@ -23,10 +26,7 @@ describe("PendingUserMessages", () => {
   beforeEach(() => {
     mockSend.mockReset();
     useOptimisticUserMessageStore.setState({ pendingMessages: [] });
-    useConversationStore.setState({
-      messageRestoreIfEmpty: null,
-      messageToSend: null,
-    });
+    useConversationStore.setState({ byConversation: {} });
   });
 
   afterEach(() => {
@@ -99,9 +99,10 @@ describe("PendingUserMessages", () => {
     expect(useOptimisticUserMessageStore.getState().pendingMessages).toHaveLength(
       0,
     );
-    expect(useConversationStore.getState().messageRestoreIfEmpty).toEqual(
-      expect.objectContaining({ text: "cancel me" }),
-    );
+    expect(
+      getComposerBucket(useConversationStore.getState(), ACTIVE_CONVO)
+        .messageRestoreIfEmpty,
+    ).toEqual(expect.objectContaining({ text: "cancel me" }));
   });
 
   it("keeps the stop button out of the bubble layout while sending", () => {

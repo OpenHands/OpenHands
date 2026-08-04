@@ -5,6 +5,7 @@ import {
   getTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useDraftPersistence } from "./use-draft-persistence";
 
@@ -21,11 +22,10 @@ export const useChatInputLogic = () => {
   const {
     messageToSend: rawMessageToSend,
     messageRestoreIfEmpty,
-    hasRightPanelToggled,
     setMessageToSend,
     clearMessageRestoreIfEmpty,
-    setIsRightPanelShown,
-  } = useConversationStore();
+  } = useConversationComposer();
+  const { hasRightPanelToggled, setIsRightPanelShown } = useConversationStore();
 
   // Draft persistence - saves to localStorage/sessionStorage, restores on mount
   const { saveDraft, clearDraft } = useDraftPersistence(

@@ -60,7 +60,7 @@ export const useSwitchLlmProfile = () => {
     // Anchor the inline message where the user issued the switch; captured
     // synchronously here because the menu unmounts before the switch resolves.
     onMutate: ({ conversationId }) => ({
-      anchorEventId: conversationId ? getLastRenderableEventId() : null,
+      anchorEventId: getLastRenderableEventId(conversationId),
     }),
     onError: (error, { profileName }) => {
       const fallback = t(I18nKey.MODEL$SWITCH_FAILED, { name: profileName });

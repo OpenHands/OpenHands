@@ -69,7 +69,7 @@ const makeInstallEvent = (
 
 const addInstallEvent = (id: string) =>
   act(() => {
-    useEventStore.getState().addEvent(makeInstallEvent(id));
+    useEventStore.getState().addEvent("test-conversation-id", makeInstallEvent(id));
   });
 
 const renderBanner = () =>
@@ -81,7 +81,7 @@ describe("SkillInstallRestartBanner", () => {
   beforeEach(() => {
     // Load the conversation into the (global) event store so installs are
     // attributed to the rendered conversation.
-    useEventStore.getState().clearEventsForConversation(CONVERSATION_ID);
+    useEventStore.getState().clearConversation(CONVERSATION_ID);
   });
 
   afterEach(() => {

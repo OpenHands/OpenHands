@@ -1,8 +1,12 @@
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
-import { useEventStore } from "#/stores/use-event-store";
+import { getConversationUiEvents } from "#/stores/use-event-store";
 
-export const getLastRenderableEventId = (): string | null => {
-  const { uiEvents } = useEventStore.getState();
+export const getLastRenderableEventId = (
+  conversationId: string | null | undefined,
+): string | null => {
+  if (!conversationId) return null;
+
+  const uiEvents = getConversationUiEvents(conversationId);
 
   for (let index = uiEvents.length - 1; index >= 0; index -= 1) {
     const event = uiEvents[index];

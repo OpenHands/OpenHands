@@ -56,8 +56,8 @@ function AppContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const clearTerminal = useCommandStore((state) => state.clearTerminal);
-  const resetConversationRuntimeState = useConversationStateStore(
-    (state) => state.reset,
+  const clearConversationRuntimeState = useConversationStateStore(
+    (state) => state.clearConversation,
   );
   const setCurrentAgentState = useAgentStore(
     (state) => state.setCurrentAgentState,
@@ -73,14 +73,15 @@ function AppContent() {
   React.useEffect(() => {
     clearTerminal();
     resetConversationState();
-    resetConversationRuntimeState();
+    // Only clear this conversation's live status — other open popouts keep theirs.
+    clearConversationRuntimeState(conversationId);
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
   }, [
     conversationId,
     clearTerminal,
     resetConversationState,
-    resetConversationRuntimeState,
+    clearConversationRuntimeState,
     setCurrentAgentState,
     removeErrorMessage,
   ]);

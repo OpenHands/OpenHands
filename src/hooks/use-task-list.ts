@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { useEventStore } from "#/stores/use-event-store";
+import { useConversationEvents } from "#/hooks/use-conversation-events";
+import type { OHEvent } from "#/stores/use-event-store";
 import { isObservationEvent } from "#/types/agent-server/type-guards";
 import type { TaskTrackerObservation } from "#/types/agent-server/core/base/observation";
 import type { ObservationEvent } from "#/types/agent-server/core/events/observation-event";
@@ -11,9 +12,7 @@ export interface TaskListItem {
   notes?: string;
 }
 
-function getTaskListFromEvent(
-  event: ReturnType<typeof useEventStore.getState>["events"][number],
-): TaskListItem[] | null {
+function getTaskListFromEvent(event: OHEvent): TaskListItem[] | null {
   if (
     isObservationEvent(event) &&
     event.observation.kind === "TaskTrackerObservation"
@@ -33,7 +32,7 @@ function getTaskListFromEvent(
 }
 
 export function useTaskList() {
-  const events = useEventStore((state) => state.events);
+  const events = useConversationEvents();
 
   return useMemo(() => {
     for (let i = events.length - 1; i >= 0; i -= 1) {

@@ -1,6 +1,5 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";
@@ -14,8 +13,9 @@ import { I18nKey } from "#/i18n/declaration";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useForkConversation } from "#/hooks/mutation/use-fork-conversation";
-import { useConversationStore } from "#/stores/conversation-store";
+import { usePopoutStore } from "#/stores/popout-store";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
+import { setConversationState } from "#/utils/conversation-local-storage";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 interface UserAssistantEventMessageProps {
@@ -30,14 +30,11 @@ export function UserAssistantEventMessage({
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
-  const { navigate } = useNavigation();
   const { conversationId } = useOptionalConversationId();
   const isCloud = useActiveBackend().backend.kind === "cloud";
   const { mutate: forkConversation, isPending: isForking } =
     useForkConversation();
-  const setMessageToSend = useConversationStore(
-    (state) => state.setMessageToSend,
-  );
+  const openPopout = usePopoutStore((state) => state.openPopout);
   // Blocks a same-tick double-click, before `isForking` flips.
   const forkInFlightRef = React.useRef(false);
 
@@ -87,12 +84,16 @@ export function UserAssistantEventMessage({
       },
       {
         onSuccess: ({ info, excluded }) => {
-          navigate(`/conversations/${info.id}`);
-          // Prefill only when excluded (else the send duplicates it). Deferred
-          // so the new conversation's composer receives it (as useLaunchSkillInChat).
+          // Prefill via the per-conversation draft so only the popout's
+          // composer picks it up (the global messageToSend would also hit the
+          // primary chat). Draft restore runs on ChatInterface mount.
           if (excluded) {
-            window.setTimeout(() => setMessageToSend(message), 0);
+            setConversationState(info.id, { draftMessage: message });
           }
+          openPopout({
+            conversationId: info.id,
+            title: info.title || branchTitle || t(I18nKey.POPOUT$DEFAULT_TITLE),
+          });
         },
         onError: (error) =>
           displayErrorToast(error instanceof Error ? error.message : null),

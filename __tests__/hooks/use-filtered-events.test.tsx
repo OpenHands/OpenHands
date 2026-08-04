@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, expect, it, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useFilteredEvents } from "#/hooks/use-filtered-events";
@@ -5,6 +6,25 @@ import { useEventStore } from "#/stores/use-event-store";
 import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { SystemPromptEvent } from "#/types/agent-server/core/events/system-event";
+import { NavigationProvider } from "#/context/navigation-context";
+import { seedConversationEvents } from "../helpers/seed-conversation-events";
+
+const CONVERSATION_ID = "test-conversation-id";
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <NavigationProvider
+      value={{
+        currentPath: `/conversations/${CONVERSATION_ID}`,
+        conversationId: CONVERSATION_ID,
+        isNavigating: false,
+        navigate: () => undefined,
+      }}
+    >
+      {children}
+    </NavigationProvider>
+  );
+}
 
 function createUserMessage(id: string): MessageEvent {
   return {
@@ -57,24 +77,16 @@ function createSystemPromptEvent(id: string): SystemPromptEvent {
 }
 
 beforeEach(() => {
-  useEventStore.setState({
-    events: [],
-    eventIds: new Set(),
-    uiEvents: [],
-  });
+  useEventStore.getState().clearEvents();
 });
 
 describe("useFilteredEvents", () => {
   describe("referential stability", () => {
     it("returns the same renderableEvents reference when uiEvents has not changed", () => {
       const event = createUserMessage("msg-1");
-      useEventStore.setState({
-        events: [event],
-        eventIds: new Set(["msg-1"]),
-        uiEvents: [event],
-      });
+      seedConversationEvents("test-conversation-id", [event], [event]);
 
-      const { result, rerender } = renderHook(() => useFilteredEvents());
+      const { result, rerender } = renderHook(() => useFilteredEvents(), { wrapper });
       const firstRenderableEvents = result.current.renderableEvents;
 
       rerender();
@@ -84,13 +96,9 @@ describe("useFilteredEvents", () => {
 
     it("returns the same allConversationEvents reference when storeEvents has not changed", () => {
       const event = createUserMessage("msg-1");
-      useEventStore.setState({
-        events: [event],
-        eventIds: new Set(["msg-1"]),
-        uiEvents: [event],
-      });
+      seedConversationEvents("test-conversation-id", [event], [event]);
 
-      const { result, rerender } = renderHook(() => useFilteredEvents());
+      const { result, rerender } = renderHook(() => useFilteredEvents(), { wrapper });
       const firstAllConversationEvents = result.current.allConversationEvents;
 
       rerender();
@@ -102,22 +110,14 @@ describe("useFilteredEvents", () => {
 
     it("returns a new renderableEvents reference when uiEvents changes", () => {
       const firstEvent = createUserMessage("msg-1");
-      useEventStore.setState({
-        events: [firstEvent],
-        eventIds: new Set(["msg-1"]),
-        uiEvents: [firstEvent],
-      });
+      seedConversationEvents("test-conversation-id", [firstEvent], [firstEvent]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       const firstRenderableEvents = result.current.renderableEvents;
 
       const secondEvent = createAgentAction("action-2");
       act(() => {
-        useEventStore.setState({
-          events: [firstEvent, secondEvent],
-          eventIds: new Set(["msg-1", "action-2"]),
-          uiEvents: [firstEvent, secondEvent],
-        });
+        seedConversationEvents("test-conversation-id", [firstEvent, secondEvent], [firstEvent, secondEvent]);
       });
 
       expect(result.current.renderableEvents).not.toBe(firstRenderableEvents);
@@ -130,13 +130,9 @@ describe("useFilteredEvents", () => {
       const userMessage = createUserMessage("msg-1");
       const systemPrompt = createSystemPromptEvent("system-1");
 
-      useEventStore.setState({
-        events: [userMessage, systemPrompt],
-        eventIds: new Set(["msg-1", "system-1"]),
-        uiEvents: [userMessage, systemPrompt],
-      });
+      seedConversationEvents("test-conversation-id", [userMessage, systemPrompt], [userMessage, systemPrompt]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
 
       expect(result.current.renderableEvents).toEqual([userMessage]);
       expect(result.current.allConversationEvents).toEqual([
@@ -149,79 +145,59 @@ describe("useFilteredEvents", () => {
       const userMessage = createUserMessage("msg-1");
       const systemPrompt = createSystemPromptEvent("system-1");
 
-      useEventStore.setState({
-        events: [userMessage, systemPrompt],
-        eventIds: new Set(["msg-1", "system-1"]),
-        uiEvents: [userMessage, systemPrompt],
-      });
+      seedConversationEvents("test-conversation-id", [userMessage, systemPrompt], [userMessage, systemPrompt]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.totalEvents).toBe(1);
     });
   });
 
   describe("hasSubstantiveAgentActions", () => {
     it("returns false when no events exist", () => {
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.hasSubstantiveAgentActions).toBe(false);
     });
 
     it("returns false when only user events exist", () => {
       const userMessage = createUserMessage("msg-1");
 
-      useEventStore.setState({
-        events: [userMessage],
-        eventIds: new Set(["msg-1"]),
-        uiEvents: [userMessage],
-      });
+      seedConversationEvents("test-conversation-id", [userMessage], [userMessage]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.hasSubstantiveAgentActions).toBe(false);
     });
 
     it("returns false when only system prompt events exist", () => {
       const systemPrompt = createSystemPromptEvent("system-1");
 
-      useEventStore.setState({
-        events: [systemPrompt],
-        eventIds: new Set(["system-1"]),
-        uiEvents: [systemPrompt],
-      });
+      seedConversationEvents("test-conversation-id", [systemPrompt], [systemPrompt]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.hasSubstantiveAgentActions).toBe(false);
     });
 
     it("returns true when agent action events exist", () => {
       const agentAction = createAgentAction("action-1");
 
-      useEventStore.setState({
-        events: [agentAction],
-        eventIds: new Set(["action-1"]),
-        uiEvents: [agentAction],
-      });
+      seedConversationEvents("test-conversation-id", [agentAction], [agentAction]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.hasSubstantiveAgentActions).toBe(true);
     });
   });
 
   describe("userEventsExist", () => {
     it("returns false when no events exist", () => {
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.userEventsExist).toBe(false);
     });
 
     it("returns true when user events exist", () => {
       const userMessage = createUserMessage("msg-1");
 
-      useEventStore.setState({
-        events: [userMessage],
-        eventIds: new Set(["msg-1"]),
-        uiEvents: [userMessage],
-      });
+      seedConversationEvents("test-conversation-id", [userMessage], [userMessage]);
 
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
       expect(result.current.conversationUserEventsExist).toBe(true);
       expect(result.current.userEventsExist).toBe(true);
     });
@@ -229,7 +205,7 @@ describe("useFilteredEvents", () => {
 
   describe("empty store", () => {
     it("returns empty arrays and false flags for empty store", () => {
-      const { result } = renderHook(() => useFilteredEvents());
+      const { result } = renderHook(() => useFilteredEvents(), { wrapper });
 
       expect(result.current.renderableEvents).toEqual([]);
       expect(result.current.allConversationEvents).toEqual([]);

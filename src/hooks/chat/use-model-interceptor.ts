@@ -53,7 +53,7 @@ export const useModelInterceptor = (
       // the entry to; swallow silently on the home page.
       if (!conversationId) return;
 
-      const anchorEventId = getLastRenderableEventId();
+      const anchorEventId = getLastRenderableEventId(conversationId);
 
       // Imperative fetch through the query cache so the result lands on the
       // same key `useLlmProfiles` reads. `staleTime: 0` forces a fresh fetch

@@ -8,7 +8,10 @@ import {
 } from "#/context/navigation-context";
 import { CreateInstructions } from "#/components/features/automations/create-instructions";
 import { I18nKey } from "#/i18n/declaration";
-import { useConversationStore } from "#/stores/conversation-store";
+import {
+  HOME_COMPOSER_KEY,
+  useConversationStore,
+} from "#/stores/conversation-store";
 import * as telemetry from "#/services/telemetry";
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -88,7 +91,7 @@ describe("CreateInstructions", () => {
     captureMock = vi
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
-    useConversationStore.setState({ messageToSend: null });
+    useConversationStore.setState({ byConversation: {} });
   });
 
   afterEach(() => {
@@ -117,7 +120,10 @@ describe("CreateInstructions", () => {
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
+      expect(setMessageToSend).toHaveBeenCalledWith(
+        HOME_COMPOSER_KEY,
+        "Create an automation",
+      );
     });
   });
 });

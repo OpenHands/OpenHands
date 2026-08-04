@@ -4,7 +4,8 @@ import { renderWithProviders } from "test-utils";
 import type { MessageEvent } from "#/types/agent-server/core";
 import { I18nKey } from "#/i18n/declaration";
 import { UserAssistantEventMessage } from "#/components/conversation-events/chat/event-message-components/user-assistant-event-message";
-import { useConversationStore } from "#/stores/conversation-store";
+import { usePopoutStore } from "#/stores/popout-store";
+import { getConversationState } from "#/utils/conversation-local-storage";
 import ConversationService from "#/api/conversation-service/conversation-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -13,13 +14,9 @@ import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 const {
   useActiveBackendMock,
   useOptionalConversationIdMock,
-  setMessageToSendMock,
-  navigateMock,
 } = vi.hoisted(() => ({
   useActiveBackendMock: vi.fn(),
   useOptionalConversationIdMock: vi.fn(),
-  setMessageToSendMock: vi.fn(),
-  navigateMock: vi.fn(),
 }));
 
 // These provide test context (backend kind, conversation id, navigation); the
@@ -31,11 +28,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => useActiveBackendMock(),
-}));
-
-vi.mock("#/context/navigation-context", async (importActual) => ({
-  ...(await importActual<object>()),
-  useNavigation: () => ({ navigate: navigateMock }),
 }));
 
 // test-utils re-inits i18n with empty resources, so `t()` returns the key —
@@ -85,17 +77,15 @@ describe("UserAssistantEventMessage — branch action", () => {
     vi.restoreAllMocks();
     useActiveBackendMock.mockReset();
     useOptionalConversationIdMock.mockReset();
-    setMessageToSendMock.mockReset();
-    navigateMock.mockReset();
-
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "local" },
       orgId: null,
     });
     useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
 
-    useConversationStore.setState({ setMessageToSend: setMessageToSendMock });
+    usePopoutStore.setState({ popouts: [] });
     ConversationService.setCurrentConversation(null);
+    window.localStorage.clear();
 
     forkSpy = vi
       .spyOn(AgentServerConversationService, "forkConversation")
@@ -122,11 +112,13 @@ describe("UserAssistantEventMessage — branch action", () => {
     fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
 
     await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith("/conversations/fork-123"),
+      expect(usePopoutStore.getState().popouts).toEqual([
+        expect.objectContaining({ conversationId: "fork-123" }),
+      ]),
     );
     expect(parentSpy).not.toHaveBeenCalled();
     expect(forkSpy).toHaveBeenCalledWith("conv-1", "evt-agent", undefined);
-    expect(setMessageToSendMock).not.toHaveBeenCalled();
+    expect(getConversationState("fork-123").draftMessage).toBeNull();
   });
 
   it("edits a user message: branches at its parent and loads its text into the composer", async () => {
@@ -139,11 +131,13 @@ describe("UserAssistantEventMessage — branch action", () => {
       expect(forkSpy).toHaveBeenCalledWith("conv-1", "evt-parent", undefined),
     );
     expect(parentSpy).toHaveBeenCalledWith("conv-1", "evt-user");
-    expect(navigateMock).toHaveBeenCalledWith("/conversations/fork-123");
     await waitFor(() =>
-      expect(setMessageToSendMock).toHaveBeenCalledWith(
-        expect.stringContaining("Hello world"),
-      ),
+      expect(usePopoutStore.getState().popouts).toEqual([
+        expect.objectContaining({ conversationId: "fork-123" }),
+      ]),
+    );
+    expect(getConversationState("fork-123").draftMessage).toEqual(
+      expect.stringContaining("Hello world"),
     );
   });
 
@@ -157,7 +151,7 @@ describe("UserAssistantEventMessage — branch action", () => {
     await waitFor(() =>
       expect(forkSpy).toHaveBeenCalledWith("conv-1", "evt-user", undefined),
     );
-    expect(setMessageToSendMock).not.toHaveBeenCalled();
+    expect(getConversationState("fork-123").draftMessage).toBeNull();
   });
 
   it("titles the fork distinctly from its source conversation", async () => {
@@ -194,9 +188,11 @@ describe("UserAssistantEventMessage — branch action", () => {
     fireEvent.click(screen.getByRole("button", { name: BRANCH_LABEL }));
 
     await waitFor(() =>
-      expect(navigateMock).toHaveBeenCalledWith("/conversations/fork-123"),
+      expect(usePopoutStore.getState().popouts).toEqual([
+        expect.objectContaining({ conversationId: "fork-123" }),
+      ]),
     );
-    expect(setMessageToSendMock).not.toHaveBeenCalled();
+    expect(getConversationState("fork-123").draftMessage).toBeNull();
   });
 
   it("branches an image-only user message inclusively (keeps the image, no prefill)", async () => {
@@ -211,7 +207,7 @@ describe("UserAssistantEventMessage — branch action", () => {
       expect(forkSpy).toHaveBeenCalledWith("conv-1", "evt-img", undefined),
     );
     expect(parentSpy).not.toHaveBeenCalled();
-    expect(setMessageToSendMock).not.toHaveBeenCalled();
+    expect(getConversationState("fork-123").draftMessage).toBeNull();
   });
 
   it("omits the fork title when the tracked conversation is a different one", async () => {

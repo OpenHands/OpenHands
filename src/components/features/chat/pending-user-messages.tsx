@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { createChatMessage } from "#/services/chat-service";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -37,9 +37,7 @@ export function PendingUserMessages() {
   const removePendingMessage = useOptimisticUserMessageStore(
     (state) => state.removePendingMessage,
   );
-  const restoreMessageToInputIfEmpty = useConversationStore(
-    (state) => state.restoreMessageToInputIfEmpty,
-  );
+  const { restoreMessageToInputIfEmpty } = useConversationComposer();
   const { send } = useSendMessage();
 
   const visibleMessages = React.useMemo(

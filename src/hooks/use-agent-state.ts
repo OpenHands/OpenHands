@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useScopedConversationId } from "#/hooks/use-conversation-events";
+import {
+  getConversationExecutionStatus,
+  useConversationStateStore,
+} from "#/stores/conversation-state-store";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -41,10 +45,13 @@ export interface UseAgentStateResult {
 
 /**
  * Returns the current agent state from conversation execution status.
+ * Live status is keyed by the conversation in navigation scope so popouts do
+ * not inherit the primary route's typing / confirmation state.
  */
 export function useAgentState(): UseAgentStateResult {
-  const liveExecutionStatus = useConversationStateStore(
-    (state) => state.execution_status,
+  const conversationId = useScopedConversationId();
+  const liveExecutionStatus = useConversationStateStore((state) =>
+    getConversationExecutionStatus(state, conversationId),
   );
   const fallbackExecutionStatus =
     useActiveConversation().data?.execution_status ?? null;

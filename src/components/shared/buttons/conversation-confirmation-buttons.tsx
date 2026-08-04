@@ -6,7 +6,7 @@ import { ActionTooltip } from "../action-tooltip";
 import { RiskAlert } from "#/components/shared/risk-alert";
 import WarningIcon from "#/icons/u-warning.svg?react";
 import { useEventMessageStore } from "#/stores/event-message-store";
-import { useEventStore } from "#/stores/use-event-store";
+import { useConversationEvents } from "#/hooks/use-conversation-events";
 import { isActionEvent } from "#/types/agent-server/type-guards";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useAgentState } from "#/hooks/use-agent-state";
@@ -25,7 +25,7 @@ export function ConversationConfirmationButtons() {
   const { data: conversation } = useActiveConversation();
   const { curAgentState } = useAgentState();
   const { mutate: respondToConfirmation } = useRespondToConfirmation();
-  const events = useEventStore((state) => state.events);
+  const events = useConversationEvents();
 
   const awaitingAction = events
     .slice()

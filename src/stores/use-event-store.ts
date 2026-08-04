@@ -11,6 +11,32 @@ export type OHEvent = OpenHandsEvent & {
   isFromPlanningAgent?: boolean;
 };
 
+/**
+ * One conversation's event stream. Buckets are keyed by conversation id so a
+ * secondary conversation (e.g. a fork rendered in a floating window) can stream
+ * alongside the routed one without either clearing the other's history.
+ */
+export interface ConversationEventBucket {
+  events: OHEvent[];
+  eventIds: Set<string | number>;
+  uiEvents: OHEvent[];
+}
+
+/**
+ * Shared frozen empties. Selectors for a conversation with no bucket yet must
+ * return a stable reference — a fresh `[]` per call would change identity on
+ * every render and spin Zustand subscribers into an infinite update loop.
+ */
+export const EMPTY_EVENTS: OHEvent[] = Object.freeze(
+  [] as OHEvent[],
+) as unknown as OHEvent[];
+
+const EMPTY_BUCKET: ConversationEventBucket = Object.freeze({
+  events: EMPTY_EVENTS,
+  eventIds: Object.freeze(new Set<string | number>()) as Set<string | number>,
+  uiEvents: EMPTY_EVENTS,
+});
+
 const getEventId = (event: OHEvent): string | number | undefined =>
   "id" in event ? event.id : undefined;
 
@@ -53,62 +79,73 @@ const needsSorting = (events: OHEvent[], newEvent: OHEvent): boolean => {
 };
 
 export interface EventState {
-  events: OHEvent[];
-  eventIds: Set<string | number>;
-  uiEvents: OHEvent[];
   /**
-   * The conversation whose events currently populate the store. The store is
-   * global (not keyed by conversation), so the conversation route uses this to
-   * tell a genuine conversation switch apart from a remount of the *same*
-   * conversation (e.g. navigating to Settings and back) — only the former
-   * should clear the accumulated events.
+   * Event buckets keyed by conversation id. A key is present once the
+   * conversation has been loaded, which is how callers distinguish a genuine
+   * conversation switch from a remount of the same conversation (e.g.
+   * navigating to Settings and back) — only the former should reset events.
    */
-  loadedConversationId: string | null;
-  addEvent: (event: OHEvent) => void;
+  byConversation: Record<string, ConversationEventBucket>;
+  addEvent: (conversationId: string, event: OHEvent) => void;
   /**
    * Bulk-insert events. Used for the initial REST history load and for
    * "scroll up to load older" pagination. Newly-added events are de-duped
-   * against the existing store and the combined list is re-sorted by
+   * against the existing bucket and the combined list is re-sorted by
    * timestamp so older pages drop into the correct position.
    */
-  addEvents: (events: OHEvent[]) => void;
+  addEvents: (conversationId: string, events: OHEvent[]) => void;
   /**
-   * Clear all events. Also resets `loadedConversationId` to `null` so the
-   * store never claims to hold a conversation whose events have been wiped —
-   * the invariant (`loadedConversationId` reflects the conversation whose
-   * events are in the arrays) holds even for a standalone clear.
-   */
-  clearEvents: () => void;
-  /**
-   * Atomically clear all events and record which conversation is now loaded.
+   * Start (or restart) a conversation with an empty bucket, marking it loaded.
    * Collapsing the reset and the bookkeeping into a single `set` keeps the
    * store invariant enforced at the boundary, rather than relying on every
-   * call-site to invoke a clear and a `loadedConversationId` setter in the
-   * right order.
+   * call-site to clear and register in the right order.
    */
-  clearEventsForConversation: (conversationId: string | null) => void;
+  loadConversation: (conversationId: string) => void;
+  /** Drop a single conversation's bucket, e.g. when its window is closed. */
+  clearConversation: (conversationId: string) => void;
+  /** Drop every conversation's events. */
+  clearEvents: () => void;
+  isConversationLoaded: (conversationId: string) => boolean;
 }
 
-const appendEvent = (state: EventState, event: OHEvent): EventState => {
+const getBucket = (
+  state: EventState,
+  conversationId: string,
+): ConversationEventBucket =>
+  state.byConversation[conversationId] ?? EMPTY_BUCKET;
+
+const withBucket = (
+  state: EventState,
+  conversationId: string,
+  bucket: ConversationEventBucket,
+): EventState => ({
+  ...state,
+  byConversation: { ...state.byConversation, [conversationId]: bucket },
+});
+
+const appendEvent = (
+  bucket: ConversationEventBucket,
+  event: OHEvent,
+): ConversationEventBucket => {
   // Deduplicate: skip if event with same id already exists (O(1) lookup)
   const eventId = getEventId(event);
-  if (eventId !== undefined && state.eventIds.has(eventId)) {
-    return state;
+  if (eventId !== undefined && bucket.eventIds.has(eventId)) {
+    return bucket;
   }
 
   const newEventIds =
     eventId !== undefined
-      ? new Set(state.eventIds).add(eventId)
-      : state.eventIds;
+      ? new Set(bucket.eventIds).add(eventId)
+      : bucket.eventIds;
 
-  const lastEventIndex = state.events.length - 1;
-  const lastEvent = state.events[lastEventIndex];
+  const lastEventIndex = bucket.events.length - 1;
+  const lastEvent = bucket.events[lastEventIndex];
   const shouldMergeStreamingDelta =
     lastEvent &&
     isStreamingDeltaEvent(event) &&
     isStreamingDeltaEvent(lastEvent) &&
     isSameStreamingSender(event, lastEvent);
-  const events = [...state.events];
+  const events = [...bucket.events];
   if (shouldMergeStreamingDelta) {
     events[lastEventIndex] = mergeStreamingDeltaEvent(event, lastEvent);
   } else {
@@ -116,48 +153,58 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   }
 
   return {
-    ...state,
     events,
     eventIds: newEventIds,
-    uiEvents: handleEventForUI(event, state.uiEvents),
+    uiEvents: handleEventForUI(event, bucket.uiEvents),
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
-  ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
+const sortBucket = (
+  bucket: ConversationEventBucket,
+): ConversationEventBucket => ({
+  ...bucket,
+  events: [...bucket.events].sort(compareEventsByTimestamp),
+  uiEvents: [...bucket.uiEvents].sort(compareEventsByTimestamp),
 });
 
-const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
-  const next = appendEvent(state, event);
-  if (next === state) {
-    return state;
+const applyAddEvent = (
+  bucket: ConversationEventBucket,
+  event: OHEvent,
+): ConversationEventBucket => {
+  const next = appendEvent(bucket, event);
+  if (next === bucket) {
+    return bucket;
   }
 
   if (
-    !needsSorting(state.events, event) &&
-    !needsSorting(state.uiEvents, event)
+    !needsSorting(bucket.events, event) &&
+    !needsSorting(bucket.uiEvents, event)
   ) {
     return next;
   }
 
-  return sortEventState(next);
+  return sortBucket(next);
 };
 
-export const useEventStore = create<EventState>()((set) => ({
-  events: [],
-  eventIds: new Set(),
-  uiEvents: [],
-  loadedConversationId: null,
-  addEvent: (event: OHEvent) => set((state) => applyAddEvent(state, event)),
-  addEvents: (incoming: OHEvent[]) =>
+export const useEventStore = create<EventState>()((set, get) => ({
+  byConversation: {},
+  addEvent: (conversationId: string, event: OHEvent) =>
+    set((state) => {
+      const bucket = getBucket(state, conversationId);
+      const next = applyAddEvent(bucket, event);
+      if (next === bucket && state.byConversation[conversationId]) {
+        return state;
+      }
+      return withBucket(state, conversationId, next);
+    }),
+  addEvents: (conversationId: string, incoming: OHEvent[]) =>
     set((state) => {
       if (incoming.length === 0) return state;
 
-      const eventIds = new Set(state.eventIds);
-      const events = [...state.events];
-      let uiEvents = [...state.uiEvents];
+      const bucket = getBucket(state, conversationId);
+      const eventIds = new Set(bucket.eventIds);
+      const events = [...bucket.events];
+      let uiEvents = [...bucket.uiEvents];
       let added = false;
 
       for (const event of incoming) {
@@ -187,32 +234,53 @@ export const useEventStore = create<EventState>()((set) => ({
         }
       }
 
-      if (!added) {
+      if (!added && state.byConversation[conversationId]) {
         return state;
       }
 
-      return sortEventState({
-        ...state,
-        events,
-        eventIds,
-        uiEvents,
-      });
+      return withBucket(
+        state,
+        conversationId,
+        sortBucket({ events, eventIds, uiEvents }),
+      );
     }),
-  clearEvents: () =>
-    set(() => ({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [],
-      loadedConversationId: null,
-    })),
-  clearEventsForConversation: (conversationId: string | null) =>
-    set(() => ({
-      events: [],
-      eventIds: new Set(),
-      uiEvents: [],
-      loadedConversationId: conversationId,
-    })),
+  loadConversation: (conversationId: string) =>
+    set((state) =>
+      withBucket(state, conversationId, {
+        events: [],
+        eventIds: new Set(),
+        uiEvents: [],
+      }),
+    ),
+  clearConversation: (conversationId: string) =>
+    set((state) => {
+      if (!state.byConversation[conversationId]) return state;
+      const byConversation = { ...state.byConversation };
+      delete byConversation[conversationId];
+      return { ...state, byConversation };
+    }),
+  clearEvents: () => set((state) => ({ ...state, byConversation: {} })),
+  isConversationLoaded: (conversationId: string) =>
+    !!get().byConversation[conversationId],
 }));
+
+/** Read a conversation's events outside React (effects, imperative helpers). */
+export const getConversationEvents = (
+  conversationId: string | null | undefined,
+): OHEvent[] =>
+  conversationId
+    ? (useEventStore.getState().byConversation[conversationId]?.events ??
+      EMPTY_EVENTS)
+    : EMPTY_EVENTS;
+
+/** Read a conversation's UI events outside React. */
+export const getConversationUiEvents = (
+  conversationId: string | null | undefined,
+): OHEvent[] =>
+  conversationId
+    ? (useEventStore.getState().byConversation[conversationId]?.uiEvents ??
+      EMPTY_EVENTS)
+    : EMPTY_EVENTS;
 
 // In dev builds, expose the store on `window` so that fixture/preview
 // scripts (e.g. .pr/issue-132 demo capture) can inject synthetic events

@@ -18,6 +18,7 @@ import { useEventStore } from "#/stores/use-event-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { seedConversationEvents } from "../../helpers/seed-conversation-events";
 
 // Module-level mocks
 vi.mock("#/hooks/query/use-config");
@@ -150,11 +151,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
 
       // Put agent-server user events in the store
       const userEvent = createUserMessageEvent("evt-1");
-      useEventStore.setState({
-        events: [userEvent],
-        eventIds: new Set(["evt-1"]),
-        uiEvents: [userEvent],
-      });
+      seedConversationEvents("test-conversation-id", [userEvent], [userEvent]);
 
       renderWithQueryClient(<ChatInterface />, queryClient);
 
@@ -179,11 +176,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       });
 
       // Store is empty
-      useEventStore.setState({
-        events: [],
-        eventIds: new Set(),
-        uiEvents: [],
-      });
+      useEventStore.getState().clearEvents();
 
       renderWithQueryClient(<ChatInterface />, queryClient);
 
@@ -199,11 +192,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
         reconnect: vi.fn(),
       });
 
-      useEventStore.setState({
-        events: [],
-        eventIds: new Set(),
-        uiEvents: [],
-      });
+      useEventStore.getState().clearEvents();
 
       useOptimisticUserMessageStore.getState().enqueuePendingMessage({
         conversationId: "test-conversation-id",
@@ -231,11 +220,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
 
       // agent-server events in store
       const userEvent = createUserMessageEvent("evt-2");
-      useEventStore.setState({
-        events: [userEvent],
-        eventIds: new Set(["evt-1"]),
-        uiEvents: [userEvent],
-      });
+      seedConversationEvents("test-conversation-id", [userEvent], [userEvent]);
 
       renderWithQueryClient(<ChatInterface />, queryClient);
 

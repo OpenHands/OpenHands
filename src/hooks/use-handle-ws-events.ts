@@ -2,7 +2,7 @@ import React from "react";
 import { generateAgentStateChangeEvent } from "#/services/agent-state-service";
 import { AgentState } from "#/types/agent-state";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { useEventStore } from "#/stores/use-event-store";
+import { useConversationEvents } from "#/hooks/use-conversation-events";
 import { useSendMessage } from "#/hooks/use-send-message";
 import {
   isAgentErrorEvent,
@@ -24,7 +24,7 @@ const isTypedErrorEvent = (
 
 export const useHandleWSEvents = () => {
   const { send } = useSendMessage();
-  const events = useEventStore((state) => state.events);
+  const events = useConversationEvents();
 
   React.useEffect(() => {
     if (!events.length) {

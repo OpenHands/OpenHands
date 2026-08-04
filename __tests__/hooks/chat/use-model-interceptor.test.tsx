@@ -100,7 +100,7 @@ describe("useModelInterceptor", () => {
       ],
       active_profile: "haiku",
     });
-    useEventStore.getState().addEvent(createUserMessageEvent("message-1"));
+    useEventStore.getState().addEvent(CONVERSATION_ID, createUserMessageEvent("message-1"));
     const onSubmit = vi.fn();
 
     const { result } = renderHook(

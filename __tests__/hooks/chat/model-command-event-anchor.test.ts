@@ -15,18 +15,18 @@ describe("getLastRenderableEventId", () => {
   it("returns null when no renderable events exist", () => {
     useEventStore
       .getState()
-      .addEvent(createPlanningFileEditorActionEvent("plan"));
+      .addEvent("test-conversation-id", createPlanningFileEditorActionEvent("plan"));
 
-    expect(getLastRenderableEventId()).toBeNull();
+    expect(getLastRenderableEventId("test-conversation-id")).toBeNull();
   });
 
   it("returns the latest renderable UI event id as a string", () => {
-    useEventStore.getState().addEvent(createUserMessageEvent("message-1"));
+    useEventStore.getState().addEvent("test-conversation-id", createUserMessageEvent("message-1"));
     useEventStore
       .getState()
-      .addEvent(createPlanningFileEditorActionEvent("plan"));
-    useEventStore.getState().addEvent(createOtherActionEvent("action-1"));
+      .addEvent("test-conversation-id", createPlanningFileEditorActionEvent("plan"));
+    useEventStore.getState().addEvent("test-conversation-id", createOtherActionEvent("action-1"));
 
-    expect(getLastRenderableEventId()).toBe("action-1");
+    expect(getLastRenderableEventId("test-conversation-id")).toBe("action-1");
   });
 });

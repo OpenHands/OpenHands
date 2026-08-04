@@ -8,10 +8,12 @@ import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { GitControlBar } from "./git-control-bar";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
 import { partitionImagesForUpload } from "#/components/features/chat/utils/chat-input.utils";
 import { isTaskPolling } from "#/utils/utils";
+import { useConversationRenderScope } from "#/contexts/conversation-render-scope";
 
 interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
@@ -24,13 +26,10 @@ export function InteractiveChatBox({
   disabled = false,
   hasStartedConversation,
 }: InteractiveChatBoxProps) {
-  const {
-    images,
-    files,
-    imagesMarkedUploadAsFile,
-    clearAllFiles,
-    subConversationTaskId,
-  } = useConversationStore();
+  const { isPrimary } = useConversationRenderScope();
+  const { images, files, imagesMarkedUploadAsFile, clearAllFiles } =
+    useConversationComposer();
+  const { subConversationTaskId } = useConversationStore();
   const { curAgentState } = useAgentState();
   const { data: conversation } = useActiveConversation();
   const { conversationId: routeConversationId } = useOptionalConversationId();
@@ -73,9 +72,11 @@ export function InteractiveChatBox({
         onSubmit={handleSubmit}
         onFilesPaste={handleUpload}
       />
-      <div className="mt-3 pb-3">
-        <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
-      </div>
+      {isPrimary ? (
+        <div className="mt-3 pb-3">
+          <GitControlBar onSuggestionsClick={handleSuggestionsClick} />
+        </div>
+      ) : null}
     </div>
   );
 }

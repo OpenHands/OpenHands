@@ -6,15 +6,25 @@ import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 interface WebSocketProviderWrapperProps {
   children: React.ReactNode;
   conversationId: string;
+  /**
+   * When false, this tree is a secondary conversation (e.g. a popout):
+   * it streams into its own event-store bucket and does not claim the process-
+   * wide current-conversation singleton or shared chrome stores.
+   */
+  sharedSideEffects?: boolean;
 }
 
 export function WebSocketProviderWrapper({
   children,
   conversationId,
+  sharedSideEffects = true,
 }: WebSocketProviderWrapperProps) {
+  // claimCurrentConversation follows ConversationRenderScope (false inside
+  // popouts), so we don't need to pass it explicitly here.
   const { data: conversation } = useActiveConversation();
+  // Popouts are chat-only — skip the planning-agent sub-conversation.
   const { data: subConversations } = useSubConversations(
-    conversation?.sub_conversation_ids ?? [],
+    sharedSideEffects ? (conversation?.sub_conversation_ids ?? []) : [],
   );
 
   const filteredSubConversations = subConversations?.filter(
@@ -37,8 +47,13 @@ export function WebSocketProviderWrapper({
       conversationId={conversationId}
       conversationUrl={conversationUrl}
       sessionApiKey={conversation?.session_api_key}
-      subConversationIds={conversation?.sub_conversation_ids}
-      subConversations={filteredSubConversations}
+      subConversationIds={
+        sharedSideEffects ? conversation?.sub_conversation_ids : undefined
+      }
+      subConversations={
+        sharedSideEffects ? filteredSubConversations : undefined
+      }
+      sharedSideEffects={sharedSideEffects}
     >
       {children}
     </ConversationWebSocketProvider>

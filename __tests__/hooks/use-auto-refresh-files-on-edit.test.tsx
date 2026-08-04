@@ -7,10 +7,24 @@ import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edi
 import { useEventStore } from "#/stores/use-event-store";
 import type { OHEvent } from "#/stores/use-event-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import { NavigationProvider } from "#/context/navigation-context";
+
+const CONVERSATION_ID = "test-conversation-id";
 
 function makeWrapper(client: QueryClient) {
   return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <NavigationProvider
+        value={{
+          currentPath: `/conversations/${CONVERSATION_ID}`,
+          conversationId: CONVERSATION_ID,
+          isNavigating: false,
+          navigate: () => undefined,
+        }}
+      >
+        {children}
+      </NavigationProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -61,7 +75,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(
+        .addEvent("test-conversation-id", 
           makeObservationEvent("1", "FileEditorObservation", "str_replace"),
         );
     });
@@ -90,7 +104,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
       act(() => {
         useEventStore
           .getState()
-          .addEvent(makeObservationEvent("1", kind, "git commit -m 'done'"));
+          .addEvent("test-conversation-id", makeObservationEvent("1", kind, "git commit -m 'done'"));
       });
 
       // Assert — the diff and commit-list queries refresh, and nothing
@@ -121,7 +135,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("1", "ExecuteBashObservation", "view"));
+        .addEvent("test-conversation-id", makeObservationEvent("1", "ExecuteBashObservation", "view"));
     });
 
     // Assert
@@ -139,7 +153,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("1", "FileEditorObservation", "view"));
+        .addEvent("test-conversation-id", makeObservationEvent("1", "FileEditorObservation", "view"));
     });
 
     expect(spy).not.toHaveBeenCalled();
@@ -156,7 +170,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("1", "BrowserObservation", "navigate"));
+        .addEvent("test-conversation-id", makeObservationEvent("1", "BrowserObservation", "navigate"));
     });
 
     expect(spy).not.toHaveBeenCalled();
@@ -174,7 +188,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(
+        .addEvent("test-conversation-id", 
           makeObservationEvent("1", "FileEditorObservation", "str_replace"),
         );
     });
@@ -183,7 +197,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(
+        .addEvent("test-conversation-id", 
           makeObservationEvent(
             "2",
             "StrReplaceEditorObservation",
@@ -204,10 +218,10 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("1", "FileEditorObservation", "view"));
+        .addEvent("test-conversation-id", makeObservationEvent("1", "FileEditorObservation", "view"));
       useEventStore
         .getState()
-        .addEvent(
+        .addEvent("test-conversation-id", 
           makeObservationEvent("2", "ExecuteBashObservation", "ls"),
         );
     });
@@ -234,10 +248,10 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("10", "FileEditorObservation", "create"));
+        .addEvent("test-conversation-id", makeObservationEvent("10", "FileEditorObservation", "create"));
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("20", "FileEditorObservation", "create"));
+        .addEvent("test-conversation-id", makeObservationEvent("20", "FileEditorObservation", "create"));
     });
     const callsAfterInitial = spy.mock.calls.length;
     expect(callsAfterInitial).toBeGreaterThan(0);
@@ -251,7 +265,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("5", "FileEditorObservation", "create"));
+        .addEvent("test-conversation-id", makeObservationEvent("5", "FileEditorObservation", "create"));
     });
 
     // We should have invalidated again and bumped the counter exactly once
@@ -302,17 +316,17 @@ describe("useAutoRefreshFilesOnEdit", () => {
       }) as unknown as OHEvent;
 
     act(() => {
-      useEventStore.getState().addEvent(idlessEvent(1));
+      useEventStore.getState().addEvent("test-conversation-id", idlessEvent(1));
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
     act(() => {
-      useEventStore.getState().addEvent(idlessEvent(2));
+      useEventStore.getState().addEvent("test-conversation-id", idlessEvent(2));
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(2);
 
     act(() => {
-      useEventStore.getState().addEvent(idlessEvent(3));
+      useEventStore.getState().addEvent("test-conversation-id", idlessEvent(3));
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(3);
   });
@@ -349,7 +363,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     } as unknown as OHEvent;
 
     act(() => {
-      useEventStore.getState().addEvent(idlessEvent);
+      useEventStore.getState().addEvent("test-conversation-id", idlessEvent);
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(1);
 
@@ -392,7 +406,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     } as unknown as OHEvent;
 
     act(() => {
-      useEventStore.getState().addEvent(numericEvent);
+      useEventStore.getState().addEvent("test-conversation-id", numericEvent);
     });
     const afterFirst = useWorkspaceMutationCounter.getState().count;
     expect(afterFirst).toBe(1);
@@ -400,7 +414,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     // Re-adding the same numeric-id event must be a no-op for the
     // counter (store dedups on id; hook must too).
     act(() => {
-      useEventStore.getState().addEvent({ ...numericEvent });
+      useEventStore.getState().addEvent("test-conversation-id", { ...numericEvent });
     });
     expect(useWorkspaceMutationCounter.getState().count).toBe(afterFirst);
   });
@@ -416,7 +430,7 @@ describe("useAutoRefreshFilesOnEdit", () => {
     act(() => {
       useEventStore
         .getState()
-        .addEvent(makeObservationEvent("1", "FileEditorObservation", "create"));
+        .addEvent("test-conversation-id", makeObservationEvent("1", "FileEditorObservation", "create"));
     });
 
     const callsAfterFirst = spy.mock.calls.length;

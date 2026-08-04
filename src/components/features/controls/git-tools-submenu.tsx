@@ -10,7 +10,7 @@ import {
   getCreatePRPrompt,
   getCreateNewBranchPrompt,
 } from "#/utils/utils";
-import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 
 import ArrowUpIcon from "#/icons/u-arrow-up.svg?react";
 import ArrowDownIcon from "#/icons/u-arrow-down.svg?react";
@@ -26,7 +26,7 @@ interface GitToolsSubmenuProps {
 
 export function GitToolsSubmenu({ onClose }: GitToolsSubmenuProps) {
   const { t } = useTranslation("openhands");
-  const { setMessageToSend } = useConversationStore();
+  const { setMessageToSend } = useConversationComposer();
   const { data: conversation } = useActiveConversation();
 
   const currentGitProvider = conversation?.git_provider as Provider;

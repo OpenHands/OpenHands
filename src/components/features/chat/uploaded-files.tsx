@@ -1,6 +1,6 @@
 import { UploadedFile } from "./uploaded-file";
 import { UploadedImage } from "./uploaded-image";
-import { useConversationStore } from "#/stores/conversation-store";
+import { useConversationComposer } from "#/hooks/use-conversation-composer";
 
 export function UploadedFiles() {
   const {
@@ -12,7 +12,7 @@ export function UploadedFiles() {
     removeFile,
     removeImage,
     toggleImageUploadAsFile,
-  } = useConversationStore();
+  } = useConversationComposer();
 
   const handleRemoveFile = (index: number) => {
     removeFile(index);

@@ -83,9 +83,7 @@ export function TranscriptExportModal({
 
       const eventStore = useEventStore.getState();
       const loadedEvents =
-        eventStore.loadedConversationId === conversationId
-          ? eventStore.events
-          : [];
+        eventStore.byConversation[conversationId]?.events ?? [];
       const events = await loadCompleteTranscriptEvents(
         loadedEvents,
         (searchOptions) =>
