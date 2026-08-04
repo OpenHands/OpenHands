@@ -95,7 +95,7 @@ describe("ChatInputLlmProfilePicker", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("labels the free OpenHands GLM route in the profile menu", () => {
+  it("labels a free OpenHands route in the profile menu", () => {
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         profiles: [
@@ -117,7 +117,7 @@ describe("ChatInputLlmProfilePicker", () => {
     expect(screen.getByText("OpenHands GLM-5.2 (free)")).toBeInTheDocument();
   });
 
-  it("labels the free OpenHands GLM route in the read-only profile menu", () => {
+  it("labels a free OpenHands route in the read-only profile menu", () => {
     useChatInputLlmProfileStateMock.mockReturnValue(
       state({
         canSwitchProfile: false,

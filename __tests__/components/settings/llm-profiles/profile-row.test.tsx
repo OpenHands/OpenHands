@@ -52,7 +52,7 @@ describe("ProfileRow", () => {
     expect(screen.getByText("openai/gpt-4")).toBeInTheDocument();
   });
 
-  it("labels the free OpenHands GLM route without changing the raw title", () => {
+  it("labels a free OpenHands route without changing the raw title", () => {
     render(
       <ProfileRow
         {...defaultProps}

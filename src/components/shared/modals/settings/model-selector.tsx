@@ -16,9 +16,9 @@ import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import {
-  OPENHANDS_FREE_GLM_BADGE_LABEL,
-  formatProviderModelNameForDisplay,
-  OPENHANDS_FREE_GLM_MODEL_NOTE,
+  FREE_MODEL_BADGE_LABEL,
+  FREE_OPENHANDS_MODEL_NOTE,
+  isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
 
 interface ModelSelectorProps {
@@ -183,10 +183,10 @@ export function ModelSelector({
             linkColor="white"
           />
           <p
-            data-testid="openhands-free-glm-note"
+            data-testid="openhands-free-models-note"
             className="text-xs text-[var(--oh-muted)]"
           >
-            {OPENHANDS_FREE_GLM_MODEL_NOTE}
+            {FREE_OPENHANDS_MODEL_NOTE}
           </p>
         </div>
       )}
@@ -229,12 +229,9 @@ export function ModelSelector({
               <AutocompleteItem key={model.name} textValue={model.name}>
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{model.name}</span>
-                  {formatProviderModelNameForDisplay(
-                    selectedProvider,
-                    model.name,
-                  ) !== model.name ? (
+                  {isFreeOpenHandsModel(`${selectedProvider}/${model.name}`) ? (
                     <span className="shrink-0 rounded-full border border-[var(--oh-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--oh-muted)]">
-                      {OPENHANDS_FREE_GLM_BADGE_LABEL}
+                      {FREE_MODEL_BADGE_LABEL}
                     </span>
                   ) : null}
                 </span>

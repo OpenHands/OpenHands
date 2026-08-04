@@ -1,22 +1,26 @@
-export const OPENHANDS_FREE_GLM_MODEL_ID = "openhands/glm-5.2";
-export const OPENHANDS_FREE_GLM_MODEL_LABEL = "OpenHands GLM-5.2 (free)";
-export const OPENHANDS_FREE_GLM_BADGE_LABEL = "Free";
-export const OPENHANDS_FREE_GLM_MODEL_NOTE =
-  "Only openhands/glm-5.2 is free. Other GLM-5.2 endpoints may require their own billing.";
+export const FREE_MODEL_BADGE_LABEL = "Free";
 
-export function isOpenHandsFreeGlmModel(
+export const FREE_OPENHANDS_MODELS = {
+  "openhands/glm-5.2": "OpenHands GLM-5.2 (free)",
+  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
+  "openhands/minimax-m2.7": "OpenHands MiniMax M2.7 (free)",
+} as const;
+
+export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
+export const FREE_OPENHANDS_MODEL_NOTE = `Free OpenHands models: ${FREE_OPENHANDS_MODEL_IDS.join(
+  ", ",
+)}. Other provider endpoints with similar model names may require separate billing.`;
+
+export const isFreeOpenHandsModel = (
   model: string | null | undefined,
-): boolean {
-  return model === OPENHANDS_FREE_GLM_MODEL_ID;
-}
+): model is keyof typeof FREE_OPENHANDS_MODELS =>
+  Boolean(model && model in FREE_OPENHANDS_MODELS);
 
 export function formatModelNameForDisplay(
   model: string | null | undefined,
 ): string | null {
   if (!model) return null;
-  return isOpenHandsFreeGlmModel(model)
-    ? OPENHANDS_FREE_GLM_MODEL_LABEL
-    : model;
+  return isFreeOpenHandsModel(model) ? FREE_OPENHANDS_MODELS[model] : model;
 }
 
 export function formatProviderModelNameForDisplay(
@@ -25,8 +29,8 @@ export function formatProviderModelNameForDisplay(
 ): string | null {
   if (!model) return null;
   const fullModel = provider ? `${provider}/${model}` : model;
-  return isOpenHandsFreeGlmModel(fullModel)
-    ? OPENHANDS_FREE_GLM_MODEL_LABEL
+  return isFreeOpenHandsModel(fullModel)
+    ? FREE_OPENHANDS_MODELS[fullModel]
     : model;
 }
 
@@ -48,7 +52,7 @@ export function formatNativeModelName(
   model: string | null | undefined,
 ): string | null {
   if (!model) return null;
-  if (isOpenHandsFreeGlmModel(model)) return OPENHANDS_FREE_GLM_MODEL_LABEL;
+  if (isFreeOpenHandsModel(model)) return FREE_OPENHANDS_MODELS[model];
   const lastSegment = model.split("/").pop();
   return lastSegment || model;
 }

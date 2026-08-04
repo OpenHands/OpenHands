@@ -895,7 +895,7 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("labels the free OpenHands GLM route on native conversation chips", () => {
+    it("labels a free OpenHands route on native conversation chips", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"

@@ -105,7 +105,7 @@ describe("ModelMessages", () => {
     );
   });
 
-  it("labels the free OpenHands GLM route in expanded profile diagnostics", async () => {
+  it("labels a free OpenHands route in expanded profile diagnostics", async () => {
     const user = userEvent.setup();
     useModelStore.getState().show(CONVERSATION_ID, "event-1", [
       {

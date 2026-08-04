@@ -29,7 +29,12 @@ describe("ModelSelector — OpenHands provider display", () => {
         verifiedCount += 1;
         return HttpResponse.json({
           models: {
-            openhands: ["claude-opus-4-7", "glm-5.2"],
+            openhands: [
+              "claude-opus-4-7",
+              "glm-5.2",
+              "deepseek-v4-flash",
+              "minimax-m2.7",
+            ],
             anthropic: ["claude-opus-4-5-20251101"],
           },
         });
@@ -62,19 +67,25 @@ describe("ModelSelector — OpenHands provider display", () => {
     expect(modelsCount).toBe(1);
   });
 
-  it("makes clear that only openhands/glm-5.2 is free", async () => {
+  it("makes clear which OpenHands models are free", async () => {
     const user = userEvent.setup();
     renderWithQuery(<ModelSelector currentModel="openhands/glm-5.2" />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("openhands-free-glm-note")).toHaveTextContent(
-        "Only openhands/glm-5.2 is free",
-      );
+      expect(
+        screen.getByTestId("openhands-free-models-note"),
+      ).toHaveTextContent("openhands/glm-5.2");
     });
+    expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
+      "openhands/deepseek-v4-flash",
+    );
+    expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
+      "openhands/minimax-m2.7",
+    );
 
     await user.click(screen.getByLabelText("LLM$MODEL"));
 
-    expect(screen.getByText("Free")).toBeInTheDocument();
+    expect(screen.getAllByText("Free")).toHaveLength(3);
     expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("glm-5.2");
   });
 });
