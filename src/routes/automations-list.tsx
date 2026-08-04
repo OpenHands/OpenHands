@@ -48,12 +48,17 @@ import {
   parseAutomationFile,
   serializeAutomation,
 } from "#/utils/automation-export";
+import {
+  automationDetailPath,
+  getInterfaceCopy,
+} from "#/manifests/automation-interface";
 import { downloadBlob } from "#/utils/utils";
 
 const PAGE_SIZE = 50;
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
+  const interfaceCopy = getInterfaceCopy();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
@@ -197,7 +202,7 @@ export default function AutomationsList() {
           displaySuccessToastWithLink(
             t(I18nKey.AUTOMATIONS$IMPORT_SUCCESS, { name: created.name }),
             t(I18nKey.AUTOMATIONS$IMPORT_VIEW),
-            `/automations/${encodeURIComponent(created.id)}`,
+            automationDetailPath(created.id),
           );
         },
         onError: (error) => {
@@ -231,10 +236,10 @@ export default function AutomationsList() {
       <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <h1 className="text-xl font-medium text-content">
-            {t(I18nKey.AUTOMATIONS$TITLE)}
+            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {t(I18nKey.AUTOMATIONS$SUBTITLE)}
+            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
           </p>
           <div className="mt-6 flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -252,10 +257,10 @@ export default function AutomationsList() {
       <div className="min-h-full">
         <div className="p-6 max-w-4xl mx-auto">
           <h1 className="text-xl font-medium text-content">
-            {t(I18nKey.AUTOMATIONS$TITLE)}
+            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {t(I18nKey.AUTOMATIONS$SUBTITLE)}
+            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
           </p>
           <BackendNotConfigured onRetry={refetchHealth} />
         </div>
@@ -270,10 +275,10 @@ export default function AutomationsList() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-content">
-              {t(I18nKey.AUTOMATIONS$TITLE)}
+              {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
             </h1>
             <p className="mt-1 text-sm text-muted">
-              {t(I18nKey.AUTOMATIONS$SUBTITLE)}
+              {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">

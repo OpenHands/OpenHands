@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
   render,
@@ -27,7 +19,11 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConfig } from "#/hooks/query/use-config";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
-import type { MessageEvent } from "#/types/agent-server/core";
+import {
+  SecurityRisk,
+  type ActionEvent,
+  type MessageEvent,
+} from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
@@ -256,11 +252,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    renderWithQueryClient(
-      <ChatInterface />,
-      queryClient,
-      "/task-abc",
-    );
+    renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
   });
@@ -282,11 +274,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    renderWithQueryClient(
-      <ChatInterface />,
-      queryClient,
-      "/task-abc",
-    );
+    renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
   });
@@ -884,6 +872,59 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
+  it("shows the unresolved terminal action while the agent is running", () => {
+    const terminalAction: ActionEvent = {
+      id: "action-running-terminal",
+      timestamp: "2026-07-27T18:00:00Z",
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "TerminalAction",
+        command: "git status",
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "terminal",
+      tool_call_id: "tool-running-terminal",
+      tool_call: {
+        id: "tool-running-terminal",
+        type: "function",
+        function: {
+          name: "terminal",
+          arguments: '{"command":"git status"}',
+        },
+      },
+      llm_response_id: "response-running-terminal",
+      security_risk: SecurityRisk.LOW,
+    };
+    useEventStore.setState({
+      events: [terminalAction],
+      eventIds: new Set([terminalAction.id]),
+      uiEvents: [terminalAction],
+    });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    const chip = screen.getByTestId("live-activity-chip");
+    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
+    expect(chip.parentElement).toHaveClass("inset-x-9");
+  });
+
+  it("hides the live activity chip when the agent is no longer running", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.PAUSED,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    expect(screen.queryByTestId("live-activity-chip")).not.toBeInTheDocument();
+  });
+
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.LOADING,

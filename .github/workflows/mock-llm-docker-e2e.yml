@@ -159,7 +159,7 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.4.0
+        uses: docker/login-action@v4.5.2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -238,6 +238,10 @@ jobs:
       # Docker) and require build/index.html to exist locally. The regular
       # mock-llm-e2e workflow builds before running; we do the same here.
       - name: Build frontend (for partial-stack tests)
+        env:
+          # Partial-stack tests use the local static build, so keep its tool
+          # payload consistent with the mock-LLM stack runtime settings.
+          VITE_ENABLE_BROWSER_TOOLS: "false"
         run: npm run build:app
 
       # ── Run tests ──────────────────────────────────────────────────────

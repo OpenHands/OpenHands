@@ -52,7 +52,7 @@ describe("SettingsService", () => {
 
     // Should have normalized settings with derived fields
     expect(settings.agent).toBe("CodeActAgent");
-    expect(settings.llm_model).toBe("openhands/minimax-m2.7");
+    expect(settings.llm_model).toBe("openhands/glm-5.2");
     expect(settings.confirmation_mode).toBe(false);
     expect(settings.security_analyzer).toBe("llm");
   });
@@ -197,6 +197,24 @@ describe("SettingsService", () => {
         },
       },
     ]);
+  });
+
+  it("treats omitted app-preferences analytics consent as unset", async () => {
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: { app_preferences: {} },
+        }),
+      ),
+    );
+    SettingsService.invalidateCache();
+
+    const settings = await SettingsService.getSettings();
+
+    expect(settings.user_consents_to_analytics).toBeNull();
   });
 
   it("surfaces server-side misc_settings.app_preferences in getSettings on a local backend", async () => {
@@ -440,6 +458,10 @@ describe("SettingsService", () => {
           integrations_hub: {
             url: "https://integrations.staging.all-hands.dev/api/mcp",
             headers: { Authorization: "Bearer new-key" },
+            // This is the one write that skips the pre-clear, so it lands as
+            // an RFC 7386 merge — `enabled` has to be spelled out because a
+            // merge cannot clear a persisted `enabled: false` by omission.
+            enabled: true,
           },
         },
       },

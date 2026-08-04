@@ -113,6 +113,35 @@ describe("SecretsService against cloud backend", () => {
       name: "NEW_NAME",
       description: "renamed",
     });
+    // No value supplied, so nothing overwrites the stored one.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("overwrites the value with a POST following the PUT", async () => {
+    // Fresh Response per call: a Response body can only be consumed once.
+    fetchMock.mockImplementation(() => Promise.resolve(mockJsonResponse({})));
+
+    await SecretsService.updateSecret(
+      "API_KEY",
+      "API_KEY",
+      "Demo secret",
+      "new-value",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const [putUrl, putInit] = getFetchCall(fetchMock, 0);
+    expect(putUrl).toBe(`${cloudBackend.host}/api/v1/secrets/API_KEY`);
+    expect(putInit).toMatchObject({ method: "PUT" });
+
+    const [postUrl, postInit] = getFetchCall(fetchMock, 1);
+    expect(postUrl).toBe(`${cloudBackend.host}/api/v1/secrets`);
+    expect(postInit).toMatchObject({ method: "POST" });
+    expect(getJsonBody(postInit)).toEqual({
+      name: "API_KEY",
+      value: "new-value",
+      description: "Demo secret",
+    });
   });
 
   it("deletes a secret via direct DELETE /api/v1/secrets/{id}", async () => {

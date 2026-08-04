@@ -70,6 +70,27 @@ describe("SystemMessage UI Rendering", () => {
   });
 });
 
+describe("ToolsContextMenu - Switch agent profile", () => {
+  it("hides the Switch agent profile item unless the caller enables it", () => {
+    // The gate (pre-start only + profiles available) is owned by
+    // ChatInputActions; without the prop the item — and its provider-backed
+    // submenu content — must not mount.
+    render(
+      <ToolsContextMenu
+        onClose={() => {}}
+        onShowSkills={() => {}}
+        onShowPlugins={() => {}}
+        onShowHooks={() => {}}
+        onShowAgentTools={() => {}}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("ToolsContextMenu - Show Plugins", () => {
   it("renders the Show Plugins item and calls onShowPlugins when clicked", async () => {
     const onShowPlugins = vi.fn();

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useSwitchAcpModel } from "#/hooks/mutation/use-switch-acp-model";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 
@@ -14,6 +15,14 @@ vi.mock(
     },
   }),
 );
+
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  default: {
+    listProfiles: vi.fn(),
+    getProfile: vi.fn(),
+    saveProfile: vi.fn(),
+  },
+}));
 
 vi.mock("#/api/settings-service/settings-service.api", () => ({
   default: {
@@ -75,7 +84,15 @@ describe("useSwitchAcpModel", () => {
     });
   });
 
-  it("persists the model as the agent-settings default on the home page (conversationId === null)", async () => {
+  it("persists the model as the agent-settings default on the home page when no ACP profile is active", async () => {
+    // Legacy/no-ACP-profile fallback: an active OpenHands profile means the
+    // ACP-profile persist path doesn't apply, so the write goes to settings.
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [
+        { id: "id-default", name: "default", agent_kind: "openhands" },
+      ],
+      active_agent_profile_id: "id-default",
+    } as never);
     vi.mocked(SettingsService.saveSettings).mockResolvedValue(true);
 
     const { result, invalidateQueriesSpy } = renderSwitchHook();
@@ -91,6 +108,7 @@ describe("useSwitchAcpModel", () => {
     expect(SettingsService.saveSettings).toHaveBeenCalledWith({
       agent_settings_diff: { acp_model: "gemini-2.5-pro" },
     });
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
     expect(
       AgentServerConversationService.switchAcpModel,
     ).not.toHaveBeenCalled();
@@ -100,6 +118,73 @@ describe("useSwitchAcpModel", () => {
     expect(invalidateQueriesSpy).toHaveBeenCalledWith({
       queryKey: SETTINGS_QUERY_KEYS.personal(),
     });
+  });
+
+  it("persists the model into the active ACP profile on the home page", async () => {
+    // The profile is the launch source (agent_profile_id and agent_settings
+    // are mutually exclusive), so the pick must land on the profile itself.
+    vi.mocked(AgentProfilesService.listProfiles).mockResolvedValue({
+      profiles: [{ id: "id-claude", name: "claude", agent_kind: "acp" }],
+      active_agent_profile_id: "id-claude",
+    } as never);
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      profile: {
+        id: "id-claude",
+        name: "claude",
+        revision: 3,
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_model: "claude-sonnet-4-6",
+        acp_session_mode: "default",
+      },
+    } as never);
+    vi.mocked(AgentProfilesService.saveProfile).mockResolvedValue({
+      name: "claude",
+      message: "saved",
+    } as never);
+
+    const { result, invalidateQueriesSpy } = renderSwitchHook();
+
+    result.current.mutate({ conversationId: null, model: "claude-opus-4-6" });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    // Model-only merge over the stored profile: unmodeled fields survive,
+    // identity (id/revision) is stripped by mergeAgentProfileSaveInput.
+    expect(AgentProfilesService.saveProfile).toHaveBeenCalledWith("claude", {
+      agent_kind: "acp",
+      acp_server: "claude-code",
+      acp_model: "claude-opus-4-6",
+      acp_session_mode: "default",
+    });
+    expect(SettingsService.saveSettings).not.toHaveBeenCalled();
+    // The agent-profiles prefix covers the list + detail entries just
+    // rewritten, so the home picker re-derives from the new model.
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+      queryKey: ["agent-profiles"],
+    });
+  });
+
+  it("falls back to the agent-settings default when the profiles surface is unavailable", async () => {
+    vi.mocked(AgentProfilesService.listProfiles).mockRejectedValue(
+      new Error("404"),
+    );
+    vi.mocked(SettingsService.saveSettings).mockResolvedValue(true);
+
+    const { result } = renderSwitchHook();
+
+    result.current.mutate({ conversationId: null, model: "gemini-2.5-pro" });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(SettingsService.saveSettings).toHaveBeenCalledWith({
+      agent_settings_diff: { acp_model: "gemini-2.5-pro" },
+    });
+    expect(AgentProfilesService.saveProfile).not.toHaveBeenCalled();
   });
 
   it("does not invalidate caches when the live switch fails", async () => {
