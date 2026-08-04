@@ -54,6 +54,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { I18nKey } from "#/i18n/declaration";
 import { hasConversationStarted } from "./components/resolve-picker-kind";
+import { isInteractiveFeConversation } from "#/utils/is-interactive-fe-conversation";
 
 function getEntryPoint(
   hasRepository: boolean | null,
@@ -118,6 +119,8 @@ export function ChatInterface() {
   const { data: activeConversation } = useActiveConversation();
   const sandboxStatus = activeConversation?.sandbox_status ?? null;
   const isArchivedConversation = useIsArchivedConversation();
+  const allowAgentNotifications =
+    isInteractiveFeConversation(activeConversation);
 
   // Block sending in a resumed conversation that has no usable LLM, and show
   // the same setup banner as the home screen so the dead end is explained.
@@ -157,7 +160,9 @@ export function ChatInterface() {
 
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
-  useIngestAgentNotificationsFromEvents(conversationId);
+  useIngestAgentNotificationsFromEvents(conversationId, {
+    enabled: allowAgentNotifications,
+  });
 
   // The live goal banner renders in the scroll stream but advances via store
   // updates (in-progress goal events are filtered out of `renderableEvents`),
@@ -288,13 +293,14 @@ export function ChatInterface() {
   const isChatLoading = isHistoryLoading && !isTask;
 
   const showAgentNotifications =
-    isAgentNotificationsStagingEnabled() ||
-    (hasSubstantiveAgentActions &&
-      !isAgentRunning &&
-      !isChatLoading &&
-      !isProvisioningTask &&
-      !isArchivedConversation &&
-      !llmBlocked);
+    allowAgentNotifications &&
+    (isAgentNotificationsStagingEnabled() ||
+      (hasSubstantiveAgentActions &&
+        !isAgentRunning &&
+        !isChatLoading &&
+        !isProvisioningTask &&
+        !isArchivedConversation &&
+        !llmBlocked));
   const handleSendMessage = async (
     content: string,
     originalImages: File[],

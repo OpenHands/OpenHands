@@ -29,10 +29,15 @@ function hasSubstantiveAgentActions(events: OHEvent[]): boolean {
  * Ingests agent-notification recommendations from the live conversation:
  * - fenced blocks in new assistant messages (detection-skill contract)
  * - heuristic detection when the agent returns to AWAITING_USER_INPUT
+ *
+ * Pass ``enabled: false`` for automation / resolver conversations so we never
+ * invent suggestions outside interactive FE sessions.
  */
 export function useIngestAgentNotificationsFromEvents(
   conversationId: string | null,
+  options?: { enabled?: boolean },
 ) {
+  const enabled = options?.enabled ?? true;
   const events = useEventStore((state) => state.events);
   const { curAgentState } = useAgentState();
   const ensureHydrated = useAgentNotificationsStore(
@@ -46,10 +51,10 @@ export function useIngestAgentNotificationsFromEvents(
   const lastHeuristicSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (conversationId) {
+    if (conversationId && enabled) {
       ensureHydrated(conversationId);
     }
-  }, [conversationId, ensureHydrated]);
+  }, [conversationId, enabled, ensureHydrated]);
 
   useEffect(() => {
     processedMessageEventIdsRef.current = new Set();
@@ -57,7 +62,7 @@ export function useIngestAgentNotificationsFromEvents(
   }, [conversationId]);
 
   useEffect(() => {
-    if (!conversationId) {
+    if (!conversationId || !enabled) {
       return;
     }
 
@@ -84,10 +89,10 @@ export function useIngestAgentNotificationsFromEvents(
         processedMessageEventIdsRef.current.add(eventId);
       }
     }
-  }, [addNotifications, conversationId, events]);
+  }, [addNotifications, conversationId, enabled, events]);
 
   useEffect(() => {
-    if (!conversationId) {
+    if (!conversationId || !enabled) {
       return;
     }
 
@@ -112,5 +117,5 @@ export function useIngestAgentNotificationsFromEvents(
     }
 
     lastHeuristicSignatureRef.current = signature;
-  }, [addNotifications, conversationId, curAgentState, events]);
+  }, [addNotifications, conversationId, curAgentState, enabled, events]);
 }
