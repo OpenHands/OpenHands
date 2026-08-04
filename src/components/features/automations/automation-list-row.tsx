@@ -18,6 +18,14 @@ import {
   automationListRowClassName,
   automationListCellClassName,
 } from "./automation-view-mode";
+import { AutomationHealthBadge } from "./automation-health-badge";
+import {
+  averageDurationDisplay,
+  lastRunText,
+  runCountDisplay,
+} from "./automation-run-insights";
+import { deriveAutomationHealth } from "#/manifests/automation-insights";
+import type { AutomationInsightsProps } from "./automation-card";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -27,6 +35,7 @@ interface AutomationListRowProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  insights?: AutomationInsightsProps;
 }
 
 export function AutomationListRow({
@@ -37,6 +46,7 @@ export function AutomationListRow({
   onDelete,
   onExport,
   onEdit,
+  insights,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
   const { t } = useTranslation("openhands");
@@ -106,7 +116,54 @@ export function AutomationListRow({
         </div>
       </td>
 
-      <td className={cn("w-0 whitespace-nowrap", automationListCellClassName)}>
+      {insights ? (
+        <>
+          <td
+            data-testid={`automation-health-${automation.id}`}
+            className={cn(
+              "hidden w-[110px] @min-[36rem]:table-cell",
+              automationListCellClassName,
+            )}
+          >
+            <AutomationHealthBadge
+              health={deriveAutomationHealth(automation, insights.state)}
+              labels={insights.spec.health}
+            />
+          </td>
+          <td
+            data-testid={`automation-last-run-${automation.id}`}
+            className={cn(
+              "hidden w-[84px] whitespace-nowrap text-xs text-muted @min-[44rem]:table-cell",
+              automationListCellClassName,
+            )}
+          >
+            {lastRunText(
+              insights.state?.summary?.latestRun?.started_at ??
+                automation.last_triggered_at,
+              insights.spec.lastRun,
+              t(I18nKey.CONVERSATION$AGO),
+            )}
+          </td>
+          <td
+            data-testid={`automation-run-stats-${automation.id}`}
+            title={`${insights.spec.stats.runs} · ${insights.spec.stats.averageDuration}`}
+            className={cn(
+              "hidden w-[140px] whitespace-nowrap text-right text-xs text-muted @min-[56rem]:table-cell",
+              automationListCellClassName,
+            )}
+          >
+            {`${runCountDisplay(insights.state)} · ${averageDurationDisplay(insights.state)}`}
+          </td>
+        </>
+      ) : null}
+
+      <td
+        className={cn(
+          insights ? "w-[90px]" : "w-0",
+          "whitespace-nowrap",
+          automationListCellClassName,
+        )}
+      >
         <div className="flex items-center justify-end gap-0.5">
           {canManage ? (
             <StyledTooltip
