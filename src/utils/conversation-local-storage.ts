@@ -44,16 +44,18 @@ export interface ConversationState {
   draftMessage: string | null;
   rightPanelShown?: boolean;
   /**
-   * User's persisted choice for the Files tab diff-vs-files toggle.
-   * `null` means "no explicit choice yet" — the Files tab then falls back
-   * to its repo-aware default (diff inside a git repo with commits, files
-   * otherwise).
+   * Legacy Files-tab Diff/Files toggle preference. Kept for blob
+   * compatibility; the Files surface no longer hosts Diff/Commits
+   * (those live in the sibling Commits conversation tab).
    */
   filesTabDiffView: boolean | null;
   /** User's persisted choice for the Files tab Rich/Plain content toggle. */
   filesTabContentViewMode: ViewMode;
+  /** Whether the left-hand file tree is visible in the Files tab. */
   filesTabTreeVisible?: boolean;
+  /** Open file tabs in the Files quick-row (basenames, closable). */
   filesTabOpenPaths?: string[];
+  /** Currently selected path among `filesTabOpenPaths`, if any. */
   filesTabSelectedPath?: string | null;
 }
 

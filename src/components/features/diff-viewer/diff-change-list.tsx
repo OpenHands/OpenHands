@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { GitChangeStatus } from "#/api/open-hands.types";
 import { FileDiffViewer } from "./file-diff-viewer";
 
@@ -20,6 +21,8 @@ export interface DiffChangeListProps {
  * previously open one (same behavior as the Commits list).
  */
 export function DiffChangeList({ changes, commit }: DiffChangeListProps) {
+  const [expandedPath, setExpandedPath] = useState<string | null>(null);
+
   return (
     <div data-testid="diff-change-list" className="w-full flex flex-col">
       {changes.map((change) => (
@@ -28,6 +31,12 @@ export function DiffChangeList({ changes, commit }: DiffChangeListProps) {
           path={change.path}
           type={change.status}
           commit={commit}
+          isExpanded={expandedPath === change.path}
+          onToggle={() =>
+            setExpandedPath((prev) =>
+              prev === change.path ? null : change.path,
+            )
+          }
         />
       ))}
     </div>
