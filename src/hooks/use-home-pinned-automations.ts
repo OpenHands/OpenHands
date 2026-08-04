@@ -1,11 +1,24 @@
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { useCallback, useMemo, useState } from "react";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   HOME_AUTOMATIONS_DEMO_PINNED_IDS,
   isHomeAutomationsDemoEnabled,
 } from "#/fixtures/home-automations-demo";
 
 export const HOME_PINNED_AUTOMATIONS_KEY = "oh:home-pinned-automations";
+
+/**
+ * Pins are stored per backend + org: automation ids only resolve against the
+ * backend that issued them, and `pruneMissing` compares against the active
+ * backend's list — a shared key would let one backend wipe another's pins.
+ */
+export function getHomePinnedAutomationsKey(
+  backendId: string,
+  orgId: string | null,
+): string {
+  return `${HOME_PINNED_AUTOMATIONS_KEY}:${backendId}:${orgId ?? "-"}`;
+}
 
 /** Soft preview cap for the home pinned dashboard before "View more". */
 export const HOME_PINNED_PREVIEW_LIMIT = 6;
@@ -70,8 +83,9 @@ export function movePinnedId(
  */
 export function useHomePinnedAutomations() {
   const demo = isHomeAutomationsDemoEnabled();
+  const active = useActiveBackend();
   const [rawPinnedIds, setRawPinnedIds] = useLocalStorage<string[]>(
-    HOME_PINNED_AUTOMATIONS_KEY,
+    getHomePinnedAutomationsKey(active.backend.id, active.orgId),
     [],
   );
   // Demo pins are fixture-backed; keep session order overrides in memory so

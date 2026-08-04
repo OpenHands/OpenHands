@@ -95,8 +95,17 @@ export function useHomeAutomationActions(
   const confirmTurnOff = useCallback(() => {
     setTurnOffConfirmOpen(false);
     if (isDemo) return;
-    toggleMutation.mutate({ id: automation.id, enabled: false });
-  }, [automation.id, isDemo, toggleMutation]);
+    toggleMutation.mutate(
+      { id: automation.id, enabled: false },
+      {
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$TURN_OFF_ERROR)),
+          );
+        },
+      },
+    );
+  }, [automation.id, isDemo, t, toggleMutation]);
 
   const cancelTurnOff = useCallback(() => {
     setTurnOffConfirmOpen(false);

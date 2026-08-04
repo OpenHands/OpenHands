@@ -27,6 +27,7 @@ export function PinnedAutomationsDashboard() {
     isError,
     enabledAutomations,
     knownAutomationIds,
+    isAutomationListComplete,
     runStates,
   } = useHomeAutomations();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -37,9 +38,11 @@ export function PinnedAutomationsDashboard() {
   );
 
   useEffect(() => {
-    if (knownAutomationIds.size === 0) return;
+    // Only prune against a complete id set: a truncated page would look like
+    // missing automations and delete valid pins.
+    if (!isAutomationListComplete || knownAutomationIds.size === 0) return;
     pruneMissing(knownAutomationIds);
-  }, [knownAutomationIds, pruneMissing]);
+  }, [isAutomationListComplete, knownAutomationIds, pruneMissing]);
 
   const enabledById = new Map(
     enabledAutomations.map((automation) => [automation.id, automation]),

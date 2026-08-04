@@ -16,6 +16,7 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -102,6 +103,14 @@ function makeConversation(id: string, title: string | null): AppConversation {
     sandbox_id: null,
     sub_conversation_ids: [],
   };
+}
+
+/** Pins are stored under a backend/org-scoped key; find it by prefix. */
+function getStoredPinnedIds(): string | null {
+  const key = Object.keys(window.localStorage).find((storageKey) =>
+    storageKey.startsWith(HOME_PINNED_AUTOMATIONS_KEY),
+  );
+  return key ? window.localStorage.getItem(key) : null;
 }
 
 function renderHomeAutomations(ui: React.ReactElement) {
@@ -271,9 +280,10 @@ describe("home automations composer layout", () => {
       await screen.findByTestId("running-automations-list"),
     ).toBeInTheDocument();
 
-    expect(
-      screen.getByRole("link", { name: /Daily digest/ }),
-    ).toHaveAttribute("href", "/conversations/conv-1");
+    expect(screen.getByRole("link", { name: /Daily digest/ })).toHaveAttribute(
+      "href",
+      "/conversations/conv-1",
+    );
     expect(screen.getByRole("link", { name: /PR review/ })).toHaveAttribute(
       "href",
       "/automations/auto-2",
@@ -400,9 +410,7 @@ describe("home automations composer layout", () => {
       within(dashboard).getByText("AUTOMATIONS$DETAIL$NO_CONVERSATION"),
     ).toBeInTheDocument();
 
-    expect(window.localStorage.getItem(HOME_PINNED_AUTOMATIONS_KEY)).toContain(
-      "auto-1",
-    );
+    expect(getStoredPinnedIds()).toContain("auto-1");
 
     await user.click(screen.getByTestId("pinned-automation-menu-auto-1"));
     expect(
@@ -430,5 +438,29 @@ describe("home automations composer layout", () => {
     expect(
       screen.queryByTestId("pinned-automation-card-auto-1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows an error toast when turning an automation off fails", async () => {
+    vi.mocked(AutomationService.toggleAutomation).mockRejectedValue(
+      new Error("backend unavailable"),
+    );
+    const user = userEvent.setup();
+
+    renderHomeAutomations(<RunningAutomationsList />);
+
+    await screen.findByTestId("running-automations-list");
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-turn-off-auto-1"));
+    await user.click(screen.getByTestId("turn-off-automation-confirm"));
+
+    await waitFor(() => {
+      expect(AutomationService.toggleAutomation).toHaveBeenCalledWith(
+        "auto-1",
+        false,
+      );
+    });
+    await waitFor(() => {
+      expect(displayErrorToast).toHaveBeenCalled();
+    });
   });
 });

@@ -36651,6 +36651,23 @@
     "uk": "Вимкнути «{{name}}»? Вона припинить запускатися за розкладом, доки ви знову її не увімкнете.",
     "ca": "Vols desactivar \"{{name}}\"? Deixarà d'executar-se segons la planificació fins que la tornis a activar."
   },
+  "AUTOMATIONS$TURN_OFF_ERROR": {
+    "en": "Failed to turn off automation",
+    "ja": "オートメーションをオフにできませんでした",
+    "zh-CN": "关闭自动化失败",
+    "zh-TW": "關閉自動化失敗",
+    "ko-KR": "자동화를 끄지 못했습니다",
+    "no": "Kunne ikke slå av automatiseringen",
+    "it": "Impossibile disattivare l'automazione",
+    "pt": "Falha ao desativar a automação",
+    "es": "No se pudo desactivar la automatización",
+    "ar": "فشل إيقاف الأتمتة",
+    "fr": "Échec de la désactivation de l'automatisation",
+    "tr": "Otomasyon kapatılamadı",
+    "de": "Automatisierung konnte nicht ausgeschaltet werden",
+    "uk": "Не вдалося вимкнути автоматизацію",
+    "ca": "No s'ha pogut desactivar l'automatització"
+  },
   "FEATURED_AUTOMATIONS$MOVE_UP": {
     "en": "Move up",
     "ja": "上に移動",

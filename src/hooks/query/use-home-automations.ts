@@ -54,6 +54,12 @@ export function useHomeAutomations() {
     allAutomations.map((automation) => automation.id),
   );
 
+  // False while loading or when the backend has more automations than the
+  // fetched page — consumers must not prune pins against a partial id set.
+  const isAutomationListComplete = demo
+    ? true
+    : automationsData != null && allAutomations.length >= automationsData.total;
+
   const liveRunStates = useLatestAutomationRuns(demo ? [] : enabledAutomations);
   const runStates = demo ? HOME_AUTOMATIONS_DEMO_RUN_STATES : liveRunStates;
 
@@ -65,6 +71,7 @@ export function useHomeAutomations() {
       isAutomationsLoading: false,
       enabledAutomations,
       knownAutomationIds,
+      isAutomationListComplete,
       runStates,
     };
   }
@@ -76,6 +83,7 @@ export function useHomeAutomations() {
     isAutomationsLoading,
     enabledAutomations,
     knownAutomationIds,
+    isAutomationListComplete,
     runStates,
   };
 }

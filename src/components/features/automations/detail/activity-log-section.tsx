@@ -20,6 +20,12 @@ interface ActivityLogSectionProps {
 
 const PAGE_SIZE = 20;
 
+/**
+ * Upper bound on auto-loading while searching for a `?run=` deep link, so a
+ * stale or bogus run id cannot page through the entire run history.
+ */
+const HIGHLIGHT_AUTO_LOAD_MAX_RUNS = 100;
+
 export function ActivityLogSection({
   automation,
   highlightedRunId = null,
@@ -67,15 +73,17 @@ export function ActivityLogSection({
   useEffect(() => {
     if (!highlightedRunId || !data?.runs.length) return;
     const index = data.runs.findIndex((run) => run.id === highlightedRunId);
-    if (index < 0 && hasMore) {
-      setLimit((prev) => prev + PAGE_SIZE);
+    if (index < 0) {
+      if (hasMore && limit < HIGHLIGHT_AUTO_LOAD_MAX_RUNS) {
+        setLimit((prev) => prev + PAGE_SIZE);
+      }
       return;
     }
     highlightedRef.current?.scrollIntoView({
       behavior: "smooth",
       block: "center",
     });
-  }, [data?.runs, hasMore, highlightedRunId]);
+  }, [data?.runs, hasMore, highlightedRunId, limit]);
 
   return (
     <div

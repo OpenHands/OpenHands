@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPinnedOrder,
+  getHomePinnedAutomationsKey,
+  HOME_PINNED_AUTOMATIONS_KEY,
   movePinnedId,
 } from "#/hooks/use-home-pinned-automations";
+
+describe("getHomePinnedAutomationsKey", () => {
+  it("scopes the storage key by backend and org", () => {
+    expect(getHomePinnedAutomationsKey("backend-a", "org-1")).toBe(
+      `${HOME_PINNED_AUTOMATIONS_KEY}:backend-a:org-1`,
+    );
+    expect(getHomePinnedAutomationsKey("backend-a", null)).toBe(
+      `${HOME_PINNED_AUTOMATIONS_KEY}:backend-a:-`,
+    );
+    expect(getHomePinnedAutomationsKey("backend-a", "org-1")).not.toBe(
+      getHomePinnedAutomationsKey("backend-b", "org-1"),
+    );
+  });
+});
 
 describe("movePinnedId", () => {
   it("reorders an id before or after a target", () => {
