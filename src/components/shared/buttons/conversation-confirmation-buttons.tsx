@@ -37,7 +37,7 @@ export function ConversationConfirmationButtons() {
 
   const handleConfirmation = useCallback(
     (accept: boolean) => {
-      if (!awaitingAction || !conversation) {
+      if (!awaitingAction || !conversation || awaitingAction.id === undefined) {
         return;
       }
 
@@ -90,7 +90,7 @@ export function ConversationConfirmationButtons() {
   // Only show if agent is waiting for confirmation and we haven't already submitted
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
-    !awaitingAction ||
+    awaitingAction?.id === undefined ||
     submittedEventIds.includes(awaitingAction.id)
   ) {
     return null;

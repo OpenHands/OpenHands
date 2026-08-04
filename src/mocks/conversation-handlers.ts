@@ -145,13 +145,18 @@ function searchPaginationEvents(
   const timestampLt = searchParams.get("timestamp__lt");
   const sortOrder = searchParams.get("sort_order");
   const filtered = timestampLt
-    ? events.filter((event) => event.timestamp < timestampLt)
+    ? events.filter(
+        (event) =>
+          event.timestamp !== undefined && event.timestamp < timestampLt,
+      )
     : events;
-  const sorted = [...filtered].sort((a, b) =>
-    sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
-  );
+  const sorted = [...filtered].sort((a, b) => {
+    const timestampA = a.timestamp ?? "";
+    const timestampB = b.timestamp ?? "";
+    return sortOrder === "TIMESTAMP_DESC"
+      ? timestampB.localeCompare(timestampA)
+      : timestampA.localeCompare(timestampB);
+  });
 
   return {
     items: sorted.slice(0, limit),
