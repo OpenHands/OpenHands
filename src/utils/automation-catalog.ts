@@ -20,7 +20,7 @@ const SKILL_BY_NAME = new Map<string, SkillCatalogEntry>(
 
 /** Every integration the entry declares, in declaration order. */
 export function getIntegrationIds(automation: RecommendedAutomation): string[] {
-  return Object.keys(automation.requires.integrations);
+  return Object.keys(automation.requires?.integrations ?? {});
 }
 
 /**
@@ -31,7 +31,7 @@ export function getIntegrationIds(automation: RecommendedAutomation): string[] {
 export function getRequiredIntegrationIds(
   automation: RecommendedAutomation,
 ): string[] {
-  return Object.entries(automation.requires.integrations)
+  return Object.entries(automation.requires?.integrations ?? {})
     .filter(([, requirement]) => requirement.required !== false)
     .map(([id]) => id);
 }
