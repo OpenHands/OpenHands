@@ -16,6 +16,12 @@
  *
  * At most ONE skin can be installed per instance.
  *
+ * The skin checkout lives in the agent's workspace (~/workspace/skin, a
+ * persistent volume) so the instance's agent can edit the running skin in
+ * place; this service supervises the app (own process group, restart with
+ * backoff) and exposes POST /skin-api/restart for applying edits. Service
+ * state (settings, logs) stays in ~/.openhands/agent-canvas/skin.
+ *
  * This module is consumed by scripts/static-server.mjs, which mounts the
  * REST API under /skin-api and reverse-proxies /skin → the running skin.
  *
@@ -29,6 +35,7 @@
  */
 
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -335,6 +342,10 @@ export class SkinService {
    *                                     (OPENHANDS_SKIN_PORT).
    * @param {string} [opts.home]         State dir (default
    *                                     ~/.openhands/agent-canvas/skin).
+   * @param {string} [opts.workspaceDir] Skin checkout dir (default
+   *                                     ~/workspace/skin). Lives in the
+   *                                     agent's workspace so the agent can
+   *                                     edit the running skin in place.
    * @param {string} [opts.agentServerUrl]  e.g. http://127.0.0.1:18000
    * @param {string} [opts.automationUrl]   e.g. http://127.0.0.1:18001
    * @param {string} [opts.sessionApiKey]   key for both backends
@@ -345,6 +356,8 @@ export class SkinService {
     this.skinPort = opts.skinPort;
     this.home =
       opts.home || join(homedir(), ".openhands", "agent-canvas", "skin");
+    this.workspaceDir =
+      opts.workspaceDir || join(homedir(), "workspace", "skin");
     this.agentServerUrl = opts.agentServerUrl || null;
     this.automationUrl = opts.automationUrl || null;
     this.sessionApiKey = opts.sessionApiKey || null;
@@ -355,10 +368,35 @@ export class SkinService {
     this.stopping = false;
     this.lastError = null;
     mkdirSync(this.home, { recursive: true });
+    this.migrateLegacyRepoDir();
   }
 
+  /** The skin checkout lives in the agent's workspace (persistent volume)
+   * so the agent can edit the running skin in place and restart it via
+   * POST /skin-api/restart. */
   get repoDir() {
-    return join(this.home, SKIN_REPO_DIR);
+    return this.workspaceDir;
+  }
+
+  /** Installs from before the workspace move live in
+   * ~/.openhands/agent-canvas/skin/repo — relocate them once. cpSync (not
+   * rename): the workspace is typically a different volume. */
+  migrateLegacyRepoDir() {
+    const legacy = join(this.home, SKIN_REPO_DIR);
+    if (
+      !existsSync(join(legacy, SKIN_YAML)) ||
+      existsSync(join(this.repoDir, SKIN_YAML))
+    ) {
+      return;
+    }
+    log(`Migrating skin checkout ${legacy} → ${this.repoDir}…`);
+    try {
+      rmSync(this.repoDir, { recursive: true, force: true });
+      cpSync(legacy, this.repoDir, { recursive: true });
+      rmSync(legacy, { recursive: true, force: true });
+    } catch (err) {
+      log(`Skin migration failed: ${err.message}`);
+    }
   }
 
   get settingsPath() {
@@ -412,6 +450,7 @@ export class SkinService {
       branch: await this.currentBranch(),
       autoPush: !!settings.autoPush,
       running: !!this.child,
+      path: this.repoDir,
       port: this.skinPort,
       canvasVersion: this.canvasVersion,
       canvasVersionRange: skin.canvas_version || null,
@@ -527,8 +566,12 @@ export class SkinService {
     if (this.stopping) return;
     log(`Starting skin app on port ${this.skinPort} (npm run start)…`);
     const logPath = join(this.home, SKIN_LOG_FILE);
+    // detached: the skin runs in its own process group so stop() can kill
+    // the whole tree (npm + the actual server), never leaving an orphan
+    // holding the port.
     const child = spawn("npm", ["run", "start"], {
       cwd: this.repoDir,
+      detached: true,
       env: {
         ...process.env,
         OPENHANDS_SKIN_PORT: String(this.skinPort),
@@ -570,10 +613,37 @@ export class SkinService {
 
   async stop() {
     this.stopping = true;
-    if (this.child) {
-      this.child.kill("SIGTERM");
-      this.child = null;
+    const child = this.child;
+    if (!child) return;
+    this.child = null;
+    const exited = new Promise((resolve) => {
+      child.once("close", resolve);
+      setTimeout(resolve, 5000).unref?.();
+    });
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      child.kill("SIGTERM");
     }
+    await exited;
+    // Whatever survived SIGTERM gets the axe — a lingering server would
+    // hold the port and make the restarted skin crash-loop on EADDRINUSE.
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* group already gone */
+    }
+  }
+
+  /** Cleanly restart the skin app (e.g. after the agent edited the code in
+   * the workspace checkout). Re-runs npm install when needed. */
+  async restart() {
+    this.requireInstalled();
+    await this.stop();
+    this.restartCount = 0;
+    this.lastError = null;
+    await this.start();
+    return this.status();
   }
 
   // ── pull / push / auto-push ──────────────────────────────────────────────
@@ -1017,6 +1087,10 @@ export function createSkinApiHandler(service) {
       }
       if (method === "POST" && pathname === "/skin-api/pull") {
         send(res, 200, await service.pull());
+        return;
+      }
+      if (method === "POST" && pathname === "/skin-api/restart") {
+        send(res, 200, await service.restart());
         return;
       }
       if (method === "POST" && pathname === "/skin-api/push") {

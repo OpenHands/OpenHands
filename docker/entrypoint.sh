@@ -43,7 +43,10 @@
 #                          (default: 18002). The skin is reverse-proxied
 #                          verbatim under /skin (embedded as the default
 #                          Canvas tab, not served standalone at /);
-#                          managed via /skin-api.
+#                          managed via /skin-api. The checkout lives in
+#                          the agent workspace (~/workspace/skin, override
+#                          with OPENHANDS_SKIN_WORKSPACE_DIR) so the agent
+#                          can edit it and POST /skin-api/restart.
 #   OPENHANDS_SKIN_REPO   – Optional GitHub repo URL of a skin to install on
 #                          first boot (skipped when a skin is already
 #                          installed). OPENHANDS_SKIN_REF pins a branch/tag.

@@ -601,8 +601,12 @@ export function startStaticServer(config) {
   if (config.skinPort) {
     skinService = new SkinService({
       // OPENHANDS_SKIN_STATE_DIR overrides the default
-      // ~/.openhands/agent-canvas/skin state directory (used in tests).
+      // ~/.openhands/agent-canvas/skin state directory (used in tests);
+      // OPENHANDS_SKIN_WORKSPACE_DIR overrides where the skin checkout
+      // lives (default ~/workspace/skin — inside the agent's workspace so
+      // the agent can edit the running skin and POST /skin-api/restart).
       home: process.env.OPENHANDS_SKIN_STATE_DIR || undefined,
+      workspaceDir: process.env.OPENHANDS_SKIN_WORKSPACE_DIR || undefined,
       skinPort: config.skinPort,
       agentServerUrl: config.skinAgentServerUrl,
       automationUrl: config.skinAutomationUrl,
