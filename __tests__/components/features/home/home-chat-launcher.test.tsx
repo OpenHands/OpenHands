@@ -2,11 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import toast from "react-hot-toast";
+import toast, { useToasterStore } from "react-hot-toast";
 
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import PluginsManagementService from "#/api/plugins-management-service";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -240,6 +242,51 @@ const renderLauncher = () =>
     ),
   });
 
+/**
+ * Reports how many toasts are currently on screen. Reads react-hot-toast's own
+ * store rather than the rendered `<Toaster />`: a dismissed toast keeps its DOM
+ * node for the exit animation, so "still in the document" is not the same
+ * question as "still shown".
+ */
+function VisibleToastCount() {
+  const { toasts } = useToasterStore();
+  return (
+    <span data-testid="visible-toast-count">
+      {toasts.filter((item) => item.visible).length}
+    </span>
+  );
+}
+
+/**
+ * Renders the launcher next to the toast probe. `unmountLauncher` drops only
+ * the launcher, leaving the probe mounted so the toast state can still be read
+ * after the component that created the toast is gone.
+ */
+const renderWithToastProbe = () => {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <VisibleToastCount />
+      <HomeChatLauncher />
+    </QueryClientProvider>,
+  );
+
+  return {
+    ...view,
+    unmountLauncher: () =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <VisibleToastCount />
+        </QueryClientProvider>,
+      ),
+  };
+};
+
 function makeConversationResponse(
   overrides: Record<string, unknown> = {},
 ): never {
@@ -302,6 +349,19 @@ describe("HomeChatLauncher", () => {
       workspaces: [],
       workspaceParents: [],
     });
+    // The create mutation awaits these two round trips itself — the agent
+    // profiles before it creates anything, the installed plugins after. Left
+    // unmocked they escape to the network and the mutation never reaches
+    // `createConversation` within the assertion window, so stub them to the
+    // "nothing configured" shape that exercises the plain agent_settings path.
+    vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    });
+    vi.spyOn(
+      PluginsManagementService,
+      "listInstalledPlugins",
+    ).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -520,6 +580,45 @@ describe("HomeChatLauncher", () => {
 
     await waitFor(() => expect(mockDisplayErrorToast).toHaveBeenCalled());
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("takes the creating-conversation toast down when creation fails", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(new Error("Network down"));
+
+    renderWithToastProbe();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(mockDisplayErrorToast).toHaveBeenCalled());
+    expect(screen.getByTestId("visible-toast-count")).toHaveTextContent("0");
+  });
+
+  it("takes the creating-conversation toast down when the launcher unmounts before creation settles", async () => {
+    // A create that never settles. The mutation keeps running past the point
+    // where the conversation exists (agent profiles, installed plugins), so
+    // leaving the home page inside that window is ordinary. The toast has an
+    // infinite duration, and until #15701 the only thing that could dismiss it
+    // was this promise chain — so a chain that never got there left it on
+    // screen for the rest of the session.
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockReturnValue(new Promise(() => {}) as never);
+
+    const { unmountLauncher } = renderWithToastProbe();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("visible-toast-count")).toHaveTextContent("1"),
+    );
+
+    unmountLauncher();
+
+    expect(screen.getByTestId("visible-toast-count")).toHaveTextContent("0");
   });
 
   it("enqueues an optimistic pending message when cloud returns a start task", async () => {

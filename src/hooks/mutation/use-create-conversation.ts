@@ -249,6 +249,14 @@ export const useCreateConversation = () => {
           installed = await queryClient.ensureQueryData({
             queryKey: PLUGINS_QUERY_KEYS.installed,
             queryFn: () => PluginsManagementService.listInstalledPlugins(),
+            // This runs *after* the conversation has been created, and the
+            // mutation doesn't resolve until it settles — so its failure mode
+            // is charged to the caller's "Creating conversation…" spinner
+            // (#15701). On a cold cache the default three retries with backoff
+            // hold that open for minutes on a backend that can't answer.
+            // Match the profile lookups above and fail fast; the snapshot is
+            // best-effort metadata for the plugins view either way.
+            retry: false,
           });
         } catch {
           // Best-effort: never let plugin lookup block conversation creation.

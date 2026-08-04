@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useTranslation } from "react-i18next";
 import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
@@ -35,6 +35,18 @@ import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
 import { OpenRepositoryDialog } from "./open-repository-dialog";
 import { HomeGitControlBarPreview } from "./home-git-control-bar-preview";
+
+/**
+ * Fixed id for the "Creating conversation…" toast.
+ *
+ * react-hot-toast gives loading toasts an infinite duration, so this one only
+ * ever leaves the screen when something dismisses it by id. Under a generated
+ * id a toast that outlives its dismiss becomes unreachable — no other code can
+ * name it — and stays up until the page is reloaded (#15701). A fixed id keeps
+ * it addressable, and means a repeat submit reuses the same toast instead of
+ * stacking another one that also has to be cleaned up.
+ */
+const CREATING_CONVERSATION_TOAST_ID = "creating-conversation";
 
 export function HomeChatLauncher() {
   const { t } = useTranslation("openhands");
@@ -74,6 +86,15 @@ export function HomeChatLauncher() {
   const hasSelection = isLocal
     ? !!pendingWorkspace
     : !!pendingRepository && !!pendingBranch;
+
+  // The submit below drives a promise chain that isn't tied to this component,
+  // and the create mutation stays pending past the point where the conversation
+  // itself exists (it also resolves agent profiles and snapshots installed
+  // plugins). Leaving the home page inside that window — clicking a sidebar
+  // conversation, switching backend — tears the launcher down while the chain
+  // is still awaiting, so clear the toast on the way out rather than trusting
+  // the chain to get there.
+  useEffect(() => () => toast.dismiss(CREATING_CONVERSATION_TOAST_ID), []);
 
   const handleSubmit = (message: string) => {
     const trimmed = message.trim();
@@ -125,16 +146,20 @@ export function HomeChatLauncher() {
     }
 
     // Loading toast gives the user a clear signal that the request is in
-    // flight; dismissed precisely once the mutation resolves.
-    const toastId = toast.loading(
-      t(I18nKey.HOME$CREATING_CONVERSATION),
-      TOAST_OPTIONS,
-    );
+    // flight; dismissed as soon as the conversation exists, and again in the
+    // `finally` below so no exit path can leave it behind.
+    toast.loading(t(I18nKey.HOME$CREATING_CONVERSATION), {
+      ...TOAST_OPTIONS,
+      id: CREATING_CONVERSATION_TOAST_ID,
+    });
 
     void (async () => {
       try {
         const data = await createConversation(variables);
-        toast.dismiss(toastId);
+        // The conversation exists from here on, so drop the toast before the
+        // attachment / pending-message work instead of leaving a "Creating
+        // conversation…" label up for a step that isn't creating anything.
+        toast.dismiss(CREATING_CONVERSATION_TOAST_ID);
         try {
           sessionStorage.removeItem(HOME_PROMPT_DRAFT_KEY);
         } catch {
@@ -204,8 +229,12 @@ export function HomeChatLauncher() {
 
         navigate(`/conversations/${targetConversationId}`);
       } catch (error) {
-        toast.dismiss(toastId);
         displayErrorToast(error instanceof Error ? error.message : null);
+      } finally {
+        // Safety net for every path above, including the early returns. The
+        // toast has no duration of its own, so a single missed dismiss leaves
+        // it on screen for the rest of the session.
+        toast.dismiss(CREATING_CONVERSATION_TOAST_ID);
       }
     })();
   };
