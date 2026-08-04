@@ -75,7 +75,11 @@ export interface SetupBlock {
   prompt?: string;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
-  /** assisted only. Setup context for the conversation that finishes setup. */
+  /**
+   * Setup context for the conversation that finishes setup. Required for
+   * assisted mode. Optional for direct mode, where it seeds the fallback
+   * conversation offered when the deployment cannot run the direct path.
+   */
   message?: string;
 }
 
@@ -125,6 +129,8 @@ export type SetupFormValues = Record<string, string>;
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
   ready: boolean;
+  /** Absolute timeout ceiling enforced by this deployment's automation API. */
+  maxAutomationTimeoutSeconds?: number;
   triggerKinds: string[];
   eventSources: string[];
   eventTypes: string[];
@@ -148,4 +154,105 @@ export interface ValidateDraftResponse {
   valid: boolean;
   errors: DraftValidationError[];
   sampleEventMatched?: boolean | null;
+}
+
+/**
+ * Host-owned shape of the production Automation interface manifest, published
+ * by `@openhands/extensions/automations` as `AUTOMATION_INTERFACE`.
+ *
+ * The catalog states what varies per automation; this states the domain-level
+ * facts of the interface itself. As with setup entries, the published data is
+ * validated at admission rather than trusted, and a package that predates the
+ * manifest simply leaves the host on its own defaults.
+ */
+
+export const INTERFACE_VERSION = "1.0";
+
+/** The closed set of runtime-model properties a client may offer for setting. */
+export type AutomationAttributeName =
+  | "name"
+  | "prompt"
+  | "model"
+  | "timeout"
+  | "schedule";
+
+export type InterfaceAttributeType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "llm-profile"
+  | "schedule";
+
+/** How one settable attribute of an existing Automation is offered. */
+export interface InterfaceAttribute {
+  type: InterfaceAttributeType;
+  label: string;
+  help?: string;
+  required: boolean;
+  /** Only a `number` attribute carries constraints. */
+  constraints?: { min?: number; max?: number };
+}
+
+export interface InterfaceRoutes {
+  list: string;
+  /** Carries the `:automationId` segment the host substitutes. */
+  setup: string;
+  /** Carries the `:automationId` segment the host substitutes. */
+  detail: string;
+}
+
+/**
+ * Service-relative paths the host calls. The base path, methods, headers, and
+ * auth remain the host's. `{id}` marks where the automation id is substituted.
+ */
+export interface InterfaceEndpoints {
+  list: string;
+  detail: string;
+  dispatch: string;
+  runs: string;
+  tarball: string;
+  health: string;
+  capabilities: string;
+  validate: string;
+  createPrompt: string;
+  createPlugin: string;
+}
+
+export type InterfaceEndpointName = keyof InterfaceEndpoints;
+
+export interface InterfaceImportExport {
+  fileKind: string;
+  fileVersion: number;
+  filenameSuffix: string;
+  importDefaults: {
+    /** Provider inferred for short owner/repo repository URLs on import. */
+    repoProvider: SetupGitProvider;
+    /** Event source of the placeholder trigger that keeps an import inert. */
+    placeholderEventSource: string;
+  };
+}
+
+export interface InterfaceManifest {
+  version: typeof INTERFACE_VERSION;
+  routes: InterfaceRoutes;
+  navigation: {
+    sidebar: { label: string };
+    commandMenu: { title: string; description: string; keywords: string };
+  };
+  pages: {
+    list: { title: string; subtitle: string };
+    detail: { backLabel: string };
+    edit: { title: string };
+  };
+  docsUrl: string;
+  /**
+   * The input surface of an existing Automation, keyed by the runtime-model
+   * property the host sends. Rendering it as an edit dialog is this host's
+   * choice, not stated here.
+   */
+  attributes: Partial<Record<AutomationAttributeName, InterfaceAttribute>>;
+  importExport: InterfaceImportExport;
+  endpoints: InterfaceEndpoints;
+  featuredAutomationIds: string[];
+  responderIntegrationIds: string[];
 }
