@@ -23,20 +23,6 @@ const DRAFT_SAVE_DEBOUNCE_MS = 500;
  */
 export const HOME_PROMPT_DRAFT_KEY = "oh:home-prompt-draft";
 
-export const HOME_PROMPT_DRAFT_SET_EVENT = "oh:home-prompt-draft-set";
-
-export function setHomePromptDraft(text: string): void {
-  try {
-    sessionStorage.setItem(HOME_PROMPT_DRAFT_KEY, text);
-  } catch {
-    // sessionStorage not available
-  }
-
-  window.dispatchEvent(
-    new CustomEvent(HOME_PROMPT_DRAFT_SET_EVENT, { detail: { text } }),
-  );
-}
-
 /**
  * Hook for persisting draft messages.
  * Handles debounced saving on input, restoration on mount, and clearing on confirmed delivery.
@@ -181,33 +167,6 @@ export const useDraftPersistence = (
 
     hasRestoredRef.current = true;
     setIsRestored(true);
-  }, [chatInputRef, conversationId]);
-
-  useEffect(() => {
-    if (conversationId) {
-      return;
-    }
-
-    const handlePromptSet = (event: Event) => {
-      const text = (event as CustomEvent<{ text: string }>).detail?.text;
-      if (typeof text !== "string") {
-        return;
-      }
-
-      const element = chatInputRef.current;
-      if (!element) {
-        return;
-      }
-
-      element.textContent = text;
-      lastHomeTextRef.current = text;
-      focusContentEditableAtEnd(element);
-    };
-
-    window.addEventListener(HOME_PROMPT_DRAFT_SET_EVENT, handlePromptSet);
-    return () => {
-      window.removeEventListener(HOME_PROMPT_DRAFT_SET_EVENT, handlePromptSet);
-    };
   }, [chatInputRef, conversationId]);
 
   // Debounced save function - called from onInput handler

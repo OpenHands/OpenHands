@@ -34,7 +34,6 @@ import {
   extensionModuleCardGridContainerClassName,
   extensionModuleCardPillClassName,
 } from "#/utils/extension-module-card-classes";
-import { AUTOMATIONS_TEMPLATES_SECTION_ID } from "./automations-page.constants";
 import { StatusBadge } from "./status-badge";
 
 interface RecommendedAutomationsSectionProps {
@@ -253,7 +252,6 @@ export function RecommendedAutomationsSection({
 
   return (
     <section
-      id={AUTOMATIONS_TEMPLATES_SECTION_ID}
       data-testid="recommended-automations-section"
       className={cn(scrollableGrid && "flex min-h-0 flex-1 flex-col")}
     >

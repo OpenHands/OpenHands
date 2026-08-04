@@ -42,7 +42,6 @@ import { ImportAutomationModal } from "#/components/features/automations/import-
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
-import { useScrollToAutomationsTemplates } from "#/hooks/use-scroll-to-automations-templates";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   getAutomationExportFilename,
@@ -93,7 +92,6 @@ export default function AutomationsList() {
     offset: 0,
     enabled: isBackendHealthy,
   });
-  useScrollToAutomationsTemplates({ isReady: !isHealthLoading });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
     useTracking();
   const toggleMutation = useToggleAutomation();
