@@ -1,3 +1,4 @@
+import { getImportExportSpec } from "#/manifests/automation-interface";
 import type {
   Automation,
   AutomationExportFile,
@@ -166,7 +167,8 @@ export function serializeAutomation(a: Automation): AutomationExportFile {
     ...(timezone !== undefined && { timezone }),
   };
 
-  return { version: 1, kind: "automation", spec };
+  const envelope = getImportExportSpec();
+  return { version: envelope.fileVersion, kind: envelope.fileKind, spec };
 }
 
 export function getAutomationExportFilename(
@@ -177,7 +179,7 @@ export function getAutomationExportFilename(
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `${slug || automation.id}.automation.json`;
+  return `${slug || automation.id}${getImportExportSpec().filenameSuffix}`;
 }
 
 export function parseAutomationFile(json: unknown): AutomationSpec {
@@ -186,11 +188,12 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     throw new AutomationFileValidationError(["file: expected a JSON object"]);
   }
 
-  if (json.version !== 1) {
-    issues.push("version: expected 1");
+  const envelope = getImportExportSpec();
+  if (json.version !== envelope.fileVersion) {
+    issues.push(`version: expected ${envelope.fileVersion}`);
   }
-  if (json.kind !== "automation") {
-    issues.push('kind: expected "automation"');
+  if (json.kind !== envelope.fileKind) {
+    issues.push(`kind: expected "${envelope.fileKind}"`);
   }
   if (!isRecord(json.spec)) {
     issues.push("spec: expected an object");

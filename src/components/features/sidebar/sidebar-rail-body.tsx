@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import {
+  automationListPath,
+  getInterfaceCopy,
+} from "#/manifests/automation-interface";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
@@ -199,8 +203,10 @@ export function SidebarRailBody({
           }
         />
         <SidebarNavLink
-          to="/automations"
-          label={t(I18nKey.SIDEBAR$AUTOMATIONS)}
+          to={automationListPath()}
+          label={
+            getInterfaceCopy().sidebarLabel ?? t(I18nKey.SIDEBAR$AUTOMATIONS)
+          }
           testId="sidebar-automations-link"
           collapsed={collapsed}
           icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}

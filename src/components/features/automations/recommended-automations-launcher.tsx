@@ -23,6 +23,7 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import { automationSetupPath } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
@@ -98,7 +99,7 @@ export function RecommendedAutomationsLauncher({
       // form, so the answers are collected before anything is created. The rest
       // still hand a slash command to an agent to interpret.
       if (SETUP_REGISTRY.findById(automation.id)) {
-        navigate?.(`/automations/new/${automation.id}`);
+        navigate?.(automationSetupPath(automation.id));
         onLaunched?.();
         return;
       }

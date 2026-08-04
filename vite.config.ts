@@ -95,6 +95,12 @@ export default defineConfig(({ mode }) => {
     VITE_FRONTEND_PORT = "3001",
     VITE_INSECURE_SKIP_VERIFY = "false",
     VITE_BASE_PATH,
+    // Runtime-services metadata for the dev server, passed by launchers that
+    // run the Vite dev server directly (e.g. dev:minimal). Unlike
+    // ingress/static-server, the Vite proxy cannot post-process the upstream
+    // /server_info response, so the launcher serializes the info here and the
+    // middleware below merges it into the proxied response.
+    VITE_RUNTIME_SERVICES_INFO,
   } = loadEnv(mode, process.cwd());
 
   const isLibraryBuild = process.env.BUILD_LIB === "true";
