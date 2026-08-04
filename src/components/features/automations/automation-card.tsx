@@ -7,7 +7,7 @@ import { useHasPermission } from "#/hooks/use-has-permission";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
-import GlobeIcon from "#/icons/globe.svg?react";
+import { Zap } from "lucide-react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { cn } from "#/utils/utils";
 import {
@@ -103,7 +103,7 @@ export function AutomationCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h3 className="flex items-center gap-2 truncate text-sm font-semibold text-white">
             {automation.trigger.type === "event" ? (
-              <GlobeIcon className="size-4 shrink-0 text-muted" />
+              <Zap className="size-4 shrink-0 text-muted" aria-hidden="true" />
             ) : (
               <ClockIcon className="size-4 shrink-0 text-muted" />
             )}

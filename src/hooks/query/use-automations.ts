@@ -107,3 +107,18 @@ export function useDispatchAutomation() {
     },
   });
 }
+
+export function useCancelAutomationRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId }: { automationId: string; runId: string }) =>
+      AutomationService.cancelAutomationRun(runId),
+    onSuccess: (_run, { automationId }) => {
+      queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
+      queryClient.invalidateQueries({
+        queryKey: [...AUTOMATION_RUNS_QUERY_KEY, automationId],
+      });
+    },
+  });
+}
