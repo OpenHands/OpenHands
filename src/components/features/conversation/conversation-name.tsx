@@ -13,7 +13,6 @@ import { SkillsModal } from "../conversation-panel/skills-modal";
 import { HooksModal } from "../conversation-panel/hooks-modal";
 import { ConfirmDeleteModal } from "../conversation-panel/confirm-delete-modal";
 import { ConfirmStopModal } from "../conversation-panel/confirm-stop-modal";
-import { MetricsModal } from "./metrics-modal/metrics-modal";
 import { TranscriptExportModal } from "./transcript-export-modal";
 
 export function ConversationName() {
@@ -43,8 +42,6 @@ export function ConversationName() {
     shareUrl,
     handleConfirmDelete,
     handleConfirmStop,
-    metricsModalVisible,
-    setMetricsModalVisible,
     systemModalVisible,
     setSystemModalVisible,
     skillsModalVisible,
@@ -207,12 +204,6 @@ export function ConversationName() {
           </div>
         )}
       </div>
-
-      {/* Metrics Modal */}
-      <MetricsModal
-        isOpen={metricsModalVisible}
-        onOpenChange={setMetricsModalVisible}
-      />
 
       {transcriptExportModalVisible && conversationId && (
         <TranscriptExportModal

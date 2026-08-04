@@ -11,10 +11,10 @@ import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
 import DownloadIcon from "#/icons/u-download.svg?react";
-import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import { Divider } from "#/ui/divider";
+import { Gauge } from "lucide-react";
 
 interface ConversationCardContextMenuProps {
   onClose: () => void;
@@ -202,7 +202,7 @@ export function ConversationCardContextMenu({
               onClick={onDisplayCost}
             >
               <ConversationNameContextMenuIconText
-                icon={<CreditCardIcon width={16} height={16} />}
+                icon={<Gauge size={16} />}
                 text={t(I18nKey.BUTTON$DISPLAY_COST)}
               />
             </ContextMenuListItem>
