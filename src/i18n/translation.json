@@ -36022,6 +36022,23 @@
     "uk": "Не вдалося завантажити",
     "ca": "No s'ha pogut carregar"
   },
+  "COMMON$TRY_AGAIN": {
+    "en": "Try Again",
+    "ja": "再試行",
+    "zh-CN": "重试",
+    "zh-TW": "重試",
+    "ko-KR": "다시 시도",
+    "no": "Prøv igjen",
+    "it": "Riprova",
+    "pt": "Tentar novamente",
+    "es": "Intentar de nuevo",
+    "ar": "حاول مرة أخرى",
+    "fr": "Réessayer",
+    "tr": "Tekrar dene",
+    "de": "Erneut versuchen",
+    "uk": "Спробувати ще раз",
+    "ca": "Torna-ho a provar"
+  },
   "SETTINGS$TOGGLE_SETTINGS_MENU": {
     "en": "Toggle settings menu",
     "zh-CN": "切换设置菜单",

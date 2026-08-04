@@ -1,5 +1,6 @@
 import React from "react";
 import { Tooltip } from "@heroui/react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
@@ -229,10 +230,12 @@ export function ConversationPanel({
     data,
     isLoading,
     isFetched,
+    isError,
     hasNextPage,
     isFetching,
     isFetchingNextPage,
     fetchNextPage,
+    refetch,
   } = usePaginatedConversations();
 
   // Fetch in-progress start tasks
@@ -721,12 +724,14 @@ export function ConversationPanel({
   // Gate on `isLoading` / `!isFetched` (true only until the first fetch settles),
   // not `isFetching` — the latter flips back to true on every 10s background
   // refetch, causing the skeleton/empty-state to flicker when the list is empty.
-  const showInitialSkeleton = isLoading || !isFetched;
+  const showInitialSkeleton = isLoading || (!isFetched && !isError);
   const showPinnedSection =
     !compact && !showInitialSkeleton && pinnedConversations.length > 0;
+  const showErrorState = isError && !data && !compact;
   const showEmptyState =
     isFetched &&
     !isLoading &&
+    !isError &&
     !compact &&
     listIsEffectivelyEmpty &&
     !showPinnedSection &&
@@ -801,6 +806,31 @@ export function ConversationPanel({
         )}
       >
         {showInitialSkeleton && <ConversationCardSkeleton compact={compact} />}
+
+        {showErrorState && (
+          <div
+            role="alert"
+            data-testid="conversation-panel-error-state"
+            className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-8 text-center"
+          >
+            <p className="text-sm font-medium text-[var(--oh-foreground)]">
+              {t(I18nKey.COMMON$FAILED_TO_LOAD)}
+            </p>
+            <button
+              type="button"
+              data-testid="retry-conversations"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--oh-border)] px-3 py-1.5 text-xs text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                aria-hidden
+                className={cn("size-3.5", isFetching && "animate-spin")}
+              />
+              {t(I18nKey.COMMON$TRY_AGAIN)}
+            </button>
+          </div>
+        )}
 
         {!compact && showEmptyState && (
           <div
