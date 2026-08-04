@@ -1,3 +1,35 @@
+export const OPENHANDS_FREE_GLM_MODEL_ID = "openhands/glm-5.2";
+export const OPENHANDS_FREE_GLM_MODEL_LABEL = "OpenHands GLM-5.2 (free)";
+export const OPENHANDS_FREE_GLM_BADGE_LABEL = "Free";
+export const OPENHANDS_FREE_GLM_MODEL_NOTE =
+  "Only openhands/glm-5.2 is free. Other GLM-5.2 endpoints may require their own billing.";
+
+export function isOpenHandsFreeGlmModel(
+  model: string | null | undefined,
+): boolean {
+  return model === OPENHANDS_FREE_GLM_MODEL_ID;
+}
+
+export function formatModelNameForDisplay(
+  model: string | null | undefined,
+): string | null {
+  if (!model) return null;
+  return isOpenHandsFreeGlmModel(model)
+    ? OPENHANDS_FREE_GLM_MODEL_LABEL
+    : model;
+}
+
+export function formatProviderModelNameForDisplay(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+): string | null {
+  if (!model) return null;
+  const fullModel = provider ? `${provider}/${model}` : model;
+  return isOpenHandsFreeGlmModel(fullModel)
+    ? OPENHANDS_FREE_GLM_MODEL_LABEL
+    : model;
+}
+
 /**
  * Format a native (OpenHands-kind) routing model string for display, stripping
  * the provider route prefix (e.g. ``"anthropic/claude-sonnet-4-5-20250929"`` →
@@ -16,6 +48,7 @@ export function formatNativeModelName(
   model: string | null | undefined,
 ): string | null {
   if (!model) return null;
+  if (isOpenHandsFreeGlmModel(model)) return OPENHANDS_FREE_GLM_MODEL_LABEL;
   const lastSegment = model.split("/").pop();
   return lastSegment || model;
 }

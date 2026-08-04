@@ -15,6 +15,11 @@ import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
+import {
+  OPENHANDS_FREE_GLM_BADGE_LABEL,
+  formatProviderModelNameForDisplay,
+  OPENHANDS_FREE_GLM_MODEL_NOTE,
+} from "#/utils/format-model-name";
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -168,14 +173,22 @@ export function ModelSelector({
       </fieldset>
 
       {selectedProvider === "openhands" && (
-        <HelpLink
-          testId="openhands-account-help"
-          text={t(I18nKey.SETTINGS$NEED_OPENHANDS_ACCOUNT)}
-          linkText={t(I18nKey.SETTINGS$CLICK_HERE)}
-          href={PRODUCT_URL.PRODUCTION}
-          size="settings"
-          linkColor="white"
-        />
+        <div className="flex flex-col gap-2">
+          <HelpLink
+            testId="openhands-account-help"
+            text={t(I18nKey.SETTINGS$NEED_OPENHANDS_ACCOUNT)}
+            linkText={t(I18nKey.SETTINGS$CLICK_HERE)}
+            href={PRODUCT_URL.PRODUCTION}
+            size="settings"
+            linkColor="white"
+          />
+          <p
+            data-testid="openhands-free-glm-note"
+            className="text-xs text-[var(--oh-muted)]"
+          >
+            {OPENHANDS_FREE_GLM_MODEL_NOTE}
+          </p>
+        </div>
       )}
 
       <fieldset className="flex flex-col gap-2.5 w-full">
@@ -213,7 +226,19 @@ export function ModelSelector({
             classNames={{ heading: "text-[var(--oh-muted)]" }}
           >
             {verifiedModels.map((model) => (
-              <AutocompleteItem key={model.name}>{model.name}</AutocompleteItem>
+              <AutocompleteItem key={model.name} textValue={model.name}>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">{model.name}</span>
+                  {formatProviderModelNameForDisplay(
+                    selectedProvider,
+                    model.name,
+                  ) !== model.name ? (
+                    <span className="shrink-0 rounded-full border border-[var(--oh-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--oh-muted)]">
+                      {OPENHANDS_FREE_GLM_BADGE_LABEL}
+                    </span>
+                  ) : null}
+                </span>
+              </AutocompleteItem>
             ))}
           </AutocompleteSection>
           {unverifiedModels.length > 0 ? (
@@ -225,6 +250,7 @@ export function ModelSelector({
                 <AutocompleteItem
                   data-testid={`model-item-${model.name}`}
                   key={model.name}
+                  textValue={model.name}
                 >
                   {model.name}
                 </AutocompleteItem>

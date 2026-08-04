@@ -32,6 +32,10 @@ import {
   resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
+import {
+  isOpenHandsFreeGlmModel,
+  OPENHANDS_FREE_GLM_MODEL_NOTE,
+} from "#/utils/format-model-name";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -100,6 +104,17 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       href="https://app.all-hands.dev/settings/api-keys"
       suffix={` ${t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX)}`}
     />
+  );
+}
+
+function OpenHandsFreeGlmNote() {
+  return (
+    <p
+      data-testid="openhands-free-glm-note"
+      className="text-xs text-[var(--oh-muted)]"
+    >
+      {OPENHANDS_FREE_GLM_MODEL_NOTE}
+    </p>
   );
 }
 
@@ -388,7 +403,12 @@ export function LlmSettingsScreen({
                   />
 
                   {showOpenHandsApiKeyHelp ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    <>
+                      {isOpenHandsFreeGlmModel(modelValue) ? (
+                        <OpenHandsFreeGlmNote />
+                      ) : null}
+                      <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    </>
                   ) : null}
 
                   <SettingsInput

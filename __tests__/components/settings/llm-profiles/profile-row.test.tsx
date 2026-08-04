@@ -52,6 +52,20 @@ describe("ProfileRow", () => {
     expect(screen.getByText("openai/gpt-4")).toBeInTheDocument();
   });
 
+  it("labels the free OpenHands GLM route without changing the raw title", () => {
+    render(
+      <ProfileRow
+        {...defaultProps}
+        profile={{ ...mockProfile, model: "openhands/glm-5.2" }}
+      />,
+    );
+
+    expect(screen.getByText("OpenHands GLM-5.2 (free)")).toHaveAttribute(
+      "title",
+      "openhands/glm-5.2",
+    );
+  });
+
   it("does not display model when null", () => {
     const profileWithoutModel: ProfileInfo = {
       ...mockProfile,

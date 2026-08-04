@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
@@ -28,7 +29,7 @@ describe("ModelSelector — OpenHands provider display", () => {
         verifiedCount += 1;
         return HttpResponse.json({
           models: {
-            openhands: ["claude-opus-4-7"],
+            openhands: ["claude-opus-4-7", "glm-5.2"],
             anthropic: ["claude-opus-4-5-20251101"],
           },
         });
@@ -59,5 +60,21 @@ describe("ModelSelector — OpenHands provider display", () => {
     expect(providersCount).toBe(1);
     expect(verifiedCount).toBe(1);
     expect(modelsCount).toBe(1);
+  });
+
+  it("makes clear that only openhands/glm-5.2 is free", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector currentModel="openhands/glm-5.2" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("openhands-free-glm-note")).toHaveTextContent(
+        "Only openhands/glm-5.2 is free",
+      );
+    });
+
+    await user.click(screen.getByLabelText("LLM$MODEL"));
+
+    expect(screen.getByText("Free")).toBeInTheDocument();
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("glm-5.2");
   });
 });

@@ -95,6 +95,44 @@ describe("ChatInputLlmProfilePicker", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("labels the free OpenHands GLM route in the profile menu", () => {
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({
+        profiles: [
+          {
+            name: "Free",
+            model: "openhands/glm-5.2",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        currentProfileName: "Free",
+        currentProfileModel: "openhands/glm-5.2",
+      }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(screen.getByText("OpenHands GLM-5.2 (free)")).toBeInTheDocument();
+  });
+
+  it("labels the free OpenHands GLM route in the read-only profile menu", () => {
+    useChatInputLlmProfileStateMock.mockReturnValue(
+      state({
+        canSwitchProfile: false,
+        currentProfileModel: "openhands/glm-5.2",
+      }),
+    );
+
+    renderWithProviders(<ChatInputLlmProfilePicker />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
+
+    expect(
+      screen.getByTestId("chat-input-llm-profile-current"),
+    ).toHaveTextContent("OpenHands GLM-5.2 (free)");
+  });
+
   it("links to the LLM profiles settings page", () => {
     const { container } = renderWithProviders(<ChatInputLlmProfilePicker />);
     fireEvent.click(screen.getByTestId("chat-input-llm-profile"));
