@@ -1,47 +1,70 @@
-import type { BackendSelection } from "./types";
+import type { Backend, BackendSelection, ResolvedActiveBackend } from "./types";
 
-export const BACKEND_ID_QUERY_PARAM = "backendId";
-export const ORG_ID_QUERY_PARAM = "orgId";
+/**
+ * Query parameters that pin a link to the backend (and cloud org) that owns
+ * the linked resource.
+ *
+ * The active backend is tab-scoped: `readStoredActiveBackend()` prefers
+ * `sessionStorage` and only falls back to `localStorage`. A tab opened with
+ * cmd/ctrl-click or middle-click does not reliably inherit the opener's
+ * `sessionStorage`, so it can boot from the `localStorage` fallback — which
+ * holds whichever backend was selected *last in any tab*, not the one the
+ * sidebar we were just looking at belongs to. The new tab then resolves the
+ * conversation id against the wrong backend and shows "conversation not
+ * found". Carrying the identity in the URL makes the link self-describing so
+ * the new tab pins to the right backend regardless of what storage holds.
+ */
+export const BACKEND_QUERY_PARAM = "backend";
+export const ORG_QUERY_PARAM = "org";
 
-export function readBackendSelectionFromSearch(
+/**
+ * Append the active backend identity to an in-app path so opening it in a new
+ * browsing context resolves against the same backend.
+ */
+export function withBackendSelectionParams(
+  path: string,
+  active: ResolvedActiveBackend,
+): string {
+  const { backend, orgId } = active;
+  if (!backend.id) return path;
+
+  const [pathname, existingSearch = ""] = path.split("?");
+  const params = new URLSearchParams(existingSearch);
+  params.set(BACKEND_QUERY_PARAM, backend.id);
+  if (orgId) params.set(ORG_QUERY_PARAM, orgId);
+
+  return `${pathname}?${params.toString()}`;
+}
+
+/**
+ * Read a backend selection off the current URL, keeping it only when it names
+ * a registered backend. An unknown id (a link from another machine, or a
+ * backend that has since been removed) is ignored so the caller falls back to
+ * the stored selection.
+ */
+export function readBackendSelectionFromUrl(
+  backends: Backend[],
   search: string,
 ): BackendSelection | null {
-  const params = new URLSearchParams(search);
-  const backendId = params.get(BACKEND_ID_QUERY_PARAM)?.trim();
-  if (!backendId) return null;
+  if (!search) return null;
 
-  const orgId = params.get(ORG_ID_QUERY_PARAM)?.trim() || null;
-  return { backendId, orgId };
-}
-
-export function readBackendSelectionFromLocation(): BackendSelection | null {
-  if (typeof window === "undefined") return null;
-  return readBackendSelectionFromSearch(window.location.search);
-}
-
-export function appendBackendSelectionToUrl(
-  path: string,
-  selection: BackendSelection | null,
-): string {
-  if (!selection?.backendId) return path;
-
-  const url = new URL(path, "http://agent-canvas.local");
-  url.searchParams.set(BACKEND_ID_QUERY_PARAM, selection.backendId);
-  if (selection.orgId) {
-    url.searchParams.set(ORG_ID_QUERY_PARAM, selection.orgId);
-  } else {
-    url.searchParams.delete(ORG_ID_QUERY_PARAM);
+  let params: URLSearchParams;
+  try {
+    params = new URLSearchParams(search);
+  } catch {
+    return null;
   }
 
-  return `${url.pathname}${url.search}${url.hash}`;
+  const backendId = params.get(BACKEND_QUERY_PARAM);
+  if (!backendId) return null;
+  if (!backends.some((backend) => backend.id === backendId)) return null;
+
+  const orgId = params.get(ORG_QUERY_PARAM);
+  return { backendId, orgId: orgId || null };
 }
 
-export function buildConversationUrl(
-  conversationId: string,
-  selection: BackendSelection | null,
-): string {
-  return appendBackendSelectionToUrl(
-    `/conversations/${conversationId}`,
-    selection,
-  );
+/** The current tab's query string, or "" outside a browser. */
+export function currentLocationSearch(): string {
+  if (typeof window === "undefined") return "";
+  return window.location.search;
 }

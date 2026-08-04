@@ -1,5 +1,8 @@
 import { BaseEvent } from "../base/event";
 import { ExecutionStatus } from "../base/common";
+import type { ConversationErrorEvent } from "@openhands/typescript-client";
+
+export type { ConversationErrorEvent };
 
 /**
  * Token usage metrics for LLM calls
@@ -148,29 +151,6 @@ export type ConversationStateUpdateEvent =
   | ConversationStateUpdateEventAgentStatus
   | ConversationStateUpdateEventStats
   | ConversationStateUpdateEventGoal;
-
-// Conversation error event - contains error information
-export interface ConversationErrorEvent extends BaseEvent {
-  /**
-   * Discriminator field for type guards
-   */
-  kind: "ConversationErrorEvent";
-
-  /**
-   * The source is always "environment" for conversation error events
-   */
-  source: "environment";
-
-  /**
-   * Error code (e.g., "AuthenticationError")
-   */
-  code: string;
-
-  /**
-   * Detailed error message
-   */
-  detail: string;
-}
 
 // Server error event - contains error information
 export interface ServerErrorEvent extends BaseEvent {

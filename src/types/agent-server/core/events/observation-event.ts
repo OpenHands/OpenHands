@@ -1,6 +1,9 @@
 import { EventID, ToolCallID } from "../base/common";
 import { BaseEvent } from "../base/event";
 import { Observation } from "../base/observation";
+import type { AgentErrorEvent } from "@openhands/typescript-client";
+
+export type { AgentErrorEvent };
 
 // Base interface for observation events
 export interface ObservationBaseEvent extends BaseEvent {
@@ -46,27 +49,4 @@ export interface UserRejectObservation extends ObservationBaseEvent {
    * The action id that this observation is responding to
    */
   action_id: EventID;
-}
-
-// Agent error event
-export interface AgentErrorEvent extends BaseEvent {
-  /**
-   * The source is always "agent" for agent error events
-   */
-  source: "agent";
-
-  /**
-   * The tool name that this observation is responding to
-   */
-  tool_name: string;
-
-  /**
-   * The tool call id that this observation is responding to
-   */
-  tool_call_id: ToolCallID;
-
-  /**
-   * The error message from the scaffold
-   */
-  error: string;
 }

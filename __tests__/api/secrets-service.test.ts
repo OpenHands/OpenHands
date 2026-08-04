@@ -76,6 +76,30 @@ describe("SecretsService", () => {
     expect(mockDeleteSecret).not.toHaveBeenCalled();
   });
 
+  it("overwrites the value without reading the existing one", async () => {
+    // Arrange
+    mockUpsertSecret.mockResolvedValue({
+      name: "OpenAI_API_Key",
+      description: "Demo secret",
+    });
+
+    // Act
+    await SecretsService.updateSecret(
+      "OpenAI_API_Key",
+      "OpenAI_API_Key",
+      "Demo secret",
+      "new-value",
+    );
+
+    // Assert
+    expect(mockGetSecret).not.toHaveBeenCalled();
+    expect(mockUpsertSecret).toHaveBeenCalledWith({
+      name: "OpenAI_API_Key",
+      value: "new-value",
+      description: "Demo secret",
+    });
+  });
+
   it("renames secrets by re-upserting and removing the old entry", async () => {
     // Arrange
     mockGetSecret.mockResolvedValue("original-value");

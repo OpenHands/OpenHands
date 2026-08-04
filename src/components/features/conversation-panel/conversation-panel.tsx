@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -42,9 +43,6 @@ import {
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
-import { buildConversationUrl } from "#/api/backend-registry/url-selection";
-import type { BackendSelection } from "#/api/backend-registry/types";
-import { isNoBackend } from "#/api/backend-registry/active-store";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -90,17 +88,8 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
-  const { backend: activeBackend, orgId: activeOrgId } = useActiveBackend();
-  const activeBackendSelection = React.useMemo<BackendSelection | null>(
-    () =>
-      isNoBackend(activeBackend)
-        ? null
-        : {
-            backendId: activeBackend.id,
-            orgId: activeOrgId,
-          },
-    [activeBackend.id, activeOrgId],
-  );
+  const { backend: activeBackend } = useActiveBackend();
+  const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -619,10 +608,6 @@ export function ConversationPanel({
             acpServer={conversation.acp_server}
             tags={conversation.tags}
             showTags={showTagsMetadata}
-            conversationUrl={buildConversationUrl(
-              conversation.id,
-              activeBackendSelection,
-            )}
           />
         );
       }
@@ -657,7 +642,7 @@ export function ConversationPanel({
           }
         >
           <NavigationLink
-            to={buildConversationUrl(conversation.id, activeBackendSelection)}
+            to={backendScopedPath(`/conversations/${conversation.id}`)}
             onClick={onClose}
             className={cn(
               "block rounded-md transition-colors",
@@ -721,7 +706,6 @@ export function ConversationPanel({
       onClose,
       openContextMenuId,
       pinnedIds,
-      activeBackendSelection,
       showRepoBranchMetadata,
       showLlmProfiles,
       showTagsMetadata,
@@ -850,10 +834,7 @@ export function ConversationPanel({
           startTasks?.map((task) => (
             <NavigationLink
               key={task.id}
-              to={buildConversationUrl(
-                `task-${task.id}`,
-                activeBackendSelection,
-              )}
+              to={backendScopedPath(`/conversations/task-${task.id}`)}
               onClick={onClose}
               className="block"
             >

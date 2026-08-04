@@ -84,12 +84,10 @@ function getConversationUrlProtocol(
  * events socket so it works in both direct-connect and reverse-proxy deployments.
  *
  * @param conversationUrl The conversation URL containing host/port
- * @param sessionApiKey Optional session API key (appended as query param)
  * @returns WebSocket URL for the bash-events endpoint
  */
 export function buildBashWebSocketUrl(
   conversationUrl: string | null | undefined,
-  sessionApiKey?: string | null,
 ): string {
   const baseHost = extractBaseHost(conversationUrl);
   const pathPrefix = extractPathPrefix(conversationUrl);
@@ -99,11 +97,7 @@ export function buildBashWebSocketUrl(
     getConversationUrlProtocol(conversationUrl) === "https:";
   const protocol = pageIsSecure || targetIsSecure ? "wss:" : "ws:";
 
-  const base = `${protocol}//${baseHost}${pathPrefix}/sockets/bash-events`;
-  if (sessionApiKey) {
-    return `${base}?session_api_key=${encodeURIComponent(sessionApiKey)}`;
-  }
-  return base;
+  return `${protocol}//${baseHost}${pathPrefix}/sockets/bash-events`;
 }
 
 /**

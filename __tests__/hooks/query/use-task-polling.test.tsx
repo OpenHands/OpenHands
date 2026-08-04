@@ -95,7 +95,7 @@ describe("useTaskPolling", () => {
     await waitFor(() => expect(result.current.taskStatus).toBe("READY"));
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(
-        "/conversations/conversation-1?backendId=default-local",
+        "/conversations/conversation-1?backend=default-local",
         {
           replace: true,
         },
@@ -133,7 +133,7 @@ describe("useTaskPolling", () => {
 
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(
-        "/conversations/conversation-1?backendId=default-local",
+        "/conversations/conversation-1?backend=default-local",
         {
           replace: true,
         },
@@ -191,7 +191,7 @@ describe("useTaskPolling", () => {
 
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(
-        "/conversations/conversation-1?backendId=default-local",
+        "/conversations/conversation-1?backend=default-local",
         {
           replace: true,
         },

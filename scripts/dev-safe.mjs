@@ -48,7 +48,7 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.37.0 leaves agent-client-protocol
+// Temporary transitive-dep pin: openhands-sdk 1.39.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
@@ -264,7 +264,9 @@ export async function assertPortsFree(portConfigs, host = "127.0.0.1") {
   const busy = results.filter(({ free }) => !free);
   if (busy.length === 0) return;
 
-  const lines = busy.map(({ name, port }) => `   • ${name}: port ${port}`).join("\n");
+  const lines = busy
+    .map(({ name, port }) => `   • ${name}: port ${port}`)
+    .join("\n");
   throw new Error(
     `Cannot start: the following ports are already in use:\n\n${lines}\n\n` +
       `Another agent-canvas instance may already be running.\n` +
@@ -399,7 +401,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.37.0")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.39.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -619,8 +621,7 @@ function buildConfigFromPorts(ports, cwd, env) {
   // ~/.openhands/agent-canvas/secret-key.txt. Persisting ensures dev mode
   // and Docker mode share the same encryption key when they mount the same
   // ~/.openhands directory (docker/entrypoint.sh reads/writes the same file).
-  const secretKeyPath =
-    env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
+  const secretKeyPath = env.OH_SECRET_KEY_PATH || DEFAULT_SECRET_KEY_PATH;
   const secretKey =
     env.OH_SECRET_KEY || getOrCreatePersistedApiKey(secretKeyPath, "secret");
   // Use the user-provided LOCAL_BACKEND_API_KEY or fall back to a key
@@ -958,10 +959,6 @@ async function main() {
   }
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
-  const runtimeServicesInfo = buildRuntimeServicesInfo({
-    mode: "dev:safe",
-    agentServerPort: config.backendPort,
-  });
   frontend = spawnProcess(frontendCommand.command, frontendCommand.args, {
     cwd: config.cwd,
     env: {
@@ -971,9 +968,17 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
-      // Inform the frontend (and downstream, the agent's system prompt) about
-      // which services are available in this dev stack.
-      VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
+      // dev:minimal deliberately does NOT supply runtime-services info (the
+      // frontend here talks straight to the agent-server over
+      // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
+      // of it to append `runtime_services` to `/server_info`, and the
+      // frontend's own VITE_RUNTIME_SERVICES_INFO env var is no longer read).
+      // It is a bare agent-server + Vite stack with no companion services to
+      // advertise, so `fetchBackendRuntimeServicesInfo()` correctly returns
+      // null and conversations simply omit the <RUNTIME_SERVICES> block.
+      // Stacks with automation/ingress/frontend services should use
+      // `npm run dev` / `dev:static`, which pass runtime-services info through
+      // ingress/static-server instead.
     },
   });
 

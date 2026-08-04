@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
@@ -29,6 +36,7 @@ import {
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
+import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 import type { Backend } from "#/api/backend-registry/types";
 
 // Mock the unified stop conversation hook
@@ -144,6 +152,18 @@ describe("ConversationPanel", () => {
     __resetActiveStoreForTests();
   });
 
+  it("pins the active backend onto each conversation link", async () => {
+    // A tab opened with cmd/ctrl-click does not reliably inherit the opener's
+    // sessionStorage, so the link has to carry the backend it belongs to or
+    // the new tab resolves the conversation against whichever backend
+    // localStorage happens to hold.
+    renderConversationPanel();
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    const href = cards[0].closest("a")?.getAttribute("href");
+    expect(href).toBe(`/conversations/1?backend=${SEEDED_DEFAULT_BACKEND_ID}`);
+  });
+
   it("should render the conversations", async () => {
     renderConversationPanel();
     const cards = await screen.findAllByTestId("conversation-card");
@@ -193,7 +213,7 @@ describe("ConversationPanel", () => {
     const title = await screen.findByText("Conversation 1");
     expect(title.closest("a")).toHaveAttribute(
       "href",
-      "/conversations/1?backendId=cloud-prod&orgId=org-2",
+      "/conversations/1?backend=cloud-prod&org=org-2",
     );
   });
 
@@ -251,7 +271,7 @@ describe("ConversationPanel", () => {
       await screen.findByLabelText("Running Conversation"),
     ).toHaveAttribute(
       "href",
-      "/conversations/running?backendId=cloud-prod&orgId=org-2",
+      "/conversations/running?backend=cloud-prod&org=org-2",
     );
   });
 
@@ -1899,7 +1919,9 @@ describe("ConversationPanel", () => {
     const reorderedAlpha = screen.getByTestId(
       "thread-folder-ws--workspace-alpha",
     );
-    const reorderedBeta = screen.getByTestId("thread-folder-ws--workspace-beta");
+    const reorderedBeta = screen.getByTestId(
+      "thread-folder-ws--workspace-beta",
+    );
     expect(reorderedBeta.compareDocumentPosition(reorderedAlpha)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -1939,9 +1961,9 @@ describe("ConversationPanel", () => {
     const pinnedSection = await screen.findByTestId(
       "conversation-panel-pinned-section",
     );
-    expect(within(pinnedSection).getAllByTestId("conversation-card")).toHaveLength(
-      1,
-    );
+    expect(
+      within(pinnedSection).getAllByTestId("conversation-card"),
+    ).toHaveLength(1);
     expect(await screen.findAllByTestId("conversation-card")).toHaveLength(3);
     expect(screen.getAllByText("Conversation 2")).toHaveLength(1);
   });
@@ -1957,9 +1979,9 @@ describe("ConversationPanel", () => {
     const pinnedSection = await screen.findByTestId(
       "conversation-panel-pinned-section",
     );
-    expect(within(pinnedSection).getAllByTestId("conversation-card")).toHaveLength(
-      1,
-    );
+    expect(
+      within(pinnedSection).getAllByTestId("conversation-card"),
+    ).toHaveLength(1);
     expect(await screen.findAllByTestId("conversation-card")).toHaveLength(3);
     expect(screen.getAllByText("Conversation 2")).toHaveLength(1);
   });

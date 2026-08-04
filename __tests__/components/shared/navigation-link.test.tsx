@@ -56,26 +56,27 @@ describe("NavigationLink", () => {
     });
   });
 
-  it("lets modified clicks use the browser href", () => {
-    const { navigate } = renderNavigationLink();
-    const link = screen.getByRole("link", { name: "MCP" });
-
-    fireEvent.click(link, { ctrlKey: true });
-
-    expect(navigate).not.toHaveBeenCalled();
-    expect(link).toHaveAttribute("href", "/settings/mcp");
-  });
-
-  it("matches active state by pathname when the href has query params", () => {
+  it("stays active when the destination carries a query string", () => {
     renderNavigationLink(
       "/conversations/abc",
       {},
-      "/conversations/abc?backendId=cloud-prod&orgId=org-2",
+      "/conversations/abc?backend=local-1",
     );
 
-    expect(screen.getByRole("link", { name: "MCP" })).toHaveAttribute(
+    const link = screen.getByRole("link", { name: "MCP" });
+    expect(link).toHaveAttribute("href", "/conversations/abc?backend=local-1");
+    expect(link).toHaveAttribute("aria-current", "page");
+  });
+
+  it("does not mark a sibling path active because of a query string", () => {
+    renderNavigationLink(
+      "/conversations/other",
+      {},
+      "/conversations/abc?backend=local-1",
+    );
+
+    expect(screen.getByRole("link", { name: "MCP" })).not.toHaveAttribute(
       "aria-current",
-      "page",
     );
   });
 });

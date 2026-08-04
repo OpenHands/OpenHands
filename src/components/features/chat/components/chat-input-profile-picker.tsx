@@ -1,26 +1,13 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputProfileState } from "#/hooks/use-chat-input-profile-state";
-import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
-import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { NavigationLink } from "#/components/shared/navigation-link";
-import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
-
-const PROFILE_LABEL_MAX_CHARS = 18;
-
-function truncateLabel(label: string): string {
-  return label.length <= PROFILE_LABEL_MAX_CHARS
-    ? label
-    : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
-}
 
 interface ChatInputProfileMenuContentProps {
   onClose: () => void;
@@ -29,6 +16,14 @@ interface ChatInputProfileMenuContentProps {
   settingsIconClassName?: string;
 }
 
+/**
+ * The agent-profile list rendered inside the "+" tools menu's "Switch agent
+ * profile" submenu, offered only while starting a new conversation (OSS-5735 —
+ * the profile is locked once a conversation starts). Selecting a profile
+ * activates it (home) or recreates the blank conversation with it (see
+ * `useChatInputProfileState`). The chat-input pill itself is always an LLM
+ * selector; the former `ChatInputProfilePicker` pill is gone.
+ */
 export function ChatInputProfileMenuContent({
   onClose,
   dividerInset,
@@ -128,67 +123,5 @@ export function ChatInputProfileMenuContent({
         </NavigationLink>
       </li>
     </>
-  );
-}
-
-export function ChatInputProfilePicker() {
-  const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, isLoading, isSwitching } =
-    useChatInputProfileState();
-  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
-  const triggerRef = React.useRef<HTMLButtonElement>(null);
-  const popoverRef = useClickOutsideElement<HTMLUListElement>(
-    () => setIsPopoverOpen(false),
-    triggerRef,
-  );
-
-  // Nothing to launch from yet (empty store before the backend seeds, or an
-  // agent-server without the /api/agent-profiles surface): stay out of the way.
-  if (isLoading || profiles.length === 0) {
-    return null;
-  }
-
-  const label = currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
-
-  return (
-    <div className="relative min-w-0">
-      <button
-        ref={triggerRef}
-        type="button"
-        className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
-        title={currentProfileName ?? undefined}
-        data-testid="chat-input-agent-profile"
-        aria-expanded={isPopoverOpen}
-        aria-haspopup="dialog"
-        // Disabled while a profile switch (new-conversation create / activate) is
-        // in flight, so re-opening the menu can't fire a second create. The menu
-        // closes on select, so this is the only double-submit path.
-        disabled={isSwitching}
-        aria-busy={isSwitching}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setIsPopoverOpen((open) => !open);
-        }}
-      >
-        <span className="truncate">{truncateLabel(label)}</span>
-        <ComboboxCaretInline isOpen={isPopoverOpen} />
-      </button>
-
-      {isPopoverOpen && (
-        <ContextMenu
-          ref={popoverRef}
-          testId="chat-input-agent-profile-popover"
-          position="top"
-          alignment="left"
-          spacing="none"
-          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
-        >
-          <ChatInputProfileMenuContent
-            onClose={() => setIsPopoverOpen(false)}
-          />
-        </ContextMenu>
-      )}
-    </div>
   );
 }
