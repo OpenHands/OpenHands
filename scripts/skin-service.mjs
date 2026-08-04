@@ -26,7 +26,8 @@
  * REST API under /skin-api and reverse-proxies /skin → the running skin.
  *
  * Skin repo format (everything at the repo root):
- *   skin.yaml       — required. name, screenshot, canvas_version, secrets,
+ *   skin.yaml       — required. name, icon (lucide icon name for the nav
+ *                     entry), screenshot, canvas_version, secrets,
  *                     mcp_servers, skills, llm, settings, theme (major
  *                     colors inherited by the whole Canvas UI).
  *   package.json    — required, must define a "start" script.
@@ -68,6 +69,20 @@ function log(...args) {
 // there is exactly one source of truth (the frontend applies the derived
 // map verbatim; /skin-api/theme.css serves the same map to the skin app).
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Lucide icon names are lowercase kebab-case (e.g. "activity",
+// "bar-chart-3"). The value comes from a user-supplied manifest and ends up
+// in a component lookup, so validate the shape strictly; anything else is
+// dropped (the frontend falls back to its default skin icon).
+const LUCIDE_ICON_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Validate a skin.yaml `icon:` value (a lucide icon name). Returns the
+ * name or null — never an error, a bad icon must not block an install. */
+export function sanitizeIconName(icon) {
+  if (typeof icon !== "string") return null;
+  const name = icon.trim().toLowerCase();
+  return name.length <= 64 && LUCIDE_ICON_NAME_RE.test(name) ? name : null;
+}
 
 const THEME_KEYS = [
   "accent",
@@ -445,6 +460,7 @@ export class SkinService {
     return {
       installed: true,
       name: skin.name || "Skin",
+      icon: sanitizeIconName(skin.icon),
       screenshot: skin.screenshot || null,
       repoUrl: settings.repoUrl,
       branch: await this.currentBranch(),

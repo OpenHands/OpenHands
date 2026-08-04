@@ -8,6 +8,8 @@ import {
   Server,
   Settings,
 } from "lucide-react";
+import { DynamicIcon, iconNames } from "lucide-react/dynamic";
+import type { IconName } from "lucide-react/dynamic";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
@@ -168,7 +170,18 @@ export function SidebarRailBody({
             label={skinStatus.name || t(I18nKey.SKIN$TITLE)}
             testId="sidebar-skin-link"
             collapsed={collapsed}
-            icon={<Palette width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              skinStatus.icon &&
+              iconNames.includes(skinStatus.icon as IconName) ? (
+                <DynamicIcon
+                  name={skinStatus.icon as IconName}
+                  width={ICON_SIZE}
+                  height={ICON_SIZE}
+                />
+              ) : (
+                <Palette width={ICON_SIZE} height={ICON_SIZE} />
+              )
+            }
           />
         ) : null}
         <SidebarNavLink

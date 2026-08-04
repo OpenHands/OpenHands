@@ -1,11 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
+  sanitizeIconName,
   sanitizeTheme,
   satisfiesCanvasVersion,
   stripSecretValues,
   themeCss,
   themeVars,
 } from "../scripts/skin-service.mjs";
+
+describe("sanitizeIconName", () => {
+  it("accepts kebab-case lucide icon names, normalized", () => {
+    expect(sanitizeIconName("activity")).toBe("activity");
+    expect(sanitizeIconName("bar-chart-3")).toBe("bar-chart-3");
+    expect(sanitizeIconName("  Layout-Dashboard ")).toBe("layout-dashboard");
+  });
+
+  it("rejects anything that is not a plain icon name", () => {
+    expect(sanitizeIconName(undefined)).toBeNull();
+    expect(sanitizeIconName(null)).toBeNull();
+    expect(sanitizeIconName("")).toBeNull();
+    expect(sanitizeIconName("Bar Chart")).toBeNull();
+    expect(sanitizeIconName("-leading")).toBeNull();
+    expect(sanitizeIconName("trailing-")).toBeNull();
+    expect(sanitizeIconName("a".repeat(65))).toBeNull();
+    expect(sanitizeIconName("<script>")).toBeNull();
+    expect(sanitizeIconName({ name: "activity" })).toBeNull();
+  });
+});
 
 describe("sanitizeTheme", () => {
   it("returns null for missing/empty/non-object themes", () => {

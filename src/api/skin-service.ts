@@ -32,6 +32,10 @@ export interface SkinStatus {
   installed: boolean;
   running: boolean;
   name?: string;
+  /** Lucide icon name (kebab-case, e.g. "activity") declared in skin.yaml,
+   * shown on the skin's left-hand nav entry. Validated server-side; null
+   * means "use the default skin icon". */
+  icon?: string | null;
   screenshot?: string | null;
   repoUrl?: string;
   branch?: string | null;
