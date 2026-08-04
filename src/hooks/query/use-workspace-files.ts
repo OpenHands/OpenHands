@@ -1,11 +1,10 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
-import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import { getGitPath } from "#/utils/get-git-path";
 
 // Cap the number of files we render so a giant repo doesn't freeze the UI.
 const MAX_FILES = 2000;
@@ -47,23 +46,47 @@ function normalizePath(path: string): string {
 }
 
 /**
- * Local-backend listing: enumerate every regular file beneath the active
- * conversation's working directory via `find` over the agent-server's
- * `/api/bash/execute_bash_command`, excluding common heavy/build directories.
- * Returns paths relative to the working dir (e.g. `src/index.html`).
- *
- * Local only: the cloud API exposes no bash-exec / file-listing endpoint,
- * and the old cross-origin `/api/cloud-proxy` hop these calls relied on was
- * removed from the agent-server. See `useWorkspaceFiles` for the cloud path.
+ * Cloud sandboxes require absolute cwd paths. Local agent-server accepts the
+ * configured working dir as-is (often the relative `workspace/project`
+ * convention). `getGitPath` returns that relative form when the conversation
+ * omits `workspace.working_dir`.
  */
-function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
+function resolveWorkspaceCwd(
+  selectedRepository: string | null | undefined,
+  workingDir: string | null | undefined,
+  isCloud: boolean,
+): string {
+  const path = getGitPath(selectedRepository, workingDir);
+  if (isCloud && !path.startsWith("/")) {
+    return `/${path}`;
+  }
+  return path;
+}
+
+/**
+ * Enumerate every regular file beneath the active conversation's working
+ * directory via `find` over `/api/bash/execute_bash_command`, excluding
+ * common heavy/build directories. Returns paths relative to the working dir
+ * (e.g. `src/index.html`).
+ *
+ * Local: SDK `RemoteWorkspace.executeCommand`.
+ * Cloud: same bash endpoint through Canvas `/api/cloud-proxy` → runtime
+ * sandbox (`AgentServerRuntimeService.executeCommand` hostOverride hop).
+ */
+function useBashWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
+  const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
 
+  const isCloud = backend.kind === "cloud";
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
-  const workingDir = conversation?.workspace?.working_dir?.trim();
+  const workingDir = resolveWorkspaceCwd(
+    conversation?.selected_repository,
+    conversation?.workspace?.working_dir,
+    isCloud,
+  );
 
   const query = useQuery<string[]>({
     queryKey: [
@@ -72,6 +95,7 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       conversationUrl,
       sessionApiKey,
       workingDir,
+      backend.kind,
     ],
     queryFn: async () => {
       const result = await AgentServerRuntimeService.executeCommand(
@@ -97,7 +121,12 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
       // Defensive: keep results unique and bounded.
       return Array.from(new Set(lines)).slice(0, MAX_FILES);
     },
-    enabled: enabled && runtimeIsReady && !!conversationId && !!workingDir,
+    enabled:
+      enabled &&
+      runtimeIsReady &&
+      !!conversationId &&
+      !!workingDir &&
+      (!isCloud || !!conversationUrl),
     retry: false,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
@@ -108,47 +137,11 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
 }
 
 /**
- * Cloud-backend listing: derive the file list from the conversation's git
- * changes — the same data source the diff view uses (and the only
- * runtime-workspace transport the cloud API proxies, alongside git diff and
- * single-file read). `git status` reports created/modified/untracked files,
- * which covers the common Agent Canvas case (a fresh or agent-authored
- * workspace). It intentionally does NOT enumerate unchanged tracked files —
- * the cloud API has no full-workspace listing endpoint — so a conversation
- * attached to a large existing repo shows changed files rather than the whole
- * tree. Deleted files are dropped since they can't be opened.
- */
-function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
-  const gitChanges = useUnifiedGetGitChanges();
-
-  const data = useMemo(() => {
-    if (!enabled) return undefined;
-    const paths = gitChanges.data
-      .filter((change) => change.status !== "D")
-      .map((change) => change.path);
-    return Array.from(new Set(paths)).slice(0, MAX_FILES);
-  }, [enabled, gitChanges.data]);
-
-  return {
-    data: enabled ? data : undefined,
-    isLoading: enabled ? gitChanges.isLoading : false,
-  };
-}
-
-/**
  * Lists the files shown in the Files tab for the active conversation.
  *
- * Local backends enumerate the full workspace tree via bash `find`. Cloud
- * backends derive the list from git changes (see `useCloudWorkspaceFiles`
- * for the rationale and its limitation), because the cloud API exposes no
- * bash-exec or file-listing endpoint.
+ * Both Local and Cloud backends enumerate the full workspace tree via bash
+ * `find`. Cloud calls hop through Canvas `/api/cloud-proxy` to the sandbox.
  */
 export function useWorkspaceFiles(): WorkspaceFilesResult {
-  const { backend } = useActiveBackend();
-  const isCloud = backend.kind === "cloud";
-
-  const local = useLocalWorkspaceFiles(!isCloud);
-  const cloud = useCloudWorkspaceFiles(isCloud);
-
-  return isCloud ? cloud : local;
+  return useBashWorkspaceFiles(true);
 }

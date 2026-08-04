@@ -25,6 +25,7 @@ import { createServer } from "node:http";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+import { handleCloudProxy, isCloudProxyRequest } from "./cloud-proxy.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -151,6 +152,14 @@ export function startIngress(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
+    // Cloud runtime sandboxes reject browser CORS; hostOverride calls POST
+    // an envelope here and we forward server-side (agent-server no longer
+    // ships /api/cloud-proxy).
+    if (isCloudProxyRequest(req)) {
+      handleCloudProxy(req, res);
+      return;
+    }
+
     const backend = route(req.url ?? "/");
 
     if (!backend) {
