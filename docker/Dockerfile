@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# agent-canvas all-in-one Docker image
+# agent-canvas all-in-one Docker image (HEADLESS)
 #
 # Combines three services into a single image:
-#   1. Agent Server  — from ghcr.io/openhands/agent-server (upstream SDK image)
+#   1. Agent Server  — binary + venv copied from the agent-server image
 #   2. Automation    — installed via pip from openhands-automation
 #   3. Frontend      — agent-canvas static build served by Node.js
 #
@@ -13,6 +13,22 @@
 #   /api/automation/*  → automation backend (:18001)
 #   /api/*, /sockets   → agent server (:18000)
 #   /* (default)       → static frontend + SPA fallback
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# DESIGN (headless)
+# Instead of inheriting the full agent-server image (which includes Docker,
+# VNC, XFCE Desktop, Chromium, and VSCode Server — ~625 MB of GUI tooling
+# that agent-canvas never uses), this build starts from the same slim
+# python-nodejs base and copies only the agent-server artefacts it needs:
+#
+#   • /agent-server/                           (Python venv + dependencies)
+#   • /usr/local/bin/openhands-agent-server    (PyInstaller binary)
+#   • /opt/acp-node/                           (ACP CLI agents)
+#   • /bin/uv, /bin/uvx                        (Python package manager)
+#
+# The slim base (nikolaik/python-nodejs:python3.13-nodejs22-slim) is the
+# same image used by agent-server's own base-image-minimal target, so the
+# copied artefacts are binary-compatible.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Build args ────────────────────────────────────────────────────────────────
@@ -67,8 +83,11 @@ RUN node -e " \
   require('fs').writeFileSync('/tmp/defaults.env', lines.join('\n') + '\n'); \
 "
 
-# ── Stage 2: Combined image ──────────────────────────────────────────────────
-FROM ${AGENT_SERVER_IMAGE} AS final
+# ── Stage 2: Slim headless runtime ───────────────────────────────────────
+# We use the same slim base as agent-server's base-image-minimal target
+# rather than inheriting the full image with its Docker/VNC/Chromium/VSCode
+# layers. Agent-server artefacts are copied in from the full image.
+FROM nikolaik/python-nodejs:python3.13-nodejs22-slim AS final
 
 ARG AUTOMATION_VERSION
 ARG AGENT_SERVER_SDK_GIT_REF=""
@@ -79,7 +98,7 @@ ARG VITE_POSTHOG_API_KEY=""
 
 ARG AGENT_CANVAS_VERSION=dev
 LABEL org.opencontainers.image.title="agent-canvas"
-LABEL org.opencontainers.image.description="All-in-one agent-canvas: Agent Server + Automation + Frontend"
+LABEL org.opencontainers.image.description="agent-canvas (headless): Agent Server + Automation + Frontend"
 LABEL org.opencontainers.image.source="https://github.com/OpenHands/OpenHands"
 LABEL org.opencontainers.image.version="${AGENT_CANVAS_VERSION}"
 LABEL org.opencontainers.image.revision="${OPENHANDS_BUILD_GIT_SHA}"
@@ -88,21 +107,51 @@ ENV AGENT_CANVAS_BUILD_GIT_SHA=${OPENHANDS_BUILD_GIT_SHA}
 ENV AGENT_CANVAS_BUILD_GIT_REF=${OPENHANDS_BUILD_GIT_REF}
 ENV AGENT_CANVAS_BASE_PATH=${VITE_BASE_PATH}
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 USER root
 
-# Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
-RUN if command -v apt-get >/dev/null 2>&1; then \
-      apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
-      rm -rf /var/lib/apt/lists/*; \
-    fi
+# ── Headless system deps ───────────────────────────────────────────────────
+# Mirrors agent-server base-image-minimal: CLI tools only, no GUI packages.
+# libpq-dev is needed by automation's asyncpg (PostgreSQL driver).
+RUN apt-get -o Acquire::Retries=5 update && \
+    apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        bash ca-certificates curl wget sudo git jq tmux tar \
+        build-essential coreutils util-linux procps findutils grep sed \
+        tini xz-utils libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install automation server via pip.
-# Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
-# already satisfied by the agent-server base image, so only automation-
-# specific packages (asyncpg, sqlalchemy, boto3, gcloud, …) are added.
+# ── Create openhands user (same UID/GID as agent-server image) ────────────
+RUN groupadd -g 10001 openhands \
+    && useradd -m -u 10001 -g 10001 -s /bin/bash openhands \
+    && echo "openhands ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && mkdir -p /workspace/project \
+    && chown -R openhands:openhands /workspace
+
+# ── Copy agent-server artefacts from full image ───────────────────────────
+# We pull the PyInstaller binary, Python venv, uv, and ACP CLI tools from
+# the published agent-server image, then discard the GUI layers.
+COPY --from=${AGENT_SERVER_IMAGE} /agent-server /agent-server
+COPY --from=${AGENT_SERVER_IMAGE} /usr/local/bin/openhands-agent-server /usr/local/bin/openhands-agent-server
+COPY --from=${AGENT_SERVER_IMAGE} /bin/uv /bin/uv
+COPY --from=${AGENT_SERVER_IMAGE} /bin/uvx /bin/uvx
+
+# ACP runtime (Claude Code, Codex, Gemini CLI) — copied from full image.
+# If the source image is incompatible (e.g. musl libc), these paths may not
+# exist; the COPY is best-effort so the build continues.
+COPY --from=${AGENT_SERVER_IMAGE} /opt/acp-node /opt/acp-node 2>/dev/null || true
+COPY --from=${AGENT_SERVER_IMAGE} /usr/local/bin/claude-agent-acp /usr/local/bin/ 2>/dev/null || true
+COPY --from=${AGENT_SERVER_IMAGE} /usr/local/bin/codex-acp /usr/local/bin/ 2>/dev/null || true
+COPY --from=${AGENT_SERVER_IMAGE} /usr/local/bin/gemini /usr/local/bin/ 2>/dev/null || true
+COPY --from=${AGENT_SERVER_IMAGE} /etc/claude-code /etc/claude-code 2>/dev/null || true
+
+# ── Fix PyInstaller binary library path ───────────────────────────────────
+# The agent-server binary was built against the full image's system libs.
+# Ensure both amd64 and arm64 lib paths are available at runtime.
+ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:/usr/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
+# ── Install automation server ─────────────────────────────────────────────
 RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" 2>/dev/null \
     || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}"
 
@@ -114,11 +163,8 @@ RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
         "${BASE_GIT_URL}#subdirectory=openhands-workspace"; \
     fi
 
-# Copy the frontend build output.
-# react-router.config.ts unpacks build/client/ into build/ for non-Vercel builds.
+# ── Frontend + static server ──────────────────────────────────────────────
 COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
-
-# Copy the static-server scripts and their production runtime deps.
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
@@ -127,25 +173,14 @@ COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_mod
 COPY --from=frontend-build /build/node_modules/mrmime /opt/agent-canvas/node_modules/mrmime
 COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_modules/totalist
 
-# Copy the runtime-services-info builder (entrypoint.sh runs it as a CLI to
-# emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).
+# ── Runtime scripts, config, tools compat, entrypoint ─────────────────────
 COPY scripts/runtime-services-info.mjs /opt/agent-canvas/runtime-services-info.mjs
-
-# Persisted conversations created before the client_tools migration still
-# import canvas_ui_tool by qualname. Keep the compatibility module available;
-# new conversations define canvas_ui_control through a JSON client tool.
 COPY tools/ /opt/agent-canvas/tools/
-
-# Copy generated defaults.env (from config/defaults.json via config-gen stage)
 COPY --from=config-gen /tmp/defaults.env /opt/agent-canvas/defaults.env
-
-# Copy the entrypoint
 COPY docker/entrypoint.sh /opt/agent-canvas/entrypoint.sh
 RUN chmod +x /opt/agent-canvas/entrypoint.sh
 
-# Pre-create persistence directories with correct ownership so the
-# openhands user can write to them even when Docker creates anonymous
-# volumes (which default to root).
+# ── Persistence directories ───────────────────────────────────────────────
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
              /home/openhands/.openhands/automation \
@@ -154,15 +189,7 @@ RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
 
 USER openhands
 
-# Persistence volumes:
-#   /home/openhands/.openhands — settings, secrets, conversations, automation DB
-#   /projects                  — user code the agent can read/edit
-# Bind-mount these for data to survive container restarts:
-#   docker run -v ~/.openhands:/home/openhands/.openhands -v ~/projects:/projects ...
 VOLUME ["/home/openhands/.openhands", "/projects"]
-
-# The entrypoint starts all services and the ingress proxy.
-# Port 8000 is the unified entry point.
 EXPOSE 8000
 
 ENTRYPOINT ["tini", "--", "/opt/agent-canvas/entrypoint.sh"]
