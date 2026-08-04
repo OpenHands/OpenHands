@@ -1,12 +1,41 @@
 import { describe, expect, it } from "vitest";
 import {
+  renderSkinAppSkill,
   sanitizeIconName,
   sanitizeTheme,
   satisfiesCanvasVersion,
   stripSecretValues,
   themeCss,
   themeVars,
+  SKIN_APP_SKILL_NAME,
 } from "../scripts/skin-service.mjs";
+
+describe("renderSkinAppSkill", () => {
+  it("wraps a bare markdown body in always-active frontmatter", () => {
+    const out = renderSkinAppSkill("# My Skin\n\nDoes things.", "My Skin");
+    expect(out).toMatch(/^---\nname: skin-app\n/);
+    expect(out).toContain('description: What the "My Skin" skin');
+    expect(out).toContain("# My Skin\n\nDoes things.");
+    expect(out).not.toContain("triggers:");
+  });
+
+  it("replaces existing frontmatter but keeps its description", () => {
+    const src =
+      "---\nname: whatever\ndescription: Monitors Datadog.\ntriggers:\n  - datadog\n---\n\n# Body\n";
+    const out = renderSkinAppSkill(src, "Datadog Monitor");
+    expect(out).toMatch(/^---\nname: skin-app\n/);
+    expect(out).toContain("description: Monitors Datadog.");
+    expect(out).not.toContain("triggers:");
+    expect(out).not.toContain("name: whatever");
+    expect(out).toContain("# Body");
+  });
+
+  it("tolerates malformed frontmatter", () => {
+    const out = renderSkinAppSkill("---\n: : :\n---\n# Body", null);
+    expect(out).toContain(`name: ${SKIN_APP_SKILL_NAME}`);
+    expect(out).toContain("# Body");
+  });
+});
 
 describe("sanitizeIconName", () => {
   it("accepts kebab-case lucide icon names, normalized", () => {

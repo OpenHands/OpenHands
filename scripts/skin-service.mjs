@@ -31,6 +31,13 @@
  *                     mcp_servers, skills, llm, settings, theme (major
  *                     colors inherited by the whole Canvas UI).
  *   package.json    — required, must define a "start" script.
+ *   SKILL.md        — required. Describes what the skin does (pages, APIs,
+ *                     data sources, agent workflows). Synced on every
+ *                     start/restart/pull into ~/.openhands/skills/ as a
+ *                     legacy always-active skill so its full content is in
+ *                     the agent's context at the start of every
+ *                     conversation. Must NOT declare `triggers:`
+ *                     frontmatter (that would demote it to on-keyword).
  *   automations/    — optional, one subdirectory per automation with its
  *                     definition (and Python code / tarball).
  */
@@ -82,6 +89,44 @@ export function sanitizeIconName(icon) {
   if (typeof icon !== "string") return null;
   const name = icon.trim().toLowerCase();
   return name.length <= 64 && LUCIDE_ICON_NAME_RE.test(name) ? name : null;
+}
+
+// Name (and filename stem) of the always-active agent skill a skin's
+// SKILL.md is synced to. Fixed so (a) uninstall knows what to remove and
+// (b) it can never collide with the skin-builder skill installed as "skin".
+export const SKIN_APP_SKILL_NAME = "skin-app";
+
+/**
+ * Render a skin repo's SKILL.md as a legacy always-active agent skill.
+ *
+ * The repo file may carry AgentSkills frontmatter (name/description/…). We
+ * strip it and emit our own minimal frontmatter WITHOUT `triggers:` — in the
+ * legacy .md format that means trigger=None, i.e. the full content is
+ * injected into the system prompt of every conversation (the whole point:
+ * the agent always knows what this instance's skin does).
+ */
+export function renderSkinAppSkill(skillMd, skinName) {
+  let body = skillMd;
+  let description = null;
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(skillMd);
+  if (fm) {
+    body = skillMd.slice(fm[0].length);
+    try {
+      const meta = yaml.load(fm[1]);
+      if (meta && typeof meta.description === "string") {
+        description = meta.description;
+      }
+    } catch {
+      // Malformed frontmatter — drop it, keep the body.
+    }
+  }
+  const frontmatter = {
+    name: SKIN_APP_SKILL_NAME,
+    description:
+      description ||
+      `What the "${skinName || "installed"}" skin of this instance does.`,
+  };
+  return `---\n${yaml.dump(frontmatter).trimEnd()}\n---\n\n${body.trim()}\n`;
 }
 
 const THEME_KEYS = [
@@ -539,6 +584,9 @@ export class SkinService {
     if (!pkg.scripts?.start) {
       return "package.json must define a `start` script (the skin is launched with `npm run start`).";
     }
+    if (!existsSync(join(this.repoDir, "SKILL.md"))) {
+      return "SKILL.md is missing at the repository root. Every skin must ship a SKILL.md describing what it does; it is loaded into the agent's context at the start of every conversation.";
+    }
     if (!satisfiesCanvasVersion(this.canvasVersion, skin.canvas_version)) {
       return `This skin requires Agent Canvas ${skin.canvas_version}, but this instance is running ${this.canvasVersion}.`;
     }
@@ -549,15 +597,49 @@ export class SkinService {
     await this.stop();
     rmSync(this.repoDir, { recursive: true, force: true });
     rmSync(this.settingsPath, { force: true });
+    rmSync(this.skillPath, { force: true });
     this.lastError = null;
     return { installed: false, running: false };
   }
 
   // ── run the skin app ─────────────────────────────────────────────────────
 
+  /** Absolute path of the always-active agent skill synced from the skin
+   * repo's SKILL.md. Lives in ~/.openhands/skills/ (a user-skills dir the
+   * SDK scans on every conversation start); legacy .md format without
+   * `triggers:` means the full content lands in the agent's system prompt. */
+  get skillPath() {
+    return join(homedir(), ".openhands", "skills", `${SKIN_APP_SKILL_NAME}.md`);
+  }
+
+  /** Sync the skin repo's SKILL.md → the always-active skill file. Called on
+   * every start (install/restart/pull all funnel through start), so agent
+   * edits to the skin's SKILL.md take effect on the next restart. */
+  syncSkillMd() {
+    const src = join(this.repoDir, "SKILL.md");
+    try {
+      if (!existsSync(src)) {
+        // Required for new installs (validateRepo); tolerated for skins
+        // installed before the requirement existed.
+        rmSync(this.skillPath, { force: true });
+        return;
+      }
+      const skin = this.readSkinYaml() || {};
+      mkdirSync(join(homedir(), ".openhands", "skills"), { recursive: true });
+      writeFileSync(
+        this.skillPath,
+        renderSkinAppSkill(readFileSync(src, "utf-8"), skin.name),
+      );
+      log(`Synced skin SKILL.md → ${this.skillPath}`);
+    } catch (err) {
+      log(`Failed to sync skin SKILL.md: ${err.message}`);
+    }
+  }
+
   async start() {
     if (!this.isInstalled() || this.child) return;
     this.stopping = false;
+    this.syncSkillMd();
 
     const pkg = JSON.parse(
       readFileSync(join(this.repoDir, "package.json"), "utf-8"),
