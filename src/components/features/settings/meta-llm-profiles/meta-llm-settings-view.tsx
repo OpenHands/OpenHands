@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -21,14 +22,29 @@ import { I18nKey } from "#/i18n/declaration";
 import { MetaProfileEditor } from "./meta-profile-editor";
 import { MetaProfileRow } from "./meta-profile-row";
 import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
-import { DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES } from "./default-meta-profile";
+import {
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+  DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES,
+  DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
+  DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+} from "./default-meta-profile";
 
 type ViewMode = "list" | "create" | "edit";
+type RouterTemplate = "max-score-pareto" | "min-cost-pareto" | "custom";
 
 interface EditingMetaProfile {
   name: string;
   config: MetaProfile;
 }
+
+const CUSTOM_META_PROFILE_CONFIG: MetaProfile = {
+  classifier_model: "",
+  default_model: "",
+  classes: [],
+  prompt_template: "",
+  model_table: "",
+};
 
 export function MetaLlmSettingsView() {
   const { t } = useTranslation("openhands");
@@ -39,6 +55,14 @@ export function MetaLlmSettingsView() {
 
   const [view, setView] = useState<ViewMode>("list");
   const [editing, setEditing] = useState<EditingMetaProfile | null>(null);
+  const [createInitial, setCreateInitial] = useState<EditingMetaProfile | null>(
+    null,
+  );
+  const [
+    createMissingRouterProfilesByDefault,
+    setCreateMissingRouterProfilesByDefault,
+  ] = useState(true);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [nameToDelete, setNameToDelete] = useState<string | null>(null);
   const [isCreatingRouterProfiles, setIsCreatingRouterProfiles] =
     useState(false);
@@ -80,6 +104,29 @@ export function MetaLlmSettingsView() {
           : t(I18nKey.ERROR$GENERIC);
       displayErrorToast(message);
     }
+  };
+
+  const handleChooseTemplate = (template: RouterTemplate) => {
+    if (template === "max-score-pareto") {
+      setCreateInitial({
+        name: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
+        config: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+      });
+      setCreateMissingRouterProfilesByDefault(true);
+    } else if (template === "min-cost-pareto") {
+      setCreateInitial({
+        name: DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
+        config: DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
+      });
+      setCreateMissingRouterProfilesByDefault(true);
+    } else {
+      setCreateInitial({ name: "", config: CUSTOM_META_PROFILE_CONFIG });
+      setCreateMissingRouterProfilesByDefault(false);
+    }
+
+    setEditing(null);
+    setIsTemplateModalOpen(false);
+    setView("create");
   };
 
   const createMissingRouterLlmProfiles = async () => {
@@ -136,6 +183,7 @@ export function MetaLlmSettingsView() {
       displaySuccessToast(t(I18nKey.SETTINGS$META_PROFILE_SAVED, { name }));
       setView("list");
       setEditing(null);
+      setCreateInitial(null);
     } catch (saveError) {
       const message =
         saveError instanceof Error
@@ -150,6 +198,7 @@ export function MetaLlmSettingsView() {
   const handleCancel = () => {
     setView("list");
     setEditing(null);
+    setCreateInitial(null);
   };
 
   if (isUnsupportedBackend) {
@@ -167,8 +216,13 @@ export function MetaLlmSettingsView() {
     return (
       <MetaProfileEditor
         mode={view === "edit" ? "edit" : "create"}
-        initialName={editing?.name}
-        initialConfig={editing?.config}
+        initialName={view === "edit" ? editing?.name : createInitial?.name}
+        initialConfig={
+          view === "edit" ? editing?.config : createInitial?.config
+        }
+        initialCreateMissingRouterProfiles={
+          view === "create" ? createMissingRouterProfilesByDefault : false
+        }
         availableProfiles={availableProfiles}
         existingNames={existingNames}
         isSaving={saveMetaProfile.isPending || isCreatingRouterProfiles}
@@ -200,8 +254,7 @@ export function MetaLlmSettingsView() {
             variant="secondary"
             className="ml-auto"
             onClick={() => {
-              setEditing(null);
-              setView("create");
+              setIsTemplateModalOpen(true);
             }}
           >
             {t(I18nKey.SETTINGS$ADD_META_PROFILE)}
@@ -248,6 +301,55 @@ export function MetaLlmSettingsView() {
         name={nameToDelete}
         onClose={() => setNameToDelete(null)}
       />
+      <ApiKeyModalBase
+        isOpen={isTemplateModalOpen}
+        title={t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_TITLE)}
+        width="md"
+        onClose={() => setIsTemplateModalOpen(false)}
+        footer={
+          <BrandButton
+            testId="meta-profile-template-cancel"
+            type="button"
+            variant="tertiary"
+            onClick={() => setIsTemplateModalOpen(false)}
+          >
+            {t(I18nKey.BUTTON$CANCEL)}
+          </BrandButton>
+        }
+      >
+        <div
+          data-testid="meta-profile-template-modal"
+          className="flex flex-col gap-3"
+        >
+          <BrandButton
+            testId="meta-profile-template-max-score"
+            type="button"
+            variant="secondary"
+            className="justify-start"
+            onClick={() => handleChooseTemplate("max-score-pareto")}
+          >
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MAX_SCORE)}
+          </BrandButton>
+          <BrandButton
+            testId="meta-profile-template-min-cost"
+            type="button"
+            variant="secondary"
+            className="justify-start"
+            onClick={() => handleChooseTemplate("min-cost-pareto")}
+          >
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_MIN_COST)}
+          </BrandButton>
+          <BrandButton
+            testId="meta-profile-template-custom"
+            type="button"
+            variant="secondary"
+            className="justify-start"
+            onClick={() => handleChooseTemplate("custom")}
+          >
+            {t(I18nKey.SETTINGS$META_PROFILE_TEMPLATE_CUSTOM)}
+          </BrandButton>
+        </div>
+      </ApiKeyModalBase>
     </>
   );
 }

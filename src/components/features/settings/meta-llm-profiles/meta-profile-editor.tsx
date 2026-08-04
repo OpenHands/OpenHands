@@ -18,6 +18,7 @@ interface MetaProfileEditorProps {
   mode: "create" | "edit";
   initialName?: string;
   initialConfig?: MetaProfile;
+  initialCreateMissingRouterProfiles?: boolean;
   /** Names of saved LLM profiles, offered as dropdown options. */
   availableProfiles: string[];
   /**
@@ -63,6 +64,7 @@ export function MetaProfileEditor({
   mode,
   initialName,
   initialConfig,
+  initialCreateMissingRouterProfiles,
   availableProfiles,
   existingNames = [],
   isSaving,
@@ -80,7 +82,7 @@ export function MetaProfileEditor({
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
   const [createMissingRouterProfiles, setCreateMissingRouterProfiles] =
-    useState(!isEdit);
+    useState(initialCreateMissingRouterProfiles ?? !isEdit);
 
   const profileItems = useMemo(
     () => availableProfiles.map((p) => ({ key: p, label: p })),

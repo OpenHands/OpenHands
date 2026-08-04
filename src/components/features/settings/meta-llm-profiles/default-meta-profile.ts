@@ -2,6 +2,8 @@ import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-serv
 
 export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME =
   "default-max-score-pareto";
+export const DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME =
+  "default-min-cost-pareto";
 
 export const DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES = [
   { name: "GPT-5.4", model: "litellm_proxy/openai/gpt-5.4" },
@@ -96,5 +98,22 @@ export const DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
   default_model: "minimax-m3",
   classes: [],
   prompt_template: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_PROMPT,
+  model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
+};
+
+export const DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT = `Placeholder min-cost Pareto router prompt.
+
+Use the model table below to choose the lowest-cost model that is likely to solve the task. Return only valid JSON with the exact model name.
+
+{{ model_table }}
+
+Task:
+{{ instance_text }}`;
+
+export const DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT: MetaProfile = {
+  classifier_model: "minimax-m3",
+  default_model: "minimax-m3",
+  classes: [],
+  prompt_template: DEFAULT_MIN_COST_PARETO_META_PROFILE_PROMPT,
   model_table: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_MODEL_TABLE,
 };

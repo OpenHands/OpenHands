@@ -21,7 +21,7 @@ const FILLED: MetaProfile = {
 };
 
 describe("MetaProfileEditor", () => {
-  it("prefills create mode with the legacy Pareto router", async () => {
+  it("prefills create mode with the max-score Pareto router", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     renderWithProviders(
