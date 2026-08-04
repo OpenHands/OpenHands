@@ -87,9 +87,26 @@ export function HomeAutomationMenu({
     const rect = anchorRef.current.getBoundingClientRect();
     const gutter = 8;
     const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // The panel's real height is only measurable from the second render
+    // pass onward (the open effect forces one via bumpPosition); the first
+    // paint falls back to an items-derived estimate (~36px per row, ~9px
+    // per separator, plus panel padding).
+    const estimatedHeight = items.reduce(
+      (total, entry) => total + (entry.kind === "separator" ? 9 : 36),
+      10,
+    );
+    const menuHeight =
+      menuRef.current?.getBoundingClientRect().height ?? estimatedHeight;
+    const overflowsBelow = rect.bottom + 4 + menuHeight + gutter > vh;
     return {
       position: "fixed" as const,
-      top: rect.bottom + 4,
+      // When the menu would clip at the viewport bottom, flip it above the
+      // trigger. Bottom-anchoring (rather than an estimated `top`) keeps
+      // the panel hugging the trigger whatever its actual height.
+      ...(overflowsBelow
+        ? { bottom: vh - rect.top + 4 }
+        : { top: rect.bottom + 4 }),
       right: Math.max(gutter, vw - rect.right),
       zIndex: 100_000,
     };
