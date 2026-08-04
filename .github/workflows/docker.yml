@@ -77,7 +77,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.4.0
+        uses: docker/login-action@v4.5.2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -277,7 +277,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4.4.0
+        uses: docker/login-action@v4.5.2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

@@ -8,9 +8,9 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
+import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
-const DOCS_URL =
-  "https://docs.openhands.dev/openhands/usage/automations/overview";
+const DOCS_URL = getAutomationsDocsUrl();
 
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
   return <span className="whitespace-nowrap">{children}</span>;
