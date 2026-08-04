@@ -1009,8 +1009,11 @@ describe("dev-safe CLI startup", () => {
       });
 
       let output = "";
+      let stubPid: number | undefined;
       const capture = (chunk: Buffer) => {
         output += chunk.toString();
+        const stubMatch = output.match(/STUB_LISTENING (\d+)/);
+        if (stubMatch) stubPid = Number(stubMatch[1]);
       };
       launcher.stdout.on("data", capture);
       launcher.stderr.on("data", capture);
@@ -1038,6 +1041,16 @@ describe("dev-safe CLI startup", () => {
         expect(stillListening, output).toBe(false);
       } finally {
         if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        // The stub is a detached process-group leader, so killing the launcher
+        // does not reap it. Without this, the regression path this test exists
+        // to catch would itself leave the stub holding its port indefinitely.
+        if (stubPid !== undefined) {
+          try {
+            process.kill(-stubPid, "SIGKILL");
+          } catch {
+            // Already gone, which is the passing path.
+          }
+        }
         rmSync(stubDir, { recursive: true, force: true });
       }
     },
