@@ -22,6 +22,7 @@ import {
   getMarketplaceEntryById,
   getMcpMarketplaceCatalog,
 } from "#/utils/mcp-marketplace-utils";
+import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
@@ -59,19 +60,12 @@ export function getAutomationsByPopularity(
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 
-/**
- * Launch allowlist — proven automations featured above the Beta group.
- * NOT derived from popularityRank (slack-standup-digest@94 outranks
- * slack-channel-monitor@92 yet is Beta). A future flag could swap this set.
- */
-export const PROVEN_AUTOMATION_IDS = [
-  "github-pr-reviewer",
-  "github-repo-monitor",
-  "slack-channel-monitor",
-] as const;
-
+// Proven automations are featured above the Beta group. The set is owned by
+// the interface manifest (falling back to the host default), not derived from
+// popularityRank: slack-standup-digest@94 outranks slack-channel-monitor@92
+// yet is Beta.
 function isProvenAutomation(automation: RecommendedAutomation): boolean {
-  return (PROVEN_AUTOMATION_IDS as readonly string[]).includes(automation.id);
+  return getFeaturedAutomationIds().includes(automation.id);
 }
 
 /**

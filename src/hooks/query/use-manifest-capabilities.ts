@@ -17,6 +17,20 @@ export interface SetupCapabilitiesResult {
   isLoading: boolean;
 }
 
+/** Fetch the deployment-owned automation limits and feature set. */
+export function useDeploymentCapabilities() {
+  const { backend, orgId } = useActiveBackend();
+
+  return useQuery({
+    queryKey: [...SETUP_QUERY_KEYS.capabilities(), backend.id, orgId],
+    queryFn: () => AutomationService.getCapabilities(),
+    retry: false,
+    staleTime: 1000 * 60 * 5,
+    // An older deployment without discovery is an expected compatibility state.
+    meta: { disableToast: true },
+  });
+}
+
 /**
  * Ask the deployment what it supports, then compare that against what the
  * manifest requires.
@@ -30,17 +44,7 @@ export interface SetupCapabilitiesResult {
 export function useSetupCapabilities(
   entry: SetupEntry,
 ): SetupCapabilitiesResult {
-  const { backend, orgId } = useActiveBackend();
-
-  const query = useQuery({
-    queryKey: [...SETUP_QUERY_KEYS.capabilities(), backend.id, orgId],
-    queryFn: () => AutomationService.getCapabilities(),
-    retry: false,
-    staleTime: 1000 * 60 * 5,
-    // A deployment without discovery is an expected state, not a user-facing
-    // failure.
-    meta: { disableToast: true },
-  });
+  const query = useDeploymentCapabilities();
 
   if (query.isLoading) {
     return {
