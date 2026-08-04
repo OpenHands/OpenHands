@@ -7,7 +7,11 @@ import { useCreateConversation } from "#/hooks/mutation/use-create-conversation"
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
-import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
+import {
+  HOME_PROMPT_DRAFT_KEY,
+  setHomePromptDraft,
+} from "#/hooks/chat/use-draft-persistence";
+import { ChatPromptSuggestionRow } from "#/components/features/chat/chat-prompt-suggestion-row";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { useConversationStore } from "#/stores/conversation-store";
 import type { WorkspaceMode } from "#/api/conversation-metadata-store";
@@ -222,6 +226,11 @@ export function HomeChatLauncher() {
       <div className="flex w-full justify-center">
         <HomeHeaderTitle />
       </div>
+
+      <ChatPromptSuggestionRow
+        disabled={isCreating || llmBlocked}
+        onSuggestionClick={setHomePromptDraft}
+      />
 
       <div className="w-full">
         <CustomChatInput

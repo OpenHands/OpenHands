@@ -71,6 +71,9 @@ describe("AppSettingsScreen", () => {
     );
 
     expect(analyticsSwitch).toBeInTheDocument();
+    expect(
+      screen.getByTestId("show-getting-started-checklist-switch"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("git-user-name-input")).toHaveValue("octocat");
     expect(screen.getByTestId("git-user-email-input")).toHaveValue(
       "octocat@example.com",

@@ -126,6 +126,18 @@ export const formControlButtonClassName = cn(
   "text-sm font-normal disabled:cursor-not-allowed disabled:opacity-30",
 );
 
+/**
+ * Dense action button for notification lists and other tight panels.
+ * Shorter than {@link formControlButtonClassName}, with the same corner radius.
+ */
+export const formControlButtonCompactClassName = cn(
+  "h-7 min-h-7",
+  "inline-flex w-fit cursor-pointer items-center justify-center gap-1.5 px-2.5 py-1",
+  formControlRadiusClassName,
+  formControlTransitionClassName,
+  "text-xs font-normal disabled:cursor-not-allowed disabled:opacity-30",
+);
+
 /** Helper text under a left-aligned {@link SettingsSwitch} (40px track + gap-2). */
 export const formControlSwitchDescriptionClassName = "pl-12";
 

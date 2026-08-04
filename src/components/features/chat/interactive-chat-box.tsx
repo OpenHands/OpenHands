@@ -1,4 +1,7 @@
+import { AgentNotifications } from "./agent-notifications";
+import { ChatPromptSuggestionRow } from "./chat-prompt-suggestion-row";
 import { CustomChatInput } from "./custom-chat-input";
+import { useAgentNotifications } from "#/hooks/chat/use-agent-notifications";
 import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
@@ -17,12 +20,16 @@ interface InteractiveChatBoxProps {
   onSubmit: (message: string, images: File[], files: File[]) => void;
   disabled?: boolean;
   hasStartedConversation?: boolean;
+  showPromptSuggestions?: boolean;
+  showAgentNotifications?: boolean;
 }
 
 export function InteractiveChatBox({
   onSubmit,
   disabled = false,
   hasStartedConversation,
+  showPromptSuggestions = false,
+  showAgentNotifications = false,
 }: InteractiveChatBoxProps) {
   const {
     images,
@@ -43,6 +50,9 @@ export function InteractiveChatBox({
     );
 
   const { handleUpload } = useChatAttachmentUpload();
+  const setMessageToSend = useConversationStore(
+    (state) => state.setMessageToSend,
+  );
 
   const handleAfterGoal = useBtwInterceptor(conversationId, (message) => {
     const { imagesToEmbed, imagesAsFiles } = partitionImagesForUpload(
@@ -59,6 +69,11 @@ export function InteractiveChatBox({
     handleSubmit(suggestion);
   };
 
+  const agentNotifications = useAgentNotifications({
+    conversationId,
+    enabled: showAgentNotifications,
+  });
+
   const isDisabled =
     disabled ||
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
@@ -66,6 +81,24 @@ export function InteractiveChatBox({
 
   return (
     <div data-testid="interactive-chat-box">
+      {showPromptSuggestions ? (
+        <div className="mb-2">
+          <ChatPromptSuggestionRow
+            disabled={isDisabled}
+            onSuggestionClick={setMessageToSend}
+          />
+        </div>
+      ) : null}
+      {agentNotifications.isVisible ? (
+        <AgentNotifications
+          agentNotifications={agentNotifications.agentNotifications}
+          onCreateAll={agentNotifications.createAll}
+          onDismiss={agentNotifications.dismiss}
+          onRemove={agentNotifications.remove}
+          disabled={isDisabled}
+          isCreating={agentNotifications.isCreating}
+        />
+      ) : null}
       <CustomChatInput
         disabled={isDisabled}
         isNewConversationPending={disabled}

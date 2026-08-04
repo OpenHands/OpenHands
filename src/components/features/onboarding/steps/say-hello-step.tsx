@@ -7,6 +7,10 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
+import {
+  readSidebarOnboardingChecklistDismissed,
+  writeSidebarOnboardingChecklistDismissed,
+} from "#/components/features/sidebar/sidebar-onboarding-checklist-storage";
 import { I18nKey } from "#/i18n/declaration";
 
 interface SayHelloStepProps {
@@ -34,6 +38,12 @@ export function SayHelloStep({
   const showRecommendedAutomations = backend.kind !== "cloud";
   const defaultMessage = t(I18nKey.ONBOARDING$HELLO_DEFAULT_MESSAGE);
   const [message, setMessage] = React.useState(defaultMessage);
+  const [showGettingStartedChecklist, setShowGettingStartedChecklist] =
+    React.useState(() => !readSidebarOnboardingChecklistDismissed());
+
+  const persistGettingStartedChecklistPreference = () => {
+    writeSidebarOnboardingChecklistDismissed(!showGettingStartedChecklist);
+  };
 
   const {
     mutate: createConversation,
@@ -138,32 +148,58 @@ export function SayHelloStep({
             className="flex min-h-0 flex-1 flex-col"
           >
             <RecommendedAutomationsLauncher
-              onLaunched={onLaunched}
+              onLaunched={() => {
+                persistGettingStartedChecklistPreference();
+                onLaunched();
+              }}
               scrollableGrid
             />
           </div>
         </>
       ) : null}
 
-      <div className="flex shrink-0 items-center justify-between gap-2 bg-base-secondary pt-7 pb-7">
-        <BrandButton
-          testId="onboarding-hello-back"
-          type="button"
-          variant="secondary"
-          onClick={onBack}
-          isDisabled={isLaunching}
+      <div className="flex shrink-0 flex-col gap-4 bg-base-secondary pt-7 pb-7">
+        <label
+          htmlFor="onboarding-show-getting-started-checklist"
+          className="flex w-fit items-center gap-2 text-xs text-[var(--oh-muted)]"
         >
-          {t(I18nKey.ONBOARDING$BACK)}
-        </BrandButton>
-        <BrandButton
-          testId="onboarding-hello-close"
-          type="button"
-          variant="secondary"
-          onClick={onClose}
-          isDisabled={isLaunching}
-        >
-          {t(I18nKey.BUTTON$CLOSE)}
-        </BrandButton>
+          <input
+            id="onboarding-show-getting-started-checklist"
+            data-testid="onboarding-show-getting-started-checklist"
+            type="checkbox"
+            checked={showGettingStartedChecklist}
+            onChange={(event) =>
+              setShowGettingStartedChecklist(event.target.checked)
+            }
+            disabled={isLaunching}
+            className="size-3.5 shrink-0"
+          />
+          {t(I18nKey.SETTINGS$SHOW_GETTING_STARTED_CHECKLIST)}
+        </label>
+
+        <div className="flex items-center justify-between gap-2">
+          <BrandButton
+            testId="onboarding-hello-back"
+            type="button"
+            variant="secondary"
+            onClick={onBack}
+            isDisabled={isLaunching}
+          >
+            {t(I18nKey.ONBOARDING$BACK)}
+          </BrandButton>
+          <BrandButton
+            testId="onboarding-hello-close"
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              persistGettingStartedChecklistPreference();
+              onClose();
+            }}
+            isDisabled={isLaunching}
+          >
+            {t(I18nKey.BUTTON$CLOSE)}
+          </BrandButton>
+        </div>
       </div>
     </div>
   );

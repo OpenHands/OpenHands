@@ -8,6 +8,7 @@ import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "../conversation-panel/ellipsis-button";
 import { ConversationNameContextMenu } from "./conversation-name-context-menu";
+import { AgentNotificationsBell } from "./agent-notifications-bell";
 import { SystemMessageModal } from "../conversation-panel/system-message-modal";
 import { SkillsModal } from "../conversation-panel/skills-modal";
 import { HooksModal } from "../conversation-panel/hooks-modal";
@@ -205,6 +206,10 @@ export function ConversationName() {
               />
             )}
           </div>
+        )}
+
+        {titleMode !== "edit" && conversationId && (
+          <AgentNotificationsBell conversationId={conversationId} />
         )}
       </div>
 

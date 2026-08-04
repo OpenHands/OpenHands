@@ -350,6 +350,20 @@ describe("HomeChatLauncher", () => {
     expect(createSpy).not.toHaveBeenCalled();
   });
 
+  it("renders prompt suggestions above the chat input even when LLM is not configured", () => {
+    mockUseLlmConfigured.mockReturnValue({
+      isConfigured: false,
+      isLoading: false,
+    });
+
+    renderLauncher();
+
+    expect(screen.getByTestId("chat-prompt-suggestion-row")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("chat-prompt-suggestion-standup-digest"),
+    ).toBeDisabled();
+  });
+
   it("passes the picked workspace path as working_dir on a local backend", async () => {
     const createSpy = vi
       .spyOn(AgentServerConversationService, "createConversation")

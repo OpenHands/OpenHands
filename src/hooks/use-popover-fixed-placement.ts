@@ -17,11 +17,23 @@ export interface FixedPlacementBox {
  * up window resize + capture-phase scroll listeners so the box follows the
  * trigger as the page moves.
  */
+export type PopoverFixedHorizontalAlign = "end" | "center";
+
 export function usePopoverFixedPlacement(
   triggerRef: React.RefObject<HTMLElement | null>,
-  options: { open: boolean; enabled: boolean; targetWidth?: number },
+  options: {
+    open: boolean;
+    enabled: boolean;
+    targetWidth?: number;
+    horizontalAlign?: PopoverFixedHorizontalAlign;
+  },
 ): FixedPlacementBox | null {
-  const { open, enabled, targetWidth = 16 * 16 } = options;
+  const {
+    open,
+    enabled,
+    targetWidth = 16 * 16,
+    horizontalAlign = "end",
+  } = options;
   const [box, setBox] = React.useState<FixedPlacementBox | null>(null);
 
   const measure = React.useCallback(() => {
@@ -30,13 +42,16 @@ export function usePopoverFixedPlacement(
     const r = el.getBoundingClientRect();
     const gutter = 8;
     const width = Math.min(targetWidth, window.innerWidth - gutter * 2);
-    let left = r.right - width;
+    let left =
+      horizontalAlign === "center"
+        ? r.left + r.width / 2 - width / 2
+        : r.right - width;
     if (left < gutter) left = gutter;
     if (left + width > window.innerWidth - gutter) {
       left = Math.max(gutter, window.innerWidth - gutter - width);
     }
     setBox({ top: r.bottom + 4, left, width });
-  }, [triggerRef, targetWidth]);
+  }, [triggerRef, targetWidth, horizontalAlign]);
 
   React.useLayoutEffect(() => {
     if (!open || !enabled) {
