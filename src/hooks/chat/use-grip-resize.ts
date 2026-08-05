@@ -2,6 +2,7 @@ import type { RefObject, MouseEvent } from "react";
 import { useRef, useState, useCallback } from "react";
 import { useAutoResize } from "#/hooks/use-auto-resize";
 import { CHAT_INPUT } from "#/utils/constants";
+import { isMobileDevice } from "#/utils/utils";
 import {
   IMessageToSend,
   useConversationStore,
@@ -64,7 +65,11 @@ export const useGripResize = (
     resetManualResize,
   } = useAutoResize(chatInputRef as React.RefObject<HTMLElement | null>, {
     minHeight: 20,
-    maxHeight: 400,
+    // Cap the composer shorter on phones/tablets so a long draft (or a grown
+    // empty box) can't swallow the conversation above it.
+    maxHeight: isMobileDevice()
+      ? CHAT_INPUT.MOBILE_MAX_HEIGHT
+      : CHAT_INPUT.MAX_HEIGHT,
     onHeightChange: handleHeightChange,
     onGripDragStart: handleGripDragStart,
     onGripDragEnd: handleGripDragEnd,

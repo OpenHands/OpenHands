@@ -92,7 +92,7 @@ export default function MainApp() {
 
   if (config.isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-base">
+      <div className="min-h-dvh flex items-center justify-center bg-base">
         <LoadingSpinner size="large" />
       </div>
     );
@@ -110,7 +110,7 @@ export default function MainApp() {
       <SidebarMobileNavProvider>
         <div
           data-testid="root-layout"
-          className="h-screen lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
+          className="h-dvh lg:min-w-5xl flex flex-col md:flex-row bg-base overflow-hidden p-0"
         >
           <title>{appTitle}</title>
           <Sidebar />
