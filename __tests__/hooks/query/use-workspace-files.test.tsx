@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
-import type { GitChange } from "#/api/open-hands.types";
+import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
 
 const useActiveBackendMock = vi.fn();
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -22,12 +22,12 @@ vi.mock("#/hooks/use-runtime-is-ready", () => ({
   useRuntimeIsReady: () => useRuntimeIsReadyMock(),
 }));
 
-const useUnifiedGetGitChangesMock = vi.fn();
-vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
-  useUnifiedGetGitChanges: () => useUnifiedGetGitChangesMock(),
+vi.mock("#/api/cloud/conversation-service.api", () => ({
+  listCloudConversationFiles: vi.fn(),
 }));
 
 const executeCommandSpy = vi.spyOn(AgentServerRuntimeService, "executeCommand");
+const listCloudFilesMock = vi.mocked(listCloudConversationFiles);
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -51,28 +51,16 @@ const conversation = {
   workspace: { working_dir: "/workspace/project" },
 };
 
-function gitChangesResult(data: GitChange[], isLoading = false) {
-  return {
-    data,
-    isLoading,
-    isFetching: false,
-    isSuccess: true,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
-  };
-}
-
 beforeEach(() => {
   useActiveBackendMock.mockReset();
   useActiveConversationMock.mockReset();
   useRuntimeIsReadyMock.mockReset();
-  useUnifiedGetGitChangesMock.mockReset();
   executeCommandSpy.mockReset();
+  listCloudFilesMock.mockReset();
 
   useRuntimeIsReadyMock.mockReturnValue(true);
   useActiveConversationMock.mockReturnValue({ data: conversation });
-  useUnifiedGetGitChangesMock.mockReturnValue(gitChangesResult([]));
+  listCloudFilesMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -115,13 +103,40 @@ describe("useWorkspaceFiles — local backend", () => {
 describe("useWorkspaceFiles — cloud backend", () => {
   beforeEach(() => useActiveBackendMock.mockReturnValue(makeBackend("cloud")));
 
-  it("derives the file list from git changes without running bash", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "M", path: "src/index.ts" },
+  it("lists the full tree via the cloud files endpoint without running bash", async () => {
+    listCloudFilesMock.mockResolvedValue([
+      "hello.txt",
+      "src/index.ts",
+      "src/untouched.ts",
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([
+        "hello.txt",
+        "src/index.ts",
+        "src/untouched.ts",
       ]),
     );
+    // The cloud path uses the first-class listing endpoint, anchored at the
+    // conversation's absolute working dir.
+    expect(listCloudFilesMock).toHaveBeenCalledWith(
+      "conv-1",
+      "/workspace/project",
+    );
+    // Cloud must never drive the removed bash/cloud-proxy path.
+    expect(executeCommandSpy).not.toHaveBeenCalled();
+  });
+
+  it("normalizes leading ./ and de-dupes the returned paths", async () => {
+    listCloudFilesMock.mockResolvedValue([
+      "./hello.txt",
+      "hello.txt",
+      "./src/index.ts",
+    ]);
 
     const { result } = renderHook(() => useWorkspaceFiles(), {
       wrapper: makeWrapper(),
@@ -130,34 +145,5 @@ describe("useWorkspaceFiles — cloud backend", () => {
     await waitFor(() =>
       expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
     );
-    // Cloud must never drive the removed bash/cloud-proxy path.
-    expect(executeCommandSpy).not.toHaveBeenCalled();
-  });
-
-  it("drops deleted files (they can't be opened) and de-dupes", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "D", path: "gone.txt" },
-        { status: "M", path: "hello.txt" },
-      ]),
-    );
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
-  });
-
-  it("surfaces the git-changes loading state", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(gitChangesResult([], true));
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    expect(result.current.isLoading).toBe(true);
-    expect(executeCommandSpy).not.toHaveBeenCalled();
   });
 });
