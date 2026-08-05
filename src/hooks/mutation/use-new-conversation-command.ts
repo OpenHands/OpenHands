@@ -38,6 +38,9 @@ export const useNewConversationCommand = () => {
         undefined,
         undefined,
         conversation.sandbox_id ?? undefined,
+        undefined,
+        undefined,
+        conversation.llm_model,
       );
 
       if (startTask.status === "ERROR") {

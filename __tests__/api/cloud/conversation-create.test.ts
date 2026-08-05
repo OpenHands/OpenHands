@@ -81,6 +81,8 @@ describe("AgentServerConversationService cloud branch", () => {
     expect(requestBody.selected_branch).toBe("main");
     expect(requestBody.git_provider).toBe("github");
     expect(requestBody.title).toBe("Optional title");
+    expect(requestBody.agent_profile_id).toBeNull();
+    expect(requestBody.llm_model).toBeNull();
     expect(requestBody.initial_message).toEqual({
       role: "user",
       content: [{ type: "text", text: "fix the bug" }],
@@ -93,6 +95,46 @@ describe("AgentServerConversationService cloud branch", () => {
     expect(result.id).toBe("task-123");
     expect(result.status).toBe("WORKING");
     expect(result.app_conversation_id).toBeNull();
+  });
+
+  it("includes the effective cloud llm_model when launching from an AgentProfile", async () => {
+    fetchMock.mockResolvedValue(
+      mockJsonResponse({
+        id: "task-123",
+        created_by_user_id: null,
+        status: "WORKING",
+        detail: null,
+        app_conversation_id: null,
+        agent_server_url: null,
+        request: {},
+        created_at: "2026-05-06T00:00:00Z",
+        updated_at: "2026-05-06T00:00:00Z",
+      }),
+    );
+
+    await AgentServerConversationService.createConversation(
+      "fix the bug",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "profile-free",
+      "openhands",
+      "openhands/glm-5.2",
+    );
+
+    const [, init] = getFetchCall(fetchMock);
+    const requestBody = getJsonBody(init);
+
+    expect(requestBody).toMatchObject({
+      agent_profile_id: "profile-free",
+      llm_model: "openhands/glm-5.2",
+    });
+    expect(requestBody).not.toHaveProperty("agent_settings_encrypted");
   });
 
   it("getStartTask polls /api/v1/app-conversations/start-tasks?ids= directly", async () => {

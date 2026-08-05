@@ -2,12 +2,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import type { ProfileListResponse } from "#/api/profiles-service/profiles-service.api";
 import AgentProfilesService, {
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
   type AgentProfileListResponse,
@@ -113,6 +114,7 @@ export const useCreateConversation = () => {
 
       const requestedAgentProfileId =
         agentProfileId ?? agentProfiles?.active_agent_profile_id ?? undefined;
+      let resolvedLlmProfiles: ProfileListResponse | undefined = llmProfiles;
 
       // Fall back to the legacy agent_settings launch when the resolved agent
       // profile can't resolve its LLM. The agent-server seeds a `default`
@@ -176,6 +178,7 @@ export const useCreateConversation = () => {
             // stalling the send through the default exponential backoff.
             retry: false,
           });
+          resolvedLlmProfiles = llm;
           llmProfileExists = llm.profiles.some(
             (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
           );
@@ -193,38 +196,57 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Only extend the call with the profile tail when launching from a
-      // profile, so a plain create stays byte-identical to the legacy
-      // agent_settings path (#3727). sandboxId is unused here.
-      // TODO(#1587): createConversation has grown to 11 positional params;
+      const referencedLlmProfile =
+        effectiveAgentProfileId && resolvedAgentProfile
+          ? resolvedAgentProfile.agent_kind === "openhands"
+            ? (resolvedAgentProfile.llm_profile_ref ??
+              resolvedLlmProfiles?.active_profile ??
+              undefined)
+            : undefined
+          : (resolvedLlmProfiles?.active_profile ?? undefined);
+      const cloudLlmModel =
+        isCloud && referencedLlmProfile
+          ? (resolvedLlmProfiles?.profiles.find(
+              (profile) => profile.name === referencedLlmProfile,
+            )?.model ?? null)
+          : null;
+
+      // Only extend the call with the profile/model tail when needed, so a
+      // plain create stays byte-identical to the legacy agent_settings path.
+      // sandboxId is unused here.
+      // TODO(#1587): createConversation has grown to 12 positional params;
       // refactor it to an options object so this position-skipping tail isn't
       // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
-          : [];
+      const createConversationArgs: Parameters<
+        typeof AgentServerConversationService.createConversation
+      > = [
+        query,
+        conversationInstructions,
+        plugins,
+        repository
+          ? {
+              selected_repository: repository.name,
+              selected_branch: repository.branch ?? null,
+              git_provider: repository.gitProvider,
+            }
+          : null,
+        workingDir,
+        workspaceMode,
+        parentConversationId,
+        agentType,
+      ];
+      if (effectiveAgentProfileId || cloudLlmModel !== null) {
+        createConversationArgs.push(
+          undefined,
+          effectiveAgentProfileId,
+          resolvedAgentProfile?.agent_kind,
+          cloudLlmModel,
+        );
+      }
 
       const conversation =
         await AgentServerConversationService.createConversation(
-          query,
-          conversationInstructions,
-          plugins,
-          repository
-            ? {
-                selected_repository: repository.name,
-                selected_branch: repository.branch ?? null,
-                git_provider: repository.gitProvider,
-              }
-            : null,
-          workingDir,
-          workspaceMode,
-          parentConversationId,
-          agentType,
-          ...profileArgs,
+          ...createConversationArgs,
         );
 
       // Stamp the active LLM profile onto the (local) conversation so the

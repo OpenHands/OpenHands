@@ -53,6 +53,7 @@ const mockConversation = {
   selected_branch: null,
   git_provider: null,
   sandbox_id: "sandbox-abc",
+  llm_model: "openhands/glm-5.2",
   conversation_version: "V1" as const,
 };
 
@@ -226,6 +227,9 @@ describe("useNewConversationCommand", () => {
         undefined,
         undefined,
         "sandbox-abc",
+        undefined,
+        undefined,
+        "openhands/glm-5.2",
       );
     });
   });
