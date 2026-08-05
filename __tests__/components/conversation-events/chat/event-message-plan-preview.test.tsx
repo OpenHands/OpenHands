@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { EventMessage } from "#/components/conversation-events/chat/event-message";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import {
   renderWithProviders,
@@ -16,10 +16,13 @@ vi.mock("#/hooks/query/use-config", () => ({
   }),
 }));
 
-// Mock useAgentState
-vi.mock("#/hooks/use-agent-state");
+// Mock useAgentState (main) and usePlanningAgentState (planner) independently
+// so each test controls exactly one without the other's default bleeding in.
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: vi.fn(),
+  usePlanningAgentState: vi.fn(),
+}));
 
-// Mock PlanPreview component to verify it's rendered with correct props
 // Mock useConversationId (EventMessage -> useAgentState -> useActiveConversation -> useConversationId)
 vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
@@ -44,18 +47,16 @@ vi.mock("#/components/features/chat/plan-preview", () => ({
 describe("EventMessage - PlanPreview rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset conversation store. `localPlanningConversationId` is set to a
-    // fixed non-null id so the isStreaming guard (which requires a resolved
-    // planner id — see PlanningObservationPreview) doesn't trivially force
-    // isStreaming=false in every test here; the isStreaming-specific tests
-    // below then vary only isLastMessage / agent state as they did before.
-    useConversationStore.setState({
-      planContent: null,
-      localPlanningConversationId: "planner-1",
-    });
-    // Default mock for useAgentState
+    useConversationStore.setState({ planContent: null });
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.INIT,
+    });
+    // A resolved planner id by default, idle, so the isStreaming-specific
+    // tests below only need to vary isLastMessage / planning agent state.
+    vi.mocked(usePlanningAgentState).mockReturnValue({
+      localPlanningConversationId: "planner-1",
+      curPlanningAgentState: AgentState.INIT,
+      isPlanningAgentRunning: false,
     });
   });
 
@@ -182,14 +183,16 @@ describe("EventMessage - PlanPreview rendering", () => {
   });
 
   describe("isStreaming prop", () => {
-    it("should pass isStreaming=true when isLastMessage is true and agent state is RUNNING", () => {
+    it("should pass isStreaming=true when isLastMessage is true and planner is RUNNING", () => {
       const event = createPlanningObservationEvent("plan-obs-1");
       const planPreviewEventIds = new Set(["plan-obs-1"]);
       const planContent = "Streaming plan content";
 
       useConversationStore.setState({ planContent });
-      vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.RUNNING,
+      vi.mocked(usePlanningAgentState).mockReturnValue({
+        localPlanningConversationId: "planner-1",
+        curPlanningAgentState: AgentState.RUNNING,
+        isPlanningAgentRunning: true,
       });
 
       renderWithProviders(
@@ -207,14 +210,16 @@ describe("EventMessage - PlanPreview rendering", () => {
       expect(planPreview).toHaveAttribute("data-is-streaming", "true");
     });
 
-    it("should pass isStreaming=false when isLastMessage is false even if agent is RUNNING", () => {
+    it("should pass isStreaming=false when isLastMessage is false even if planner is RUNNING", () => {
       const event = createPlanningObservationEvent("plan-obs-1");
       const planPreviewEventIds = new Set(["plan-obs-1"]);
       const planContent = "Plan content";
 
       useConversationStore.setState({ planContent });
-      vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.RUNNING,
+      vi.mocked(usePlanningAgentState).mockReturnValue({
+        localPlanningConversationId: "planner-1",
+        curPlanningAgentState: AgentState.RUNNING,
+        isPlanningAgentRunning: true,
       });
 
       renderWithProviders(
@@ -232,14 +237,16 @@ describe("EventMessage - PlanPreview rendering", () => {
       expect(planPreview).toHaveAttribute("data-is-streaming", "false");
     });
 
-    it("should pass isStreaming=false when agent state is not RUNNING even if isLastMessage is true", () => {
+    it("should pass isStreaming=false when planner state is not RUNNING even if isLastMessage is true", () => {
       const event = createPlanningObservationEvent("plan-obs-1");
       const planPreviewEventIds = new Set(["plan-obs-1"]);
       const planContent = "Completed plan content";
 
       useConversationStore.setState({ planContent });
-      vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.AWAITING_USER_INPUT,
+      vi.mocked(usePlanningAgentState).mockReturnValue({
+        localPlanningConversationId: "planner-1",
+        curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+        isPlanningAgentRunning: false,
       });
 
       renderWithProviders(
@@ -257,7 +264,7 @@ describe("EventMessage - PlanPreview rendering", () => {
       expect(planPreview).toHaveAttribute("data-is-streaming", "false");
     });
 
-    it("should pass isStreaming=false when localPlanningConversationId hasn't resolved yet, even if isLastMessage and agent state are RUNNING", () => {
+    it("should pass isStreaming=false when localPlanningConversationId hasn't resolved yet, even if isLastMessage and planner state are RUNNING", () => {
       // Regression: useAgentState(undefined) falls back to the route
       // conversation's own state, so without this guard the code agent's
       // activity could be mistaken for the planner's before the planner id
@@ -266,12 +273,11 @@ describe("EventMessage - PlanPreview rendering", () => {
       const planPreviewEventIds = new Set(["plan-obs-1"]);
       const planContent = "Plan content";
 
-      useConversationStore.setState({
-        planContent,
+      useConversationStore.setState({ planContent });
+      vi.mocked(usePlanningAgentState).mockReturnValue({
         localPlanningConversationId: null,
-      });
-      vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.RUNNING,
+        curPlanningAgentState: AgentState.RUNNING,
+        isPlanningAgentRunning: false,
       });
 
       renderWithProviders(
@@ -289,14 +295,16 @@ describe("EventMessage - PlanPreview rendering", () => {
       expect(planPreview).toHaveAttribute("data-is-streaming", "false");
     });
 
-    it("should pass isStreaming=false when agent state is FINISHED", () => {
+    it("should pass isStreaming=false when planner state is FINISHED", () => {
       const event = createPlanningObservationEvent("plan-obs-1");
       const planPreviewEventIds = new Set(["plan-obs-1"]);
       const planContent = "Finished plan content";
 
       useConversationStore.setState({ planContent });
-      vi.mocked(useAgentState).mockReturnValue({
-        curAgentState: AgentState.FINISHED,
+      vi.mocked(usePlanningAgentState).mockReturnValue({
+        localPlanningConversationId: "planner-1",
+        curPlanningAgentState: AgentState.FINISHED,
+        isPlanningAgentRunning: false,
       });
 
       renderWithProviders(

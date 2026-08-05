@@ -23,16 +23,11 @@ export function WebSocketProviderWrapper({
     (state) => state.localPlanningConversationId,
   );
 
-  // `localPlanningConversationId` is a single unscoped Zustand field, not
-  // keyed by conversation. When switching conversations, this component
-  // re-renders with the new `conversationId` prop (always current — it comes
-  // straight from the route, no query latency) before the separate reset
-  // effect in routes/conversation.tsx has cleared the *previous*
-  // conversation's value, and before `useActiveConversation()` has refetched
-  // for the new id. Trusting the store value during that window would open
-  // the planner socket for the *previous* conversation's planner against the
-  // conversation now being rendered. Only trust it once `conversation` has
-  // actually resolved for the conversation currently being rendered.
+  // `localPlanningConversationId` is a single unscoped Zustand field. Right
+  // after switching conversations it can still hold the *previous*
+  // conversation's planner id, since the reset effect in
+  // routes/conversation.tsx and `useActiveConversation()`'s refetch both lag
+  // this render — only trust it once `conversation` matches `conversationId`.
   const isConversationDataFresh = conversation?.id === conversationId;
   const trustedLocalPlanningConversationId = isConversationDataFresh
     ? localPlanningConversationId
@@ -40,13 +35,9 @@ export function WebSocketProviderWrapper({
 
   // Candidate ids to resolve. On local backends `sub_conversation_ids` is the
   // generic (untyped) child list, so fetch it below to find the
-  // `plannerparent`-tagged entry. Cloud has no such ambiguity — the app-server
-  // only ever attaches the planner here, so it's trusted directly.
-  //
-  // Stable reference across renders: ConversationWebSocketProvider keys effects
-  // on `subConversationIds` (planning-history tracking + the deferred PLAN.md
-  // read), so a fresh array literal each render re-fires them and wipes the
-  // pending plan read — the local planner's PLAN.md would never surface.
+  // `plannerparent`-tagged entry; cloud has no such ambiguity. Memoized: a
+  // fresh array literal each render would re-fire ConversationWebSocketProvider's
+  // reference-keyed effects and wipe the pending PLAN.md read.
   const candidateConversationIds = React.useMemo(() => {
     if (!isLocalBackend) {
       return conversation?.sub_conversation_ids ?? [];
@@ -69,27 +60,12 @@ export function WebSocketProviderWrapper({
     candidateConversationIds,
   );
 
-  // `sub_conversation_ids` makes no promise that any entry (let alone index
-  // 0) is the planner — identify it explicitly via the `plannerparent` tag
-  // that local planner creation stamps, rather than assuming list position
-  // implies type. A pre-existing, unrelated child conversation must never be
-  // adopted as the planner and fed events/routing meant for it.
-  //
-  // Resolved as its own memo, kept to a primitive (string | null), rather than
-  // inlined into planningConversationIds below: ConversationWebSocketProvider
-  // resets its planning-history tracking whenever the `subConversationIds`
-  // array it receives changes *by reference* (see the comment on
-  // candidateConversationIds above). `subConversations` gets a new array
-  // reference on every refetch (e.g. the default refetchOnWindowFocus) even
-  // when the planner id hasn't changed — e.g. only `execution_status` ticked.
-  // Deriving planningConversationIds directly from `subConversations` would
-  // rebuild its own array on every such refetch and wipe the
-  // ConversationWebSocketProvider live once the tag lookup falls out of the
-  // dependency chain, leaving the Planner tab stuck showing stale content
-  // until a full reload. Keeping this as a separate memo means
-  // planningConversationIds only depends on the resolved *id* (a primitive,
-  // stable across reference-only refetches), so its own array stays stable
-  // too.
+  // Identify the planner via the `plannerparent` tag rather than list
+  // position — an unrelated child must never be adopted as the planner.
+  // Kept as its own memo (a primitive) rather than inlined below: `subConversations`
+  // gets a new array reference on every refetch even when the planner id
+  // hasn't changed, and planningConversationIds must not rebuild its own
+  // array in that case — see candidateConversationIds above.
   const plannerConversationId = React.useMemo(() => {
     if (!isLocalBackend) return null;
     return findPlannerConversationId(subConversations, conversation?.id);
@@ -98,14 +74,9 @@ export function WebSocketProviderWrapper({
   const planningConversationIds = React.useMemo(() => {
     if (!isLocalBackend) return candidateConversationIds;
     if (plannerConversationId) return [plannerConversationId];
-    // Tag data hasn't resolved yet (still loading, or no planner exists).
-    // `localPlanningConversationId` is only ever set to a verified planner
-    // id (freshly created, or restored via the same tag check in
-    // useHandlePlanClick), so it's safe to bridge with synchronously once we
-    // know it belongs to the conversation being rendered (see
-    // `trustedLocalPlanningConversationId` above); otherwise stay empty
-    // rather than guessing that an untagged child — or a stale planner id
-    // left over from the previously active conversation — is the planner.
+    // Tag data hasn't resolved yet — bridge with the verified store id (see
+    // `trustedLocalPlanningConversationId` above), otherwise stay empty
+    // rather than guessing an untagged child is the planner.
     return trustedLocalPlanningConversationId
       ? [trustedLocalPlanningConversationId]
       : [];
@@ -122,12 +93,8 @@ export function WebSocketProviderWrapper({
       planningConversationIds.includes(subConversation.id),
   );
 
-  // Don't pass a conversation URL to the WebSocket provider while the cloud
-  // sandbox is PAUSED. The URL still points to the old sandbox host, which
-  // rejects connections until the sandbox has fully resumed. Treating the URL
-  // as absent here keeps wsUrl === null in ConversationWebSocketProvider, so
-  // no connection is attempted until useActiveConversation detects the
-  // transition out of PAUSED (via fast 3-second polling).
+  // Suppress the URL while the cloud sandbox is PAUSED — it still points at
+  // the old (now-rejecting) host until the sandbox resumes.
   const conversationUrl =
     conversation?.sandbox_status === "PAUSED"
       ? null

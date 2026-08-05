@@ -50,6 +50,11 @@ vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: vi.fn(() => ({
     curAgentState: AgentState.AWAITING_USER_INPUT,
   })),
+  usePlanningAgentState: vi.fn(() => ({
+    localPlanningConversationId: null,
+    curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+    isPlanningAgentRunning: false,
+  })),
 }));
 
 vi.mock("#/components/features/chat/btw-messages", () => ({

@@ -73,21 +73,29 @@ export function isPlanFilePath(path: string | null | undefined): boolean {
 }
 
 /**
- * Finds the planner helper among a conversation's fetched sub-conversations.
- * `sub_conversation_ids` is the generic child list — the agent-server makes
- * no promise that any entry (let alone index 0) is the planner, so identity
- * comes from the `plannerparent` tag `createLocalPlanningConversation`
- * stamps on creation, not from list position.
+ * Whether `conversation` is the local planner helper for `parentConversationId`
+ * — identity comes from the `plannerparent` tag `createLocalPlanningConversation`
+ * stamps on creation, never from list position (`sub_conversation_ids` is the
+ * generic, untyped child list).
  */
+export function isPlannerConversationOf(
+  conversation: Pick<AppConversation, "tags"> | null | undefined,
+  parentConversationId: string,
+): boolean {
+  return (
+    conversation?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === parentConversationId
+  );
+}
+
+/** Finds the planner helper among a conversation's fetched sub-conversations. */
 export function findPlannerConversationId(
   subConversations: (AppConversation | null)[] | null | undefined,
   parentConversationId: string | null | undefined,
 ): string | null {
   if (!parentConversationId) return null;
   return (
-    subConversations?.find(
-      (sub) =>
-        sub?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === parentConversationId,
+    subConversations?.find((sub) =>
+      isPlannerConversationOf(sub, parentConversationId),
     )?.id ?? null
   );
 }

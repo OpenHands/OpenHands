@@ -61,17 +61,6 @@ export const APP_UPDATE_QUERY_KEYS = {
 } as const;
 
 export const CONVERSATION_QUERY_KEYS = {
-  all: ["user", "conversations"] as const,
-  /**
-   * Prefix-matches a single conversation's own query, e.g.
-   * `["user", "conversation", cid, backendId, orgId]` from
-   * `useUserConversation`/`useActiveConversation`. Deliberately a different
-   * key from `all` above (`"conversation"` singular vs. `"conversations"`
-   * plural) — invalidating `all` only refreshes the paginated list, not any
-   * individual conversation's own cached data.
-   */
-  active: (conversationId: string) =>
-    ["user", "conversation", conversationId] as const,
   subConversations: ["v1", "sub-conversations"] as const,
 } as const;
 

@@ -52,6 +52,11 @@ vi.mock("#/hooks/use-handle-build-plan-click", () => ({
 let mockCurAgentState = AgentState.AWAITING_USER_INPUT;
 vi.mock("#/hooks/use-agent-state", () => ({
   useAgentState: () => ({ curAgentState: mockCurAgentState }),
+  usePlanningAgentState: () => ({
+    localPlanningConversationId: null,
+    curPlanningAgentState: AgentState.AWAITING_USER_INPUT,
+    isPlanningAgentRunning: false,
+  }),
 }));
 
 vi.mock("#/hooks/query/use-unified-vscode-url", () => ({

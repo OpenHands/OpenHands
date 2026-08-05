@@ -22,6 +22,7 @@ import {
 } from "#/hooks/query/query-keys";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import { findPlannerConversationId } from "#/utils/plan-file";
+import { invalidateConversationQueries } from "#/hooks/mutation/conversation-mutation-utils";
 
 function useCreateLocalPlanningConversationMutation(options: {
   onCreated: (planningConversationId: string) => void;
@@ -42,16 +43,10 @@ function useCreateLocalPlanningConversationMutation(options: {
       ),
     onSuccess: (planningConversation, variables) => {
       options.onCreated(planningConversation.id);
-      queryClient.invalidateQueries({ queryKey: CONVERSATION_QUERY_KEYS.all });
-      // `.all` only matches the paginated conversation list — the parent's
-      // own cached AppConversation (what useActiveConversation reads
-      // sub_conversation_ids from) needs its own key invalidated too, or it
-      // stays stale for up to the next poll interval.
-      queryClient.invalidateQueries({
-        queryKey: CONVERSATION_QUERY_KEYS.active(
-          variables.parentConversationId,
-        ),
-      });
+      invalidateConversationQueries(
+        queryClient,
+        variables.parentConversationId,
+      );
       queryClient.invalidateQueries({
         queryKey: CONVERSATION_QUERY_KEYS.subConversations,
       });
@@ -187,13 +182,10 @@ export const useHandlePlanClick = () => {
       setConversationMode("plan");
 
       if (backend.kind !== "cloud") {
-        // Guard on the server-reported helper and the store, so a browser
-        // that has never seen this conversation before adopts the existing
-        // planner instead of spawning a second hidden one — and on the
-        // mutation's own in-flight state, so two rapid invocations (a fast
-        // double-click, or a click racing a `/plan` submission) before either
-        // of those has had a chance to update can't both pass this guard and
-        // create two planner conversations for the same parent.
+        // Guard on the server-reported helper, the store, and the mutation's
+        // own in-flight state — the last one stops two rapid invocations
+        // (e.g. a double-click) from both passing before either updates and
+        // creating two planners for the same parent.
         if (
           !conversation?.id ||
           localPlanningConversationId ||

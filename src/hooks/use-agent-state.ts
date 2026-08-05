@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useConversationStore } from "#/stores/conversation-store";
 import { AgentState } from "#/types/agent-state";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
@@ -74,4 +75,33 @@ export function useAgentState(conversationId?: string): UseAgentStateResult {
   );
 
   return { curAgentState, executionStatus };
+}
+
+export interface UsePlanningAgentStateResult {
+  localPlanningConversationId: string | null;
+  curPlanningAgentState: AgentState;
+  /** Running or loading. `false` (not "unknown") when there's no planner yet. */
+  isPlanningAgentRunning: boolean;
+}
+
+/**
+ * The local planner helper's own state — read separately from the main
+ * conversation's via `useAgentState` since the two run independently.
+ */
+export function usePlanningAgentState(): UsePlanningAgentStateResult {
+  const localPlanningConversationId = useConversationStore(
+    (state) => state.localPlanningConversationId,
+  );
+  const { curAgentState: curPlanningAgentState } = useAgentState(
+    localPlanningConversationId ?? undefined,
+  );
+  const isPlanningAgentRunning =
+    !!localPlanningConversationId &&
+    (curPlanningAgentState === AgentState.RUNNING ||
+      curPlanningAgentState === AgentState.LOADING);
+  return {
+    localPlanningConversationId,
+    curPlanningAgentState,
+    isPlanningAgentRunning,
+  };
 }

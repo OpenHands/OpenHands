@@ -20,7 +20,7 @@ import { ChatSuggestions } from "./chat-suggestions";
 import { ScrollProvider } from "#/context/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
@@ -63,8 +63,7 @@ function getEntryPoint(
 
 export function ChatInterface() {
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
-  const { setMessageToSend, localPlanningConversationId } =
-    useConversationStore();
+  const { setMessageToSend } = useConversationStore();
   const { errorMessage, errorCode, removeErrorMessage, setErrorMessage } =
     useErrorMessageStore();
   const navigate = useNavigate();
@@ -106,13 +105,7 @@ export function ChatInterface() {
   } = useNewConversationCommand();
 
   const { curAgentState } = useAgentState();
-  const { curAgentState: curPlanningAgentState } = useAgentState(
-    localPlanningConversationId ?? undefined,
-  );
-  const isPlanningAgentRunning =
-    !!localPlanningConversationId &&
-    (curPlanningAgentState === AgentState.RUNNING ||
-      curPlanningAgentState === AgentState.LOADING);
+  const { isPlanningAgentRunning } = usePlanningAgentState();
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:

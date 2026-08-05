@@ -83,11 +83,8 @@ interface SendMessageResult {
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
   /**
-   * The main (code-agent) connection's own state, unmerged with the planning
-   * connection. Commands that only ever address the main conversation (e.g.
-   * `/code`) should gate on this instead of `connectionState` — the merged
-   * state can report non-OPEN purely because the *planning* socket is
-   * momentarily reconnecting, even while the main socket is fine to send on.
+   * The main connection's own state, unmerged with the planning connection —
+   * see `useMainWebSocketStatus`.
    */
   mainConnectionState: WebSocketConnectionState;
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
@@ -347,6 +344,16 @@ export function ConversationWebSocketProvider({
     isFetchingHistory,
     isPreloadHistoryError,
   ]);
+
+  // Derived from `subConversationIds` (the pre-filtered, tag-verified id
+  // list) rather than the resolved `subConversations` entry, which lands a
+  // tick later — routing on it would leave a window where the first prompt
+  // sent in plan mode fell through to the parent (the code agent) instead of
+  // the planner.
+  const planningConversationId = useMemo(
+    () => subConversationIds?.[0] ?? null,
+    [subConversationIds],
+  );
 
   const planningAgentWsUrl = useMemo(() => {
     if (!subConversations?.length) {
@@ -767,11 +774,7 @@ export function ConversationWebSocketProvider({
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
             // conversation's run/idle transitions, which must never overwrite
-            // the main conversation's status in the shared store. Derived
-            // from `subConversationIds` (the pre-filtered, tag-verified id
-            // list), matching `sendMessage` below — not from the resolved
-            // `subConversations` entry, which lands a tick later.
-            const planningConversationId = subConversationIds?.[0] ?? null;
+            // the main conversation's status in the shared store.
             if (
               isFullStateConversationStateUpdateEvent(event) &&
               planningConversationId
@@ -861,7 +864,7 @@ export function ConversationWebSocketProvider({
       consumeMatchingPendingMessage,
       queryClient,
       subConversations,
-      subConversationIds,
+      planningConversationId,
       conversationId,
       setExecutionStatus,
       appendInput,
@@ -1009,13 +1012,6 @@ export function ConversationWebSocketProvider({
       const currentMode = useConversationStore.getState().conversationMode;
       const currentSocket =
         currentMode === "plan" ? planningAgentSocket : mainSocket;
-      // In plan mode the message belongs to the planning conversation. Target
-      // the planner *id* rather than the resolved `subConversations` entry: the
-      // id is known as soon as the planner is created, while the react-query
-      // fetch that resolves it lands a tick later. Routing on the resolved
-      // entry would leave a window where the first prompt fell through to the
-      // parent — the code agent — and got executed instead of planned.
-      const planningConversationId = subConversationIds?.[0] ?? null;
       const targetConversationId =
         currentMode === "plan" ? planningConversationId : conversationId;
 
@@ -1074,7 +1070,7 @@ export function ConversationWebSocketProvider({
       planningAgentSocket,
       setErrorMessage,
       conversationId,
-      subConversationIds,
+      planningConversationId,
     ],
   );
 

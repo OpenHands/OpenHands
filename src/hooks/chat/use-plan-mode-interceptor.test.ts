@@ -10,12 +10,11 @@ let isCreatingConversation = false;
 let hasPlanner = false;
 let mainWebSocketStatus: WebSocketConnectionState = "OPEN";
 let unifiedWebSocketStatus: WebSocketConnectionState = "OPEN";
-let localPlanningConversationId: string | null = null;
-let curPlanningAgentState: AgentState = AgentState.AWAITING_USER_INPUT;
+let isPlanningAgentRunning = false;
 
 vi.mock("#/stores/conversation-store", () => ({
   useConversationStore: (selector: (s: unknown) => unknown) =>
-    selector({ setConversationMode, localPlanningConversationId }),
+    selector({ setConversationMode }),
 }));
 vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
@@ -29,7 +28,7 @@ vi.mock("#/hooks/use-unified-websocket-status", () => ({
   useUnifiedWebSocketStatus: () => unifiedWebSocketStatus,
 }));
 vi.mock("#/hooks/use-agent-state", () => ({
-  useAgentState: () => ({ curAgentState: curPlanningAgentState }),
+  usePlanningAgentState: () => ({ isPlanningAgentRunning }),
 }));
 
 const CONV = "conv-1";
@@ -52,8 +51,7 @@ describe("usePlanModeInterceptor", () => {
     hasPlanner = false;
     mainWebSocketStatus = "OPEN";
     unifiedWebSocketStatus = "OPEN";
-    localPlanningConversationId = null;
-    curPlanningAgentState = AgentState.AWAITING_USER_INPUT;
+    isPlanningAgentRunning = false;
   });
 
   it("passes a non-command message straight through to onSubmit", () => {
@@ -181,8 +179,7 @@ describe("usePlanModeInterceptor", () => {
     // Regression: a new message must not be routed into a planner that's
     // still mid-run, mirroring isPlanningAgentRunning elsewhere.
     hasPlanner = true;
-    localPlanningConversationId = "planner-1";
-    curPlanningAgentState = AgentState.RUNNING;
+    isPlanningAgentRunning = true;
     const { intercept, onSubmit } = setup(CONV);
     intercept("/plan another task");
     expect(setConversationMode).not.toHaveBeenCalled();

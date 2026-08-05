@@ -12,11 +12,10 @@ export function useUnifiedWebSocketStatus(): WebSocketConnectionState {
 }
 
 /**
- * Returns the main (code-agent) connection's own status, unmerged with the
- * planning connection. Use this for actions that only ever address the main
- * conversation (e.g. sending `/code`) — the merged status from
- * `useUnifiedWebSocketStatus` can report non-OPEN purely because the
- * *planning* socket is momentarily reconnecting.
+ * The main connection's own status, unmerged with the planning connection.
+ * Use for actions that only address the main conversation (e.g. `/code`) —
+ * `useUnifiedWebSocketStatus` can report non-OPEN purely from a momentary
+ * planning reconnect.
  */
 export function useMainWebSocketStatus(): WebSocketConnectionState {
   const conversationContext = useConversationWebSocket();

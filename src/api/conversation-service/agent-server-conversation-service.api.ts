@@ -59,7 +59,7 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
-import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
+import { isPlannerConversationOf } from "#/utils/plan-file";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -266,7 +266,6 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     launched_agent_profile: normalizeLaunchedAgentProfile(
       item.launched_agent_profile,
     ),
-    parent_conversation_id: stringOrNull(item.parent_conversation_id),
     sub_conversation_ids: normalizeSubConversationIds(
       item.sub_conversation_ids,
     ),
@@ -524,16 +523,11 @@ class AgentServerConversationService {
       await buildStartPlanningConversationRequestWithEncryptedSettings({
         workingDir,
         parentConversationId,
-        // Pin the planner to the parent conversation's own current model —
-        // its active_profile, which tracks /model switches and the agent's
-        // own SwitchLLMTool calls — rather than some other conversation (or
-        // the home page) activating a different profile globally. Only
-        // meaningful for "openhands"-kind parents: for an ACP parent,
-        // active_profile is stamped with whatever LLM profile happened to be
-        // globally active when the ACP conversation was created (it's not
-        // kept live — /model is a no-op for ACP), so treating it as
-        // authoritative here would pin the planner to that stale, unrelated
-        // snapshot instead of falling through to current global settings.
+        // Pin the planner to the parent's own current model. Only meaningful
+        // for "openhands"-kind parents: an ACP parent's active_profile is a
+        // stale launch-time snapshot (/model is a no-op for ACP), not a live
+        // value, so treating it as authoritative would pin the planner to
+        // the wrong model instead of falling through to global settings.
         parentActiveProfileName:
           parent?.agent_kind === "openhands"
             ? (parent?.active_profile ?? null)
@@ -564,17 +558,11 @@ class AgentServerConversationService {
    * backend — today that means its planner helper, the only child Canvas
    * creates locally.
    *
-   * `sub_conversation_ids` is the generic server-derived child list, not a
-   * planner-only list, so each child is fetched and kept only if it's
-   * actually tagged `plannerparent` for this parent — mirrors the identity
-   * check in `findPlannerConversationId` used everywhere else a planner is
-   * resolved. Without this, deleting the parent would also delete an
-   * unrelated non-planner child (e.g. a delegated sub-agent).
-   *
-   * Server-first: the agent-server derives `sub_conversation_ids` from its own
-   * catalog, so the relationship survives storage loss and a different browser.
-   * The stored metadata hint is merged in for agent-servers older than 1.37.1,
-   * which ignore `parent_conversation_id` and therefore report no children.
+   * `sub_conversation_ids` is the generic server-derived child list, so each
+   * child is kept only if it's tagged `plannerparent` for this parent —
+   * otherwise deleting the parent would also delete an unrelated non-planner
+   * child (e.g. a delegated sub-agent). The stored metadata hint is merged in
+   * for agent-servers older than 1.37.1, which report no children at all.
    */
   static async getLocalPlanningConversationIds(
     parentConversationId: string,
@@ -591,9 +579,7 @@ class AgentServerConversationService {
       if (childIds.length > 0) {
         const children = await this.batchGetAppConversations(childIds);
         for (const child of children) {
-          if (
-            child?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === parentConversationId
-          ) {
+          if (child && isPlannerConversationOf(child, parentConversationId)) {
             ids.add(child.id);
           }
         }

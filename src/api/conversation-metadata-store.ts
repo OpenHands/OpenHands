@@ -90,11 +90,9 @@ export const setStoredConversationMetadata = (
 
 /**
  * Merge `patch` into a conversation's stored metadata, preserving every
- * existing field. `setStoredConversationMetadata` does a full-object
- * replace, so a caller that enumerates only the fields it knows about would
- * silently drop everything else (e.g. `local_planning_conversation_id`,
- * `plugins`) on every call — this is the correct-by-construction way to
- * update a subset of fields without that hazard.
+ * existing field — `setStoredConversationMetadata` does a full-object
+ * replace, which would otherwise silently drop fields the caller doesn't
+ * enumerate (e.g. `plugins`).
  */
 export const mergeStoredConversationMetadata = (
   conversationId: string,

@@ -18,7 +18,7 @@ import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useTaskList } from "#/hooks/use-task-list";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
@@ -32,8 +32,7 @@ export function ConversationTabs({
   isPanelResizing?: boolean;
 }) {
   const { conversationId } = useConversationId();
-  const { setSelectedTab, planContent, localPlanningConversationId } =
-    useConversationStore();
+  const { setSelectedTab, planContent } = useConversationStore();
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -45,12 +44,7 @@ export function ConversationTabs({
 
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { curAgentState } = useAgentState();
-  // The plan is written by the (local) planner helper conversation, not the
-  // main one — its own run/idle status determines whether the plan is still
-  // being generated, so read it separately from the main agent's.
-  const { curAgentState: curPlanningAgentState } = useAgentState(
-    localPlanningConversationId ?? undefined,
-  );
+  const { isPlanningAgentRunning } = usePlanningAgentState();
 
   const {
     selectTab,
@@ -151,10 +145,6 @@ export function ConversationTabs({
 
   const unpinnedSignature = persistedState.unpinnedTabs.join(",");
 
-  const isPlanningAgentRunning =
-    !!localPlanningConversationId &&
-    (curPlanningAgentState === AgentState.RUNNING ||
-      curPlanningAgentState === AgentState.LOADING);
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
     curAgentState === AgentState.LOADING ||

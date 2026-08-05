@@ -105,14 +105,12 @@ export interface DirectConversationInfo {
     revision: number;
   } | null;
   /**
-   * Server-owned parent/child links (agent-server >= 1.37.1, SDK #4188). The
-   * agent-server derives ``sub_conversation_ids`` from its own catalog, so a
-   * conversation started with ``parent_conversation_id`` is discoverable from
-   * the parent on any browser — this is what makes the local planner's
-   * relationship server state rather than a browser-local hint. Both are
-   * absent on older agent-servers and on the cloud wire shape.
+   * Server-owned, derived from the catalog's ``parent_conversation_id`` link
+   * (agent-server >= 1.37.1, SDK #4188) — a conversation started with a
+   * parent is discoverable here on any browser, which is what makes the
+   * local planner's relationship server state rather than a browser-local
+   * hint. Absent on older agent-servers and on the cloud wire shape.
    */
-  parent_conversation_id?: string | null;
   sub_conversation_ids?: string[] | null;
 }
 
@@ -1298,14 +1296,10 @@ export function buildStartPlanningConversationRequest(options: {
 }
 
 /**
- * Resolve the encrypted LLM config for a named LLM profile, so a planner
- * started from a conversation can run whatever model that conversation is
- * *currently* on (its `active_profile` — the profile it launched with, or the
- * one it was last switched to via `/model` or `SwitchLLMTool`) rather than
- * re-deriving a possibly-stale value from its launch-time agent profile.
- *
- * Returns `null` — caller falls back further — when the profile is unknown
- * or the lookup fails.
+ * Resolve the encrypted LLM config for a named LLM profile, so a planner can
+ * run the parent conversation's *current* model (`active_profile`, tracking
+ * `/model` and `SwitchLLMTool`) rather than a stale launch-time value.
+ * Returns `null` — caller falls back further — if unknown or lookup fails.
  */
 async function resolveLlmProfileSettings(
   profileName: string,
@@ -1327,16 +1321,12 @@ async function resolveLlmProfileSettings(
 }
 
 /**
- * Resolve the encrypted LLM config the given AgentProfile launches with, so a
- * planner started from a conversation can run the *parent's* model rather than
- * whatever profile happens to be globally active now. AgentProfiles hold a
- * reference (`llm_profile_ref`), not credentials, so this is a two-hop lookup:
- * profile id -> llm profile name -> encrypted LLM config.
- *
- * Returns `null` — caller falls back to global settings — when the profile is
- * unknown, is an ACP profile (no LLM config of its own; the planner cannot run
- * on an ACP agent anyway), has a dangling `llm_profile_ref`, or the lookup
- * fails. A dangling reference should not block plan creation outright.
+ * Resolve the encrypted LLM config the given AgentProfile launches with, as a
+ * fallback for `resolveLlmProfileSettings`. AgentProfiles hold a reference
+ * (`llm_profile_ref`), not credentials, so this is a two-hop lookup: profile
+ * id -> llm profile name -> encrypted LLM config. Returns `null` — caller
+ * falls back to global settings — for an unknown/ACP/dangling-ref profile or
+ * a failed lookup, none of which should block plan creation outright.
  */
 async function resolveAgentProfileLlmSettings(
   agentProfileId: string,
@@ -1365,22 +1355,18 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
   workingDir: string;
   parentConversationId: string;
   /**
-   * The parent conversation's current LLM profile name (`AppConversation.active_profile`)
-   * — the profile it launched with, or the one it was last switched to via
-   * `/model` or the agent's own `SwitchLLMTool`. Takes priority over
-   * `parentAgentProfileId` below so switching the *parent conversation's*
-   * model actually carries over to a planner created afterward, while a
-   * *different* conversation (or the home page) activating another profile
-   * globally still does not repoint this planner — `active_profile` only
-   * changes when this specific conversation's own model does.
+   * The parent conversation's current LLM profile (`AppConversation.active_profile`,
+   * tracking `/model` and `SwitchLLMTool`). Takes priority over
+   * `parentAgentProfileId` so a model switch on the parent carries over to a
+   * planner created afterward, without a *different* conversation's global
+   * profile activation repointing it.
    */
   parentActiveProfileName?: string | null;
   /**
-   * ``launched_agent_profile.agent_profile_id`` of the parent conversation, when
-   * it was started from an AgentProfile. Fallback for when
-   * `parentActiveProfileName` can't be resolved (e.g. an ACP parent, whose
-   * `active_profile` reflects the globally-active LLM profile at launch time
-   * rather than anything the ACP agent itself runs).
+   * `launched_agent_profile.agent_profile_id` of the parent, when started
+   * from an AgentProfile. Fallback for when `parentActiveProfileName` can't
+   * be resolved (e.g. an ACP parent, whose `active_profile` is a stale
+   * launch-time snapshot rather than anything the ACP agent itself runs).
    */
   parentAgentProfileId?: string | null;
   initialMessage?: string;

@@ -20,7 +20,6 @@ import { getStoredConversationMetadata } from "#/api/conversation-metadata-store
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { useSubConversations } from "#/hooks/query/use-sub-conversations";
 import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
-import { CONVERSATION_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 // Mock dependencies
 vi.mock("#/stores/conversation-store");
@@ -322,11 +321,11 @@ describe("useHandlePlanClick", () => {
     });
 
     it("invalidates the parent's own active-conversation query, not just the paginated list", async () => {
-      // Regression: CONVERSATION_QUERY_KEYS.all (["user", "conversations"])
-      // only prefix-matches the paginated list query — the parent's own
-      // cached AppConversation (what useActiveConversation reads
-      // sub_conversation_ids from) needs its own key invalidated too, or it
-      // stays stale until the next poll.
+      // Regression: invalidating only ["user", "conversations"] (the
+      // paginated list) leaves the parent's own cached AppConversation
+      // (what useActiveConversation reads sub_conversation_ids from) stale
+      // until the next poll. onSuccess now delegates to the shared
+      // invalidateConversationQueries helper, which covers both.
       vi.mocked(useActiveBackend).mockReturnValue({
         backend: { kind: "local" },
       } as ReturnType<typeof useActiveBackend>);
@@ -348,7 +347,7 @@ describe("useHandlePlanClick", () => {
       });
 
       expect(invalidateQueriesSpy).toHaveBeenCalledWith({
-        queryKey: CONVERSATION_QUERY_KEYS.active("conv-123"),
+        queryKey: ["user", "conversation", "conv-123"],
       });
     });
 

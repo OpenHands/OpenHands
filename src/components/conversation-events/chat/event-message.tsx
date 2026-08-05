@@ -22,7 +22,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 import { GoalStatusContent } from "#/components/features/chat/goal-status-content";
@@ -135,12 +135,8 @@ const renderUserMessageWithSkillReady = (
 };
 
 /**
- * Renders the plan preview for a `PlanningFileEditorObservation` event.
- * Isolated in its own component so the planner's `useAgentState()`
- * subscription — needed only here, to compute the shine effect and whether
- * the Build button should stay disabled — is scoped to the rare
- * PlanningFileEditorObservation row instead of paid for by every message in
- * the conversation.
+ * Renders the plan preview. Its own component so `usePlanningAgentState()`
+ * only subscribes on this rare row, not every message in the conversation.
  */
 function PlanningObservationPreview({
   planContent,
@@ -151,25 +147,14 @@ function PlanningObservationPreview({
   isLastMessage: boolean;
   isMainAgentRunning: boolean;
 }) {
-  const localPlanningConversationId = useConversationStore(
-    (state) => state.localPlanningConversationId,
-  );
-  // The plan is written by the (local) planner helper conversation, not the
-  // main one — its own run/idle status is what determines whether the plan
-  // is still being generated, so read it separately from the main agent's.
-  const { curAgentState: curPlanningAgentState } = useAgentState(
-    localPlanningConversationId ?? undefined,
-  );
-  const isPlanningAgentRunning =
-    !!localPlanningConversationId &&
-    (curPlanningAgentState === AgentState.RUNNING ||
-      curPlanningAgentState === AgentState.LOADING);
+  const {
+    localPlanningConversationId,
+    curPlanningAgentState,
+    isPlanningAgentRunning,
+  } = usePlanningAgentState();
 
-  // Show shine effect only if this is the last message AND the planner is
-  // running. Guard on localPlanningConversationId explicitly — useAgentState
-  // (undefined) silently falls back to the route conversation's own state,
-  // so without this guard the code agent's activity could be mistaken for
-  // the planner's before the planner id has resolved.
+  // Guard on the id explicitly — useAgentState(undefined) falls back to the
+  // route conversation, which could be mistaken for the planner's activity.
   const isStreaming =
     isLastMessage &&
     !!localPlanningConversationId &&
@@ -196,11 +181,8 @@ export function EventMessage({
   const { planContent } = useConversationStore();
   const { curAgentState } = useAgentState();
 
-  // Disable Build button while the main agent is running (streaming). The
-  // planner's own running state is folded in by PlanningObservationPreview
-  // below, which is the only place that needs it — reading it here too would
-  // pay for a second useAgentState() subscription on every rendered message
-  // row, not just the rare PlanningFileEditorObservation one.
+  // Planner-running state is folded in by PlanningObservationPreview below,
+  // not read here, to avoid a second useAgentState() subscription per row.
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
     curAgentState === AgentState.LOADING;
