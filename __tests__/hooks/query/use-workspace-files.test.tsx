@@ -22,6 +22,11 @@ vi.mock("#/hooks/use-runtime-is-ready", () => ({
   useRuntimeIsReady: () => useRuntimeIsReadyMock(),
 }));
 
+const useOptionalConversationIdMock = vi.fn();
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => useOptionalConversationIdMock(),
+}));
+
 vi.mock("#/api/cloud/conversation-service.api", () => ({
   listCloudConversationFiles: vi.fn(),
 }));
@@ -55,11 +60,13 @@ beforeEach(() => {
   useActiveBackendMock.mockReset();
   useActiveConversationMock.mockReset();
   useRuntimeIsReadyMock.mockReset();
+  useOptionalConversationIdMock.mockReset();
   executeCommandSpy.mockReset();
   listCloudFilesMock.mockReset();
 
   useRuntimeIsReadyMock.mockReturnValue(true);
   useActiveConversationMock.mockReturnValue({ data: conversation });
+  useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
   listCloudFilesMock.mockResolvedValue([]);
 });
 
@@ -144,6 +151,27 @@ describe("useWorkspaceFiles — cloud backend", () => {
 
     await waitFor(() =>
       expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
+    );
+  });
+
+  it("fires using the route id even when the active-conversation query has no data yet", async () => {
+    // Regression: the query id must come from the route, not from
+    // `useActiveConversation().data.id`. If the batch-get query is still
+    // loading (data === undefined) the listing must still fire — otherwise the
+    // Files tab makes no `/files` call at all on cloud.
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    listCloudFilesMock.mockResolvedValue(["hello.txt"]);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
+    // Falls back to the default working dir when the conversation metadata
+    // (and thus its working_dir) isn't available yet.
+    expect(listCloudFilesMock).toHaveBeenCalledWith(
+      "conv-1",
+      "/workspace/project",
     );
   });
 });

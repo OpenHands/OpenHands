@@ -4,6 +4,7 @@ import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtim
 import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
 
@@ -122,10 +123,14 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
  * relative to the working dir (e.g. `src/index.html`).
  */
 function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
+  // Source the id from the route (like the diff/commits cloud hooks), NOT from
+  // `useActiveConversation().data.id`: the cloud API listing call only needs
+  // the id, and gating on the batch-get query's data would keep the query
+  // disabled — and never fire — whenever that data is null or still loading.
+  const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
 
-  const conversationId = conversation?.id;
   const selectedRepository = conversation?.selected_repository;
   const workingDir = conversation?.workspace?.working_dir?.trim();
 
