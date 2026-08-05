@@ -40,3 +40,13 @@ export function interpolateText(template: string, scope: SetupScope): string {
     toText(getByPath(scope, path)),
   );
 }
+
+/** Substitute placeholders from a flat name → value record. */
+export function interpolateValues(
+  template: string,
+  values: Record<string, string | number>,
+): string {
+  return template.replace(PLACEHOLDER_PATTERN, (_match, name: string) =>
+    toText(values[name]),
+  );
+}

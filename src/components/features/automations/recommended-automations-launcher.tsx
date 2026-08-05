@@ -23,6 +23,7 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import { automationSetupPath } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
@@ -73,14 +74,13 @@ export function RecommendedAutomationsLauncher({
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
 
-  // A disabled server is withheld from the agent, so treating it as installed
-  // would show "Connected" for an automation that then fails at runtime.
   const installedMcpConfig = useMemo(
     () =>
       flattenMcpConfig(
-        parseMcpConfig(settings?.agent_settings?.mcp_config),
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
-    [settings?.agent_settings?.mcp_config],
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(
@@ -98,7 +98,7 @@ export function RecommendedAutomationsLauncher({
       // form, so the answers are collected before anything is created. The rest
       // still hand a slash command to an agent to interpret.
       if (SETUP_REGISTRY.findById(automation.id)) {
-        navigate?.(`/automations/new/${automation.id}`);
+        navigate?.(automationSetupPath(automation.id));
         onLaunched?.();
         return;
       }
