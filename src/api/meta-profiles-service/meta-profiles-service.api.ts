@@ -5,12 +5,20 @@
  * ``classifier_model``, a ``default_model`` and a direct ``prompt_template``
  * whose returned ``model`` value is matched to saved LLM profile names.
  *
- * The SDK's ``@openhands/typescript-client`` does not (yet) ship a dedicated
- * meta-profiles client, so we drive the endpoints with the SDK's public
- * ``HttpClient`` — mirroring how ``ProfilesClient`` is implemented — and create
- * a client per call to pick up the current backend configuration.
+ * Transport goes through the SDK's typed ``MetaProfilesClient`` (mirroring how
+ * ``ProfilesService`` uses ``ProfilesClient``), creating a client per call so
+ * it picks up the current backend configuration.
+ *
+ * The local ``MetaProfile`` type is intentionally wider than the SDK's: this
+ * UI writes direct-prompt profiles, so it carries ``prompt_template`` /
+ * ``model_table`` (and treats ``classes`` as optional) which the SDK's
+ * ``MetaProfile`` type does not declare yet. ``MetaProfilesClient`` forwards
+ * the config to the server unchanged, so we cast the local config to the SDK
+ * type on save and the extra fields still reach the backend. Once the SDK type
+ * is widened, the cast can be dropped.
  */
-import { HttpClient } from "@openhands/typescript-client";
+import { MetaProfilesClient } from "@openhands/typescript-client/clients";
+import type { MetaProfile as SdkMetaProfile } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 
 export interface MetaProfileClass {
@@ -59,56 +67,47 @@ export interface ActivateMetaProfileResponse {
   message: string;
 }
 
-const BASE_PATH = "/api/meta-profiles";
-
-function client(): HttpClient {
-  const { host, apiKey } = getAgentServerClientOptions();
-  return new HttpClient({ baseUrl: host, apiKey, timeout: 60000 });
-}
-
 class MetaProfilesService {
   static async listMetaProfiles(): Promise<MetaProfileListResponse> {
-    const response = await client().get<MetaProfileListResponse>(BASE_PATH);
-    return response.data;
+    return new MetaProfilesClient(
+      getAgentServerClientOptions(),
+    ).listMetaProfiles();
   }
 
   static async getMetaProfile(
     name: string,
   ): Promise<MetaProfileDetailResponse> {
-    const response = await client().get<MetaProfileDetailResponse>(
-      `${BASE_PATH}/${encodeURIComponent(name)}`,
-    );
-    return response.data;
+    // The server returns the full direct-prompt config (including
+    // ``prompt_template`` / ``model_table``); the SDK's ``MetaProfile`` type
+    // just does not declare those fields yet, so widen the typed result.
+    return new MetaProfilesClient(getAgentServerClientOptions()).getMetaProfile(
+      name,
+    ) as unknown as Promise<MetaProfileDetailResponse>;
   }
 
   static async saveMetaProfile(
     name: string,
     config: MetaProfile,
   ): Promise<MetaProfileMutationResponse> {
-    const response = await client().post<MetaProfileMutationResponse>(
-      `${BASE_PATH}/${encodeURIComponent(name)}`,
-      config,
-    );
-    return response.data;
+    return new MetaProfilesClient(
+      getAgentServerClientOptions(),
+    ).saveMetaProfile(name, config as unknown as SdkMetaProfile);
   }
 
   static async deleteMetaProfile(
     name: string,
   ): Promise<MetaProfileMutationResponse> {
-    const response = await client().delete<MetaProfileMutationResponse>(
-      `${BASE_PATH}/${encodeURIComponent(name)}`,
-    );
-    return response.data;
+    return new MetaProfilesClient(
+      getAgentServerClientOptions(),
+    ).deleteMetaProfile(name);
   }
 
   static async activateMetaProfile(
     name: string,
   ): Promise<ActivateMetaProfileResponse> {
-    const response = await client().post<ActivateMetaProfileResponse>(
-      `${BASE_PATH}/${encodeURIComponent(name)}/activate`,
-      {},
-    );
-    return response.data;
+    return new MetaProfilesClient(
+      getAgentServerClientOptions(),
+    ).activateMetaProfile(name);
   }
 }
 
