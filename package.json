@@ -96,6 +96,7 @@
     "prelint": "npm run make-i18n",
     "lint": "npm run typecheck && eslint src && prettier --check src/**/*.{ts,tsx}",
     "lint:fix": "eslint src --fix && prettier --write src/**/*.{ts,tsx}",
+    "postinstall": "node scripts/postinstall-message.mjs",
     "prepare": "husky",
     "typecheck": "react-router typegen && tsc",
     "typecheck:staged": "react-router typegen && npx tsc --noEmit --skipLibCheck",
