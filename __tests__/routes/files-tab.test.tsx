@@ -7,7 +7,7 @@ import { MemoryRouter } from "react-router";
 
 import FilesTab from "#/routes/files-tab";
 import { useFilesTabStore } from "#/stores/files-tab-store";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 
 // Mocks must be declared before the SUT is imported.
 const useHasAttachedSourceMock = vi.fn();

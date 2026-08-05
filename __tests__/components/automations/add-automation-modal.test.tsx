@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { I18nKey } from "#/i18n/declaration";
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import useMetricsStore from "#/stores/metrics-store";
 import { useDeleteConversation } from "./mutation/use-delete-conversation";

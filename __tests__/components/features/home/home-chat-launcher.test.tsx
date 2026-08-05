@@ -51,7 +51,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("#/context/navigation-context", () => ({
+vi.mock("#/contexts/navigation-context", () => ({
   useNavigation: () => ({
     currentPath: "/",
     conversationId: null,

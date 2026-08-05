@@ -46,7 +46,7 @@ import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import {
   applyColorTheme,
   readPersistedColorTheme,

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useConfig } from "#/hooks/query/use-config";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";

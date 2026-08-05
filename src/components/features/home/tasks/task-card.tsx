@@ -4,7 +4,7 @@ import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation"
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { TaskIssueNumber } from "./task-issue-number";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { cn } from "#/utils/utils";
 import { I18nKey } from "#/i18n/declaration";
 

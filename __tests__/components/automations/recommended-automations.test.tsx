@@ -20,7 +20,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
