@@ -96,7 +96,7 @@
     "prelint": "npm run make-i18n",
     "lint": "npm run typecheck && eslint src && prettier --check src/**/*.{ts,tsx}",
     "lint:fix": "eslint src --fix && prettier --write src/**/*.{ts,tsx}",
-    "postinstall": "node scripts/postinstall-message.mjs",
+    "postinstall": "node -e \"console.log('\\n\\x1b[32m\\x1b[1m\\u2713 @openhands/agent-canvas installed!\\x1b[0m\\n\\nTo start Agent Canvas, run:\\n\\n  \\x1b[36m\\x1b[1magent-canvas\\x1b[0m\\n\\nThis launches the full stack at \\x1b[36mhttp://localhost:8000\\x1b[0m.\\n\\nDocs: https://docs.openhands.dev/openhands/usage/agent-canvas/setup\\n')\"",
     "prepare": "husky",
     "typecheck": "react-router typegen && tsc",
     "typecheck:staged": "react-router typegen && npx tsc --noEmit --skipLibCheck",
