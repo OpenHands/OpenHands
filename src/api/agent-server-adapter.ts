@@ -459,11 +459,13 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
 
 /**
  * Conversation tag keys Canvas itself stamps/consumes for internal routing.
- * They are already surfaced through dedicated UI (the ACP provider chip), so
- * the generic tag-chip display filters them out.
+ * They are already surfaced through dedicated UI (the ACP provider chip,
+ * the hidden-from-list planner filter) or not meant to be user-facing at
+ * all, so the generic tag-chip display filters them out.
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  LOCAL_PLANNER_PARENT_TAG_KEY,
 ]);
 
 /**
@@ -1188,6 +1190,11 @@ export function buildStartPlanningConversationRequest(options: {
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
+  // Stream assistant tokens, matching the code agent (see
+  // buildConfiguredOpenHandsAgentSettings) — otherwise the agent-server never
+  // emits StreamingDeltaEvents for the planner and its replies would appear
+  // all at once instead of token-by-token.
+  llm.stream = true;
 
   const planPath = buildPlanPath(options.workingDir);
 

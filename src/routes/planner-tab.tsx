@@ -65,7 +65,8 @@ function PlannerTab() {
     }
   }, [planContent, autoScroll, scrollDomToBottom]);
   const isPlanMode = conversationMode === "plan";
-  const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
+  const { handlePlanClick, hasPlanner, isCreatingConversation } =
+    useHandlePlanClick();
 
   if (planContent !== null && planContent !== undefined) {
     return (
@@ -89,11 +90,7 @@ function PlannerTab() {
           type="button"
           variant="secondary"
           onClick={handlePlanClick}
-          isDisabled={
-            isPlanMode ||
-            isCreatingConversation ||
-            !!localPlanningConversationId
-          }
+          isDisabled={isPlanMode || isCreatingConversation || hasPlanner}
           className="min-w-40 justify-center px-6"
         >
           {t(I18nKey.COMMON$CREATE_A_PLAN)}

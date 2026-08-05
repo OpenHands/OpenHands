@@ -58,6 +58,7 @@ import {
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -525,8 +526,17 @@ class AgentServerConversationService {
         // Pin the planner to the parent conversation's own current model —
         // its active_profile, which tracks /model switches and the agent's
         // own SwitchLLMTool calls — rather than some other conversation (or
-        // the home page) activating a different profile globally.
-        parentActiveProfileName: parent?.active_profile ?? null,
+        // the home page) activating a different profile globally. Only
+        // meaningful for "openhands"-kind parents: for an ACP parent,
+        // active_profile is stamped with whatever LLM profile happened to be
+        // globally active when the ACP conversation was created (it's not
+        // kept live — /model is a no-op for ACP), so treating it as
+        // authoritative here would pin the planner to that stale, unrelated
+        // snapshot instead of falling through to current global settings.
+        parentActiveProfileName:
+          parent?.agent_kind === "openhands"
+            ? (parent?.active_profile ?? null)
+            : null,
         // Fallback when active_profile can't be resolved (e.g. an ACP parent).
         parentAgentProfileId:
           parent?.launched_agent_profile?.agent_profile_id ?? null,
@@ -560,6 +570,13 @@ class AgentServerConversationService {
    * backend — today that means its planner helper, the only child Canvas
    * creates locally.
    *
+   * `sub_conversation_ids` is the generic server-derived child list, not a
+   * planner-only list, so each child is fetched and kept only if it's
+   * actually tagged `plannerparent` for this parent — mirrors the identity
+   * check in `findPlannerConversationId` used everywhere else a planner is
+   * resolved. Without this, deleting the parent would also delete an
+   * unrelated non-planner child (e.g. a delegated sub-agent).
+   *
    * Server-first: the agent-server derives `sub_conversation_ids` from its own
    * catalog, so the relationship survives storage loss and a different browser.
    * The stored metadata hint is merged in for agent-servers older than 1.37.1,
@@ -576,7 +593,17 @@ class AgentServerConversationService {
       const [parent] = await this.batchGetAppConversations([
         parentConversationId,
       ]);
-      for (const id of parent?.sub_conversation_ids ?? []) ids.add(id);
+      const childIds = parent?.sub_conversation_ids ?? [];
+      if (childIds.length > 0) {
+        const children = await this.batchGetAppConversations(childIds);
+        for (const child of children) {
+          if (
+            child?.tags?.[LOCAL_PLANNER_PARENT_TAG_KEY] === parentConversationId
+          ) {
+            ids.add(child.id);
+          }
+        }
+      }
     } catch (error) {
       // The stored hint below still covers the common case, and callers
       // (delete) must not be blocked by a failed lookup.

@@ -771,8 +771,11 @@ export function ConversationWebSocketProvider({
             // Scope to the planning agent's own conversation id, not the main
             // `conversationId` — this socket reports the planning helper
             // conversation's run/idle transitions, which must never overwrite
-            // the main conversation's status in the shared store.
-            const planningConversationId = subConversations?.[0]?.id;
+            // the main conversation's status in the shared store. Derived
+            // from `subConversationIds` (the pre-filtered, tag-verified id
+            // list), matching `sendMessage` below — not from the resolved
+            // `subConversations` entry, which lands a tick later.
+            const planningConversationId = subConversationIds?.[0] ?? null;
             if (
               isFullStateConversationStateUpdateEvent(event) &&
               planningConversationId
@@ -862,6 +865,7 @@ export function ConversationWebSocketProvider({
       consumeMatchingPendingMessage,
       queryClient,
       subConversations,
+      subConversationIds,
       conversationId,
       setExecutionStatus,
       appendInput,
