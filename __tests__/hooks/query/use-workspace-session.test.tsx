@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { callCloudProxy } from "#/api/cloud/proxy";
 import {
   joinWorkspaceUrl,
   useWorkspaceSession,
@@ -94,7 +93,11 @@ describe("useWorkspaceSession", () => {
   describe("local backend", () => {
     it("calls startWorkspaceSession and exposes the returned baseUrl", async () => {
       getActiveBackendMock.mockReturnValue({
-        backend: { id: "local-1", kind: "local", host: "http://localhost:8000" },
+        backend: {
+          id: "local-1",
+          kind: "local",
+          host: "http://localhost:8000",
+        },
       });
       useActiveConversationMock.mockReturnValue({
         data: {
@@ -125,8 +128,7 @@ describe("useWorkspaceSession", () => {
 
       expect(getAgentServerClientOptionsMock).toHaveBeenCalledTimes(1);
       expect(getAgentServerClientOptionsMock).toHaveBeenCalledWith({
-        conversationUrl:
-          "https://agent.example.com/api/conversations/conv-1",
+        conversationUrl: "https://agent.example.com/api/conversations/conv-1",
         sessionApiKey: "key-abc",
       });
       expect(RemoteWorkspace).toHaveBeenCalledTimes(1);
@@ -138,6 +140,49 @@ describe("useWorkspaceSession", () => {
       expect(startWorkspaceSessionMock).toHaveBeenCalledTimes(1);
       expect(startWorkspaceSessionMock).toHaveBeenCalledWith("conv-1");
       expect(callCloudProxyMock).not.toHaveBeenCalled();
+    });
+
+    it("re-mints the workspace session after switching local backends", async () => {
+      getActiveBackendMock.mockReturnValue({
+        backend: { id: "local-1", kind: "local", host: "http://one.example" },
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          id: "conv-1",
+          conversation_url: "http://one.example",
+          session_api_key: "key-abc",
+        },
+      });
+      startWorkspaceSessionMock.mockResolvedValue(
+        "http://one.example/api/conversations/conv-1/workspace/",
+      );
+      getAgentServerClientOptionsMock.mockReturnValue({});
+
+      const { rerender } = renderHook(() => useWorkspaceSession(), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() =>
+        expect(startWorkspaceSessionMock).toHaveBeenCalledTimes(1),
+      );
+
+      getActiveBackendMock.mockReturnValue({
+        backend: { id: "local-2", kind: "local", host: "http://two.example" },
+      });
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          id: "conv-1",
+          conversation_url: "http://two.example",
+          session_api_key: "key-def",
+        },
+      });
+      startWorkspaceSessionMock.mockResolvedValue(
+        "http://two.example/api/conversations/conv-1/workspace/",
+      );
+      rerender();
+
+      await waitFor(() =>
+        expect(startWorkspaceSessionMock).toHaveBeenCalledTimes(2),
+      );
     });
   });
 
@@ -177,8 +222,7 @@ describe("useWorkspaceSession", () => {
     useActiveConversationMock.mockReturnValue({
       data: {
         id: "conv-1",
-        conversation_url:
-          "https://agent.example.com/api/conversations/conv-1",
+        conversation_url: "https://agent.example.com/api/conversations/conv-1",
         session_api_key: "key-abc",
       },
     });

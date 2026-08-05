@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { readCloudConversationFile } from "#/api/cloud/conversation-service.api";
@@ -142,7 +143,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export function useWorkspaceFileContent(relativePath: string | null) {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
-  const { data: workspaceSession } = useWorkspaceSession();
+  const { data: workspaceSession, refresh: refreshWorkspaceSession } =
+    useWorkspaceSession();
+  const refreshWorkspaceSessionRef = useRef(refreshWorkspaceSession);
+  refreshWorkspaceSessionRef.current = refreshWorkspaceSession;
   // Bump on every agent-side file mutation so the query refetches the
   // currently-selected file's body even when the *path* hasn't changed.
   // The iframe / <img> cache-busting for the rich preview is handled at
@@ -172,6 +176,8 @@ export function useWorkspaceFileContent(relativePath: string | null) {
     ? `${workspaceRoot}/${relativePath}`
     : null;
 
+  // The ref supplies a stable callback for one-time 401 recovery; it is not
+  // cache identity and therefore must not be a query-key member.
   return useQuery<WorkspaceFileContent>({
     queryKey: [
       "workspace-file-content",
@@ -263,9 +269,18 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       // (it travels because we opt in to credentialed requests). This
       // matches the auth path the iframe / <img> uses, and avoids a CORS
       // preflight for a custom header.
-      const response = await fetch(staticUrl, {
+      let response = await fetch(staticUrl, {
         credentials: "include",
       });
+      // A browser may have discarded the partitioned workspace cookie (for
+      // example after a context change), while React Query still holds the
+      // successful mint result. Re-mint once and retry the same request.
+      if (response.status === 401) {
+        await refreshWorkspaceSessionRef.current();
+        response = await fetch(staticUrl, {
+          credentials: "include",
+        });
+      }
       if (!response.ok) {
         throw new Error(`Failed to read ${relativePath}: ${response.status}`);
       }

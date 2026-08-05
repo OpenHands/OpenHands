@@ -48,6 +48,7 @@ export function useWorkspaceSession(): {
   isLoading: boolean;
   isError: boolean;
   error: Error | null;
+  refresh: () => Promise<WorkspaceSession | null>;
 } {
   const { data: conversation } = useActiveConversation();
   const runtimeIsReady = useRuntimeIsReady();
@@ -55,13 +56,16 @@ export function useWorkspaceSession(): {
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
   const sessionApiKey = conversation?.session_api_key;
-  const isLocal = getActiveBackend().backend.kind === "local";
+  const activeBackend = getActiveBackend().backend;
+  const isLocal = activeBackend.kind === "local";
 
   const enabled = runtimeIsReady && !!conversationId && isLocal;
 
   const query = useQuery<WorkspaceSession>({
     queryKey: [
       "workspace-session",
+      activeBackend.id,
+      activeBackend.host,
       conversationId,
       conversationUrl,
       sessionApiKey,
@@ -91,6 +95,11 @@ export function useWorkspaceSession(): {
     isLoading: query.isLoading,
     isError: query.isError,
     error: (query.error as Error | null) ?? null,
+    refresh: async () => {
+      const result = await query.refetch();
+      if (result.error) throw result.error;
+      return result.data ?? null;
+    },
   };
 }
 
