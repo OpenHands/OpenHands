@@ -88,6 +88,27 @@ export const setStoredConversationMetadata = (
   writeAll(all);
 };
 
+/**
+ * Merge `patch` into a conversation's stored metadata, preserving every
+ * existing field. `setStoredConversationMetadata` does a full-object
+ * replace, so a caller that enumerates only the fields it knows about would
+ * silently drop everything else (e.g. `local_planning_conversation_id`,
+ * `plugins`) on every call — this is the correct-by-construction way to
+ * update a subset of fields without that hazard.
+ */
+export const mergeStoredConversationMetadata = (
+  conversationId: string,
+  patch: Partial<ConversationMetadata>,
+): void => {
+  setStoredConversationMetadata(conversationId, {
+    selected_repository: null,
+    selected_branch: null,
+    git_provider: null,
+    ...(getStoredConversationMetadata(conversationId) ?? {}),
+    ...patch,
+  });
+};
+
 export const removeStoredConversationMetadata = (
   conversationId: string,
 ): void => {

@@ -53,6 +53,7 @@ import SettingsService from "../settings-service/settings-service.api";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
+  mergeStoredConversationMetadata,
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
   type WorkspaceMode,
@@ -547,18 +548,11 @@ class AgentServerConversationService {
       getAgentServerClientOptions(),
     ).createConversation<DirectConversationInfo>(payload);
 
-    const existing = getStoredConversationMetadata(parentConversationId);
     // Client-side fallback only: agent-servers >= 1.37.1 persist the link via
     // `parent_conversation_id` and hand it back on the parent's
     // `sub_conversation_ids`, which is the source of truth. This hint covers
-    // older backends that ignore the field. Spread `existing` so optional
-    // fields added to ConversationMetadata later are carried forward instead of
-    // being silently dropped (the setter does a full replace).
-    setStoredConversationMetadata(parentConversationId, {
-      selected_repository: null,
-      selected_branch: null,
-      git_provider: null,
-      ...(existing ?? {}),
+    // older backends that ignore the field.
+    mergeStoredConversationMetadata(parentConversationId, {
       local_planning_conversation_id: data.id,
     });
 

@@ -44,9 +44,14 @@ vi.mock("#/components/features/chat/plan-preview", () => ({
 describe("EventMessage - PlanPreview rendering", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset conversation store
+    // Reset conversation store. `localPlanningConversationId` is set to a
+    // fixed non-null id so the isStreaming guard (which requires a resolved
+    // planner id — see PlanningObservationPreview) doesn't trivially force
+    // isStreaming=false in every test here; the isStreaming-specific tests
+    // below then vary only isLastMessage / agent state as they did before.
     useConversationStore.setState({
       planContent: null,
+      localPlanningConversationId: "planner-1",
     });
     // Default mock for useAgentState
     vi.mocked(useAgentState).mockReturnValue({
@@ -242,6 +247,38 @@ describe("EventMessage - PlanPreview rendering", () => {
           event={event}
           messages={[]}
           isLastMessage={true}
+          isInLast10Actions={false}
+          planPreviewEventIds={planPreviewEventIds}
+        />,
+      );
+
+      const planPreview = screen.getByTestId("plan-preview");
+      expect(planPreview).toBeInTheDocument();
+      expect(planPreview).toHaveAttribute("data-is-streaming", "false");
+    });
+
+    it("should pass isStreaming=false when localPlanningConversationId hasn't resolved yet, even if isLastMessage and agent state are RUNNING", () => {
+      // Regression: useAgentState(undefined) falls back to the route
+      // conversation's own state, so without this guard the code agent's
+      // activity could be mistaken for the planner's before the planner id
+      // resolves (e.g. right after "Create a Plan" is clicked).
+      const event = createPlanningObservationEvent("plan-obs-1");
+      const planPreviewEventIds = new Set(["plan-obs-1"]);
+      const planContent = "Plan content";
+
+      useConversationStore.setState({
+        planContent,
+        localPlanningConversationId: null,
+      });
+      vi.mocked(useAgentState).mockReturnValue({
+        curAgentState: AgentState.RUNNING,
+      });
+
+      renderWithProviders(
+        <EventMessage
+          event={event}
+          messages={[]}
+          isLastMessage
           isInLast10Actions={false}
           planPreviewEventIds={planPreviewEventIds}
         />,

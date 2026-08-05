@@ -40,9 +40,18 @@ function useCreateLocalPlanningConversationMutation(options: {
         variables.parentConversationId,
         variables.initialMessage,
       ),
-    onSuccess: (planningConversation) => {
+    onSuccess: (planningConversation, variables) => {
       options.onCreated(planningConversation.id);
       queryClient.invalidateQueries({ queryKey: CONVERSATION_QUERY_KEYS.all });
+      // `.all` only matches the paginated conversation list — the parent's
+      // own cached AppConversation (what useActiveConversation reads
+      // sub_conversation_ids from) needs its own key invalidated too, or it
+      // stays stale for up to the next poll interval.
+      queryClient.invalidateQueries({
+        queryKey: CONVERSATION_QUERY_KEYS.active(
+          variables.parentConversationId,
+        ),
+      });
       queryClient.invalidateQueries({
         queryKey: CONVERSATION_QUERY_KEYS.subConversations,
       });
@@ -178,13 +187,18 @@ export const useHandlePlanClick = () => {
       setConversationMode("plan");
 
       if (backend.kind !== "cloud") {
-        // Guard on the server-reported helper as well as the store, so a
-        // browser that has never seen this conversation before adopts the
-        // existing planner instead of spawning a second hidden one.
+        // Guard on the server-reported helper and the store, so a browser
+        // that has never seen this conversation before adopts the existing
+        // planner instead of spawning a second hidden one — and on the
+        // mutation's own in-flight state, so two rapid invocations (a fast
+        // double-click, or a click racing a `/plan` submission) before either
+        // of those has had a chance to update can't both pass this guard and
+        // create two planner conversations for the same parent.
         if (
           !conversation?.id ||
           localPlanningConversationId ||
-          serverPlanningConversationId
+          serverPlanningConversationId ||
+          isCreatingLocalPlanningConversation
         ) {
           return;
         }
@@ -227,6 +241,7 @@ export const useHandlePlanClick = () => {
       createConversation,
       createLocalPlanningConversation,
       hasCloudPlanner,
+      isCreatingLocalPlanningConversation,
       localPlanningConversationId,
       serverPlanningConversationId,
       setConversationMode,

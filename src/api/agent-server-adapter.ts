@@ -952,6 +952,9 @@ interface LookupSecret {
   description?: string;
 }
 
+/** A custom secret's public identity — name + optional description, no value. */
+type CustomSecretInput = { name: string; description?: string };
+
 type StartConversationPayloadBase = Record<string, unknown> & {
   workspace: LocalWorkspacePayload;
   confirmation_policy: SettingsRecord;
@@ -998,7 +1001,7 @@ export interface StartConversationOptions {
   encryptedAgentSettings?: Record<string, SettingsValue>;
   encryptedConversationSettings?: Record<string, SettingsValue>;
   secretsEncrypted?: boolean;
-  customSecrets?: Array<{ name: string; description?: string }>;
+  customSecrets?: CustomSecretInput[];
   // When set, the conversation launches from this AgentProfile (resolved
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
@@ -1017,7 +1020,7 @@ export interface StartConversationOptions {
  * secrets so callers can omit the field.
  */
 function buildCustomSecrets(
-  customSecrets: Array<{ name: string; description?: string }> | undefined,
+  customSecrets: CustomSecretInput[] | undefined,
 ): Record<string, LookupSecret> | undefined {
   if (!customSecrets?.length) return undefined;
 
@@ -1184,9 +1187,11 @@ export function buildStartPlanningConversationRequest(options: {
   parentConversationId: string;
   initialMessage?: string;
   secretsEncrypted?: boolean;
-  customSecrets?: Array<{ name: string; description?: string }>;
+  customSecrets?: CustomSecretInput[];
   /** Mirrors the parent's configured `conversation_settings.max_iterations` — see DEFAULT_MAX_ITERATIONS. */
   maxIterations?: number;
+  /** Mirrors the code agent's skill filtering — see buildConfiguredOpenHandsAgentSettings. */
+  disabledSkills?: string[];
 }): RawAgentStartConversationPayload {
   const agentSettings = toRecord(options.encryptedAgentSettings);
   const llm = buildNormalizedLlmSettings(agentSettings.llm);
@@ -1201,7 +1206,11 @@ export function buildStartPlanningConversationRequest(options: {
   // Put the planner's directive + boundaries in the system prompt (matching the
   // OpenHands app-server's PLANNING_AGENT_INSTRUCTION), preserving any suffix
   // buildAgentContext already set (e.g. the runtime-services block).
-  const agentContext = buildAgentContext(agentSettings);
+  const agentContext = buildAgentContext(
+    agentSettings,
+    undefined,
+    options.disabledSkills,
+  );
   const existingSuffix = agentContext.system_message_suffix;
   agentContext.system_message_suffix =
     typeof existingSuffix === "string"
@@ -1408,6 +1417,7 @@ export async function buildStartPlanningConversationRequestWithEncryptedSettings
     secretsEncrypted: settingsResult.secretsEncrypted,
     customSecrets,
     maxIterations,
+    disabledSkills: settingsResult.disabledSkills,
   });
 }
 

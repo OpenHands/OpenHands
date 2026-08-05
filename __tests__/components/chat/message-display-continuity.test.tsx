@@ -144,6 +144,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -174,6 +175,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -195,6 +197,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: true,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });
@@ -225,6 +228,7 @@ describe("ChatInterface – message display continuity (spec 3.1)", () => {
       vi.mocked(useConversationWebSocket).mockReturnValue({
         isLoadingHistory: false,
         connectionState: "OPEN",
+        mainConnectionState: "OPEN",
         sendMessage: vi.fn(),
         reconnect: vi.fn(),
       });

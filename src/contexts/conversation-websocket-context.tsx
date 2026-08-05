@@ -67,10 +67,7 @@ import {
   invalidateConversationQueries,
   updateConversationLlmModelInCache,
 } from "#/hooks/mutation/conversation-mutation-utils";
-import {
-  getStoredConversationMetadata,
-  setStoredConversationMetadata,
-} from "#/api/conversation-metadata-store";
+import { mergeStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { isPlanFilePath } from "#/utils/plan-file";
 
 export type WebSocketConnectionState =
@@ -85,6 +82,14 @@ interface SendMessageResult {
 
 interface ConversationWebSocketContextType {
   connectionState: WebSocketConnectionState;
+  /**
+   * The main (code-agent) connection's own state, unmerged with the planning
+   * connection. Commands that only ever address the main conversation (e.g.
+   * `/code`) should gate on this instead of `connectionState` — the merged
+   * state can report non-OPEN purely because the *planning* socket is
+   * momentarily reconnecting, even while the main socket is fine to send on.
+   */
+  mainConnectionState: WebSocketConnectionState;
   sendMessage: (message: SendMessageRequest) => Promise<SendMessageResult>;
   isLoadingHistory: boolean;
   reconnect: () => void;
@@ -622,16 +627,7 @@ export function ConversationWebSocketProvider({
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
             // when several profiles share a model (#1082).
-            const prevMetadata = getStoredConversationMetadata(conversationId);
-            // Full-object replace: spread the previous record so every field
-            // survives a profile switch (the plugins snapshot backing the
-            // in-conversation plugins view, the local planner id, and anything
-            // added to ConversationMetadata later).
-            setStoredConversationMetadata(conversationId, {
-              selected_repository: null,
-              selected_branch: null,
-              git_provider: null,
-              ...(prevMetadata ?? {}),
+            mergeStoredConversationMetadata(conversationId, {
               active_profile: switchLLMObservation.observation.profile_name,
             });
 
@@ -1141,8 +1137,20 @@ export function ConversationWebSocketProvider({
   }, [planningAgentSocket, planningAgentWsUrl]);
 
   const contextValue = useMemo(
-    () => ({ connectionState, sendMessage, isLoadingHistory, reconnect }),
-    [connectionState, sendMessage, isLoadingHistory, reconnect],
+    () => ({
+      connectionState,
+      mainConnectionState,
+      sendMessage,
+      isLoadingHistory,
+      reconnect,
+    }),
+    [
+      connectionState,
+      mainConnectionState,
+      sendMessage,
+      isLoadingHistory,
+      reconnect,
+    ],
   );
 
   return (

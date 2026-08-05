@@ -52,6 +52,12 @@ function getAgentContextSkillNames(
   return agentSettings?.agent_context?.skills?.map((skill) => skill.name) ?? [];
 }
 
+function getPlannerAgentContextSkillNames(payload: {
+  agent: { agent_context?: { skills?: Array<{ name?: string }> } };
+}): Array<string | undefined> {
+  return payload.agent.agent_context?.skills?.map((skill) => skill.name) ?? [];
+}
+
 describe("buildStartConversationRequest", () => {
   it("marks OpenHands start requests as encrypted when MCP headers are encrypted", () => {
     const agentSettings = {
@@ -326,6 +332,7 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
     },
     conversationSettings: {},
     secretsEncrypted: true,
+    disabledSkills: [],
   };
 
   beforeEach(() => {
@@ -507,6 +514,23 @@ describe("buildStartPlanningConversationRequestWithEncryptedSettings", () => {
       });
 
     expect(payload.max_iterations).toBe(500);
+  });
+
+  it("excludes disabled skills from the planner's agent context, mirroring the code agent", async () => {
+    vi.mocked(SettingsService.getSettingsForConversation).mockResolvedValue({
+      ...globallyActiveSettings,
+      disabledSkills: ["agent-memory"],
+    });
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir: "/workspace/project",
+        parentConversationId: "parent-1",
+      });
+
+    const skillNames = getPlannerAgentContextSkillNames(payload);
+    expect(skillNames).not.toContain("agent-memory");
+    expect(skillNames).toContain("add-javadoc");
   });
 });
 

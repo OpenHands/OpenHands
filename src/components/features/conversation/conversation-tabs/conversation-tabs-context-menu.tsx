@@ -110,8 +110,6 @@ export function ConversationTabsContextMenu({
     });
   }
 
-  const visibleTabConfig = tabConfig;
-
   const handleOpenTab = (tab: string) => {
     if (isArchivedConversation) {
       return;
@@ -135,7 +133,7 @@ export function ConversationTabsContextMenu({
       setUnpinnedTabs(newUnpinnedTabs);
 
       if (selectedTab === tab && isRightPanelShown) {
-        const nextPinnedTab = visibleTabConfig.find(
+        const nextPinnedTab = tabConfig.find(
           ({ tab: tabKey }) =>
             tabKey !== tab && !newUnpinnedTabs.includes(tabKey),
         );
@@ -161,7 +159,7 @@ export function ConversationTabsContextMenu({
       spacing={isPortaled ? "none" : "default"}
       className={cn("z-[9999] w-fit", isPortaled ? "mt-0" : "mt-2")}
     >
-      {visibleTabConfig.map(({ tab, icon: Icon, i18nKey }) => {
+      {tabConfig.map(({ tab, icon: Icon, i18nKey }) => {
         const pinned = !state.unpinnedTabs.includes(tab);
         return (
           <li key={tab} className="list-none">

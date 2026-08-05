@@ -23,6 +23,21 @@ export function WebSocketProviderWrapper({
     (state) => state.localPlanningConversationId,
   );
 
+  // `localPlanningConversationId` is a single unscoped Zustand field, not
+  // keyed by conversation. When switching conversations, this component
+  // re-renders with the new `conversationId` prop (always current — it comes
+  // straight from the route, no query latency) before the separate reset
+  // effect in routes/conversation.tsx has cleared the *previous*
+  // conversation's value, and before `useActiveConversation()` has refetched
+  // for the new id. Trusting the store value during that window would open
+  // the planner socket for the *previous* conversation's planner against the
+  // conversation now being rendered. Only trust it once `conversation` has
+  // actually resolved for the conversation currently being rendered.
+  const isConversationDataFresh = conversation?.id === conversationId;
+  const trustedLocalPlanningConversationId = isConversationDataFresh
+    ? localPlanningConversationId
+    : null;
+
   // Candidate ids to resolve. On local backends `sub_conversation_ids` is the
   // generic (untyped) child list, so fetch it below to find the
   // `plannerparent`-tagged entry. Cloud has no such ambiguity — the app-server
@@ -42,11 +57,13 @@ export function WebSocketProviderWrapper({
     ) {
       return conversation.sub_conversation_ids;
     }
-    return localPlanningConversationId ? [localPlanningConversationId] : [];
+    return trustedLocalPlanningConversationId
+      ? [trustedLocalPlanningConversationId]
+      : [];
   }, [
     isLocalBackend,
     conversation?.sub_conversation_ids,
-    localPlanningConversationId,
+    trustedLocalPlanningConversationId,
   ]);
   const { data: subConversations } = useSubConversations(
     candidateConversationIds,
@@ -84,15 +101,19 @@ export function WebSocketProviderWrapper({
     // Tag data hasn't resolved yet (still loading, or no planner exists).
     // `localPlanningConversationId` is only ever set to a verified planner
     // id (freshly created, or restored via the same tag check in
-    // useHandlePlanClick), so it's safe to bridge with synchronously;
-    // otherwise stay empty rather than guessing that an untagged child is
-    // the planner.
-    return localPlanningConversationId ? [localPlanningConversationId] : [];
+    // useHandlePlanClick), so it's safe to bridge with synchronously once we
+    // know it belongs to the conversation being rendered (see
+    // `trustedLocalPlanningConversationId` above); otherwise stay empty
+    // rather than guessing that an untagged child — or a stale planner id
+    // left over from the previously active conversation — is the planner.
+    return trustedLocalPlanningConversationId
+      ? [trustedLocalPlanningConversationId]
+      : [];
   }, [
     isLocalBackend,
     candidateConversationIds,
     plannerConversationId,
-    localPlanningConversationId,
+    trustedLocalPlanningConversationId,
   ]);
 
   const filteredSubConversations = subConversations?.filter(

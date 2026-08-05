@@ -9,8 +9,9 @@
  */
 import React from "react";
 import { render } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WebSocketProviderWrapper } from "#/contexts/websocket-provider-wrapper";
+import { useConversationStore } from "#/stores/conversation-store";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { LOCAL_PLANNER_PARENT_TAG_KEY } from "#/utils/plan-file";
 
@@ -208,5 +209,62 @@ describe("WebSocketProviderWrapper — subConversationIds reference stability", 
     expect(capturedSubConversationIdsPerRender.at(-1)).toBe(
       capturedSubConversationIdsPerRender.at(-2),
     );
+  });
+});
+
+/**
+ * Regression: `localPlanningConversationId` is a single unscoped Zustand
+ * field, not keyed by conversation. Right after switching conversations,
+ * this component re-renders with the new `conversationId` prop before
+ * `useActiveConversation()` has refetched for it (and before the separate
+ * reset effect in routes/conversation.tsx has cleared the *previous*
+ * conversation's value out of the store) — trusting the stale store value
+ * during that window would open the planner socket for the wrong
+ * conversation's planner. See `trustedLocalPlanningConversationId` in
+ * websocket-provider-wrapper.tsx.
+ */
+describe("WebSocketProviderWrapper — stale cross-conversation localPlanningConversationId", () => {
+  beforeEach(() => {
+    capturedUrlPerRender.length = 0;
+    capturedSubConversationIdsPerRender.length = 0;
+    vi.clearAllMocks();
+    mockUseActiveBackend.mockReturnValue({ backend: { kind: "local" } });
+    mockUseSubConversations.mockReturnValue({ data: [] });
+  });
+
+  afterEach(() => {
+    useConversationStore.setState({ localPlanningConversationId: null });
+  });
+
+  it("does not fall back to a stale localPlanningConversationId while the active conversation query hasn't caught up to the rendered conversationId", () => {
+    // The store still holds the *previous* conversation's planner id, and
+    // useActiveConversation hasn't resolved data for the new conversationId
+    // yet (data undefined — exactly the state on the first render after a
+    // conversation switch).
+    useConversationStore.setState({ localPlanningConversationId: "planner-A" });
+    mockUseActiveConversation.mockReturnValue({ data: undefined });
+
+    render(
+      <WebSocketProviderWrapper conversationId="conv-B">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationIdsPerRender.at(-1)).toEqual([]);
+  });
+
+  it("trusts localPlanningConversationId once the active conversation has resolved to the conversation being rendered", () => {
+    useConversationStore.setState({ localPlanningConversationId: "planner-B" });
+    mockUseActiveConversation.mockReturnValue({
+      data: makeConversation({ id: "conv-B", sub_conversation_ids: [] }),
+    });
+
+    render(
+      <WebSocketProviderWrapper conversationId="conv-B">
+        <div />
+      </WebSocketProviderWrapper>,
+    );
+
+    expect(capturedSubConversationIdsPerRender.at(-1)).toEqual(["planner-B"]);
   });
 });

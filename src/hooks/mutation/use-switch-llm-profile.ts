@@ -8,10 +8,7 @@ import {
 } from "#/hooks/query/query-keys";
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
 import { recordModelSwitchMessage } from "#/hooks/chat/record-model-switch-message";
-import {
-  getStoredConversationMetadata,
-  setStoredConversationMetadata,
-} from "#/api/conversation-metadata-store";
+import { mergeStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
@@ -80,15 +77,7 @@ export const useSwitchLlmProfile = () => {
         // Keep the per-conversation profile identity fresh so the chat-header
         // switcher shows the right name after a reload (the agent-server only
         // round-trips the model string). #1082
-        const prev = getStoredConversationMetadata(conversationId);
-        // Spread `prev` first: the setter replaces the whole record, and
-        // enumerating fields silently drops any this call site doesn't know
-        // about (e.g. `local_planning_conversation_id`).
-        setStoredConversationMetadata(conversationId, {
-          selected_repository: null,
-          selected_branch: null,
-          git_provider: null,
-          ...(prev ?? {}),
+        mergeStoredConversationMetadata(conversationId, {
           active_profile: profileName,
         });
       } else {

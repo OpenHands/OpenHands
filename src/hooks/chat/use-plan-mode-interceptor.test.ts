@@ -8,11 +8,14 @@ const setConversationMode = vi.fn();
 const handlePlanClick = vi.fn();
 let isCreatingConversation = false;
 let hasPlanner = false;
-let webSocketStatus: WebSocketConnectionState = "OPEN";
+let mainWebSocketStatus: WebSocketConnectionState = "OPEN";
+let unifiedWebSocketStatus: WebSocketConnectionState = "OPEN";
+let localPlanningConversationId: string | null = null;
+let curPlanningAgentState: AgentState = AgentState.AWAITING_USER_INPUT;
 
 vi.mock("#/stores/conversation-store", () => ({
   useConversationStore: (selector: (s: unknown) => unknown) =>
-    selector({ setConversationMode }),
+    selector({ setConversationMode, localPlanningConversationId }),
 }));
 vi.mock("#/hooks/use-handle-plan-click", () => ({
   useHandlePlanClick: () => ({
@@ -22,7 +25,11 @@ vi.mock("#/hooks/use-handle-plan-click", () => ({
   }),
 }));
 vi.mock("#/hooks/use-unified-websocket-status", () => ({
-  useUnifiedWebSocketStatus: () => webSocketStatus,
+  useMainWebSocketStatus: () => mainWebSocketStatus,
+  useUnifiedWebSocketStatus: () => unifiedWebSocketStatus,
+}));
+vi.mock("#/hooks/use-agent-state", () => ({
+  useAgentState: () => ({ curAgentState: curPlanningAgentState }),
 }));
 
 const CONV = "conv-1";
@@ -43,7 +50,10 @@ describe("usePlanModeInterceptor", () => {
     vi.clearAllMocks();
     isCreatingConversation = false;
     hasPlanner = false;
-    webSocketStatus = "OPEN";
+    mainWebSocketStatus = "OPEN";
+    unifiedWebSocketStatus = "OPEN";
+    localPlanningConversationId = null;
+    curPlanningAgentState = AgentState.AWAITING_USER_INPUT;
   });
 
   it("passes a non-command message straight through to onSubmit", () => {
@@ -141,18 +151,42 @@ describe("usePlanModeInterceptor", () => {
   });
 
   it("swallows /plan while the websocket is disconnected (matches the disabled button)", () => {
-    webSocketStatus = "CLOSED";
+    unifiedWebSocketStatus = "CLOSED";
     const { intercept, onSubmit } = setup(CONV);
     intercept("/plan");
     expect(handlePlanClick).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("swallows /code while the websocket is disconnected (matches the disabled button)", () => {
-    webSocketStatus = "CLOSED";
+  it("swallows /code while the main websocket is disconnected", () => {
+    mainWebSocketStatus = "CLOSED";
     const { intercept, onSubmit } = setup(CONV);
     intercept("/code");
     expect(setConversationMode).not.toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not swallow /code when only the planning socket is disconnected", () => {
+    // Regression: /code only needs the main socket, so a momentary planning
+    // reconnect (main OPEN, merged status CLOSED) must not silently drop it.
+    mainWebSocketStatus = "OPEN";
+    unifiedWebSocketStatus = "CLOSED";
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/code fix the bug");
+    expect(setConversationMode).toHaveBeenCalledWith("code");
+    expect(onSubmit).toHaveBeenCalledWith("fix the bug");
+  });
+
+  it("swallows /plan <task> when the existing planner is already running", () => {
+    // Regression: a new message must not be routed into a planner that's
+    // still mid-run, mirroring isPlanningAgentRunning elsewhere.
+    hasPlanner = true;
+    localPlanningConversationId = "planner-1";
+    curPlanningAgentState = AgentState.RUNNING;
+    const { intercept, onSubmit } = setup(CONV);
+    intercept("/plan another task");
+    expect(setConversationMode).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(handlePlanClick).not.toHaveBeenCalled();
   });
 });

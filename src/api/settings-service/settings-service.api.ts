@@ -307,6 +307,17 @@ const removesMcpServer = (previous: unknown, next: unknown): boolean => {
 };
 
 /**
+ * Read `disabled_skills` off a raw API response without running it through
+ * the full `transformApiResponse`/`syncDerivedSettings` pipeline — used by
+ * `getSettingsForConversation`, which returns the encrypted settings dump
+ * as-is rather than a normalized `Settings` object.
+ */
+const getDisabledSkills = (response: SettingsApiResponse): string[] => {
+  const value = response.misc_settings?.app_preferences?.disabled_skills;
+  return Array.isArray(value) ? value : [];
+};
+
+/**
  * Transform API response into Settings object with derived fields.
  */
 const transformApiResponse = (
@@ -478,6 +489,7 @@ class SettingsService {
     agentSettings: Record<string, SettingsValue>;
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
+    disabledSkills: string[];
   }> {
     // Check cache first
     if (isCacheValid() && settingsCache.encrypted) {
@@ -485,6 +497,7 @@ class SettingsService {
         agentSettings: settingsCache.encrypted.agent_settings,
         conversationSettings: settingsCache.encrypted.conversation_settings,
         secretsEncrypted: true,
+        disabledSkills: getDisabledSkills(settingsCache.encrypted),
       };
     }
 
@@ -499,6 +512,7 @@ class SettingsService {
       agentSettings: response.agent_settings,
       conversationSettings: response.conversation_settings,
       secretsEncrypted: true,
+      disabledSkills: getDisabledSkills(response),
     };
   }
 

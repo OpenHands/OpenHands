@@ -1,7 +1,11 @@
 import { useCallback } from "react";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
-import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
+import {
+  useMainWebSocketStatus,
+  useUnifiedWebSocketStatus,
+} from "#/hooks/use-unified-websocket-status";
+import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { PLAN_COMMAND, CODE_COMMAND } from "#/utils/constants";
 
@@ -25,12 +29,17 @@ const CODE_PREFIX = `${CODE_COMMAND} `;
  * conversation always already exists — so it just switches mode and sends
  * `<task>` the same synchronous way.
  *
- * Swallows the command (no toggle, no chat message) while the agent is
- * running, a planning conversation is already being created, or the
- * websocket is disconnected — the same conditions that disable the
- * Code/Plan button — since flipping the mode mid-run, or before the socket
- * can carry it, would leave it out of sync with which conversation the
- * in-flight run is actually targeting.
+ * Swallows the command (no toggle, no chat message) while the relevant agent
+ * is running, a planning conversation is already being created, or the
+ * socket the command needs is disconnected, since flipping the mode mid-run,
+ * or before the socket can carry it, would leave it out of sync with which
+ * conversation the in-flight run is actually targeting. "/code" only ever
+ * needs the main socket, so it gates on that alone rather than the
+ * main+planning merged status — otherwise a momentary planning-socket
+ * reconnect would silently swallow a "/code" the main socket could have
+ * sent. "/plan <task>" additionally guards on the planner's own running
+ * state (mirroring the `isPlanningAgentRunning` check used elsewhere for the
+ * same reason) so a new message isn't routed into a planner still mid-run.
  */
 export const usePlanModeInterceptor = (
   conversationId: string | null | undefined,
@@ -40,9 +49,20 @@ export const usePlanModeInterceptor = (
   const setConversationMode = useConversationStore(
     (s) => s.setConversationMode,
   );
+  const localPlanningConversationId = useConversationStore(
+    (s) => s.localPlanningConversationId,
+  );
   const { handlePlanClick, hasPlanner, isCreatingConversation } =
     useHandlePlanClick();
+  const isMainWebSocketConnected = useMainWebSocketStatus() === "OPEN";
   const isWebSocketConnected = useUnifiedWebSocketStatus() === "OPEN";
+  const { curAgentState: curPlanningAgentState } = useAgentState(
+    localPlanningConversationId ?? undefined,
+  );
+  const isPlanningAgentRunning =
+    !!localPlanningConversationId &&
+    (curPlanningAgentState === AgentState.RUNNING ||
+      curPlanningAgentState === AgentState.LOADING);
 
   return useCallback(
     (message: string) => {
@@ -56,15 +76,14 @@ export const usePlanModeInterceptor = (
         return;
       }
 
-      if (
-        curAgentState === AgentState.RUNNING ||
-        isCreatingConversation ||
-        !isWebSocketConnected
-      ) {
+      if (curAgentState === AgentState.RUNNING || isCreatingConversation) {
         return;
       }
 
       if (isPlan) {
+        if (isPlanningAgentRunning || !isWebSocketConnected) {
+          return;
+        }
         const task = trimmed.slice(PLAN_COMMAND.length).trim();
         if (task && hasPlanner) {
           // Planner already exists: switch mode, then send normally — the
@@ -76,6 +95,9 @@ export const usePlanModeInterceptor = (
           handlePlanClick(undefined, task || undefined);
         }
       } else {
+        if (!isMainWebSocketConnected) {
+          return;
+        }
         setConversationMode("code");
         const task = trimmed.slice(CODE_COMMAND.length).trim();
         if (task) {
@@ -91,6 +113,8 @@ export const usePlanModeInterceptor = (
       curAgentState,
       hasPlanner,
       isCreatingConversation,
+      isMainWebSocketConnected,
+      isPlanningAgentRunning,
       isWebSocketConnected,
       onSubmit,
       handlePlanClick,
