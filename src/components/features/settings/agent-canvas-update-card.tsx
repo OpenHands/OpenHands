@@ -267,13 +267,20 @@ function AgentCanvasUpdateModal({
   );
 }
 
+interface AgentCanvasUpdateCardProps {
+  /** When true, omit the card unless an update is available (main sidebar). */
+  hideWhenUpToDate?: boolean;
+}
+
 /**
- * Information-only version/update card for the settings navigation surfaces.
+ * Information-only version/update card for settings and the main sidebar.
  * Opens update details in a modal. Never blocks or toasts; check failures
  * degrade to a quiet inline message. Hidden in locked-to-Cloud deployments —
  * the hosted canvas has no npm/docker install to update.
  */
-export function AgentCanvasUpdateCard() {
+export function AgentCanvasUpdateCard({
+  hideWhenUpToDate = false,
+}: AgentCanvasUpdateCardProps) {
   const { t } = useTranslation("openhands");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const isLockedToCloud = getLockedCloudHost() !== null;
@@ -291,6 +298,8 @@ export function AgentCanvasUpdateCard() {
   const updateAvailable = comparison === 1;
   // 0 or -1: running the npm latest or newer (local dev build).
   const upToDate = comparison !== null && comparison <= 0;
+
+  if (hideWhenUpToDate && !updateAvailable) return null;
 
   return (
     <>
