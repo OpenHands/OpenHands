@@ -32,8 +32,15 @@ import {
   type RecommendedAutomation,
 } from "@openhands/extensions/automations";
 
-const { mockCreateConversationMutate, mockUseSettings } = vi.hoisted(() => ({
+const {
+  mockCreateConversationMutate,
+  mockCreateSecret,
+  mockUseSearchSecrets,
+  mockUseSettings,
+} = vi.hoisted(() => ({
   mockCreateConversationMutate: vi.fn(),
+  mockCreateSecret: vi.fn(),
+  mockUseSearchSecrets: vi.fn(),
   mockUseSettings: vi.fn(),
 }));
 
@@ -52,6 +59,14 @@ vi.mock("#/hooks/mutation/use-create-conversation", () => ({
     mutate: mockCreateConversationMutate,
     isPending: false,
   }),
+}));
+
+vi.mock("#/hooks/mutation/use-create-secret", () => ({
+  useCreateSecret: () => ({ mutate: mockCreateSecret }),
+}));
+
+vi.mock("#/hooks/query/use-get-secrets", () => ({
+  useSearchSecrets: () => mockUseSearchSecrets(),
 }));
 
 vi.mock("#/hooks/query/use-settings", () => ({
@@ -134,6 +149,7 @@ describe("recommended automations", () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithMcpConfig({}),
     });
+    mockUseSearchSecrets.mockReturnValue({ data: [] });
     // Pre-flight connectivity test must pass so save mutations are reached.
     vi.spyOn(McpService, "testServer").mockResolvedValue({
       ok: true,
@@ -417,6 +433,31 @@ describe("recommended automations", () => {
       "/automations/new/github-pr-reviewer",
     );
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+    expect(mockCreateSecret).toHaveBeenCalledWith({
+      name: "OPENHANDS_URL",
+      value: window.location.origin,
+    });
+  });
+
+  it("preserves an existing OPENHANDS_URL when starting a local responder", () => {
+    mockUseSettings.mockReturnValue({
+      data: settingsWithGithubMcp(),
+    });
+    mockUseSearchSecrets.mockReturnValue({
+      data: [{ name: "OPENHANDS_URL" }],
+    });
+
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/automations/new/github-pr-reviewer",
+    );
+    expect(mockCreateSecret).not.toHaveBeenCalled();
   });
 
   it("launches an automation that ships no setup form with its slash command", () => {
@@ -565,6 +606,7 @@ describe("recommended automations", () => {
       "noopener,noreferrer",
     );
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+    expect(mockCreateSecret).not.toHaveBeenCalled();
 
     openSpy.mockRestore();
   });
@@ -579,5 +621,6 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("responder-deployment-modal"),
     ).not.toBeInTheDocument();
+    expect(mockCreateSecret).not.toHaveBeenCalled();
   });
 });

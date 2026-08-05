@@ -2,6 +2,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
+import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
+import { useSearchSecrets } from "#/hooks/query/use-get-secrets";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -62,6 +64,11 @@ export function RecommendedAutomationsLauncher({
   const { data: settings } = useSettings();
   const { trackPrebuiltAutomationEnabled } = useTracking();
   const createConversation = useCreateConversation();
+  const createSecret = useCreateSecret();
+  const { data: openHandsUrlSecrets } = useSearchSecrets({
+    nameContains: "OPENHANDS_URL",
+    enabled: activeBackend.backend.kind !== "cloud",
+  });
   const isCreatingConversation = useIsCreatingConversation();
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
@@ -188,6 +195,14 @@ export function RecommendedAutomationsLauncher({
     const automation = deploymentChoiceAutomation;
     setDeploymentChoiceAutomation(null);
     if (automation) {
+      if (
+        !openHandsUrlSecrets.some((secret) => secret.name === "OPENHANDS_URL")
+      ) {
+        createSecret.mutate({
+          name: "OPENHANDS_URL",
+          value: window.location.origin,
+        });
+      }
       proceedWithLocalLaunch(automation);
     }
   };
