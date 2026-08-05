@@ -25,6 +25,31 @@ describe("FeaturedAutomationsDemo", () => {
     );
   });
 
+  it("removes an automation from the featured dashboard on a second click", () => {
+    render(<FeaturedAutomationsDemo />);
+
+    const button = screen.getByRole("button", { name: "PR reviewer" });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByText("3 suggestions posted · 1 security check passed"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.queryByText("3 suggestions posted · 1 security check passed"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "I reviewed the pull request and posted three suggestions. The security check completed without findings.",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open most recent conversation" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the latest error when a failed automation is featured", () => {
     render(<FeaturedAutomationsDemo />);
 

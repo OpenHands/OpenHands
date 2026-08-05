@@ -446,9 +446,6 @@ const MOCK_CONVERSATION_SETTINGS_SCHEMA: NonNullable<
 
 export const MOCK_DEFAULT_USER_SETTINGS: Settings = {
   ...DEFAULT_SETTINGS,
-  // The browser mock represents a configured local Canvas workspace.
-  // This keeps product-review routes free of the unrelated LLM setup banner.
-  llm_api_key_set: true,
   provider_tokens_set: {},
   agent_settings_schema: MOCK_AGENT_SETTINGS_SCHEMA,
   agent_settings: {
@@ -491,17 +488,8 @@ const MOCK_LLM_PROFILES: {
   profiles: Map<string, MockLlmProfile>;
   activeProfile: string | null;
 } = {
-  profiles: new Map([
-    [
-      "Canvas demo",
-      {
-        name: "Canvas demo",
-        config: { model: DEFAULT_MODEL, api_key: "mock-api-key" },
-        api_key_set: true,
-      },
-    ],
-  ]),
-  activeProfile: "Canvas demo",
+  profiles: new Map(),
+  activeProfile: null,
 };
 
 let mockOpenAISubscriptionConnected = false;

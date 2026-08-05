@@ -138,10 +138,10 @@ function AutomationTooltip({ automation }: { automation: DemoAutomation }) {
 export function FeaturedAutomationsDemo() {
   const [featured, setFeatured] = useState<DemoAutomation[]>([]);
 
-  const addFeatured = (automation: DemoAutomation) => {
+  const toggleFeatured = (automation: DemoAutomation) => {
     setFeatured((current) =>
       current.some((item) => item.id === automation.id)
-        ? current
+        ? current.filter((item) => item.id !== automation.id)
         : [...current, automation],
     );
   };
@@ -177,7 +177,7 @@ export function FeaturedAutomationsDemo() {
                 type="button"
                 aria-label={automation.name}
                 aria-pressed={isFeatured}
-                onClick={() => addFeatured(automation)}
+                onClick={() => toggleFeatured(automation)}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-[var(--oh-foreground)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]",
                   isFeatured
