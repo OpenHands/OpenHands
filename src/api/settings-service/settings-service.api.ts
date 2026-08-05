@@ -229,13 +229,48 @@ const headersFromMcpAuth = (
   }
 };
 
-const cloudCompatibleMcpConfig = (value: unknown): unknown => {
+/**
+ * Convert SDK `auth` credentials to the cloud's header-only storage shape.
+ *
+ * The cloud settings endpoint applies `mcp_config` as a merge patch, so a
+ * credential change must also tombstone the headers the previous credential
+ * produced — otherwise stale secrets survive a strategy switch (e.g. an
+ * api_key's custom header after moving to bearer). Stored headers that the
+ * new credential still produces (via the patch's carried `headers` or the
+ * converted auth) are left untouched; any other stored header is cleared.
+ */
+const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
   if (!isRecord(value)) return value;
 
   const hasWrapper = isRecord(value.mcpServers);
   const serverMap: Record<string, unknown> = hasWrapper
     ? (value.mcpServers as Record<string, unknown>)
     : value;
+
+  const needsStoredCredential =
+    Object.values(serverMap).some(
+      (server) =>
+        isRecord(server) && isRecord(server.auth) && server.auth !== null,
+    ) && getActiveBackend().backend.kind === "cloud";
+
+  const storedHeadersByServer = new Map<string, Record<string, string>>();
+  if (needsStoredCredential) {
+    try {
+      const stored = await fetchCloudSettings();
+      const storedMcp = isRecord(stored.mcp_config) ? stored.mcp_config : {};
+      for (const [name, server] of Object.entries(storedMcp)) {
+        if (isRecord(server)) {
+          const headers = stringRecord(
+            (server as Record<string, unknown>).headers,
+          );
+          if (headers) storedHeadersByServer.set(name, headers);
+        }
+      }
+    } catch {
+      // Fall back to the patch-only conversion; a transient fetch failure
+      // must not block saving the user's explicit edits.
+    }
+  }
 
   const converted = Object.fromEntries(
     Object.entries(serverMap).map(([name, server]) => {
@@ -255,7 +290,18 @@ const cloudCompatibleMcpConfig = (value: unknown): unknown => {
 
       const nextServer = { ...server };
       const existingHeaders = stringRecord(server.headers) ?? {};
-      const mergedHeaders = { ...existingHeaders, ...authHeaders };
+      const mergedHeaders: Record<string, string | null> = {
+        ...existingHeaders,
+        ...authHeaders,
+      };
+
+      const storedHeaders = storedHeadersByServer.get(name);
+      if (storedHeaders) {
+        for (const key of Object.keys(storedHeaders)) {
+          if (!(key in mergedHeaders)) mergedHeaders[key] = null;
+        }
+      }
+
       delete nextServer.auth;
       if (Object.keys(mergedHeaders).length > 0) {
         nextServer.headers = mergedHeaders;
@@ -490,11 +536,10 @@ class SettingsService {
    */
   static async patchMcpConfig(patch: MCPConfigPatch): Promise<boolean> {
     if (getActiveBackend().backend.kind === "cloud") {
+      const mcpConfig = await cloudCompatibleMcpConfig(patch);
       await withRetry(() =>
         saveCloudSettings({
-          agent_settings_diff: {
-            mcp_config: cloudCompatibleMcpConfig(patch) as SettingsValue,
-          },
+          agent_settings_diff: { mcp_config: mcpConfig as SettingsValue },
         }),
       );
     } else {
@@ -615,9 +660,9 @@ class SettingsService {
         cloudPayload.agent_settings_diff = { ...payload.agent_settings_diff };
         if ("mcp_config" in cloudPayload.agent_settings_diff) {
           cloudPayload.agent_settings_diff.mcp_config =
-            cloudCompatibleMcpConfig(
+            (await cloudCompatibleMcpConfig(
               cloudPayload.agent_settings_diff.mcp_config,
-            ) as SettingsValue;
+            )) as SettingsValue;
         }
       }
       if (payload.conversation_settings_diff) {
