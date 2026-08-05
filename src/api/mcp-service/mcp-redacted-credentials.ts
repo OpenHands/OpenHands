@@ -31,6 +31,33 @@ const hasRedactedValue = (values: Record<string, string> | undefined) =>
   !!values &&
   Object.values(values).some((value) => value === REDACTED_MCP_SECRET_VALUE);
 
+/**
+ * Recursively replace only the redacted display placeholders inside
+ * ``submitted`` with the corresponding stored (encrypted) leaf. Fresh
+ * non-redacted edits and untouched structure are preserved verbatim, so a
+ * probe request exercises the server exactly as it will be persisted.
+ */
+function substituteRedactedLeaves<T>(submitted: T, stored: unknown): T {
+  if (!isRecord(submitted)) return submitted;
+
+  const storedRecord = isRecord(stored) ? stored : {};
+  const merged: Record<string, unknown> = { ...submitted };
+  for (const [key, value] of Object.entries(submitted)) {
+    if (value === REDACTED_MCP_SECRET_VALUE) {
+      const storedValue = storedRecord[key];
+      if (
+        typeof storedValue === "string" &&
+        storedValue !== REDACTED_MCP_SECRET_VALUE
+      ) {
+        merged[key] = storedValue;
+      }
+    } else if (isRecord(value)) {
+      merged[key] = substituteRedactedLeaves(value, storedRecord[key]);
+    }
+  }
+  return merged as T;
+}
+
 const findStoredServer = (
   server: MCPServerConfig,
   storedServers: StoredMcpConfig,
@@ -90,7 +117,7 @@ export async function substituteRedactedMcpCredentials(
 
     const nextServer = { ...server };
     if (redactedRemoteAuth && isMcpAuthCredential(stored.auth)) {
-      nextServer.auth = stored.auth;
+      nextServer.auth = substituteRedactedLeaves(server.auth, stored.auth);
     }
     if (redactedRemoteHeaders) {
       const storedHeaders = stringRecord(stored.headers) ?? {};
