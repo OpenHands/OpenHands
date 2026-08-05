@@ -20,7 +20,7 @@ import type { Settings } from "#/types/settings";
 import type { MCPServerConfig } from "#/types/mcp-server";
 
 const EDIT_STDIO_SERVER: MCPServerConfig = {
-  id: "stdio-0",
+  id: "github",
   type: "stdio",
   name: "github",
   command: "docker",
@@ -28,7 +28,7 @@ const EDIT_STDIO_SERVER: MCPServerConfig = {
 };
 
 const EDIT_OAUTH_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "superhuman_mail",
   type: "shttp",
   name: "superhuman_mail",
   url: "https://mcp.mail.superhuman.com/mcp",
@@ -118,6 +118,35 @@ function renderWith(ui: React.ReactNode) {
 describe("CustomServerEditor", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "createMcpServer").mockImplementation(
+      (settingsKey, server) =>
+        SettingsService.saveSettings({
+          agent_settings_diff: {
+            mcp_config: { [settingsKey]: server },
+          },
+        }),
+    );
+    vi.spyOn(SettingsService, "patchMcpServer").mockImplementation(
+      (settingsKey, patch) =>
+        SettingsService.saveSettings({
+          agent_settings_diff: {
+            mcp_config: { [settingsKey]: patch },
+          },
+        }),
+    );
+    vi.spyOn(SettingsService, "deleteMcpServer").mockImplementation(
+      (settingsKey) =>
+        SettingsService.saveSettings({
+          agent_settings_diff: {
+            mcp_config: { [settingsKey]: null },
+          },
+        }),
+    );
+    vi.spyOn(SettingsService, "patchMcpConfig").mockImplementation((patch) =>
+      SettingsService.saveSettings({
+        agent_settings_diff: { mcp_config: patch },
+      }),
+    );
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       MOCK_DEFAULT_USER_SETTINGS,
     );

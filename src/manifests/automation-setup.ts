@@ -14,6 +14,7 @@
  */
 
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import { getAutomationEndpoint } from "./automation-interface";
 import { collectFields } from "./manifest-local-validation";
 import { interpolateText } from "./manifest-template";
 import type {
@@ -25,7 +26,7 @@ import type {
 } from "./types";
 
 /** The creation endpoint a derived draft would be posted to. */
-export const AUTOMATION_CREATE_ENDPOINT = "/v1/preset/prompt";
+export const AUTOMATION_CREATE_ENDPOINT = getAutomationEndpoint("createPrompt");
 
 /**
  * Trigger properties a form field may fill, per trigger kind. A field under a

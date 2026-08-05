@@ -37,7 +37,9 @@ import sirv from "sirv";
 import {
   createProxyHandlers,
   createRouter,
+  isServerInfoRequest,
   matchesPathPrefix,
+  proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
 import { SkinService, createSkinApiHandler } from "./skin-service.mjs";
 
@@ -659,6 +661,14 @@ export function startStaticServer(config) {
     }
     const backend = route(req.url ?? "/");
     if (backend) {
+      if (
+        config.runtimeServicesInfo &&
+        isServerInfoRequest(req) &&
+        (req.method === "GET" || req.method === "HEAD")
+      ) {
+        proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
+        return;
+      }
       proxy.proxyHttp(req, res, backend);
       return;
     }

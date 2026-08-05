@@ -82,7 +82,7 @@ export const useTracking = () => {
     hasParentConversation: boolean;
     entryPoint?: string;
   }) => {
-    track("conversation_created", {
+    track("conversation_start_requested", {
       conversation_id: conversationId,
       task_id: taskId,
       is_start_task: conversationId.startsWith("task-"),
@@ -301,6 +301,19 @@ export const useTracking = () => {
     track("automation_exported", { backend_kind: backendKind });
   };
 
+  const trackAutomationActivityLogExported = ({
+    backendKind,
+    format,
+  }: {
+    backendKind: BackendKind;
+    format: "json" | "csv";
+  }) => {
+    track("automation_activity_log_exported", {
+      backend_kind: backendKind,
+      format,
+    });
+  };
+
   const trackAutomationImported = ({
     backendKind,
   }: {
@@ -407,6 +420,7 @@ export const useTracking = () => {
     trackAutomationDisableButton,
     trackAutomationEdited,
     trackAutomationExported,
+    trackAutomationActivityLogExported,
     trackAutomationImported,
     trackBackendAdded,
     trackOnboardingStarted,
