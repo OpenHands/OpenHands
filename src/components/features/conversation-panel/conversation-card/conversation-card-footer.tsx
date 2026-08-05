@@ -18,13 +18,7 @@ import {
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
-
-/**
- * Display budget for the tag-chip row. Tags are server-/API-controlled, so a
- * conversation can carry arbitrarily many; the card shows at most this many
- * chips (sorted by key) and folds the rest into a "+N" overflow chip.
- */
-export const MAX_VISIBLE_TAG_CHIPS = 3;
+import { ConversationTagChips } from "./conversation-tag-chips";
 
 interface ConversationCardFooterProps {
   selectedRepository: RepositorySelection | null;
@@ -58,8 +52,8 @@ interface ConversationCardFooterProps {
   acpServer?: string | null;
   /**
    * Server-side conversation tags (``AppConversation.tags``). Non-reserved
-   * entries render as ``key: value`` chips so API-/automation-born
-   * conversations can surface attribution (e.g. ``origin: slack``).
+   * entries render as value-only chips so API-/automation-born
+   * conversations can surface attribution (e.g. ``origin: slack`` → ``slack``).
    */
   tags?: Record<string, string> | null;
   /**
@@ -130,12 +124,6 @@ export function ConversationCardFooter({
     executionStatus !== undefined ? "pl-[26px]" : undefined;
 
   const displayTags = showTags ? getDisplayConversationTags(tags) : [];
-  // Tags are API-controlled with no server-side count bound, so the card
-  // renders a fixed display budget: the first chips in sorted-key order plus
-  // a "+N" affordance whose tooltip reveals the remainder. The full map stays
-  // on ``AppConversation.tags`` for non-display consumers.
-  const visibleTags = displayTags.slice(0, MAX_VISIBLE_TAG_CHIPS);
-  const overflowTags = displayTags.slice(MAX_VISIBLE_TAG_CHIPS);
 
   return (
     <div
@@ -148,42 +136,23 @@ export function ConversationCardFooter({
         <div className={metadataIndentClass}>
           <span
             data-testid="conversation-card-agent-chip"
-            className="inline-flex items-center gap-1 text-xs text-[var(--oh-muted)] max-w-full min-w-0"
+            className="inline-flex max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]"
             title={chip.tooltip}
           >
-            <AgentBrandIcon kind={chip.kind} />
-            <span className="truncate">{chip.text}</span>
+            {/* Same line-height slot as tag chips; width flexes for the wider OpenHands mark. */}
+            <span
+              className="inline-flex h-4 shrink-0 items-center justify-center [&_svg]:block"
+              aria-hidden
+            >
+              <AgentBrandIcon kind={chip.kind} size={12} />
+            </span>
+            <span className="truncate leading-4">{chip.text}</span>
           </span>
         </div>
       ) : null}
       {displayTags.length > 0 ? (
-        <div
-          className={cn(
-            "flex flex-row flex-wrap items-center gap-1 min-w-0",
-            metadataIndentClass,
-          )}
-        >
-          {visibleTags.map(([key, value]) => (
-            <span
-              key={key}
-              data-testid="conversation-card-tag-chip"
-              title={`${key}: ${value}`}
-              className="inline-flex max-w-full min-w-0 items-center rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]"
-            >
-              <span className="truncate">{`${key}: ${value}`}</span>
-            </span>
-          ))}
-          {overflowTags.length > 0 ? (
-            <span
-              data-testid="conversation-card-tag-overflow"
-              title={overflowTags
-                .map(([key, value]) => `${key}: ${value}`)
-                .join("\n")}
-              className="inline-flex items-center rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]"
-            >
-              {`+${overflowTags.length}`}
-            </span>
-          ) : null}
+        <div className={metadataIndentClass}>
+          <ConversationTagChips tags={displayTags} />
         </div>
       ) : null}
       <div

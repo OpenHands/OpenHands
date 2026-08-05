@@ -440,9 +440,22 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * High-signal tag keys shown first in the chip row (before A–Z). Cloud
+ * conversations stamp ``git_provider`` / ``repo_name`` / ``selected_branch``;
+ * automations often stamp ``origin``.
+ */
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
+  "origin",
+  "git_provider",
+  "repo_name",
+  "selected_branch",
+];
+
+/**
  * User-facing subset of a conversation's server-side tags: everything except
- * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries
- * sorted by key so chip order doesn't shuffle between refetches.
+ * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
+ * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
+ * the rest sort A–Z so chip order doesn't shuffle between refetches.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
@@ -452,7 +465,16 @@ export function getDisplayConversationTags(
   }
   return Object.entries(tags)
     .filter(([key]) => !RESERVED_CONVERSATION_TAG_KEYS.has(key))
-    .sort(([a], [b]) => a.localeCompare(b));
+    .sort(([a], [b]) => {
+      const aPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(a);
+      const bPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(b);
+      const aRank = aPriority === -1 ? Number.POSITIVE_INFINITY : aPriority;
+      const bRank = bPriority === -1 ? Number.POSITIVE_INFINITY : bPriority;
+      if (aRank !== bRank) {
+        return aRank - bRank;
+      }
+      return a.localeCompare(b);
+    });
 }
 
 const FERNET_TOKEN_PREFIX = "gAAAAA";

@@ -621,7 +621,7 @@ export function ConversationPanel({
             !showHoverMetadata || openContextMenuId === conversation.id
           }
           disableAnimation={import.meta.env.MODE === "test"}
-          className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+          className="max-w-none overflow-visible rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
           content={
             <ConversationCardPreview
               title={conversation.title ?? ""}
@@ -638,6 +638,7 @@ export function ConversationPanel({
               }
               llmModel={conversation.llm_model}
               createdAt={conversation.created_at}
+              tags={conversation.tags}
             />
           }
         >

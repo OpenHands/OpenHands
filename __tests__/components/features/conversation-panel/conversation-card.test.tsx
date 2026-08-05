@@ -13,7 +13,6 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { formatTimeDelta } from "#/utils/format-time-delta";
 import { ConversationCard } from "#/components/features/conversation-panel/conversation-card/conversation-card";
-import { MAX_VISIBLE_TAG_CHIPS } from "#/components/features/conversation-panel/conversation-card/conversation-card-footer";
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
@@ -592,8 +591,9 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``).
-    it("renders non-reserved tags as key: value chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chip labels are
+    // value-only; the full ``key: value`` lives in the chip tooltip.
+    it("renders non-reserved tags as value-only chips when showTags is on", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -605,10 +605,19 @@ describe("ConversationCard", () => {
       );
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      // Chips are sorted by key ("origin" < "owner") for a stable order.
+      // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("origin: slack");
-      expect(chips[1]).toHaveTextContent("owner: alice");
+      expect(chips[0]).toHaveTextContent("slack");
+      expect(chips[0].getAttribute("title")).toMatch(/: slack$/);
+      expect(chips[0].getAttribute("title")).not.toContain("origin");
+      expect(chips[1]).toHaveTextContent("alice");
+      expect(chips[1]).toHaveAttribute("title", "Owner: alice");
+      expect(
+        within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
+      ).toHaveAttribute("data-tag-key", "origin");
+      expect(
+        within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
+      ).toHaveAttribute("data-tag-key", "owner");
     });
 
     it("filters reserved tag keys out of the chip row", () => {
@@ -626,7 +635,9 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("origin: review");
+      expect(chips[0]).toHaveTextContent("review");
+      expect(chips[0].getAttribute("title")).toMatch(/: review$/);
+      expect(chips[0].getAttribute("title")).not.toContain("origin");
     });
 
     it("hides the chips when showTags is omitted", () => {
@@ -644,39 +655,7 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("caps visible chips at the display budget with a +N overflow chip", () => {
-      // Tags are API-controlled with no useful size bound, so the card must
-      // not grow with the tag count: first MAX_VISIBLE_TAG_CHIPS sorted keys
-      // render as chips, the rest fold into "+N" with a tooltip listing them.
-      renderWithProviders(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          showTags
-          tags={{
-            env: "prod",
-            origin: "slack",
-            owner: "alice",
-            repo: "goodday",
-            team: "infra",
-          }}
-        />,
-      );
-
-      const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      expect(chips).toHaveLength(MAX_VISIBLE_TAG_CHIPS);
-      expect(chips[0]).toHaveTextContent("env: prod");
-      expect(chips[1]).toHaveTextContent("origin: slack");
-      expect(chips[2]).toHaveTextContent("owner: alice");
-
-      const overflow = screen.getByTestId("conversation-card-tag-overflow");
-      expect(overflow).toHaveTextContent("+2");
-      // The hidden remainder stays reachable via the overflow tooltip.
-      expect(overflow).toHaveAttribute("title", "repo: goodday\nteam: infra");
-    });
-
-    it("renders no overflow chip when tags fit the display budget", () => {
+    it("keeps chips on a single nowrap row", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -687,12 +666,26 @@ describe("ConversationCard", () => {
         />,
       );
 
-      expect(
-        screen.getAllByTestId("conversation-card-tag-chip"),
-      ).toHaveLength(3);
-      expect(
-        screen.queryByTestId("conversation-card-tag-overflow"),
-      ).not.toBeInTheDocument();
+      const row = screen.getByTestId("conversation-card-tag-row");
+      expect(row).toHaveClass("flex-nowrap");
+      expect(row).toHaveClass("overflow-hidden");
+    });
+
+    it("hard-truncates long chip values while keeping the full tooltip", () => {
+      const longValue = "abcdefghijklmnopqrstuvwxyz";
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ token: longValue }}
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-tag-chip");
+      expect(chip).toHaveTextContent("abcdefghijklm…");
+      expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 
     it("renders no chip row when every tag is reserved", () => {
