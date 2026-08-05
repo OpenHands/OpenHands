@@ -28,5 +28,17 @@ jobs:
               with:
                   ref: ${{ github.event.pull_request.base.sha }}
 
-            - name: Validate HUMAN note and PR template
-              run: python .github/scripts/check_pr_description.py
+            - name: Fetch changed file paths
+              id: pr_files
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                      --paginate --jq '.[].filename' > pr-files.txt
+                  echo "count=$(wc -l < pr-files.txt)" >> "$GITHUB_OUTPUT"
+
+            - name: Validate HUMAN note, PR template, and frontend evidence
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+              run: python .github/scripts/check_pr_description.py --files-file pr-files.txt
