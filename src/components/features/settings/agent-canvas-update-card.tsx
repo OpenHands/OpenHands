@@ -310,15 +310,17 @@ export function AgentCanvasUpdateCard() {
               <span
                 data-testid="agent-canvas-update-badge"
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none",
+                  "inline-flex shrink-0 items-center gap-1 text-[10px] font-medium leading-none",
                   updateAvailable
-                    ? "border-transparent bg-[#1E3A5F] text-[#3B82F6]"
-                    : "border-[var(--oh-border)] bg-[var(--oh-surface)] text-success",
+                    ? "rounded-full border border-transparent bg-[#1E3A5F] px-1.5 py-0.5 text-[#3B82F6]"
+                    : "text-success",
                 )}
               >
                 {updateAvailable ? (
                   <ArrowUpCircle className="size-3 shrink-0" aria-hidden />
-                ) : null}
+                ) : (
+                  <CircleCheck className="size-3 shrink-0" aria-hidden />
+                )}
                 {t(
                   updateAvailable
                     ? I18nKey.SETTINGS$APP_UPDATE_BADGE_UPDATE_AVAILABLE

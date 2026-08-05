@@ -4,7 +4,6 @@ import { I18nKey } from "#/i18n/declaration";
 import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { SidebarNavLink } from "#/components/features/sidebar/sidebar-nav-link";
 import { AgentCanvasUpdateCard } from "#/components/features/settings/agent-canvas-update-card";
-import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { CloudSettingsLink } from "#/components/features/settings/cloud-settings-link";
 import { IntegrationsSettingsLink } from "#/components/features/settings/integrations-settings-link";
@@ -42,7 +41,6 @@ export function SettingsMobileHub({ navigationItems }: SettingsMobileHubProps) {
         <CloudSettingsLink />
       </nav>
       <AgentCanvasUpdateCard />
-      <AgentCanvasVersionTile hideWhenUpdateAvailable />
       <div className="pt-1">
         <BackendSyncedSettingsBadge />
       </div>
