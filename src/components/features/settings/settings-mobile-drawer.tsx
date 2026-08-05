@@ -10,6 +10,7 @@ import { SettingsNavDivider } from "./settings-nav-divider";
 import { SettingsNavLink } from "./settings-nav-link";
 import { navInteractiveTransitionClassName } from "#/components/features/sidebar/sidebar-layout";
 import { AgentCanvasUpdateCard } from "#/components/features/settings/agent-canvas-update-card";
+import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { CloudSettingsLink } from "#/components/features/settings/cloud-settings-link";
 import { IntegrationsSettingsLink } from "#/components/features/settings/integrations-settings-link";
@@ -92,8 +93,9 @@ export function SettingsMobileDrawer({
           <CloudSettingsLink />
         </div>
 
-        <div className="px-2 pt-3">
+        <div className="flex flex-col gap-2 px-2 pt-3">
           <AgentCanvasUpdateCard />
+          <AgentCanvasVersionTile hideWhenUpdateAvailable />
         </div>
 
         <div className="px-2 pt-3">

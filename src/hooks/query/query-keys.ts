@@ -60,6 +60,11 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+/** Alternate version-tile query key (feat/agent-canvas-version-update-ui design). */
+export const AGENT_CANVAS_VERSION_QUERY_KEYS = {
+  latest: ["agent-canvas-version", "latest"] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes
