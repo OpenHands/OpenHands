@@ -14092,6 +14092,23 @@
     "uk": "Журнал активності",
     "ca": "Registre d'activitat"
   },
+  "AUTOMATIONS$DETAIL$RUN_COST": {
+    "en": "Cost",
+    "ja": "コスト",
+    "zh-CN": "成本",
+    "zh-TW": "成本",
+    "ko-KR": "비용",
+    "no": "Kostnad",
+    "it": "Costo",
+    "pt": "Custo",
+    "es": "Costo",
+    "ar": "التكلفة",
+    "fr": "Coût",
+    "tr": "Maliyet",
+    "de": "Kosten",
+    "uk": "Вартість",
+    "ca": "Cost"
+  },
   "AUTOMATIONS$DETAIL$BACK_TO_LIST": {
     "en": "Back to Automations",
     "ja": "オートメーション一覧に戻る",

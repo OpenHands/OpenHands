@@ -209,7 +209,7 @@ function getDirSizeBytes(dir) {
 /** @type {import('electron-builder').Configuration} */
 const config = {
   appId: "dev.openhands.agent-canvas",
-  productName: "Agent Canvas",
+  productName: "OpenHands Agent Canvas",
   copyright: "Copyright © 2025 All Hands AI",
 
   // Stamp the packaged app with the released version (see rootPackageJson
@@ -219,8 +219,9 @@ const config = {
   // Treat electron/ as the app root. electron/package.json provides the
   // Electron entry point without touching the npm-published root package.json.
   // `buildResources` points at electron/build-resources so electron-builder
-  // can auto-discover icon.png (1024×1024 OpenHands raised-hands app icon)
-  // and generate the platform-specific icon.icns / icon.ico from it.
+  // can auto-discover the committed icon.icns / icon.ico (generated from the
+  // 1024×1024 icon.png master via `npm run generate-icons`) and, for Linux,
+  // icon.png itself.
   directories: {
     app: "electron",
     output: "dist-electron",
@@ -247,6 +248,8 @@ const config = {
     // main.mjs can set it as the BrowserWindow icon at runtime (used for the
     // Linux taskbar; macOS reads from the .icns inside the .app bundle).
     "build-resources/icon.png",
+    // Windows runtime BrowserWindow icon (main.mjs picks .ico on win32).
+    "build-resources/icon.ico",
     // Scripts from project root. Mostly Node built-ins; the two spawned
     // servers additionally need RUNTIME_PACKAGES, restored into
     // Resources/app/node_modules by the afterPack hook.
@@ -304,28 +307,29 @@ const config = {
         ],
       },
     ],
-    // Icon auto-discovered from directories.buildResources/icon.png
-    // (electron-builder generates icon.icns from the 1024×1024 PNG).
+    // Icon auto-discovered from directories.buildResources/icon.icns
+    // (committed; regenerate with `npm run generate-icons`).
   },
 
   dmg: {
-    title: "Agent Canvas",
+    title: "OpenHands Agent Canvas",
     contents: [
       { x: 130, y: 220 },
       { x: 410, y: 220, type: "link", path: "/Applications" },
     ],
     window: { width: 540, height: 380 },
-    // Default is "Agent Canvas-<version>-<arch>.dmg"; GitHub release assets
-    // mangle spaces, so keep the asset name literal (matches the nsis
+    // Default is "OpenHands Agent Canvas-<version>-<arch>.dmg"; GitHub release
+    // assets mangle spaces, so keep the asset name literal (matches the nsis
     // convention). ${version}/${arch}/${ext} are electron-builder macros.
-    artifactName: "Agent-Canvas-${version}-${arch}.${ext}",
+    artifactName: "OpenHands-Agent-Canvas-${version}-${arch}.${ext}",
   },
 
   // ── Windows ────────────────────────────────────────────────────────────────
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
-    // Icon auto-discovered from directories.buildResources/icon.png
-    // (electron-builder generates icon.ico from the 1024×1024 PNG).
+    // Icon auto-discovered from directories.buildResources/icon.ico
+    // (committed; regenerate with `npm run generate-icons`). Also used for
+    // the NSIS installer/uninstaller and the rcedit exe icon resource.
   },
 
   nsis: {
@@ -334,10 +338,10 @@ const config = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    // The default artifact name is "Agent Canvas Setup <version>.exe";
+    // The default artifact name is "OpenHands Agent Canvas Setup <version>.exe";
     // GitHub release assets mangle spaces, so ship a space-free name.
     // ${version}/${ext} are electron-builder macros, not JS interpolation.
-    artifactName: "Agent-Canvas-Setup-${version}.${ext}",
+    artifactName: "OpenHands-Agent-Canvas-Setup-${version}.${ext}",
   },
 
   // ── Linux ──────────────────────────────────────────────────────────────────
