@@ -12,7 +12,7 @@
   - `VITE_SESSION_API_KEY` for optional session auth.
   - `VITE_WORKING_DIR` for the default workspace path sent when starting conversations.
   - `VITE_ENABLE_BROWSER_TOOLS=false` to omit `BrowserToolSet` from new conversation payloads.
-  - `VITE_MAX_ATTACHMENT_FILE_SIZE_MB` / `VITE_MAX_ATTACHMENT_TOTAL_SIZE_MB` for source-build attachment limits (defaults: 25 MB per file, 50 MB aggregate).
+  - `VITE_MAX_ATTACHMENT_FILE_SIZE_MB` / `VITE_MAX_ATTACHMENT_TOTAL_SIZE_MB` for source-build attachment limits (defaults: 100 MB per file, 200 MB aggregate).
   - `OH_MAX_ATTACHMENT_FILE_SIZE_MB` / `OH_MAX_ATTACHMENT_TOTAL_SIZE_MB` for runtime overrides in the prebuilt npm/desktop frontend.
   - `VITE_BASE_PATH` for serving the SPA under a subpath such as `/canvas`; pair it with `scripts/static-server.mjs --base-path` at runtime.
 - Public skills are loaded from the `@openhands/extensions` npm package at build time via `SKILLS_CATALOG` (exported from `@openhands/extensions/skills`). The frontend's `SkillsService` maps catalog entries to `SkillInfo` objects and merges them with user/project skills fetched from the agent-server (with `load_public: false`). The agent-server no longer clones the extensions repo or uses `EXTENSIONS_REF` for public skills.

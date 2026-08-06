@@ -54,7 +54,7 @@ describe("ChatAddFileButton", () => {
     await user.click(screen.getByTestId("chat-plus-button"));
     expect(screen.getByTestId("tools-context-menu")).toBeInTheDocument();
     expect(screen.getByTestId("add-files-and-images-button")).toHaveTextContent(
-      "25 MB",
+      "100 MB",
     );
 
     await user.click(screen.getByTestId("add-files-and-images-button"));

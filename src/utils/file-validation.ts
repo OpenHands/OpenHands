@@ -1,6 +1,6 @@
 const BYTES_PER_MB = 1024 * 1024;
-const DEFAULT_MAX_FILE_SIZE_MB = 25;
-const DEFAULT_MAX_TOTAL_SIZE_MB = 50;
+const DEFAULT_MAX_FILE_SIZE_MB = 100;
+const DEFAULT_MAX_TOTAL_SIZE_MB = 200;
 const MAX_EMBEDDED_IMAGE_SIZE_MB = 3;
 
 interface AttachmentLimits {

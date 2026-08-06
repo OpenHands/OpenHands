@@ -31,30 +31,30 @@ describe("attachment file validation", () => {
   });
 
   it("enforces the default per-file and aggregate limits", () => {
-    expect(validateFiles([makeFile("archive.zip", 25 * MB)]).isValid).toBe(
+    expect(validateFiles([makeFile("archive.zip", 100 * MB)]).isValid).toBe(
       true,
     );
 
-    const oversized = validateFiles([makeFile("archive.zip", 25 * MB + 1)]);
+    const oversized = validateFiles([makeFile("archive.zip", 100 * MB + 1)]);
     expect(oversized).toMatchObject({
       isValid: false,
       oversizedFiles: ["archive.zip"],
     });
-    expect(oversized.errorMessage).toContain("25MB");
+    expect(oversized.errorMessage).toContain("100MB");
 
     expect(
       validateFiles(
-        [makeFile("new.zip", 20 * MB)],
-        [makeFile("existing.zip", 30 * MB)],
+        [makeFile("new.zip", 80 * MB)],
+        [makeFile("existing.zip", 120 * MB)],
       ).isValid,
     ).toBe(true);
 
     const overTotal = validateFiles(
-      [makeFile("new.zip", 20 * MB + 1)],
-      [makeFile("existing.zip", 30 * MB)],
+      [makeFile("new.zip", 80 * MB + 1)],
+      [makeFile("existing.zip", 120 * MB)],
     );
     expect(overTotal.isValid).toBe(false);
-    expect(overTotal.errorMessage).toContain("50MB limit");
+    expect(overTotal.errorMessage).toContain("200MB limit");
   });
 
   it("uses build-time overrides and keeps the total at least the per-file limit", () => {
@@ -80,8 +80,8 @@ describe("attachment file validation", () => {
 
     setRuntimeLimits({ maxFileSizeMb: -1, maxTotalSizeMb: "invalid" });
     expect(getAttachmentLimits()).toEqual({
-      maxFileSizeMb: 25,
-      maxTotalSizeMb: 50,
+      maxFileSizeMb: 100,
+      maxTotalSizeMb: 200,
     });
   });
 });
