@@ -56,6 +56,7 @@ const sampleRow = (
   conversation_id: "c1",
   conversation_url: "http://localhost:8000/conversations/c1",
   error: "boom",
+  cost: null,
   ...overrides,
 });
 
@@ -87,6 +88,29 @@ describe("automation-activity-log-export", () => {
         "http://localhost:8000",
       ),
     ).toEqual(sampleRow());
+  });
+
+  it("carries the run's accumulated cost into the export row", () => {
+    // Arrange
+    const run = sampleRun({ cost: 0.4213 });
+
+    // Act
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    // Assert
+    expect(row.cost).toBe(0.4213);
+  });
+
+  it("serializes the cost as a raw number so spreadsheets can total it", () => {
+    // Arrange
+    const rows: AutomationRunExportRow[] = [sampleRow({ cost: 0.4213 })];
+
+    // Act
+    const csv = serializeActivityLogRowsCsv(rows);
+
+    // Assert
+    expect(csv.split("\n")[0]).toContain("cost");
+    expect(csv.split("\n")[1]).toContain("0.4213");
   });
 
   it("serializes CSV with conversation URL and escaped fields", () => {
