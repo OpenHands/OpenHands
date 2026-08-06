@@ -998,6 +998,84 @@ export const MOCK_ACP_COMMAND_SCRIPT =
   process.env.MOCK_ACP_CONTAINER_SCRIPT || MOCK_ACP_SERVER_PATH;
 
 /**
+ * Configure the "default" agent profile as an ACP conversation running the
+ * mock ACP server, tagged with the "claude-code" provider — directly against
+ * the agent-profiles API (mirrors `ensureMockLLMAgentProfile`'s API-direct
+ * setup pattern) rather than through the Settings → Agent UI.
+ *
+ * The UI can't produce this combination: `agent-settings.tsx`'s
+ * `selectedPreset` (and therefore the saved `acp_server`) is *derived* from
+ * the command text via `detectPreset`, which only matches a provider's
+ * *exact* default npx command — typing our mock script's command, even
+ * right after picking the "Claude Code" preset, snaps the detected preset
+ * back to "custom" before Save. The backend has no such coupling:
+ * `ACPAgentProfile.acp_server`/`acp_command` are independent fields
+ * (`ACPAgentSettings.resolve_acp_command()` uses `acp_command` verbatim
+ * when set, regardless of `acp_server`; `acp_server` is "informational
+ * only" per its docstring, read back by Canvas to resolve the provider
+ * brand label / curated model list / static effort levels). Posting both
+ * directly is therefore the only way to exercise the "claude-code" model +
+ * effort UI (`getAcpEffortLevels`/`composeAcpModelId`) against our mock
+ * script instead of a real `claude-agent-acp` subprocess.
+ *
+ * Activates the profile afterward so a home-page conversation launches from
+ * it, exactly like `ensureMockLLMAgentProfile`.
+ */
+export async function ensureAcpClaudeCodeMockProfile(
+  request: APIRequestContext,
+  command: string = `${MOCK_ACP_COMMAND_PYTHON} ${MOCK_ACP_COMMAND_SCRIPT}`,
+) {
+  const name = "default";
+  const headers = {
+    "X-Session-API-Key": SESSION_API_KEY,
+    "Content-Type": "application/json",
+  };
+
+  const saveResp = await retryOnTransient(
+    request,
+    "POST",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(name)}`,
+    {
+      headers,
+      data: {
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        acp_command: command,
+      },
+    },
+  );
+  expect(
+    saveResp.ok(),
+    `save ACP agent profile "${name}": ${saveResp.status()}`,
+  ).toBe(true);
+
+  // Activate needs the stable id; the save response only echoes the name.
+  const detailResp = await retryOnTransient(
+    request,
+    "GET",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(name)}`,
+    { headers },
+  );
+  expect(
+    detailResp.ok(),
+    `get ACP agent profile "${name}": ${detailResp.status()}`,
+  ).toBe(true);
+  const id = (await detailResp.json())?.profile?.id as string | undefined;
+  expect(id, `ACP agent profile "${name}" id`).toBeTruthy();
+
+  const activateResp = await retryOnTransient(
+    request,
+    "POST",
+    `${BACKEND_URL}/api/agent-profiles/${encodeURIComponent(id!)}/activate`,
+    { headers, data: {} },
+  );
+  expect(
+    activateResp.ok(),
+    `activate ACP agent profile "${name}": ${activateResp.status()}`,
+  ).toBe(true);
+}
+
+/**
  * @deprecated Use `resetToOpenHandsAgentViaUI(page)` to exercise the UI path.
  * Kept only for callers that cannot open a page (should not exist in new tests).
  */

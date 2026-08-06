@@ -10,6 +10,7 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  labelForAcpModel,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -219,6 +220,52 @@ describe("getAcpPreferredDefaultModel", () => {
     expect(getAcpPreferredDefaultModel("openhands")).toBeNull();
     expect(getAcpPreferredDefaultModel(ACP_CUSTOM_PRESET_KEY)).toBeNull();
     expect(getAcpPreferredDefaultModel("future-acp-server")).toBeNull();
+  });
+});
+
+describe("labelForAcpModel", () => {
+  it("resolves a bare curated id to its registry label", () => {
+    expect(labelForAcpModel("claude-code", "sonnet")).toBe("Claude Sonnet 4.6");
+    expect(labelForAcpModel("codex", "gpt-5.5")).toBe("GPT-5.5");
+  });
+
+  it("splits a composite id and appends '· <effort>' to the base's label", () => {
+    expect(labelForAcpModel("claude-code", "sonnet/high")).toBe(
+      "Claude Sonnet 4.6 · high",
+    );
+    expect(labelForAcpModel("codex", "gpt-5.5/medium")).toBe(
+      "GPT-5.5 · medium",
+    );
+  });
+
+  it("falls back to the raw base (not the full composite) when the base isn't curated", () => {
+    expect(labelForAcpModel("claude-code", "my-custom-fork/high")).toBe(
+      "my-custom-fork · high",
+    );
+  });
+
+  it("never splits gemini-cli or the custom preset, even on a '/' that looks like an effort suffix", () => {
+    expect(labelForAcpModel("gemini-cli", "gemini-2.5-pro/high")).toBe(
+      "gemini-2.5-pro/high",
+    );
+    expect(labelForAcpModel("custom", "my-model/high")).toBe("my-model/high");
+  });
+
+  it("does not split on an effort level the server doesn't recognize", () => {
+    // "max" is a claude-code level, not a codex one.
+    expect(labelForAcpModel("codex", "gpt-5.5/max")).toBe("gpt-5.5/max");
+  });
+
+  it("falls back to the raw id for an unknown provider", () => {
+    expect(labelForAcpModel("future-acp-server", "some-model")).toBe(
+      "some-model",
+    );
+  });
+
+  it("returns null for an empty/null/undefined model id", () => {
+    expect(labelForAcpModel("claude-code", null)).toBeNull();
+    expect(labelForAcpModel("claude-code", undefined)).toBeNull();
+    expect(labelForAcpModel("claude-code", "")).toBeNull();
   });
 });
 

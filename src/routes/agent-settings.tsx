@@ -33,12 +33,20 @@ import {
 import {
   ACP_PROVIDERS,
   ACP_CUSTOM_PRESET_KEY,
+  ACP_EFFORT_LEVEL_I18N_KEYS,
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
+import { useAcpModelChoices } from "#/hooks/use-acp-model-choices";
+import { useAcpCustomModelsStore } from "#/stores/acp-custom-models-store";
+import {
+  composeAcpModelId,
+  getAcpEffortLevels,
+  parseAcpModelId,
+} from "#/utils/acp-model-id";
 
 export const handle = { hideTitle: true };
 
@@ -48,6 +56,9 @@ const ENABLE_SUB_AGENTS_FIELD_KEY = "enable_sub_agents";
 const TOOL_CONCURRENCY_FIELD_KEY = "tool_concurrency_limit";
 const COMMAND_PLACEHOLDER_FALLBACK = "npx -y <package-name>";
 const ACP_CUSTOM_MODEL_KEY = "__custom_model__";
+/** UI sentinel for "no effort suffix" — {@link composeAcpModelId} treats this
+ * identically to `null`/empty (bare `acp_model`, no trailing "/<effort>"). */
+const ACP_EFFORT_DEFAULT = "default";
 
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -82,13 +93,11 @@ function getEnableSubAgentsValue(
   return field?.default === true;
 }
 
-function isKnownAcpModel(
-  provider: ACPProviderConfig | undefined,
-  model: string,
-): boolean {
-  return (
-    provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
-  );
+/** Whether `model` (trimmed) matches one of `knownIds` (already-trimmed ids). */
+function isKnownModelId(knownIds: readonly string[], model: string): boolean {
+  const trimmed = model.trim();
+  if (!trimmed) return false;
+  return knownIds.includes(trimmed);
 }
 
 /**
@@ -118,6 +127,11 @@ export interface AgentProfileFieldsInput {
   isDefaultProviderCommand: boolean;
   commandTokens: string[];
   acpModel: string;
+  /** Effort level selected in the effort dropdown ("default" or one of
+   * {@link getAcpEffortLevels}'s levels for `selectedPreset`). Composed onto
+   * `acpModel` via {@link composeAcpModelId} — ignored (never suffixed) for
+   * a server {@link getAcpEffortLevels} returns `null` for. */
+  acpEffort: string;
   subAgentsEnabled: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
@@ -150,6 +164,7 @@ export function buildAgentProfileFields(
     isDefaultProviderCommand,
     commandTokens,
     acpModel,
+    acpEffort,
     subAgentsEnabled,
     toolConcurrencyField,
     toolConcurrency,
@@ -160,7 +175,8 @@ export function buildAgentProfileFields(
     return {
       agent_kind: "acp",
       acp_server: selectedPreset,
-      acp_model: acpModel.trim() || null,
+      acp_model:
+        composeAcpModelId(acpModel.trim(), acpEffort, selectedPreset) || null,
       acp_command: isBuiltinDefault
         ? null
         : formatCommand(commandTokens) || null,
@@ -225,12 +241,20 @@ interface AgentSettingsScreenProps {
    */
   agentSettingsOverride?: Record<string, SettingsValue> | null;
   onSaveControlChange?: (control: AgentSettingsSaveControl) => void;
+  /**
+   * Stable AgentProfile UUID being edited (embedded mode only). Lets the ACP
+   * model picker remember/offer custom model overrides per profile via
+   * `useAcpCustomModelsStore`. `undefined` in the profile-creation flow (no
+   * id minted yet) — custom entries are then one-shot, exactly like before M2.
+   */
+  profileId?: string;
 }
 
 export function AgentSettingsScreen({
   embedded = false,
   agentSettingsOverride = null,
   onSaveControlChange,
+  profileId,
 }: AgentSettingsScreenProps = {}) {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
@@ -280,6 +304,7 @@ export function AgentSettingsScreen({
   const [agentType, setAgentType] = useState<AgentType>("openhands");
   const [commandText, setCommandText] = useState("");
   const [acpModel, setAcpModel] = useState("");
+  const [acpEffort, setAcpEffort] = useState(ACP_EFFORT_DEFAULT);
   const [isCustomAcpModel, setIsCustomAcpModel] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -335,23 +360,44 @@ export function AgentSettingsScreen({
       const savedModel = source?.acp_model;
       const normalizedSavedModel =
         typeof savedModel === "string" ? savedModel.trim() : "";
-      setAcpModel(
-        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
-      );
+      const effectiveSavedModel =
+        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
+      // CRITICAL: parse the composite id BEFORE the known-model check below —
+      // isKnownModelId must see the bare base, or a composite id like
+      // "sonnet/high" would never match the curated list and would
+      // incorrectly flip the UI to the custom free-text input instead of
+      // preselecting "Sonnet" with "high" in the effort dropdown.
+      const parsedSavedModel = parseAcpModelId(effectiveSavedModel, acpServer);
+      setAcpModel(parsedSavedModel.base);
+      setAcpEffort(parsedSavedModel.effort ?? ACP_EFFORT_DEFAULT);
+      // A model is "known" (shows selected in the dropdown, not the free-text
+      // override) when it's either curated or a remembered custom entry for
+      // this profile — both synchronously available, unlike the async
+      // models.dev catalog extras `modelChoices` may still be loading.
+      const curatedIds = provider?.available_models?.map((m) => m.id) ?? [];
+      const customIdsForProfile = profileId
+        ? (useAcpCustomModelsStore.getState().customModelsByProfileId[
+            profileId
+          ] ?? [])
+        : [];
       setIsCustomAcpModel(
         !!normalizedSavedModel &&
-          (!provider || !isKnownAcpModel(provider, normalizedSavedModel)),
+          !isKnownModelId(
+            [...curatedIds, ...customIdsForProfile],
+            parsedSavedModel.base,
+          ),
       );
     } else {
       setAgentType("openhands");
       setCommandText("");
       setAcpModel("");
+      setAcpEffort(ACP_EFFORT_DEFAULT);
       loadedAcpServerRef.current = null;
       loadedCommandTextRef.current = "";
       setIsCustomAcpModel(false);
     }
     setIsDirty(false);
-  }, [settings, agentSettingsOverride]);
+  }, [settings, agentSettingsOverride, profileId]);
 
   // Sync the sub-agents toggle when settings reload
   useEffect(() => {
@@ -385,6 +431,21 @@ export function AgentSettingsScreen({
   const acpCommandEmpty =
     agentType === "acp" && parseCommand(commandText).length === 0;
   const embeddedCredentialsDirty = acpCredentialForm.isDirty;
+
+  // Model choices are computed here (before the loading early-return) since
+  // `useAcpModelChoices` calls hooks internally (react-query + the custom-
+  // models store) and must run unconditionally on every render. `curated`
+  // comes straight from the detected preset's registry entry — an empty list
+  // for a custom ACP server, exactly like `available_models` always was.
+  const selectedPreset = detectPreset(commandText, ACP_PROVIDERS);
+  const selectedProvider = getAcpProvider(selectedPreset);
+  const modelSuggestions = selectedProvider?.available_models ?? [];
+  const { choices: modelChoices } = useAcpModelChoices({
+    acpServer: selectedPreset,
+    curated: modelSuggestions,
+    profileId,
+  });
+
   useEffect(() => {
     if (!embedded || !onSaveControlChange) return;
     onSaveControlChange({
@@ -413,15 +474,20 @@ export function AgentSettingsScreen({
   const isAcp = agentType === "acp";
   const commandTokens = parseCommand(commandText);
   const isAcpInvalid = isAcp && commandTokens.length === 0;
-  const selectedPreset = detectPreset(commandText, ACP_PROVIDERS);
-  const selectedProvider = getAcpProvider(selectedPreset);
-  const modelSuggestions = selectedProvider?.available_models ?? [];
-  const hasModelSuggestions = modelSuggestions.length > 0;
-  const selectedModelIsSuggestion = isKnownAcpModel(selectedProvider, acpModel);
+  const hasModelSuggestions = modelChoices.length > 0;
+  const selectedModelIsSuggestion = isKnownModelId(
+    modelChoices.map((choice) => choice.id),
+    acpModel,
+  );
   const selectedModelKey =
     isCustomAcpModel || !selectedModelIsSuggestion
       ? ACP_CUSTOM_MODEL_KEY
       : acpModel;
+  // Effort UI only exists for servers that recognize a "<base>/<effort>"
+  // suffix (claude-code, codex) — null for gemini-cli, custom, and any
+  // unknown server, which hides the dropdown entirely rather than offering
+  // a single useless "Default" choice.
+  const acpEffortLevels = getAcpEffortLevels(selectedPreset);
   const isDefaultProviderCommand =
     !!selectedProvider &&
     commandTokens.join(" ") === selectedProvider.default_command.join(" ");
@@ -429,21 +495,35 @@ export function AgentSettingsScreen({
     formatCommand(ACP_PROVIDERS[0]?.default_command ?? []) ||
     COMMAND_PLACEHOLDER_FALLBACK;
 
+  // Remember a committed custom ACP model override against `profileId` so it
+  // becomes a selectable `source: "custom"` choice next time (instead of a
+  // one-shot free-text override). No-ops without a profile id (creation flow)
+  // or when the current model isn't a custom override.
+  function rememberCustomAcpModelIfNeeded(): void {
+    if (!isCustomAcpModel || !profileId) return;
+    const trimmedModel = acpModel.trim();
+    if (!trimmedModel) return;
+    useAcpCustomModelsStore.getState().addCustomModel(profileId, trimmedModel);
+  }
+
   // Assign the embedded control's field builder from the live render state.
   // The mapping itself lives in the pure `buildAgentProfileFields` (unit-
   // tested); this closure just snapshots the current state. Throws only when
   // called (at save time), never during render.
-  buildFieldsRef.current = (): AgentProfileFieldsDraft =>
-    buildAgentProfileFields({
+  buildFieldsRef.current = (): AgentProfileFieldsDraft => {
+    rememberCustomAcpModelIfNeeded();
+    return buildAgentProfileFields({
       isAcp,
       selectedPreset,
       isDefaultProviderCommand,
       commandTokens,
       acpModel,
+      acpEffort,
       subAgentsEnabled,
       toolConcurrencyField,
       toolConcurrency,
     });
+  };
 
   // Dirty tracking: for OpenHands path, also check sub-agents toggle and the
   // parallel-tool-calls input.
@@ -493,14 +573,22 @@ export function AgentSettingsScreen({
           : ACP_CUSTOM_PRESET_KEY;
       // ``model: undefined`` lets buildAcpAgentSettingsDiff seed the
       // provider's preferred default for built-in keys; for the custom preset
-      // it falls through to ``null`` since custom has no default.
+      // it falls through to ``null`` since custom has no default. A blank
+      // base stays blank (never gets an effort suffix composed onto it) so
+      // that fallback still kicks in.
+      const trimmedAcpModel = acpModel.trim();
+      const composedAcpModel = trimmedAcpModel
+        ? composeAcpModelId(trimmedAcpModel, acpEffort, providerKey)
+        : trimmedAcpModel;
       const agentSettingsDiff = buildAcpAgentSettingsDiff(providerKey, {
         command: useDefault ? [] : commandTokens,
-        model: acpModel.trim() || undefined,
+        model: composedAcpModel || undefined,
         allowUnknownServer: preserveUnknownServer,
       });
 
       if (!agentSettingsDiff) return;
+
+      rememberCustomAcpModelIfNeeded();
 
       saveSettings(
         { agent_settings_diff: agentSettingsDiff },
@@ -609,6 +697,7 @@ export function AgentSettingsScreen({
               setCommandText(formatCommand(preferred.default_command));
               setAcpModel(getAcpPreferredDefaultModel(preferred.key) ?? "");
               setIsCustomAcpModel(false);
+              setAcpEffort(ACP_EFFORT_DEFAULT);
             }
           } else if (newType === "openhands") {
             setIsCustomAcpModel(false);
@@ -675,6 +764,11 @@ export function AgentSettingsScreen({
                 setCommandText(formatCommand(provider.default_command));
                 setAcpModel(getAcpPreferredDefaultModel(preset) ?? "");
                 setIsCustomAcpModel(false);
+                // A different provider may not support the previously
+                // selected effort level at all (or support a different set)
+                // — reset to Default rather than risk leaking e.g. claude's
+                // "max" onto Codex, where compose would silently drop it.
+                setAcpEffort(ACP_EFFORT_DEFAULT);
               } else if (preset === ACP_CUSTOM_PRESET_KEY) {
                 // Clear command + model: the previous provider's default
                 // command would otherwise make detectPreset(commandText)
@@ -685,6 +779,7 @@ export function AgentSettingsScreen({
                 setCommandText("");
                 setAcpModel("");
                 setIsCustomAcpModel(true);
+                setAcpEffort(ACP_EFFORT_DEFAULT);
               }
               setIsDirty(true);
             }}
@@ -716,6 +811,7 @@ export function AgentSettingsScreen({
                 if (nextPreset !== prevPreset) {
                   setAcpModel(getAcpPreferredDefaultModel(nextPreset) ?? "");
                   setIsCustomAcpModel(false);
+                  setAcpEffort(ACP_EFFORT_DEFAULT);
                 }
                 setCommandText(nextCommandText);
                 setIsDirty(true);
@@ -733,9 +829,12 @@ export function AgentSettingsScreen({
                 name="agent-model"
                 label={t(I18nKey.SETTINGS$AGENT_MODEL)}
                 items={[
-                  ...modelSuggestions.map((model) => ({
-                    key: model.id,
-                    label: model.label,
+                  // Flat list, ordered curated -> remembered custom entries ->
+                  // models.dev extras (SettingsDropdownInput has no group/
+                  // description support to render source distinctly).
+                  ...modelChoices.map((choice) => ({
+                    key: choice.id,
+                    label: choice.label,
                   })),
                   {
                     key: ACP_CUSTOM_MODEL_KEY,
@@ -779,6 +878,32 @@ export function AgentSettingsScreen({
               {t(I18nKey.SETTINGS$AGENT_MODEL_HINT)}
             </Typography.Text>
           </div>
+
+          {acpEffortLevels && (
+            <div className="flex flex-col gap-1.5">
+              <SettingsDropdownInput
+                testId="agent-effort-selector"
+                name="agent-effort"
+                label={t(I18nKey.SETTINGS$AGENT_EFFORT)}
+                items={acpEffortLevels.map((level) => ({
+                  key: level,
+                  label: t(
+                    ACP_EFFORT_LEVEL_I18N_KEYS[level] ??
+                      I18nKey.SETTINGS$AGENT_EFFORT_DEFAULT,
+                  ),
+                }))}
+                selectedKey={acpEffort}
+                onSelectionChange={(key) => {
+                  if (!key) return;
+                  setAcpEffort(String(key));
+                  setIsDirty(true);
+                }}
+              />
+              <Typography.Text className="text-xs text-[#717888]">
+                {t(I18nKey.SETTINGS$AGENT_EFFORT_HINT)}
+              </Typography.Text>
+            </div>
+          )}
         </>
       )}
 

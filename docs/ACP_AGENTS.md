@@ -222,18 +222,117 @@ Open **Settings → Agent** at any time:
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
   API keys are *not* entered here — they live in the Secrets panel.
-- **Model** — choose a suggested model for the provider or enter a custom model
-  override. Built-in providers save a concrete model rather than leaving it
-  blank.
+- **Model** — pick from a dynamically built list, or enter a custom model
+  override. The list merges up to four sources, highest precedence first:
+  models the *live* ACP session currently reports (only available from
+  inside a running conversation — see
+  [Live models & the chat pill](#live-models--the-chat-pill)) → the
+  provider's curated registry (`ACP_PROVIDERS`, see
+  [Supported providers](#supported-providers)) → custom model ids you've
+  previously saved for *this* profile, remembered client-side → the
+  [models.dev](#the-modelsdev-catalog) catalog as a fallback/extra. A
+  duplicate id keeps the higher-precedence entry's label. Built-in providers
+  save a concrete model rather than leaving it blank.
+- **Effort** — for **Claude Code** and **Codex**, a second dropdown appears
+  next to Model once one is selected: `Default`, `Low`, `Medium`, `High`,
+  `xHigh`, and (Claude Code only) `Max`. See
+  [Reasoning effort](#reasoning-effort) below. Gemini CLI and Custom servers
+  don't get this dropdown — Canvas only knows how to compose an effort
+  suffix for the two servers that use one.
 
 Saving writes an `agent_settings_diff` (`agent_kind`, `acp_server`,
 `acp_command`, `acp_model`) to `PATCH /api/settings`. A running conversation
 keeps the agent it started with; the new choice applies to conversations you
 start afterward.
 
+### Reasoning effort
+
+Claude Code and Codex sessions can run at a selectable reasoning-effort
+level. Canvas represents "model + effort" as a single composite id — the
+same convention the ACP server itself uses for a running session's
+`current_model_id` — by suffixing the base model id with the effort level,
+e.g. `sonnet/high` or `gpt-5.5/medium`. `default` is the one level that adds
+no suffix; picking it saves the bare base model id, identical to never
+having touched the effort dropdown.
+
+The composite travels as an ordinary `acp_model` string end-to-end — Settings
+→ Agent's Save composes it before writing `agent_settings_diff.acp_model`,
+and the [chat pill's](#live-models--the-chat-pill) mid-session switch
+composes it onto the same model-switch mutation a plain model pick uses — so
+no new field was needed anywhere in Canvas's own settings model. It's the
+agent-server that actually understands the suffix: it splits `model/effort`
+back into the two ACP `configOptions` the adapter expects (`model`,
+`effort`) before forwarding either one to the CLI subprocess.
+
+Conversation chips (the conversation list, the conversation-panel footer)
+render the effort inline whenever one is set — `Claude Sonnet 4.6 · high` —
+and just the plain label when it isn't.
+
+`src/utils/acp-model-id.ts` (`parseAcpModelId` / `composeAcpModelId` /
+`getAcpEffortLevels`) is the single place this split/compose/level-list logic
+lives; every surface above calls into it rather than re-implementing the
+convention.
+
+### Live models & the chat pill
+
+The model name shown in the chat input of a running conversation is a
+button, not static text — click it to reopen the same kind of list Settings
+→ Agent offers (plus the effort section, for Claude Code/Codex), scoped to
+*this* conversation. Picking a row calls the agent-server's model-switch
+endpoint immediately: the change applies on your very next turn, no restart
+needed. Picking one from the home page (before a conversation exists)
+instead saves it to the active profile, same as Settings → Agent.
+
+Inside a running conversation, the pill's list gets one more source ahead of
+the four above: the ACP session's own live report of what it can run right
+now (`ConversationInfo.available_models` / `current_model_id` /
+`current_effort` / `available_efforts`, surfaced by the agent-server when the
+adapter advertises them). This is what makes **Custom** ACP servers pickable
+at all — a custom server has no curated registry and isn't mapped into the
+models.dev catalog, so its picker stays empty until either a live session
+reports models or a custom id you've typed for it gets remembered (see
+[Custom ACP servers](#custom-acp-servers)).
+
+### The models.dev catalog
+
+[models.dev](https://models.dev) publishes a free, unauthenticated catalog of
+provider/model metadata (`https://models.dev/api.json`). Canvas fetches it as
+a bottom-of-precedence fallback so a built-in provider's picker isn't limited
+to just the handful of models `ACP_PROVIDERS` curates. The response is cached
+in `localStorage` for 24 hours (revalidated with `If-None-Match` after that),
+so it costs at most one fetch a day per browser; a network failure, or an
+expired cache that can't revalidate, just serves the last known-good copy —
+never an error — so the picker degrades to the curated list rather than
+breaking. No API key or authentication of any kind is involved.
+
+### Compatibility with older agent-servers
+
+Everything above is additive, and Canvas checks for it defensively:
+
+- An agent-server whose `ConversationInfo` doesn't (yet) carry
+  `available_models` simply omits live models from the pill — the list falls
+  back to curated → remembered custom → models.dev, same as the profile
+  editor gets outside a running conversation.
+- Composite `model/effort` id parsing (`parseAcpModelId` /
+  `composeAcpModelId`) is plain client-side string splitting — it behaves
+  identically against any agent-server, old or new, since Canvas never asks
+  the server to do the split.
+- The **live current-effort and available-effort list**, specifically, need
+  an agent-server that surfaces `current_effort` / `available_efforts` on
+  `ConversationInfo`. Without that, the effort dropdown falls back to the
+  static per-server level list (`getAcpEffortLevels`) and highlights
+  whatever effort the composite `current_model_id` itself parses out, if
+  any — so effort selection still works, it just can't reflect a value the
+  session changed to some other way.
+
 ## Custom ACP servers
 
 Any stdio ACP server works: choose **Custom** in Settings → Agent and enter its
-launch command. Custom servers have no curated model list, so enter the model ID
-the server expects (if any) as a custom model. Pass credentials by adding the
-env vars the server reads as global secrets under **Settings → Secrets**.
+launch command. Custom servers have no curated model list, so the model field
+starts out as plain free text — but it isn't purely one-shot: a custom model
+id you save is remembered client-side against this profile and offered back
+as a suggestion the next time you edit it, and once a conversation using this
+profile has run, the model it actually reports also joins the list (see
+[Live models & the chat pill](#live-models--the-chat-pill)). With neither yet,
+it's still just a text field. Pass credentials by adding the env vars the
+server reads as global secrets under **Settings → Secrets**.

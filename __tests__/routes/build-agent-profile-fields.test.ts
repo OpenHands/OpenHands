@@ -8,6 +8,7 @@ const baseAcp = {
   isDefaultProviderCommand: true,
   commandTokens: ["npx", "-y", "@zed-industries/claude-code-acp"],
   acpModel: "claude-opus-4-8",
+  acpEffort: "default",
   subAgentsEnabled: false,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
@@ -72,6 +73,51 @@ describe("buildAgentProfileFields — ACP", () => {
       expect(fields.acp_model).toBeNull();
     }
   });
+
+  it("composes the base model with a non-default effort level", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      acpModel: "sonnet",
+      acpEffort: "high",
+    });
+    if (fields.agent_kind === "acp") {
+      expect(fields.acp_model).toBe("sonnet/high");
+    }
+  });
+
+  it("leaves the model bare for the 'default' effort sentinel", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      acpModel: "sonnet",
+      acpEffort: "default",
+    });
+    if (fields.agent_kind === "acp") {
+      expect(fields.acp_model).toBe("sonnet");
+    }
+  });
+
+  it("never composes an effort suffix for a provider that doesn't support it", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      selectedPreset: "gemini-cli",
+      acpModel: "gemini-2.5-pro",
+      acpEffort: "high",
+    });
+    if (fields.agent_kind === "acp") {
+      expect(fields.acp_model).toBe("gemini-2.5-pro");
+    }
+  });
+
+  it("composes a custom free-text base with an effort level", () => {
+    const fields = buildAgentProfileFields({
+      ...baseAcp,
+      acpModel: "my-custom-fork",
+      acpEffort: "medium",
+    });
+    if (fields.agent_kind === "acp") {
+      expect(fields.acp_model).toBe("my-custom-fork/medium");
+    }
+  });
 });
 
 describe("buildAgentProfileFields — OpenHands", () => {
@@ -81,6 +127,7 @@ describe("buildAgentProfileFields — OpenHands", () => {
     isDefaultProviderCommand: false,
     commandTokens: [],
     acpModel: "",
+    acpEffort: "default",
     subAgentsEnabled: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
