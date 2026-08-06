@@ -219,8 +219,9 @@ const config = {
   // Treat electron/ as the app root. electron/package.json provides the
   // Electron entry point without touching the npm-published root package.json.
   // `buildResources` points at electron/build-resources so electron-builder
-  // can auto-discover icon.png (1024×1024 OpenHands raised-hands app icon)
-  // and generate the platform-specific icon.icns / icon.ico from it.
+  // can auto-discover the committed icon.icns / icon.ico (generated from the
+  // 1024×1024 icon.png master via `npm run generate-icons`) and, for Linux,
+  // icon.png itself.
   directories: {
     app: "electron",
     output: "dist-electron",
@@ -247,6 +248,8 @@ const config = {
     // main.mjs can set it as the BrowserWindow icon at runtime (used for the
     // Linux taskbar; macOS reads from the .icns inside the .app bundle).
     "build-resources/icon.png",
+    // Windows runtime BrowserWindow icon (main.mjs picks .ico on win32).
+    "build-resources/icon.ico",
     // Scripts from project root. Mostly Node built-ins; the two spawned
     // servers additionally need RUNTIME_PACKAGES, restored into
     // Resources/app/node_modules by the afterPack hook.
@@ -304,8 +307,8 @@ const config = {
         ],
       },
     ],
-    // Icon auto-discovered from directories.buildResources/icon.png
-    // (electron-builder generates icon.icns from the 1024×1024 PNG).
+    // Icon auto-discovered from directories.buildResources/icon.icns
+    // (committed; regenerate with `npm run generate-icons`).
   },
 
   dmg: {
@@ -324,8 +327,9 @@ const config = {
   // ── Windows ────────────────────────────────────────────────────────────────
   win: {
     target: [{ target: "nsis", arch: ["x64"] }],
-    // Icon auto-discovered from directories.buildResources/icon.png
-    // (electron-builder generates icon.ico from the 1024×1024 PNG).
+    // Icon auto-discovered from directories.buildResources/icon.ico
+    // (committed; regenerate with `npm run generate-icons`). Also used for
+    // the NSIS installer/uninstaller and the rcedit exe icon resource.
   },
 
   nsis: {

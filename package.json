@@ -108,7 +108,8 @@
     "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs --publish never",
     "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
     "download-uv": "node scripts/download-uv.mjs",
-    "download-node": "node scripts/download-node.mjs"
+    "download-node": "node scripts/download-node.mjs",
+    "generate-icons": "node scripts/generate-icons.mjs"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js}": [
@@ -163,6 +164,7 @@
     "jsdom": "30.0.0",
     "lint-staged": "16.4.0",
     "msw": "2.15.0",
+    "png2icons": "2.0.1",
     "postcss-prefix-selector": "2.1.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.3.3",
