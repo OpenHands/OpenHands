@@ -584,7 +584,7 @@ async function startStack() {
   //   onServiceLog: stream uvx/agent-server output to the loading window so
   //     the user sees progress instead of an indefinite spinner.
   const result = await main({
-    bannerTitle: "Agent Canvas",
+    bannerTitle: "OpenHands Agent Canvas",
     staticMode: true,
     staticDir: buildDir,
     mode: "agent-canvas",
@@ -628,7 +628,7 @@ app.whenReady().then(async () => {
     dialog.showErrorBox(
       "Missing prerequisite: uv",
       app.isPackaged
-        ? "The bundled uv binary could not be found. Please reinstall Agent Canvas."
+        ? "The bundled uv binary could not be found. Please reinstall OpenHands Agent Canvas."
         : "uv (uvx) is not installed.\n\nInstall it from https://docs.astral.sh/uv/ then restart.",
     );
     app.quit();
@@ -671,7 +671,7 @@ app.whenReady().then(async () => {
     const errorTail = recentServiceErrors.length
       ? `\n\nRecent service errors:\n${recentServiceErrors.join("\n")}`
       : "";
-    dialog.showErrorBox("Agent Canvas failed to start", summary + errorTail);
+    dialog.showErrorBox("OpenHands Agent Canvas failed to start", summary + errorTail);
     app.quit();
   }
 });
