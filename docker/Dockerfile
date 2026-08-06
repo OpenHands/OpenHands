@@ -56,6 +56,7 @@ RUN node -e " \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
+    'CONFIG_SKIN_PORT=' + c.ports.skin, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
@@ -86,6 +87,9 @@ LABEL org.opencontainers.image.revision="${OPENHANDS_BUILD_GIT_SHA}"
 
 ENV AGENT_CANVAS_BUILD_GIT_SHA=${OPENHANDS_BUILD_GIT_SHA}
 ENV AGENT_CANVAS_BUILD_GIT_REF=${OPENHANDS_BUILD_GIT_REF}
+# Runtime-visible version so the skin service can enforce canvas_version
+# ranges declared by skins.
+ENV AGENT_CANVAS_VERSION=${AGENT_CANVAS_VERSION}
 ENV AGENT_CANVAS_BASE_PATH=${VITE_BASE_PATH}
 ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 
@@ -121,11 +125,14 @@ COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 # Copy the static-server scripts and their production runtime deps.
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
+COPY scripts/skin-service.mjs /opt/agent-canvas/skin-service.mjs
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka
 COPY --from=frontend-build /build/node_modules/mrmime /opt/agent-canvas/node_modules/mrmime
 COPY --from=frontend-build /build/node_modules/totalist /opt/agent-canvas/node_modules/totalist
+COPY --from=frontend-build /build/node_modules/js-yaml /opt/agent-canvas/node_modules/js-yaml
+COPY --from=frontend-build /build/node_modules/argparse /opt/agent-canvas/node_modules/argparse
 
 # Copy the runtime-services-info builder (entrypoint.sh runs it as a CLI to
 # emit the agent's <RUNTIME_SERVICES> block; same builder the dev stack uses).
@@ -148,6 +155,7 @@ RUN chmod +x /opt/agent-canvas/entrypoint.sh
 # volumes (which default to root).
 RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
+             /home/openhands/.openhands/agent-canvas/skin \
              /home/openhands/.openhands/automation \
              /projects && \
     chown -R openhands:openhands /home/openhands/.openhands /projects

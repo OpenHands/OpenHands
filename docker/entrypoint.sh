@@ -39,6 +39,17 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   OPENHANDS_SKIN_PORT   – Port the installed skin app listens on
+#                          (default: 18002). The skin is reverse-proxied
+#                          verbatim under /skin (embedded as the default
+#                          Canvas tab, not served standalone at /);
+#                          managed via /skin-api. The checkout lives in
+#                          the agent workspace (~/workspace/skin, override
+#                          with OPENHANDS_SKIN_WORKSPACE_DIR) so the agent
+#                          can edit it and POST /skin-api/restart.
+#   OPENHANDS_SKIN_REPO   – Optional GitHub repo URL of a skin to install on
+#                          first boot (skipped when a skin is already
+#                          installed). OPENHANDS_SKIN_REF pins a branch/tag.
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -57,6 +68,12 @@ PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
+
+# Skin support: the single port the installed skin app must listen on.
+# The static-server starts the skin (npm run start) when one is installed
+# and reverse-proxies it verbatim under /skin (embedded in the Canvas UI).
+OPENHANDS_SKIN_PORT="${OPENHANDS_SKIN_PORT:-${CONFIG_SKIN_PORT:-18002}}"
+export OPENHANDS_SKIN_PORT
 
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
@@ -258,6 +275,10 @@ node /opt/agent-canvas/static-server.mjs \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+  --skin-port "$OPENHANDS_SKIN_PORT" \
+  --skin-agent-server-url "http://127.0.0.1:${AGENT_SERVER_PORT}" \
+  --skin-automation-url "http://127.0.0.1:${AUTOMATION_PORT}" \
+  --skin-canvas-version "${AGENT_CANVAS_VERSION:-dev}" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -296,6 +317,38 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
   PIDS+=($!)
+fi
+
+# ── 6. (Optional) First-boot skin install ────────────────────────────────────
+# When OPENHANDS_SKIN_REPO is set (e.g. by the helm chart) and no skin is
+# installed yet, install it through the skin management API once the static
+# server is up. Failures are logged but never block startup.
+if [ -n "${OPENHANDS_SKIN_REPO:-}" ]; then
+  (
+    wait_for_port "$PORT" "Static server (for skin install)" 60 || exit 0
+    STATUS_JSON="$(curl -sf "http://127.0.0.1:${PORT}/skin-api/status" || echo '{}')"
+    case "$STATUS_JSON" in
+      *'"installed":true'*)
+        log "Skin already installed; skipping OPENHANDS_SKIN_REPO install."
+        ;;
+      *)
+        log "Installing skin from ${OPENHANDS_SKIN_REPO}…"
+        BODY="{\"repoUrl\":\"${OPENHANDS_SKIN_REPO}\""
+        if [ -n "${OPENHANDS_SKIN_REF:-}" ]; then
+          BODY="${BODY},\"ref\":\"${OPENHANDS_SKIN_REF}\""
+        fi
+        BODY="${BODY}}"
+        if curl -sf -X POST "http://127.0.0.1:${PORT}/skin-api/install" \
+             -H "Content-Type: application/json" \
+             -H "X-Session-API-Key: ${EFFECTIVE_SESSION_KEY}" \
+             -d "$BODY" >/dev/null; then
+          log "Skin installed from ${OPENHANDS_SKIN_REPO}."
+        else
+          log_error "Skin install from ${OPENHANDS_SKIN_REPO} failed (continuing without a skin)."
+        fi
+        ;;
+    esac
+  ) &
 fi
 
 log "All services started. Unified entry point: http://0.0.0.0:${PORT}/"
