@@ -13,13 +13,15 @@ import {
   getConversationTagIcon,
   type ConversationTagIcon,
 } from "./conversation-tag-icons";
+import {
+  CONVERSATION_CARD_META_CHIP_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
+  CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
+} from "./conversation-card-meta-chip";
 
 interface ConversationTagChipsProps {
   tags: Array<[string, string]>;
 }
-
-const tagChipClassName =
-  "inline-flex max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]";
 
 /**
  * Fixed line-height slot so Lucide / react-icons / local SVGs share the same
@@ -37,14 +39,14 @@ function TagIconSlot({
 }) {
   return (
     <span
-      className="inline-flex h-4 w-3 shrink-0 items-center justify-center [&_svg]:block"
+      className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
       aria-hidden
     >
       <Icon
         data-testid={testId}
         data-tag-key={keyName}
         aria-hidden
-        className="h-3 w-3"
+        className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME}
       />
     </span>
   );
@@ -210,7 +212,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
       >
         {tags.map(([key, value]) => (
-          <span key={key} className={tagChipClassName}>
+          <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
               keyName={key}
@@ -230,7 +232,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             key={key}
             data-testid="conversation-card-tag-chip"
             title={formatConversationTagTooltip(key, value, t)}
-            className={tagChipClassName}
+            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
           >
             <TagChipContent
               icon={getConversationTagIcon(key, value)}
@@ -252,7 +254,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             onMouseDown={stopCardNavigation}
             onClick={activateOverflow}
             className={cn(
-              tagChipClassName,
+              CONVERSATION_CARD_META_CHIP_CLASSNAME,
               "shrink-0 self-center hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--foreground)]",
             )}
           >

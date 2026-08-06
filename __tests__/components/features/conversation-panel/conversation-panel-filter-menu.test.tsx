@@ -60,6 +60,21 @@ describe("ConversationPanelFilterMenu", () => {
     expect(screen.getByTestId("delete-all-conversations")).toBeInTheDocument();
   });
 
+  it("orders metadata toggles as repo/branch, model, then tags", () => {
+    renderFilterMenu({ filterMenuOpen: true });
+
+    const repo = screen.getByTestId("toggle-repo-branch-metadata");
+    const model = screen.getByTestId("toggle-llm-profiles");
+    const tags = screen.getByTestId("toggle-tags-metadata");
+
+    expect(
+      repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("runs a row's action and closes the menu when the row is clicked", async () => {
     // Arrange
     const user = userEvent.setup();

@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  Briefcase,
   CircleUserRound,
   CloudCog,
   Folder,
   FolderGit2,
+  FolderKey,
   GitBranch,
+  House,
+  Layers,
   Tag,
   Waypoints,
+  Wrench,
 } from "lucide-react";
 import { FaGithub } from "react-icons/fa6";
 import SlackIcon from "#/icons/slack.svg?react";
@@ -21,6 +26,16 @@ describe("getConversationTagIcon", () => {
     expect(
       getConversationTagIcon("archiveworkspacepath", "/workspace/project"),
     ).toBe(Folder);
+    expect(getConversationTagIcon("worktools", "browser")).toBe(Wrench);
+    expect(
+      getConversationTagIcon("Workwsid", "cad8995a71e54b12b156d1d153be062f"),
+    ).toBe(FolderKey);
+  });
+
+  it("uses mode-specific icons for Appmode values", () => {
+    expect(getConversationTagIcon("Appmode", "work")).toBe(Briefcase);
+    expect(getConversationTagIcon("app_mode", "personal")).toBe(House);
+    expect(getConversationTagIcon("mode", "custom")).toBe(Layers);
   });
 
   it("prefers source brand icons for origin and git_provider values", () => {

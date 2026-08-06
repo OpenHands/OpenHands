@@ -252,22 +252,22 @@ export function ConversationPanelFilterMenu({
           <MenuSeparator />
           <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$METADATA)}</MenuHeading>
           <MenuRow
-            icon={Bot}
-            label={t(I18nKey.CONVERSATION_PANEL$LLM_MODEL)}
-            selected={showLlmProfiles}
-            testId="toggle-llm-profiles"
-            onClick={() => {
-              toggleShowLlmProfiles();
-              setFilterMenuOpen(false);
-            }}
-          />
-          <MenuRow
             icon={GitBranch}
             label={t(I18nKey.CONVERSATION_PANEL$REPO_BRANCH)}
             selected={showRepoBranchMetadata}
             testId="toggle-repo-branch-metadata"
             onClick={() => {
               toggleShowRepoBranchMetadata();
+              setFilterMenuOpen(false);
+            }}
+          />
+          <MenuRow
+            icon={Bot}
+            label={t(I18nKey.CONVERSATION_PANEL$LLM_MODEL)}
+            selected={showLlmProfiles}
+            testId="toggle-llm-profiles"
+            onClick={() => {
+              toggleShowLlmProfiles();
               setFilterMenuOpen(false);
             }}
           />

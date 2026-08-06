@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   computeVisibleTagChipCount,
-  filterPreviewConversationTags,
   formatConversationTagTooltip,
   getConversationTagLabel,
   getConversationTagLabelKind,
@@ -63,24 +62,25 @@ describe("computeVisibleTagChipCount", () => {
 });
 
 describe("getDisplayConversationTags", () => {
-  it("filters reserved keys and puts priority keys first", () => {
+  it("excludes reserved keys and puts priority keys first", () => {
     expect(
       getDisplayConversationTags({
         owner: "alice",
         acpserver: "claude-code",
+        title: "can you research an office app?",
         origin: "slack",
         env: "prod",
         archiveworkspacepath: "/workspace/project",
         git_provider: "github",
         repo_name: "org/repo",
         selected_branch: "main",
+        branch: "feature",
+        repo: "other/repo",
+        workspace: "/tmp/ws",
+        working_dir: "/tmp/wd",
       }),
     ).toEqual([
       ["origin", "slack"],
-      ["git_provider", "github"],
-      ["repo_name", "org/repo"],
-      ["selected_branch", "main"],
-      ["archiveworkspacepath", "/workspace/project"],
       ["env", "prod"],
       ["owner", "alice"],
     ]);
@@ -90,6 +90,20 @@ describe("getDisplayConversationTags", () => {
     expect(getDisplayConversationTags(null)).toEqual([]);
     expect(getDisplayConversationTags(undefined)).toEqual([]);
   });
+
+  it("drops blank and whitespace-only tag values", () => {
+    expect(
+      getDisplayConversationTags({
+        appmode: "work",
+        worktools: "",
+        workwsid: "   ",
+        owner: "alice",
+      }),
+    ).toEqual([
+      ["appmode", "work"],
+      ["owner", "alice"],
+    ]);
+  });
 });
 
 describe("getConversationTagLabelKind", () => {
@@ -98,6 +112,9 @@ describe("getConversationTagLabelKind", () => {
     ["repo_name", "repo"],
     ["selected_branch", "branch"],
     ["archiveworkspacepath", "workspace"],
+    ["Appmode", "app_mode"],
+    ["worktools", "work_tools"],
+    ["Workwsid", "work_wsid"],
     ["owner", "other"],
   ] as const)("maps %s → %s", (key, kind) => {
     expect(getConversationTagLabelKind(key)).toBe(kind);
@@ -115,6 +132,12 @@ describe("getConversationTagLabel", () => {
         return "Branch";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE:
         return "Workspace";
+      case I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE:
+        return "App mode";
+      case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS:
+        return "Work tools";
+      case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_WSID:
+        return "Workspace ID";
       default:
         return String(key);
     }
@@ -126,6 +149,9 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("archiveworkspacepath", t)).toBe(
       "Workspace",
     );
+    expect(getConversationTagLabel("Appmode", t)).toBe("App mode");
+    expect(getConversationTagLabel("worktools", t)).toBe("Work tools");
+    expect(getConversationTagLabel("Workwsid", t)).toBe("Workspace ID");
     expect(formatConversationTagTooltip("selected_branch", "main", t)).toBe(
       "Branch: main",
     );
@@ -134,27 +160,5 @@ describe("getConversationTagLabel", () => {
   it("humanizes unknown snake_case keys", () => {
     expect(humanizeConversationTagKey("my_custom_tag")).toBe("My custom tag");
     expect(getConversationTagLabel("owner", t)).toBe("Owner");
-  });
-});
-
-describe("filterPreviewConversationTags", () => {
-  it("drops tags covered by existing hovercard fields", () => {
-    expect(
-      filterPreviewConversationTags(
-        [
-          ["git_provider", "github"],
-          ["repo_name", "org/repo"],
-          ["selected_branch", "main"],
-          ["archiveworkspacepath", "/workspace/project"],
-          ["owner", "alice"],
-        ],
-        {
-          hasGitProvider: true,
-          hasRepository: true,
-          hasBranch: true,
-          hasDirectory: true,
-        },
-      ),
-    ).toEqual([["owner", "alice"]]);
   });
 });

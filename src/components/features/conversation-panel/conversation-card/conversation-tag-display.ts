@@ -23,11 +23,16 @@ export type ConversationTagLabelKind =
   | "repo"
   | "branch"
   | "workspace"
+  | "app_mode"
+  | "work_tools"
+  | "work_wsid"
   | "other";
 
 /**
  * Map a server tag key to a hovercard label kind. ``archiveworkspacepath`` is
  * treated as "workspace" — the sandbox working directory for the conversation.
+ * ACM / Work stamps (``Appmode``, ``Worktools``, ``Workwsid``) get dedicated
+ * kinds so chips and hovercards show friendly labels instead of the wire key.
  */
 export function getConversationTagLabelKind(
   key: string,
@@ -48,6 +53,19 @@ export function getConversationTagLabelKind(
     case "workspace":
     case "working_dir":
       return "workspace";
+    case "appmode":
+    case "app_mode":
+    case "mode":
+      return "app_mode";
+    case "worktools":
+    case "work_tools":
+    case "tools":
+      return "work_tools";
+    case "workwsid":
+    case "work_wsid":
+    case "wsid":
+    case "workspace_id":
+      return "work_wsid";
     default:
       return "other";
   }
@@ -84,6 +102,12 @@ export function getConversationTagLabel(
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_BRANCH);
     case "workspace":
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORKSPACE);
+    case "app_mode":
+      return t(I18nKey.CONVERSATION_PANEL$PREVIEW_APP_MODE);
+    case "work_tools":
+      return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS);
+    case "work_wsid":
+      return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_WSID);
     default:
       return humanizeConversationTagKey(key);
   }
@@ -96,40 +120,6 @@ export function formatConversationTagTooltip(
   t: (key: I18nKey) => string,
 ): string {
   return `${getConversationTagLabel(key, t)}: ${value}`;
-}
-
-export interface PreviewTagCoverage {
-  hasRepository: boolean;
-  hasBranch: boolean;
-  hasDirectory: boolean;
-  hasGitProvider: boolean;
-}
-
-/**
- * Drop tags that duplicate fields already rendered in the conversation
- * hovercard (repository / branch / directory / provider), so the list stays
- * one row per fact.
- */
-export function filterPreviewConversationTags(
-  tags: Array<[string, string]>,
-  coverage: PreviewTagCoverage,
-): Array<[string, string]> {
-  return tags.filter(([key]) => {
-    const kind = getConversationTagLabelKind(key);
-    if (kind === "git" && coverage.hasGitProvider) {
-      return false;
-    }
-    if (kind === "repo" && coverage.hasRepository) {
-      return false;
-    }
-    if (kind === "branch" && coverage.hasBranch) {
-      return false;
-    }
-    if (kind === "workspace" && coverage.hasDirectory) {
-      return false;
-    }
-    return true;
-  });
 }
 
 /**

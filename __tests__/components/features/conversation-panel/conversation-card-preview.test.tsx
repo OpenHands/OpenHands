@@ -6,7 +6,7 @@ import { ConversationCardPreview } from "#/components/features/conversation-pane
 const PREVIEW_TITLE = "Conversation 1";
 
 describe("ConversationCardPreview", () => {
-  it("always renders each non-redundant tag as a full preview row", () => {
+  it("renders free-form tags and skips reserved repo / branch / workspace keys", () => {
     renderWithProviders(
       <ConversationCardPreview
         title={PREVIEW_TITLE}
@@ -17,6 +17,7 @@ describe("ConversationCardPreview", () => {
           selected_branch: "main",
           archiveworkspacepath: "/workspace/project",
           owner: "alice",
+          origin: "slack",
         }}
       />,
     );
@@ -24,27 +25,14 @@ describe("ConversationCardPreview", () => {
     expect(screen.queryByTestId("conversation-card-tag-chip")).not.toBeInTheDocument();
 
     const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
-    expect(rows).toHaveLength(5);
-    expect(rows[0]).toHaveAttribute("data-tag-key", "git_provider");
-    expect(rows[0]).toHaveTextContent("github");
-    expect(rows[1]).toHaveAttribute("data-tag-key", "repo_name");
-    expect(rows[1]).toHaveTextContent("org/repo");
-    expect(rows[2]).toHaveAttribute("data-tag-key", "selected_branch");
-    expect(rows[2]).toHaveTextContent("main");
-    expect(rows[3]).toHaveAttribute("data-tag-key", "archiveworkspacepath");
-    expect(rows[3]).toHaveTextContent("/workspace/project");
-    expect(rows[4]).toHaveAttribute("data-tag-key", "owner");
-    expect(rows[4]).toHaveTextContent("alice");
-
-    expect(screen.getByText("CONVERSATION_PANEL$PREVIEW_GIT")).toBeInTheDocument();
-    expect(screen.getByText("CONVERSATION_PANEL$PREVIEW_REPO")).toBeInTheDocument();
-    expect(screen.getByText("CONVERSATION_PANEL$PREVIEW_BRANCH")).toBeInTheDocument();
-    expect(
-      screen.getByText("CONVERSATION_PANEL$PREVIEW_WORKSPACE"),
-    ).toBeInTheDocument();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "origin");
+    expect(rows[0]).toHaveTextContent("slack");
+    expect(rows[1]).toHaveAttribute("data-tag-key", "owner");
+    expect(rows[1]).toHaveTextContent("alice");
   });
 
-  it("skips tag rows that duplicate repository / branch / provider fields", () => {
+  it("still shows first-class repo / branch rows from selectedRepository", () => {
     renderWithProviders(
       <ConversationCardPreview
         title={PREVIEW_TITLE}
@@ -62,13 +50,14 @@ describe("ConversationCardPreview", () => {
       />,
     );
 
-    const rows = screen.queryAllByTestId("conversation-card-preview-tag-row");
+    expect(screen.getByText("org/repo")).toBeInTheDocument();
+    expect(screen.getByText("main")).toBeInTheDocument();
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute("data-tag-key", "owner");
-    expect(rows[0]).toHaveTextContent("alice");
   });
 
-  it("skips archiveworkspacepath when Directory is already shown", () => {
+  it("shows Directory from workspaceWorkingDir instead of a workspace tag", () => {
     renderWithProviders(
       <ConversationCardPreview
         title={PREVIEW_TITLE}
@@ -78,24 +67,58 @@ describe("ConversationCardPreview", () => {
       />,
     );
 
+    expect(screen.getByText("/workspace/project")).toBeInTheDocument();
     const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute("data-tag-key", "owner");
   });
 
   it("shows full tag values without truncation", () => {
-    const longPath =
-      "/workspace/project/very/long/nested/directory/path/that-exceeds-chip-budget";
+    const longValue = "a-very-long-custom-tag-value-that-exceeds-chip-budget";
     renderWithProviders(
       <ConversationCardPreview
         title={PREVIEW_TITLE}
         selectedRepository={null}
-        tags={{ archiveworkspacepath: longPath }}
+        tags={{ custom_token: longValue }}
       />,
     );
 
     expect(screen.getByTestId("conversation-card-preview-tag-row")).toHaveTextContent(
-      longPath,
+      longValue,
     );
+  });
+
+  it("styles the model row with the OpenHands brand icon", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        llmModel="openhands/claude-opus-4-5-20251101"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-preview-model"),
+    ).toHaveTextContent("openhands/claude-opus-4-5-20251101");
+    expect(
+      screen.getByTestId("agent-brand-icon-openhands"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits blank tag values from the hovercard", () => {
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        tags={{ appmode: "work", worktools: "", workwsid: "abc" }}
+      />,
+    );
+
+    const rows = screen.getAllByTestId("conversation-card-preview-tag-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveAttribute("data-tag-key", "appmode");
+    expect(rows[0]).toHaveTextContent("work");
+    expect(rows[1]).toHaveAttribute("data-tag-key", "workwsid");
+    expect(rows[1]).toHaveTextContent("abc");
   });
 });

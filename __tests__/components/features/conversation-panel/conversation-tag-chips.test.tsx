@@ -63,7 +63,7 @@ describe("ConversationTagChips", () => {
       <ConversationTagChips
         tags={[
           ["origin", "slack"],
-          ["selected_branch", "main"],
+          ["env", "prod"],
           ["owner", "alice"],
         ]}
       />,
@@ -96,8 +96,8 @@ describe("ConversationTagChips", () => {
       "conversation-card-tag-overflow-row",
     );
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent("main");
-    expect(rows[0]).not.toHaveTextContent("selected_branch");
+    expect(rows[0]).toHaveTextContent("prod");
+    expect(rows[0]).toHaveTextContent("Env");
     expect(rows[1]).toHaveTextContent("Owner");
     expect(rows[1]).toHaveTextContent("alice");
   });

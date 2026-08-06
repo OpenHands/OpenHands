@@ -133,6 +133,58 @@ describe("ConversationCard", () => {
     screen.getByTestId("conversation-card-selected-repository");
   });
 
+  it("styles repo and branch with the same raised pill chip as tags", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={{
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const repo = screen.getByTestId("conversation-card-selected-repository");
+    const branch = screen.getByTestId("conversation-card-selected-branch");
+    const tag = screen.getByTestId("conversation-card-tag-chip");
+
+    expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
+    expect(repo.className).toBe(tag.className);
+    expect(branch.className).toBe(tag.className);
+  });
+
+  it("stacks metadata as repo/branch, then model, then tags", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={{
+          selected_repository: "org/repo",
+          selected_branch: "main",
+          git_provider: "github",
+        }}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        llmModel="openhands/claude-opus-4-5-20251101"
+        showLlmProfiles
+        agentKind="openhands"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const repo = screen.getByTestId("conversation-card-selected-repository");
+    const model = screen.getByTestId("conversation-card-agent-chip");
+    const tags = screen.getByTestId("conversation-card-tag-chips");
+
+    expect(repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders the workspace folder name when no repository is selected", () => {
     renderWithProviders(
       <ConversationCard
@@ -149,6 +201,23 @@ describe("ConversationCard", () => {
     expect(
       screen.getByTitle("/workspace/project/agent-canvas"),
     ).toBeInTheDocument();
+  });
+
+  it("styles the no-repository label with the same raised pill chip", () => {
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        showTags
+        tags={{ origin: "slack" }}
+      />,
+    );
+
+    const noRepo = screen.getByTestId("conversation-card-no-repository");
+    const tag = screen.getByTestId("conversation-card-tag-chip");
+    expect(noRepo).toHaveTextContent("No repository");
+    expect(noRepo.className).toBe(tag.className);
   });
 
   it("handles Windows workspace paths and falls back when the path is empty", () => {
@@ -621,15 +690,23 @@ describe("ConversationCard", () => {
     });
 
     it("filters reserved tag keys out of the chip row", () => {
-      // ``acpserver`` is Canvas-internal routing state already surfaced via
-      // the agent chip — it must not double-render as a generic tag chip.
+      // Reserved keys already have a first-class UI source (ACP chip, title,
+      // repo/branch/workspace metadata) and must not double-render as tags.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
           selectedRepository={null}
           lastUpdatedAt="2021-10-01T12:00:00Z"
           showTags
-          tags={{ acpserver: "claude-code", origin: "review" }}
+          tags={{
+            acpserver: "claude-code",
+            title: "ignored title tag",
+            git_provider: "github",
+            repo_name: "org/repo",
+            selected_branch: "main",
+            archiveworkspacepath: "/workspace/project",
+            origin: "review",
+          }}
         />,
       );
 

@@ -431,25 +431,33 @@ type ConversationSettingsPayload = SettingsRecord & {
 export const ACP_SERVER_TAG_KEY = "acpserver";
 
 /**
- * Conversation tag keys Canvas itself stamps/consumes for internal routing.
- * They are already surfaced through dedicated UI (the ACP provider chip), so
- * the generic tag-chip display filters them out.
+ * Conversation tag keys that must not appear as generic chips / hovercard
+ * rows. Each already has a single first-class UI source:
+ * - ``acpserver`` → ACP provider chip
+ * - ``title`` → conversation card heading
+ * - git / repo / branch / workspace stamps → repo-branch metadata + directory
+ *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
+ *   ``git_provider``, ``workspace.working_dir``)
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  "title",
+  "git_provider",
+  "repo_name",
+  "repo",
+  "repository",
+  "selected_branch",
+  "branch",
+  "archiveworkspacepath",
+  "workspace",
+  "working_dir",
 ]);
 
 /**
- * High-signal tag keys shown first in the chip row (before A–Z). Cloud
- * conversations stamp ``git_provider`` / ``repo_name`` / ``selected_branch``;
- * automations often stamp ``origin``.
+ * High-signal tag keys shown first in the chip row (before A–Z). Automations
+ * often stamp ``origin``; remaining free-form tags sort alphabetically.
  */
-export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = [
-  "origin",
-  "git_provider",
-  "repo_name",
-  "selected_branch",
-];
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
 
 /**
  * User-facing subset of a conversation's server-side tags: everything except
@@ -464,7 +472,12 @@ export function getDisplayConversationTags(
     return [];
   }
   return Object.entries(tags)
-    .filter(([key]) => !RESERVED_CONVERSATION_TAG_KEYS.has(key))
+    .filter(
+      ([key, value]) =>
+        !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
     .sort(([a], [b]) => {
       const aPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(a);
       const bPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(b);

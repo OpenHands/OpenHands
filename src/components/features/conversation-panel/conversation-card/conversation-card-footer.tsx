@@ -19,6 +19,7 @@ import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import { ConversationRepoLink } from "./conversation-repo-link";
 import { NoRepository } from "./no-repository";
 import { ConversationTagChips } from "./conversation-tag-chips";
+import { CONVERSATION_CARD_META_CHIP_CLASSNAME } from "./conversation-card-meta-chip";
 
 interface ConversationCardFooterProps {
   selectedRepository: RepositorySelection | null;
@@ -132,29 +133,6 @@ export function ConversationCardFooter({
         isPaused && "opacity-60",
       )}
     >
-      {chip ? (
-        <div className={metadataIndentClass}>
-          <span
-            data-testid="conversation-card-agent-chip"
-            className="inline-flex max-w-full min-w-0 shrink-0 items-center gap-0.5 rounded-sm bg-[var(--oh-surface-raised)] px-1 py-px text-[10px] leading-4 text-[var(--oh-muted)]"
-            title={chip.tooltip}
-          >
-            {/* Same line-height slot as tag chips; width flexes for the wider OpenHands mark. */}
-            <span
-              className="inline-flex h-4 shrink-0 items-center justify-center [&_svg]:block"
-              aria-hidden
-            >
-              <AgentBrandIcon kind={chip.kind} size={12} />
-            </span>
-            <span className="truncate leading-4">{chip.text}</span>
-          </span>
-        </div>
-      ) : null}
-      {displayTags.length > 0 ? (
-        <div className={metadataIndentClass}>
-          <ConversationTagChips tags={displayTags} />
-        </div>
-      ) : null}
       <div
         className={cn(
           "flex flex-row items-center gap-2 w-full min-w-0",
@@ -177,6 +155,29 @@ export function ConversationCardFooter({
           )}
         </div>
       </div>
+      {chip ? (
+        <div className={metadataIndentClass}>
+          <span
+            data-testid="conversation-card-agent-chip"
+            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+            title={chip.tooltip}
+          >
+            {/* Same line-height slot as tag chips; width flexes for the wider OpenHands mark. */}
+            <span
+              className="inline-flex h-4 shrink-0 items-center justify-center [&_svg]:block"
+              aria-hidden
+            >
+              <AgentBrandIcon kind={chip.kind} size={12} />
+            </span>
+            <span className="truncate leading-4">{chip.text}</span>
+          </span>
+        </div>
+      ) : null}
+      {displayTags.length > 0 ? (
+        <div className={metadataIndentClass}>
+          <ConversationTagChips tags={displayTags} />
+        </div>
+      ) : null}
     </div>
   );
 }

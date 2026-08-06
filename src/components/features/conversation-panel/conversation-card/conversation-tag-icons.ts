@@ -1,18 +1,22 @@
 import type { ComponentType, SVGProps } from "react";
 import {
   Bot,
+  Briefcase,
   Building2,
   CircleUserRound,
   CloudCog,
   Flag,
   Folder,
   FolderGit2,
+  FolderKey,
   GitBranch,
   GitPullRequest,
   Globe2,
   Hash,
+  House,
   IdCard,
   KeyRound,
+  Layers,
   Link2,
   Mails,
   MessagesSquare,
@@ -23,6 +27,7 @@ import {
   UsersRound,
   Waypoints,
   Webhook,
+  Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -44,12 +49,21 @@ export type ConversationTagIcon =
  * Tag keys whose value names a git host / chat source — resolve the icon from
  * the value (e.g. ``git_provider: github`` → GitHub mark) instead of the key.
  */
-const VALUE_DRIVEN_TAG_KEYS = new Set(["origin", "source", "git_provider"]);
+const SOURCE_VALUE_DRIVEN_TAG_KEYS = new Set([
+  "origin",
+  "source",
+  "git_provider",
+]);
+
+/**
+ * App-mode keys resolve from the mode value (``work`` → briefcase) when known,
+ * otherwise fall back to {@link Layers}.
+ */
+const APP_MODE_TAG_KEYS = new Set(["appmode", "app_mode", "mode"]);
 
 /**
  * Icons for well-known conversation tag keys. Unknown keys fall back to
- * {@link Tag}. Value-driven keys (see {@link VALUE_DRIVEN_TAG_KEYS}) additionally
- * resolve via {@link SOURCE_VALUE_ICONS}.
+ * {@link Tag}. Value-driven keys additionally resolve via the value maps below.
  */
 const KEY_ICONS: Record<string, ConversationTagIcon> = {
   origin: Waypoints,
@@ -86,6 +100,16 @@ const KEY_ICONS: Record<string, ConversationTagIcon> = {
   status: IdCard,
   id: KeyRound,
   integration: Plug,
+  appmode: Layers,
+  app_mode: Layers,
+  mode: Layers,
+  worktools: Wrench,
+  work_tools: Wrench,
+  tools: Wrench,
+  workwsid: FolderKey,
+  work_wsid: FolderKey,
+  wsid: FolderKey,
+  workspace_id: FolderKey,
 };
 
 /**
@@ -113,8 +137,19 @@ const SOURCE_VALUE_ICONS: Record<string, ConversationTagIcon> = {
 };
 
 /**
+ * Value-specific icons for app-mode stamps (``Appmode: work`` → briefcase).
+ */
+const APP_MODE_VALUE_ICONS: Record<string, ConversationTagIcon> = {
+  work: Briefcase,
+  personal: House,
+  home: House,
+  private: House,
+};
+
+/**
  * Pick an icon that matches a conversation tag. Prefer value-specific icons
- * for source/provider keys; otherwise map by key; finally fall back to ``Tag``.
+ * for source/provider and app-mode keys; otherwise map by key; finally fall
+ * back to ``Tag``.
  */
 export function getConversationTagIcon(
   key: string,
@@ -123,9 +158,17 @@ export function getConversationTagIcon(
   const normalizedKey = key.trim().toLowerCase();
   const normalizedValue = value.trim().toLowerCase();
 
-  if (VALUE_DRIVEN_TAG_KEYS.has(normalizedKey)) {
+  if (SOURCE_VALUE_DRIVEN_TAG_KEYS.has(normalizedKey)) {
     return (
       SOURCE_VALUE_ICONS[normalizedValue] ?? KEY_ICONS[normalizedKey] ?? Tag
+    );
+  }
+
+  if (APP_MODE_TAG_KEYS.has(normalizedKey)) {
+    return (
+      APP_MODE_VALUE_ICONS[normalizedValue] ??
+      KEY_ICONS[normalizedKey] ??
+      Layers
     );
   }
 

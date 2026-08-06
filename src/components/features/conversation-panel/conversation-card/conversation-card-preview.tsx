@@ -11,11 +11,9 @@ import type { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
 import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
+import { AgentBrandIcon } from "#/components/shared/agent-brand-icon";
 import { ConversationStatusDot } from "../conversation-status-dot";
-import {
-  filterPreviewConversationTags,
-  getConversationTagLabel,
-} from "./conversation-tag-display";
+import { getConversationTagLabel } from "./conversation-tag-display";
 import { getConversationTagIcon } from "./conversation-tag-icons";
 
 interface ConversationCardPreviewProps {
@@ -109,7 +107,6 @@ export function ConversationCardPreview({
   const branch = selectedRepository?.selected_branch ?? null;
   const provider = selectedRepository?.git_provider ?? null;
   const ProviderIcon = provider ? providerIcon[provider] : null;
-  const hasDirectory = !repository && Boolean(workspaceWorkingDir);
 
   const createdLabel = createdAt
     ? new Date(createdAt).toLocaleString(undefined, {
@@ -118,15 +115,7 @@ export function ConversationCardPreview({
       })
     : null;
 
-  const previewTags = filterPreviewConversationTags(
-    getDisplayConversationTags(tags),
-    {
-      hasRepository: Boolean(repository),
-      hasBranch: Boolean(branch),
-      hasDirectory,
-      hasGitProvider: Boolean(provider),
-    },
-  );
+  const previewTags = getDisplayConversationTags(tags);
 
   return (
     <div
@@ -182,7 +171,12 @@ export function ConversationCardPreview({
 
         {llmModel ? (
           <PreviewRow label={t(I18nKey.CONVERSATION_PANEL$PREVIEW_MODEL)}>
-            <span className="whitespace-normal break-all">{llmModel}</span>
+            <PreviewValueWithIcon
+              testId="conversation-card-preview-model"
+              icon={<AgentBrandIcon kind="openhands" size={12} />}
+            >
+              {llmModel}
+            </PreviewValueWithIcon>
           </PreviewRow>
         ) : null}
 
