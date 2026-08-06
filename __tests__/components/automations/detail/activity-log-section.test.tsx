@@ -57,13 +57,16 @@ const run: AutomationRun = {
   completed_at: "2026-01-01T09:01:00Z",
 };
 
-function renderSection() {
+function renderSection(highlightedRunId: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
-      <ActivityLogSection automation={automation} />
+      <ActivityLogSection
+        automation={automation}
+        highlightedRunId={highlightedRunId}
+      />
     </QueryClientProvider>,
   );
 }
@@ -125,5 +128,61 @@ describe("ActivityLogSection export", () => {
 
     expect(screen.getByTestId("activity-log-export-json")).toBeDisabled();
     expect(screen.getByTestId("activity-log-export-csv")).toBeDisabled();
+  });
+});
+
+describe("ActivityLogSection ?run= highlight", () => {
+  function makeRuns(count: number): AutomationRun[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...run,
+      id: `r${index + 1}`,
+    }));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("marks the deep-linked run and scrolls it into view", async () => {
+    vi.mocked(useAutomationRuns).mockReturnValue({
+      data: { runs: [run], total: 1 },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAutomationRuns>);
+
+    renderSection("r1");
+
+    expect(
+      screen.getByTestId("automation-run-highlight-r1"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  it("stops auto-loading pages for a missing run id at the cap", async () => {
+    vi.mocked(useAutomationRuns).mockImplementation(
+      (options) =>
+        ({
+          data: { runs: makeRuns(options.limit ?? 20), total: 500 },
+          isLoading: false,
+        }) as unknown as ReturnType<typeof useAutomationRuns>,
+    );
+
+    renderSection("r-missing");
+
+    await waitFor(() => {
+      expect(useAutomationRuns).toHaveBeenCalledWith({
+        id: "a1",
+        limit: 100,
+        offset: 0,
+      });
+    });
+
+    const requestedLimits = vi
+      .mocked(useAutomationRuns)
+      .mock.calls.map(([options]) => options.limit ?? 0);
+    expect(Math.max(...requestedLimits)).toBe(100);
+    expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 });

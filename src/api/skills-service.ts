@@ -16,6 +16,7 @@ function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
     source: "public",
     description: entry.description,
     triggers: entry.triggers,
+    category: entry.category,
     content: entry.content,
     license: entry.license ?? null,
     compatibility: entry.compatibility ?? null,
