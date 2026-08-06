@@ -35750,6 +35750,23 @@
     "uk": "Переглянути всі",
     "ca": "Mostra-ho tot"
   },
+  "FEATURED_AUTOMATIONS$EMPTY_HINT": {
+    "en": "No automations yet. Add one to automate repetitive work.",
+    "ja": "オートメーションがありません。反復作業を自動化するには追加してください。",
+    "zh-CN": "还没有自动化。添加一个以自动化重复性工作。",
+    "zh-TW": "尚未有自動化。新增一個以自動化重複性工作。",
+    "ko-KR": "자동화가 없습니다. 반복 작업을 자동화하려면 추가하세요.",
+    "no": "Ingen automatiseringer ennå. Legg til en for å automatisere gjentakende arbeid.",
+    "it": "Nessuna automazione ancora. Aggiungine una per automatizzare il lavoro ripetitivo.",
+    "pt": "Nenhuma automação ainda. Adicione uma para automatizar trabalho repetitivo.",
+    "es": "Aún no hay automatizaciones. Añade una para automatizar tareas repetitivas.",
+    "ar": "لا أتمتة بعد. أضف واحدة لأتمتة العمل المتكرر.",
+    "fr": "Aucune automatisation pour l'instant. Ajoutez-en une pour automatiser le travail répétitif.",
+    "tr": "Henüz otomasyon yok. Tekrarlayan işleri otomatikleştirmek için bir tane ekleyin.",
+    "de": "Noch keine Automatisierungen. Füge eine hinzu, um wiederkehrende Aufgaben zu automatisieren.",
+    "uk": "Ще немає автоматизацій. Додайте одну, щоб автоматизувати повторювану роботу.",
+    "ca": "Encara no hi ha automatitzacions. Afegeix-ne una per automatitzar tasques repetitives."
+  },
   "FEATURED_AUTOMATIONS$RUN_ACTIVITY_LABEL": {
     "en": "{{count}} recent runs",
     "ja": "最近の実行 {{count}} 件",
