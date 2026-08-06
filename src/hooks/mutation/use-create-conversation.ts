@@ -221,9 +221,11 @@ export const useCreateConversation = () => {
             resolvedLlmProfiles?.active_profile ??
             undefined;
         }
-      } else {
+      } else if (!effectiveAgentProfileId) {
         referencedLlmProfile = resolvedLlmProfiles?.active_profile ?? undefined;
       }
+      // effectiveAgentProfileId set but unresolved → cloudLlmModel stays null;
+      // the backend classifies from the resolved profile.
       const cloudLlmModel =
         isCloud && referencedLlmProfile
           ? (resolvedLlmProfiles?.profiles.find(
