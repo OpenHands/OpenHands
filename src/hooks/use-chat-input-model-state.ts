@@ -65,7 +65,7 @@ export function useChatInputModelState(): ChatInputModelState {
         ) ?? activeAcpProfile.acp_server)
       : null;
   const acpServerKey = isActiveAcpConversation
-    ? (conversation?.acp_server ?? settingsUiAcpServerKey)
+    ? conversation?.acp_server
     : isHomeAcp
       ? (profileUiAcpServerKey ?? settingsUiAcpServerKey)
       : null;

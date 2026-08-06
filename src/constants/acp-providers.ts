@@ -1,5 +1,6 @@
 import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
+import { parseCommand } from "#/utils/acp-command";
 
 export type ACPProviderIcon =
   | "claude-code"
@@ -20,8 +21,9 @@ export const PI_ACP_DEFAULT_COMMAND: readonly string[] = [
   "pi-acp",
 ];
 
-/** Docker image pre-installs ``pi-acp`` on PATH; ``npx`` is unreliable there. */
-export const PI_ACP_DOCKER_COMMAND: readonly string[] = ["pi-acp"];
+/** Docker image installs pi-acp at this path (see docker/Dockerfile). */
+export const PI_ACP_DOCKER_BIN = "/opt/node24/bin/pi-acp";
+export const PI_ACP_DOCKER_COMMAND: readonly string[] = [PI_ACP_DOCKER_BIN];
 
 const PI_ACP_DEFAULT_COMMAND_TEXT = PI_ACP_DEFAULT_COMMAND.join(" ");
 const PI_ACP_DOCKER_COMMAND_TEXT = PI_ACP_DOCKER_COMMAND.join(" ");
@@ -33,9 +35,7 @@ function normalizeAcpCommandTokens(command: unknown): string[] {
     );
   }
   if (typeof command === "string") {
-    const trimmed = command.trim();
-    if (!trimmed) return [];
-    return trimmed.split(/\s+/);
+    return parseCommand(command);
   }
   return [];
 }

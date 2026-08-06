@@ -13,6 +13,7 @@ import {
   getAcpPreferredDefaultModel,
   effectivePiAcpCommandTokens,
   wireAcpServerForProvider,
+  PI_ACP_PROVIDER_KEY,
 } from "#/constants/acp-providers";
 import { getDeploymentMode } from "#/api/agent-server-adapter";
 import { formatCommand } from "#/utils/acp-command";
@@ -132,7 +133,7 @@ export function SetupAcpSecretsStep({
           agent_kind: "acp",
           acp_server: wireAcpServerForProvider(providerKey) as ACPServerKind,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
-          ...(providerKey === "pi"
+          ...(providerKey === PI_ACP_PROVIDER_KEY
             ? {
                 acp_command: formatCommand(
                   effectivePiAcpCommandTokens(getDeploymentMode()),

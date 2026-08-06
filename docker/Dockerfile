@@ -70,8 +70,8 @@ RUN node -e " \
 # ── Stage 1c: Pi ACP (Node 22+ required; avoid Debian apt nodejs) ─────────────
 FROM node:24-slim AS pi-acp-install
 RUN npm install -g --ignore-scripts \
-  @earendil-works/pi-coding-agent \
-  pi-acp
+  @earendil-works/pi-coding-agent@0.84.0 \
+  pi-acp@0.0.33
 
 # ── Stage 2: Combined image ──────────────────────────────────────────────────
 FROM ${AGENT_SERVER_IMAGE} AS final
@@ -114,9 +114,9 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # symlinks into flat scripts that import ./config.js from bin/ instead of
 # the package directory under lib/node_modules.
 COPY --from=pi-acp-install /usr/local/ /opt/node24/
-ENV PATH="/opt/node24/bin:${PATH}"
+
 RUN test -x /opt/node24/bin/pi-acp && test -x /opt/node24/bin/pi && \
-    /opt/node24/bin/pi --version
+    /opt/node24/bin/pi --version && /opt/node24/bin/pi-acp
 
 # Install automation server via pip.
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are

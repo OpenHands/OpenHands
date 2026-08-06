@@ -800,16 +800,12 @@ function buildConfiguredAcpAgentSettings(
   // conversation starts with whatever the Settings → Agent UI shows — without
   // that, the form's displayed default would silently not take effect at
   // runtime until the user re-saved the page.
-  const serverKey =
-    resolveUiAcpProviderKey(
-      typeof agentSettings.acp_server === "string"
-        ? agentSettings.acp_server
-        : undefined,
-      agentSettings.acp_command,
-    ) ??
-    (typeof agentSettings.acp_server === "string"
+  const serverKey = resolveUiAcpProviderKey(
+    typeof agentSettings.acp_server === "string"
       ? agentSettings.acp_server
-      : undefined);
+      : undefined,
+    agentSettings.acp_command,
+  );
   const effectiveModel = resolveEffectiveAcpModel({
     configured: agentSettings.acp_model as string | null | undefined,
     providerDefault: getAcpPreferredDefaultModel(serverKey),
