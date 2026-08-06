@@ -54,6 +54,7 @@ const mockConversation = {
   git_provider: null,
   sandbox_id: "sandbox-abc",
   llm_model: "openhands/glm-5.2",
+  agent_kind: "openhands",
   conversation_version: "V1" as const,
 };
 
@@ -97,6 +98,8 @@ describe("useNewConversationCommand", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockConversation.llm_model = "openhands/glm-5.2";
+    mockConversation.agent_kind = "openhands";
     captureMock = vi
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
@@ -230,6 +233,37 @@ describe("useNewConversationCommand", () => {
         undefined,
         undefined,
         "openhands/glm-5.2",
+      );
+    });
+  });
+
+  it("does not forward ACP display models through /new", async () => {
+    mockConversation.agent_kind = "acp";
+    mockConversation.llm_model = "claude-code/opus";
+    const readyTask = makeStartTask();
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(readyTask as never);
+
+    const { result } = renderHook(() => useNewConversationCommand(), {
+      wrapper,
+    });
+    await result.current.mutateAsync();
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "sandbox-abc",
+        undefined,
+        undefined,
+        null,
       );
     });
   });

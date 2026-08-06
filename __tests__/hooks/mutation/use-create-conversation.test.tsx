@@ -560,6 +560,47 @@ describe("useCreateConversation", () => {
     expect(call?.[11]).toBe("openhands/glm-5.2");
   });
 
+  it("awaits LLM profiles on cold-cache cloud launches", async () => {
+    mockUseActiveBackend.mockReturnValue({
+      backend: { id: "cloud-1", kind: "cloud" },
+      orgId: null,
+    });
+    useLlmProfilesMock.mockReturnValue({
+      data: undefined as unknown as { active_profile: string | null },
+    });
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    });
+    listLlmProfilesMock.mockResolvedValue({
+      profiles: [{ name: "Free", model: "openhands/glm-5.2" }],
+      active_profile: "Free",
+    });
+    const createConversationSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue({
+        id: "task-id",
+        app_conversation_id: "conv-1",
+        agent_server_url: "http://agent-server.local",
+      } as never);
+
+    const { result } = renderHook(() => useCreateConversation(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={new QueryClient()}>
+          {children}
+        </QueryClientProvider>
+      ),
+    });
+
+    await result.current.mutateAsync({ query: "hello" });
+
+    const call = createConversationSpy.mock.lastCall;
+    expect(listLlmProfilesMock).toHaveBeenCalled();
+    expect(call?.[9]).toBeUndefined();
+    expect(call?.[10]).toBeUndefined();
+    expect(call?.[11]).toBe("openhands/glm-5.2");
+  });
+
   it("does not send an OpenHands LLM model when launching an ACP profile on cloud", async () => {
     mockUseActiveBackend.mockReturnValue({
       backend: { id: "cloud-1", kind: "cloud" },

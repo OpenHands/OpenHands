@@ -28,6 +28,8 @@ export const useNewConversationCommand = () => {
       // /new reuses the parent conversation's sandbox (matches OpenHands
       // cloud behavior); it is NOT a sub-conversation, so parent_conversation_id
       // and agent_type stay undefined.
+      const cloudLlmModel =
+        conversation.agent_kind === "acp" ? null : conversation.llm_model;
       const startTask = await AgentServerConversationService.createConversation(
         undefined,
         undefined,
@@ -40,7 +42,7 @@ export const useNewConversationCommand = () => {
         conversation.sandbox_id ?? undefined,
         undefined,
         undefined,
-        conversation.llm_model,
+        cloudLlmModel,
       );
 
       if (startTask.status === "ERROR") {

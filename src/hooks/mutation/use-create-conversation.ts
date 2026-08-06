@@ -115,6 +115,21 @@ export const useCreateConversation = () => {
       const requestedAgentProfileId =
         agentProfileId ?? agentProfiles?.active_agent_profile_id ?? undefined;
       let resolvedLlmProfiles: ProfileListResponse | undefined = llmProfiles;
+      const ensureLlmProfiles = async () => {
+        if (resolvedLlmProfiles?.profiles) {
+          return resolvedLlmProfiles;
+        }
+        try {
+          resolvedLlmProfiles = await queryClient.ensureQueryData({
+            queryKey: [...LLM_PROFILES_QUERY_KEYS.all, backend.id, orgId],
+            queryFn: ProfilesService.listProfiles,
+            retry: false,
+          });
+        } catch {
+          // LLM profiles unavailable → omit the best-effort cloud llm_model.
+        }
+        return resolvedLlmProfiles;
+      };
 
       // Fall back to the legacy agent_settings launch when the resolved agent
       // profile can't resolve its LLM. The agent-server seeds a `default`
@@ -170,18 +185,16 @@ export const useCreateConversation = () => {
         // after it errors) must still validate the ref, not launch blind.
         let llmProfileExists = false;
         try {
-          const llm = await queryClient.ensureQueryData({
-            queryKey: [...LLM_PROFILES_QUERY_KEYS.all, backend.id, orgId],
-            queryFn: ProfilesService.listProfiles,
-            // Match the agent-profiles fetch above: on a backend where this
-            // errors, fall back to agent_settings immediately rather than
-            // stalling the send through the default exponential backoff.
-            retry: false,
-          });
+          // Match the agent-profiles fetch above: on a backend where this
+          // errors, fall back to agent_settings immediately rather than
+          // stalling the send through the default exponential backoff.
+          const llm = await ensureLlmProfiles();
           resolvedLlmProfiles = llm;
-          llmProfileExists = llm.profiles.some(
-            (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
-          );
+          llmProfileExists =
+            llm?.profiles.some(
+              (profile) =>
+                profile.name === resolvedAgentProfile.llm_profile_ref,
+            ) ?? false;
         } catch {
           // List unavailable → can't validate → fall back to agent_settings.
         }
@@ -196,14 +209,21 @@ export const useCreateConversation = () => {
         }
       }
 
-      const referencedLlmProfile =
-        effectiveAgentProfileId && resolvedAgentProfile
-          ? resolvedAgentProfile.agent_kind === "openhands"
-            ? (resolvedAgentProfile.llm_profile_ref ??
-              resolvedLlmProfiles?.active_profile ??
-              undefined)
-            : undefined
-          : (resolvedLlmProfiles?.active_profile ?? undefined);
+      if (isCloud) {
+        await ensureLlmProfiles();
+      }
+
+      let referencedLlmProfile: string | undefined;
+      if (effectiveAgentProfileId && resolvedAgentProfile) {
+        if (resolvedAgentProfile.agent_kind === "openhands") {
+          referencedLlmProfile =
+            resolvedAgentProfile.llm_profile_ref ??
+            resolvedLlmProfiles?.active_profile ??
+            undefined;
+        }
+      } else {
+        referencedLlmProfile = resolvedLlmProfiles?.active_profile ?? undefined;
+      }
       const cloudLlmModel =
         isCloud && referencedLlmProfile
           ? (resolvedLlmProfiles?.profiles.find(
