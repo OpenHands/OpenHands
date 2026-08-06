@@ -7,7 +7,7 @@
 // These tests therefore build a fake bundle under os.tmpdir() and verify
 // resolution with a real `node --eval` from that location.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -94,5 +94,25 @@ describe("electron-builder afterPack hook", () => {
     expect(existsSync(junkPkg)).toBe(false);
     expect(existsSync(join(appDir, "node_modules", "sirv", "package.json"))).toBe(true);
     expect(existsSync(join(appDir, "node_modules", "httpxy", "package.json"))).toBe(true);
+  });
+});
+
+// The app's display name is set in two places that must agree:
+//   electron-builder.config.mjs productName → CFBundleName / NSIS / .desktop
+//     name of the PACKAGED bundle (what the Dock, ⌘-Tab and Finder show).
+//   electron/package.json productName       → app.name at runtime (macOS menu
+//     bar, About panel, app.getPath("userData")), read by Electron's
+//     default_app in dev and by lib/browser/init when packaged.
+// Neither one implies the other — the packaged app shipped with
+// CFBundleName "Agent Canvas" but app.name "agent-canvas" until both were
+// set. Pin them together so they can't drift again.
+describe("desktop app name", () => {
+  it("keeps electron/package.json productName in sync with the builder config", () => {
+    const appManifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, "../../electron/package.json"), "utf8"),
+    );
+
+    expect(appManifest.productName).toBe(config.productName);
+    expect(config.productName).toBe(PRODUCT_FILENAME);
   });
 });

@@ -17,13 +17,19 @@
  *     Contents/Resources/bin/     ← process.resourcesPath/bin
  *       uv  uvx                   ← bundled via extraResources
  *
- *   Dev (npm run desktop  →  electron electron/main.mjs):
+ *   Dev (npm run desktop  →  electron electron):
  *     electron/main.mjs           ← __dirname = <repo>/electron/
  *     scripts/ config/ build/     ← one level up: <repo>/
  *     system uvx from PATH
  *
  * When packaged, scripts/config/build are siblings of main.mjs so
  * projectRoot === __dirname. In dev they are one level up.
+ *
+ * The dev command points electron at the electron/ DIRECTORY, not at
+ * main.mjs directly. Electron's default_app only reads name/productName/
+ * version out of <arg>/package.json, so passing the file makes it look for
+ * electron/main.mjs/package.json, miss, and leave app.name at the host
+ * bundle's default — "Electron" in the menu bar and userData path.
  */
 
 import {
@@ -47,8 +53,10 @@ const __dirname = dirname(__filename);
 // ── Path resolution ───────────────────────────────────────────────────────────
 // Packaged (directories.app: 'electron'): scripts/config/build are SIBLINGS of
 // main.mjs inside Resources/app/, so projectRoot === __dirname.
-// Dev (electron electron/main.mjs): those directories are one level UP in the
+// Dev (electron electron): those directories are one level UP in the
 // repo root, so projectRoot === join(__dirname, '..').
+// Both branches key off __dirname (always <repo>/electron in dev), not
+// app.getAppPath(), so the entry-point form doesn't affect them.
 
 const projectRoot = app.isPackaged ? __dirname : join(__dirname, "..");
 const buildDir = join(projectRoot, "build");
