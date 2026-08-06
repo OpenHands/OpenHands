@@ -1,8 +1,12 @@
+import { useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
-import { useActiveBackend } from "#/contexts/active-backend-context";
+import {
+  getSnapshot,
+  subscribeActiveBackend,
+} from "#/api/backend-registry/active-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
@@ -167,10 +171,24 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
  * `find` directly against the agent-server; cloud backends call the cloud
  * API's first-class file-listing endpoint, which runs the same `find`
  * server-side on the conversation's runtime (see `useCloudWorkspaceFiles`).
+ *
+ * Cloud detection reads the backend-registry store (via `useSyncExternalStore`)
+ * rather than the `ActiveBackendProvider` context. The transport layer that
+ * actually issues the requests — `executeCommand`, `getGitChanges`, the cloud
+ * file-read — all branch on the *store* (`getActiveBackend()`), so the Files
+ * tab must use the same source. Reading the context here can disagree with the
+ * store (its `useActiveBackend` fallback synthesizes a *local* backend when the
+ * provider isn't in scope), which would run the local bash path against a cloud
+ * backend: `executeCommand` then POSTs to the removed `/api/cloud-proxy` (405)
+ * and the cloud `/files` call never fires.
  */
 export function useWorkspaceFiles(): WorkspaceFilesResult {
-  const { backend } = useActiveBackend();
-  const isCloud = backend.kind === "cloud";
+  const snapshot = useSyncExternalStore(
+    subscribeActiveBackend,
+    getSnapshot,
+    getSnapshot,
+  );
+  const isCloud = snapshot.active.backend.kind === "cloud";
 
   const local = useLocalWorkspaceFiles(!isCloud);
   const cloud = useCloudWorkspaceFiles(isCloud);

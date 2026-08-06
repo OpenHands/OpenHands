@@ -7,9 +7,40 @@ import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtim
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
 import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
 
-const useActiveBackendMock = vi.fn();
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => useActiveBackendMock(),
+// The hook reads cloud/local from the backend-registry store (the same source
+// the transport layer branches on), so drive the store snapshot in tests.
+// `getSnapshot` must return a STABLE reference per state or `useSyncExternalStore`
+// re-renders forever — precompute one frozen snapshot per kind.
+const STORE_SNAPSHOTS = {
+  local: {
+    active: {
+      backend: {
+        id: "backend-id",
+        name: "Local",
+        host: "http://127.0.0.1:8000",
+        apiKey: "test-key",
+        kind: "local",
+      },
+      orgId: null,
+    },
+  },
+  cloud: {
+    active: {
+      backend: {
+        id: "backend-id",
+        name: "Production",
+        host: "https://app.all-hands.dev",
+        apiKey: "test-key",
+        kind: "cloud",
+      },
+      orgId: null,
+    },
+  },
+} as const;
+let storeBackendKind: "local" | "cloud" = "local";
+vi.mock("#/api/backend-registry/active-store", () => ({
+  subscribeActiveBackend: () => () => {},
+  getSnapshot: () => STORE_SNAPSHOTS[storeBackendKind],
 }));
 
 const useActiveConversationMock = vi.fn();
@@ -57,7 +88,7 @@ const conversation = {
 };
 
 beforeEach(() => {
-  useActiveBackendMock.mockReset();
+  storeBackendKind = "local";
   useActiveConversationMock.mockReset();
   useRuntimeIsReadyMock.mockReset();
   useOptionalConversationIdMock.mockReset();
@@ -74,20 +105,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const makeBackend = (kind: "local" | "cloud") => ({
-  backend: {
-    id: "backend-id",
-    name: kind === "local" ? "Local" : "Production",
-    host:
-      kind === "local" ? "http://127.0.0.1:8000" : "https://app.all-hands.dev",
-    apiKey: "test-key",
-    kind,
-  },
-  orgId: null,
-});
-
 describe("useWorkspaceFiles — local backend", () => {
-  beforeEach(() => useActiveBackendMock.mockReturnValue(makeBackend("local")));
+  beforeEach(() => {
+    storeBackendKind = "local";
+  });
 
   it("lists files via bash find and does not touch git changes", async () => {
     executeCommandSpy.mockResolvedValue({
@@ -108,7 +129,9 @@ describe("useWorkspaceFiles — local backend", () => {
 });
 
 describe("useWorkspaceFiles — cloud backend", () => {
-  beforeEach(() => useActiveBackendMock.mockReturnValue(makeBackend("cloud")));
+  beforeEach(() => {
+    storeBackendKind = "cloud";
+  });
 
   it("lists the full tree via the cloud files endpoint without running bash", async () => {
     listCloudFilesMock.mockResolvedValue([
