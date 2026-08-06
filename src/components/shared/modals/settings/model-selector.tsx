@@ -126,6 +126,32 @@ export function ModelSelector({
       ? `${selectedProvider}/${selectedModel}`
       : null;
   const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+  const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
+  const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    if (!isSelectedModelFree || !selectedModelMeasureRef.current) {
+      setSelectedModelTextWidth(0);
+      return undefined;
+    }
+
+    const measureSelectedModel = () => {
+      setSelectedModelTextWidth(
+        Math.ceil(
+          selectedModelMeasureRef.current?.getBoundingClientRect().width ?? 0,
+        ),
+      );
+    };
+    measureSelectedModel();
+
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(measureSelectedModel);
+    observer.observe(selectedModelMeasureRef.current);
+    return () => observer.disconnect();
+  }, [isSelectedModelFree, selectedModel]);
 
   const { t } = useTranslation("openhands");
 
@@ -211,76 +237,93 @@ export function ModelSelector({
         <label className={cn("text-sm", labelClassName)}>
           {t(I18nKey.LLM$MODEL)}
         </label>
-        <Autocomplete
-          data-testid="llm-model-input"
-          isRequired
-          isVirtualized={false}
-          isLoading={isLoadingModels}
-          name="llm-model-input"
-          aria-label={t(I18nKey.LLM$MODEL)}
-          isClearable={false}
-          onSelectionChange={(e) => {
-            if (e?.toString()) handleChangeModel(e.toString());
-          }}
-          isDisabled={isDisabled || !selectedProvider}
-          selectedKey={selectedModel}
-          defaultSelectedKey={selectedModel ?? undefined}
-          endContent={
-            isSelectedModelFree ? (
-              <span
-                data-testid="selected-free-model-badge"
-                className={freeModelBadgeClassName}
-              >
-                {FREE_MODEL_BADGE_LABEL}
-              </span>
-            ) : null
-          }
-          classNames={{
-            popoverContent:
-              "bg-content1 rounded-xl border border-[var(--oh-border)]",
-            selectorButton: heroUiAutocompleteSelectorButtonClassName,
-          }}
-          selectorButtonProps={{ disableRipple: true }}
-          inputProps={{
-            classNames: {
-              inputWrapper: formControlSettingsFieldClassName,
-            },
-          }}
-        >
-          <AutocompleteSection
-            title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-            classNames={{ heading: "text-[var(--oh-muted)]" }}
+        <div className="relative">
+          <Autocomplete
+            data-testid="llm-model-input"
+            isRequired
+            isVirtualized={false}
+            isLoading={isLoadingModels}
+            name="llm-model-input"
+            aria-label={t(I18nKey.LLM$MODEL)}
+            isClearable={false}
+            onSelectionChange={(e) => {
+              if (e?.toString()) handleChangeModel(e.toString());
+            }}
+            isDisabled={isDisabled || !selectedProvider}
+            selectedKey={selectedModel}
+            defaultSelectedKey={selectedModel ?? undefined}
+            classNames={{
+              popoverContent:
+                "bg-content1 rounded-xl border border-[var(--oh-border)]",
+              selectorButton: heroUiAutocompleteSelectorButtonClassName,
+            }}
+            selectorButtonProps={{ disableRipple: true }}
+            inputProps={{
+              classNames: {
+                inputWrapper: formControlSettingsFieldClassName,
+              },
+            }}
           >
-            {verifiedModels.map((model) => (
-              <AutocompleteItem key={model.name} textValue={model.name}>
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate">{model.name}</span>
-                  {isFreeOpenHandsModel(`${selectedProvider}/${model.name}`) ? (
-                    <span className={freeModelBadgeClassName}>
-                      {FREE_MODEL_BADGE_LABEL}
-                    </span>
-                  ) : null}
-                </span>
-              </AutocompleteItem>
-            ))}
-          </AutocompleteSection>
-          {unverifiedModels.length > 0 ? (
             <AutocompleteSection
-              title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
+              title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
               classNames={{ heading: "text-[var(--oh-muted)]" }}
             >
-              {unverifiedModels.map((model) => (
-                <AutocompleteItem
-                  data-testid={`model-item-${model.name}`}
-                  key={model.name}
-                  textValue={model.name}
-                >
-                  {model.name}
+              {verifiedModels.map((model) => (
+                <AutocompleteItem key={model.name} textValue={model.name}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{model.name}</span>
+                    {isFreeOpenHandsModel(
+                      `${selectedProvider}/${model.name}`,
+                    ) ? (
+                      <span className={freeModelBadgeClassName}>
+                        {FREE_MODEL_BADGE_LABEL}
+                      </span>
+                    ) : null}
+                  </span>
                 </AutocompleteItem>
               ))}
             </AutocompleteSection>
+            {unverifiedModels.length > 0 ? (
+              <AutocompleteSection
+                title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                classNames={{ heading: "text-[var(--oh-muted)]" }}
+              >
+                {unverifiedModels.map((model) => (
+                  <AutocompleteItem
+                    data-testid={`model-item-${model.name}`}
+                    key={model.name}
+                    textValue={model.name}
+                  >
+                    {model.name}
+                  </AutocompleteItem>
+                ))}
+              </AutocompleteSection>
+            ) : null}
+          </Autocomplete>
+          {isSelectedModelFree && selectedModel ? (
+            <>
+              <span
+                ref={selectedModelMeasureRef}
+                className="pointer-events-none absolute left-3 top-1/2 whitespace-pre text-sm opacity-0"
+                aria-hidden
+              >
+                {selectedModel}
+              </span>
+              <span
+                data-testid="selected-free-model-badge"
+                className={cn(
+                  freeModelBadgeClassName,
+                  "pointer-events-none absolute top-1/2 z-10 -translate-y-1/2",
+                )}
+                style={{
+                  left: `calc(0.75rem + ${selectedModelTextWidth}px + 0.5rem)`,
+                }}
+              >
+                {FREE_MODEL_BADGE_LABEL}
+              </span>
+            </>
           ) : null}
-        </Autocomplete>
+        </div>
         {modelsError && (
           <p data-testid="models-error" className="text-danger text-xs">
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
