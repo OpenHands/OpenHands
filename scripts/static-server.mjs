@@ -99,6 +99,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     vscodeBasePath: null,
     // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
+    disableSecure: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -153,6 +154,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         config.vscodeBasePath = prefix.replace(/\/+$/, "") || "/";
         break;
       }
+      case "--disable-secure":
+        config.disableSecure = true;
+        break;
 
       case "--auth-required":
         config.authRequired = true;
@@ -271,6 +275,11 @@ OPTIONS:
                                since advertising a prefix it does not route
                                produces a control that opens the SPA. Omit on
                                any origin without the editor route.
+  --disable-secure            Strip the Secure attribute from Set-Cookie
+                              headers forwarded from backends. Use when
+                              serving over plain http:// to a non-loopback
+                              host (e.g. a LAN/VM IP) so browsers will send
+                              session cookies back.
   --reject-prefix <prefix>     Return 503 for requests matching <prefix>
   --no-referrer-prefix <p>     Send "Referrer-Policy: no-referrer" on proxied
                                responses under <p>. For upstreams whose URL
@@ -636,7 +645,10 @@ async function handleStatic(
 
 export function startStaticServer(config) {
   const route = createRouter(config.routes);
-  const proxy = createProxyHandlers({ label: `static:${config.port}` });
+  const proxy = createProxyHandlers({
+    label: `static:${config.port}`,
+    stripSecureCookie: config.disableSecure === true,
+  });
   const dirAbs = resolve(config.dir);
   const injectionOpts = {
     sessionApiKey: config.sessionApiKey || null,
