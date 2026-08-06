@@ -24,8 +24,8 @@ import {
 import {
   validateAutomationTimeout,
   AUTOMATION_TIMEOUT_DEFAULT_SECONDS,
-  AUTOMATION_TIMEOUT_MAX_SECONDS,
 } from "#/utils/automation-timeout";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import {
   getAttributeSpec,
   getInterfaceCopy,
@@ -134,6 +134,14 @@ export function EditAutomationModal({
   const modelSpec = getAttributeSpec("model");
   const timeoutSpec = getAttributeSpec("timeout");
   const scheduleSpec = getAttributeSpec("schedule");
+  const { data: capabilities } = useDeploymentCapabilities();
+  const serviceTimeoutMax = capabilities?.maxAutomationTimeoutSeconds;
+  // The deployment owns the absolute ceiling. A manifest may narrow it, never
+  // expand it; without discovery, leave maximum enforcement to the service.
+  const timeoutMax =
+    serviceTimeoutMax === undefined
+      ? undefined
+      : Math.min(serviceTimeoutMax, timeoutSpec.max ?? serviceTimeoutMax);
   const { data: profilesData, isLoading: isLoadingProfiles } = useLlmProfiles();
   const profiles = profilesData?.profiles ?? [];
   const modelItems = [
@@ -199,12 +207,9 @@ export function EditAutomationModal({
     }
     setNameError(null);
 
-    const timeoutResult = validateAutomationTimeout(
-      form.timeout,
-      timeoutSpec.max ?? undefined,
-    );
+    const timeoutResult = validateAutomationTimeout(form.timeout, timeoutMax);
     if ("errorKey" in timeoutResult) {
-      setTimeoutError(t(timeoutResult.errorKey));
+      setTimeoutError(t(timeoutResult.errorKey, { max: timeoutMax }));
       return;
     }
     setTimeoutError(null);
@@ -365,7 +370,7 @@ export function EditAutomationModal({
                 error={timeoutError ?? undefined}
                 showOptionalTag
                 min={timeoutSpec.min ?? 1}
-                max={timeoutSpec.max ?? AUTOMATION_TIMEOUT_MAX_SECONDS}
+                max={timeoutMax}
                 step={1}
                 placeholder={String(AUTOMATION_TIMEOUT_DEFAULT_SECONDS)}
               />

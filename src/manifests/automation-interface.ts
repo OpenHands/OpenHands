@@ -9,26 +9,38 @@
  * `@openhands/extensions` ships one and it passes admission; otherwise the
  * host's own defaults do, which reproduce today's behavior exactly. Copy
  * defaults are null, meaning "render the host's own translation".
+ *
+ * The sub-page surface (navigation, overview tiles, filters, sort, run
+ * insights, templates page) is the exception: the host holds no definitions
+ * of its own, so its accessors return null until an admitted manifest
+ * declares it, and the sub-pages simply do not render.
  */
 
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
-import { AUTOMATION_TIMEOUT_MAX_SECONDS } from "#/utils/automation-timeout";
 import { validateInterfaceManifest } from "./interface-validation";
 import { AUTOMATION_INTERFACE_CANDIDATE } from "./manifest-sources";
 import type {
   AutomationAttributeName,
+  InterfaceDashboardFilter,
+  InterfaceDashboardSort,
   InterfaceEndpointName,
+  InterfaceIconSlug,
   InterfaceImportExport,
+  InterfaceListInsights,
   InterfaceManifest,
+  InterfaceOverview,
   InterfaceRoutes,
+  InterfaceSubPageId,
+  InterfaceTemplatesPage,
 } from "./types";
 
 /** The routes this host has registrations for, in `src/routes.ts`. */
-const MOUNTED_ROUTES: InterfaceRoutes = {
+const MOUNTED_ROUTES = {
   list: "/automations",
   setup: "/automations/new/:automationId",
   detail: "/automations/:automationId",
-};
+  templates: "/automations/templates",
+} satisfies InterfaceRoutes;
 
 const DEFAULT_ENDPOINTS: InterfaceManifest["endpoints"] = {
   list: "/v1",
@@ -127,7 +139,7 @@ const DEFAULT_ATTRIBUTES: Record<AutomationAttributeName, AttributeSpec> = {
     help: null,
     required: false,
     min: 1,
-    max: AUTOMATION_TIMEOUT_MAX_SECONDS,
+    max: null,
   },
   schedule: {
     present: true,
@@ -186,6 +198,10 @@ export function automationSetupPath(id: string): string {
 
 export function automationDetailPath(id: string): string {
   return substituteRouteParam((ADMITTED?.routes ?? MOUNTED_ROUTES).detail, id);
+}
+
+export function automationTemplatesPath(): string {
+  return ADMITTED?.routes.templates ?? MOUNTED_ROUTES.templates;
 }
 
 export function getAutomationEndpoint(name: InterfaceEndpointName): string {
@@ -265,4 +281,60 @@ export function getFeaturedAutomationIds(): readonly string[] {
 
 export function getResponderIntegrationIds(): readonly string[] {
   return ADMITTED?.responderIntegrationIds ?? DEFAULT_RESPONDER_INTEGRATION_IDS;
+}
+
+export interface SubPageNavSpec {
+  page: InterfaceSubPageId;
+  /** The page's route, resolved through the manifest. */
+  to: string;
+  label: string;
+  icon: InterfaceIconSlug;
+}
+
+/**
+ * The sub-page navigation, or null when the manifest does not declare the
+ * sub-page surface. No manifest, no sub-pages — there is no host default.
+ */
+export function getSubPagesSpec(): SubPageNavSpec[] | null {
+  const subPages = ADMITTED?.navigation.subPages;
+  if (!subPages) return null;
+  return subPages.map((item) => ({
+    page: item.page,
+    to:
+      item.page === "templates"
+        ? automationTemplatesPath()
+        : automationListPath(),
+    label: item.label,
+    icon: item.icon,
+  }));
+}
+
+export interface DashboardSpec {
+  overview: InterfaceOverview;
+  filters: InterfaceDashboardFilter[];
+  sort: InterfaceDashboardSort;
+  insights: InterfaceListInsights;
+}
+
+/**
+ * The list page's dashboard composition, or null when the manifest does not
+ * declare it. Admission accepts the sub-page surface whole or not at all, so
+ * these four are present together.
+ */
+export function getDashboardSpec(): DashboardSpec | null {
+  const list = ADMITTED?.pages.list;
+  if (!list?.overview || !list.filters || !list.sort || !list.insights) {
+    return null;
+  }
+  return {
+    overview: list.overview,
+    filters: list.filters,
+    sort: list.sort,
+    insights: list.insights,
+  };
+}
+
+/** The templates page identity, or null when the manifest does not declare it. */
+export function getTemplatesPageSpec(): InterfaceTemplatesPage | null {
+  return ADMITTED?.pages.templates ?? null;
 }

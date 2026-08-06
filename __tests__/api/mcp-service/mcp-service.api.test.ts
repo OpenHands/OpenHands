@@ -105,7 +105,7 @@ describe("McpService.testServer", () => {
   it("maps a stdio config to a StdioMCPServerSpec", async () => {
     mockTestServer.mockResolvedValue({ ok: true, tools: [] });
     const stdio: MCPServerConfig = {
-      id: "stdio-1",
+      id: "my-server",
       type: "stdio",
       name: "my-server",
       command: "npx",
@@ -118,7 +118,7 @@ describe("McpService.testServer", () => {
     // Exact match also guards that non-catalog servers get no `tool_call`.
     expect(mockTestServer).toHaveBeenCalledWith({
       server: {
-        transport: "stdio",
+        type: "stdio",
         command: "npx",
         args: ["-y", "@my/mcp-server"],
         env: { API_KEY: "secret" },
@@ -136,7 +136,7 @@ describe("McpService.testServer", () => {
   // -------------------------------------------------------------------------
 
   const SLACK_SERVER: MCPServerConfig = {
-    id: "stdio-0",
+    id: "slack",
     type: "stdio",
     name: "slack",
     command: "npx",

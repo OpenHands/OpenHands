@@ -7,7 +7,7 @@ import { useHasPermission } from "#/hooks/use-has-permission";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
-import GlobeIcon from "#/icons/globe.svg?react";
+import { Zap } from "lucide-react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { cn } from "#/utils/utils";
 import {
@@ -17,6 +17,19 @@ import {
 import { buildAutomationMetadataPills } from "./build-automation-pills";
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationRunNowTextButtonClassName } from "./automation-action-button-classes";
+import { AutomationHealthBadge } from "./automation-health-badge";
+import { AutomationRunStats, lastRunText } from "./automation-run-insights";
+import {
+  deriveAutomationHealth,
+  type RunSummaryState,
+} from "#/manifests/automation-insights";
+import type { InterfaceListInsights } from "#/manifests/types";
+
+/** Run insights shown when the manifest declares the dashboard surface. */
+export interface AutomationInsightsProps {
+  spec: InterfaceListInsights;
+  state: RunSummaryState | undefined;
+}
 
 interface AutomationCardProps {
   automation: Automation;
@@ -26,6 +39,7 @@ interface AutomationCardProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  insights?: AutomationInsightsProps;
 }
 
 export function AutomationCard({
@@ -36,6 +50,7 @@ export function AutomationCard({
   onDelete,
   onExport,
   onEdit,
+  insights,
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t } = useTranslation("openhands");
@@ -88,7 +103,7 @@ export function AutomationCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h3 className="flex items-center gap-2 truncate text-sm font-semibold text-white">
             {automation.trigger.type === "event" ? (
-              <GlobeIcon className="size-4 shrink-0 text-muted" />
+              <Zap className="size-4 shrink-0 text-muted" aria-hidden="true" />
             ) : (
               <ClockIcon className="size-4 shrink-0 text-muted" />
             )}
@@ -122,11 +137,32 @@ export function AutomationCard({
         </div>
       </header>
 
+      {insights ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <AutomationHealthBadge
+            health={deriveAutomationHealth(automation, insights.state)}
+            labels={insights.spec.health}
+          />
+          <span data-testid={`automation-last-run-${automation.id}`}>
+            {`${insights.spec.lastRun.label} ${lastRunText(
+              insights.state?.summary?.latestRun?.started_at ??
+                automation.last_triggered_at,
+              insights.spec.lastRun,
+              t(I18nKey.CONVERSATION$AGO),
+            )}`}
+          </span>
+        </div>
+      ) : null}
+
       {pills.length > 0 ? (
         <SkillCardPillRow
           pills={pills}
           testId={`automation-pills-${automation.id}`}
         />
+      ) : null}
+
+      {insights ? (
+        <AutomationRunStats state={insights.state} copy={insights.spec.stats} />
       ) : null}
     </div>
   );
