@@ -21,6 +21,9 @@ const CSV_COLUMNS = [
   "conversation_id",
   "conversation_url",
   "error",
+  // Appended rather than grouped with the other run metrics so existing
+  // consumers that read the CSV by column position keep working.
+  "cost",
 ] as const;
 
 export function getActivityLogExportFilename(
@@ -98,6 +101,9 @@ export function mapAutomationRunToExportRow(
       conversationBaseUrl,
     ),
     error: run.error_detail,
+    // Exports carry the raw number and leave formatting to the consumer; the
+    // Activity Log row is the only place that renders it as USD.
+    cost: run.cost ?? null,
   };
 }
 
