@@ -58,4 +58,44 @@ describe("ConfigService", () => {
     const openhands = page.items.find((p) => p.name === "openhands");
     expect(openhands).toEqual({ name: "openhands", verified: true });
   });
+
+  it("surfaces providers discoverable only from model ids (e.g. openrouter)", async () => {
+    // Arrange: mirror the real local agent-server, where OpenRouter is absent
+    // from /api/llm/providers and from /api/llm/models/verified, but its models
+    // are listed under /api/llm/models with an "openrouter/..." id prefix.
+    server.use(
+      http.get("/api/llm/providers", () =>
+        HttpResponse.json({ providers: ["anthropic", "openai"] }),
+      ),
+      http.get("/api/llm/models/verified", () =>
+        HttpResponse.json({
+          models: { anthropic: ["claude-opus-4-5-20251101"] },
+        }),
+      ),
+      http.get("/api/llm/models", () =>
+        HttpResponse.json({
+          models: [
+            "anthropic/claude-opus-4-5-20251101",
+            "openai/gpt-4o",
+            "openrouter/anthropic/claude-3.5-sonnet",
+            "openrouter/openai/gpt-4o",
+          ],
+        }),
+      ),
+    );
+
+    // Act
+    const page = await ConfigService.searchProviders({ limit: 50 });
+
+    // Assert: openrouter is surfaced even though it is in neither the
+    // providers list nor the verified-models map, and it is not flagged
+    // verified.
+    const openrouter = page.items.find((p) => p.name === "openrouter");
+    expect(openrouter).toEqual({ name: "openrouter", verified: false });
+
+    // Existing providers are preserved and stay deduplicated.
+    expect(page.items.some((p) => p.name === "anthropic")).toBe(true);
+    expect(page.items.some((p) => p.name === "openai")).toBe(true);
+    expect(page.items.filter((p) => p.name === "anthropic")).toHaveLength(1);
+  });
 });
