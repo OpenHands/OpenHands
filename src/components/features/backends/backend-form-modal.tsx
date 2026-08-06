@@ -1563,7 +1563,7 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-[720px] overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
+            "relative max-h-[92vh] w-[720px] overflow-y-auto overflow-x-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
@@ -1619,6 +1619,7 @@ export function BackendFormModal({
         className={cn(
           "relative bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]",
           modalWidthClassName("md"),
+          MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
         <ModalCloseButton onClose={onClose} testId={`${testIdRoot}-close`} />
