@@ -30,6 +30,14 @@ interface LlmConfiguredResult {
    * warning doesn't flash before data loads or on a transient network error.
    */
   isLoading: boolean;
+  /**
+   * True when the LLM is not configured because an active LLM profile exists
+   * but is unusable — its API key is missing (`api_key_set: false`) and it has
+   * no subscription. This is distinct from the genuinely unconfigured state
+   * (no profile at all), and lets the UI point the user at repairing the
+   * specific profile instead of re-creating one from scratch.
+   */
+  activeProfileMissingKey: boolean;
 }
 
 /**
@@ -139,6 +147,11 @@ export function useLlmConfigured(): LlmConfiguredResult {
   const hasUsableActiveProfile =
     hasActiveProfileApiKey || hasActiveProfileSubscription;
   const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  // Distinguishes "no LLM set up at all" from "the selected profile exists but
+  // its API key is missing". When the latter, the banner can direct the user to
+  // repair that specific profile instead of re-creating one from scratch.
+  const activeProfileMissingKey =
+    isLocal && !!activeProfile && !hasUsableActiveProfile;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network
@@ -163,6 +176,7 @@ export function useLlmConfigured(): LlmConfiguredResult {
 
   return {
     isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
+    activeProfileMissingKey,
     isLoading:
       settingsIndeterminate ||
       configIndeterminate ||
