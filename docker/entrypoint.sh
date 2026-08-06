@@ -171,9 +171,6 @@ PIDS+=($!)
 # ── 2. Start Automation Server ───────────────────────────────────────────────
 log "Starting automation server on port $AUTOMATION_PORT..."
 
-# Disable the automation's own frontend — agent-canvas provides the UI.
-export AUTOMATION_FRONTEND_DIR=""
-
 # File storage — use local filesystem unless the user has configured cloud
 # storage.  Without FILE_STORE=local the automation backend may fall back
 # to a cloud provider (S3/GCS) which will fail without credentials, causing
