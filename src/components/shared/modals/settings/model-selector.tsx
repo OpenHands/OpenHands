@@ -3,6 +3,7 @@ import {
   AutocompleteItem,
   AutocompleteSection,
 } from "@heroui/react";
+import { Info } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -20,6 +21,21 @@ import {
   FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
+
+const freeModelBadgeClassName =
+  "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
+
+function FreeOpenHandsModelsNote() {
+  return (
+    <p
+      data-testid="openhands-free-models-note"
+      className="flex items-start gap-2 text-xs text-warning"
+    >
+      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
+    </p>
+  );
+}
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -182,12 +198,6 @@ export function ModelSelector({
             size="settings"
             linkColor="white"
           />
-          <p
-            data-testid="openhands-free-models-note"
-            className="text-xs text-[var(--oh-muted)]"
-          >
-            {FREE_OPENHANDS_MODEL_NOTE}
-          </p>
         </div>
       )}
 
@@ -230,7 +240,7 @@ export function ModelSelector({
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{model.name}</span>
                   {isFreeOpenHandsModel(`${selectedProvider}/${model.name}`) ? (
-                    <span className="shrink-0 rounded-full border border-[var(--oh-border)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--oh-muted)]">
+                    <span className={freeModelBadgeClassName}>
                       {FREE_MODEL_BADGE_LABEL}
                     </span>
                   ) : null}
@@ -260,6 +270,7 @@ export function ModelSelector({
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
           </p>
         )}
+        {selectedProvider === "openhands" ? <FreeOpenHandsModelsNote /> : null}
       </fieldset>
     </div>
   );
