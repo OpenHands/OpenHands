@@ -127,7 +127,7 @@ export function AgentStatus({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 min-w-0",
+        "flex items-center gap-1 min-w-0 overflow-hidden",
         isTransientCheckStatus && "transition-opacity duration-500",
         shouldFadeDoneStatus && "opacity-0",
         className,
