@@ -90,6 +90,10 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  OH_MAX_ATTACHMENT_FILE_SIZE_MB
+                               Per-file attachment limit (default: 25)
+  OH_MAX_ATTACHMENT_TOTAL_SIZE_MB
+                               Aggregate attachment limit (default: 50)
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.

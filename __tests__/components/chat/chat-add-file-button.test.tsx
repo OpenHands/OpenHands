@@ -38,7 +38,10 @@ describe("ChatAddFileButton", () => {
     render(<ChatAddFileButton handleFileIconClick={vi.fn()} />);
 
     const button = screen.getByTestId("chat-plus-button");
-    expect(button).toHaveAttribute("aria-label", I18nKey.CHAT_INTERFACE$PLUS_MENU);
+    expect(button).toHaveAttribute(
+      "aria-label",
+      I18nKey.CHAT_INTERFACE$PLUS_MENU,
+    );
     expect(button).toHaveAttribute("aria-haspopup", "menu");
   });
 
@@ -50,6 +53,9 @@ describe("ChatAddFileButton", () => {
 
     await user.click(screen.getByTestId("chat-plus-button"));
     expect(screen.getByTestId("tools-context-menu")).toBeInTheDocument();
+    expect(screen.getByTestId("add-files-and-images-button")).toHaveTextContent(
+      "25 MB",
+    );
 
     await user.click(screen.getByTestId("add-files-and-images-button"));
     expect(handleFileIconClick).toHaveBeenCalledTimes(1);
@@ -60,10 +66,7 @@ describe("ChatAddFileButton", () => {
     const handleFileIconClick = vi.fn();
 
     render(
-      <ChatAddFileButton
-        handleFileIconClick={handleFileIconClick}
-        disabled
-      />,
+      <ChatAddFileButton handleFileIconClick={handleFileIconClick} disabled />,
     );
 
     const button = screen.getByTestId("chat-plus-button");

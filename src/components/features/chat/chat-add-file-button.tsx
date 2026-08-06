@@ -12,6 +12,7 @@ import { SystemMessageModal } from "#/components/features/conversation-panel/sys
 import { SkillsModal } from "#/components/features/conversation-panel/skills-modal";
 import { PluginsModal } from "#/components/features/conversation-panel/plugins-modal";
 import { HooksModal } from "#/components/features/conversation-panel/hooks-modal";
+import { getAttachmentLimits } from "#/utils/file-validation";
 
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
@@ -34,6 +35,7 @@ export function ChatAddFileButton({
   const { conversationId } = useOptionalConversationId();
   const { data: conversation } = useActiveConversation();
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const { maxFileSizeMb } = getAttachmentLimits();
 
   const {
     handleShowAgentTools,
@@ -110,7 +112,7 @@ export function ChatAddFileButton({
                 aria-hidden
               />
             ),
-            label: t(I18nKey.CHAT_INTERFACE$ADD_FILES_AND_IMAGES),
+            label: `${t(I18nKey.CHAT_INTERFACE$ADD_FILES_AND_IMAGES)} · ${maxFileSizeMb} MB`,
             onClick: handleFileIconClick,
           }}
         />

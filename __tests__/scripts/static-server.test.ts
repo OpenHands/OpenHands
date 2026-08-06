@@ -170,6 +170,32 @@ describe("static-server.mjs", () => {
       const config = parseArgs(["--runtime-services-info", ""]);
       expect(config.runtimeServicesInfo).toBeNull();
     });
+
+    it("parses attachment limit overrides", () => {
+      const config = parseArgs([
+        "--max-attachment-file-size-mb",
+        "25",
+        "--max-attachment-total-size-mb",
+        "50.5",
+      ]);
+
+      expect(config.maxAttachmentFileSizeMb).toBe(25);
+      expect(config.maxAttachmentTotalSizeMb).toBe(50.5);
+    });
+
+    it("rejects malformed or contradictory attachment limits", () => {
+      expect(() =>
+        parseArgs(["--max-attachment-file-size-mb", "invalid"]),
+      ).toThrow("must be a positive number");
+      expect(() =>
+        parseArgs([
+          "--max-attachment-file-size-mb",
+          "25",
+          "--max-attachment-total-size-mb",
+          "20",
+        ]),
+      ).toThrow("must be at least");
+    });
   });
 
   describe("runtime services info exposure", () => {
@@ -372,6 +398,26 @@ describe("static-server.mjs", () => {
 
       expect(response.status).toBe(200);
       expect(body).toContain("__AGENT_CANVAS_LOCK_TO_CLOUD__");
+    });
+  });
+
+  describe("attachment limit injection", () => {
+    it("exposes configured limits to pre-built frontend bundles", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir, {
+        maxAttachmentFileSizeMb: 25,
+        maxAttachmentTotalSizeMb: 50,
+      });
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_ATTACHMENT_LIMITS__");
+      expect(body).toContain('{"maxFileSizeMb":25,"maxTotalSizeMb":50}');
     });
   });
 

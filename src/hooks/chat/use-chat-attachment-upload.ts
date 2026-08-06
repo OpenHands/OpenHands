@@ -5,7 +5,10 @@ export type ChatAttachmentUploadOptions = {
 };
 import { isFileImage } from "#/utils/is-file-image";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { validateFiles } from "#/utils/file-validation";
+import {
+  validateEmbeddedImageSizes,
+  validateFiles,
+} from "#/utils/file-validation";
 import { processFiles, processImages } from "#/utils/file-processing";
 import { useConversationStore } from "#/stores/conversation-store";
 
@@ -34,8 +37,13 @@ export function useChatAttachmentUpload() {
         return;
       }
 
-      const validFiles = selectedFiles.filter((f) => !isFileImage(f));
-      const validImages = selectedFiles.filter((f) => isFileImage(f));
+      const validImages = selectedFiles.filter(
+        (file) =>
+          isFileImage(file) && validateEmbeddedImageSizes([file]).isValid,
+      );
+      const validFiles = selectedFiles.filter(
+        (file) => !validImages.includes(file),
+      );
 
       if (validImages.length > 0) {
         markImagesAsPasted(validImages.map((image) => image.name));

@@ -181,15 +181,19 @@ If you want Tailwind layout utilities on the inner themed container, pass `conte
 
 You can create a `.env` file in the project directory with these variables based on `.env.sample`.
 
-| Variable                    | Description                                                                               | Default Value          |
-| --------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
-| `VITE_BACKEND_BASE_URL`     | Full base URL for the agent server used by direct browser requests                        | current browser origin |
-| `VITE_BACKEND_HOST`         | Backend host used by the Vite dev proxy                                                   | `127.0.0.1:8000`       |
-| `VITE_SESSION_API_KEY`      | (Internal) Session API key injected by the launcher — set `LOCAL_BACKEND_API_KEY` instead | -                      |
-| `VITE_WORKING_DIR`          | Workspace path sent when starting new conversations                                       | `workspace/project`    |
-| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads                    | `true`                 |
-| `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
-| `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
-| `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
-| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
-| `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+| Variable                            | Description                                                                               | Default Value          |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
+| `VITE_BACKEND_BASE_URL`             | Full base URL for the agent server used by direct browser requests                        | current browser origin |
+| `VITE_BACKEND_HOST`                 | Backend host used by the Vite dev proxy                                                   | `127.0.0.1:8000`       |
+| `VITE_SESSION_API_KEY`              | (Internal) Session API key injected by the launcher — set `LOCAL_BACKEND_API_KEY` instead | -                      |
+| `VITE_WORKING_DIR`                  | Workspace path sent when starting new conversations                                       | `workspace/project`    |
+| `VITE_ENABLE_BROWSER_TOOLS`         | Set to `false` to omit `BrowserToolSet` from new conversation payloads                    | `true`                 |
+| `VITE_MAX_ATTACHMENT_FILE_SIZE_MB`  | Per-file attachment limit for source builds                                               | `25`                   |
+| `VITE_MAX_ATTACHMENT_TOTAL_SIZE_MB` | Aggregate attachment limit for source builds                                              | `50`                   |
+| `OH_MAX_ATTACHMENT_FILE_SIZE_MB`    | Per-file attachment limit for the prebuilt npm/desktop frontend                           | `25`                   |
+| `OH_MAX_ATTACHMENT_TOTAL_SIZE_MB`   | Aggregate attachment limit for the prebuilt npm/desktop frontend                          | `50`                   |
+| `VITE_BASE_PATH`                    | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
+| `VITE_MOCK_API`                     | Enable/disable API mocking with MSW                                                       | `false`                |
+| `VITE_USE_TLS`                      | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
+| `VITE_FRONTEND_PORT`                | Port to run the frontend application                                                      | `3001`                 |
+| `VITE_INSECURE_SKIP_VERIFY`         | Skip TLS certificate verification for proxied backend requests                            | `false`                |

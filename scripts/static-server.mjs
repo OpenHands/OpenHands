@@ -88,6 +88,8 @@ export function parseArgs(argv = process.argv.slice(2)) {
     authRequired: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
+    maxAttachmentFileSizeMb: null,
+    maxAttachmentTotalSizeMb: null,
     basePath: "/",
   };
 
@@ -130,6 +132,12 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "--lock-to-cloud":
         config.lockToCloud = argv[++i] || null;
         break;
+      case "--max-attachment-file-size-mb":
+        config.maxAttachmentFileSizeMb = parsePositiveNumber(argv[++i], flag);
+        break;
+      case "--max-attachment-total-size-mb":
+        config.maxAttachmentTotalSizeMb = parsePositiveNumber(argv[++i], flag);
+        break;
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
         break;
@@ -169,7 +177,25 @@ export function parseArgs(argv = process.argv.slice(2)) {
     process.exit(1);
   }
 
+  if (
+    config.maxAttachmentFileSizeMb !== null &&
+    config.maxAttachmentTotalSizeMb !== null &&
+    config.maxAttachmentTotalSizeMb < config.maxAttachmentFileSizeMb
+  ) {
+    throw new Error(
+      "--max-attachment-total-size-mb must be at least --max-attachment-file-size-mb",
+    );
+  }
+
   return config;
+}
+
+function parsePositiveNumber(value, flag) {
+  const parsed = Number(value);
+  if (!value || !Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${flag} must be a positive number`);
+  }
+  return parsed;
 }
 
 function normalizeBasePath(value) {
@@ -208,6 +234,10 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --max-attachment-file-size-mb <number>
+                               Override the per-file attachment limit.
+  --max-attachment-total-size-mb <number>
+                               Override the aggregate attachment limit.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -265,6 +295,10 @@ ROUTING:
  *   `agent-server-config.ts` so pre-built frontend bundles can hide manual
  *   backend setup and the custom Cloud URL field at runtime.
  *
+ * - `attachmentLimits`: optional per-file and aggregate attachment limits,
+ *   exposed as `window.__AGENT_CANVAS_ATTACHMENT_LIMITS__` for pre-built
+ *   frontend bundles.
+ *
  * - `basePath`: the path prefix the SPA is mounted under, exposed as
  *   `window.__AGENT_CANVAS_BASE_PATH__` so runtime static assets like locale
  *   files can resolve through the same subpath as the built bundle.
@@ -274,6 +308,7 @@ function makeConfigInjectionScript(
   authRequired,
   runtimeServicesInfo,
   lockToCloud,
+  attachmentLimits,
   basePath,
 ) {
   const parts = [];
@@ -312,6 +347,12 @@ function makeConfigInjectionScript(
     );
   }
 
+  if (attachmentLimits) {
+    parts.push(
+      `window.__AGENT_CANVAS_ATTACHMENT_LIMITS__=${JSON.stringify(attachmentLimits)};`,
+    );
+  }
+
   if (lockToCloud) {
     parts.push(
       `window.__AGENT_CANVAS_LOCK_TO_CLOUD__=${JSON.stringify(lockToCloud)};`,
@@ -342,6 +383,7 @@ async function serveInjectedIndexHtml(
     authRequired,
     runtimeServicesInfo,
     lockToCloud,
+    attachmentLimits,
     basePath,
   } = {},
 ) {
@@ -357,6 +399,7 @@ async function serveInjectedIndexHtml(
     authRequired,
     runtimeServicesInfo,
     lockToCloud,
+    attachmentLimits,
     basePath,
   );
   // Inject right before </head> so the key is available before any app code runs.
@@ -406,6 +449,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
+    injectionOpts.attachmentLimits ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -544,11 +588,21 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
+  const attachmentLimits = {
+    ...(config.maxAttachmentFileSizeMb
+      ? { maxFileSizeMb: config.maxAttachmentFileSizeMb }
+      : {}),
+    ...(config.maxAttachmentTotalSizeMb
+      ? { maxTotalSizeMb: config.maxAttachmentTotalSizeMb }
+      : {}),
+  };
   const injectionOpts = {
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
+    attachmentLimits:
+      Object.keys(attachmentLimits).length > 0 ? attachmentLimits : null,
     basePath: normalizeBasePath(config.basePath),
   };
   const basePath = injectionOpts.basePath;
