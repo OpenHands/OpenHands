@@ -85,6 +85,14 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  /**
+   * Accumulated LLM cost of the run in USD, reported by the SDK in the
+   * completion callback. `null` means unknown — the run predates cost
+   * tracking, or ended without a callback (cancelled, watchdog timeout).
+   * Absent entirely when the automation service is older than the release
+   * that added the field, hence optional.
+   */
+  cost?: number | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -109,4 +117,10 @@ export interface AutomationRunExportRow {
   conversation_id: string | null;
   conversation_url: string | null;
   error: string | null;
+  /**
+   * Accumulated LLM cost in USD, or null when unknown. Unlike
+   * `AutomationRun["cost"]` this is always present: the row normalizes a
+   * missing field to null so every exported record has the same shape.
+   */
+  cost: number | null;
 }
