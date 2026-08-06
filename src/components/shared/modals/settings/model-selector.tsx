@@ -121,6 +121,12 @@ export function ModelSelector({
     setLitellmId(null);
   };
 
+  const selectedFullModel =
+    selectedProvider && selectedModel
+      ? `${selectedProvider}/${selectedModel}`
+      : null;
+  const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+
   const { t } = useTranslation("openhands");
 
   return (
@@ -219,6 +225,16 @@ export function ModelSelector({
           isDisabled={isDisabled || !selectedProvider}
           selectedKey={selectedModel}
           defaultSelectedKey={selectedModel ?? undefined}
+          endContent={
+            isSelectedModelFree ? (
+              <span
+                data-testid="selected-free-model-badge"
+                className={freeModelBadgeClassName}
+              >
+                {FREE_MODEL_BADGE_LABEL}
+              </span>
+            ) : null
+          }
           classNames={{
             popoverContent:
               "bg-content1 rounded-xl border border-[var(--oh-border)]",

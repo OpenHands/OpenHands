@@ -82,10 +82,20 @@ describe("ModelSelector — OpenHands provider display", () => {
     expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
       "openhands/minimax-m2.7",
     );
+    expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
+      "Free",
+    );
 
     await user.click(screen.getByLabelText("LLM$MODEL"));
 
-    expect(screen.getAllByText("Free")).toHaveLength(3);
+    expect(screen.getAllByText("Free")).toHaveLength(4);
     expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("glm-5.2");
+
+    await user.click(screen.getByText("minimax-m2.7"));
+
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("minimax-m2.7");
+    expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
+      "Free",
+    );
   });
 });
