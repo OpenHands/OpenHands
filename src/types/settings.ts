@@ -1,6 +1,12 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
+import type { GitProviderPreference } from "#/types/git-provider";
+
+export type {
+  GitProviderPreference,
+  GitProviderAuthMethod,
+} from "#/types/git-provider";
 
 export const ProviderOptions = {
   github: "github",
@@ -146,6 +152,16 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   title_llm_profile?: string | null;
+  /**
+   * Absolute path the folder browser opens on. Empty/null falls back to the
+   * agent-server home (or `/projects` in the Docker image).
+   */
+  default_workspace_browse_path?: string | null;
+  /**
+   * Non-secret GitProviders entries for local clone-by-URL. Secrets are stored
+   * separately via SecretsService (`GIT_PROVIDER_{id}_*`).
+   */
+  git_providers?: GitProviderPreference[];
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;

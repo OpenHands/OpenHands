@@ -173,6 +173,64 @@ describe("SettingsService", () => {
     ]);
   });
 
+  it("sends default_workspace_browse_path and git_providers under app_preferences", async () => {
+    const patchBodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.patch("*/api/settings", async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: {
+              default_workspace_browse_path: "/data/workspaces",
+              git_providers: [
+                {
+                  id: "github",
+                  label: "GitHub",
+                  host: "github.com",
+                  auth_method: "pat",
+                },
+              ],
+            },
+          },
+        });
+      }),
+    );
+
+    const result = await SettingsService.saveSettings({
+      default_workspace_browse_path: "/data/workspaces",
+      git_providers: [
+        {
+          id: "github",
+          label: "GitHub",
+          host: "github.com",
+          auth_method: "pat",
+        },
+      ],
+    });
+
+    expect(result).toBe(true);
+    expect(patchBodies).toEqual([
+      {
+        misc_settings_diff: {
+          app_preferences: {
+            default_workspace_browse_path: "/data/workspaces",
+            git_providers: [
+              {
+                id: "github",
+                label: "GitHub",
+                host: "github.com",
+                auth_method: "pat",
+              },
+            ],
+          },
+        },
+      },
+    ]);
+  });
+
   it("stores the title profile as a local app preference", async () => {
     const patchBodies: Array<Record<string, unknown>> = [];
     server.use(

@@ -30,6 +30,8 @@ export const APP_PREFERENCE_FIELDS = [
   "git_user_email",
   "title_llm_profile",
   "disabled_skills",
+  "default_workspace_browse_path",
+  "git_providers",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];

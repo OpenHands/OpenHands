@@ -46,6 +46,10 @@ export function AppSettingsScreen() {
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
     React.useState(false);
+  const [
+    defaultWorkspaceBrowsePathHasChanged,
+    setDefaultWorkspaceBrowsePathHasChanged,
+  ] = React.useState(false);
   const [titleLlmProfileInput, setTitleLlmProfileInput] = React.useState<
     string | null | undefined
   >(undefined);
@@ -99,6 +103,9 @@ export function AppSettingsScreen() {
     const gitUserEmail =
       formData.get("git-user-email-input")?.toString() ||
       DEFAULT_SETTINGS.git_user_email;
+    const defaultWorkspaceBrowsePath =
+      formData.get("default-workspace-browse-path-input")?.toString().trim() ||
+      null;
 
     saveSettings(
       {
@@ -107,6 +114,7 @@ export function AppSettingsScreen() {
         enable_sound_notifications: enableSoundNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
+        default_workspace_browse_path: defaultWorkspaceBrowsePath,
         title_llm_profile: selectedTitleLlmProfile,
       },
       {
@@ -124,6 +132,7 @@ export function AppSettingsScreen() {
           setSoundNotificationsSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
+          setDefaultWorkspaceBrowsePathHasChanged(false);
           setTitleLlmProfileInput(undefined);
         },
       },
@@ -164,13 +173,19 @@ export function AppSettingsScreen() {
     setGitUserEmailHasChanged(value !== currentValue);
   };
 
+  const checkIfDefaultWorkspaceBrowsePathHasChanged = (value: string) => {
+    const currentValue = settings?.default_workspace_browse_path ?? "";
+    setDefaultWorkspaceBrowsePathHasChanged(value !== currentValue);
+  };
+
   const formIsClean =
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
     !gitUserNameHasChanged &&
-    !gitUserEmailHasChanged;
+    !gitUserEmailHasChanged &&
+    !defaultWorkspaceBrowsePathHasChanged;
 
   const shouldBeLoading =
     !settings || isLoading || areLlmProfilesLoading || isPending;
@@ -191,6 +206,20 @@ export function AppSettingsScreen() {
           />
 
           <ThemeInput />
+
+          <SettingsInput
+            testId="default-workspace-browse-path-input"
+            name="default-workspace-browse-path-input"
+            type="text"
+            label={t(I18nKey.SETTINGS$DEFAULT_WORKSPACE_BROWSE_PATH)}
+            defaultValue={settings.default_workspace_browse_path || ""}
+            onChange={checkIfDefaultWorkspaceBrowsePathHasChanged}
+            placeholder={t(
+              I18nKey.SETTINGS$DEFAULT_WORKSPACE_BROWSE_PATH_PLACEHOLDER,
+            )}
+            hint={t(I18nKey.SETTINGS$DEFAULT_WORKSPACE_BROWSE_PATH_HINT)}
+            className="w-full min-w-0"
+          />
 
           <SettingsSwitch
             testId="enable-analytics-switch"

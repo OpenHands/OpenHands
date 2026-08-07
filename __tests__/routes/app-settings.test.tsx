@@ -162,6 +162,35 @@ describe("AppSettingsScreen", () => {
     });
   });
 
+  it("saves the default workspace browse path preference", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ default_workspace_browse_path: null }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    const pathInput = await screen.findByTestId(
+      "default-workspace-browse-path-input",
+    );
+
+    await user.clear(pathInput);
+    await user.type(pathInput, "/data/workspaces");
+    await user.click(screen.getByTestId("submit-button"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          default_workspace_browse_path: "/data/workspaces",
+        }),
+      );
+    });
+  });
+
   it("saves a dedicated title generation profile", async () => {
     vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
       profiles: [

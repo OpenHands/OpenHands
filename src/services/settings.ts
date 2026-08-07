@@ -31,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = {
   git_user_name: "openhands",
   git_user_email: "openhands@all-hands.dev",
   title_llm_profile: null,
+  default_workspace_browse_path: null,
+  git_providers: [],
   agent_settings_schema: null,
   agent_settings: {
     schema_version: 6,

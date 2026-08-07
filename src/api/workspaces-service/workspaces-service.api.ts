@@ -10,6 +10,8 @@
  */
 import {
   WorkspacesClient,
+  type CloneRepositoryRequest,
+  type CloneRepositoryResponse,
   type WorkspacesListResponse as SdkWorkspacesListResponse,
 } from "@openhands/typescript-client/clients";
 
@@ -21,6 +23,8 @@ export interface WorkspacesListResponse {
   workspaces: LocalWorkspace[];
   workspaceParents: LocalWorkspaceParent[];
 }
+
+export type { CloneRepositoryRequest, CloneRepositoryResponse };
 
 function client() {
   return new WorkspacesClient(getAgentServerClientOptions());
@@ -61,6 +65,12 @@ class WorkspacesService {
 
   static async removeWorkspaceParent(path: string): Promise<void> {
     await client().deleteWorkspaceParent(path);
+  }
+
+  static async cloneRepository(
+    request: CloneRepositoryRequest,
+  ): Promise<CloneRepositoryResponse> {
+    return client().cloneRepository(request);
   }
 }
 

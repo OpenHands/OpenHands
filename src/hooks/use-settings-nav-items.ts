@@ -18,7 +18,9 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const featureFlags = config?.feature_flags;
 
   return OSS_NAV_ITEMS.filter(
-    (item) => !isSettingsPageHidden(item.to, featureFlags),
+    (item) =>
+      !isSettingsPageHidden(item.to, featureFlags) &&
+      (!item.localOnly || backend.kind === "local"),
   ).map((item) => {
     const renamedItem =
       item.to === "/settings"

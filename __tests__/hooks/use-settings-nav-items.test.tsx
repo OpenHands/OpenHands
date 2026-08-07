@@ -87,12 +87,37 @@ describe("useSettingsNavItems", () => {
 
     const { result } = renderHook(() => useSettingsNavItems());
 
-    // Agent profiles are available on cloud too (OpenHands #15060), so every
-    // OSS item is present; only the `/settings` LLM-Profiles rename stays
-    // local-only, so on cloud every item is passed through unchanged.
+    // Agent profiles are available on cloud too (OpenHands #15060). Local-only
+    // items (GitProviders) stay hidden on cloud; the `/settings` LLM-Profiles
+    // rename stays local-only, so remaining items pass through unchanged.
     expect(result.current).toEqual(
-      OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
+      OSS_NAV_ITEMS.filter((item) => !item.localOnly).map((item) => ({
+        type: "item",
+        item,
+      })),
     );
+  });
+
+  it("shows GitProviders only on local backends", () => {
+    useConfigMock.mockReturnValue({ data: createConfig() });
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "local" },
+      orgId: null,
+    });
+    const localPaths = renderHook(() => useSettingsNavItems())
+      .result.current.filter((item) => item.type === "item")
+      .map((item) => (item.type === "item" ? item.item.to : null));
+    expect(localPaths).toContain("/settings/git-providers");
+
+    useActiveBackendMock.mockReturnValue({
+      backend: { kind: "cloud" },
+      orgId: "org-123",
+    });
+    const cloudPaths = renderHook(() => useSettingsNavItems())
+      .result.current.filter((item) => item.type === "item")
+      .map((item) => (item.type === "item" ? item.item.to : null));
+    expect(cloudPaths).not.toContain("/settings/git-providers");
   });
 
   it("shows a single Agent item (the profile library) on both local and cloud", () => {

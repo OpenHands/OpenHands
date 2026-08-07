@@ -1,4 +1,4 @@
-import { AppWindow, Brain, Shield } from "lucide-react";
+import { AppWindow, Brain, GitBranch, Shield } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -10,6 +10,8 @@ export interface SettingsNavItem {
   text: string;
   /** Short grey subline under the page title (`settings.tsx`). */
   subtitle: string;
+  /** When true, only shown for local backends (GitProviders / local clone). */
+  localOnly?: boolean;
 }
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
@@ -58,6 +60,13 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
     subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+  },
+  {
+    icon: <GitBranch className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/git-providers",
+    text: "SETTINGS$NAV_GIT_PROVIDERS",
+    subtitle: "SETTINGS$PAGE_GIT_PROVIDERS_SUBLINE",
+    localOnly: true,
   },
   {
     icon: <KeyIcon width={16} height={16} />,

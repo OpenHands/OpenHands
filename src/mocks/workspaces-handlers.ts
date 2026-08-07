@@ -35,6 +35,24 @@ export function resetMockWorkspaces(): void {
 }
 
 export const WORKSPACES_HANDLERS = [
+  http.post("*/api/workspaces/clone", async ({ request }) => {
+    const body = (await request.json()) as {
+      url?: string;
+      parentPath?: string;
+      providerId?: string;
+    };
+    const url = body.url ?? "";
+    const name =
+      url
+        .replace(/\.git$/i, "")
+        .split("/")
+        .filter(Boolean)
+        .pop() || "repository";
+    const parent = (body.parentPath ?? "/tmp").replace(/\/$/, "");
+    const path = `${parent}/${name}`;
+    return HttpResponse.json({ path, name });
+  }),
+
   http.get("*/api/workspaces", async () => HttpResponse.json(snapshot())),
 
   http.post("*/api/workspaces", async ({ request }) => {
