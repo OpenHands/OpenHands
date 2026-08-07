@@ -24,6 +24,13 @@ interface LlmConfiguredResult {
    */
   isConfigured: boolean;
   /**
+   * True when an active LLM profile exists but its API key is missing
+   * (api_key_set is false). The banner can use this to show a specific
+   * message pointing to the profile editor rather than the generic
+   * "not set up" message.
+   */
+  profileMissingKey: boolean;
+  /**
    * True while the configured/unconfigured state is indeterminate — either
    * settings/config are still resolving, or a fetch failed and left us with no
    * data to decide from. Consumers should render nothing in this state so a
@@ -139,6 +146,10 @@ export function useLlmConfigured(): LlmConfiguredResult {
   const hasUsableActiveProfile =
     hasActiveProfileApiKey || hasActiveProfileSubscription;
   const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  // A profile that exists but has no API key is the "missing key" case —
+  // distinct from having no profile at all.
+  const profileExistsAndMissingKey =
+    isLocal && !hasUsableActiveProfile && !!activeProfile;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network
@@ -163,6 +174,7 @@ export function useLlmConfigured(): LlmConfiguredResult {
 
   return {
     isConfigured: isAcpAgent || llmSettingsHidden || hasUsableLlm,
+    profileMissingKey: profileExistsAndMissingKey,
     isLoading:
       settingsIndeterminate ||
       configIndeterminate ||

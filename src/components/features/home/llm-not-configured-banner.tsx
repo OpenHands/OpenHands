@@ -12,6 +12,10 @@ import { Typography } from "#/ui/typography";
  * a single action that routes to LLM settings so the failure is communicated
  * up front instead of surfacing only when a conversation attempt errors out.
  *
+ * When an active LLM profile exists but its API key is missing
+ * (api_key_set: false), shows a specific message pointing to the profile
+ * editor rather than the generic "not set up" message.
+ *
  * Renders nothing while settings load (avoids a flash) or once the LLM is
  * configured; the settings query refetches after a key is saved, so the banner
  * unmounts on its own.
@@ -19,7 +23,7 @@ import { Typography } from "#/ui/typography";
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { isConfigured, isLoading } = useLlmConfigured();
+  const { isConfigured, isLoading, profileMissingKey } = useLlmConfigured();
 
   if (isLoading || isConfigured) {
     return null;
@@ -36,7 +40,9 @@ export function LlmNotConfiguredBanner() {
           <FaTriangleExclamation className="align-middle text-yellow-400" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
-          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
+          {profileMissingKey
+            ? t(I18nKey.HOME$LLM_NOT_CONFIGURED_PROFILE_KEY_MISSING)
+            : t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
         </Typography.Text>
       </div>
 
@@ -47,7 +53,9 @@ export function LlmNotConfiguredBanner() {
         className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
         onClick={() => navigate("/settings/llm")}
       >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        {profileMissingKey
+          ? t(I18nKey.HOME$LLM_PROFILE_KEY_MISSING_ACTION)
+          : t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
       </BrandButton>
     </div>
   );
