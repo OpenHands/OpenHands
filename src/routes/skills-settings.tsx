@@ -81,12 +81,16 @@ function SkillsSettingsScreen() {
 
   const activeFilterCount = countActiveFilters(filter);
 
-  // Sync local state with server settings when data first arrives
+  // Sync local state with server settings when data first arrives.
+  // Hydrate exactly once: on every later refetch the auto-save below has
+  // already persisted the user's latest toggle, so re-reading server settings
+  // here would clobber in-flight local changes and make a just-disabled skill
+  // snap back to enabled (the "toggle resets after ~5s" bug).
   React.useEffect(() => {
-    if (settingsLoading || !settings) return;
+    if (settingsLoading || !settings || hasHydratedInitialSettings) return;
     setDisabledSet(new Set(settings.disabled_skills ?? []));
     setHasHydratedInitialSettings(true);
-  }, [settingsLoading, settings?.disabled_skills]);
+  }, [settingsLoading, settings, hasHydratedInitialSettings]);
 
   // Auto-save skill toggles once initial settings are loaded.
   React.useEffect(() => {
