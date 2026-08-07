@@ -38,6 +38,10 @@ import {
   LEGACY_CANVAS_UI_TOOL_NAME,
   type ClientToolSpec,
 } from "./canvas-ui-client-tool";
+import {
+  LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+} from "./launch-child-conversation-client-tool";
 
 export interface DirectConversationInfo {
   id: string;
@@ -936,6 +940,7 @@ type StartConversationPayload = Record<string, unknown> & {
   worktree: boolean;
   secrets_encrypted?: true;
   conversation_id?: string;
+  parent_conversation_id?: string;
   secrets?: Record<string, LookupSecret>;
   tags?: Record<string, string>;
   client_tools: ClientToolSpec[];
@@ -948,6 +953,11 @@ export interface StartConversationOptions {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  // Links the new conversation to an existing one as its child. The
+  // agent-server requires the parent to exist and to share this
+  // conversation's requested `workspace.working_dir` (software-agent-sdk
+  // #4188, agent-server >= 1.37.1); older servers ignore the field.
+  parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
   encryptedAgentSettings?: Record<string, SettingsValue>;
@@ -1023,8 +1033,15 @@ export function buildStartConversationRequest(
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
+    // The agent-server caches each client tool's schema per tool *name* for the
+    // life of the process and rejects a re-registration with a different schema
+    // (`ClientToolSchemaConflictError`). Editing either schema below therefore
+    // requires restarting a long-running dev agent-server before new
+    // conversations can start.
     client_tools:
-      launchAgentKind === "openhands" ? [CANVAS_UI_CLIENT_TOOL] : [],
+      launchAgentKind === "openhands"
+        ? [CANVAS_UI_CLIENT_TOOL, LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL]
+        : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
     max_iterations:
@@ -1063,6 +1080,10 @@ export function buildStartConversationRequest(
     payload.conversation_id = options.conversationId;
   }
 
+  if (options.parentConversationId) {
+    payload.parent_conversation_id = options.parentConversationId;
+  }
+
   const securityAnalyzer =
     getConversationSecurityAnalyzer(conversationSettings);
   if (securityAnalyzer) {
@@ -1088,6 +1109,7 @@ export function buildStartConversationRequest(
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
+  delete toolModuleQualnames[LAUNCH_CHILD_CONVERSATION_TOOL_NAME];
   if (Object.keys(toolModuleQualnames).length > 0) {
     payload.tool_module_qualnames = toolModuleQualnames;
   }
@@ -1153,6 +1175,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
   agentProfileId?: string;

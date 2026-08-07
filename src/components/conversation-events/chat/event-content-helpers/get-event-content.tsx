@@ -1,6 +1,7 @@
 import { Trans } from "react-i18next";
 import React from "react";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import {
   OpenHandsEvent,
   ObservationEvent,
@@ -240,6 +241,10 @@ const getObservationEventTitle = (
           });
         }
         observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
+        break;
+      }
+      if (event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME) {
+        observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
         break;
       }
       return observationType.replace("Observation", "").toUpperCase();

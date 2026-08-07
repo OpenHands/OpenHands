@@ -38,8 +38,10 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
   ConversationErrorEvent,
@@ -480,9 +482,10 @@ export function ConversationWebSocketProvider({
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
-          const isDuplicateEvent = useEventStore
-            .getState()
-            .eventIds.has(event.id);
+          const eventId = event.id;
+          const isDuplicateEvent =
+            eventId !== undefined &&
+            useEventStore.getState().eventIds.has(eventId);
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
@@ -644,6 +647,17 @@ export function ConversationWebSocketProvider({
           if (isCanvasUIActionEvent(event)) {
             handleCanvasUIAction(event.action, conversationId ?? null);
           }
+
+          // Same client-tool pattern, but the work is a network call: launch
+          // the requested child conversation and post the outcome back so the
+          // agent learns the id the server-side acknowledgement can't carry.
+          if (conversationId && isLaunchChildConversationActionEvent(event)) {
+            void handleLaunchChildConversationAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
         }
       } catch (error) {
         console.warn("Failed to parse WebSocket message as JSON:", error);
@@ -685,9 +699,10 @@ export function ConversationWebSocketProvider({
         if (isAgentServerEvent(event)) {
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
-          const isDuplicateEvent = useEventStore
-            .getState()
-            .eventIds.has(event.id);
+          const eventId = event.id;
+          const isDuplicateEvent =
+            eventId !== undefined &&
+            useEventStore.getState().eventIds.has(eventId);
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,

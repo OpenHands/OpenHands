@@ -32,7 +32,7 @@ describe("useTerminal", () => {
     write: vi.fn(),
     writeln: vi.fn(),
     dispose: vi.fn(),
-    onData: vi.fn(() => ({ dispose: vi.fn() })),
+    onData: vi.fn((_handler: (data: string) => void) => ({ dispose: vi.fn() })),
     element: document.createElement("div"),
   }));
 

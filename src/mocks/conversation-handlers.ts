@@ -137,6 +137,8 @@ function createPaginationEvents(messagePrefix: string): OpenHandsEvent[] {
   );
 }
 
+const eventTimestamp = (event: OpenHandsEvent): string => event.timestamp ?? "";
+
 function searchPaginationEvents(
   events: OpenHandsEvent[],
   searchParams: URLSearchParams,
@@ -145,12 +147,12 @@ function searchPaginationEvents(
   const timestampLt = searchParams.get("timestamp__lt");
   const sortOrder = searchParams.get("sort_order");
   const filtered = timestampLt
-    ? events.filter((event) => event.timestamp < timestampLt)
+    ? events.filter((event) => eventTimestamp(event) < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
     sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+      ? eventTimestamp(b).localeCompare(eventTimestamp(a))
+      : eventTimestamp(a).localeCompare(eventTimestamp(b)),
   );
 
   return {
