@@ -168,6 +168,10 @@ class ConfigService {
 
     const verifiedProviders = new Set(Object.keys(verifiedMap ?? {}));
     const names = new Set<string>([...verifiedProviders, ...(providers ?? [])]);
+    // Local agent-server may not list every provider the frontend supports.
+    // OpenRouter is returned by Cloud but missing from the local provider list,
+    // so add it here as a known provider so it's discoverable in the UI.
+    names.add("openrouter");
     const providerItems: LLMProvider[] = [...names].map((name) => ({
       name,
       verified: verifiedProviders.has(name),
