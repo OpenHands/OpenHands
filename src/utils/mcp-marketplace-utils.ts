@@ -10,6 +10,7 @@ import type {
   IntegrationOAuthConfig,
   IntegrationTransport,
 } from "@openhands/extensions/integrations";
+import { LOCAL_MCP_CATALOG } from "#/utils/mcp-local-catalog";
 
 export type { MarketplaceEntry };
 
@@ -110,7 +111,16 @@ export function getMcpOAuthAuthenticationConfig(
 export function getMcpMarketplaceCatalog(
   catalog: MarketplaceEntry[],
 ): MarketplaceEntry[] {
-  return catalog.filter((entry) => !!getDefaultMcpConnectionOption(entry));
+  const fromUpstream = catalog.filter(
+    (entry) => !!getDefaultMcpConnectionOption(entry),
+  );
+  const upstreamIds = new Set(fromUpstream.map((entry) => entry.id));
+  // Fork-local entries (e.g. Appwrite) until they land in @openhands/extensions.
+  const fromLocal = LOCAL_MCP_CATALOG.filter(
+    (entry) =>
+      !upstreamIds.has(entry.id) && !!getDefaultMcpConnectionOption(entry),
+  );
+  return [...fromUpstream, ...fromLocal];
 }
 
 const tryUrl = (raw: string): URL | null => {

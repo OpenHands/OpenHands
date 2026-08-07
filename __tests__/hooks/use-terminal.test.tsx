@@ -24,13 +24,13 @@ function TestTerminalComponent() {
 }
 
 describe("useTerminal", () => {
-  // Terminal is read-only - no longer tests user input functionality
   const mockTerminal = vi.hoisted(() => ({
     loadAddon: vi.fn(),
     open: vi.fn(),
     write: vi.fn(),
     writeln: vi.fn(),
     dispose: vi.fn(),
+    onData: vi.fn(() => ({ dispose: vi.fn() })),
     element: document.createElement("div"),
   }));
 
@@ -61,6 +61,8 @@ describe("useTerminal", () => {
         writeln = mockTerminal.writeln;
 
         dispose = mockTerminal.dispose;
+
+        onData = mockTerminal.onData;
 
         element = mockTerminal.element;
       },
@@ -95,6 +97,7 @@ describe("useTerminal", () => {
 
     renderWithProviders(<TestTerminalComponent />);
 
+    expect(mockTerminal.write).toHaveBeenCalledWith("$ ");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
   });
@@ -111,5 +114,53 @@ describe("useTerminal", () => {
 
     // Restore original element
     mockTerminal.element = originalElement;
+  });
+
+  it("should skip already-displayed commands when syncing from the store", () => {
+    useCommandStore.setState({
+      commands: [
+        { content: "pwd", type: "input", alreadyDisplayed: true },
+        { content: "/workspace", type: "output", alreadyDisplayed: true },
+      ],
+    });
+
+    renderWithProviders(<TestTerminalComponent />);
+
+    expect(mockTerminal.writeln).not.toHaveBeenCalled();
+  });
+
+  it("should submit typed commands through onSubmitCommand", async () => {
+    let onDataHandler: ((data: string) => void) | null = null;
+    mockTerminal.onData.mockImplementation((handler: (data: string) => void) => {
+      onDataHandler = handler;
+      return { dispose: vi.fn() };
+    });
+
+    const onSubmitCommand = vi.fn(async () => {
+      useCommandStore.getState().appendOutput("ok");
+    });
+
+    function InteractiveTerminal() {
+      const ref = useTerminal({ onSubmitCommand });
+      return <div ref={ref} />;
+    }
+
+    renderWithProviders(<InteractiveTerminal />);
+
+    expect(onDataHandler).not.toBeNull();
+    onDataHandler!("l");
+    onDataHandler!("s");
+    onDataHandler!("\r");
+
+    await vi.waitFor(() => {
+      expect(onSubmitCommand).toHaveBeenCalledWith("ls");
+    });
+
+    const stored = useCommandStore.getState().commands;
+    expect(stored[0]).toMatchObject({
+      content: "ls",
+      type: "input",
+      alreadyDisplayed: true,
+    });
   });
 });

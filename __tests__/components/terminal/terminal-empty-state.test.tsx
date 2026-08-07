@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useCommandStore } from "#/stores/command-store";
 import { useAgentState } from "#/hooks/use-agent-state";
@@ -6,12 +6,31 @@ import { AgentState } from "#/types/agent-state";
 
 vi.mock("#/hooks/use-agent-state");
 
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => ({
+    data: {
+      id: "test-conversation-id",
+      conversation_url: "http://localhost:3000",
+      session_api_key: "test-key",
+      workspace: { working_dir: "/projects/odysseus" },
+    },
+    isFetched: true,
+  }),
+}));
+
+vi.mock("#/hooks/use-bash-command-runner", () => ({
+  useBashCommandRunner: () =>
+    vi.fn(async () => ({ exit_code: 0, stdout: "", stderr: "" })),
+}));
+
 const mockTerminalInstance = {
   open: vi.fn(),
   write: vi.fn(),
   writeln: vi.fn(),
   dispose: vi.fn(),
   loadAddon: vi.fn(),
+  onData: vi.fn(() => ({ dispose: vi.fn() })),
+  element: document.createElement("div"),
 };
 
 vi.mock("@xterm/xterm", async (importOriginal) => ({
@@ -42,15 +61,19 @@ describe("Terminal empty state", () => {
         disconnect: vi.fn(),
       };
     }) as unknown as typeof ResizeObserver;
+    vi.clearAllMocks();
   });
 
-  it("shows the empty state when runtime is active and there is no output", () => {
+  it("shows an interactive prompt when runtime is active and there is no output", async () => {
     renderWithProviders(<Terminal />);
 
-    expect(screen.getByText("TERMINAL$NO_OUTPUT")).toBeInTheDocument();
+    expect(screen.queryByText("TERMINAL$NO_OUTPUT")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockTerminalInstance.write).toHaveBeenCalledWith("$ ");
+    });
   });
 
-  it("hides the empty state when terminal commands exist", () => {
+  it("keeps the terminal mounted when commands exist", () => {
     useCommandStore.setState({
       commands: [{ type: "output", content: "hello" }],
     });
@@ -58,9 +81,10 @@ describe("Terminal empty state", () => {
     renderWithProviders(<Terminal />);
 
     expect(screen.queryByText("TERMINAL$NO_OUTPUT")).not.toBeInTheDocument();
+    expect(mockTerminalInstance.open).toHaveBeenCalled();
   });
 
-  it("shows the runtime waiting state instead of the empty state when inactive", () => {
+  it("shows the runtime waiting state when inactive", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.LOADING,
     });

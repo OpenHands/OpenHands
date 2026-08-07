@@ -304,3 +304,51 @@ describe("GitHub hosted MCP entry", () => {
     expect(match?.id).toBe("github");
   });
 });
+
+describe("local Appwrite MCP catalog entry", () => {
+  it("exposes the uvx stdio Appwrite server in the marketplace", () => {
+    // @spec — Heimdall local catalog overlay for Appwrite MCP
+    const catalog = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
+    const appwrite = catalog.find((entry) => entry.id === "appwrite");
+    expect(appwrite).toBeDefined();
+    expect(appwrite?.name).toBe("Appwrite");
+    expect(appwrite?.docsUrl).toBe(
+      "https://appwrite.io/docs/tooling/ai/mcp-servers",
+    );
+
+    const transport = getDefaultMcpTransport(appwrite!);
+    expect(transport?.kind).toBe("stdio");
+    if (transport?.kind !== "stdio") {
+      throw new Error("Appwrite transport should be stdio");
+    }
+    expect(transport.serverName).toBe("appwrite");
+    expect(transport.command).toBe("uvx");
+    expect(transport.args).toEqual(["mcp-server-appwrite"]);
+    expect(transport.envFields?.map((field) => field.key)).toEqual([
+      "APPWRITE_API_KEY",
+      "APPWRITE_PROJECT_ID",
+      "APPWRITE_ENDPOINT",
+    ]);
+  });
+
+  it("matches installed Appwrite stdio servers by name", () => {
+    const appwrite = getMcpMarketplaceCatalog(MCP_MARKETPLACE).find(
+      (entry) => entry.id === "appwrite",
+    )!;
+    const match = findInstalledMatch(getDefaultMcpTransport(appwrite)!, [
+      {
+        id: "stdio-0",
+        type: "stdio",
+        name: "appwrite",
+        command: "uvx",
+        args: ["mcp-server-appwrite"],
+        env: {
+          APPWRITE_API_KEY: "secret",
+          APPWRITE_PROJECT_ID: "proj",
+          APPWRITE_ENDPOINT: "https://cloud.appwrite.io/v1",
+        },
+      },
+    ]);
+    expect(match).toEqual(expect.objectContaining({ id: "stdio-0" }));
+  });
+});

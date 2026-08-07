@@ -3,24 +3,46 @@ import { create } from "zustand";
 export type Command = {
   content: string;
   type: "input" | "output";
+  /** Already echoed by the interactive terminal; skip when syncing from the store. */
+  alreadyDisplayed?: boolean;
 };
 
 interface CommandState {
   commands: Command[];
-  appendInput: (content: string) => void;
-  appendOutput: (content: string) => void;
+  appendInput: (
+    content: string,
+    options?: { alreadyDisplayed?: boolean },
+  ) => void;
+  appendOutput: (
+    content: string,
+    options?: { alreadyDisplayed?: boolean },
+  ) => void;
   clearTerminal: () => void;
 }
 
 export const useCommandStore = create<CommandState>((set) => ({
   commands: [],
-  appendInput: (content: string) =>
+  appendInput: (content, options) =>
     set((state) => ({
-      commands: [...state.commands, { content, type: "input" }],
+      commands: [
+        ...state.commands,
+        {
+          content,
+          type: "input",
+          alreadyDisplayed: options?.alreadyDisplayed,
+        },
+      ],
     })),
-  appendOutput: (content: string) =>
+  appendOutput: (content, options) =>
     set((state) => ({
-      commands: [...state.commands, { content, type: "output" }],
+      commands: [
+        ...state.commands,
+        {
+          content,
+          type: "output",
+          alreadyDisplayed: options?.alreadyDisplayed,
+        },
+      ],
     })),
   clearTerminal: () => set({ commands: [] }),
 }));
