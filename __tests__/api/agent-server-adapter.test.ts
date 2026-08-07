@@ -5,7 +5,9 @@ import {
   ACP_SERVER_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
+  fetchBackendRuntimeServicesInfo,
   getDefaultConversationTitle,
+  parseRuntimeServicesInfo,
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
@@ -24,6 +26,8 @@ const {
   mockGetAgentServerWorkingDir,
   mockIsAgentServerToolAvailable,
   mockGetEffectiveLocalBackend,
+  mockGetCachedAgentServerInfo,
+  mockGetServerInfo,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
@@ -34,6 +38,16 @@ const {
     apiKey: "session-key",
     kind: "local" as const,
   })),
+  mockGetCachedAgentServerInfo: vi.fn<() => unknown>(() => null),
+  mockGetServerInfo: vi.fn(),
+}));
+
+vi.mock("@openhands/typescript-client/clients", () => ({
+  ServerClient: vi.fn(function ServerClientMock() {
+    return {
+      getServerInfo: mockGetServerInfo,
+    };
+  }),
 }));
 
 vi.mock("#/api/agent-server-config", () => ({
@@ -46,6 +60,7 @@ vi.mock("#/api/agent-server-config", () => ({
 
 vi.mock("#/api/agent-server-compatibility", () => ({
   isAgentServerToolAvailable: mockIsAgentServerToolAvailable,
+  getCachedAgentServerInfo: mockGetCachedAgentServerInfo,
 }));
 
 vi.mock("#/api/backend-registry/active-store", () => ({
@@ -54,6 +69,8 @@ vi.mock("#/api/backend-registry/active-store", () => ({
 
 beforeEach(() => {
   mockIsAgentServerToolAvailable.mockReturnValue(true);
+  mockGetCachedAgentServerInfo.mockReturnValue(null);
+  mockGetServerInfo.mockReset();
   mockGetEffectiveLocalBackend.mockReturnValue({
     id: "default-local",
     name: "Local backend",
@@ -691,6 +708,24 @@ describe("buildStartConversationRequest", () => {
       expect(payload.tool_module_qualnames).toBeUndefined();
     });
 
+    it("omits canvas_ui and its module qualname when the backend does not advertise canvas_ui", () => {
+      mockIsAgentServerToolAvailable.mockImplementation(
+        (toolName: string) => toolName !== "canvas_ui",
+      );
+
+      const payload = buildStartConversationRequest({
+        settings: DEFAULT_SETTINGS,
+      }) as {
+        agent_settings: { tools: Array<{ name: string }> };
+        tool_module_qualnames?: Record<string, string>;
+      };
+
+      expect(
+        payload.agent_settings.tools.map((tool) => tool.name),
+      ).not.toContain("canvas_ui");
+      expect(payload.tool_module_qualnames).toBeUndefined();
+    });
+
     it("omits the client tool for an inline ACP agent", () => {
       const payload = buildStartConversationRequest({
         settings: {
@@ -1086,49 +1121,50 @@ describe("toAppConversation", () => {
 });
 
 describe("buildRuntimeServicesSystemSuffix", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    delete (window as unknown as Record<string, unknown>)
-      .__AGENT_CANVAS_RUNTIME_SERVICES_INFO__;
-  });
-
-  it("returns undefined when VITE_RUNTIME_SERVICES_INFO is unset", () => {
+  it("returns undefined when runtime services info is absent", () => {
     expect(buildRuntimeServicesSystemSuffix()).toBeUndefined();
   });
 
-  it("returns undefined when the env var is malformed JSON", () => {
-    vi.stubEnv("VITE_RUNTIME_SERVICES_INFO", "{not valid json");
-    expect(buildRuntimeServicesSystemSuffix()).toBeUndefined();
+  it("parses runtime services JSON strings", () => {
+    expect(
+      parseRuntimeServicesInfo(
+        JSON.stringify({
+          mode: "dev:automation",
+          services: {
+            agent_server: { url_from_agent: "http://localhost:18000" },
+          },
+        }),
+      )?.mode,
+    ).toBe("dev:automation");
+  });
+
+  it("returns null when runtime services JSON is malformed", () => {
+    expect(parseRuntimeServicesInfo("{not valid json")).toBeNull();
   });
 
   it("returns undefined when the JSON has no services", () => {
-    vi.stubEnv("VITE_RUNTIME_SERVICES_INFO", JSON.stringify({ mode: "x" }));
-    expect(buildRuntimeServicesSystemSuffix()).toBeUndefined();
+    expect(buildRuntimeServicesSystemSuffix({ mode: "x" })).toBeUndefined();
   });
 
   it("renders a <RUNTIME_SERVICES> block when an automation entry is present", () => {
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
-        mode: "dev:automation",
-        agent_host_alias: "localhost",
-        services: {
-          agent_server: {
-            description: "self",
-            url_from_agent: "http://localhost:18000",
-          },
-          automation: {
-            description: "automations",
-            url_from_agent: "http://localhost:18001",
-            api_prefix: "/api/automation",
-            docs_url: "http://localhost:18001/api/automation/docs",
-            openapi_url: "http://localhost:18001/api/automation/openapi.json",
-            auth_env_var: "OPENHANDS_AUTOMATION_API_KEY",
-          },
+    const suffix = buildRuntimeServicesSystemSuffix({
+      mode: "dev:automation",
+      agent_host_alias: "localhost",
+      services: {
+        agent_server: {
+          description: "self",
+          url_from_agent: "http://localhost:18000",
         },
-      }),
-    );
-    const suffix = buildRuntimeServicesSystemSuffix();
+        automation: {
+          description: "automations",
+          url_from_agent: "http://localhost:18001",
+          api_prefix: "/api/automation",
+          docs_url: "http://localhost:18001/api/automation/docs",
+          openapi_url: "http://localhost:18001/api/automation/openapi.json",
+          auth_env_var: "OPENHANDS_AUTOMATION_API_KEY",
+        },
+      },
+    });
     expect(suffix).toBeDefined();
     expect(suffix).toContain("<RUNTIME_SERVICES>");
     expect(suffix).toContain("dev:automation");
@@ -1151,16 +1187,12 @@ describe("buildRuntimeServicesSystemSuffix", () => {
   it("uses the configured agent-server URL in the don't-guess line (not a hardcoded :8000)", () => {
     // dev:safe runs the agent-server on :18000, not :8000. Make sure the
     // rendered block doesn't lie to the agent about its own URL.
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
-        mode: "dev:safe",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-        },
-      }),
-    );
-    const suffix = buildRuntimeServicesSystemSuffix();
+    const suffix = buildRuntimeServicesSystemSuffix({
+      mode: "dev:safe",
+      services: {
+        agent_server: { url_from_agent: "http://localhost:18000" },
+      },
+    });
     expect(suffix).toBeDefined();
     expect(suffix).toContain(
       "In particular, http://localhost:18000 inside your sandbox is the Agent Server",
@@ -1171,21 +1203,17 @@ describe("buildRuntimeServicesSystemSuffix", () => {
   });
 
   it("renders the frontend entry with the new key", () => {
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
-        mode: "dev:static",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-          frontend: {
-            kind: "static",
-            description: "Static-file server hosting the agent-canvas build.",
-            url_from_agent: "http://localhost:3001",
-          },
+    const suffix = buildRuntimeServicesSystemSuffix({
+      mode: "dev:static",
+      services: {
+        agent_server: { url_from_agent: "http://localhost:18000" },
+        frontend: {
+          kind: "static",
+          description: "Static-file server hosting the agent-canvas build.",
+          url_from_agent: "http://localhost:3001",
         },
-      }),
-    );
-    const suffix = buildRuntimeServicesSystemSuffix();
+      },
+    });
     expect(suffix).toContain("* Frontend: http://localhost:3001");
     expect(suffix).toContain("Static-file server");
     // Should NOT mislabel a static-build frontend as "Vite frontend".
@@ -1193,78 +1221,60 @@ describe("buildRuntimeServicesSystemSuffix", () => {
   });
 
   it("explicitly mentions when automation is absent", () => {
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
-        mode: "dev:safe",
-        services: {
-          agent_server: { url_from_agent: "http://localhost:18000" },
-        },
-      }),
-    );
-    const suffix = buildRuntimeServicesSystemSuffix();
+    const suffix = buildRuntimeServicesSystemSuffix({
+      mode: "dev:safe",
+      services: {
+        agent_server: { url_from_agent: "http://localhost:18000" },
+      },
+    });
     expect(suffix).toBeDefined();
     expect(suffix).toContain("Automation backend: not running");
   });
 
-  it("falls back to window.__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ when the env var is unset (static builds)", () => {
-    // Static builds (Docker image / published binary) have no
-    // VITE_RUNTIME_SERVICES_INFO baked in; scripts/static-server.mjs injects
-    // the JSON onto window at serve time instead.
-    (
-      window as unknown as Record<string, unknown>
-    ).__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ = JSON.stringify({
-      mode: "docker",
-      services: {
-        agent_server: { url_from_agent: "http://127.0.0.1:18000" },
-        automation: {
-          url_from_agent: "http://127.0.0.1:8000",
-          api_prefix: "/api/automation",
-          auth_env_var: "OPENHANDS_AUTOMATION_API_KEY",
+  it("fetches runtime services from cached server_info when available", async () => {
+    mockGetCachedAgentServerInfo.mockReturnValue({
+      version: "1.28.0",
+      runtime_services: {
+        mode: "docker",
+        services: {
+          agent_server: { url_from_agent: "http://127.0.0.1:18000" },
+          automation: {
+            url_from_agent: "http://127.0.0.1:8000",
+            api_prefix: "/api/automation",
+            auth_env_var: "OPENHANDS_AUTOMATION_API_KEY",
+          },
         },
       },
     });
-    const suffix = buildRuntimeServicesSystemSuffix();
-    expect(suffix).toBeDefined();
-    expect(suffix).toContain("<RUNTIME_SERVICES>");
-    expect(suffix).toContain("docker");
-    expect(suffix).toContain("http://127.0.0.1:18000");
-    expect(suffix).toContain("http://127.0.0.1:8000");
-    expect(suffix).toContain(
-      "X-Session-API-Key: $OPENHANDS_AUTOMATION_API_KEY",
+
+    const info = await fetchBackendRuntimeServicesInfo();
+
+    expect(info?.mode).toBe("docker");
+    expect(info?.services?.automation?.url_from_agent).toBe(
+      "http://127.0.0.1:8000",
     );
+    expect(mockGetServerInfo).not.toHaveBeenCalled();
   });
 
-  it("prefers VITE_RUNTIME_SERVICES_INFO over the window fallback", () => {
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
-        mode: "dev:env",
+  it("fetches runtime services from /server_info when there is no cached probe", async () => {
+    mockGetServerInfo.mockResolvedValue({
+      version: "1.28.0",
+      runtime_services: {
+        mode: "dev:automation",
         services: {
           agent_server: { url_from_agent: "http://localhost:18000" },
         },
-      }),
-    );
-    (
-      window as unknown as Record<string, unknown>
-    ).__AGENT_CANVAS_RUNTIME_SERVICES_INFO__ = JSON.stringify({
-      mode: "docker:window",
-      services: {
-        agent_server: { url_from_agent: "http://127.0.0.1:99999" },
       },
     });
-    const suffix = buildRuntimeServicesSystemSuffix();
-    expect(suffix).toContain("dev:env");
-    expect(suffix).not.toContain("docker:window");
-    expect(suffix).not.toContain("99999");
+
+    const info = await fetchBackendRuntimeServicesInfo();
+
+    expect(info?.mode).toBe("dev:automation");
+    expect(mockGetServerInfo).toHaveBeenCalledOnce();
   });
 });
 
 describe("agent_settings runtime services suffix", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   it("does not set system_message_suffix when no runtime info is provided", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
@@ -1282,10 +1292,11 @@ describe("agent_settings runtime services suffix", () => {
     );
   });
 
-  it("sets system_message_suffix when runtime info is provided", () => {
-    vi.stubEnv(
-      "VITE_RUNTIME_SERVICES_INFO",
-      JSON.stringify({
+  it("sets system_message_suffix when backend runtime info is provided", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      query: "hello",
+      runtimeServicesInfo: {
         mode: "dev:automation",
         services: {
           agent_server: { url_from_agent: "http://localhost:18000" },
@@ -1293,11 +1304,7 @@ describe("agent_settings runtime services suffix", () => {
             url_from_agent: "http://localhost:18001",
           },
         },
-      }),
-    );
-    const payload = buildStartConversationRequest({
-      settings: DEFAULT_SETTINGS,
-      query: "hello",
+      },
     }) as {
       agent_settings: { agent_context: Record<string, unknown> };
     };

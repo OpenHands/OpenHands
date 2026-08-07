@@ -16,7 +16,7 @@ function HomeScreen() {
   return (
     <div
       data-testid="home-screen"
-      className="custom-scrollbar-always flex h-full flex-col overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-[42px]"
+      className="custom-scrollbar-always h-full overflow-y-auto rounded-xl bg-transparent px-4 md:px-0 lg:px-[42px]"
     >
       {import.meta.env.VITE_FEATURED_AUTOMATIONS_DEMO === "true" ? (
         <div className="pb-3 pt-4">
@@ -28,9 +28,7 @@ function HomeScreen() {
         <LlmNotConfiguredBanner />
       </div>
 
-      <div className="flex flex-1 min-h-0 flex-col items-center justify-center">
-        <HomeChatLauncher />
-      </div>
+      <HomeChatLauncher />
 
       {!isPreview ? <OnboardingHost /> : null}
     </div>

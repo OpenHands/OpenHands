@@ -23,6 +23,8 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -124,6 +126,21 @@ describe("ConversationPanel", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("pins the active backend onto each conversation link", async () => {
+    // A tab opened with cmd/ctrl-click does not reliably inherit the opener's
+    // sessionStorage, so the link has to carry the backend it belongs to or
+    // the new tab resolves the conversation against whichever backend
+    // localStorage happens to hold.
+    renderConversationPanel();
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    const href = cards[0].closest("a")?.getAttribute("href");
+    expect(href).toBe(`/conversations/1?backend=${SEEDED_DEFAULT_BACKEND_ID}`);
   });
 
   it("should render the conversations", async () => {

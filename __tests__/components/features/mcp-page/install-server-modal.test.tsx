@@ -35,6 +35,14 @@ function renderWith(ui: React.ReactNode) {
 describe("InstallServerModal", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "createMcpServer").mockImplementation(
+      (settingsKey, server) =>
+        SettingsService.saveSettings({
+          agent_settings_diff: {
+            mcp_config: { [settingsKey]: server },
+          },
+        }),
+    );
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       MOCK_DEFAULT_USER_SETTINGS,
     );
