@@ -9,6 +9,7 @@ import { setStoredConversationMetadata } from "#/api/conversation-metadata-store
 import {
   batchGetCloudConversations,
   createCloudAppConversation,
+  pickCloudBackendForLaunch,
   searchCloudConversations,
 } from "#/api/cloud/conversation-service.api";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "#/api/client-source";
@@ -62,6 +63,52 @@ describe("cloud conversation-service overlay", () => {
         headers: AGENT_CANVAS_CLIENT_HEADERS,
       }),
     );
+  });
+
+  it("starts a Cloud conversation on a registered backend while a local one is active", async () => {
+    const localBackend: Backend = {
+      id: "local-1",
+      kind: "local",
+      host: "http://localhost:8000",
+      apiKey: "local-key",
+      name: "Local",
+    };
+    setRegisteredBackends([localBackend, cloudBackend]);
+    setActiveSelection({ backendId: localBackend.id, orgId: null });
+    mockCallCloudProxy.mockResolvedValueOnce({ id: "start-task" });
+
+    await createCloudAppConversation(
+      {
+        initial_message: null,
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        parent_conversation_id: null,
+      },
+      pickCloudBackendForLaunch()!,
+    );
+
+    expect(mockCallCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        path: "/api/v1/app-conversations",
+        headers: AGENT_CANVAS_CLIENT_HEADERS,
+      }),
+    );
+  });
+
+  it("has no cloud backend to launch on when only local backends are registered", () => {
+    const localBackend: Backend = {
+      id: "local-1",
+      kind: "local",
+      host: "http://localhost:8000",
+      apiKey: "local-key",
+      name: "Local",
+    };
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id, orgId: null });
+
+    expect(pickCloudBackendForLaunch()).toBeNull();
   });
 
   it("overlays locally-stored repo selection onto batchGetCloudConversations results when the server returns nulls", async () => {
