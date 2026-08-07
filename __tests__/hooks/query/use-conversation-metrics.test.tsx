@@ -64,19 +64,14 @@ beforeEach(() => {
 });
 
 describe("useConversationMetrics", () => {
-  it("skips the runtime REST query when the Canvas is hosted on the Cloud (cloud canvas + cloud backend)", async () => {
-    // Arrange — Case 3: the Canvas itself is served from the Cloud host, so
-    // there is no local agent-server exposing /api/cloud-proxy. The REST
-    // fetch would hit a 405 on the Cloud host, so the hook must stay idle
-    // and let the modal fall back to the WebSocket-fed metrics store.
-    // window.location.origin (the fallback in getAgentServerBaseUrl) matches
-    // the cloud backend host in this deployment.
-    vi.spyOn(window, "location", "get").mockReturnValue({
-      ...window.location,
-      origin: "https://app.all-hands.dev",
-      hostname: "app.all-hands.dev",
-    });
-
+  it("skips the runtime REST query on cloud backends (cloud-proxy endpoint was removed)", async () => {
+    // Arrange — register a cloud backend so getActiveBackend() reports
+    // kind === "cloud". The runtime conversation REST fetch tunnels
+    // through /api/cloud-proxy, which was removed from the agent-server:
+    // the local agent-server returns 404 (Local Canvas + Cloud backend)
+    // and the cloud host returns 405 (Cloud Canvas + Cloud backend). The
+    // modal already falls back to the WebSocket-fed metrics store, so the
+    // hook must stay idle to avoid the error toast.
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id, orgId: null });
 
@@ -104,47 +99,6 @@ describe("useConversationMetrics", () => {
     });
     expect(spy).not.toHaveBeenCalled();
     expect(result.current.data).toBeUndefined();
-  });
-
-  it("fires the runtime REST query on a local Canvas with a Cloud backend (cloud-proxy path)", async () => {
-    // Arrange — Case 2: the Canvas runs locally (localhost) but connects to
-    // a Cloud backend. The local agent-server exposes /api/cloud-proxy so
-    // the cloud-proxy path inside getRuntimeConversation can reach the
-    // runtime sandbox. The query must stay enabled.
-    vi.spyOn(window, "location", "get").mockReturnValue({
-      ...window.location,
-      origin: "http://localhost:8000",
-      hostname: "localhost",
-    });
-
-    setRegisteredBackends([cloudBackend]);
-    setActiveSelection({ backendId: cloudBackend.id, orgId: null });
-
-    const spy = vi
-      .spyOn(AgentServerConversationService, "getRuntimeConversation")
-      .mockResolvedValue(runtimeInfo);
-
-    // Act
-    const { result } = renderHook(
-      () =>
-        useConversationMetrics(
-          "conv-abc",
-          "https://runtime.example.com/api/conversations/conv-abc",
-          "session-key",
-          true,
-        ),
-      { wrapper: makeWrapper() },
-    );
-
-    // Assert — the query fires through the cloud-proxy path.
-    await waitFor(() => {
-      expect(result.current.data?.accumulated_cost).toBe(2.5);
-    });
-    expect(spy).toHaveBeenCalledWith(
-      "conv-abc",
-      "https://runtime.example.com/api/conversations/conv-abc",
-      "session-key",
-    );
   });
 
   it("fires the query when sessionApiKey is null (local backends without auth)", async () => {
