@@ -5,13 +5,24 @@ import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { getGitPath } from "#/utils/get-git-path";
-import type { GitChange } from "#/api/open-hands.types";
 
+/**
+ * The diff view should reflect the *current* git state. Every fetch (initial,
+ * auto-invalidate after a commit/push event, or the periodic poll below)
+ * returns the authoritative, complete ordered list from the server, so we hand
+ * that straight to the UI. Historically this hook accumulated deltas into an
+ * `orderedChanges` buffer whose closure-dependent merge could pin stale rows
+ * after a commit — that's the "diff still shows after commit" bug. The server
+ * already returns the whole picture, so no buffer is needed.
+ *
+ * A short `refetchInterval` also closes the gap where the one-shot invalidate
+ * from the commit event can fire *before* the commit lands on disk: the next
+ * poll picks it up, so the diff clears on its own instead of waiting for a
+ * manual refresh.
+ */
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
-  const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
-  const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
 
   const conversationUrl = conversation?.conversation_url;
@@ -46,48 +57,21 @@ export const useUnifiedGetGitChanges = () => {
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 15, // 15 minutes
     refetchOnMount: "always",
+    // Keep the diff in sync after a commit/push lands. The commit event's
+    // invalidate can fire before the backend finishes committing; this poll
+    // guarantees the view converges to the true state shortly after.
+    refetchInterval: 5000,
     enabled: runtimeIsReady && !!conversationId,
     meta: {
       disableToast: true,
     },
   });
 
-  // Latest changes should be on top
-  React.useEffect(() => {
-    if (!result.isFetching && result.isSuccess && result.data) {
-      const currentData = result.data;
-
-      // If this is new data (not the same reference as before)
-      if (currentData !== previousDataRef.current) {
-        previousDataRef.current = currentData;
-
-        // Figure out new items by comparing with what we already have
-        if (Array.isArray(currentData)) {
-          const currentIds = new Set(currentData.map((item) => item.path));
-          const existingIds = new Set(orderedChanges.map((item) => item.path));
-
-          // Filter out items that already exist in orderedChanges
-          const newItems = currentData.filter(
-            (item) => !existingIds.has(item.path),
-          );
-
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
-
-          // Add new items to the beginning
-          setOrderedChanges([...newItems, ...existingItems]);
-        } else {
-          // If not an array, just use the data directly
-          setOrderedChanges([currentData]);
-        }
-      }
-    }
-  }, [result.isFetching, result.isSuccess, result.data]);
-
+  // Return a stable, flat shape (not the full UseQueryResult union) so
+  // consumers and test mocks can rely on these fields. `data` is always an
+  // array: `undefined` becomes `[]`.
   return {
-    data: orderedChanges,
+    data: result.data ?? [],
     isLoading: result.isLoading,
     isFetching: result.isFetching,
     isSuccess: result.isSuccess,
