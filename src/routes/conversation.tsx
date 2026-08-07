@@ -55,7 +55,9 @@ function AppContent() {
   const { resetConversationState } = useConversationStore();
   const navigate = useNavigate();
   const location = useLocation();
-  const clearTerminal = useCommandStore((state) => state.clearTerminal);
+  const setActiveConversation = useCommandStore(
+    (state) => state.setActiveConversation,
+  );
   const resetConversationRuntimeState = useConversationStateStore(
     (state) => state.reset,
   );
@@ -66,19 +68,22 @@ function AppContent() {
     (state) => state.removeErrorMessage,
   );
 
-  // Per-conversation UI/runtime resets. The event store is cleared separately,
-  // inside ConversationWebSocketProvider, so the clear is ordered *before* the
-  // preloaded-history re-seed (see the note there) — clearing it here would run
-  // too late and wipe the freshly seeded history on a conversation switch.
+  // Per-conversation UI/runtime resets. Terminal history is keyed by
+  // conversation id in the command store — switch the active conversation
+  // instead of wiping it so returning to a chat restores its terminals.
+  // The event store is cleared separately, inside ConversationWebSocketProvider,
+  // so the clear is ordered *before* the preloaded-history re-seed (see the
+  // note there) — clearing it here would run too late and wipe the freshly
+  // seeded history on a conversation switch.
   React.useEffect(() => {
-    clearTerminal();
+    setActiveConversation(conversationId);
     resetConversationState();
     resetConversationRuntimeState();
     setCurrentAgentState(AgentState.LOADING);
     removeErrorMessage();
   }, [
     conversationId,
-    clearTerminal,
+    setActiveConversation,
     resetConversationState,
     resetConversationRuntimeState,
     setCurrentAgentState,

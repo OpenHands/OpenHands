@@ -1,13 +1,15 @@
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
-import { Command, useCommandStore } from "#/stores/command-store";
+import { Command, resetCommandStore, useCommandStore } from "#/stores/command-store";
 import { renderWithProviders } from "../../test-utils";
+
+const CONVERSATION_ID = "test-conversation-id";
 
 // Mock useActiveConversation
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => ({
     data: {
-      id: "test-conversation-id",
+      id: CONVERSATION_ID,
     },
     isFetched: true,
   }),
@@ -78,11 +80,11 @@ describe("useTerminal", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    // Reset command store between tests
-    useCommandStore.setState({ commands: [] });
+    resetCommandStore();
   });
 
   it("should render", () => {
+    resetCommandStore(CONVERSATION_ID);
     renderWithProviders(<TestTerminalComponent />);
   });
 
@@ -93,7 +95,7 @@ describe("useTerminal", () => {
     ];
 
     // Set commands in store before rendering to ensure they're picked up during initialization
-    useCommandStore.setState({ commands });
+    resetCommandStore(CONVERSATION_ID, commands);
 
     renderWithProviders(<TestTerminalComponent />);
 
@@ -103,6 +105,7 @@ describe("useTerminal", () => {
   });
 
   it("should not call fit() when terminal.element is null", () => {
+    resetCommandStore(CONVERSATION_ID);
     // Temporarily set element to null to simulate terminal not being opened
     const originalElement = mockTerminal.element;
     mockTerminal.element = null as unknown as HTMLDivElement;
@@ -117,12 +120,10 @@ describe("useTerminal", () => {
   });
 
   it("should skip already-displayed commands when syncing from the store", () => {
-    useCommandStore.setState({
-      commands: [
-        { content: "pwd", type: "input", alreadyDisplayed: true },
-        { content: "/workspace", type: "output", alreadyDisplayed: true },
-      ],
-    });
+    resetCommandStore(CONVERSATION_ID, [
+      { content: "pwd", type: "input", alreadyDisplayed: true },
+      { content: "/workspace", type: "output", alreadyDisplayed: true },
+    ]);
 
     renderWithProviders(<TestTerminalComponent />);
 
@@ -130,6 +131,7 @@ describe("useTerminal", () => {
   });
 
   it("should submit typed commands through onSubmitCommand", async () => {
+    resetCommandStore(CONVERSATION_ID);
     let onDataHandler: ((data: string) => void) | null = null;
     mockTerminal.onData.mockImplementation((handler: (data: string) => void) => {
       onDataHandler = handler;

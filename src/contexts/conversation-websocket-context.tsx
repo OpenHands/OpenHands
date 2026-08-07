@@ -573,7 +573,7 @@ export function ConversationWebSocketProvider({
 
           // Handle ExecuteBashAction events - add command as input to terminal
           if (isExecuteBashActionEvent(event)) {
-            appendInput(event.action.command);
+            appendInput(event.action.command, undefined, conversationId);
           }
 
           // Handle ExecuteBashObservation events - add output to terminal
@@ -583,7 +583,7 @@ export function ConversationWebSocketProvider({
               .filter((c) => c.type === "text")
               .map((c) => c.text)
               .join("\n");
-            appendOutput(textContent);
+            appendOutput(textContent, undefined, conversationId);
           }
 
           // Handle BrowserObservation events - update browser store with screenshot
@@ -779,7 +779,7 @@ export function ConversationWebSocketProvider({
 
           // Handle ExecuteBashAction events - add command as input to terminal
           if (isExecuteBashActionEvent(event)) {
-            appendInput(event.action.command);
+            appendInput(event.action.command, undefined, conversationId);
           }
 
           // Handle ExecuteBashObservation events - add output to terminal
@@ -789,7 +789,7 @@ export function ConversationWebSocketProvider({
               .filter((c) => c.type === "text")
               .map((c) => c.text)
               .join("\n");
-            appendOutput(textContent);
+            appendOutput(textContent, undefined, conversationId);
           }
 
           // Handle PlanningFileEditorObservation - only update plan for Plan.md

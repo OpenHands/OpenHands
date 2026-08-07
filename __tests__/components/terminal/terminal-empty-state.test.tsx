@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { useCommandStore } from "#/stores/command-store";
+import { resetCommandStore, useCommandStore } from "#/stores/command-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 
@@ -22,6 +23,17 @@ vi.mock("#/hooks/use-bash-command-runner", () => ({
   useBashCommandRunner: () =>
     vi.fn(async () => ({ exit_code: 0, stdout: "", stderr: "" })),
 }));
+
+vi.mock("react-i18next", async (importOriginal) => {
+  const real = await importOriginal<typeof import("react-i18next")>();
+  return {
+    ...real,
+    useTranslation: () => ({
+      t: (key: string, opts?: { number?: number }) =>
+        opts?.number != null ? `${key}:${opts.number}` : key,
+    }),
+  };
+});
 
 const mockTerminalInstance = {
   open: vi.fn(),
@@ -49,9 +61,9 @@ vi.mock("@xterm/addon-fit", () => ({
 import { renderWithProviders } from "test-utils";
 import Terminal from "#/components/features/terminal/terminal";
 
-describe("Terminal empty state", () => {
+describe("Terminal empty state + tabs", () => {
   beforeEach(() => {
-    useCommandStore.setState({ commands: [] });
+    resetCommandStore("test-conversation-id");
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.RUNNING,
     });
@@ -74,9 +86,9 @@ describe("Terminal empty state", () => {
   });
 
   it("keeps the terminal mounted when commands exist", () => {
-    useCommandStore.setState({
-      commands: [{ type: "output", content: "hello" }],
-    });
+    resetCommandStore("test-conversation-id", [
+      { type: "output", content: "hello" },
+    ]);
 
     renderWithProviders(<Terminal />);
 
@@ -93,5 +105,25 @@ describe("Terminal empty state", () => {
 
     expect(screen.queryByText("TERMINAL$NO_OUTPUT")).not.toBeInTheDocument();
     expect(screen.getByTestId("runtime-waiting")).toBeInTheDocument();
+  });
+
+  it("can open a second terminal tab with an independent buffer", async () => {
+    const user = userEvent.setup();
+    resetCommandStore("test-conversation-id", [
+      { type: "output", content: "first-tab" },
+    ]);
+
+    renderWithProviders(<Terminal />);
+
+    expect(screen.getByTestId("terminal-tab-1")).toBeInTheDocument();
+    await user.click(screen.getByTestId("terminal-add-tab"));
+
+    expect(screen.getByTestId("terminal-tab-2")).toBeInTheDocument();
+    expect(useCommandStore.getState().commands).toEqual([]);
+
+    useCommandStore.getState().appendOutput("second-tab");
+    expect(useCommandStore.getState().commands).toEqual([
+      { type: "output", content: "second-tab", alreadyDisplayed: undefined },
+    ]);
   });
 });

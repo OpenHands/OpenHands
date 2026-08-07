@@ -6,7 +6,7 @@ import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket
 import { useEventStore } from "#/stores/use-event-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
-import { useCommandStore } from "#/stores/command-store";
+import { resetCommandStore, useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import EventService from "#/api/event-service/event-service.api";
@@ -104,7 +104,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     });
     useOptimisticUserMessageStore.setState({ pendingMessages: [] });
     useBrowserStore.getState().reset();
-    useCommandStore.setState({ commands: [] });
+    resetCommandStore();
     useErrorMessageStore.getState().removeErrorMessage();
 
     vi.mocked(useUserConversation).mockReturnValue({
