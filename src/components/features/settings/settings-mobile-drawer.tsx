@@ -92,7 +92,7 @@ export function SettingsMobileDrawer({
           <CloudSettingsLink />
         </div>
 
-        <div className="px-2 pt-3">
+        <div className="flex flex-col gap-2 px-2 pt-3">
           <AgentCanvasUpdateCard />
         </div>
 
