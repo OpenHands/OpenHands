@@ -212,6 +212,7 @@ export function RunningAutomationsList() {
     isBackendHealthy,
     isHealthLoading,
     isError,
+    isAutomationsLoading,
     enabledAutomations,
     runStates,
   } = useHomeAutomations();
@@ -245,9 +246,11 @@ export function RunningAutomationsList() {
     !isExpanded && items.length > HOME_AUTOMATIONS_PREVIEW_LIMIT;
   const canViewAll = isExpanded && items.length >= MAX_HOME_AUTOMATION_CHIPS;
 
-  if (isHealthLoading || !isBackendHealthy || isError || items.length === 0) {
+  if (isHealthLoading || !isBackendHealthy || isError || isAutomationsLoading) {
     return null;
   }
+
+  const isEmpty = items.length === 0;
 
   return (
     <section
@@ -278,23 +281,32 @@ export function RunningAutomationsList() {
         </StyledTooltip>
       </div>
 
-      <ul
-        aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
-        className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
-      >
-        {visibleItems.map((item) => {
-          const automation = automationById.get(item.id);
-          if (!automation) return null;
-          return (
-            <RunningAutomationRow
-              key={item.id}
-              item={item}
-              automation={automation}
-              runState={runStates.get(item.id) ?? UNKNOWN_RUN_STATE}
-            />
-          );
-        })}
-      </ul>
+      {isEmpty ? (
+        <p
+          data-testid="running-automations-empty-hint"
+          className="rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-4 py-3 text-xs text-[var(--oh-text-secondary)]"
+        >
+          {t(I18nKey.FEATURED_AUTOMATIONS$EMPTY_HINT)}
+        </p>
+      ) : (
+        <ul
+          aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
+          className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
+        >
+          {visibleItems.map((item) => {
+            const automation = automationById.get(item.id);
+            if (!automation) return null;
+            return (
+              <RunningAutomationRow
+                key={item.id}
+                item={item}
+                automation={automation}
+                runState={runStates.get(item.id) ?? UNKNOWN_RUN_STATE}
+              />
+            );
+          })}
+        </ul>
+      )}
 
       {canViewMore ? (
         <div className="mt-2 flex justify-start">
