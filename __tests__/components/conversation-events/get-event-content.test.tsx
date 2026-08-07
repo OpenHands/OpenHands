@@ -392,4 +392,61 @@ describe("getEventContent", () => {
       "UI command 'open_tab' dispatched to the Agent Canvas frontend.",
     );
   });
+
+  it("renders open_url Canvas UI events as Open URL titles", () => {
+    const openUrlAction: ActionEvent = {
+      id: "action-open-url",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: CANVAS_UI_CLIENT_ACTION_KIND,
+        command: "open_url",
+        path: null,
+        tab: null,
+        url: "http://localhost:8089",
+      },
+      tool_name: CANVAS_UI_CLIENT_TOOL_NAME,
+      tool_call_id: "tool-open-url",
+      tool_call: {
+        id: "tool-open-url",
+        type: "function",
+        function: {
+          name: CANVAS_UI_CLIENT_TOOL_NAME,
+          arguments:
+            '{"command":"open_url","url":"http://localhost:8089"}',
+        },
+      },
+      llm_response_id: "response-open-url",
+      security_risk: SecurityRisk.LOW,
+      summary: "",
+    };
+    const openUrlObservation: ObservationEvent = {
+      id: "obs-open-url",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: CANVAS_UI_CLIENT_TOOL_NAME,
+      tool_call_id: "tool-open-url",
+      action_id: "action-open-url",
+      observation: {
+        kind: "ClientToolObservation",
+        content: [{ type: "text", text: "Tool call dispatched to client." }],
+        is_error: false,
+      },
+    };
+
+    const actionContent = getEventContent(openUrlAction);
+    const { unmount } = render(<span>{actionContent.title}</span>);
+    expect(screen.getByText("BROWSER$OPEN_URL_TITLE")).toBeInTheDocument();
+    unmount();
+
+    const { title, details } = getEventContent(
+      openUrlObservation,
+      openUrlAction,
+    );
+    render(<span>{title}</span>);
+    expect(screen.getByText("BROWSER$OPEN_URL_TITLE")).toBeInTheDocument();
+    expect(details).toBe("");
+  });
 });

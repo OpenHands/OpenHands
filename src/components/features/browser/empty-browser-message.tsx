@@ -8,7 +8,7 @@ export function EmptyBrowserMessage() {
 
   return (
     <ConversationTabEmptyState icon={<IoIosGlobe />}>
-      {t(I18nKey.BROWSER$NO_PAGE_LOADED)}
+      {t(I18nKey.BROWSER$SERVER_MESSAGE)}
     </ConversationTabEmptyState>
   );
 }

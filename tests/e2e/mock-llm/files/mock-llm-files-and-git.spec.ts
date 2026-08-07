@@ -324,11 +324,12 @@ test.describe("files tab, git control bar, and browser tab", () => {
     });
 
     await test.step("verify empty browser message", async () => {
-      // The EmptyBrowserMessage renders the "No page loaded yet" message.
-      // We assert on the text rather than a test-id since the component
-      // uses the shared ConversationTabEmptyState without its own id.
+      // The EmptyBrowserMessage renders BROWSER$SERVER_MESSAGE when no
+      // live URL or agent screenshot is loaded. Assert on the text rather
+      // than a test-id since the component uses the shared
+      // ConversationTabEmptyState without its own id.
       await expect(
-        page.getByText("No page loaded yet", { exact: false }),
+        page.getByText("No web app running", { exact: false }),
       ).toBeVisible({ timeout: 10_000 });
     });
   });

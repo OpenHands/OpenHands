@@ -30,6 +30,24 @@ describe("canvas_ui client tool", () => {
     );
   });
 
+  it("documents open_url for live iframe previews of local servers", () => {
+    expect(CANVAS_UI_CLIENT_TOOL.description).toContain("Open URL:");
+    expect(CANVAS_UI_CLIENT_TOOL.description).toContain(
+      'command="open_url", url=',
+    );
+    expect(
+      (
+        CANVAS_UI_CLIENT_TOOL.parameters.properties as {
+          command: { enum: string[] };
+          url: unknown;
+        }
+      ).command.enum,
+    ).toContain("open_url");
+    expect(
+      (CANVAS_UI_CLIENT_TOOL.parameters.properties as { url: unknown }).url,
+    ).toBeDefined();
+  });
+
   it("exports the semantic tool name and generated action kind", () => {
     expect(CANVAS_UI_CLIENT_TOOL_NAME).toBe("canvas_ui_control");
     expect(CANVAS_UI_CLIENT_ACTION_KIND).toBe("ClientAction_canvas_ui_control");

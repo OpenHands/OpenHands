@@ -690,7 +690,12 @@ describe("buildStartConversationRequest", () => {
           type: "object",
           properties: {
             command: {
-              enum: ["navigate_to_file", "open_tab", "show_preview"],
+              enum: [
+                "navigate_to_file",
+                "open_tab",
+                "show_preview",
+                "open_url",
+              ],
             },
           },
           required: ["command"],

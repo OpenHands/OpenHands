@@ -2,8 +2,12 @@ import {
   ConversationTab,
   useConversationStore,
 } from "#/stores/conversation-store";
+import { useBrowserStore } from "#/stores/browser-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
+import { isValidLivePreviewUrl } from "#/utils/browser-live-url";
+
+export { isValidLivePreviewUrl } from "#/utils/browser-live-url";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
   "files",
@@ -41,6 +45,16 @@ export function handleCanvasUIAction(
         useFilesTabStore
           .getState()
           .setSelectedPath(action.path, conversationId);
+      }
+      return;
+    case "open_url":
+      if (isValidLivePreviewUrl(action.url)) {
+        useBrowserStore.getState().setLiveUrl(action.url as string);
+        navigateToTab("browser");
+      } else {
+        console.warn(
+          `[canvas_ui] Ignoring open_url with invalid or non-http(s) url: ${action.url ?? "(missing)"}`,
+        );
       }
       return;
     case "open_tab":

@@ -215,10 +215,30 @@ const getObservationEventTitle = (
       };
       break;
     case "CanvasUIObservation":
+      if (
+        correspondingAction &&
+        isCanvasUIActionEvent(correspondingAction) &&
+        correspondingAction.action.command === "open_url" &&
+        correspondingAction.action.url
+      ) {
+        return createTitleFromKey("BROWSER$OPEN_URL_TITLE", {
+          url: trimEventTitleText(correspondingAction.action.url, 120),
+        });
+      }
       observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
       break;
     case "ClientToolObservation":
       if (event.tool_name === CANVAS_UI_CLIENT_TOOL_NAME) {
+        if (
+          correspondingAction &&
+          isCanvasUIActionEvent(correspondingAction) &&
+          correspondingAction.action.command === "open_url" &&
+          correspondingAction.action.url
+        ) {
+          return createTitleFromKey("BROWSER$OPEN_URL_TITLE", {
+            url: trimEventTitleText(correspondingAction.action.url, 120),
+          });
+        }
         observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
         break;
       }
@@ -286,6 +306,11 @@ const getCanvasUIClientObservationContent = (
     !isCanvasUIActionEvent(correspondingAction)
   ) {
     return null;
+  }
+
+  // open_url already has a clear title ("Open URL: …"); keep the body empty.
+  if (correspondingAction.action.command === "open_url") {
+    return "";
   }
 
   return `UI command '${correspondingAction.action.command}' dispatched to the Agent Canvas frontend.`;

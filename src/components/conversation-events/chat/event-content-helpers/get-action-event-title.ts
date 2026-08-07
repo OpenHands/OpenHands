@@ -129,8 +129,24 @@ export const getActionEventTitleDescriptor = (
         values: {},
       };
     case "CanvasUIAction":
-    case CANVAS_UI_CLIENT_ACTION_KIND:
+    case CANVAS_UI_CLIENT_ACTION_KIND: {
+      const canvasAction = event.action as {
+        command?: string;
+        url?: string | null;
+      };
+      if (
+        canvasAction.command === "open_url" &&
+        typeof canvasAction.url === "string" &&
+        canvasAction.url.trim()
+      ) {
+        return {
+          kind: "translation",
+          key: "BROWSER$OPEN_URL_TITLE",
+          values: { url: trimEventTitleText(canvasAction.url, 120) },
+        };
+      }
       return { kind: "text", text: "CANVASUI" };
+    }
     default:
       return {
         kind: "text",

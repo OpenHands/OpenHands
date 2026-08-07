@@ -45,7 +45,16 @@ When to call (pick the most specific option that matches your last action):
   should inspect →
     command="open_tab", tab="terminal"
 
-* You browsed to a URL the user should see →
+* You started a local web server / app the user should browse live →
+    Open URL: <http(s) URL reachable from the user's browser>
+    (command="open_url", url=<that URL>. Prefer this over open_tab+browser
+    when the goal is to show a running server, not an agent browser-tool
+    screenshot. The URL must be reachable by the user's browser — typically
+    localhost or a public URL — not an address that only exists inside the
+    agent sandbox.)
+
+* You browsed to a URL with the browser automation tools and the user
+  should see that screenshot →
     First call browser_get_state(include_screenshot=true) after your final
     browser interaction so Agent Canvas has a screenshot to display, then call
     command="open_tab", tab="browser"
@@ -66,7 +75,7 @@ export const CANVAS_UI_CLIENT_TOOL: ClientToolSpec = {
     properties: {
       command: {
         type: "string",
-        enum: ["navigate_to_file", "open_tab", "show_preview"],
+        enum: ["navigate_to_file", "open_tab", "show_preview", "open_url"],
         description: "UI command to dispatch.",
       },
       path: {
@@ -78,6 +87,11 @@ export const CANVAS_UI_CLIENT_TOOL: ClientToolSpec = {
         type: "string",
         enum: ["files", "browser", "vscode", "terminal", "planner", "tasklist"],
         description: "Tab to open. Required for open_tab; ignored otherwise.",
+      },
+      url: {
+        type: "string",
+        description:
+          "http(s) URL to open as a live iframe in the Browser tab. Required for open_url; ignored otherwise. Must be reachable from the user's browser.",
       },
     },
     required: ["command"],

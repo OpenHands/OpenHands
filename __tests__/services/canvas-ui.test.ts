@@ -6,6 +6,7 @@ import {
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { useBrowserStore } from "#/stores/browser-store";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
@@ -31,6 +32,7 @@ describe("handleCanvasUIAction", () => {
       selectedPath: null,
       selectedConversationId: null,
     });
+    useBrowserStore.getState().reset();
   });
 
   it("navigate_to_file selects the files tab, reveals the panel, and sets selectedPath", () => {
@@ -93,6 +95,43 @@ describe("handleCanvasUIAction", () => {
 
     expect(useFilesTabStore.getState().selectedPath).toBe("previous.txt");
     expect(useConversationStore.getState().selectedTab).toBe("files");
+  });
+
+  it("open_url switches to the browser tab and sets live iframe mode", () => {
+    useBrowserStore.setState({
+      mode: "screenshot",
+      url: "https://old.example",
+      screenshotSrc: "data:image/png;base64,abc",
+    });
+
+    handleCanvasUIAction(
+      action({ command: "open_url", url: "http://localhost:8089/" }),
+    );
+
+    const browser = useBrowserStore.getState();
+    expect(browser.mode).toBe("live");
+    expect(browser.url).toBe("http://localhost:8089/");
+    expect(browser.screenshotSrc).toBe("");
+    expect(useConversationStore.getState().selectedTab).toBe("browser");
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+  });
+
+  it("open_url rejects non-http(s) URLs and leaves the browser store unchanged", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      handleCanvasUIAction(
+        action({ command: "open_url", url: "javascript:alert(1)" }),
+      );
+
+      expect(useBrowserStore.getState().mode).toBe("empty");
+      expect(useConversationStore.getState().selectedTab).toBeNull();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("javascript:alert(1)"),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
