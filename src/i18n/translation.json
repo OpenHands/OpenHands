@@ -17475,6 +17475,23 @@
     "uk": "Налаштування",
     "ca": "Configuració"
   },
+  "SIDEBAR$JOIN_SLACK": {
+    "en": "Join Slack",
+    "ja": "Slackに参加",
+    "zh-CN": "加入 Slack",
+    "zh-TW": "加入 Slack",
+    "ko-KR": "Slack 참여",
+    "no": "Bli med i Slack",
+    "it": "Unisciti a Slack",
+    "pt": "Entrar no Slack",
+    "es": "Unirse a Slack",
+    "ar": "انضم إلى Slack",
+    "fr": "Rejoindre Slack",
+    "tr": "Slack'e katıl",
+    "de": "Slack beitreten",
+    "uk": "Приєднатися до Slack",
+    "ca": "Uneix-te a Slack"
+  },
   "SIDEBAR$DOCS": {
     "en": "Documentation",
     "ja": "ドキュメント",

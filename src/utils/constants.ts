@@ -23,6 +23,8 @@ export const PRODUCT_URL = {
   PRODUCTION: "https://app.all-hands.dev",
 };
 
+export const OPENHANDS_SLACK_INVITE_URL = "https://go.openhands.dev/slack";
+
 export const SETTINGS_FORM = {
   LABEL_CLASSNAME: "text-[11px] font-medium leading-4 tracking-[0.11px]",
 };
