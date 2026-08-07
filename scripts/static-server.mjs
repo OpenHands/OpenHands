@@ -35,6 +35,11 @@ import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
 import {
+  createAppLoginHandler,
+  createAppLoginStore,
+  isAppLoginRequest,
+} from "./app-login.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -554,10 +559,22 @@ export function startStaticServer(config) {
   const basePath = injectionOpts.basePath;
   const rejectPrefixes = config.rejectPrefixes ?? [];
   const staticMiddleware = createStaticMiddleware(dirAbs);
+  const handleAppLogin = createAppLoginHandler(createAppLoginStore());
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
+    if (isAppLoginRequest(req.url ?? "/")) {
+      void handleAppLogin(req, res).catch((err) => {
+        console.error(`App login handler error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
     const backend = route(req.url ?? "/");
     if (backend) {
       if (

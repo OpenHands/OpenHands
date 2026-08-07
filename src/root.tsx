@@ -15,24 +15,16 @@ import "./index.css";
 import React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
+import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import {
-  clearCachedAgentServerInfo,
-  isAgentServerUnavailableError,
-  isAgentServerAuthError,
-} from "#/api/agent-server-compatibility";
-import {
-  getLockedCloudAuthMode,
-  getLockedCloudHost,
-  isAuthRequiredAndMissing,
-  isSameCloudHost,
-} from "#/api/agent-server-config";
-import {
-  authenticateWithMainAppCookie,
-  redirectToMainAppLogin,
-  shouldUseMainAppCookieAuth,
-} from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
-import { useActiveBackendContext } from "#/contexts/active-backend-context";
+  useAppLoginSession,
+  useAppLoginStatus,
+} from "#/hooks/query/use-app-login";
+import { AgentServerUIRoot } from "#/components/providers";
+import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
+import { buildAgentCanvasPath } from "#/utils/base-path";
+import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { NavigationProvider } from "#/context/navigation-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
   isCloudBackendLoggedOutHealthError,
@@ -41,12 +33,24 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
-import { QUERY_KEYS } from "#/hooks/query/query-keys";
-import { AgentServerUIRoot } from "#/components/providers";
-import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
-import { buildAgentCanvasPath } from "#/utils/base-path";
-import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
-import { NavigationProvider } from "#/context/navigation-context";
+import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
+import {
+  authenticateWithMainAppCookie,
+  redirectToMainAppLogin,
+  shouldUseMainAppCookieAuth,
+} from "#/api/main-app-auth";
+import {
+  getLockedCloudAuthMode,
+  getLockedCloudHost,
+  isAuthRequiredAndMissing,
+  isSameCloudHost,
+} from "#/api/agent-server-config";
+import {
+  clearCachedAgentServerInfo,
+  isAgentServerUnavailableError,
+  isAgentServerAuthError,
+} from "#/api/agent-server-compatibility";
 import {
   applyColorTheme,
   readPersistedColorTheme,
@@ -71,6 +75,11 @@ const ManageBackendsModal = React.lazy(() =>
 // Rendered when the backend returns 401 (public mode — user must paste key).
 const ApiKeyEntryScreen = React.lazy(
   () => import("#/components/features/backends/api-key-entry-screen"),
+);
+
+// Internal username/password gate (APP_LOGIN_ENABLED).
+const AppLoginScreen = React.lazy(
+  () => import("#/components/features/auth/app-login-screen"),
 );
 
 // Rendered only for first-run public/frontend-only bootstraps; keep the
@@ -263,6 +272,17 @@ export default function App() {
   const { isCompleted: onboardingCompleted, markCompleted } =
     useOnboardingCompletion();
 
+  const appLoginStatus = useAppLoginStatus();
+  const appLoginEnabled = appLoginStatus.data?.enabled === true;
+  const appLoginSession = useAppLoginSession(
+    appLoginStatus.isSuccess && appLoginEnabled,
+  );
+  const waitingForAppLogin =
+    appLoginStatus.isPending ||
+    (appLoginEnabled && appLoginSession.isPending);
+  const needsAppLogin =
+    appLoginEnabled && appLoginSession.data?.authenticated !== true;
+
   // In locked-to-Cloud mode the `openhands-onboarded` localStorage flag is
   // not trustworthy: it may have been set during a previous non-locked
   // session on the same origin, and origin-scoped localStorage cannot tell
@@ -288,7 +308,11 @@ export default function App() {
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,
-    enabled: shouldCheckMainAppAuth && !showFirstRunOnboarding,
+    enabled:
+      shouldCheckMainAppAuth &&
+      !showFirstRunOnboarding &&
+      !waitingForAppLogin &&
+      !needsAppLogin,
     retry: false,
     staleTime: 1000 * 60 * 5,
     meta: { disableToast: true },
@@ -313,12 +337,17 @@ export default function App() {
   // collection; the onboarding steps issue their own backend-specific queries.
   const config = useConfig({
     enabled:
+      !waitingForAppLogin &&
+      !needsAppLogin &&
       !authMissing &&
       !showFirstRunOnboarding &&
       mainAppAuthAllowsBackendQueries,
   });
   const activeCloudHealth = useBackendsHealth(
-    active.backend.kind === "cloud" && mainAppAuthAllowsBackendQueries
+    active.backend.kind === "cloud" &&
+      mainAppAuthAllowsBackendQueries &&
+      !waitingForAppLogin &&
+      !needsAppLogin
       ? [active.backend]
       : [],
   )[active.backend.id];
@@ -335,6 +364,18 @@ export default function App() {
     active.backend.kind === "cloud" &&
     activeCloudHealth?.disabled === true &&
     isCloudBackendApiKeyOrNetworkHealthError(activeCloudHealth.lastError);
+
+  if (waitingForAppLogin) {
+    return <AgentServerBootstrapLoading />;
+  }
+
+  if (needsAppLogin) {
+    return (
+      <React.Suspense fallback={<AgentServerBootstrapLoading />}>
+        <AppLoginScreen />
+      </React.Suspense>
+    );
+  }
 
   if (showFirstRunOnboarding) {
     return (

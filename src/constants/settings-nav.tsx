@@ -1,4 +1,4 @@
-import { AppWindow, Brain, GitBranch, Shield } from "lucide-react";
+import { AppWindow, Brain, GitBranch, Shield, Users } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -12,6 +12,8 @@ export interface SettingsNavItem {
   subtitle: string;
   /** When true, only shown for local backends (GitProviders / local clone). */
   localOnly?: boolean;
+  /** When true, only shown while internal app login is enabled. */
+  appLoginOnly?: boolean;
 }
 
 export const OSS_NAV_ITEMS: SettingsNavItem[] = [
@@ -60,6 +62,13 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/app",
     text: "SETTINGS$NAV_APPLICATION",
     subtitle: "SETTINGS$PAGE_APPLICATION_SUBLINE",
+  },
+  {
+    icon: <Users className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/users",
+    text: "SETTINGS$NAV_USERS",
+    subtitle: "SETTINGS$PAGE_USERS_SUBLINE",
+    appLoginOnly: true,
   },
   {
     icon: <GitBranch className="size-4" strokeWidth={2} aria-hidden />,

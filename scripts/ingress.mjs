@@ -26,6 +26,11 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 
 import {
+  createAppLoginHandler,
+  createAppLoginStore,
+  isAppLoginRequest,
+} from "./app-login.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
@@ -148,9 +153,21 @@ function buildConfig(args, env = process.env) {
 export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
+  const handleAppLogin = createAppLoginHandler(createAppLoginStore());
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
+    if (isAppLoginRequest(req.url ?? "/")) {
+      void handleAppLogin(req, res).catch((err) => {
+        console.error(`App login handler error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
     const backend = route(req.url ?? "/");
 
     if (!backend) {

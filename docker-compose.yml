@@ -60,6 +60,8 @@ services:
       LOCAL_BACKEND_API_KEY: ${LOCAL_BACKEND_API_KEY:-}
       OH_SECRET_KEY: ${OH_SECRET_KEY:-}
       OH_SESSION_API_KEYS_0: ${OH_SESSION_API_KEYS_0:-}
+      # Internal username/password gate (opt-in; compose defaults to on).
+      APP_LOGIN_ENABLED: ${APP_LOGIN_ENABLED:-true}
       # Optional LLM credentials (can also be configured in the UI).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

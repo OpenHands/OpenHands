@@ -6,6 +6,10 @@ import { WebClientConfig } from "#/api/option-service/option.types";
 
 const useConfigMock = vi.fn();
 const useSettingsMock = vi.fn();
+const useAppLoginStatusMock = vi.fn(() => ({
+  data: { enabled: false },
+  isSuccess: true,
+}));
 const useActiveBackendMock = vi.fn<
   () => { backend: { kind: "local" | "cloud" }; orgId: string | null }
 >(() => ({
@@ -22,6 +26,10 @@ vi.mock("#/hooks/query/use-config", () => ({
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => useSettingsMock(),
+}));
+
+vi.mock("#/hooks/query/use-app-login", () => ({
+  useAppLoginStatus: () => useAppLoginStatusMock(),
 }));
 
 vi.mock("#/contexts/active-backend-context", () => ({
@@ -56,6 +64,10 @@ describe("useSettingsNavItems", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSettingsMock.mockReturnValue({ data: openHandsSettings });
+    useAppLoginStatusMock.mockReturnValue({
+      data: { enabled: false },
+      isSuccess: true,
+    });
     useActiveBackendMock.mockReturnValue({
       backend: { kind: "local" },
       orgId: null,
@@ -90,12 +102,38 @@ describe("useSettingsNavItems", () => {
     // Agent profiles are available on cloud too (OpenHands #15060). Local-only
     // items (GitProviders) stay hidden on cloud; the `/settings` LLM-Profiles
     // rename stays local-only, so remaining items pass through unchanged.
+    // App-login-only items stay hidden unless APP_LOGIN_ENABLED is on.
     expect(result.current).toEqual(
-      OSS_NAV_ITEMS.filter((item) => !item.localOnly).map((item) => ({
-        type: "item",
-        item,
-      })),
+      OSS_NAV_ITEMS.filter((item) => !item.localOnly && !item.appLoginOnly).map(
+        (item) => ({
+          type: "item",
+          item,
+        }),
+      ),
     );
+  });
+
+  it("shows Users settings only when app login is enabled", () => {
+    useConfigMock.mockReturnValue({ data: createConfig() });
+    useAppLoginStatusMock.mockReturnValue({
+      data: { enabled: false },
+      isSuccess: true,
+    });
+    expect(
+      renderHook(() => useSettingsNavItems())
+        .result.current.filter((item) => item.type === "item")
+        .map((item) => (item.type === "item" ? item.item.to : null)),
+    ).not.toContain("/settings/users");
+
+    useAppLoginStatusMock.mockReturnValue({
+      data: { enabled: true },
+      isSuccess: true,
+    });
+    expect(
+      renderHook(() => useSettingsNavItems())
+        .result.current.filter((item) => item.type === "item")
+        .map((item) => (item.type === "item" ? item.item.to : null)),
+    ).toContain("/settings/users");
   });
 
   it("shows GitProviders only on local backends", () => {

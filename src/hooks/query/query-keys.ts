@@ -60,6 +60,12 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+export const APP_LOGIN_QUERY_KEYS = {
+  status: ["app-login", "status"] as const,
+  session: ["app-login", "session"] as const,
+  users: ["app-login", "users"] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

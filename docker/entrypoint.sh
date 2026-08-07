@@ -19,6 +19,9 @@
 #   AGENT_CANVAS_BASE_PATH – Static frontend mount path (default: /canvas)
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
 #                          with --auth-required (no session key injected)
+#   APP_LOGIN_ENABLED    – Internal username/password UI gate (opt-in).
+#                          Set to true/1/yes to enable. Seeds heimdallsec/
+#                          heimdallsec into ~/.openhands/agent-canvas/app-users.json
 #   OH_SECRET_KEY        – Secret key for settings encryption (auto-generated
 #                          and persisted if not provided)
 #   OPENHANDS_AUTOMATION_API_KEY – Override automation backend auth key
