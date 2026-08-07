@@ -1,4 +1,4 @@
-import { AppWindow, Brain, GitBranch, Shield, Users } from "lucide-react";
+import { AppWindow, Brain, GitBranch, Puzzle, Shield, Users } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -82,5 +82,12 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/secrets",
     text: "SETTINGS$NAV_SECRETS",
     subtitle: "SETTINGS$PAGE_SECRETS_SUBLINE",
+  },
+  {
+    icon: <Puzzle className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/integrations",
+    text: "SETTINGS$NAV_INTEGRATIONS",
+    subtitle: "SETTINGS$PAGE_INTEGRATIONS_SUBLINE",
+    localOnly: true,
   },
 ];

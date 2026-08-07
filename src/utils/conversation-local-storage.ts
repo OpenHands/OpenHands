@@ -61,6 +61,7 @@ const VALID_CONVERSATION_TABS: ReadonlySet<ConversationTab> = new Set([
   "terminal",
   "planner",
   "tasklist",
+  "cloudai",
 ]);
 
 // Tab keys that *used to* exist and were removed during the Files tab

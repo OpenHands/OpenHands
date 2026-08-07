@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { Cloud, Globe, ListTodo, SquareChevronRight } from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -22,6 +22,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
+import { useConversationAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
 
 export function ConversationTabs({
   variant = "default",
@@ -41,6 +42,7 @@ export function ConversationTabs({
 
   const { hasTaskList } = useTaskList();
   const { backend } = useActiveBackend();
+  const { isReady: isCloudAiReady } = useConversationAppwriteIntegration();
 
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { curAgentState } = useAgentState();
@@ -120,6 +122,18 @@ export function ConversationTabs({
       label: t(I18nKey.COMMON$BROWSER),
     },
   ];
+
+  if (isCloudAiReady) {
+    tabs.push({
+      tabValue: "cloudai",
+      isActive: isTabActive("cloudai"),
+      icon: Cloud,
+      onClick: () => selectTab("cloudai"),
+      tooltipContent: t(I18nKey.COMMON$CLOUDAI),
+      tooltipAriaLabel: t(I18nKey.COMMON$CLOUDAI),
+      label: t(I18nKey.COMMON$CLOUDAI),
+    });
+  }
 
   if (hasTaskList) {
     // Insert after `files` so the leftmost slot stays Files.

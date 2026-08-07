@@ -66,6 +66,25 @@ export const APP_LOGIN_QUERY_KEYS = {
   users: ["app-login", "users"] as const,
 } as const;
 
+export const APPWRITE_QUERY_KEYS = {
+  all: ["appwrite"] as const,
+  databases: ["appwrite", "databases"] as const,
+  collections: (databaseId: string) =>
+    ["appwrite", "collections", databaseId] as const,
+  documents: (databaseId: string, collectionId: string) =>
+    ["appwrite", "documents", databaseId, collectionId] as const,
+  attributes: (databaseId: string, collectionId: string) =>
+    ["appwrite", "attributes", databaseId, collectionId] as const,
+  functions: ["appwrite", "functions"] as const,
+  executions: (functionId: string) =>
+    ["appwrite", "executions", functionId] as const,
+  functionVariables: (functionId: string) =>
+    ["appwrite", "function-variables", functionId] as const,
+  variables: ["appwrite", "variables"] as const,
+  buckets: ["appwrite", "buckets"] as const,
+  files: (bucketId: string) => ["appwrite", "files", bucketId] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

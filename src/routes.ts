@@ -31,6 +31,7 @@ export default [
       route("users", "routes/users-settings.tsx"),
       route("git-providers", "routes/git-providers-settings.tsx"),
       route("secrets", "routes/secrets-settings.tsx"),
+      route("integrations", "routes/integrations-settings.tsx"),
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),

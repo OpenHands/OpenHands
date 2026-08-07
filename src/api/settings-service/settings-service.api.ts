@@ -6,6 +6,7 @@ import type {
 } from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsSchema, SettingsValue } from "#/types/settings";
+import type { IntegrationsSettings } from "#/types/integrations";
 import { stringRecord } from "#/utils/mcp-config";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
@@ -42,12 +43,12 @@ export type AppPreferences = Partial<Pick<Settings, AppPreferenceField>>;
  * Container for frontend-owned settings the agent doesn't interpret.
  * Mirrors the SDK `MiscSettings` model introduced in agent-server 1.27.
  *
- * Single nested category today (`app_preferences`). Adding a future
- * category (e.g. `ui_preferences`) is a non-breaking change for the wire
- * shape — it just adds another optional sibling here.
+ * Categories today: `app_preferences` and `integrations`. Additional
+ * siblings are a non-breaking change for the wire shape.
  */
 export interface MiscSettings {
   app_preferences?: AppPreferences;
+  integrations?: IntegrationsSettings;
 }
 
 /**
@@ -350,6 +351,11 @@ const transformApiResponse = (
     }
   }
 
+  const integrations = response.misc_settings?.integrations;
+  if (integrations) {
+    partial.integrations = integrations;
+  }
+
   return partial;
 };
 
@@ -619,6 +625,11 @@ class SettingsService {
       settings as Record<string, unknown>,
     );
     const hasAppPreferences = Object.keys(appPreferences).length > 0;
+    const integrations = rest.integrations as IntegrationsSettings | undefined;
+    const hasIntegrations = integrations !== undefined;
+    if (hasIntegrations) {
+      delete rest.integrations;
+    }
 
     const payload: SettingsUpdateRequest = {};
 
@@ -641,8 +652,11 @@ class SettingsService {
       payload.conversation_settings_diff = conversationSettingsDiff;
     }
 
-    if (hasAppPreferences) {
-      payload.misc_settings_diff = { app_preferences: appPreferences };
+    if (hasAppPreferences || hasIntegrations) {
+      payload.misc_settings_diff = {
+        ...(hasAppPreferences ? { app_preferences: appPreferences } : {}),
+        ...(hasIntegrations ? { integrations } : {}),
+      };
     }
 
     const isCloud = getActiveBackend().backend.kind === "cloud";

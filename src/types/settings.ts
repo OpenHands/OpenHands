@@ -2,11 +2,16 @@ import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
 import type { GitProviderPreference } from "#/types/git-provider";
+import type { IntegrationsSettings } from "#/types/integrations";
 
 export type {
   GitProviderPreference,
   GitProviderAuthMethod,
 } from "#/types/git-provider";
+export type {
+  AppwriteIntegrationConfig,
+  IntegrationsSettings,
+} from "#/types/integrations";
 
 export const ProviderOptions = {
   github: "github",
@@ -162,6 +167,11 @@ export type Settings = {
    * separately via SecretsService (`GIT_PROVIDER_{id}_*`).
    */
   git_providers?: GitProviderPreference[];
+  /**
+   * Frontend-owned third-party integrations (AppWrite, …). Persisted under
+   * `misc_settings.integrations`; API keys live in the Secrets store.
+   */
+  integrations?: IntegrationsSettings;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;

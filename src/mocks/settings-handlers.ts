@@ -1026,7 +1026,10 @@ export const SETTINGS_HANDLERS = [
     // but always fall back to the default-empty block so the GUI sees a
     // deterministic shape on first read.
     const storedMisc = (settings as Record<string, unknown>).misc_settings as
-      | { app_preferences?: Record<string, unknown> }
+      | {
+          app_preferences?: Record<string, unknown>;
+          integrations?: Record<string, unknown>;
+        }
       | undefined;
     const appPreferences = {
       ...DEFAULT_APP_PREFERENCES,
@@ -1037,7 +1040,12 @@ export const SETTINGS_HANDLERS = [
       agent_settings: agentSettings,
       conversation_settings: settings.conversation_settings ?? {},
       llm_api_key_is_set: llmApiKeySet,
-      misc_settings: { app_preferences: appPreferences },
+      misc_settings: {
+        app_preferences: appPreferences,
+        ...(storedMisc?.integrations
+          ? { integrations: storedMisc.integrations }
+          : {}),
+      },
     });
   }),
 
@@ -1049,6 +1057,7 @@ export const SETTINGS_HANDLERS = [
       conversation_settings_diff?: Record<string, SettingsValue>;
       misc_settings_diff?: {
         app_preferences?: Record<string, unknown>;
+        integrations?: Record<string, unknown>;
       };
     } | null;
 
@@ -1103,13 +1112,17 @@ export const SETTINGS_HANDLERS = [
     if (body.misc_settings_diff) {
       const existingMisc = (current as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
+        | {
+            app_preferences?: Record<string, unknown>;
+            integrations?: Record<string, unknown>;
+          }
         | undefined;
-      // Deep-merge: nested `app_preferences` overlays field-by-field;
-      // `disabled_skills` lists are replaced wholesale. This mirrors the
-      // SDK's `_deep_merge` behaviour for the two-level shape currently
-      // stored in `misc_settings`.
-      const nextMisc: { app_preferences?: Record<string, unknown> } = {
+      // Deep-merge: nested `app_preferences` / `integrations` overlay
+      // field-by-field. Lists under app_preferences are replaced wholesale.
+      const nextMisc: {
+        app_preferences?: Record<string, unknown>;
+        integrations?: Record<string, unknown>;
+      } = {
         ...(existingMisc ?? {}),
       };
       if (body.misc_settings_diff.app_preferences) {
@@ -1117,6 +1130,30 @@ export const SETTINGS_HANDLERS = [
           ...(existingMisc?.app_preferences ?? {}),
           ...body.misc_settings_diff.app_preferences,
         };
+      }
+      if (body.misc_settings_diff.integrations) {
+        const existingIntegrations = existingMisc?.integrations ?? {};
+        const incoming = body.misc_settings_diff.integrations;
+        const nextIntegrations: Record<string, unknown> = {
+          ...existingIntegrations,
+        };
+        for (const [key, value] of Object.entries(incoming)) {
+          if (
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value) &&
+            existingIntegrations[key] &&
+            typeof existingIntegrations[key] === "object"
+          ) {
+            nextIntegrations[key] = {
+              ...(existingIntegrations[key] as Record<string, unknown>),
+              ...(value as Record<string, unknown>),
+            };
+          } else {
+            nextIntegrations[key] = value;
+          }
+        }
+        nextMisc.integrations = nextIntegrations;
       }
       (nextSettings as Record<string, unknown>).misc_settings = nextMisc;
     }
@@ -1130,7 +1167,10 @@ export const SETTINGS_HANDLERS = [
       llm_api_key_is_set: nextSettings.llm_api_key_set ?? false,
       misc_settings: ((nextSettings as Record<string, unknown>)
         .misc_settings as
-        | { app_preferences?: Record<string, unknown> }
+        | {
+            app_preferences?: Record<string, unknown>;
+            integrations?: Record<string, unknown>;
+          }
         | undefined) ?? { app_preferences: {} },
     });
   }),
