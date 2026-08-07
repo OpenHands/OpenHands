@@ -34254,6 +34254,23 @@
     "uk": "Пошук репозиторіїв...",
     "ca": "Cerca repositoris..."
   },
+  "COMMON$SELECT_REPOSITORY_PLACEHOLDER": {
+    "en": "Select repository...",
+    "ja": "Select repository...",
+    "zh-CN": "Select repository...",
+    "zh-TW": "Select repository...",
+    "ko-KR": "Select repository...",
+    "no": "Select repository...",
+    "it": "Select repository...",
+    "pt": "Select repository...",
+    "es": "Select repository...",
+    "ar": "Select repository...",
+    "fr": "Select repository...",
+    "tr": "Select repository...",
+    "de": "Select repository...",
+    "uk": "Select repository...",
+    "ca": "Select repository..."
+  },
   "COMMON$SELECT_BRANCH_PLACEHOLDER": {
     "en": "Select branch...",
     "ja": "ブランチを選択...",
