@@ -1,4 +1,9 @@
-import { createServer, request, type Server } from "node:http";
+import {
+  createServer,
+  request,
+  type IncomingHttpHeaders,
+  type Server,
+} from "node:http";
 import { connect as netConnect, type AddressInfo, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -6,7 +11,7 @@ import { once } from "node:events";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -147,7 +152,7 @@ async function getText(url: string) {
 }
 
 async function stopChild(child?: ChildProcess) {
-  if (!child || child.exitCode !== null) {
+  if (child?.exitCode !== null) {
     return;
   }
   child.kill("SIGTERM");
@@ -736,5 +741,131 @@ describe("ingress socket-error resilience", () => {
     expect(ingressProcess.exitCode).toBeNull();
     expect(ingressProcess.signalCode).toBeNull();
     expect(ingressStderr).not.toContain("Unhandled 'error' event");
+  });
+});
+
+describe("ingress plain-HTTP non-loopback cookie handling", () => {
+  let backend: Server;
+  let ingressProcess: ChildProcess;
+  let backendPort: number;
+  let ingressPort: number;
+
+  /**
+   * Perform a raw HTTP request against the ingress with a specific Host header,
+   * returning the raw response (headers + body) so tests can inspect the
+   * Set-Cookie header exactly as the browser would receive it.
+   */
+  async function rawRequestWithHost(
+    host: string,
+    path: string,
+  ): Promise<{
+    statusCode: number;
+    headers: IncomingHttpHeaders;
+    body: string;
+  }> {
+    return new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: loopbackHost,
+          port: ingressPort,
+          method: "GET",
+          path,
+          setHost: false,
+          headers: { Host: host },
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => {
+            body += chunk;
+          });
+          res.on("end", () => {
+            resolve({
+              statusCode: res.statusCode ?? 0,
+              headers: res.headers,
+              body,
+            });
+          });
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+  }
+
+  beforeAll(async () => {
+    // A mock backend that always sets a Secure session cookie.
+    backend = createServer((_req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "text/plain",
+        "Set-Cookie":
+          "oh_workspace_session_key=abc; Path=/; HttpOnly; Secure; SameSite=Lax",
+      });
+      res.end("ok");
+    });
+    backendPort = await listenOnLoopback(backend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+        "--default",
+        originForPort(backendPort),
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(backend);
+  });
+
+  it("strips Secure from the cookie on a plain-HTTP non-loopback host", async () => {
+    const res = await rawRequestWithHost(
+      "192.168.1.50:8000",
+      "/api/conversations/1/workspace/index.html",
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe("ok");
+    const cookie =
+      (res.headers["set-cookie"] as string[] | undefined)?.join(";") ?? "";
+    expect(cookie).toContain("oh_workspace_session_key=abc");
+    expect(cookie).not.toMatch(/;\s*Secure(?=;|$)/i);
+  });
+
+  it("keeps Secure on the cookie for a loopback (127.0.0.1) host", async () => {
+    const res = await rawRequestWithHost(
+      `127.0.0.1:${ingressPort}`,
+      "/api/conversations/1/workspace/index.html",
+    );
+
+    expect(res.statusCode).toBe(200);
+    const cookie =
+      (res.headers["set-cookie"] as string[] | undefined)?.join(";") ?? "";
+    expect(cookie).toMatch(/Secure/i);
+  });
+
+  it("keeps Secure on the cookie for localhost", async () => {
+    const res = await rawRequestWithHost(
+      `localhost:${ingressPort}`,
+      "/api/conversations/1/workspace/index.html",
+    );
+
+    expect(res.statusCode).toBe(200);
+    const cookie =
+      (res.headers["set-cookie"] as string[] | undefined)?.join(";") ?? "";
+    expect(cookie).toMatch(/Secure/i);
   });
 });

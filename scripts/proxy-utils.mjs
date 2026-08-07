@@ -45,7 +45,8 @@ function parseBackendUrl(backendUrl) {
   }
   return {
     hostname: url.hostname,
-    port: Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
+    port:
+      Number.parseInt(url.port, 10) || (url.protocol === "https:" ? 443 : 80),
     protocol: url.protocol,
   };
 }
@@ -203,6 +204,61 @@ function writeProxyError(res, message) {
   res.destroy();
 }
 
+/**
+ * Modern browsers treat `http://localhost`/`http://127.0.0.1` as a
+ * "potentially trustworthy origin" and will send `Secure` cookies over those
+ * plain-HTTP hosts — but NOT over any other plain-HTTP host (a container IP,
+ * a LAN address, a VM). When the agent-server mints `oh_workspace_session_key`
+ * with `Secure` and the browser reached our ingress over plain HTTP on a
+ * non-loopback host, the browser drops the cookie and the subsequent
+ * workspace file request 401s even though the rest of the UI works.
+ *
+ * This rewrites the upstream `set-cookie` headers, dropping the `Secure`
+ * flag when the incoming connection is plain HTTP and not loopback, so the
+ * cookie is preserved for exactly the case that breaks. HTTPS and
+ * loopback traffic are left untouched (loopback is already trustworthy and
+ * HTTPS must keep `Secure`).
+ *
+ * @returns {(proxyRes: import("node:http").IncomingMessage, req: import("node:http").IncomingMessage) => void}
+ */
+function stripSecureCookieOnPlainHttp() {
+  const isLoopback = (hostname) =>
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname.startsWith("127.");
+
+  return (proxyRes, req) => {
+    // No Set-Cookie header to rewrite.
+    if (!proxyRes.headers["set-cookie"]) {
+      return;
+    }
+
+    // The browser reached us over HTTPS (or is behind a TLS-terminating
+    // proxy that forwarded https). Secure cookies are correct there.
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    if (req.socket?.encrypted || forwardedProto?.includes("https")) {
+      return;
+    }
+
+    const host = String(req.headers.host ?? "").split(":")[0];
+    // Loopback hosts are treated as trustworthy by browsers even on plain
+    // HTTP, so `Secure` is fine there and should be preserved.
+    if (isLoopback(host)) {
+      return;
+    }
+
+    const setCookie = proxyRes.headers["set-cookie"];
+    proxyRes.headers["set-cookie"] = (
+      Array.isArray(setCookie) ? setCookie : [setCookie]
+    ).map((cookie) =>
+      cookie
+        .split(";")
+        .filter((part) => part.trim().toLowerCase() !== "secure")
+        .join(";"),
+    );
+  };
+}
+
 export function createProxyHandlers({
   label = "proxy",
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
@@ -235,6 +291,11 @@ export function createProxyHandlers({
       resOrSocket.destroy();
     }
   });
+
+  // Preserve the workspace-session cookie on plain-HTTP non-loopback hosts by
+  // dropping the `Secure` flag, so workspace file preview doesn't 401 on
+  // {container,VM,LAN} hosts. HTTPS and loopback are left untouched.
+  proxy.on("proxyRes", stripSecureCookieOnPlainHttp());
 
   function proxyHttp(req, res, target) {
     metrics.activeHttpRequests += 1;
