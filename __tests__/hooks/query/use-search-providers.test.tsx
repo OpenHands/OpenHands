@@ -74,7 +74,7 @@ describe("useSearchProviders", () => {
     });
   });
 
-  it("requests the first page without a cursor", async () => {
+  it("stops after one request when the first page has no cursor", async () => {
     const searchProviders = vi.mocked(ConfigService.searchProviders);
     searchProviders.mockResolvedValueOnce(page(["openhands"], null));
 
@@ -83,9 +83,11 @@ describe("useSearchProviders", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(searchProviders).toHaveBeenCalledTimes(1);
-    expect(searchProviders.mock.calls[0][0]).toMatchObject({
-      page_id: undefined,
-    });
+    expect(searchProviders).toHaveBeenNthCalledWith(
+      1,
+      { limit: 100, page_id: undefined },
+      {},
+    );
   });
 
   it("gives up rather than paginating forever when the cursor never clears", async () => {
