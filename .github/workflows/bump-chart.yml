@@ -1,0 +1,60 @@
+name: Bump chart image tag
+
+# Opens a PR in OpenHands/OpenHands-Cloud pointing the agent-canvas subchart's
+# image.tag at the release that was just tagged. release-please pushes the semver
+# tag (with the App token, so this trigger fires); docker.yml concurrently tags
+# the ghcr.io/openhands/agent-canvas image with the same bare semver.
+#
+# Mirrors the OpenHands/automation caller of the same name. Two adjustments for
+# this repo:
+#   - Trigger on `v*` tags (OpenHands tags are `v1.12.0`, not bare semver).
+#   - The chart's image.tag is a bare semver (e.g. "1.12.0", no `v`), so strip
+#     the leading `v` before passing `tag`. A reusable-workflow caller job can't
+#     run steps, so the tag is computed in a small upstream job.
+#
+# See OpenHands/OpenHands-Cloud docs/automated-image-tag-bumps.md for caller
+# setup and the auth model. secrets: inherit forwards RELEASE_APP_ID /
+# RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
+
+on:
+  push:
+    tags:
+      # Stable semver only — the chart default should track a published release.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to bump the chart to (e.g. v1.12.0 or 1.12.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: bump-chart-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+    steps:
+      - id: t
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          # Resolve the bare semver (no leading `v`).
+          RAW="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          TAG="${RAW#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  bump-chart:
+    needs: prepare-tag
+    # secrets: inherit forwards the org secrets RELEASE_APP_ID /
+    # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
+    secrets: inherit
+    uses: OpenHands/OpenHands-Cloud/.github/workflows/bump-image-tag.yml@main
+    with:
+      component: agent-canvas
+      chart_file: charts/openhands/charts/agent-canvas/values.yaml
+      tag: ${{ needs.prepare-tag.outputs.tag }}
