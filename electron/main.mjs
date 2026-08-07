@@ -361,9 +361,10 @@ function createMainWindow() {
   // shell.openExternal hands the URL to the OS, which dispatches by scheme:
   // file: can launch downloaded executables or apps, and custom protocol
   // handlers (smb:, ms-msdt:, etc.) reach arbitrary local applications. Only
-  // http(s) is ever legitimate here; every other scheme is dropped. Renderer
-  // content includes agent-generated markdown, so treat link targets as
-  // untrusted even though they require a user click.
+  // http(s) and mailto: (composes but never sends) are legitimate here; every
+  // other scheme is dropped. Renderer content includes agent-generated
+  // markdown, so treat link targets as untrusted even though they require a
+  // user click.
   const openExternalSafe = (url) => {
     let parsed;
     try {
@@ -371,7 +372,11 @@ function createMainWindow() {
     } catch {
       return false;
     }
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    if (
+      parsed.protocol !== "https:" &&
+      parsed.protocol !== "http:" &&
+      parsed.protocol !== "mailto:"
+    ) {
       return false;
     }
     shell.openExternal(url);
