@@ -1,6 +1,6 @@
 {
   "name": "@openhands/agent-canvas",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Agent Canvas UI for OpenHands - run AI coding agents with a visual interface",
   "license": "MIT",
   "private": false,
@@ -23,10 +23,10 @@
     "@heroui/react": "2.8.10",
     "@microlink/react-json-view": "1.31.20",
     "@monaco-editor/react": "4.7.0",
-    "@openhands/extensions": "0.13.0",
+    "@openhands/extensions": "0.16.0",
     "@openhands/typescript-client": "1.36.1",
-    "@react-router/node": "7.17.0",
-    "@react-router/serve": "7.17.0",
+    "@react-router/node": "7.18.2",
+    "@react-router/serve": "7.18.2",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.101.4",
     "@types/shell-quote": "1.7.5",
@@ -45,14 +45,14 @@
     "isbot": "5.1.39",
     "lucide-react": "1.25.0",
     "monaco-editor": "0.56.0",
-    "posthog-js": "1.372.6",
+    "posthog-js": "1.380.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hot-toast": "2.6.0",
     "react-i18next": "17.0.11",
     "react-icons": "5.6.0",
     "react-markdown": "10.1.0",
-    "react-router": "7.17.0",
+    "react-router": "7.18.2",
     "react-syntax-highlighter": "16.1.1",
     "rehype-raw": "7.0.0",
     "rehype-sanitize": "6.0.0",
@@ -104,11 +104,13 @@
     "build:lib": "npm run make-i18n && react-router typegen && cross-env BUILD_LIB=true vite build && tsc -p tsconfig.lib.json",
     "build:docker": "node scripts/docker-build.mjs",
     "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
-    "desktop": "npm run build:app && electron electron/main.mjs",
+    "predesktop": "node scripts/brand-dev-electron.mjs",
+    "desktop": "npm run build:app && electron electron",
     "build:desktop": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && electron-builder --config electron-builder.config.mjs --publish never",
     "build:desktop:universal": "npm run build:app && node scripts/download-uv.mjs && node scripts/download-node.mjs && cross-env ELECTRON_ARCH=universal electron-builder --config electron-builder.config.mjs --publish never",
     "download-uv": "node scripts/download-uv.mjs",
-    "download-node": "node scripts/download-node.mjs"
+    "download-node": "node scripts/download-node.mjs",
+    "generate-icons": "node scripts/generate-icons.mjs"
   },
   "lint-staged": {
     "src/**/*.{ts,tsx,js}": [
@@ -127,7 +129,7 @@
     "@eslint/js": "9.39.4",
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.62.0",
-    "@react-router/dev": "7.17.0",
+    "@react-router/dev": "7.18.2",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
     "@tailwindcss/typography": "0.5.20",
@@ -147,7 +149,7 @@
     "@vitest/coverage-v8": "4.1.10",
     "cross-env": "10.1.0",
     "electron": "42.3.3",
-    "electron-builder": "26.8.1",
+    "electron-builder": "26.15.3",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
@@ -163,6 +165,7 @@
     "jsdom": "30.0.0",
     "lint-staged": "16.4.0",
     "msw": "2.15.0",
+    "png2icons": "2.0.1",
     "postcss-prefix-selector": "2.1.1",
     "prettier": "3.8.3",
     "tailwindcss": "4.3.3",
@@ -183,7 +186,10 @@
     "@vercel/static-config": {
       "ajv": "8.20.0"
     },
-    "dompurify": "3.4.7"
+    "dompurify": "3.4.12",
+    "typed-rest-client": {
+      "qs": "6.15.3"
+    }
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -242,6 +248,6 @@
   "peerDependencies": {
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-router": "7.17.0"
+    "react-router": "7.18.2"
   }
 }

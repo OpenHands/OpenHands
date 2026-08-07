@@ -7,8 +7,8 @@ import GitBranchIcon from "#/icons/git-branch.svg?react";
 import CheckCircleIcon from "#/icons/check-circle.svg?react";
 import CalendarIcon from "#/icons/calendar.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
+import { Zap } from "lucide-react";
 import BellIcon from "#/icons/bell.svg?react";
-import GlobeIcon from "#/icons/globe.svg?react";
 import CodeTagIcon from "#/icons/code-tag.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
 import { formatEventOn } from "#/utils/automation-schedule";
@@ -103,7 +103,7 @@ export function ConfigurationSection({
 
         {isEvent && automation.trigger.source && (
           <ConfigField
-            icon={<GlobeIcon className="size-3.5" />}
+            icon={<Zap className="size-3.5" aria-hidden="true" />}
             label={t(I18nKey.AUTOMATIONS$DETAIL$EVENT_SOURCE)}
           >
             {automation.trigger.source}

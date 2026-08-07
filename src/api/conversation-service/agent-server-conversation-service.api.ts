@@ -439,6 +439,11 @@ class AgentServerConversationService {
       conversationInstructions,
       plugins,
       conversationId,
+      // The agent-server rejects a parent in a different workspace, so callers
+      // launching a child must pass the parent's own `working_dir` as
+      // `workingDirOverride` (see `resolveConversationWorkingDir`). Servers
+      // older than 1.37.1 ignore the field and create an unlinked conversation.
+      parentConversationId,
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
@@ -631,32 +636,17 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    const active = getActiveBackend().backend;
-
     type RawRuntime = DirectConversationInfo & {
       stats?: RuntimeConversationInfo["stats"];
     };
 
-    // Cloud mode: route through the cloud-proxy to the runtime sandbox at
-    // the conversation's runtime URL — same pattern as getVSCodeUrl. Local
-    // mode forwards conversationUrl so the host explicitly resolves to the
-    // conversation's runtime instead of falling back to the active backend.
-    const response =
-      active.kind === "cloud" && conversationUrl
-        ? await callCloudProxy<RawRuntime>({
-            backend: active,
-            method: "GET",
-            hostOverride: buildHttpBaseUrl(conversationUrl),
-            path: `/api/conversations/${conversationId}`,
-            authMode: "session-api-key",
-            sessionApiKey,
-          })
-        : await new ConversationClient(
-            getAgentServerClientOptions({
-              conversationUrl,
-              sessionApiKey,
-            }),
-          ).getConversation<RawRuntime>(conversationId);
+    // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
+    const response = await new ConversationClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getConversation<RawRuntime>(conversationId);
     const data = requireDirectConversationInfo(response);
     const stats = isRecord(response) ? response.stats : null;
 

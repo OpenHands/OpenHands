@@ -1,4 +1,5 @@
 import { CANVAS_UI_CLIENT_ACTION_KIND } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_ACTION_KIND } from "#/constants/child-conversation";
 import { ActionBase } from "./base";
 import { TaskItem } from "./common";
 
@@ -321,6 +322,24 @@ export interface CanvasUIAction extends ActionBase<
   tab?: string | null;
 }
 
+/**
+ * Request to launch a child conversation, emitted over the existing WebSocket
+ * and intercepted by handleLaunchChildConversationAction. The agent-server
+ * validates the parameter *names* and types against the tool schema but not
+ * `enum` values, so the fields stay loosely typed here and the dispatcher
+ * narrows them (returning corrective guidance on a mismatch).
+ */
+export interface LaunchChildConversationAction extends ActionBase<
+  typeof LAUNCH_CHILD_CONVERSATION_ACTION_KIND
+> {
+  target: string;
+  task: string;
+  title?: string | null;
+  repository?: string | null;
+  branch?: string | null;
+  isolation?: string | null;
+}
+
 export type Action =
   | MCPToolAction
   | FinishAction
@@ -346,4 +365,5 @@ export type Action =
   | InvokeSkillAction
   | TaskAction
   | SwitchLLMAction
-  | CanvasUIAction;
+  | CanvasUIAction
+  | LaunchChildConversationAction;
