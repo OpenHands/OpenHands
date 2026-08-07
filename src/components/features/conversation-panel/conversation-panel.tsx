@@ -693,6 +693,8 @@ export function ConversationPanel({
                 conversation.workspace?.working_dir
               }
               llmModel={conversation.llm_model}
+              agentKind={conversation.agent_kind}
+              acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
               tags={conversation.tags}
             />

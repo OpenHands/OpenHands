@@ -498,6 +498,16 @@ export function getDisplayConversationTags(
   if (!tags) {
     return [];
   }
+  // Both the reserved-key check and the priority lookup must see the same
+  // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
+  // ranking those off the raw key would silently drop them out of first place.
+  const priorityRank = (key: string): number => {
+    const index = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(
+      key.trim().toLowerCase(),
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
+
   return Object.entries(tags)
     .filter(
       ([key, value]) =>
@@ -506,10 +516,8 @@ export function getDisplayConversationTags(
         value.trim().length > 0,
     )
     .sort(([a], [b]) => {
-      const aPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(a);
-      const bPriority = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(b);
-      const aRank = aPriority === -1 ? Number.POSITIVE_INFINITY : aPriority;
-      const bRank = bPriority === -1 ? Number.POSITIVE_INFINITY : bPriority;
+      const aRank = priorityRank(a);
+      const bRank = priorityRank(b);
       if (aRank !== bRank) {
         return aRank - bRank;
       }

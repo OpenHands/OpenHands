@@ -105,6 +105,27 @@ describe("ConversationCardPreview", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses the ACP provider mark on the model row for ACP conversations", () => {
+    // The card chip resolves the ACP brand mark; the hovercard for the same
+    // conversation must not contradict it with the OpenHands wordmark.
+    renderWithProviders(
+      <ConversationCardPreview
+        title={PREVIEW_TITLE}
+        selectedRepository={null}
+        llmModel="claude-opus-4-5"
+        agentKind="acp"
+        acpServer="claude-code"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("agent-brand-icon-claude-code"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("agent-brand-icon-openhands"),
+    ).not.toBeInTheDocument();
+  });
+
   it("omits blank tag values from the hovercard", () => {
     renderWithProviders(
       <ConversationCardPreview

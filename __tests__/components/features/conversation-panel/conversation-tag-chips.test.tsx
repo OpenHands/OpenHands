@@ -79,9 +79,9 @@ describe("ConversationTagChips", () => {
     });
     const visibleChip = screen.getByTestId("conversation-card-tag-chip");
     expect(visibleChip).toHaveTextContent("slack");
-    // Tooltip uses the localized/humanized label, never the wire key.
-    expect(visibleChip.getAttribute("title")).toMatch(/: slack$/);
-    expect(visibleChip.getAttribute("title")).not.toContain("origin");
+    // Tooltip uses the humanized label — "Origin", not the wire key and not
+    // "Git" (origin names the source of the conversation, not a git fact).
+    expect(visibleChip).toHaveAttribute("title", "Origin: slack");
 
     const overflow = screen.getByTestId("conversation-card-tag-overflow");
     expect(overflow).toHaveTextContent("+2");
@@ -158,6 +158,112 @@ describe("ConversationTagChips", () => {
     });
     expect(
       screen.queryByTestId("conversation-card-tag-overflow"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("emits chip icon test ids only for visible chips, not the measure row", async () => {
+    // The off-screen measure row renders the same chips; tagging those too
+    // would make `getByTestId` (singular) ambiguous for every tagged card.
+    renderWithProviders(
+      <ConversationTagChips
+        tags={[
+          ["origin", "slack"],
+          ["owner", "alice"],
+        ]}
+      />,
+    );
+
+    stubWidths(200, 40);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
+        2,
+      );
+    });
+    expect(
+      screen.getAllByTestId("conversation-card-tag-chip-icon"),
+    ).toHaveLength(2);
+  });
+
+  it("keeps the overflow popover open across re-renders with unchanged tags", async () => {
+    // Callers rebuild the tag array on every render, and the conversation
+    // panel re-renders at least every 10s (`refetchInterval`). Resetting on
+    // array identity would slam the popover shut under the user's cursor.
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
+      <ConversationTagChips
+        tags={[
+          ["origin", "slack"],
+          ["env", "prod"],
+          ["owner", "alice"],
+        ]}
+      />,
+    );
+
+    stubWidths(80, 40);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("conversation-card-tag-overflow"),
+      ).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("conversation-card-tag-overflow"));
+    expect(
+      screen.getByTestId("conversation-card-tag-overflow-popover"),
+    ).toBeInTheDocument();
+
+    // Same content, fresh array identity — exactly what the parent produces.
+    rerender(
+      <ConversationTagChips
+        tags={[
+          ["origin", "slack"],
+          ["env", "prod"],
+          ["owner", "alice"],
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("conversation-card-tag-overflow-popover"),
+    ).toBeInTheDocument();
+  });
+
+  it("closes the overflow popover when the tags themselves change", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
+      <ConversationTagChips
+        tags={[
+          ["origin", "slack"],
+          ["env", "prod"],
+          ["owner", "alice"],
+        ]}
+      />,
+    );
+
+    stubWidths(80, 40);
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("conversation-card-tag-overflow"),
+      ).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("conversation-card-tag-overflow"));
+    expect(
+      screen.getByTestId("conversation-card-tag-overflow-popover"),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ConversationTagChips
+        tags={[
+          ["origin", "api"],
+          ["env", "prod"],
+          ["owner", "alice"],
+        ]}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("conversation-card-tag-overflow-popover"),
     ).not.toBeInTheDocument();
   });
 });

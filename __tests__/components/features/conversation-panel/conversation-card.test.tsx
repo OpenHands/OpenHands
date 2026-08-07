@@ -155,8 +155,25 @@ describe("ConversationCard", () => {
     expect(repo).toHaveClass("bg-[var(--oh-surface-raised)]");
     expect(branch).toHaveClass("bg-[var(--oh-surface-raised)]");
     expect(tag).toHaveClass("bg-[var(--oh-surface-raised)]");
-    expect(repo.className).toBe(tag.className);
-    expect(branch.className).toBe(tag.className);
+
+    // Identical pill look. The one intentional difference is flex-shrink:
+    // repo and branch share a single overflow-hidden row, so they must shrink
+    // (otherwise a long repo name evicts the branch chip entirely), while a
+    // tag chip keeps its intrinsic width and folds behind "+N" instead.
+    const pillLook = (element: HTMLElement) =>
+      element.className
+        .split(/\s+/)
+        .filter((name) => name !== "shrink" && name !== "shrink-0")
+        .sort()
+        .join(" ");
+
+    expect(pillLook(repo)).toBe(pillLook(tag));
+    expect(pillLook(branch)).toBe(pillLook(tag));
+    expect(repo).toHaveClass("shrink");
+    expect(repo).not.toHaveClass("shrink-0");
+    expect(branch).toHaveClass("shrink");
+    expect(branch).not.toHaveClass("shrink-0");
+    expect(tag).toHaveClass("shrink-0");
   });
 
   it("stacks metadata as repo/branch, then model, then tags", () => {

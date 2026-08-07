@@ -4,11 +4,23 @@ import { IconType } from "react-icons/lib";
 import { RepositorySelection } from "#/api/open-hands.types";
 import { Provider } from "#/types/settings";
 import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
+import { cn } from "#/utils/utils";
 import {
   CONVERSATION_CARD_META_CHIP_CLASSNAME,
   CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME,
   CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME,
 } from "./conversation-card-meta-chip";
+
+/**
+ * Repo and branch share one ``overflow-hidden`` row, so unlike the standalone
+ * chips they must be allowed to shrink: with the shared class's ``shrink-0``
+ * a long repository name claims the full row and pushes the branch chip out of
+ * view entirely. Shrinking lets both stay visible and truncate proportionally.
+ */
+const REPO_LINK_CHIP_CLASSNAME = cn(
+  CONVERSATION_CARD_META_CHIP_CLASSNAME,
+  "shrink",
+);
 
 interface ConversationRepoLinkProps {
   selectedRepository: RepositorySelection;
@@ -36,7 +48,7 @@ export function ConversationRepoLink({
         <span
           data-testid="conversation-card-selected-repository"
           title={repository}
-          className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+          className={REPO_LINK_CHIP_CLASSNAME}
         >
           {(Icon || selectedRepository.git_provider === "azure_devops") && (
             <span
@@ -59,7 +71,7 @@ export function ConversationRepoLink({
         <span
           data-testid="conversation-card-selected-branch"
           title={branch}
-          className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+          className={REPO_LINK_CHIP_CLASSNAME}
         >
           <span
             className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}

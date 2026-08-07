@@ -56,18 +56,21 @@ function TagChipContent({
   icon,
   keyName,
   value,
+  iconTestId,
 }: {
   icon: ConversationTagIcon;
   keyName: string;
   value: string;
+  /**
+   * Only the visible row passes this. The off-screen measure row renders the
+   * same chips, so tagging both would emit every chip test id twice and break
+   * ``getByTestId`` (singular) for any card with tags.
+   */
+  iconTestId?: string;
 }) {
   return (
     <>
-      <TagIconSlot
-        icon={icon}
-        keyName={keyName}
-        testId="conversation-card-tag-chip-icon"
-      />
+      <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
       <span className="truncate leading-4">{truncateTagChipValue(value)}</span>
     </>
   );
@@ -122,10 +125,21 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
     setPopoverBox({ top: rect.bottom + 4, left });
   }, []);
 
+  // Callers build this array fresh on every render (``getDisplayConversationTags``
+  // returns a new array), so keying the reset effect on ``tags`` identity would
+  // fire on every parent render — closing an open ``+N`` popover and forcing a
+  // layout read on each 10s panel refetch. Compare tag *content* instead.
+  const tagsKey = tags.map(([key, value]) => `${key}=${value}`).join("\u001f");
+  const lastTagsKeyRef = React.useRef<string | null>(null);
+
   React.useLayoutEffect(() => {
+    if (lastTagsKeyRef.current === tagsKey) {
+      return;
+    }
+    lastTagsKeyRef.current = tagsKey;
     setIsOverflowOpen(false);
     recomputeVisibleCount();
-  }, [tags, recomputeVisibleCount]);
+  }, [tagsKey, recomputeVisibleCount]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -238,6 +252,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
               icon={getConversationTagIcon(key, value)}
               keyName={key}
               value={value}
+              iconTestId="conversation-card-tag-chip-icon"
             />
           </span>
         ))}

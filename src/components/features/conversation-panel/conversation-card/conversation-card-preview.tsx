@@ -10,6 +10,7 @@ import type { Provider } from "#/types/settings";
 import type { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import type { SandboxStatus } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { getDisplayConversationTags } from "#/api/agent-server-adapter";
+import { resolveAcpProviderIcon } from "#/constants/acp-providers";
 import AzureDevOpsLogo from "#/assets/branding/azure-devops-logo.svg?react";
 import { AgentBrandIcon } from "#/components/shared/agent-brand-icon";
 import { ConversationStatusDot } from "../conversation-status-dot";
@@ -23,6 +24,15 @@ interface ConversationCardPreviewProps {
   selectedRepository: RepositorySelection | null;
   workspaceWorkingDir?: string | null;
   llmModel?: string | null;
+  /**
+   * High-level kind of the conversation's agent. Drives the model row's brand
+   * mark exactly like the card chip does — without it an ACP conversation
+   * would show the OpenHands wordmark next to a Claude Code / Codex / Gemini
+   * model, contradicting the chip on the very card being hovered.
+   */
+  agentKind?: "openhands" | "acp" | null;
+  /** Registry key of the ACP CLI server, resolved to its brand mark. */
+  acpServer?: string | null;
   createdAt?: string;
   /**
    * Server-side conversation tags. Always shown in the hovercard when present
@@ -60,7 +70,9 @@ function PreviewRow({ label, children }: PreviewRowProps) {
 /**
  * Icon + value for preview rows. The icon sits in a box matching the first
  * line's height (``leading-4``) so it stays optically centered when the value
- * wraps to multiple lines.
+ * wraps to multiple lines. The slot has a 12px *minimum* rather than a fixed
+ * width so the wider OpenHands wordmark (18px at ``size={12}``) is not clipped,
+ * while the square icons still share one column.
  */
 function PreviewValueWithIcon({
   icon,
@@ -80,7 +92,7 @@ function PreviewValueWithIcon({
       className="inline-flex min-w-0 max-w-full items-start gap-1.5"
     >
       {icon ? (
-        <span className="inline-flex h-4 w-3 shrink-0 items-center justify-center [&_svg]:block">
+        <span className="inline-flex h-4 min-w-3 shrink-0 items-center justify-center [&_svg]:block">
           {icon}
         </span>
       ) : null}
@@ -98,6 +110,8 @@ export function ConversationCardPreview({
   selectedRepository,
   workspaceWorkingDir,
   llmModel,
+  agentKind = null,
+  acpServer = null,
   createdAt,
   tags = null,
 }: ConversationCardPreviewProps) {
@@ -173,7 +187,16 @@ export function ConversationCardPreview({
           <PreviewRow label={t(I18nKey.CONVERSATION_PANEL$PREVIEW_MODEL)}>
             <PreviewValueWithIcon
               testId="conversation-card-preview-model"
-              icon={<AgentBrandIcon kind="openhands" size={12} />}
+              icon={
+                <AgentBrandIcon
+                  kind={
+                    agentKind === "acp"
+                      ? resolveAcpProviderIcon(acpServer)
+                      : "openhands"
+                  }
+                  size={12}
+                />
+              }
             >
               {llmModel}
             </PreviewValueWithIcon>

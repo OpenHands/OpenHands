@@ -30,6 +30,27 @@ describe("truncateTagChipValue", () => {
       truncated.startsWith("a".repeat(TAG_CHIP_VALUE_MAX_LENGTH - 1)),
     ).toBe(true);
   });
+
+  it("never splits a surrogate pair at the cut point", () => {
+    // Slack-/Discord-stamped values carry emoji; slicing by UTF-16 code unit
+    // would leave a lone surrogate that renders as a replacement glyph.
+    const value = `${"a".repeat(TAG_CHIP_VALUE_MAX_LENGTH - 1)}🎉extra`;
+    const truncated = truncateTagChipValue(value);
+
+    expect(truncated).toBe(`${"a".repeat(TAG_CHIP_VALUE_MAX_LENGTH - 1)}…`);
+    for (const codePoint of truncated) {
+      expect(codePoint.codePointAt(0)).toBeLessThan(0xd800);
+    }
+  });
+
+  it("counts astral characters as one character each", () => {
+    // 13 emoji + one more: 14 code points fits the budget untouched.
+    const value = "🎉".repeat(TAG_CHIP_VALUE_MAX_LENGTH);
+    expect(truncateTagChipValue(value)).toBe(value);
+    expect(truncateTagChipValue(`${value}🎉`)).toBe(
+      `${"🎉".repeat(TAG_CHIP_VALUE_MAX_LENGTH - 1)}…`,
+    );
+  });
 });
 
 describe("computeVisibleTagChipCount", () => {
@@ -86,6 +107,21 @@ describe("getDisplayConversationTags", () => {
     ]);
   });
 
+  it("ranks priority keys by their normalized name", () => {
+    // The reserved-key filter normalizes the key, so the priority lookup must
+    // too — otherwise a cloud-stamped `Origin` sorts alphabetically instead of
+    // leading the row.
+    expect(
+      getDisplayConversationTags({
+        env: "prod",
+        Origin: "slack",
+      }),
+    ).toEqual([
+      ["Origin", "slack"],
+      ["env", "prod"],
+    ]);
+  });
+
   it("returns an empty list for nullish tags", () => {
     expect(getDisplayConversationTags(null)).toEqual([]);
     expect(getDisplayConversationTags(undefined)).toEqual([]);
@@ -109,6 +145,11 @@ describe("getDisplayConversationTags", () => {
 describe("getConversationTagLabelKind", () => {
   it.each([
     ["git_provider", "git"],
+    // `origin` / `source` name where a conversation came from (Slack, an API
+    // call, an automation), which is not a git fact — they stay "other" and
+    // humanize to "Origin" / "Source".
+    ["origin", "other"],
+    ["source", "other"],
     ["repo_name", "repo"],
     ["selected_branch", "branch"],
     ["archiveworkspacepath", "workspace"],
@@ -160,5 +201,15 @@ describe("getConversationTagLabel", () => {
   it("humanizes unknown snake_case keys", () => {
     expect(humanizeConversationTagKey("my_custom_tag")).toBe("My custom tag");
     expect(getConversationTagLabel("owner", t)).toBe("Owner");
+  });
+
+  it("labels origin and source by their own names, not Git", () => {
+    expect(getConversationTagLabel("origin", t)).toBe("Origin");
+    expect(getConversationTagLabel("source", t)).toBe("Source");
+    expect(formatConversationTagTooltip("origin", "slack", t)).toBe(
+      "Origin: slack",
+    );
+    // The git host stamp keeps the Git label.
+    expect(getConversationTagLabel("git_provider", t)).toBe("Git");
   });
 });

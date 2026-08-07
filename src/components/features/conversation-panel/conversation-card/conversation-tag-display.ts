@@ -33,14 +33,16 @@ export type ConversationTagLabelKind =
  * treated as "workspace" — the sandbox working directory for the conversation.
  * ACM / Work stamps (``Appmode``, ``Worktools``, ``Workwsid``) get dedicated
  * kinds so chips and hovercards show friendly labels instead of the wire key.
+ *
+ * ``origin`` / ``source`` deliberately stay "other" (humanized to "Origin" /
+ * "Source"): they name where a conversation came from — Slack, an API call, an
+ * automation — which is not a git fact. Only ``git_provider`` is "Git".
  */
 export function getConversationTagLabelKind(
   key: string,
 ): ConversationTagLabelKind {
   switch (key.trim().toLowerCase()) {
     case "git_provider":
-    case "origin":
-    case "source":
       return "git";
     case "repo_name":
     case "repo":
@@ -125,18 +127,24 @@ export function formatConversationTagTooltip(
 /**
  * Hard-truncate a tag value for the chip label. The full ``key: value`` string
  * stays available via tooltip / overflow popover.
+ *
+ * Measures and slices by code point rather than UTF-16 code unit: values
+ * stamped by Slack / Discord automations carry emoji, and cutting between the
+ * halves of a surrogate pair leaves a lone surrogate that browsers draw as a
+ * replacement glyph.
  */
 export function truncateTagChipValue(
   value: string,
   maxLength: number = TAG_CHIP_VALUE_MAX_LENGTH,
 ): string {
-  if (value.length <= maxLength) {
+  const characters = Array.from(value);
+  if (characters.length <= maxLength) {
     return value;
   }
   if (maxLength <= 1) {
     return "…";
   }
-  return `${value.slice(0, maxLength - 1)}…`;
+  return `${characters.slice(0, maxLength - 1).join("")}…`;
 }
 
 /**
