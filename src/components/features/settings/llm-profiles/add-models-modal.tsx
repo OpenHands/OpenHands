@@ -136,7 +136,7 @@ export function AddModelsModal({
     let blocked = false;
     let blockedReason: string | null = null;
 
-    for (const row of targets) {
+    for (const [i, row] of targets.entries()) {
       try {
         await saveProfile.mutateAsync({
           name: row.name,
@@ -155,6 +155,11 @@ export function AddModelsModal({
         if (isSdkHttpStatusError(error, 409)) {
           blocked = true;
           blockedReason = getServerDetail(error);
+          // Rows past this one were marked "saving" up front and are now
+          // never attempted; leave them idle rather than spinning forever.
+          for (const skipped of targets.slice(i + 1)) {
+            setRow(skipped.model, { status: "idle" });
+          }
           break;
         }
       }

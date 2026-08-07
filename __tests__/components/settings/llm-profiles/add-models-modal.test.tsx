@@ -264,6 +264,10 @@ describe("AddModelsModal", () => {
       "Profile limit reached (10). Delete a profile first.",
     );
     expect(onClose).not.toHaveBeenCalled();
+    // exactly one row reports a status; the unattempted row is not left
+    // spinning on a "saving" it never got
+    expect(screen.getAllByText(/^(Saved|Failed)$/)).toHaveLength(1);
+    expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
   });
 
   it("select-all toggles every selectable row", async () => {
