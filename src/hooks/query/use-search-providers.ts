@@ -8,6 +8,36 @@ import {
   fetchVerifiedModelsByProvider,
 } from "./use-verified-models";
 
+const MAX_PAGINATION_DEPTH = 10;
+
+async function fetchPage(
+  verifiedByProvider: Record<string, string[]>,
+  pageId?: string,
+  depth = 0,
+): Promise<LLMProvider[]> {
+  if (depth >= MAX_PAGINATION_DEPTH) {
+    throw new Error("Too many pagination requests for providers");
+  }
+
+  const page = await ConfigService.searchProviders(
+    {
+      limit: 100,
+      page_id: pageId,
+    },
+    verifiedByProvider,
+  );
+
+  if (page.next_page_id) {
+    const rest = await fetchPage(
+      verifiedByProvider,
+      page.next_page_id,
+      depth + 1,
+    );
+    return [...page.items, ...rest];
+  }
+  return page.items;
+}
+
 export const useSearchProviders = () =>
   useQuery({
     queryKey: ["config", "providers"],
@@ -17,12 +47,7 @@ export const useSearchProviders = () =>
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
       });
-      // Providers are a small set; fetch all in one call with a high limit.
-      const page = await ConfigService.searchProviders(
-        { limit: 100 },
-        verifiedByProvider,
-      );
-      return page.items;
+      return fetchPage(verifiedByProvider);
     },
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
