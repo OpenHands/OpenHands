@@ -23,6 +23,16 @@
 ARG AGENT_SERVER_IMAGE
 ARG AUTOMATION_VERSION
 
+# Optional sibling package for `file:../typescript-client` lockfiles (local forks).
+# Override with: docker build --build-context typescript-client=../typescript-client
+# or Compose `additional_contexts`. When omitted, this stage is empty and npm
+# must resolve `@openhands/typescript-client` from the registry instead.
+FROM scratch AS typescript-client
+
+# Optional local software-agent-sdk (workspace clone and other unreleased APIs).
+# Override with: --build-context software-agent-sdk=../software-agent-sdk
+FROM scratch AS software-agent-sdk
+
 # ── Stage 1: Build frontend ──────────────────────────────────────────────────
 FROM node:24-slim AS frontend-build
 
@@ -30,6 +40,13 @@ WORKDIR /build
 
 # Cache-friendly: package files first
 COPY package.json package-lock.json ./
+# Place the sibling where `file:../typescript-client` resolves from /build.
+# Build it first so parent `npm ci` does not re-run `prepare` without its toolchain.
+COPY --from=typescript-client . /typescript-client
+RUN cd /typescript-client \
+  && npm ci \
+  && npm run build \
+  && npm pkg delete scripts.prepare
 RUN npm ci
 
 # Copy everything needed for the build
@@ -106,12 +123,39 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" 2>/dev/null \
     || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}"
 
-RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
+# Prefer a local software-agent-sdk checkout (Compose additional_contexts) so
+# unreleased agent-server APIs such as POST /api/workspaces/clone ship in the
+# image. Falls back to AGENT_SERVER_SDK_GIT_REF from GitHub when the local
+# context is empty.
+COPY --from=software-agent-sdk . /opt/software-agent-sdk
+RUN if [ -f /opt/software-agent-sdk/openhands-agent-server/pyproject.toml ]; then \
+      echo "Installing local software-agent-sdk from /opt/software-agent-sdk..." && \
+      uv pip install --system --force-reinstall \
+        "/opt/software-agent-sdk/openhands-sdk" \
+        "/opt/software-agent-sdk/openhands-tools" \
+        "/opt/software-agent-sdk/openhands-workspace" \
+        "/opt/software-agent-sdk/openhands-agent-server" && \
+      # Base image ships a frozen PyInstaller binary that ignores site-packages.
+      # Replace it so the reinstalled Python package (with /workspaces/clone) runs.
+      printf '%s\n' \
+        '#!/bin/sh' \
+        'exec python -m openhands.agent_server "$@"' \
+        > /usr/local/bin/openhands-agent-server && \
+      chmod +x /usr/local/bin/openhands-agent-server; \
+    elif [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \
       uv pip install --system --force-reinstall \
         "${BASE_GIT_URL}#subdirectory=openhands-sdk" \
         "${BASE_GIT_URL}#subdirectory=openhands-tools" \
-        "${BASE_GIT_URL}#subdirectory=openhands-workspace"; \
+        "${BASE_GIT_URL}#subdirectory=openhands-workspace" \
+        "${BASE_GIT_URL}#subdirectory=openhands-agent-server" && \
+      printf '%s\n' \
+        '#!/bin/sh' \
+        'exec python -m openhands.agent_server "$@"' \
+        > /usr/local/bin/openhands-agent-server && \
+      chmod +x /usr/local/bin/openhands-agent-server; \
+    else \
+      rm -rf /opt/software-agent-sdk; \
     fi
 
 # Copy the frontend build output.

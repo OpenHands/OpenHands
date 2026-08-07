@@ -1,0 +1,2 @@
+# Placeholder so the default Compose bind mount `./projects:/projects` exists.
+# Put the repositories / folders you want the agent to access here.

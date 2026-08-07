@@ -1,0 +1,90 @@
+# Agent Canvas — all-in-one stack (Agent Server + Automation + Frontend)
+#
+# Quick start (published image — portable to any machine with Docker):
+#   mkdir -p projects
+#   docker compose up -d
+#   → http://localhost:8000/canvas
+#
+# Build from this repo (test local / unreleased changes).
+# Requires siblings ../typescript-client and ../software-agent-sdk
+# (clone endpoint lives in the local agent-server, not the published image):
+#   mkdir -p projects
+#   docker compose up --build -d
+#   → builds and tags as AGENT_CANVAS_IMAGE (default: published tag below)
+#
+# Prefer a local tag while iterating:
+#   AGENT_CANVAS_IMAGE=agent-canvas:local docker compose up --build -d
+#
+# Override host port / projects path (e.g. Windows when :8000 is taken):
+#   HOST_PORT=8001 PROJECTS_PATH=./projects docker compose up -d
+#
+# Copy settings from docker/compose.env.example into `.env` (Compose loads it
+# automatically) or pass `--env-file docker/compose.env.example`.
+#
+# Move a local build to another machine:
+#   AGENT_CANVAS_IMAGE=agent-canvas:local docker compose build
+#   docker save agent-canvas:local | gzip > agent-canvas-local.tar.gz
+#   # on the other host:
+#   gunzip -c agent-canvas-local.tar.gz | docker load
+#   AGENT_CANVAS_IMAGE=agent-canvas:local docker compose up -d
+
+services:
+  agent-canvas:
+    # x-release-please-version
+    image: ${AGENT_CANVAS_IMAGE:-ghcr.io/openhands/agent-canvas:1.10.0}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      # Local forks: typescript-client (file: dep) + software-agent-sdk (clone API).
+      additional_contexts:
+        typescript-client: ${TYPESCRIPT_CLIENT_PATH:-../typescript-client}
+        # Prefer OH_AGENT_SERVER_LOCAL_PATH from .env (same as npm run dev).
+        software-agent-sdk: ${SOFTWARE_AGENT_SDK_PATH:-${OH_AGENT_SERVER_LOCAL_PATH:-../software-agent-sdk}}
+      args:
+        # Pins match config/defaults.json — override via .env when needed.
+        AGENT_SERVER_IMAGE: ${AGENT_SERVER_IMAGE:-ghcr.io/openhands/agent-server:1.40.1-python}
+        AUTOMATION_VERSION: ${AUTOMATION_VERSION:-1.6.0}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/canvas}
+        VITE_POSTHOG_API_KEY: ${VITE_POSTHOG_API_KEY:-}
+        # Optional fallback when SOFTWARE_AGENT_SDK_PATH is unavailable:
+        # rebuild Python packages from a software-agent-sdk git ref.
+        AGENT_SERVER_SDK_GIT_REF: ${AGENT_SERVER_SDK_GIT_REF:-}
+    container_name: agent-canvas
+    ports:
+      # Only the unified ingress is published; :18000/:18001 stay inside the container.
+      - "${HOST_PORT:-8000}:8000"
+    environment:
+      PORT: "8000"
+      # Optional: pin keys so restarts / machines share the same credentials.
+      # Leave unset to auto-generate and persist under the openhands-data volume.
+      LOCAL_BACKEND_API_KEY: ${LOCAL_BACKEND_API_KEY:-}
+      OH_SECRET_KEY: ${OH_SECRET_KEY:-}
+      OH_SESSION_API_KEYS_0: ${OH_SESSION_API_KEYS_0:-}
+      # Optional LLM credentials (can also be configured in the UI).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      VITE_DO_NOT_TRACK: ${VITE_DO_NOT_TRACK:-}
+      AUTOMATION_BASE_URL: ${AUTOMATION_BASE_URL:-}
+    volumes:
+      # Settings, secrets, conversations, automation DB, session/API keys.
+      - openhands-data:/home/openhands/.openhands
+      # Host projects the agent can read/edit. Create the folder before first run.
+      - ${PROJECTS_PATH:-./projects}:/projects
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/alive', timeout=5)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  openhands-data:
+    name: ${OPENHANDS_VOLUME_NAME:-agent-canvas-openhands-data}

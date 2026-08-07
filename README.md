@@ -103,6 +103,16 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
+**Docker Compose** (same image, named volume for state, easy to move between machines):
+
+```sh
+mkdir -p projects
+docker compose up -d                    # published image
+# docker compose up --build -d          # build from this checkout instead
+```
+
+Open [http://localhost:8000/canvas](http://localhost:8000/canvas). Copy `docker/compose.env.example` to `.env` to set `HOST_PORT`, API keys, or LLM credentials. See comments in `docker-compose.yml` for exporting a local build with `docker save`.
+
 ### Option 3: From Source
 
 > [!WARNING]
