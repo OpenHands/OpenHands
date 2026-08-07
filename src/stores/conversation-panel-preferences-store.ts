@@ -62,7 +62,7 @@ const initialState: ConversationPanelPreferencesState = {
   showLlmProfiles: true,
   showTagsMetadata: true,
   showHoverMetadata: true,
-  organizeMode: "chronological",
+  organizeMode: "grouped",
   conversationSort: "updated",
   threadScope: "all",
   automationFilterMode: "all",

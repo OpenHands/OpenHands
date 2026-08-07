@@ -8,13 +8,13 @@ describe("conversation-panel-preferences store", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to showing older conversations, LLM profiles, chronological list, and expected toggles", () => {
+  it("defaults to showing older conversations, LLM profiles, grouped-by-workspace list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(true);
     expect(state.showTagsMetadata).toBe(true);
-    expect(state.organizeMode).toBe("chronological");
+    expect(state.organizeMode).toBe("grouped");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
     expect(state.automationFilterMode).toBe("all");
@@ -174,7 +174,7 @@ describe("conversation-panel-preferences store", () => {
       showRepoBranchMetadata: true,
       // Filled with defaults for missing fields.
       showLlmProfiles: true,
-      organizeMode: "chronological",
+      organizeMode: "grouped",
       conversationSort: "updated",
       threadScope: "all",
     });
