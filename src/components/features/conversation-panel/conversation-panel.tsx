@@ -193,9 +193,6 @@ export function ConversationPanel({
       state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
   const togglePin = usePinnedConversationsStore((state) => state.togglePin);
-  const pruneMissingPinnedConversations = usePinnedConversationsStore(
-    (state) => state.pruneMissingConversations,
-  );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
@@ -296,21 +293,6 @@ export function ConversationPanel({
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
   );
-
-  React.useEffect(() => {
-    if (!isFetched) {
-      return;
-    }
-    pruneMissingPinnedConversations(
-      activeBackend.id,
-      conversations.map((conversation) => conversation.id),
-    );
-  }, [
-    activeBackend.id,
-    conversations,
-    isFetched,
-    pruneMissingPinnedConversations,
-  ]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
