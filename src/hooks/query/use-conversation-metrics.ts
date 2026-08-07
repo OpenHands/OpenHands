@@ -1,8 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
+import { getAgentServerBaseUrl } from "#/api/agent-server-config";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { getCombinedMetrics } from "#/utils/conversation-metrics";
 import type { MetricsSnapshot } from "#/api/conversation-service/agent-server-conversation-service.types";
+
+/**
+ * When the Canvas is itself hosted on the Cloud (e.g. served from
+ * `app.all-hands.dev`), there is no local agent-server and therefore no
+ * `/api/cloud-proxy` endpoint to tunnel runtime requests through. The cloud
+ * host returns 405 for that path, so the runtime REST query must be skipped
+ * and the modal falls back to the WebSocket-fed `useMetricsStore`.
+ *
+ * In the "local Canvas + Cloud backend" case the local agent-server DOES
+ * expose `/api/cloud-proxy`, so the query is kept enabled and the cloud-proxy
+ * path inside `getRuntimeConversation` handles the fetch.
+ */
+function isCloudHostedCanvas(): boolean {
+  const { backend } = getActiveBackend();
+  if (backend.kind !== "cloud") return false;
+
+  const baseUrl = getAgentServerBaseUrl();
+  if (!baseUrl || !backend.host) return false;
+
+  try {
+    const canvasOrigin = new URL(baseUrl).origin;
+    const backendOrigin = new URL(backend.host).origin;
+    return canvasOrigin === backendOrigin;
+  } catch {
+    return false;
+  }
+}
 
 export const useConversationMetrics = (
   conversationId: string | null | undefined,
@@ -14,13 +42,7 @@ export const useConversationMetrics = (
   isLoading: boolean;
   error: unknown;
 } => {
-  // Cloud backends have no runtime REST fetch path: the runtime lives at
-  // `*.prod-runtime.all-hands.dev`, which is CORS-blocked from the browser,
-  // and the SDK no longer exposes a `/api/cloud-proxy` hop to reach it.
-  // `metrics-modal.tsx` already falls back to the WebSocket-fed
-  // `useMetricsStore`, so the hook must stay idle on cloud to avoid the
-  // 405 toast the user sees when opening the Display Cost modal.
-  const isCloud = getActiveBackend().backend.kind === "cloud";
+  const skipRuntimeQuery = isCloudHostedCanvas();
 
   const query = useQuery({
     queryKey: [
@@ -39,7 +61,8 @@ export const useConversationMetrics = (
         );
       return getCombinedMetrics(conversationInfo);
     },
-    enabled: enabled && !!conversationId && !!conversationUrl && !isCloud,
+    enabled:
+      enabled && !!conversationId && !!conversationUrl && !skipRuntimeQuery,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 30,
