@@ -486,4 +486,32 @@ describe("Sidebar", () => {
       "Automate",
     );
   });
+
+  it("renders the Join Slack action as a new-tab link in the expanded sidebar", () => {
+    renderSidebar("/conversations");
+
+    const sidebar = getDesktopSidebar(false);
+    const joinSlackLink = within(sidebar).getByTestId(
+      "sidebar-join-slack-link",
+    );
+    expect(joinSlackLink).toHaveTextContent("Join Slack");
+    expect(joinSlackLink).toHaveAttribute(
+      "href",
+      "https://go.openhands.dev/slack",
+    );
+    expect(joinSlackLink).toHaveAttribute("target", "_blank");
+    expect(joinSlackLink).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(joinSlackLink).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
+  });
+
+  it("renders the Join Slack iconized action with an accessible label when sidebar is collapsed", () => {
+    useSidebarStore.setState({ collapsed: true });
+    renderSidebar("/conversations");
+
+    const joinSlackLink = screen.getByTestId("sidebar-join-slack-link");
+    expect(joinSlackLink).toHaveAttribute("aria-label", "Join Slack");
+    expect(joinSlackLink).toHaveAttribute("href", "https://go.openhands.dev/slack");
+    expect(joinSlackLink).toHaveAttribute("target", "_blank");
+    expect(joinSlackLink.querySelector("svg")).not.toBeNull();
+  });
 });

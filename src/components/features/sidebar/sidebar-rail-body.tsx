@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Send,
   Server,
   Settings,
 } from "lucide-react";
@@ -223,6 +224,14 @@ export function SidebarRailBody({
             "mt-auto pb-2 cursor-pointer",
           )}
         >
+          <SidebarNavLink
+            to="https://go.openhands.dev/slack"
+            label={t(I18nKey.SIDEBAR$JOIN_SLACK)}
+            testId="sidebar-join-slack-link"
+            external
+            collapsed={collapsed}
+            icon={<Send width={ICON_SIZE} height={ICON_SIZE} />}
+          />
           <StyledTooltip
             content={t(I18nKey.SIDEBAR$SETTINGS)}
             placement="right"
@@ -315,6 +324,13 @@ export function SidebarRailBody({
             "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
           )}
         >
+          <SidebarNavLink
+            to="https://go.openhands.dev/slack"
+            label={t(I18nKey.SIDEBAR$JOIN_SLACK)}
+            testId="sidebar-join-slack-link"
+            external
+            icon={<Send width={ICON_SIZE} height={ICON_SIZE} />}
+          />
           <AgentCanvasVersionTile hideWhenUpToDate />
           <BackendSelector sidebarCollapsed={collapsed} openUpward />
         </div>
