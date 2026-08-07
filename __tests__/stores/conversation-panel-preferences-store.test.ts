@@ -8,12 +8,12 @@ describe("conversation-panel-preferences store", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to showing older conversations, LLM profiles, chronological list, and expected toggles", () => {
+  it("defaults to showing older conversations, chronological list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
     expect(state.showRepoBranchMetadata).toBe(false);
-    expect(state.showLlmProfiles).toBe(true);
-    expect(state.showTagsMetadata).toBe(true);
+    expect(state.showLlmProfiles).toBe(false);
+    expect(state.showTagsMetadata).toBe(false);
     expect(state.organizeMode).toBe("chronological");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
@@ -173,21 +173,21 @@ describe("conversation-panel-preferences store", () => {
       showOlderConversations: false,
       showRepoBranchMetadata: true,
       // Filled with defaults for missing fields.
-      showLlmProfiles: true,
+      showLlmProfiles: false,
       organizeMode: "chronological",
       conversationSort: "updated",
       threadScope: "all",
     });
   });
 
-  it("preserves an explicitly hidden LLM-profiles preference from persisted storage", async () => {
+  it("preserves an explicitly enabled LLM-profiles preference from persisted storage", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         state: {
           showOlderConversations: true,
           showRepoBranchMetadata: false,
-          showLlmProfiles: false,
+          showLlmProfiles: true,
         },
         version: 0,
       }),
@@ -197,6 +197,6 @@ describe("conversation-panel-preferences store", () => {
 
     expect(
       useConversationPanelPreferencesStore.getState().showLlmProfiles,
-    ).toBe(false);
+    ).toBe(true);
   });
 });

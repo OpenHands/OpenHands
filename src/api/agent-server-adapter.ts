@@ -454,22 +454,45 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
 ];
 
 /**
- * Conversation tag keys Canvas itself stamps/consumes for internal routing.
- * They are already surfaced through dedicated UI (the ACP provider chip, the
- * automation filter in the conversation panel), so the generic tag-chip
- * display filters them out. The automation id/run-id keys are raw UUIDs —
- * chip noise — while `automationname`/`automationtrigger` stay visible.
+ * Conversation tag keys that must not appear as generic chips / hovercard
+ * rows. Each is either already surfaced by a first-class UI source or is
+ * internal routing data:
+ * - ``acpserver`` → ACP provider chip
+ * - ``title`` → conversation card heading
+ * - git / repo / branch / workspace stamps → repo-branch metadata + directory
+ *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
+ *   ``git_provider``, ``workspace.working_dir``)
+ * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
+ *   conversation panel's automation filter (chip noise), while
+ *   ``automationname`` / ``automationtrigger`` stay visible
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
+  "title",
+  "git_provider",
+  "repo_name",
+  "repo",
+  "repository",
+  "selected_branch",
+  "branch",
+  "archiveworkspacepath",
+  "workspace",
+  "working_dir",
 ]);
 
 /**
+ * High-signal tag keys shown first in the chip row (before A–Z). Automations
+ * often stamp ``origin``; remaining free-form tags sort alphabetically.
+ */
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
+
+/**
  * User-facing subset of a conversation's server-side tags: everything except
- * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries
- * sorted by key so chip order doesn't shuffle between refetches.
+ * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
+ * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
+ * the rest sort A–Z so chip order doesn't shuffle between refetches.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
@@ -477,9 +500,31 @@ export function getDisplayConversationTags(
   if (!tags) {
     return [];
   }
+  // Both the reserved-key check and the priority lookup must see the same
+  // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
+  // ranking those off the raw key would silently drop them out of first place.
+  const priorityRank = (key: string): number => {
+    const index = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(
+      key.trim().toLowerCase(),
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
+
   return Object.entries(tags)
-    .filter(([key]) => !RESERVED_CONVERSATION_TAG_KEYS.has(key))
-    .sort(([a], [b]) => a.localeCompare(b));
+    .filter(
+      ([key, value]) =>
+        !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
+    .sort(([a], [b]) => {
+      const aRank = priorityRank(a);
+      const bRank = priorityRank(b);
+      if (aRank !== bRank) {
+        return aRank - bRank;
+      }
+      return a.localeCompare(b);
+    });
 }
 
 const FERNET_TOKEN_PREFIX = "gAAAAA";
