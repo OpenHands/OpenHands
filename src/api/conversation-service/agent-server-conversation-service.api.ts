@@ -636,32 +636,26 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    const active = getActiveBackend().backend;
-
     type RawRuntime = DirectConversationInfo & {
       stats?: RuntimeConversationInfo["stats"];
     };
 
-    // Cloud mode: route through the cloud-proxy to the runtime sandbox at
-    // the conversation's runtime URL — same pattern as getVSCodeUrl. Local
-    // mode forwards conversationUrl so the host explicitly resolves to the
-    // conversation's runtime instead of falling back to the active backend.
-    const response =
-      active.kind === "cloud" && conversationUrl
-        ? await callCloudProxy<RawRuntime>({
-            backend: active,
-            method: "GET",
-            hostOverride: buildHttpBaseUrl(conversationUrl),
-            path: `/api/conversations/${conversationId}`,
-            authMode: "session-api-key",
-            sessionApiKey,
-          })
-        : await new ConversationClient(
-            getAgentServerClientOptions({
-              conversationUrl,
-              sessionApiKey,
-            }),
-          ).getConversation<RawRuntime>(conversationId);
+    // Fetch directly from the runtime sandbox. The conversationUrl points
+    // at the per-conversation agent-server (e.g.
+    // `https://runtime-xxx.prod-runtime.all-hands.dev/api/conversations/…`
+    // for cloud, or `http://localhost:…/api/conversations/…` for local).
+    // `getAgentServerClientOptions` resolves the host from conversationUrl
+    // and the sessionApiKey authenticates with `X-Session-API-Key`.
+    // Previously cloud backends tunneled through `/api/cloud-proxy`, but
+    // that endpoint was removed from the agent-server; a direct fetch to
+    // the runtime host works because the runtime agent-server sends CORS
+    // headers for browser-origin requests.
+    const response = await new ConversationClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getConversation<RawRuntime>(conversationId);
     const data = requireDirectConversationInfo(response);
     const stats = isRecord(response) ? response.stats : null;
 

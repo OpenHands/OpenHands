@@ -6,12 +6,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
-import {
-  __resetActiveStoreForTests,
-  setActiveSelection,
-  setRegisteredBackends,
-} from "#/api/backend-registry/active-store";
-import type { Backend } from "#/api/backend-registry/types";
 
 const runtimeInfo = {
   id: "conv-abc",
@@ -46,59 +40,43 @@ function makeWrapper() {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  window.localStorage.clear();
-  __resetActiveStoreForTests();
 });
 
-const cloudBackend: Backend = {
-  id: "prod",
-  name: "Production",
-  host: "https://app.all-hands.dev",
-  apiKey: "bearer-token",
-  kind: "cloud",
-};
-
 beforeEach(() => {
-  window.localStorage.clear();
-  __resetActiveStoreForTests();
+  vi.restoreAllMocks();
 });
 
 describe("useConversationMetrics", () => {
-  it("skips the runtime REST query on cloud backends (cloud-proxy endpoint was removed)", async () => {
-    // Arrange — register a cloud backend so getActiveBackend() reports
-    // kind === "cloud". The runtime conversation REST fetch tunnels
-    // through /api/cloud-proxy, which was removed from the agent-server:
-    // the local agent-server returns 404 (Local Canvas + Cloud backend)
-    // and the cloud host returns 405 (Cloud Canvas + Cloud backend). The
-    // modal already falls back to the WebSocket-fed metrics store, so the
-    // hook must stay idle to avoid the error toast.
-    setRegisteredBackends([cloudBackend]);
-    setActiveSelection({ backendId: cloudBackend.id, orgId: null });
-
-    const spy = vi.spyOn(
-      AgentServerConversationService,
-      "getRuntimeConversation",
-    );
+  it("fires the query on cloud backends, fetching directly from the runtime URL", async () => {
+    // Arrange — the runtime REST fetch must work on cloud backends.
+    // getRuntimeConversation now fetches directly from the runtime
+    // sandbox URL (conversationUrl) instead of tunneling through the
+    // removed /api/cloud-proxy endpoint.
+    const spy = vi
+      .spyOn(AgentServerConversationService, "getRuntimeConversation")
+      .mockResolvedValue(runtimeInfo);
 
     // Act
     const { result } = renderHook(
       () =>
         useConversationMetrics(
           "conv-abc",
-          "https://runtime.example.com/api/conversations/conv-abc",
+          "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
           "session-key",
           true,
         ),
       { wrapper: makeWrapper() },
     );
 
-    // Assert — the query is never enabled, so the spy stays untouched and
-    // the hook exposes no data (the modal reads storeMetrics instead).
+    // Assert — the query fires and resolves to the runtime data.
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.data?.accumulated_cost).toBe(2.5);
     });
-    expect(spy).not.toHaveBeenCalled();
-    expect(result.current.data).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(
+      "conv-abc",
+      "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
+      "session-key",
+    );
   });
 
   it("fires the query when sessionApiKey is null (local backends without auth)", async () => {
