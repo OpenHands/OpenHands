@@ -640,16 +640,7 @@ class AgentServerConversationService {
       stats?: RuntimeConversationInfo["stats"];
     };
 
-    // Fetch directly from the runtime sandbox. The conversationUrl points
-    // at the per-conversation agent-server (e.g.
-    // `https://runtime-xxx.prod-runtime.all-hands.dev/api/conversations/…`
-    // for cloud, or `http://localhost:…/api/conversations/…` for local).
-    // `getAgentServerClientOptions` resolves the host from conversationUrl
-    // and the sessionApiKey authenticates with `X-Session-API-Key`.
-    // Previously cloud backends tunneled through `/api/cloud-proxy`, but
-    // that endpoint was removed from the agent-server; a direct fetch to
-    // the runtime host works because the runtime agent-server sends CORS
-    // headers for browser-origin requests.
+    // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
     const response = await new ConversationClient(
       getAgentServerClientOptions({
         conversationUrl,
