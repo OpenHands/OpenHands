@@ -1367,7 +1367,7 @@ function AddBackendChooser({
       <div
         role="tablist"
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
-        className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+        className="grid grid-cols-1 overflow-hidden rounded-lg border border-[var(--oh-border)] md:grid-cols-2"
       >
         <BackendOptionTab
           value="cloud"
