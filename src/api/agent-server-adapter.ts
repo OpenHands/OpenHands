@@ -349,6 +349,7 @@ export function toAppConversation(
           runtimeId: info.current_model_id,
           configured: info.agent?.acp_model,
           sdkLlm: info.agent?.llm?.model,
+          providerKey: acpServer,
         })
       : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
     metrics: info.metrics
@@ -791,6 +792,7 @@ function buildConfiguredAcpAgentSettings(
   const effectiveModel = resolveEffectiveAcpModel({
     configured: agentSettings.acp_model as string | null | undefined,
     providerDefault: getAcpPreferredDefaultModel(serverKey),
+    providerKey: serverKey,
   });
   if (effectiveModel) {
     payload.acp_model = effectiveModel;

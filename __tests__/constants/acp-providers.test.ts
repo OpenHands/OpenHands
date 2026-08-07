@@ -10,6 +10,8 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  labelForAcpModel,
+  normalizeAcpModelId,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -224,6 +226,7 @@ describe("getAcpPreferredDefaultModel", () => {
     expect(getAcpPreferredDefaultModel("claude-code")).toBe(
       getAcpProvider("claude-code")?.default_model,
     );
+    expect(getAcpPreferredDefaultModel("cursor")).toBe("auto");
   });
 
   it("returns null for OpenHands / custom / unknown", () => {
@@ -292,5 +295,25 @@ describe("getAcpCredentialConflicts", () => {
       ),
     ).toEqual([]);
     expect(getAcpCredentialConflicts(null, () => true)).toEqual([]);
+  });
+});
+
+describe("normalizeAcpModelId / labelForAcpModel (Cursor)", () => {
+  it("maps Auto label and default[] placeholder to auto", () => {
+    expect(normalizeAcpModelId("cursor", "Auto")).toBe("auto");
+    expect(normalizeAcpModelId("cursor", "default[]")).toBe("auto");
+    expect(normalizeAcpModelId("cursor", "composer-2.5")).toBe("composer-2.5");
+  });
+
+  it("shows the human Auto label for normalized Cursor models", () => {
+    expect(labelForAcpModel("cursor", "Auto")).toBe("Auto");
+    expect(labelForAcpModel("cursor", "default[]")).toBe("Auto");
+    expect(labelForAcpModel("cursor", "composer-2.5")).toBe("Composer 2.5");
+  });
+
+  it("lists Auto as the Cursor default in the registry overlay", () => {
+    const cursor = getAcpProvider("cursor");
+    expect(cursor?.default_model).toBe("auto");
+    expect(cursor?.available_models?.some((m) => m.id === "auto")).toBe(true);
   });
 });

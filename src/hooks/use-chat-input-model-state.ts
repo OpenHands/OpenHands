@@ -76,10 +76,10 @@ export function useChatInputModelState(): ChatInputModelState {
     // creation time). Use it directly if available; fall back to the
     // settings-configured model or provider default so the chip stays visible.
     currentModelId =
-      conversation?.llm_model ??
       resolveEffectiveAcpModel({
-        configured: acpConfiguredModel,
+        configured: conversation?.llm_model ?? acpConfiguredModel,
         providerDefault: getAcpPreferredDefaultModel(acpServerKey),
+        providerKey: acpServerKey,
       });
   } else if (isHomeAcp) {
     currentModelId = resolveEffectiveAcpModel({
@@ -87,6 +87,7 @@ export function useChatInputModelState(): ChatInputModelState {
       // Preferred default (Vertex-safe for Gemini) — must match what the
       // start request would substitute for an unconfigured model.
       providerDefault: getAcpPreferredDefaultModel(acpServerKey),
+      providerKey: acpServerKey,
     });
   } else {
     currentModelId = conversation?.llm_model ?? settings?.llm_model ?? null;

@@ -36,6 +36,7 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  normalizeAcpModelId,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
@@ -86,8 +87,10 @@ function isKnownAcpModel(
   provider: ACPProviderConfig | undefined,
   model: string,
 ): boolean {
+  if (!provider) return false;
+  const normalized = normalizeAcpModelId(provider.key, model);
   return (
-    provider?.available_models?.some(({ id }) => id === model.trim()) ?? false
+    provider.available_models?.some(({ id }) => id === normalized) ?? false
   );
 }
 
@@ -160,7 +163,9 @@ export function buildAgentProfileFields(
     return {
       agent_kind: "acp",
       acp_server: selectedPreset,
-      acp_model: acpModel.trim() || null,
+      acp_model:
+        normalizeAcpModelId(selectedPreset, acpModel.trim() || null) ??
+        (acpModel.trim() || null),
       acp_command: isBuiltinDefault
         ? null
         : formatCommand(commandTokens) || null,
@@ -334,7 +339,9 @@ export function AgentSettingsScreen({
 
       const savedModel = source?.acp_model;
       const normalizedSavedModel =
-        typeof savedModel === "string" ? savedModel.trim() : "";
+        typeof savedModel === "string"
+          ? (normalizeAcpModelId(acpServer, savedModel) ?? savedModel.trim())
+          : "";
       setAcpModel(
         normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
       );

@@ -52,6 +52,8 @@ export function resolveEffectiveAcpModel(inputs: {
   configured?: string | null;
   sdkLlm?: string | null;
   providerDefault?: string | null;
+  /** When set, normalizes candidates against the provider's model registry. */
+  providerKey?: string | null;
 }): string | null {
   for (const candidate of [
     inputs.runtimeName,
@@ -60,7 +62,11 @@ export function resolveEffectiveAcpModel(inputs: {
     inputs.sdkLlm,
   ]) {
     const value = realAcpModel(candidate);
-    if (value) return value;
+    if (value) {
+      return (
+        normalizeAcpModelId(inputs.providerKey, value) ?? value
+      );
+    }
   }
   return inputs.providerDefault ?? null;
 }
@@ -444,6 +450,46 @@ export function resolveAcpProviderIcon(
 }
 
 /**
+ * Map a user-/runtime-facing model string onto the registry id for ``serverKey``.
+ *
+ * Handles free-text labels (``"Auto"`` → ``"auto"``), case folding, and known
+ * Cursor placeholders (``"default[]"`` / ``"default"`` → ``"auto"``). Returns
+ * the original trimmed string when no registry match applies (custom override).
+ */
+export function normalizeAcpModelId(
+  serverKey: string | null | undefined,
+  modelId: string | null | undefined,
+): string | null {
+  if (modelId == null) return null;
+  const trimmed = modelId.trim();
+  if (!trimmed) return null;
+
+  const provider = getAcpProvider(serverKey);
+  if (!provider?.available_models?.length) {
+    if (serverKey === "cursor" && trimmed.toLowerCase() === "auto") {
+      return "auto";
+    }
+    return trimmed;
+  }
+
+  const exact = provider.available_models.find((m) => m.id === trimmed);
+  if (exact) return exact.id;
+
+  const lower = trimmed.toLowerCase();
+  const byIdOrLabel = provider.available_models.find(
+    (m) => m.id.toLowerCase() === lower || m.label.toLowerCase() === lower,
+  );
+  if (byIdOrLabel) return byIdOrLabel.id;
+
+  // Cursor ACP sometimes reports a placeholder when no ``--model`` was pinned.
+  if (serverKey === "cursor" && (trimmed === "default[]" || trimmed === "default")) {
+    return provider.default_model ?? "auto";
+  }
+
+  return trimmed;
+}
+
+/**
  * Resolve a raw ``acp_model`` ID to the human-readable label the provider's
  * picker shows for it (e.g. ``"claude-opus-4-7"`` → ``"Claude Opus 4.7"``).
  *
@@ -457,10 +503,11 @@ export function labelForAcpModel(
   serverKey: string | null | undefined,
   modelId: string | null | undefined,
 ): string | null {
-  if (!modelId) return null;
+  const normalized = normalizeAcpModelId(serverKey, modelId);
+  if (!normalized) return null;
   const provider = getAcpProvider(serverKey);
-  const match = provider?.available_models?.find((m) => m.id === modelId);
-  return match?.label ?? modelId;
+  const match = provider?.available_models?.find((m) => m.id === normalized);
+  return match?.label ?? normalized;
 }
 
 /**
@@ -513,7 +560,7 @@ export function buildAcpAgentSettingsDiff(
   const model =
     options.model === undefined
       ? getAcpPreferredDefaultModel(providerKey)
-      : options.model;
+      : normalizeAcpModelId(providerKey, options.model);
 
   // ``acp_args: []`` resets any API-set ``acp_args`` that would
   // otherwise survive and concatenate to ``acp_command`` at spawn time
