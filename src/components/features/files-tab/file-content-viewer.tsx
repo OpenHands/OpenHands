@@ -7,7 +7,7 @@ import {
   withWorkspaceCacheBuster,
 } from "#/stores/use-workspace-mutation-counter";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
-import { HighlightedSourceView } from "./highlighted-source-view";
+import { EditableSourceView } from "./editable-source-view";
 import type { ViewMode } from "./view-mode";
 
 interface FileContentViewerProps {
@@ -104,19 +104,12 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   const { kind, text, staticUrl, mimeType } = query.data;
   const bustedStaticUrl = withWorkspaceCacheBuster(staticUrl, mutationCounter);
 
-  // ----- Plain mode: raw source bytes, syntax-highlighted when we can
-  // recognize the grammar (falls through to a `<pre>` otherwise). This
-  // includes "plain" view of markdown / HTML, where the point is to see
-  // the markup behind the rich preview.
+  // ----- Plain mode: editable source for text files. Markdown / HTML
+  // also land here so the developer can tweak markup behind the rich
+  // preview. Binaries stay on the unpreviewable fallback.
   if (viewMode === "plain") {
     if (kind === "text" && text !== null) {
-      return (
-        <HighlightedSourceView
-          path={path}
-          text={text}
-          mimeType={mimeType ?? undefined}
-        />
-      );
+      return <EditableSourceView path={path} text={text} />;
     }
     return <UnpreviewableFallback path={path} />;
   }
@@ -207,19 +200,11 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   // Rich mode for actual source code (.ts, .py, .yaml, .css, …): there
-  // is no other "rich" rendering to fall back to, so highlighted source
-  // IS the rich view. Identical to the plain-mode treatment — keeping
-  // both branches reuse `HighlightedSourceView` means the toggle has the
-  // same visual identity for source files in both modes (which is the
-  // honest answer: source IS rendered code).
+  // is no other "rich" rendering to fall back to, so an editable source
+  // view IS the rich view. Plain mode uses the same editor so toggling
+  // rich/plain for source files keeps a consistent edit experience.
   if (kind === "text" && text !== null) {
-    return (
-      <HighlightedSourceView
-        path={path}
-        text={text}
-        mimeType={mimeType ?? undefined}
-      />
-    );
+    return <EditableSourceView path={path} text={text} />;
   }
 
   // Truly unknown / empty payload — show a fallback so the pane is never
