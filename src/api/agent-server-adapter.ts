@@ -68,7 +68,8 @@ export interface DirectConversationInfo {
     kind?: string | null;
     acp_model?: string | null;
     /**
-     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli``) from the
+     * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli`` /
+     * ``cursor``) from the
      * SDK's ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
      * ``acpserver`` tag is absent — e.g. a profile launch doesn't stamp the tag
      * client-side and the server may not repopulate it. Read by {@link toAppConversation}.

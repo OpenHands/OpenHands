@@ -5,6 +5,8 @@ import {
   CLAUDE_CODE_VIEWBOX,
   CODEX_MARK_PATH,
   CODEX_VIEWBOX,
+  CURSOR_MARK_PATH,
+  CURSOR_VIEWBOX,
   GEMINI_MARK_PATH,
   GEMINI_VIEWBOX,
 } from "#/constants/acp-brand-marks";
@@ -103,6 +105,21 @@ export function AgentBrandIcon({
         aria-hidden
       >
         <path fill="currentColor" d={GEMINI_MARK_PATH} />
+      </svg>
+    );
+  }
+  if (kind === "cursor") {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox={CURSOR_VIEWBOX}
+        width={size}
+        height={size}
+        className={cn("shrink-0", className)}
+        data-testid={testId ?? "agent-brand-icon-cursor"}
+        aria-hidden
+      >
+        <path fill="currentColor" d={CURSOR_MARK_PATH} />
       </svg>
     );
   }

@@ -66,6 +66,10 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
+      # Optional Cursor ACP credentials (also configurable via Secrets in the UI).
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      CURSOR_AUTH_TOKEN: ${CURSOR_AUTH_TOKEN:-}
+      CURSOR_API_ENDPOINT: ${CURSOR_API_ENDPOINT:-}
       VITE_DO_NOT_TRACK: ${VITE_DO_NOT_TRACK:-}
       AUTOMATION_BASE_URL: ${AUTOMATION_BASE_URL:-}
     volumes:

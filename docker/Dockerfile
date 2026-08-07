@@ -180,6 +180,23 @@ COPY scripts/runtime-services-info.mjs /opt/agent-canvas/runtime-services-info.m
 # new conversations define canvas_ui_control through a JSON client tool.
 COPY tools/ /opt/agent-canvas/tools/
 
+# Cursor CLI (`agent`) for the ACP Cursor preset (`agent acp`). Install into
+# the openhands home so the agent-server subprocess can find it on PATH.
+# Auth in-container uses CURSOR_API_KEY (or CURSOR_AUTH_TOKEN) from Secrets.
+RUN if ! command -v curl >/dev/null 2>&1; then \
+      if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends curl ca-certificates && \
+        rm -rf /var/lib/apt/lists/*; \
+      fi; \
+    fi \
+ && curl -fsSL https://cursor.com/install | HOME=/home/openhands bash \
+ && chown -R openhands:openhands /home/openhands/.local \
+ && ln -sf /home/openhands/.local/bin/agent /usr/local/bin/agent \
+ && if [ -x /home/openhands/.local/bin/cursor-agent ]; then \
+      ln -sf /home/openhands/.local/bin/cursor-agent /usr/local/bin/cursor-agent; \
+    fi
+
 # Copy generated defaults.env (from config/defaults.json via config-gen stage)
 COPY --from=config-gen /tmp/defaults.env /opt/agent-canvas/defaults.env
 

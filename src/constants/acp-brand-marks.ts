@@ -16,3 +16,8 @@ export const CODEX_VIEWBOX = "0 0 12 12";
 export const GEMINI_MARK_PATH =
   "M12 0C12.904 6.056 17.944 11.096 24 12C17.944 12.904 12.904 17.944 12 24C11.096 17.944 6.056 12.904 0 12C6.056 11.096 11.096 6.056 12 0Z";
 export const GEMINI_VIEWBOX = "0 0 24 24";
+
+// Simplified Cursor-style pointer mark (currentColor fill).
+export const CURSOR_MARK_PATH =
+  "M4 2.5L4 18.5L8.2 14.8L11.1 21.5L14.2 20.2L11.2 13.3L16.5 13.3L4 2.5Z";
+export const CURSOR_VIEWBOX = "0 0 24 24";

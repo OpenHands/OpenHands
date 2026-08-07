@@ -13,10 +13,11 @@ import {
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
-  it("resolves the three built-in registry keys to their human names", () => {
+  it("resolves the built-in registry keys to their human names", () => {
     expect(getAcpProviderDisplayName("claude-code")).toBe("Claude Code");
     expect(getAcpProviderDisplayName("codex")).toBe("Codex");
     expect(getAcpProviderDisplayName("gemini-cli")).toBe("Gemini CLI");
+    expect(getAcpProviderDisplayName("cursor")).toBe("Cursor");
   });
 
   it("returns null for the Custom-command preset so callers can fall back to the generic 'ACP' label", () => {
@@ -62,8 +63,13 @@ describe("ACP provider registry", () => {
   });
 
   it("keeps every built-in default model in the UX suggestions", () => {
+    // Cursor (and any future provider without a curated list) may leave
+    // default_model unset so the CLI picks its own default.
     for (const provider of ACP_PROVIDERS) {
-      expect(provider.default_model, provider.key).toBeTruthy();
+      if (!provider.default_model) {
+        expect(provider.available_models ?? []).toEqual([]);
+        continue;
+      }
       expect(provider.available_models, provider.key).toBeTruthy();
       expect(
         provider.available_models?.some(
@@ -152,6 +158,11 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
     ]);
   });
 
+  it("collects the API key + endpoint for Cursor", () => {
+    const names = getAcpProviderSecrets("cursor").map((f) => f.name);
+    expect(names).toEqual(["CURSOR_API_KEY", "CURSOR_API_ENDPOINT"]);
+  });
+
   it("renders file-content blobs as multiline secret fields", () => {
     // ``multiline`` also drives the orphaned-credential warning on backends
     // that can't materialise file secrets (cloud, agent-canvas#1016).
@@ -170,7 +181,7 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
     // ``secret`` is what a required credential step counts as an actual
     // credential — a base URL alone can't authenticate, and ANTHROPIC_BASE_URL
     // alongside a Claude OAuth token actively breaks bearer auth.
-    for (const key of ["codex", "claude-code", "gemini-cli"]) {
+    for (const key of ["codex", "claude-code", "gemini-cli", "cursor"]) {
       const baseUrl = getAcpProviderSecrets(key).find((f) =>
         f.name.endsWith("_BASE_URL"),
       );

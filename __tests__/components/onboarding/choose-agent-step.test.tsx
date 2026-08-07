@@ -178,6 +178,7 @@ describe("ChooseAgentStep", () => {
   it.each([
     ["codex", "codex"],
     ["gemini-cli", "gemini-cli"],
+    ["cursor", "cursor"],
   ])("persists acp_server=%s for the matching tile", async (id, expected) => {
     const save = vi.spyOn(SettingsService, "saveSettings");
     renderStep(id as OnboardingAgentId);

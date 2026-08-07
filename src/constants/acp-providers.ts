@@ -5,6 +5,7 @@ export type ACPProviderIcon =
   | "claude-code"
   | "codex"
   | "gemini"
+  | "cursor"
   | "cli-generic";
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
@@ -141,6 +142,10 @@ const ACP_PROVIDER_UI: Record<
   "gemini-cli": {
     icon: "gemini",
     description_key: I18nKey.ONBOARDING$AGENT_GEMINI_CLI_DESCRIPTION,
+  },
+  cursor: {
+    icon: "cursor",
+    description_key: I18nKey.ONBOARDING$AGENT_CURSOR_DESCRIPTION,
   },
 };
 
