@@ -1,13 +1,27 @@
+import React from "react";
 import { useTranslation } from "react-i18next";
 import { useChatInputProfileState } from "#/hooks/use-chat-input-profile-state";
+import { ComboboxCaretInline } from "#/ui/combobox-caret";
 import SettingsGearIcon from "#/icons/settings-gear.svg?react";
 import CheckIcon from "#/icons/checkmark.svg?react";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import { AgentBrandIcon } from "#/components/shared/agent-brand-icon";
+import { ContextMenu } from "#/ui/context-menu";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { Divider } from "#/ui/divider";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
+import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+
+const PROFILE_LABEL_MAX_CHARS = 18;
+
+function truncateLabel(label: string): string {
+  return label.length <= PROFILE_LABEL_MAX_CHARS
+    ? label
+    : `${label.slice(0, PROFILE_LABEL_MAX_CHARS)}…`;
+}
 
 interface ChatInputProfileMenuContentProps {
   onClose: () => void;
@@ -17,12 +31,11 @@ interface ChatInputProfileMenuContentProps {
 }
 
 /**
- * The agent-profile list rendered inside the "+" tools menu's "Switch agent
- * profile" submenu, offered only while starting a new conversation (OSS-5735 —
- * the profile is locked once a conversation starts). Selecting a profile
- * activates it (home) or recreates the blank conversation with it (see
- * `useChatInputProfileState`). The chat-input pill itself is always an LLM
- * selector; the former `ChatInputProfilePicker` pill is gone.
+ * Agent-profile list for the chat-input switcher (inline pill + "+" tools
+ * submenu). Selecting a different profile on the home page activates it; inside
+ * a conversation it starts a **new** conversation with the same workspace /
+ * repo (ACP / OpenHands agent kinds cannot be swapped in-place on a live
+ * session). The model pill remains a separate LLM / ACP-model selector.
  */
 export function ChatInputProfileMenuContent({
   onClose,
@@ -77,6 +90,14 @@ export function ChatInputProfileMenuContent({
                   isCurrent && "bg-[var(--oh-interactive-hover)]",
                 )}
               >
+                <AgentBrandIcon
+                  kind={
+                    profile.agent_kind === "openhands"
+                      ? "openhands"
+                      : "cli-generic"
+                  }
+                  size={14}
+                />
                 <span
                   className="flex-1 truncate text-sm leading-5"
                   title={profile.name}
@@ -123,5 +144,83 @@ export function ChatInputProfileMenuContent({
         </NavigationLink>
       </li>
     </>
+  );
+}
+
+/**
+ * Inline pill that lists Agent Profiles (OpenHands / Cursor / Claude / …).
+ * Mid-conversation picks start a new conversation with the same workspace.
+ */
+export function ChatInputProfilePicker() {
+  const { t } = useTranslation("openhands");
+  const {
+    profiles,
+    currentProfileName,
+    isLoading,
+    isSwitching,
+  } = useChatInputProfileState();
+  const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = useClickOutsideElement<HTMLUListElement>(
+    () => setIsPopoverOpen(false),
+    triggerRef,
+  );
+
+  if (isLoading || profiles.length === 0) {
+    return null;
+  }
+
+  const current = profiles.find((p) => p.name === currentProfileName);
+  const label =
+    currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cn(chatInputPillButtonClassName, "max-w-[200px]")}
+        title={
+          currentProfileName
+            ? `${currentProfileName} — ${t(I18nKey.CHAT$START_NEW_WITH_PROFILE_HINT)}`
+            : undefined
+        }
+        data-testid="chat-input-agent-profile"
+        aria-expanded={isPopoverOpen}
+        aria-haspopup="dialog"
+        aria-label={t(I18nKey.CHAT$SWITCH_AGENT_PROFILE)}
+        disabled={isSwitching}
+        aria-busy={isSwitching}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsPopoverOpen((open) => !open);
+        }}
+      >
+        <AgentBrandIcon
+          kind={
+            current?.agent_kind === "openhands" ? "openhands" : "cli-generic"
+          }
+          size={12}
+        />
+        <span className="truncate">{truncateLabel(label)}</span>
+        <ComboboxCaretInline isOpen={isPopoverOpen} />
+      </button>
+
+      {isPopoverOpen && (
+        <ContextMenu
+          ref={popoverRef}
+          testId="chat-input-agent-profile-popover"
+          position="top"
+          alignment="left"
+          spacing="none"
+          className="z-[60] mb-2 min-w-[200px] max-w-[320px] max-h-[60vh] overflow-y-auto"
+        >
+          <ChatInputProfileMenuContent
+            onClose={() => setIsPopoverOpen(false)}
+          />
+        </ContextMenu>
+      )}
+    </div>
   );
 }

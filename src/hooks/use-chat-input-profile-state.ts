@@ -67,7 +67,7 @@ export function useChatInputProfileState(): ChatInputProfileState {
         : null;
       const variables: CreateConversationVariables = {
         agentProfileId: profile.id,
-        entryPoint: "blank_conversation_profile_picker",
+        entryPoint: "conversation_agent_profile_picker",
       };
       if (conversation?.selected_repository) {
         variables.repository = {

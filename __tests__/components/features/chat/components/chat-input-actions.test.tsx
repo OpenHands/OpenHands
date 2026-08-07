@@ -33,6 +33,9 @@ vi.mock("#/components/features/chat/change-agent-button", () => ({
 vi.mock(
   "#/components/features/chat/components/chat-input-profile-picker",
   () => ({
+    ChatInputProfilePicker: () => (
+      <div data-testid="chat-input-agent-profile" />
+    ),
     ChatInputProfileMenuContent: () => (
       <div data-testid="agent-profile-menu-stub" />
     ),
@@ -102,8 +105,8 @@ describe("ChatInputActions", () => {
       navigation: { conversationId: null },
     });
 
-    // The pill is always an LLM selector (OSS-5735) — agent-profile switching
-    // lives in the "+" tools menu instead.
+    // The model pill is an LLM selector; agent-profile switching is a
+    // separate pill + the "+" tools menu.
     expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
     expect(
       screen.queryByTestId("chat-input-llm-model"),
@@ -290,7 +293,7 @@ describe("ChatInputActions", () => {
   });
 });
 
-describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
+describe("ChatInputActions — Switch agent profile gate", () => {
   beforeEach(() => {
     useActiveConversationMock.mockReset();
     useActiveConversationMock.mockReturnValue({ data: undefined });
@@ -339,7 +342,7 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not offer Switch agent profile once the conversation has started", async () => {
+  it("offers Switch agent profile after the conversation has started", async () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "conv-started", llm_model: "gpt-4o" },
     });
@@ -351,10 +354,12 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
 
     openPlusMenu();
 
-    expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("switch-agent-profile-button"),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("switch-agent-profile-button"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("chat-input-agent-profile"),
+    ).toBeInTheDocument();
   });
 
   it("does not offer Switch agent profile when the backend has no profiles", async () => {
@@ -383,7 +388,7 @@ describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
 
     openPlusMenu();
 
-    await waitFor(() => expect(listAgentProfilesMock).toHaveBeenCalled());
+    expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
     expect(
       screen.queryByTestId("switch-agent-profile-button"),
     ).not.toBeInTheDocument();

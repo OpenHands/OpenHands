@@ -4,9 +4,8 @@ import {
   resolvePickerKind,
 } from "#/components/features/chat/components/resolve-picker-kind";
 
-// The pill is always an LLM selector (OSS-5735): agent-profile switching lives
-// in the "+" tools menu, and neither the backend nor the conversation's state
-// branches here any more — whether a pick is actionable is decided in
+// The model pill is always an LLM selector: agent-profile switching is a
+// separate control. Whether a model pick is actionable is decided in
 // useChatInputLlmProfileState, so cloud never falls back to a raw model chip.
 describe("resolvePickerKind", () => {
   it("shows the constrained model picker in an ACP context", () => {

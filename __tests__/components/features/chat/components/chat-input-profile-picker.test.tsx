@@ -29,7 +29,7 @@ vi.mock("#/hooks/mutation/use-activate-agent-profile", () => ({
   ACTIVATE_AGENT_PROFILE_MUTATION_KEY: ["activate-agent-profile"],
 }));
 
-import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
+import { ChatInputProfileMenuContent, ChatInputProfilePicker } from "#/components/features/chat/components/chat-input-profile-picker";
 
 const PROFILES = [
   { id: "id-default", name: "Default", agent_kind: "openhands" },
@@ -150,7 +150,7 @@ describe("ChatInputProfileMenuContent", () => {
 
     expect(createConversationMutate).toHaveBeenCalledWith({
       agentProfileId: "id-codex",
-      entryPoint: "blank_conversation_profile_picker",
+      entryPoint: "conversation_agent_profile_picker",
       workingDir: "/workspace/alpha",
       workspaceMode: "local_repo",
     });
@@ -159,6 +159,16 @@ describe("ChatInputProfileMenuContent", () => {
     // Navigation rides the mutateAsync promise (survives the menu unmounting).
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-2"),
+    );
+  });
+
+  it("renders an inline agent-profile pill with the current name", () => {
+    renderWithProviders(<ChatInputProfilePicker />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(screen.getByTestId("chat-input-agent-profile")).toHaveTextContent(
+      "Default",
     );
   });
 

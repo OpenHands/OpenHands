@@ -34,9 +34,9 @@ interface ToolsContextMenuProps {
   shouldShowHooks?: boolean;
   shouldShowPlugins?: boolean;
   /**
-   * Offer the "Switch agent profile" submenu (OSS-5735). The caller owns the
-   * gating (pre-start only + profiles available) so this menu stays renderable
-   * without query/navigation providers when the item is off.
+   * Offer the "Switch agent profile" submenu. The caller owns the gating
+   * (profiles available, not a start-task route) so this menu stays
+   * renderable without query/navigation providers when the item is off.
    */
   showAgentProfileSwitch?: boolean;
   /** When set, renders a divider and this action as the last menu item. */
@@ -95,11 +95,9 @@ export function ToolsContextMenu({
       alignment="left"
       className="left-[-16px] mb-2 bottom-full overflow-visible min-w-[200px]"
     >
-      {/* Switch agent profile — only while starting a new conversation; the
-          profile is locked once the conversation starts (OSS-5735). Selecting
-          a profile activates it (home) or recreates the blank conversation
-          with it (see ChatInputProfileMenuContent). No archived gating: this
-          never renders in a started (archivable) conversation. */}
+      {/* Switch agent profile — available whenever profiles exist. Selecting
+          a profile activates it (home) or starts a replacement conversation
+          with the same workspace (see ChatInputProfileMenuContent). */}
       {showAgentProfileSwitch && (
         <div className="relative group/agent-profile">
           <ContextMenuListItem

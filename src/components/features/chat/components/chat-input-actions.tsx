@@ -9,6 +9,7 @@ import {
   ChatInputLlmProfilePicker,
   ChatInputLlmProfileMenuContent,
 } from "./chat-input-llm-profile-picker";
+import { ChatInputProfilePicker } from "./chat-input-profile-picker";
 import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
@@ -52,7 +53,7 @@ interface ChatInputActionsProps {
 export function ChatInputActions({
   disabled,
   canSubmit = true,
-  hasStartedConversation,
+  hasStartedConversation: _hasStartedConversation,
   onAddFileClick = () => {},
   showButton = true,
   buttonClassName = "",
@@ -66,18 +67,17 @@ export function ChatInputActions({
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
-  // Agent-profile switching lives in the "+" tools menu while the conversation
-  // hasn't started (OSS-5735) — the pill itself is always an LLM selector. The
-  // gate is computed here (not in the menu) so ToolsContextMenu only mounts the
-  // profile submenu when it can actually be used: pre-start, not on a task
-  // route, and only when the backend has profiles (#1571 fallback). Fetch is
-  // limited to the pre-start window.
-  const isPreStart = !conversationId || hasStartedConversation === false;
-  const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
+  // Agent-profile switching is available any time profiles exist (home,
+  // blank, or mid-conversation). Mid-chat picks start a *new* conversation
+  // with the same workspace — OpenHands ↔ ACP kinds cannot be swapped on a
+  // live session. The model pill remains a separate LLM / ACP-model selector.
+  // Hide on cloud start-task routes and when the backend has no profiles.
+  const agentProfiles = useAgentProfiles({
+    enabled: !(conversationId?.startsWith("task-") ?? false),
+  });
   const showAgentProfileSwitch =
-    isPreStart &&
     !(conversationId?.startsWith("task-") ?? false) &&
-    (agentProfilesForStart.data?.profiles?.length ?? 0) > 0;
+    (agentProfiles.data?.profiles?.length ?? 0) > 0;
   // Code/Plan mode switching is a cloud OpenHands feature — it doesn't apply
   // to ACP conversations (which have no "plan" mode), so hide it when ACP.
   const showChangeAgentButton = isCloud && !modelState.isAcpContext;
@@ -440,6 +440,11 @@ export function ChatInputActions({
           {showChangeAgentButton && (
             <div ref={codeRef} className={cn(!showCodeInline && "hidden")}>
               <ChangeAgentButton />
+            </div>
+          )}
+          {showAgentProfileSwitch && (
+            <div className="min-w-0">
+              <ChatInputProfilePicker />
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
