@@ -15,6 +15,10 @@
 # Prefer a local tag while iterating:
 #   AGENT_CANVAS_IMAGE=agent-canvas:local docker compose up --build -d
 #
+# Backend-only (no SPA) for multi-backend experiments:
+#   docker compose -f docker-compose.backend-only.yml up --build
+#   → http://localhost:8001  (API only; register in Manage backends)
+#
 # Override host port / projects path (e.g. Windows when :8000 is taken):
 #   HOST_PORT=8001 PROJECTS_PATH=./projects docker compose up -d
 #

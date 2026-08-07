@@ -1,0 +1,86 @@
+# Agent Canvas — backend-only stack (no SPA)
+#
+# Starts agent-server + automation behind an API ingress. The UI root returns
+# 503; register this host from a separate frontend / full stack via
+# Manage backends.
+#
+# Requires the same image build as docker-compose.yml (STACK_MODE=backend is a
+# runtime switch in docker/entrypoint.sh).
+#
+# Quick start (build from this repo):
+#   mkdir -p projects
+#   docker compose -f docker-compose.backend-only.yml up --build
+#
+# Smoke test (API key must match LOCAL_BACKEND_API_KEY below):
+#   curl -sS -H "X-Session-API-Key: backend-only-dev-key" http://localhost:8001/server_info
+#   curl -sS -o /dev/null -w "%{http_code}\n" http://localhost:8001/
+#     → expect 503 (no frontend)
+#
+# Connect from a full stack UI (e.g. docker compose up on :8000):
+#   Manage backends → Add backend
+#     Host: http://localhost:8001
+#     Session API key: backend-only-dev-key  (or your LOCAL_BACKEND_API_KEY)
+#
+# Prefer a local tag while iterating:
+#   AGENT_CANVAS_IMAGE=agent-canvas:local docker compose -f docker-compose.backend-only.yml up --build
+#
+# Second backend on another port:
+#   HOST_PORT=8002 OPENHANDS_VOLUME_NAME=agent-canvas-backend-b \
+#     docker compose -f docker-compose.backend-only.yml up -d
+
+services:
+  agent-canvas-backend:
+    # x-release-please-version
+    image: ${AGENT_CANVAS_IMAGE:-ghcr.io/openhands/agent-canvas:1.10.0}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      additional_contexts:
+        typescript-client: ${TYPESCRIPT_CLIENT_PATH:-../typescript-client}
+        software-agent-sdk: ${SOFTWARE_AGENT_SDK_PATH:-${OH_AGENT_SERVER_LOCAL_PATH:-../software-agent-sdk}}
+      args:
+        AGENT_SERVER_IMAGE: ${AGENT_SERVER_IMAGE:-ghcr.io/openhands/agent-server:1.40.1-python}
+        AUTOMATION_VERSION: ${AUTOMATION_VERSION:-1.6.0}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/canvas}
+        VITE_POSTHOG_API_KEY: ${VITE_POSTHOG_API_KEY:-}
+        AGENT_SERVER_SDK_GIT_REF: ${AGENT_SERVER_SDK_GIT_REF:-}
+    container_name: agent-canvas-backend
+    ports:
+      - "${HOST_PORT:-8001}:8000"
+    environment:
+      PORT: "8000"
+      STACK_MODE: backend
+      # Pin a known key so Manage backends / curl tests are deterministic.
+      LOCAL_BACKEND_API_KEY: ${LOCAL_BACKEND_API_KEY:-backend-only-dev-key}
+      OH_SECRET_KEY: ${OH_SECRET_KEY:-}
+      OH_SESSION_API_KEYS_0: ${OH_SESSION_API_KEYS_0:-}
+      # No SPA in this stack — disable the UI login gate.
+      APP_LOGIN_ENABLED: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      CURSOR_AUTH_TOKEN: ${CURSOR_AUTH_TOKEN:-}
+      CURSOR_API_ENDPOINT: ${CURSOR_API_ENDPOINT:-}
+      VITE_DO_NOT_TRACK: ${VITE_DO_NOT_TRACK:-}
+      AUTOMATION_BASE_URL: ${AUTOMATION_BASE_URL:-}
+    volumes:
+      - openhands-backend-data:/home/openhands/.openhands
+      - ${PROJECTS_PATH:-./projects}:/projects
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/alive', timeout=5)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  openhands-backend-data:
+    name: ${OPENHANDS_VOLUME_NAME:-agent-canvas-backend-only-data}

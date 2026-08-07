@@ -162,8 +162,10 @@ RUN if [ -f /opt/software-agent-sdk/openhands-agent-server/pyproject.toml ]; the
 # react-router.config.ts unpacks build/client/ into build/ for non-Vercel builds.
 COPY --from=frontend-build /build/build /opt/agent-canvas/frontend
 
-# Copy the static-server scripts and their production runtime deps.
+# Copy the static-server / ingress scripts and their production runtime deps.
+# ingress.mjs is used when STACK_MODE=backend (API proxy without SPA).
 COPY scripts/static-server.mjs /opt/agent-canvas/static-server.mjs
+COPY scripts/ingress.mjs /opt/agent-canvas/ingress.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 COPY scripts/app-login.mjs /opt/agent-canvas/app-login.mjs
 COPY scripts/appwrite-proxy.mjs /opt/agent-canvas/appwrite-proxy.mjs

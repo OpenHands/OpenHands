@@ -13,12 +13,18 @@
 #      Used by auth-mode E2E tests. Only started when PUBLIC_MODE_PORT is set.
 #
 # Environment variables:
+#   STACK_MODE           – full (default) | backend
+#                          full: agent-server + automation + frontend proxy
+#                          backend: agent-server + automation + API ingress only
+#                                   (no SPA; UI root returns 503 — same as
+#                                   `npx @openhands/agent-canvas --backend-only`)
 #   PORT                 – Unified entry point port (default: 8000)
 #   AGENT_SERVER_PORT    – Internal agent-server port (default: 18000)
 #   AUTOMATION_PORT      – Internal automation port (default: 18001)
 #   AGENT_CANVAS_BASE_PATH – Static frontend mount path (default: /canvas)
 #   PUBLIC_MODE_PORT     – If set, starts a second static server on this port
-#                          with --auth-required (no session key injected)
+#                          with --auth-required (no session key injected).
+#                          Ignored when STACK_MODE=backend.
 #   APP_LOGIN_ENABLED    – Internal username/password UI gate (opt-in).
 #                          Set to true/1/yes to enable. Seeds heimdallsec/
 #                          heimdallsec into ~/.openhands/agent-canvas/app-users.json
@@ -61,6 +67,22 @@ AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
 
+# Normalize stack mode (full | backend). Accept common aliases.
+STACK_MODE_RAW="${STACK_MODE:-full}"
+case "$(printf '%s' "$STACK_MODE_RAW" | tr '[:upper:]' '[:lower:]')" in
+  backend|backend-only|backend_only|api|api-only)
+    STACK_MODE="backend"
+    ;;
+  full|all|all-in-one|aio|"")
+    STACK_MODE="full"
+    ;;
+  *)
+    log_error "Unknown STACK_MODE='$STACK_MODE_RAW' (expected: full | backend)"
+    exit 1
+    ;;
+esac
+log "Stack mode: $STACK_MODE"
+
 # Persistence paths — keep settings, conversations, bash history under a
 # single well-known directory that the VOLUME directive exposes.
 OPENHANDS_DIR="${HOME}/.openhands"
@@ -102,8 +124,18 @@ if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; t
     chmod 600 "$API_KEY_FILE"
     log "Generated API key (persisted to $API_KEY_FILE)"
   fi
+fi
+
+# Keep LOCAL_BACKEND_API_KEY and OH_SESSION_API_KEYS_0 in sync so either
+# env var alone is enough (Compose often sets only LOCAL_BACKEND_API_KEY).
+if [ -n "${LOCAL_BACKEND_API_KEY:-}" ] && [ -z "${OH_SESSION_API_KEYS_0:-}" ]; then
   export OH_SESSION_API_KEYS_0="$LOCAL_BACKEND_API_KEY"
 fi
+if [ -z "${LOCAL_BACKEND_API_KEY:-}" ] && [ -n "${OH_SESSION_API_KEYS_0:-}" ]; then
+  export LOCAL_BACKEND_API_KEY="$OH_SESSION_API_KEYS_0"
+fi
+export LOCAL_BACKEND_API_KEY
+export OH_SESSION_API_KEYS_0
 
 # Both backends share the same API key value and the same `X-Session-API-Key`
 # header for authentication.  Default OPENHANDS_AUTOMATION_API_KEY to the
@@ -237,56 +269,28 @@ wait_for_port "$AUTOMATION_PORT" "Automation Server" 60 &
 WAIT_PID2=$!
 wait "$WAIT_PID1" "$WAIT_PID2"
 
-# ── 4. Start static server (frontend + proxy) ────────────────────────────────
-log "Starting frontend + proxy on port $PORT..."
-
-# Describe the local runtime services so the frontend can populate the agent's
-# <RUNTIME_SERVICES> system-prompt block (without it the agent does not know how
-# to reach the local automation backend and falls back to the cloud API). These
-# URLs are runtime config (overridable at `docker run`), so build the JSON here
-# from the sandbox-facing URLs the entrypoint already exports. static-server.mjs
-# appends it to /server_info as runtime_services and also injects the legacy
-# window global for older frontend bundles.
+# Describe the local runtime services so connected frontends can populate the
+# agent's <RUNTIME_SERVICES> system-prompt block. URLs are from the agent's
+# point of view inside this container.
+RUNTIME_MODE="docker"
+if [ "$STACK_MODE" = "backend" ]; then
+  RUNTIME_MODE="docker:backend"
+fi
 RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
-  --mode docker \
+  --mode "$RUNTIME_MODE" \
   --agent-host-alias 127.0.0.1 \
   --agent-server-url "$AGENT_SERVER_URL" \
   --automation-url "$AUTOMATION_BASE_URL")"
 
-# EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt
-node /opt/agent-canvas/static-server.mjs \
-  --port "$PORT" \
-  --host :: \
-  --dir /opt/agent-canvas/frontend \
-  --base-path "$AGENT_CANVAS_BASE_PATH" \
-  --session-api-key "$EFFECTIVE_SESSION_KEY" \
-  --runtime-services-info "$RUNTIME_SERVICES_INFO" \
-  --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
-  --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
-STATIC_PID=$!
-PIDS+=("$STATIC_PID")
+PROXY_PID=""
 
-# ── 5. (Optional) Public-mode static server ─────────────────────────────────
-# When PUBLIC_MODE_PORT is set, start a second static-server instance that
-# serves the same frontend WITHOUT injecting the session key into the HTML
-# (--auth-required). This is used by auth-mode E2E tests to verify the
-# ApiKeyEntryScreen gate, key rotation recovery, etc.
-if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
-  log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
-  node /opt/agent-canvas/static-server.mjs \
-    --port "$PUBLIC_MODE_PORT" \
-    --host :: \
-    --dir /opt/agent-canvas/frontend \
-    --base-path "$AGENT_CANVAS_BASE_PATH" \
-    --auth-required \
+if [ "$STACK_MODE" = "backend" ]; then
+  # ── 4a. Backend-only ingress (API proxy, no SPA) ───────────────────────────
+  # Mirrors `npx @openhands/agent-canvas --backend-only`: agent-server +
+  # automation behind a path-based proxy. Unmatched routes (UI) return 503.
+  log "Starting backend-only ingress on port $PORT (no frontend)..."
+  node /opt/agent-canvas/ingress.mjs \
+    --port "$PORT" \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
     --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -298,12 +302,67 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
-  PIDS+=($!)
+  PROXY_PID=$!
+  PIDS+=("$PROXY_PID")
+  log "Backend-only ready. Register this host in Manage backends:"
+  log "  URL:     http://<host>:${PORT}/"
+  log "  API key: ${EFFECTIVE_SESSION_KEY}"
+else
+  # ── 4b. Full stack: static server (frontend + proxy) ───────────────────────
+  log "Starting frontend + proxy on port $PORT..."
+
+  # EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or api-key.txt
+  node /opt/agent-canvas/static-server.mjs \
+    --port "$PORT" \
+    --host :: \
+    --dir /opt/agent-canvas/frontend \
+    --base-path "$AGENT_CANVAS_BASE_PATH" \
+    --session-api-key "$EFFECTIVE_SESSION_KEY" \
+    --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+    --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
+    --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+  PROXY_PID=$!
+  PIDS+=("$PROXY_PID")
+
+  # ── 5. (Optional) Public-mode static server ─────────────────────────────────
+  # When PUBLIC_MODE_PORT is set, start a second static-server instance that
+  # serves the same frontend WITHOUT injecting the session key into the HTML
+  # (--auth-required). This is used by auth-mode E2E tests to verify the
+  # ApiKeyEntryScreen gate, key rotation recovery, etc.
+  if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
+    log "Starting public-mode frontend on port $PUBLIC_MODE_PORT (--auth-required)..."
+    node /opt/agent-canvas/static-server.mjs \
+      --port "$PUBLIC_MODE_PORT" \
+      --host :: \
+      --dir /opt/agent-canvas/frontend \
+      --base-path "$AGENT_CANVAS_BASE_PATH" \
+      --auth-required \
+      --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+      --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
+      --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+      --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+    PIDS+=($!)
+  fi
 fi
 
 log "All services started. Unified entry point: http://0.0.0.0:${PORT}/"
 
-# Keep the container alive while the static-server (ingress) is running.
+# Keep the container alive while the ingress/proxy is running.
 # Backend crashes (agent-server, automation) are tolerated — the proxy
 # returns 502 for downed routes, matching the non-Docker path where each
 # service is an independent host process.
@@ -312,10 +371,10 @@ log "All services started. Unified entry point: http://0.0.0.0:${PORT}/"
 # operation.  Unlike a bare `sleep`, the builtin `wait` is interrupted
 # immediately when a trapped signal (SIGTERM/SIGINT) arrives, so cleanup()
 # fires without delay.  cleanup() calls `exit 0` to terminate after the
-# trap returns.  The loop re-checks the static-server PID every 10 s so the
+# trap returns.  The loop re-checks the proxy PID every 10 s so the
 # container exits promptly if the ingress process dies on its own.
-while kill -0 "$STATIC_PID" 2>/dev/null; do
+while kill -0 "$PROXY_PID" 2>/dev/null; do
   sleep 10 & wait $!
 done
-log_error "Static server (PID $STATIC_PID) exited"
+log_error "Ingress/proxy (PID $PROXY_PID) exited"
 exit 1
