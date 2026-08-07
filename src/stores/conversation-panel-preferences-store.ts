@@ -59,8 +59,8 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
 const initialState: ConversationPanelPreferencesState = {
   showOlderConversations: true,
   showRepoBranchMetadata: false,
-  showLlmProfiles: true,
-  showTagsMetadata: true,
+  showLlmProfiles: false,
+  showTagsMetadata: false,
   showHoverMetadata: true,
   organizeMode: "chronological",
   conversationSort: "updated",
