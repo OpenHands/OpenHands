@@ -439,6 +439,11 @@ class AgentServerConversationService {
       conversationInstructions,
       plugins,
       conversationId,
+      // The agent-server rejects a parent in a different workspace, so callers
+      // launching a child must pass the parent's own `working_dir` as
+      // `workingDirOverride` (see `resolveConversationWorkingDir`). Servers
+      // older than 1.37.1 ignore the field and create an unlinked conversation.
+      parentConversationId,
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,

@@ -17,6 +17,8 @@ describe("conversation-panel-preferences store", () => {
     expect(state.organizeMode).toBe("chronological");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
+    expect(state.automationFilterMode).toBe("all");
+    expect(state.selectedAutomationNames).toEqual([]);
   });
 
   it("toggles showOlderConversations and persists the new value to localStorage", () => {
@@ -71,9 +73,11 @@ describe("conversation-panel-preferences store", () => {
       window.localStorage.getItem(STORAGE_KEY) ?? "{}",
     );
     expect(Object.keys(persisted.state).sort()).toEqual([
+      "automationFilterMode",
       "conversationSort",
       "groupFolderOrder",
       "organizeMode",
+      "selectedAutomationNames",
       "showHoverMetadata",
       "showLlmProfiles",
       "showOlderConversations",
@@ -112,6 +116,30 @@ describe("conversation-panel-preferences store", () => {
       organizeMode: "grouped",
       conversationSort: "created",
       threadScope: "relevant",
+    });
+  });
+
+  it("updates the automation filter mode and toggles selected names via their actions", () => {
+    const store = useConversationPanelPreferencesStore.getState();
+    store.setAutomationFilterMode("only-automations");
+    store.toggleAutomationName("Nightly Audit");
+    store.toggleAutomationName("PR Review Bot");
+    store.toggleAutomationName("Nightly Audit");
+
+    const next = useConversationPanelPreferencesStore.getState();
+    expect({
+      automationFilterMode: next.automationFilterMode,
+      selectedAutomationNames: next.selectedAutomationNames,
+    }).toEqual({
+      automationFilterMode: "only-automations",
+      // Toggling twice removes the name again; the other selection stays.
+      selectedAutomationNames: ["PR Review Bot"],
+    });
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+      selectedAutomationNames: [],
     });
   });
 

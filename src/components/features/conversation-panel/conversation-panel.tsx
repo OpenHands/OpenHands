@@ -35,7 +35,9 @@ import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-threa
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
+  applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  collectAutomationNameFacets,
   filterOutPinnedConversations,
   groupConversations,
   resolvePinnedConversations,
@@ -154,6 +156,18 @@ export function ConversationPanel({
   const setThreadScope = useConversationPanelPreferencesStore(
     (state) => state.setThreadScope,
   );
+  const automationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.automationFilterMode,
+  );
+  const setAutomationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.setAutomationFilterMode,
+  );
+  const selectedAutomationNames = useConversationPanelPreferencesStore(
+    (state) => state.selectedAutomationNames,
+  );
+  const toggleAutomationName = useConversationPanelPreferencesStore(
+    (state) => state.toggleAutomationName,
+  );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
   );
@@ -255,6 +269,29 @@ export function ConversationPanel({
     });
   }, [data]);
 
+  // Facets derive from the unfiltered list so the automation-name rows in the
+  // filter menu don't vanish while a narrowing selection is active.
+  const automationNameFacets = React.useMemo(
+    () => collectAutomationNameFacets(conversations),
+    [conversations],
+  );
+
+  const automationFilteredConversations = React.useMemo(
+    () =>
+      applyAutomationConversationFilter(
+        conversations,
+        automationFilterMode,
+        selectedAutomationNames,
+        automationNameFacets,
+      ),
+    [
+      automationFilterMode,
+      automationNameFacets,
+      conversations,
+      selectedAutomationNames,
+    ],
+  );
+
   const pinnedConversations = React.useMemo(
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
@@ -282,10 +319,14 @@ export function ConversationPanel({
   }, [pinnedIds.length]);
 
   const scopedConversations = React.useMemo(() => {
+    // The pinned section intentionally bypasses the automation filter (same
+    // exemption the thread scope has): a pin is an explicit user override.
     const scopeFiltered =
       threadScope === "relevant"
-        ? conversations.filter((c) => isExecutionActive(c.execution_status))
-        : conversations;
+        ? automationFilteredConversations.filter((c) =>
+            isExecutionActive(c.execution_status),
+          )
+        : automationFilteredConversations;
 
     // In the expanded panel, pinned conversations should only appear inside
     // the dedicated pinned section (not duplicated in grouped/flat lists).
@@ -294,7 +335,7 @@ export function ConversationPanel({
     }
 
     return filterOutPinnedConversations(scopeFiltered, pinnedIds);
-  }, [compact, conversations, pinnedIds, threadScope]);
+  }, [automationFilteredConversations, compact, pinnedIds, threadScope]);
 
   const { recent: recentScoped, older: olderScoped } = React.useMemo(
     () => partitionByCutoff(scopedConversations),
@@ -390,6 +431,16 @@ export function ConversationPanel({
       ? visibleGroupedCount === 0
       : visibleFlatCount === 0;
 
+  // Attribution is exact: the automation filter step itself produced zero
+  // rows out of a non-empty loaded set (not merely threadScope/older-cutoff
+  // effects). Used to keep "Load more" reachable and to pick the empty-state
+  // message.
+  const emptyDueToAutomationFilter =
+    listIsEffectivelyEmpty &&
+    automationFilterMode !== "all" &&
+    conversations.length > 0 &&
+    automationFilteredConversations.length === 0;
+
   // Number of conversations actually rendered in the list right now, in the
   // current organize mode. "Load more" succeeds only when this number grows.
   const visibleCount =
@@ -469,10 +520,15 @@ export function ConversationPanel({
   const olderHidden = olderScoped.length > 0 && !showOlderConversations;
   // Compact mode also hides "Load more" — paginating into archived
   // conversations contradicts the "active only" intent of the icon rail.
-  // Do not show when the visible list is empty (e.g. filters hide every
-  // loaded conversation) — that state already shows "No conversations found".
+  // Do not show when the visible list is empty (that state already shows
+  // "No conversations found") — unless the automation filter alone emptied
+  // it while more pages exist: then the button must stay reachable so the
+  // load-more driver can keep fetching until a matching run surfaces.
   const showLoadMore =
-    !!hasNextPage && !olderHidden && !compact && !listIsEffectivelyEmpty;
+    !!hasNextPage &&
+    !olderHidden &&
+    !compact &&
+    (!listIsEffectivelyEmpty || emptyDueToAutomationFilter);
 
   const { mutate: createConversation } = useCreateConversation();
   const isCreatingConversationFlow = useIsCreatingConversation();
@@ -772,6 +828,11 @@ export function ConversationPanel({
                 setConversationSort={setConversationSort}
                 threadScope={threadScope}
                 setThreadScope={setThreadScope}
+                automationFilterMode={automationFilterMode}
+                setAutomationFilterMode={setAutomationFilterMode}
+                selectedAutomationNames={selectedAutomationNames}
+                onToggleAutomationName={toggleAutomationName}
+                automationNameFacets={automationNameFacets}
                 showOlderConversations={showOlderConversations}
                 toggleShowOlderConversations={toggleShowOlderConversations}
                 showRepoBranchMetadata={showRepoBranchMetadata}
@@ -809,7 +870,11 @@ export function ConversationPanel({
             className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
           >
             <p className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+              {t(
+                emptyDueToAutomationFilter
+                  ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
+                  : I18nKey.CONVERSATION$NO_CONVERSATIONS,
+              )}
             </p>
           </div>
         )}

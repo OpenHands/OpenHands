@@ -717,6 +717,37 @@ describe("ConversationCard", () => {
       expect(chips[0].getAttribute("title")).not.toContain("origin");
     });
 
+    it("keeps the automation name/trigger chips but hides the automation id chips", () => {
+      // The automation id/run-id tags are raw UUIDs consumed by the panel's
+      // automation filter — chip noise — while the human-meaningful name and
+      // trigger stay visible. Like every tag chip they render value-only,
+      // with the humanized ``key: value`` pair in the tooltip.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{
+            automationname: "Nightly Audit",
+            automationtrigger: "cron",
+            automationid: "3f2b6c1e-1111-4222-8333-abcdefabcdef",
+            automationrunid: "run-0001",
+          }}
+        />,
+      );
+
+      const chips = screen.getAllByTestId("conversation-card-tag-chip");
+      expect(chips).toHaveLength(2);
+      expect(chips[0]).toHaveTextContent("Nightly Audit");
+      expect(chips[0]).toHaveAttribute(
+        "title",
+        "Automationname: Nightly Audit",
+      );
+      expect(chips[1]).toHaveTextContent("cron");
+      expect(chips[1]).toHaveAttribute("title", "Automationtrigger: cron");
+    });
+
     it("hides the chips when showTags is omitted", () => {
       renderWithProviders(
         <ConversationCard
