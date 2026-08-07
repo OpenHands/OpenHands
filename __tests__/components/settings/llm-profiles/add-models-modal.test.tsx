@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AddModelsModal } from "#/components/features/settings/llm-profiles/add-models-modal";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import ConfigService from "#/api/config-service/config-service.api";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -54,8 +55,18 @@ const PROVIDERS = {
   items: [
     { name: "openhands", verified: true },
     { name: "openai", verified: true },
+    // The provider feed carries entries that are not providers at all; they
+    // arrive unverified and belong under the "Others" divider.
+    { name: "1024-x-1024", verified: false },
   ],
   next_page_id: null,
+};
+
+/** An error shaped like the SDK's HttpError, which the modal narrows on. */
+const httpError = (status: number, detail: string) => {
+  const error = new Error(detail);
+  error.name = "HttpError";
+  return Object.assign(error, { status, response: { detail } });
 };
 
 const MODELS = {
@@ -144,10 +155,43 @@ describe("AddModelsModal", () => {
     expect(
       screen.getByTestId("add-models-check-openhands/deepseek-v4-flash"),
     ).toBeDisabled();
-    // only the non-colliding model is offered for submit
+    // select-all reaches only the non-colliding row
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 1 profiles",
     );
+  });
+
+  it("selects nothing until the user chooses", async () => {
+    renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+
+    expect(
+      screen.getByTestId("add-models-check-openhands/trinity-large-thinking"),
+    ).not.toBeChecked();
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 0 profiles",
+    );
+    expect(screen.getByTestId("add-models-submit")).toBeDisabled();
+  });
+
+  it("groups unverified providers under a separate divider", async () => {
+    renderModal();
+    const select = await screen.findByTestId("add-models-provider");
+    // options arrive with the providers query, not on first paint
+    await screen.findByRole("option", { name: "1024-x-1024" });
+
+    const groups = Array.from(select.querySelectorAll("optgroup"));
+    expect(groups).toHaveLength(2);
+    expect(
+      Array.from(groups[0].querySelectorAll("option")).map((o) => o.value),
+    ).toEqual(["openhands", "openai"]);
+    expect(
+      Array.from(groups[1].querySelectorAll("option")).map((o) => o.value),
+    ).toEqual(["1024-x-1024"]);
   });
 
   it("creates one profile per selected model, keyless", async () => {
@@ -158,9 +202,9 @@ describe("AddModelsModal", () => {
       "add-models-row-openhands/trinity-large-thinking",
     );
 
-    // deselect one; only the other is created
+    // pick one; only that one is created
     await userEvent.click(
-      screen.getByTestId("add-models-check-openhands/trinity-large-thinking"),
+      screen.getByTestId("add-models-check-openhands/deepseek-v4-flash"),
     );
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
@@ -186,6 +230,7 @@ describe("AddModelsModal", () => {
       "add-models-row-openhands/trinity-large-thinking",
     );
 
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
 
     await waitFor(() =>
@@ -196,6 +241,31 @@ describe("AddModelsModal", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("stops the run and reports the server's reason when it refuses with 409", async () => {
+    const onClose = vi.fn();
+    vi.mocked(ProfilesService.saveProfile).mockRejectedValue(
+      httpError(409, "Profile limit reached (10). Delete a profile first."),
+    );
+    renderModal([], onClose);
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
+    );
+    // the second selected row is never attempted
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(1);
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Profile limit reached (10). Delete a profile first.",
+    );
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("select-all toggles every selectable row", async () => {
     renderModal();
     await pickProvider();
@@ -203,7 +273,6 @@ describe("AddModelsModal", () => {
       "add-models-row-openhands/trinity-large-thinking",
     );
 
-    await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 0 profiles",
     );
@@ -212,6 +281,11 @@ describe("AddModelsModal", () => {
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
       "Add 2 profiles",
+    );
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    expect(screen.getByTestId("add-models-submit")).toHaveTextContent(
+      "Add 0 profiles",
     );
   });
 });

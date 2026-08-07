@@ -17,7 +17,15 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { cn } from "#/utils/utils";
+
+/** Pull the server's own explanation out of an error, when it sent one. */
+function getServerDetail(error: unknown): string | null {
+  const detail = (error as { response?: { detail?: unknown } })?.response
+    ?.detail;
+  return typeof detail === "string" && detail.trim() ? detail : null;
+}
 
 interface AddModelsModalProps {
   isOpen: boolean;
@@ -72,7 +80,10 @@ export function AddModelsModal({
         return {
           model: full,
           name: deriveProfileNameFromModel(full),
-          selected: true,
+          // Nothing is pre-selected: the server caps how many profiles an
+          // account may hold, so defaulting to "all" invites a submission
+          // that is mostly refusals. Choosing is the point of the modal.
+          selected: false,
           status: "idle" as RowStatus,
         };
       }),
@@ -115,35 +126,44 @@ export function AddModelsModal({
     const targets = selectedRows;
     for (const row of targets) setRow(row.model, { status: "saving" });
 
-    const results = await Promise.allSettled(
-      targets.map((row) =>
-        saveProfile.mutateAsync({
+    // Sequential, not a parallel fan-out: the server enforces a profile limit,
+    // and firing every create at once turns one refusal into a wall of
+    // identical failures. Duplicate names are already pre-flagged client-side,
+    // so a 409 here means a server-side limit the remaining creates would hit
+    // too — stop and report it rather than spending the requests.
+    let added = 0;
+    let failed = 0;
+    let blocked = false;
+    let blockedReason: string | null = null;
+
+    for (const row of targets) {
+      try {
+        await saveProfile.mutateAsync({
           name: row.name,
           request: {
             llm: { model: row.model } as SaveProfileRequest["llm"],
             include_secrets: false,
           },
-        }),
-      ),
-    );
-
-    let failed = 0;
-    results.forEach((result, i) => {
-      const ok = result.status === "fulfilled";
-      if (!ok) {
-        failed += 1;
+        });
+        setRow(row.model, { status: "saved" });
+        added += 1;
+      } catch (error) {
         // Surface the server's reason — a silent "failed" row is undebuggable.
-        console.error(
-          `profile create failed for ${targets[i].model}:`,
-          result.status === "rejected" ? result.reason : result,
-        );
+        console.error(`profile create failed for ${row.model}:`, error);
+        setRow(row.model, { status: "failed" });
+        failed += 1;
+        if (isSdkHttpStatusError(error, 409)) {
+          blocked = true;
+          blockedReason = getServerDetail(error);
+          break;
+        }
       }
-      setRow(targets[i].model, { status: ok ? "saved" : "failed" });
-    });
+    }
 
     setSubmitting(false);
-    const added = targets.length - failed;
-    if (failed === 0) {
+    if (blocked && blockedReason) {
+      displayErrorToast(blockedReason);
+    } else if (failed === 0) {
       displaySuccessToast(
         t(I18nKey.SETTINGS$MODELS_ADDED, { count: String(added) }),
       );
@@ -162,7 +182,13 @@ export function AddModelsModal({
     if (!submitting) onClose();
   };
 
+  // Split verified from the rest, matching how the model selector presents the
+  // same list: the provider feed carries entries that are not really providers
+  // (image dimensions, quality tiers), and they belong below a divider rather
+  // than inline with Anthropic and OpenAI.
   const providerOptions = providers.data ?? [];
+  const verifiedProviders = providerOptions.filter((p) => p.verified);
+  const otherProviders = providerOptions.filter((p) => !p.verified);
   const isLoadingModels = provider !== null && models.isLoading;
   const showEmpty = provider !== null && !isLoadingModels && rows.length === 0;
 
@@ -214,11 +240,24 @@ export function AddModelsModal({
             <option value="" disabled>
               {t(I18nKey.SETTINGS$ADD_MODELS_PROVIDER_PLACEHOLDER)}
             </option>
-            {providerOptions.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
-              </option>
-            ))}
+            {verifiedProviders.length > 0 && (
+              <optgroup label={t(I18nKey.MODEL_SELECTOR$VERIFIED)}>
+                {verifiedProviders.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {otherProviders.length > 0 && (
+              <optgroup label={t(I18nKey.MODEL_SELECTOR$OTHERS)}>
+                {otherProviders.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
 
