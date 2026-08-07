@@ -5,7 +5,7 @@ const CONTEXT_WINDOW_RING_SIZE = 16;
 const CONTEXT_WINDOW_RING_STROKE = 2;
 
 const TONE_STROKE = {
-  neutral: "white",
+  neutral: "var(--oh-foreground)",
   warning: "#f59e0b", // amber-500
   danger: "#ef4444", // red-500
 } as const;

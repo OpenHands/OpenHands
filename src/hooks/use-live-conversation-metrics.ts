@@ -17,7 +17,14 @@ import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
 export function useLiveConversationMetrics(
   enabled: boolean = true,
 ): MetricsState {
-  const storeMetrics = useMetricsStore();
+  // Per-field selectors rather than a bare `useMetricsStore()`: subscribing to
+  // the whole store re-runs this hook on any store write, including the action
+  // identity, and matches how `useContextWindowUsage` reads the same store.
+  const storeCost = useMetricsStore((state) => state.cost);
+  const storeMaxBudgetPerTask = useMetricsStore(
+    (state) => state.max_budget_per_task,
+  );
+  const storeUsage = useMetricsStore((state) => state.usage);
   const { data: conversation } = useActiveConversation();
 
   const { data: conversationMetrics } = useConversationMetrics(
@@ -55,9 +62,9 @@ export function useLiveConversationMetrics(
     }
 
     return {
-      cost: storeMetrics.cost,
-      max_budget_per_task: storeMetrics.max_budget_per_task,
-      usage: storeMetrics.usage,
+      cost: storeCost,
+      max_budget_per_task: storeMaxBudgetPerTask,
+      usage: storeUsage,
     };
-  }, [conversationMetrics, storeMetrics]);
+  }, [conversationMetrics, storeCost, storeMaxBudgetPerTask, storeUsage]);
 }

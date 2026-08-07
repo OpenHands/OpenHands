@@ -19,7 +19,7 @@ import { getContextFillTone } from "#/components/features/conversation/usage-pan
 import { ContextWindowRing } from "./context-window-ring";
 
 const TONE_BAR_CLASS = {
-  neutral: "bg-white",
+  neutral: "bg-foreground",
   warning: "bg-amber-500",
   danger: "bg-red-500",
 } as const;
@@ -72,7 +72,7 @@ export function ContextWindowMeter() {
         <button
           ref={triggerRef}
           type="button"
-          className="flex size-8 items-center justify-center rounded-full hover:bg-white/10 transition-colors"
+          className="flex size-8 items-center justify-center rounded-full hover:bg-[var(--oh-interactive-hover)] transition-colors"
           aria-label={`${t(I18nKey.CHAT_INTERFACE$CONTEXT_WINDOW_METER_LABEL)}: ${usagePercentLabel}`}
           aria-expanded={isPopoverOpen}
           aria-haspopup="dialog"
