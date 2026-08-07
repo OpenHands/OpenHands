@@ -37,6 +37,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
+import { unlinkSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -383,7 +384,9 @@ function startAutomationBackend(config) {
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
 
-  spawnService(
+  const autoDbPath = join(config.stateDir, "automations.db");
+
+  const proc = spawnService(
     "automation",
     automationCmd.command,
     [
@@ -399,6 +402,43 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+
+  // Detect stale SQLite migration failures (identical recovery as
+  // dev-with-automation.mjs).
+  let detectedMigrationError = false;
+  const MIGRATION_ERROR_PATTERN = "Can't locate revision identified by";
+
+  const checkForMigrationError = (data) => {
+    if (!detectedMigrationError && data.toString().includes(MIGRATION_ERROR_PATTERN)) {
+      detectedMigrationError = true;
+    }
+  };
+
+  proc.stdout.on("data", checkForMigrationError);
+  proc.stderr.on("data", checkForMigrationError);
+
+  proc.on("exit", (code) => {
+    if (code === 3 && detectedMigrationError) {
+      logService(
+        "automation",
+        `Migration error — removing stale DB at ${autoDbPath} and restarting...`,
+        c.yellow,
+      );
+      try {
+        unlinkSync(autoDbPath);
+        logService(
+          "automation",
+          `Deleted stale automations.db, restarting...`,
+          c.green,
+        );
+        startAutomationBackend(config);
+      } catch (err) {
+        logError(
+          `Failed to remove stale automations.db: ${err.message}`,
+        );
+      }
+    }
+  });
 }
 
 function startStaticServer(config) {

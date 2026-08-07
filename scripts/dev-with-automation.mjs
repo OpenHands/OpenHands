@@ -45,7 +45,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -970,7 +970,12 @@ function startAutomationBackend(config) {
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
 
-  spawnService(
+  const autoDbPath = join(
+    dirname(config.stateDir),
+    SHARED_DEFAULTS.paths.automationDb,
+  );
+
+  const proc = spawnService(
     "automation",
     automationCmd.command,
     [
@@ -1015,7 +1020,7 @@ function startAutomationBackend(config) {
           : {}),
         AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
         // ~/.openhands/automation/automations.db — matches docker/entrypoint.sh.
-        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb)}`,
+        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${autoDbPath}`,
         // The automation backend uses this as its publicly-reachable base
         // URL: it's appended to callback URLs and injected into each
         // sandbox as `AUTOMATION_API_URL` (consumed by setup.sh for
@@ -1059,6 +1064,45 @@ function startAutomationBackend(config) {
       color: c.green,
     },
   );
+
+  // Detect stale SQLite migration failures (happens when openhands-automation
+  // is updated to a version with a restructured Alembic revision chain, and
+  // the old DB references a revision the new chain doesn't know about).
+  // Recovery: delete the stale DB and restart once.
+  let detectedMigrationError = false;
+  const MIGRATION_ERROR_PATTERN = "Can't locate revision identified by";
+
+  const checkForMigrationError = (data) => {
+    if (!detectedMigrationError && data.toString().includes(MIGRATION_ERROR_PATTERN)) {
+      detectedMigrationError = true;
+    }
+  };
+
+  proc.stdout.on("data", checkForMigrationError);
+  proc.stderr.on("data", checkForMigrationError);
+
+  proc.on("exit", (code) => {
+    if (code === 3 && detectedMigrationError) {
+      logService(
+        "automation",
+        `Migration error — removing stale DB at ${autoDbPath} and restarting...`,
+        c.yellow,
+      );
+      try {
+        unlinkSync(autoDbPath);
+        logService(
+          "automation",
+          `Deleted stale automations.db, restarting...`,
+          c.green,
+        );
+        startAutomationBackend(config);
+      } catch (err) {
+        logError(
+          `Failed to remove stale automations.db: ${err.message}`,
+        );
+      }
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
