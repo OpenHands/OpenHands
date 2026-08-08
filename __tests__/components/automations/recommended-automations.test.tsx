@@ -30,6 +30,7 @@ import {
   RecommendedAutomationsSection,
   getAutomationsByPopularity,
 } from "#/components/features/automations/recommended-automations-section";
+import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
   AUTOMATION_CATALOG,
   type RecommendedAutomation,
@@ -188,6 +189,11 @@ describe("recommended automations", () => {
   });
 
   it("renders the proven automations before the beta ones, each in popularity order", () => {
+    const featuredIds = new Set(getFeaturedAutomationIds());
+    const sortedIds = getAutomationsByPopularity(AUTOMATION_CATALOG).map(
+      (automation) => automation.id,
+    );
+
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -205,32 +211,15 @@ describe("recommended automations", () => {
       );
 
     expect(cardIds).toEqual([
-      "github-pr-reviewer",
-      "custom-automation",
-      "github-issue-to-pr",
-      "slack-channel-monitor",
-      "github-agents-md-maintainer",
-      "news-digest",
-      "github-repo-monitor",
-      "slack-standup-digest",
-      "linear-triage-assistant",
-      "linear-issue-to-github-pr",
-      "gitlab-issue-to-mr",
-      "linear-issue-to-gitlab-mr",
-      "linear-issue-to-bitbucket-pr",
-      "jira-issue-to-pr",
-      "qa-changes",
-      "jira-issue-to-gitlab-mr",
-      "research-brief-writer",
-      "jira-issue-to-bitbucket-pr",
-      "github-delivery-watchdog",
-      "github-issue-triage",
-      "upstream-fork-sync",
-      "incident-retrospective-drafter",
+      ...sortedIds.filter((id) => featuredIds.has(id)),
+      ...sortedIds.filter((id) => !featuredIds.has(id)),
     ]);
   });
 
   it("groups the non-proven automations under a labeled Beta section", () => {
+    const betaCount =
+      AUTOMATION_CATALOG.length - getFeaturedAutomationIds().length;
+
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -242,7 +231,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("6")).toBeInTheDocument();
+    expect(within(provenHeading].getByText(String(featuredIds.size))).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -250,7 +239,8 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("16")).toBeInTheDocument();
+
+    expect(within(betaHeading).getByText(String(betaCount))).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",

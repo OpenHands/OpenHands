@@ -404,7 +404,8 @@ export function ConversationPanel({
     const loadedIds =
       data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
     pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, hasNextPage, isFetched, pruneMissingPinnedConversations]); (Fix pinned conversations pruned by partial pages)
+  }, [activeBackend.id, data, hasNextPage, isFetched, pruneMissingPinnedConversations]);
+  });
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {

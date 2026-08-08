@@ -1,6 +1,6 @@
 import type { MCPConfig } from "@openhands/typescript-client";
 export type { MCPConfig } from "@openhands/typescript-client";
-import type { SkillCategoryId } from "@openhands/extensions/skills";
+import type { SkillCategoryId } from "#/utils/skill-category";
 
 export const ProviderOptions = {
   github: "github",

@@ -1,10 +1,10 @@
-import type { SkillCategoryId } from "@openhands/extensions/skills";
 import { I18nKey } from "#/i18n/declaration";
 import type { SkillInfo, SkillType } from "#/types/settings";
 import {
   getSkillCategory,
   SKILL_CATEGORY_LABEL_KEYS,
   SKILL_CATEGORY_ORDER,
+  type SkillCategoryId,
 } from "#/utils/skill-category";
 import {
   getSkillScope,
