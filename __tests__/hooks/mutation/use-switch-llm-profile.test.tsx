@@ -27,7 +27,12 @@ vi.mock(
   }),
 );
 
-vi.mock("#/hooks/chat/record-model-switch-message", () => ({
+vi.mock("#/hooks/chat/record-model-switch-message", async (importOriginal) => ({
+  // Keep the real stampActiveLlmProfile so the metadata-stamp assertions
+  // below exercise the actual write; only the inline-message recorder is spied.
+  ...(await importOriginal<
+    typeof import("#/hooks/chat/record-model-switch-message")
+  >()),
   recordModelSwitchMessage: vi.fn(),
 }));
 
