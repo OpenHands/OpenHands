@@ -298,7 +298,7 @@ export function ConversationPanel({
   );
 
   React.useEffect(() => {
-    if (!isFetched) {
+    if (!isFetched || hasNextPage) {
       return;
     }
     pruneMissingPinnedConversations(
@@ -308,6 +308,7 @@ export function ConversationPanel({
   }, [
     activeBackend.id,
     conversations,
+    hasNextPage,
     isFetched,
     pruneMissingPinnedConversations,
   ]);
