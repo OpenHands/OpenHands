@@ -59,6 +59,7 @@ RUN node -e " \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
+    'CONFIG_BASH_EVENTS_RETENTION_SECONDS=' + c.retention.bashEventsSeconds, \
     'CONFIG_AUTOMATION_DB=' + c.paths.automationDb, \
     'CONFIG_CANVAS_BASE_PATH=' + c.paths.canvasBasePath, \
     'CONFIG_POSTHOG_API_KEY=' + c.telemetry.posthogApiKey, \

@@ -48,6 +48,12 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
+// Rolling retention for agent-server bash event files. Without it the
+// bash_events dir grows without bound and the agent-server's
+// search_bash_events glob scan eventually pins the event loop at 100% CPU
+// (observed: 165k files / 860 MB after a few weeks of heavy use).
+const DEFAULT_BASH_EVENTS_RETENTION_SECONDS =
+  SHARED_DEFAULTS.retention.bashEventsSeconds;
 // Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
@@ -593,6 +599,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} conversationsPath
  * @property {string} workspacesPath
  * @property {string} bashEventsDir
+ * @property {string} bashEventsRetentionSeconds
  * @property {string} backendBaseUrl
  * @property {string} backendHost
  * @property {string} workingDir
@@ -667,6 +674,9 @@ function buildConfigFromPorts(ports, cwd, env) {
     conversationsPath,
     workspacesPath,
     bashEventsDir: path.join(stateDir, "bash_events"),
+    bashEventsRetentionSeconds:
+      env.OH_BASH_EVENTS_RETENTION_SECONDS ||
+      String(DEFAULT_BASH_EVENTS_RETENTION_SECONDS),
     backendBaseUrl: `http://127.0.0.1:${backendPort}`,
     backendHost: `127.0.0.1:${backendPort}`,
     workingDir: env.VITE_WORKING_DIR || workspacesPath,
@@ -703,6 +713,11 @@ export function buildAgentServerEnv(config) {
     OH_PERSISTENCE_DIR: path.dirname(config.stateDir),
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
+    // Enable the agent-server's rolling bash-events cleanup task. Without a
+    // retention window the events dir grows without bound, and the server's
+    // per-request glob over that dir eventually pins the event loop at
+    // 100% CPU (see buildConfigFromPorts).
+    OH_BASH_EVENTS_RETENTION_SECONDS: config.bashEventsRetentionSeconds,
     OH_VSCODE_PORT: String(config.vscodePort),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format

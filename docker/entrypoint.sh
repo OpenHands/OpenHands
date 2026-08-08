@@ -21,6 +21,8 @@
 #                          with --auth-required (no session key injected)
 #   OH_SECRET_KEY        – Secret key for settings encryption (auto-generated
 #                          and persisted if not provided)
+#   OH_BASH_EVENTS_RETENTION_SECONDS – Rolling retention window for bash event
+#                          files (default: 172800 = 2 days)
 #   OPENHANDS_AUTOMATION_API_KEY – Override automation backend auth key
 #                          (defaults to session API key — both backends
 #                          use the same `X-Session-API-Key` header)
@@ -65,6 +67,10 @@ STATE_DIR="${OPENHANDS_DIR}/${CONFIG_STATE_SUBDIR:-agent-canvas}"
 export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
+# Rolling retention for bash event files. Without it the bash_events dir grows
+# without bound and the agent-server's per-request glob over that dir
+# eventually pins the event loop at 100% CPU.
+export OH_BASH_EVENTS_RETENTION_SECONDS="${OH_BASH_EVENTS_RETENTION_SECONDS:-${CONFIG_BASH_EVENTS_RETENTION_SECONDS:-172800}}"
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation

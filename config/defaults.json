@@ -28,6 +28,10 @@
     "automationDb": "automation/automations.db",
     "canvasBasePath": "/canvas"
   },
+  "retention": {
+    "_comment": "Rolling retention window for agent-server bash event files, in seconds (default: 2 days). Without it the bash_events dir grows without bound and the agent-server's search_bash_events glob scan eventually pins the event loop at 100% CPU. Override at runtime with OH_BASH_EVENTS_RETENTION_SECONDS.",
+    "bashEventsSeconds": 172800
+  },
   "packages": {
     "agentServer": "openhands-agent-server",
     "automation": "openhands-automation",
