@@ -613,10 +613,13 @@ export function ConversationWebSocketProvider({
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
-            // when several profiles share a model (#1082).
+            // when several profiles share a model (#1082). Stamp with the
+            // observation's own timestamp so a later history seed of this same
+            // event can't roll it back (or needlessly rewrite it).
             stampActiveLlmProfile(
               conversationId,
               switchLLMObservation.observation.profile_name,
+              switchLLMObservation.timestamp,
             );
 
             if (switchLLMObservation.observation.active_model) {

@@ -19,10 +19,11 @@ const switchObservation = (
   id: string,
   profileName: string,
   isError = false,
+  timestamp = "2024-01-01T00:00:00Z",
 ): OpenHandsEvent =>
   ({
     id,
-    timestamp: "2024-01-01T00:00:00Z",
+    timestamp,
     source: "environment",
     action_id: `action-${id}`,
     observation: {
@@ -231,5 +232,82 @@ describe("seedModelSwitchesFromHistory", () => {
       active_profile: "fast",
       plugins: [{ source: "s", ref: "r", repo_path: null }],
     });
+  });
+
+  it("leaves a newer manual stamp alone (manual switch after a tool switch survives reload)", () => {
+    // t1: agent tool-switches to "fast" (observation in history). t2: user
+    // manually switches back to "architect" via /model — a REST call that
+    // leaves no observation. The reload seed must not roll the stamp back.
+    setStoredConversationMetadata("c1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      active_profile: "architect",
+      stamped_at: "2024-06-01T00:00:00Z",
+    });
+
+    seedModelSwitchesFromHistory("c1", [
+      userMessage("u1"),
+      switchObservation("o1", "fast"),
+    ]);
+
+    expect(getStoredConversationMetadata("c1")?.active_profile).toBe(
+      "architect",
+    );
+    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
+      "2024-06-01T00:00:00Z",
+    );
+    // The in-memory stamp takes priority over the persisted one in the pill,
+    // so it must not be set to the stale profile either.
+    expect(activeProfileFor("c1")).toBeUndefined();
+  });
+
+  it("repairs a legacy stamp written before stamped_at existed", () => {
+    setStoredConversationMetadata("c1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      active_profile: "architect",
+    });
+
+    seedModelSwitchesFromHistory("c1", [
+      userMessage("u1"),
+      switchObservation("o1", "fast"),
+    ]);
+
+    expect(stampedProfileFor("c1")).toBe("fast");
+    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
+      "2024-01-01T00:00:00Z",
+    );
+  });
+
+  it("re-stamps when the latest observation is newer than the stored stamp", () => {
+    setStoredConversationMetadata("c1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      active_profile: "architect",
+      stamped_at: "2023-01-01T00:00:00Z",
+    });
+
+    seedModelSwitchesFromHistory("c1", [
+      userMessage("u1"),
+      switchObservation("o1", "fast"),
+    ]);
+
+    expect(stampedProfileFor("c1")).toBe("fast");
+    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
+      "2024-01-01T00:00:00Z",
+    );
+  });
+
+  it("stamps with the observation timestamp so re-seeding the same history is a no-op", () => {
+    const events = [userMessage("u1"), switchObservation("o1", "fast")];
+    seedModelSwitchesFromHistory("c1", events);
+    seedModelSwitchesFromHistory("c1", events);
+
+    expect(getStoredConversationMetadata("c1")?.stamped_at).toBe(
+      "2024-01-01T00:00:00Z",
+    );
   });
 });
