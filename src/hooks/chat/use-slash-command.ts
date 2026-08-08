@@ -1,21 +1,44 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
-import { SkillInfo } from "#/types/settings";
-import { Microagent } from "#/api/open-hands.types";
 import { BUILT_IN_COMMANDS, MODEL_COMMAND } from "#/utils/constants";
-import { useActiveBackend } from "#/contexts/active-backend-context";
+import type { SlashCommandItem } from "#/types/slash-command";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import type { SkillInfo } from "#/types/settings";
 
-export type SlashCommandSkill = SkillInfo | Microagent;
-
-export interface SlashCommandItem {
-  skill: SlashCommandSkill;
-  /** The slash command string, e.g. "/random-number" */
-  command: string;
-}
+export type { SlashCommandItem } from "#/types/slash-command";
 
 type SlashCompletionKind = "command" | "model-profile";
+
+/** Build the shared autocomplete/help list with built-ins taking precedence. */
+// @spec SC-001 — One discoverable command registry
+export function buildSlashCommandItems(
+  skills: SkillInfo[] | undefined,
+): SlashCommandItem[] {
+  const items = [...BUILT_IN_COMMANDS];
+  const commands = new Set(items.map((item) => item.command));
+
+  for (const skill of skills ?? []) {
+    const slashTriggers = (skill.triggers ?? []).filter((trigger) =>
+      trigger.startsWith("/"),
+    );
+    const derivedCommands =
+      slashTriggers.length > 0
+        ? slashTriggers
+        : skill.type === "agentskills"
+          ? [`/${skill.name}`]
+          : [];
+
+    for (const command of derivedCommands) {
+      if (!commands.has(command)) {
+        items.push({ skill, command });
+        commands.add(command);
+      }
+    }
+  }
+
+  return items;
+}
 
 /** Get the cursor's character offset within a contentEditable element. */
 function getCursorOffset(element: HTMLElement): number {
@@ -31,7 +54,7 @@ function getCursorOffset(element: HTMLElement): number {
 /**
  * Hook for managing slash command autocomplete in the chat input.
  * Detects when user types "/" and provides filtered skill suggestions.
- * Only skills with explicit "/" triggers (TaskTrigger) appear in the menu.
+ * AgentSkills without an explicit slash trigger use `/<skill-name>`.
  */
 export const useSlashCommand = (
   chatInputRef: React.RefObject<HTMLDivElement | null>,
@@ -39,7 +62,6 @@ export const useSlashCommand = (
   // Scope the skill catalog to this conversation's attached workspace so the
   // slash menu lists the same project skills that were loaded into it.
   const { data: skills, isLoading: isSkillsLoading } = useConversationSkills();
-  const isCloud = useActiveBackend().backend.kind === "cloud";
   const { data: profilesData, isLoading: isProfilesLoading } = useLlmProfiles();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [filterText, setFilterText] = useState("");
@@ -48,37 +70,15 @@ export const useSlashCommand = (
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Build slash command items from built-in commands + skills:
-  // - Built-in commands (like /new) are included for V1 conversations
-  // - /new is cloud-only — local backends don't surface it
+  // - Built-in commands are available on local and cloud backends
   // - /model lists/switches LLM profiles; both local and cloud support them
   // - Skills with explicit "/" triggers use those triggers
   // - AgentSkills without "/" triggers get a derived "/<name>" command
   const slashItems = useMemo(() => {
-    const items: SlashCommandItem[] = BUILT_IN_COMMANDS.filter((cmd) => {
-      if (cmd.command === "/new") return isCloud;
-      return true;
-    });
-
+    // @spec SC-001 — One discoverable command registry
     // Wait for skills to finish initial load so all commands appear together
-    if (isSkillsLoading) return items;
-
-    if (!skills) return items;
-    skills.forEach((skill) => {
-      const triggers = skill.triggers || [];
-      const slashTriggers = triggers.filter((t) => t.startsWith("/"));
-
-      if (slashTriggers.length > 0) {
-        // Skill has explicit slash triggers
-        slashTriggers.forEach((trigger) => {
-          items.push({ skill, command: trigger });
-        });
-      } else if (skill.type === "agentskills") {
-        // AgentSkills without slash triggers get a derived command
-        items.push({ skill, command: `/${skill.name}` });
-      }
-    });
-    return items;
-  }, [skills, isSkillsLoading, isCloud]);
+    return buildSlashCommandItems(isSkillsLoading ? undefined : skills);
+  }, [skills, isSkillsLoading]);
 
   const modelProfileItems = useMemo<SlashCommandItem[]>(() => {
     return (profilesData?.profiles ?? []).map((profile) => {
