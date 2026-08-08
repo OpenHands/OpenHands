@@ -13,3 +13,8 @@
 - [x] `/help` shall render every available built-in and skill-derived slash command in the chat area.
 - [x] Built-in commands shall have localized descriptions, and help shall mention the `/` autocomplete menu.
 - [x] Built-in help shall remain available when the skill catalog cannot be refreshed.
+
+### SC-005: Conversation condensation
+
+- [x] `/condense` shall request condensation through the typed conversation client.
+- [x] Backends returning HTTP 404, 405, or 501 shall produce a localized unsupported message; other failures shall produce a localized generic failure.

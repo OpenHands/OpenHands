@@ -47,6 +47,8 @@ export const GOAL_COMMAND = "/goal";
 
 export const HELP_COMMAND = "/help";
 
+export const CONDENSE_COMMAND = "/condense";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -100,6 +102,16 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     },
     command: HELP_COMMAND,
     descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "condense",
+      type: "agentskills",
+      content: "Condense the current conversation history",
+      triggers: [CONDENSE_COMMAND],
+    },
+    command: CONDENSE_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$CONDENSE_DESCRIPTION,
   },
 ];
 
