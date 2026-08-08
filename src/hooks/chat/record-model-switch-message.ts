@@ -45,6 +45,10 @@ export function stampActiveLlmProfile(
     selected_branch: prev?.selected_branch ?? null,
     git_provider: prev?.git_provider ?? null,
     selected_workspace: prev?.selected_workspace ?? null,
+    // Carry the attached-workspace mode forward too — the full-object replace
+    // would otherwise drop it (#15520). This helper is the single write site
+    // for the profile-switch stamp, so one line covers every path.
+    workspace_mode: prev?.workspace_mode ?? null,
     active_profile: profileName,
     stamped_at: stampedAt,
     // Full-object replace: carry the plugins snapshot forward so the

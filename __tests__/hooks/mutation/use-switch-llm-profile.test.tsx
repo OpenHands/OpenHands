@@ -231,6 +231,7 @@ describe("useSwitchLlmProfile", () => {
       selected_branch: "main",
       git_provider: "github",
       selected_workspace: null,
+      workspace_mode: null,
       active_profile: "claude-sonnet-4.6",
       // Client-clock ISO timestamp; the mutation path has no event timestamp.
       stamped_at: expect.any(String),

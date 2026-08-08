@@ -234,6 +234,25 @@ describe("seedModelSwitchesFromHistory", () => {
     });
   });
 
+  it("preserves workspace_mode across a stamp (#15520)", () => {
+    setStoredConversationMetadata("c1", {
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      selected_workspace: "/ws",
+      workspace_mode: "local_repo",
+    });
+
+    seedModelSwitchesFromHistory("c1", [
+      userMessage("u1"),
+      switchObservation("o1", "fast"),
+    ]);
+
+    expect(getStoredConversationMetadata("c1")?.workspace_mode).toBe(
+      "local_repo",
+    );
+  });
+
   it("leaves a newer manual stamp alone (manual switch after a tool switch survives reload)", () => {
     // t1: agent tool-switches to "fast" (observation in history). t2: user
     // manually switches back to "architect" via /model — a REST call that
