@@ -104,6 +104,7 @@ test.describe("active profile deletion + reconciliation", () => {
 
   test("active profile is deletable and reconciliation activates another profile", async ({
     page,
+    request,
   }) => {
     // ── Setup: create two profiles via the UI, activate one ──
     await routeSessionApiKey(page);
@@ -195,34 +196,46 @@ test.describe("active profile deletion + reconciliation", () => {
       await page.getByTestId("delete-profile-confirm").click();
 
       // useEnsureActiveProfile re-activates the only remaining profile. Poll
-      // with reload — the delete + activate mutations may take a moment on CI.
+      // the backend state rather than repeatedly reloading the page: reloads
+      // can interrupt the client-side activation mutation that performs the
+      // reconciliation after the delete succeeds.
       await expect
         .poll(
           async () => {
-            await page.goto("/settings/llm", {
-              waitUntil: "domcontentloaded",
+            const resp = await request.get(`${BACKEND_URL}/api/profiles`, {
+              headers: { "X-Session-API-Key": SESSION_API_KEY },
             });
-            await waitForTestId(page, "add-llm-profile");
-            const remaining = await rowFor(INACTIVE_PROFILE);
-            if (!remaining) return false;
-            // The deleted profile must be gone, and reconciliation must keep
-            // *some* profile active (the "always have an active profile"
-            // guarantee). We don't assert it's INACTIVE_PROFILE specifically —
-            // other profiles may linger on the shared agent-server and
-            // useEnsureActiveProfile activates the first keyed one.
-            const goneRow = await rowFor(ACTIVE_PROFILE);
-            const activeBadges = await page
-              .getByTestId("profile-active-badge")
-              .count();
-            return goneRow === null && activeBadges > 0;
+            if (!resp.ok()) return false;
+
+            const data = (await resp.json()) as {
+              profiles?: Array<{ name?: string }>;
+              active_profile?: string | null;
+            };
+            const names = new Set(
+              (data.profiles ?? [])
+                .map((profile) => profile.name)
+                .filter((name): name is string => Boolean(name)),
+            );
+
+            return (
+              !names.has(ACTIVE_PROFILE) &&
+              names.has(INACTIVE_PROFILE) &&
+              data.active_profile != null &&
+              names.has(data.active_profile)
+            );
           },
           {
-            message: `"${INACTIVE_PROFILE}" should become active after deleting "${ACTIVE_PROFILE}"`,
+            message: `"${ACTIVE_PROFILE}" should be deleted and active_profile should point to a remaining profile`,
             timeout: 15_000,
             intervals: [1_000, 2_000, 3_000],
           },
         )
         .toBe(true);
+
+      await page.goto("/settings/llm", { waitUntil: "domcontentloaded" });
+      await waitForTestId(page, "add-llm-profile");
+      expect(await rowFor(ACTIVE_PROFILE)).toBeNull();
+      await expect(page.getByTestId("profile-active-badge")).toHaveCount(1);
     });
   });
 });
