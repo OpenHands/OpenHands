@@ -39,6 +39,7 @@ import {
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
 import { parseCommand, formatCommand } from "#/utils/acp-command";
+import { agentProfileSupportsSwitchLlmTool } from "#/api/agent-profiles-service/profile-field-support";
 
 export const handle = { hideTitle: true };
 
@@ -131,6 +132,13 @@ export interface AgentProfileFieldsInput {
   subAgentsEnabled: boolean;
   switchLlmToolField?: SettingsFieldSchema;
   switchLlmToolEnabled: boolean;
+  /**
+   * Whether the backend's *profile* model accepts `enable_switch_llm_tool`.
+   * Tracked apart from {@link switchLlmToolField} because the settings schema
+   * and the profile model gained the field in different releases — see
+   * {@link agentProfileSupportsSwitchLlmTool}.
+   */
+  switchLlmToolSupportedOnProfile: boolean;
   toolConcurrencyField?: SettingsFieldSchema;
   toolConcurrency: string | boolean;
 }
@@ -165,6 +173,7 @@ export function buildAgentProfileFields(
     subAgentsEnabled,
     switchLlmToolField,
     switchLlmToolEnabled,
+    switchLlmToolSupportedOnProfile,
     toolConcurrencyField,
     toolConcurrency,
   } = input;
@@ -186,10 +195,12 @@ export function buildAgentProfileFields(
       agent_kind: "openhands",
       enable_sub_agents: subAgentsEnabled,
     };
-  if (switchLlmToolField) {
-    // Emit only when the backend schema exposes the field — older
-    // agent-servers that predate ``enable_switch_llm_tool`` would reject the
-    // unknown key on the whole-profile overwrite (``extra="forbid"``).
+  if (switchLlmToolField && switchLlmToolSupportedOnProfile) {
+    // Two conditions, two different questions. The schema tells us the field
+    // is a real setting on this server; the version gate tells us its
+    // *profile* model will accept it. Between agent-server 1.29.0 and 1.30.x
+    // the first is true and the second is not, and the whole-profile
+    // overwrite is ``extra="forbid"`` — an unknown key 422s the entire save.
     fields.enable_switch_llm_tool = switchLlmToolEnabled;
   }
   if (toolConcurrencyField) {
@@ -298,6 +309,14 @@ export function AgentSettingsScreen({
   const [switchLlmToolEnabled, setSwitchLlmToolEnabled] = useState(
     initialSwitchLlmToolEnabled,
   );
+  // Embedded mode saves an AgentProfile, not global settings, and the profile
+  // model gained this field four releases after the settings schema did. The
+  // global page is unaffected — that endpoint has accepted the key since
+  // 1.22.0 — so the extra gate applies to the profile editor alone.
+  const switchLlmToolSupportedOnProfile = agentProfileSupportsSwitchLlmTool();
+  const showSwitchLlmTool =
+    Boolean(switchLlmToolField) &&
+    (!embedded || switchLlmToolSupportedOnProfile);
 
   // --- Parallel tool calls (OpenHands path) ---
   // Surfaced only when the backend schema exposes the field, so older
@@ -486,6 +505,7 @@ export function AgentSettingsScreen({
       subAgentsEnabled,
       switchLlmToolField,
       switchLlmToolEnabled,
+      switchLlmToolSupportedOnProfile,
       toolConcurrencyField,
       toolConcurrency,
     });
@@ -711,7 +731,7 @@ export function AgentSettingsScreen({
         </div>
       )}
 
-      {!isAcp && switchLlmToolField ? (
+      {!isAcp && showSwitchLlmTool ? (
         <div className="flex flex-col gap-1.5">
           <SettingsSwitch
             testId="agent-settings-enable-switch-llm-tool"

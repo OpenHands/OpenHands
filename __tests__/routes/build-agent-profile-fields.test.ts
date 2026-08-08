@@ -11,6 +11,7 @@ const baseAcp = {
   subAgentsEnabled: false,
   switchLlmToolField: undefined,
   switchLlmToolEnabled: false,
+  switchLlmToolSupportedOnProfile: true,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
 };
@@ -100,6 +101,7 @@ describe("buildAgentProfileFields — OpenHands", () => {
     subAgentsEnabled: true,
     switchLlmToolField: undefined,
     switchLlmToolEnabled: false,
+    switchLlmToolSupportedOnProfile: true,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
   };
@@ -120,6 +122,19 @@ describe("buildAgentProfileFields — OpenHands", () => {
     if (fields.agent_kind === "openhands") {
       expect(fields.enable_switch_llm_tool).toBe(true);
     }
+  });
+
+  it("omits enable_switch_llm_tool when the schema has it but the profile model does not", () => {
+    // agent-server 1.29.0–1.30.x: agent profiles exist and the settings schema
+    // advertises the field, but `OpenHandsAgentProfile` gained it in 1.31.0.
+    // The profile POST is `extra="forbid"`, so emitting here 422s the save.
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      switchLlmToolField,
+      switchLlmToolEnabled: false,
+      switchLlmToolSupportedOnProfile: false,
+    });
+    expect(fields).not.toHaveProperty("enable_switch_llm_tool");
   });
 
   it("omits enable_switch_llm_tool when the schema predates the field", () => {

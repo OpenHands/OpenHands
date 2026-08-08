@@ -16,6 +16,14 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
+// The profile editor gates the LLM-switching toggle on the backend's *profile*
+// model, which gained the field later than the settings schema did. Stub the
+// probe so both sides of that gate are reachable without a live server.
+const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
+vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
+  agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
+}));
+
 // Observe save toasts so we can assert the single Save shows one confirmation,
 // not one per persisted thing (agent spec + credentials).
 const toastMocks = vi.hoisted(() => ({
@@ -38,8 +46,10 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderAgentSettingsScreen() {
-  return render(<AgentSettingsScreen />, {
+function renderAgentSettingsScreen(
+  props: React.ComponentProps<typeof AgentSettingsScreen> = {},
+) {
+  return render(<AgentSettingsScreen {...props} />, {
     wrapper: ({ children }) => (
       <MemoryRouter>
         <QueryClientProvider
@@ -70,6 +80,7 @@ describe("AgentSettingsScreen", () => {
     toastMocks.success.mockClear();
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
   });
 
   it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
@@ -226,6 +237,77 @@ describe("AgentSettingsScreen", () => {
     // ...while the other OpenHands controls still render.
     expect(
       screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the LLM-switching toggle in the profile editor when the profile model predates the field", async () => {
+    // agent-server 1.29.0–1.30.x advertises the field in the settings schema
+    // while `OpenHandsAgentProfile` still rejects it. Rendering the toggle
+    // there would offer a control whose save the server refuses outright.
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the LLM-switching toggle in the profile editor once the profile model carries the field", async () => {
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the LLM-switching toggle on the global page even when the profile model predates the field", async () => {
+    // The global page writes `agent_settings`, which has accepted the key
+    // since 1.22.0. The profile-model gap must not reach back and hide it.
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
     ).toBeInTheDocument();
   });
 
