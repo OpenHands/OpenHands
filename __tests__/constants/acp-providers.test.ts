@@ -12,6 +12,7 @@ import {
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
   labelForAcpModel,
+  matchAcpProviderByCommand,
   normalizeAcpModelId,
   resolveClientAcpProvider,
 } from "#/constants/acp-providers";
@@ -115,11 +116,12 @@ describe("ACP provider registry", () => {
     // Preferred default = registry default everywhere except Gemini, where
     // the Vertex-safe override applies (see getAcpPreferredDefaultModel) —
     // EVERY default-model surface must agree on this, including this diff
-    // builder's fallback.
+    // builder's fallback. Fork-local providers (OpenCode) wire as ``custom``.
     for (const provider of ACP_PROVIDERS) {
+      const localOnly = Boolean(LOCAL_ACP_PROVIDER_REGISTRY[provider.key]);
       expect(buildAcpAgentSettingsDiff(provider.key)).toMatchObject({
         agent_kind: "acp",
-        acp_server: provider.key,
+        acp_server: localOnly ? ACP_CUSTOM_PRESET_KEY : provider.key,
         acp_model: getAcpPreferredDefaultModel(provider.key),
       });
     }
@@ -132,6 +134,16 @@ describe("ACP provider registry", () => {
     expect(buildAcpAgentSettingsDiff(ACP_CUSTOM_PRESET_KEY)).toMatchObject({
       agent_kind: "acp",
       acp_server: ACP_CUSTOM_PRESET_KEY,
+      acp_model: null,
+    });
+  });
+
+  it("persists OpenCode as custom + explicit command until the SDK enum accepts it", () => {
+    // Agent-server 422s on acp_server literal without 'opencode' — wire as custom.
+    expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
+      agent_kind: "acp",
+      acp_server: ACP_CUSTOM_PRESET_KEY,
+      acp_command: ["opencode", "acp"],
       acp_model: null,
     });
   });
@@ -313,6 +325,13 @@ describe("getAcpCredentialConflicts", () => {
       ),
     ).toEqual([]);
     expect(getAcpCredentialConflicts(null, () => true)).toEqual([]);
+  });
+});
+
+describe("matchAcpProviderByCommand", () => {
+  it("re-detects OpenCode from a custom-persisted command", () => {
+    expect(matchAcpProviderByCommand(["opencode", "acp"])).toBe("opencode");
+    expect(matchAcpProviderByCommand("opencode acp")).toBe("opencode");
   });
 });
 

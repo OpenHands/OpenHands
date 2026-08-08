@@ -66,6 +66,21 @@ export function resolveClientAcpProvider(
   return LOCAL_ACP_PROVIDER_REGISTRY[key] ?? null;
 }
 
+/**
+ * True when Canvas surfaces the provider but the pinned agent-server /
+ * typescript-client literal enum does not accept the key yet (e.g. OpenCode).
+ * Those presets must be persisted as ``acp_server: "custom"`` with an explicit
+ * ``acp_command`` until the SDK registry catches up.
+ */
+export function isBackendUnsupportedAcpServer(
+  key: string | null | undefined,
+): boolean {
+  if (!key) return false;
+  return Boolean(
+    LOCAL_ACP_PROVIDER_REGISTRY[key] && !getClientAcpProvider(key),
+  );
+}
+
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
 
 // Sentinel ``agent.llm.model`` returned by older SDKs for ACP conversations
@@ -241,6 +256,29 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
 });
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
+
+/**
+ * Match a stored ACP command line against a built-in / local provider's
+ * default command. Used to re-detect fork-local presets that were persisted
+ * as ``acp_server: "custom"``.
+ */
+export function matchAcpProviderByCommand(
+  command: readonly string[] | string | null | undefined,
+): string | null {
+  const tokens = Array.isArray(command)
+    ? command.filter((part) => typeof part === "string" && part.trim())
+    : typeof command === "string"
+      ? command.trim().split(/\s+/).filter(Boolean)
+      : [];
+  if (tokens.length === 0) return null;
+  const normalized = tokens.join(" ");
+  for (const provider of ACP_PROVIDERS) {
+    if (provider.default_command.join(" ") === normalized) {
+      return provider.key;
+    }
+  }
+  return null;
+}
 
 /**
  * A credential an ACP provider authenticates with, surfaced during onboarding
@@ -625,6 +663,19 @@ export function buildAcpAgentSettingsDiff(
       ? getAcpPreferredDefaultModel(providerKey)
       : normalizeAcpModelId(providerKey, options.model);
 
+  // Fork-local providers (OpenCode) are not in the agent-server's
+  // ``acp_server`` literal enum yet — persist as ``custom`` with an explicit
+  // command so PATCH /api/settings accepts the payload. The Settings UI
+  // re-detects the preset from the command via {@link matchAcpProviderByCommand}.
+  const wireAsCustom = isBackendUnsupportedAcpServer(providerKey);
+  const wireServer = wireAsCustom ? ACP_CUSTOM_PRESET_KEY : providerKey;
+  const explicitCommand =
+    options.command && options.command.length > 0
+      ? options.command
+      : wireAsCustom && provider
+        ? [...provider.default_command]
+        : (options.command ?? []);
+
   // ``acp_args: []`` resets any API-set ``acp_args`` that would
   // otherwise survive and concatenate to ``acp_command`` at spawn time
   // (the agent-server merges the two before exec). Callers building the
@@ -633,8 +684,8 @@ export function buildAcpAgentSettingsDiff(
   // ``acp_command`` here, so no args are lost.
   return {
     agent_kind: "acp",
-    acp_server: providerKey,
-    acp_command: options.command ?? [],
+    acp_server: wireServer,
+    acp_command: explicitCommand,
     acp_args: [],
     acp_model: model ?? null,
   };
