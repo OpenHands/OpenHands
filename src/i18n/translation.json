@@ -31568,6 +31568,23 @@
     "ca": "S'han afegit {{added}} perfils; {{failed}} han fallat",
     "uk": "Додано {{added}} профілів; {{failed}} не вдалося"
   },
+  "SETTINGS$MODELS_ADD_BLOCKED": {
+    "en": "Added {{added}} profiles; the server refused the rest",
+    "ja": "{{added}} 件追加、残りはサーバーに拒否されました",
+    "zh-CN": "已添加 {{added}} 个配置文件；服务器拒绝了其余的",
+    "zh-TW": "已新增 {{added}} 個設定檔；伺服器拒絕了其餘的",
+    "ko-KR": "{{added}}개 추가, 나머지는 서버가 거부했습니다",
+    "no": "La til {{added}} profiler; serveren avviste resten",
+    "it": "Aggiunti {{added}} profili; il server ha rifiutato il resto",
+    "pt": "{{added}} perfis adicionados; o servidor recusou os restantes",
+    "es": "{{added}} perfiles añadidos; el servidor rechazó el resto",
+    "ar": "تمت إضافة {{added}}؛ رفض الخادم البقية",
+    "fr": "{{added}} profils ajoutés ; le serveur a refusé les autres",
+    "tr": "{{added}} profil eklendi; sunucu geri kalanı reddetti",
+    "de": "{{added}} Profile hinzugefügt; den Rest hat der Server abgelehnt",
+    "ca": "S'han afegit {{added}} perfils; el servidor ha rebutjat la resta",
+    "uk": "Додано {{added}} профілів; решту сервер відхилив"
+  },
   "SETTINGS$MODEL_ROW_FAILED": {
     "en": "Failed",
     "ja": "失敗",

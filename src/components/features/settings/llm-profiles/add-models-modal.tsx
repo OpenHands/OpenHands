@@ -40,6 +40,7 @@ interface ModelRow {
   model: string;
   /** Editable profile name. */
   name: string;
+  verified: boolean;
   selected: boolean;
   status: RowStatus;
 }
@@ -65,37 +66,59 @@ export function AddModelsModal({
   const models = useProviderModels(provider);
   const saveProfile = useSaveLlmProfile();
 
-  // Rebuild the rows when the model list or the verified filter changes;
-  // names derive once from the model id and stay user-editable afterward.
+  // Rows follow the model list, and only the model list: the verified filter
+  // hides rows at render rather than rebuilding them, because a rebuild
+  // discards the edited names, selections and per-row statuses the user has
+  // accumulated. A row already on screen keeps its state when the list
+  // refreshes; only its verified flag tracks the server.
   useEffect(() => {
-    const items = (models.data ?? []).filter(
-      (m) => !verifiedOnly || m.verified,
-    );
-    setRows(
-      items.map((m) => {
+    const items = models.data ?? [];
+    setRows((prev) => {
+      const prior = new Map(prev.map((row) => [row.model, row]));
+      return items.map((m) => {
         const full =
           m.provider && !m.name.startsWith(`${m.provider}/`)
             ? `${m.provider}/${m.name}`
             : m.name;
+        const verified = !!m.verified;
+        const carried = prior.get(full);
+        if (carried) return { ...carried, verified };
         return {
           model: full,
           name: deriveProfileNameFromModel(full),
+          verified,
           // Nothing is pre-selected: the server caps how many profiles an
           // account may hold, so defaulting to "all" invites a submission
           // that is mostly refusals. Choosing is the point of the modal.
           selected: false,
           status: "idle" as RowStatus,
         };
-      }),
-    );
-  }, [models.data, verifiedOnly]);
+      });
+    });
+  }, [models.data]);
+
+  // The manager keeps this component mounted and drives it with `isOpen`, so
+  // without an explicit reset a reopened modal still shows the last session's
+  // provider, selections and Saved/Failed marks.
+  useEffect(() => {
+    if (!isOpen) {
+      setProvider(null);
+      setVerifiedOnly(true);
+      setRows([]);
+      setSubmitting(false);
+    }
+  }, [isOpen]);
 
   const existing = useMemo(() => new Set(existingNames), [existingNames]);
 
   if (!isOpen) return null;
 
+  // Everything below reasons about what the user can see: a row hidden by the
+  // filter is neither counted, nor conflict-checked, nor submitted.
+  const visibleRows = rows.filter((row) => !verifiedOnly || row.verified);
+
   const nameCounts = new Map<string, number>();
-  for (const row of rows) {
+  for (const row of visibleRows) {
     nameCounts.set(row.name, (nameCounts.get(row.name) ?? 0) + 1);
   }
   const hasConflict = (row: ModelRow) =>
@@ -103,7 +126,7 @@ export function AddModelsModal({
 
   const isSelectable = (row: ModelRow) =>
     !hasConflict(row) && isProfileNameValid(row.name, { isRequired: true });
-  const selectable = rows.filter(isSelectable);
+  const selectable = visibleRows.filter(isSelectable);
   const selectedRows = selectable.filter((row) => row.selected);
 
   const setRow = (model: string, patch: Partial<ModelRow>) =>
@@ -116,8 +139,11 @@ export function AddModelsModal({
 
   const toggleAll = () => {
     const next = !allSelected;
+    const reachable = new Set(selectable.map((row) => row.model));
     setRows((prev) =>
-      prev.map((row) => (isSelectable(row) ? { ...row, selected: next } : row)),
+      prev.map((row) =>
+        reachable.has(row.model) ? { ...row, selected: next } : row,
+      ),
     );
   };
 
@@ -128,11 +154,17 @@ export function AddModelsModal({
 
     // Sequential, not a parallel fan-out: the server enforces a profile limit,
     // and firing every create at once turns one refusal into a wall of
-    // identical failures. Duplicate names are already pre-flagged client-side,
-    // so a 409 here means a server-side limit the remaining creates would hit
-    // too — stop and report it rather than spending the requests.
+    // identical failures.
+    //
+    // A 409 is ambiguous. It means the profile ceiling, which every remaining
+    // create would hit too — or a name taken since this list loaded, which
+    // says nothing about the rows behind it. Stopping on the first one halts
+    // a run that would have succeeded; ignoring it spends the whole selection
+    // against a wall. So one 409 fails its own row and the run continues, and
+    // a second confirms the wall at a cost of exactly one extra request.
     let added = 0;
     let failed = 0;
+    let conflicts = 0;
     let blocked = false;
     let blockedReason: string | null = null;
 
@@ -153,21 +185,30 @@ export function AddModelsModal({
         setRow(row.model, { status: "failed" });
         failed += 1;
         if (isSdkHttpStatusError(error, 409)) {
-          blocked = true;
-          blockedReason = getServerDetail(error);
-          // Rows past this one were marked "saving" up front and are now
-          // never attempted; leave them idle rather than spinning forever.
-          for (const skipped of targets.slice(i + 1)) {
-            setRow(skipped.model, { status: "idle" });
+          conflicts += 1;
+          blockedReason = getServerDetail(error) ?? blockedReason;
+          if (conflicts >= 2) {
+            blocked = true;
+            // Rows past this one were marked "saving" up front and are now
+            // never attempted; leave them idle rather than spinning forever.
+            for (const skipped of targets.slice(i + 1)) {
+              setRow(skipped.model, { status: "idle" });
+            }
+            break;
           }
-          break;
         }
       }
     }
 
     setSubmitting(false);
-    if (blocked && blockedReason) {
-      displayErrorToast(blockedReason);
+    if (blocked) {
+      // Quote the server when it explained itself. When it did not, say so
+      // plainly: the partial-count wording below counts only the rows that
+      // were attempted, so it reads as a smaller failure than it was.
+      displayErrorToast(
+        blockedReason ??
+          t(I18nKey.SETTINGS$MODELS_ADD_BLOCKED, { added: String(added) }),
+      );
     } else if (failed === 0) {
       displaySuccessToast(
         t(I18nKey.SETTINGS$MODELS_ADDED, { count: String(added) }),
@@ -195,7 +236,8 @@ export function AddModelsModal({
   const verifiedProviders = providerOptions.filter((p) => p.verified);
   const otherProviders = providerOptions.filter((p) => !p.verified);
   const isLoadingModels = provider !== null && models.isLoading;
-  const showEmpty = provider !== null && !isLoadingModels && rows.length === 0;
+  const showEmpty =
+    provider !== null && !isLoadingModels && visibleRows.length === 0;
 
   const footer = (
     <>
@@ -294,7 +336,7 @@ export function AddModelsModal({
           </p>
         )}
 
-        {rows.length > 0 && (
+        {visibleRows.length > 0 && (
           <>
             <label className="flex items-center gap-2 text-sm text-white">
               <input
@@ -307,7 +349,7 @@ export function AddModelsModal({
               {t(I18nKey.SETTINGS$ADD_MODELS_SELECT_ALL)}
             </label>
             <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-              {rows.map((row) => {
+              {visibleRows.map((row) => {
                 // A successfully saved row re-appears in existingNames after
                 // the profiles query refreshes — don't flag it as conflicting
                 // with itself.

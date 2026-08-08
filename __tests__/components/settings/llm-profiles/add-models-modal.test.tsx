@@ -22,6 +22,7 @@ vi.mock("react-i18next", () => ({
         SETTINGS$ADD_N_PROFILES: `Add ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED: `Added ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED_PARTIAL: `Added ${params?.added ?? "?"} profiles; ${params?.failed ?? "?"} failed`,
+        SETTINGS$MODELS_ADD_BLOCKED: `Added ${params?.added ?? "?"} profiles; the server refused the rest`,
         SETTINGS$MODEL_ROW_SAVED: "Saved",
         SETTINGS$MODEL_ROW_FAILED: "Failed",
         BUTTON$CANCEL: "Cancel",
@@ -62,11 +63,18 @@ const PROVIDERS = {
   next_page_id: null,
 };
 
-/** An error shaped like the SDK's HttpError, which the modal narrows on. */
-const httpError = (status: number, detail: string) => {
-  const error = new Error(detail);
+/**
+ * An error shaped like the SDK's HttpError, which the modal narrows on.
+ * `HttpError.response` carries the parsed error body, so a server that answers
+ * with a plain-text or detail-less body leaves nothing for the modal to quote.
+ */
+const httpError = (status: number, detail?: string) => {
+  const error = new Error(detail ?? `HTTP ${status}`);
   error.name = "HttpError";
-  return Object.assign(error, { status, response: { detail } });
+  return Object.assign(error, {
+    status,
+    response: detail === undefined ? null : { detail },
+  });
 };
 
 const MODELS = {
@@ -81,8 +89,8 @@ const MODELS = {
 describe("AddModelsModal", () => {
   let queryClient: QueryClient;
 
-  const renderModal = (existingNames: string[] = [], onClose = vi.fn()) =>
-    render(
+  const renderModal = (existingNames: string[] = [], onClose = vi.fn()) => {
+    const view = render(
       <QueryClientProvider client={queryClient}>
         <AddModelsModal
           isOpen
@@ -91,6 +99,25 @@ describe("AddModelsModal", () => {
         />
       </QueryClientProvider>,
     );
+    // The manager renders the modal unconditionally and drives it with
+    // `isOpen`, so the component never unmounts between openings.
+    const setOpen = (isOpen: boolean) =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <AddModelsModal
+            isOpen={isOpen}
+            existingNames={existingNames}
+            onClose={onClose}
+          />
+        </QueryClientProvider>,
+      );
+    return { ...view, setOpen };
+  };
+
+  const showUnverified = async () => {
+    await userEvent.click(screen.getByTestId("add-models-verified-only"));
+    await screen.findByTestId("add-models-row-openhands/unverified-model");
+  };
 
   const pickProvider = async () => {
     const select = await screen.findByTestId("add-models-provider");
@@ -251,6 +278,7 @@ describe("AddModelsModal", () => {
     await screen.findByTestId(
       "add-models-row-openhands/trinity-large-thinking",
     );
+    await showUnverified();
 
     await userEvent.click(screen.getByTestId("add-models-select-all"));
     await userEvent.click(screen.getByTestId("add-models-submit"));
@@ -258,16 +286,122 @@ describe("AddModelsModal", () => {
     await waitFor(() =>
       expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
     );
-    // the second selected row is never attempted
-    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(1);
+    // A second refusal confirms the wall; the third row is never attempted.
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(2);
     expect(displayErrorToast).toHaveBeenCalledWith(
       "Profile limit reached (10). Delete a profile first.",
     );
     expect(onClose).not.toHaveBeenCalled();
-    // exactly one row reports a status; the unattempted row is not left
-    // spinning on a "saving" it never got
-    expect(screen.getAllByText(/^(Saved|Failed)$/)).toHaveLength(1);
+    // only the attempted rows report a status; the unattempted row is not
+    // left spinning on a "saving" it never got
+    expect(screen.getAllByText(/^(Saved|Failed)$/)).toHaveLength(2);
     expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+  });
+
+  it("carries on past a single 409 so one raced name collision cannot halt the run", async () => {
+    // A name free at load can be taken by another session before submit. That
+    // 409 is about one row, not the account's profile ceiling.
+    vi.mocked(ProfilesService.saveProfile)
+      .mockRejectedValueOnce(httpError(409, "Profile 'x' already exists."))
+      .mockResolvedValueOnce({ name: "b", message: "ok" });
+    renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
+    );
+    expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Added 1 profiles; 1 failed",
+    );
+  });
+
+  it("names the refusal generically when the 409 carries no detail", async () => {
+    // A body the client cannot quote must not fall through to a count that
+    // omits the rows the server never let it attempt.
+    vi.mocked(ProfilesService.saveProfile).mockRejectedValue(httpError(409));
+    renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+    await showUnverified();
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
+    );
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Added 0 profiles; the server refused the rest",
+    );
+  });
+
+  it("keeps selections and edited names across a filter toggle", async () => {
+    renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+
+    const name = screen.getByTestId(
+      "add-models-name-openhands/deepseek-v4-flash",
+    );
+    await userEvent.clear(name);
+    await userEvent.type(name, "my-flash");
+    await userEvent.click(
+      screen.getByTestId("add-models-check-openhands/deepseek-v4-flash"),
+    );
+
+    await showUnverified();
+
+    expect(
+      screen.getByTestId("add-models-name-openhands/deepseek-v4-flash"),
+    ).toHaveValue("my-flash");
+    expect(
+      screen.getByTestId("add-models-check-openhands/deepseek-v4-flash"),
+    ).toBeChecked();
+
+    // and back again
+    await userEvent.click(screen.getByTestId("add-models-verified-only"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("add-models-row-openhands/unverified-model"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("add-models-name-openhands/deepseek-v4-flash"),
+    ).toHaveValue("my-flash");
+  });
+
+  it("starts a fresh session when the modal is reopened", async () => {
+    vi.mocked(ProfilesService.saveProfile).mockRejectedValue(new Error("boom"));
+    const { setOpen } = renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+    await waitFor(() => expect(screen.getAllByText("Failed")).toHaveLength(2));
+
+    setOpen(false);
+    setOpen(true);
+
+    const select = await screen.findByTestId("add-models-provider");
+    expect(select).toHaveValue("");
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-models-row-openhands/deepseek-v4-flash"),
+    ).not.toBeInTheDocument();
   });
 
   it("select-all toggles every selectable row", async () => {
