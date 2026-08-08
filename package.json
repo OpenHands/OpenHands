@@ -56,7 +56,7 @@
     "rehype-sanitize": "6.0.0",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
-    "rioterm": "0.1.2",
+    "rioterm": "0.1.3",
     "shell-quote": "1.9.0",
     "sirv": "3.0.2",
     "sirv-cli": "3.0.1",
