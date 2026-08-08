@@ -13,3 +13,7 @@
 - [x] `/help` shall render every available built-in and skill-derived slash command in the chat area.
 - [x] Built-in commands shall have localized descriptions, and help shall mention the `/` autocomplete menu.
 - [x] Built-in help shall remain available when the skill catalog cannot be refreshed.
+
+### SC-004: Feedback
+
+- [x] `/feedback` shall open the anonymous feedback form in a protected new browser tab without sending a user message to the agent.
