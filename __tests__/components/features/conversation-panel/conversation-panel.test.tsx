@@ -1913,6 +1913,27 @@ describe("ConversationPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("preserves pinned conversations that are outside the loaded page window", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [mockConversations[0]],
+      next_page_id: "page-2",
+    });
+    usePinnedConversationsStore
+      .getState()
+      .pinConversation("default-local", "older-pinned");
+
+    renderConversationPanel();
+
+    await screen.findByText("Conversation 1");
+
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId["default-local"],
+    ).toContain("older-pinned");
+  });
+
   it("renders pinned conversations only in the pinned section in chronological mode", async () => {
     usePinnedConversationsStore
       .getState()

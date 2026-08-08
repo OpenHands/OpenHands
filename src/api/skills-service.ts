@@ -4,12 +4,19 @@ import {
   type SkillCatalogEntry,
 } from "@openhands/extensions/skills";
 import { SkillInfo } from "#/types/settings";
+import type { SkillCategoryId } from "#/utils/skill-category";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getActiveBackend } from "./backend-registry/active-store";
 import { fetchCloudSkills } from "./cloud/skills-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 
-function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
+type CategorizedSkillCatalogEntry = SkillCatalogEntry & {
+  category?: SkillCategoryId | null;
+};
+
+function catalogEntryToSkillInfo(
+  entry: CategorizedSkillCatalogEntry,
+): SkillInfo {
   return {
     name: entry.name,
     type: "knowledge",
