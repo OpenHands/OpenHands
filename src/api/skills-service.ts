@@ -14,7 +14,9 @@ type CategorizedSkillCatalogEntry = SkillCatalogEntry & {
   category?: SkillCategoryId | null;
 };
 
-function catalogEntryToSkillInfo(entry: CategorizedSkillCatalogEntry): SkillInfo {
+function catalogEntryToSkillInfo(
+  entry: CategorizedSkillCatalogEntry,
+): SkillInfo {
   return {
     name: entry.name,
     type: "knowledge",
