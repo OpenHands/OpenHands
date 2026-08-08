@@ -47,6 +47,10 @@ export const GOAL_COMMAND = "/goal";
 
 export const HELP_COMMAND = "/help";
 
+export const FEEDBACK_COMMAND = "/feedback";
+
+export const FEEDBACK_FORM_URL = "https://forms.gle/chHc5VdS3wty5DwW6";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -100,6 +104,16 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     },
     command: HELP_COMMAND,
     descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "feedback",
+      type: "agentskills",
+      content: "Open the anonymous feedback form",
+      triggers: [FEEDBACK_COMMAND],
+    },
+    command: FEEDBACK_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$FEEDBACK_DESCRIPTION,
   },
 ];
 

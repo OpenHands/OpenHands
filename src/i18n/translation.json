@@ -37842,4 +37842,22 @@
     "uk": "Ця команда потребує активної розмови.",
     "ca": "Aquesta ordre requereix una conversa activa."
   }
+,
+"SLASH_COMMAND$FEEDBACK_DESCRIPTION": {
+    "en": "Open the anonymous feedback form",
+    "ja": "匿名フィードバックフォームを開きます",
+    "zh-CN": "打开匿名反馈表单",
+    "zh-TW": "開啟匿名意見回饋表單",
+    "ko-KR": "익명 피드백 양식을 엽니다",
+    "no": "Åpne det anonyme tilbakemeldingsskjemaet",
+    "it": "Apri il modulo di feedback anonimo",
+    "pt": "Abrir o formulário de comentários anónimos",
+    "es": "Abrir el formulario de comentarios anónimos",
+    "ar": "فتح نموذج الملاحظات المجهول",
+    "fr": "Ouvrir le formulaire de commentaires anonymes",
+    "tr": "Anonim geri bildirim formunu aç",
+    "de": "Das anonyme Feedbackformular öffnen",
+    "uk": "Відкрити анонімну форму зворотного зв’язку",
+    "ca": "Obre el formulari de comentaris anònims"
+  }
 }

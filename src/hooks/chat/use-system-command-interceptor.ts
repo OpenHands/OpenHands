@@ -4,13 +4,18 @@ import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-ancho
 import { buildSlashCommandItems } from "#/hooks/chat/use-slash-command";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
-import { HELP_COMMAND } from "#/utils/constants";
+import {
+  HELP_COMMAND,
+  FEEDBACK_COMMAND,
+  FEEDBACK_FORM_URL,
+} from "#/utils/constants";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 
 /**
  * Intercepts browser-local utility commands. These commands never reach the
- * agent as user messages; help produces an anchored inline chat card.
+ * agent as user messages; help produces an anchored inline chat card and
+ * feedback opens an external form.
  */
 export function useSystemCommandInterceptor(
   conversationId: string | null | undefined,
@@ -23,8 +28,17 @@ export function useSystemCommandInterceptor(
   return useCallback(
     (message: string) => {
       const command = message.trim();
-      if (command !== HELP_COMMAND) {
+      const isSystemCommand = [HELP_COMMAND, FEEDBACK_COMMAND].includes(
+        command,
+      );
+      if (!isSystemCommand) {
         onSubmit(message);
+        return;
+      }
+
+      // @spec SC-004 — Feedback
+      if (command === FEEDBACK_COMMAND) {
+        window.open(FEEDBACK_FORM_URL, "_blank", "noopener,noreferrer");
         return;
       }
 

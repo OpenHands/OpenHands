@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSystemCommandInterceptor } from "#/hooks/chat/use-system-command-interceptor";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { useEventStore } from "#/stores/use-event-store";
+import { BUILT_IN_COMMANDS } from "#/utils/constants";
 
 const {
   mockDisplayErrorToast,
@@ -11,6 +12,8 @@ const {
   mockDisplayErrorToast: vi.fn(),
   mockRefetchSkills: vi.fn(),
 }));
+
+
 
 const skills = [
   {
@@ -82,7 +85,7 @@ describe("useSystemCommandInterceptor", () => {
       });
       if (entry?.kind === "help") {
         expect(entry.commands.map((command) => command.command)).toEqual(
-          expect.arrayContaining(["/help", "/code-search"]),
+         expect.arrayContaining(["/help", "/feedback", "/code-search"]),
         );
       }
     });
@@ -127,6 +130,24 @@ describe("useSystemCommandInterceptor", () => {
 
     expect(mockDisplayErrorToast).toHaveBeenCalledWith(
       "SLASH_COMMAND$ACTIVE_CONVERSATION_REQUIRED",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // @spec SC-004 — Feedback
+  it("opens the anonymous feedback form in a protected new tab", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
+    );
+
+    act(() => result.current("/feedback"));
+
+    expect(open).toHaveBeenCalledWith(
+      "https://forms.gle/chHc5VdS3wty5DwW6",
+      "_blank",
+      "noopener,noreferrer",
     );
     expect(onSubmit).not.toHaveBeenCalled();
   });

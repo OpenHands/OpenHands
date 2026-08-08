@@ -121,6 +121,7 @@ describe("useSlashCommand", () => {
         "/model",
         "/goal",
         "/help",
+        "/feedback",
         "/code-search",
       ]),
     );
