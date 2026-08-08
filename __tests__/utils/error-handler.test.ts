@@ -72,6 +72,47 @@ describe("Error Handler", () => {
       });
     });
 
+    it("promotes a string metadata eventId as the error_id fallback", () => {
+      trackError({
+        source: "chat",
+        metadata: { msgId: "m-1", eventId: "evt-42", extra: "info" },
+      });
+
+      expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        error_source: "chat",
+        error_kind: "unknown",
+        error_id: "evt-42",
+        error_telemetry: "diagnostic",
+        msgId: "m-1",
+        extra: "info",
+      });
+    });
+
+    it("lets a classification error_id win over a metadata eventId", () => {
+      trackError({
+        source: "agent",
+        metadata: { msgId: "m-1", eventId: "evt-42" },
+        classification: {
+          kind: "auth",
+          retryable: false,
+          user_action: "settings",
+          error_id: "cls-7",
+        },
+      });
+
+      expect(trackEvent).toHaveBeenCalledWith(
+        "error_outcome",
+        expect.objectContaining({
+          error_id: "cls-7",
+          error_telemetry: "outcome",
+        }),
+      );
+      expect(trackEvent).not.toHaveBeenCalledWith(
+        "error_outcome",
+        expect.objectContaining({ eventId: "evt-42" }),
+      );
+    });
+
     it("records non-internal classifications as outcomes", () => {
       trackError({
         source: "agent",

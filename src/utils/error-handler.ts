@@ -25,15 +25,21 @@ export function trackError({
     Object.entries(metadata).filter(([key]) => !RESERVED_ERROR_KEYS.has(key)),
   );
   const kind = classification?.kind || "unknown";
+  // Promote a caller-provided `eventId` to the reserved `error_id` dimension as
+  // a fallback so unclassified errors stay correlatable with server-side logs.
+  const promotedEventId =
+    typeof metadata.eventId === "string" ? metadata.eventId : undefined;
+  if (promotedEventId != null) {
+    delete extra.eventId;
+  }
+  const errorId = classification?.error_id ?? promotedEventId;
 
   void trackEvent("error_outcome", {
     ...extra,
     error_source: source || "unknown",
     error_kind: kind,
     // Keep diagnostic errors correlatable without capturing raw messages.
-    ...(classification?.error_id != null
-      ? { error_id: classification.error_id }
-      : {}),
+    ...(errorId != null ? { error_id: errorId } : {}),
     error_telemetry:
       kind === "internal" || kind === "unknown" ? "diagnostic" : "outcome",
   });
