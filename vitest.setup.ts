@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "#/mocks/node";
+import { installProgressEventFallback } from "#/test-support/progress-event-fallback";
 import "@testing-library/jest-dom/vitest";
 
 // Some modules read env at import time before Vitest's per-test hooks run.
@@ -60,32 +61,14 @@ if (typeof requestAnimationFrame === "undefined") {
   );
 }
 
-if (typeof ProgressEvent === "undefined") {
-  class MockProgressEvent extends Event {
-    readonly lengthComputable: boolean;
-
-    readonly loaded: number;
-
-    readonly total: number;
-
-    constructor(type: string, eventInitDict: ProgressEventInit = {}) {
-      super(type, eventInitDict);
-      this.lengthComputable = eventInitDict.lengthComputable ?? false;
-      this.loaded = eventInitDict.loaded ?? 0;
-      this.total = eventInitDict.total ?? 0;
-    }
-  }
-
-  // MSW's XMLHttpRequest interceptor may dispatch progress events while
-  // Vitest is tearing down globals between files. Keep this process-level
-  // fallback outside `vi.stubGlobal()` so `vi.unstubAllGlobals()` does not
-  // remove it before late interceptor callbacks settle.
-  Object.defineProperty(globalThis, "ProgressEvent", {
-    configurable: true,
-    writable: true,
-    value: MockProgressEvent,
-  });
-}
+// MSW's XMLHttpRequest interceptor caches `typeof ProgressEvent !== "undefined"`
+// at module load, then resolves the bare `ProgressEvent` identifier per event.
+// Under jsdom it commits to the "supported" branch, so a late interceptor
+// callback firing during environment teardown throws a ReferenceError and fails
+// the run even when every test passed. Install unconditionally: the previous
+// `typeof ProgressEvent === "undefined"` guard is false under jsdom, so the
+// fallback was only ever installed where it was not needed.
+installProgressEventFallback();
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
