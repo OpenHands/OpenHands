@@ -3,6 +3,7 @@ import { useBtwInterceptor } from "#/hooks/chat/use-btw-interceptor";
 import { useGoalInterceptor } from "#/hooks/chat/use-goal-interceptor";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { usePlanModeInterceptor } from "#/hooks/chat/use-plan-mode-interceptor";
+import { useSystemCommandInterceptor } from "#/hooks/chat/use-system-command-interceptor";
 import { useChatAttachmentUpload } from "#/hooks/chat/use-chat-attachment-upload";
 import { AgentState } from "#/types/agent-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -62,7 +63,14 @@ export function InteractiveChatBox({
     conversationId,
     handleAfterPlanMode,
   );
-  const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
+  const handleAfterSystem = useModelInterceptor(
+    conversationId,
+    handleAfterModel,
+  );
+  const handleSubmit = useSystemCommandInterceptor(
+    conversationId,
+    handleAfterSystem,
+  );
 
   const handleSuggestionsClick = (suggestion: string) => {
     handleSubmit(suggestion);
