@@ -172,6 +172,7 @@ function parseArgs() {
     static: false,
     dynamic: false,
     staticDir: null,
+    frontendPort: null,
     skipBuild: false,
     public: false,
     frontendOnly: false,
@@ -202,6 +203,9 @@ function parseArgs() {
         break;
       case "--static-dir":
         config.staticDir = args[++i];
+        break;
+      case "--frontend-port":
+        config.frontendPort = parseInt(args[++i], 10);
         break;
       case "--skip-build":
         config.skipBuild = true;
@@ -241,6 +245,7 @@ OPTIONS:
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
   --static-dir <dir>          Static build directory (default: build/)
+  --frontend-port <port>      Frontend service port (default: 3001)
   --skip-build                Reuse build/ when the launcher builds static assets
   --dynamic                   Force Vite dev server when a wrapper defaults static
   --frontend-only             Start only the frontend behind ingress
@@ -255,6 +260,7 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
+  OH_CANVAS_SAFE_VITE_PORT    Frontend service port (default: 3001)
   OH_SECRET_KEY               Secret key for sessions
 
 SECRETS:
@@ -372,7 +378,8 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+  const preferredVitePort =
+    args.frontendPort || parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
   // Fail fast if any preferred port for a service in this mode is already in use.
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
