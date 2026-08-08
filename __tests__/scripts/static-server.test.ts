@@ -122,6 +122,52 @@ describe("static-server.mjs", () => {
       expect(config.sessionApiKey).toBeNull();
     });
 
+    it("falls back to the SESSION_API_KEY env var when no flag is given", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs([]);
+        expect(config.sessionApiKey).toBe("env-key");
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
+    it("prefers --session-api-key over the SESSION_API_KEY env var", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs(["--session-api-key", "argv-key"]);
+        expect(config.sessionApiKey).toBe("argv-key");
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
+    it("ignores the SESSION_API_KEY env var in public mode (--auth-required)", () => {
+      const previous = process.env.SESSION_API_KEY;
+      try {
+        process.env.SESSION_API_KEY = "env-key";
+        const config = parseArgs(["--auth-required"]);
+        expect(config.sessionApiKey).toBeNull();
+        expect(config.authRequired).toBe(true);
+      } finally {
+        if (previous === undefined) {
+          delete process.env.SESSION_API_KEY;
+        } else {
+          process.env.SESSION_API_KEY = previous;
+        }
+      }
+    });
+
     it("defaults runtimeServicesInfo to null", () => {
       const config = parseArgs([]);
       expect(config.runtimeServicesInfo).toBeNull();
