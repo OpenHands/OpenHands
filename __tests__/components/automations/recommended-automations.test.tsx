@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -9,6 +10,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
+import { SecretsService } from "#/api/secrets-service";
 import { I18nKey } from "#/i18n/declaration";
 import { getConversationState } from "#/utils/conversation-local-storage";
 import {
@@ -35,12 +37,12 @@ import {
 const {
   mockCreateConversationMutate,
   mockCreateSecret,
-  mockUseSearchSecrets,
+  mockDisplayErrorToast,
   mockUseSettings,
 } = vi.hoisted(() => ({
   mockCreateConversationMutate: vi.fn(),
   mockCreateSecret: vi.fn(),
-  mockUseSearchSecrets: vi.fn(),
+  mockDisplayErrorToast: vi.fn(),
   mockUseSettings: vi.fn(),
 }));
 
@@ -62,15 +64,16 @@ vi.mock("#/hooks/mutation/use-create-conversation", () => ({
 }));
 
 vi.mock("#/hooks/mutation/use-create-secret", () => ({
-  useCreateSecret: () => ({ mutate: mockCreateSecret }),
-}));
-
-vi.mock("#/hooks/query/use-get-secrets", () => ({
-  useSearchSecrets: () => mockUseSearchSecrets(),
+  useCreateSecret: () => ({ mutateAsync: mockCreateSecret }),
 }));
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => mockUseSettings(),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", async (importOriginal) => ({
+  ...(await importOriginal()),
+  displayErrorToast: mockDisplayErrorToast,
 }));
 
 const localBackend: Backend = {
@@ -111,15 +114,18 @@ function renderLauncher({ withBackendProvider = false } = {}) {
     </NavigationProvider>
   );
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      {withBackendProvider ? (
-        <ActiveBackendProvider>{launcher}</ActiveBackendProvider>
-      ) : (
-        launcher
-      )}
-    </QueryClientProvider>,
-  );
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        {withBackendProvider ? (
+          <ActiveBackendProvider>{launcher}</ActiveBackendProvider>
+        ) : (
+          launcher
+        )}
+      </QueryClientProvider>,
+    ),
+    queryClient,
+  };
 }
 
 function settingsWithMcpConfig(mcp_config: unknown) {
@@ -139,6 +145,17 @@ function settingsWithGithubMcp() {
   });
 }
 
+function continueGithubResponderLocally() {
+  fireEvent.click(
+    screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+  );
+  const continueButton = screen.getByTestId(
+    "responder-deployment-continue-local",
+  );
+  fireEvent.click(continueButton);
+  return continueButton;
+}
+
 describe("recommended automations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -149,7 +166,8 @@ describe("recommended automations", () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithMcpConfig({}),
     });
-    mockUseSearchSecrets.mockReturnValue({ data: [] });
+    vi.spyOn(SecretsService, "getSecretsOrThrow").mockResolvedValue([]);
+    mockCreateSecret.mockResolvedValue(undefined);
     // Pre-flight connectivity test must pass so save mutations are reached.
     vi.spyOn(McpService, "testServer").mockResolvedValue({
       ok: true,
@@ -414,50 +432,155 @@ describe("recommended automations", () => {
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
-  it("opens the setup form for an automation that ships one, creating nothing", () => {
-    // Arrange
+  it("saves OPENHANDS_URL before opening a responder setup form", async () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
     });
 
     renderLauncher();
+    continueGithubResponderLocally();
 
-    // Act
-    fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
-    );
-    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
-
-    // Assert — nothing exists until the user confirms in the setup form.
-    expect(mockNavigate).toHaveBeenCalledWith(
-      "/automations/new/github-pr-reviewer",
+    await waitFor(() =>
+      expect(mockCreateSecret).toHaveBeenCalledWith({
+        name: "OPENHANDS_URL",
+        value: window.location.origin,
+      }),
     );
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
-    expect(mockCreateSecret).toHaveBeenCalledWith({
-      name: "OPENHANDS_URL",
-      value: window.location.origin,
-    });
   });
 
-  it("preserves an existing OPENHANDS_URL when starting a local responder", () => {
+  it("preserves an existing OPENHANDS_URL when starting a local responder", async () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
     });
-    mockUseSearchSecrets.mockReturnValue({
-      data: [{ name: "OPENHANDS_URL" }],
-    });
+    vi.mocked(SecretsService.getSecretsOrThrow).mockResolvedValue([
+      { name: "OPENHANDS_URL" },
+    ]);
 
     renderLauncher();
 
-    fireEvent.click(
-      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
-    );
-    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
+    continueGithubResponderLocally();
 
-    expect(mockNavigate).toHaveBeenCalledWith(
-      "/automations/new/github-pr-reviewer",
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
     );
     expect(mockCreateSecret).not.toHaveBeenCalled();
+  });
+
+  it("uses fresh secrets instead of a cached OPENHANDS_URL", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    const { queryClient } = renderLauncher();
+    queryClient.setQueryData(
+      ["secrets", localBackend.id, null],
+      [{ name: "OPENHANDS_URL" }],
+    );
+
+    continueGithubResponderLocally();
+
+    await waitFor(() => expect(mockCreateSecret).toHaveBeenCalledTimes(1));
+    expect(SecretsService.getSecretsOrThrow).toHaveBeenCalledTimes(1);
+  });
+
+  it("matches the OPENHANDS_URL secret name exactly", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    vi.mocked(SecretsService.getSecretsOrThrow).mockResolvedValue([
+      { name: "OPENHANDS_URL_BACKUP" },
+    ]);
+
+    renderLauncher();
+    continueGithubResponderLocally();
+
+    await waitFor(() => expect(mockCreateSecret).toHaveBeenCalledTimes(1));
+  });
+
+  it("waits for the secret save and invalidates the cache before continuing", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    let resolveSave: (() => void) | undefined;
+    mockCreateSecret.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const { queryClient } = renderLauncher();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const continueButton = continueGithubResponderLocally();
+
+    await waitFor(() => expect(mockCreateSecret).toHaveBeenCalledTimes(1));
+    expect(continueButton).toBeDisabled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await act(async () => resolveSave?.());
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["secrets"] });
+    expect(invalidateSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      mockNavigate.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("keeps the responder modal open when the fresh secret read fails", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    vi.mocked(SecretsService.getSecretsOrThrow).mockRejectedValue(
+      new Error("secret read failed"),
+    );
+
+    renderLauncher();
+    continueGithubResponderLocally();
+
+    await waitFor(() =>
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith("secret read failed"),
+    );
+    expect(
+      screen.getByTestId("responder-deployment-modal"),
+    ).toBeInTheDocument();
+    expect(mockCreateSecret).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate local continues while secrets are loading", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    vi.mocked(SecretsService.getSecretsOrThrow).mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    renderLauncher();
+    const continueButton = continueGithubResponderLocally();
+    fireEvent.click(continueButton);
+
+    await waitFor(() =>
+      expect(SecretsService.getSecretsOrThrow).toHaveBeenCalledTimes(1),
+    );
+    expect(continueButton).toBeDisabled();
+    expect(
+      screen.getByTestId("responder-deployment-modal-close"),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId("responder-deployment-open-openhands-cloud"),
+    ).toBeDisabled();
+    expect(mockCreateSecret).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not continue or close the modal when the secret save fails", async () => {
+    mockUseSettings.mockReturnValue({ data: settingsWithGithubMcp() });
+    mockCreateSecret.mockRejectedValue(new Error("secret save failed"));
+
+    renderLauncher();
+    continueGithubResponderLocally();
+
+    await waitFor(() => expect(mockCreateSecret).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("responder-deployment-continue-local"),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByTestId("responder-deployment-modal"),
+    ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it("launches an automation that ships no setup form with its slash command", () => {
@@ -532,7 +655,7 @@ describe("recommended automations", () => {
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
-  it("ignores repeated launches once a responder deployment choice is in flight", () => {
+  it("ignores repeated launches once a responder deployment choice is in flight", async () => {
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
     });
@@ -548,7 +671,7 @@ describe("recommended automations", () => {
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
 
-    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
   });
 
   it("hides the recommended automations section on cloud backends", () => {
