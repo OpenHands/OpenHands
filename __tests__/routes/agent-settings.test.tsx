@@ -290,9 +290,11 @@ describe("AgentSettingsScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the LLM-switching toggle on the global page even when the profile model predates the field", async () => {
-    // The global page writes `agent_settings`, which has accepted the key
-    // since 1.22.0. The profile-model gap must not reach back and hide it.
+  it("keeps the LLM-switching toggle in non-embedded mode even when the profile model predates the field", async () => {
+    // Non-embedded, the form writes `agent_settings`, which has accepted the
+    // key since 1.22.0. The profile-model gap must not reach back and hide it.
+    // (That mode has no route today — #1571 turned /settings/agent into a
+    // redirect — but the gate should stay scoped to what it actually knows.)
     profileSupportsSwitchLlmToolMock.mockReturnValue(false);
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
