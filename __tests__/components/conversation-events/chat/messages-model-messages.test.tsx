@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { useModelStore } from "#/stores/model-store";
+import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { ActionEvent, SecurityRisk } from "#/types/agent-server/core";
 import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import { BUILT_IN_COMMANDS } from "#/utils/constants";
 
 const CONVERSATION_ID = "test-conversation-id";
 
@@ -48,6 +50,7 @@ const makeStreamingDelta = (content: string): StreamingDeltaEvent => ({
 describe("Messages model entries", () => {
   beforeEach(() => {
     useModelStore.setState({ entriesByConversation: {} });
+    useSlashCommandOutputStore.getState().clearAll();
   });
 
   it("renders model entries anchored to non-last events inside grouped runs", () => {
@@ -60,6 +63,22 @@ describe("Messages model entries", () => {
     );
 
     expect(screen.getByTestId("model-messages")).toBeInTheDocument();
+  });
+
+  it("renders slash command output anchored inside grouped runs", () => {
+    const first = makeBashAction("action-1");
+    const second = makeBashAction("action-2");
+    useSlashCommandOutputStore
+      .getState()
+      .showHelp(CONVERSATION_ID, first.id, BUILT_IN_COMMANDS);
+
+    renderWithProviders(
+      <Messages messages={[first, second]} allEvents={[first, second]} />,
+    );
+
+    expect(
+      screen.getByTestId("slash-command-output-messages"),
+    ).toHaveTextContent("/help");
   });
 
   it("rerenders when a streaming delta is compacted under the same event id", () => {
