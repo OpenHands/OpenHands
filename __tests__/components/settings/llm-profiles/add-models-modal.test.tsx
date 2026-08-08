@@ -323,6 +323,34 @@ describe("AddModelsModal", () => {
     );
   });
 
+  it("reports the blocking 409's own reason, not the earlier one's", async () => {
+    // A raced duplicate stops nothing on its own. When the next 409 is the one
+    // that halts the run and explains nothing, quoting the duplicate's sentence
+    // blames the wrong thing entirely.
+    vi.mocked(ProfilesService.saveProfile)
+      .mockRejectedValueOnce(httpError(409, "Profile 'x' already exists."))
+      .mockRejectedValueOnce(httpError(409));
+    renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+    await showUnverified();
+
+    await userEvent.click(screen.getByTestId("add-models-select-all"));
+    await userEvent.click(screen.getByTestId("add-models-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("add-models-submit")).not.toBeDisabled(),
+    );
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "Added 0 profiles; the server refused the rest",
+    );
+    expect(displayErrorToast).not.toHaveBeenCalledWith(
+      "Profile 'x' already exists.",
+    );
+  });
+
   it("names the refusal generically when the 409 carries no detail", async () => {
     // A body the client cannot quote must not fall through to a count that
     // omits the rows the server never let it attempt.
@@ -380,6 +408,33 @@ describe("AddModelsModal", () => {
     expect(
       screen.getByTestId("add-models-name-openhands/deepseek-v4-flash"),
     ).toHaveValue("my-flash");
+  });
+
+  it("does not repopulate rows when the old provider's query refreshes after close", async () => {
+    // The reset clears provider, so the hook subscribes to a null-keyed query.
+    // A late refresh of the previous provider's key must not reach it.
+    const { setOpen } = renderModal();
+    await pickProvider();
+    await screen.findByTestId(
+      "add-models-row-openhands/trinity-large-thinking",
+    );
+
+    setOpen(false);
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("add-models-modal"),
+      ).not.toBeInTheDocument(),
+    );
+    await queryClient.refetchQueries({
+      queryKey: ["config", "models", "openhands"],
+    });
+
+    setOpen(true);
+    await screen.findByTestId("add-models-modal");
+    expect(screen.getByTestId("add-models-provider")).toHaveValue("");
+    expect(
+      screen.queryAllByTestId(/^add-models-row-/),
+    ).toHaveLength(0);
   });
 
   it("starts a fresh session when the modal is reopened", async () => {

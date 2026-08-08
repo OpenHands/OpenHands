@@ -186,9 +186,12 @@ export function AddModelsModal({
         failed += 1;
         if (isSdkHttpStatusError(error, 409)) {
           conflicts += 1;
-          blockedReason = getServerDetail(error) ?? blockedReason;
           if (conflicts >= 2) {
             blocked = true;
+            // Read the reason off the refusal that actually stopped the run.
+            // Carrying an earlier 409's detail forward would report a raced
+            // duplicate name as the cause of a halt it had nothing to do with.
+            blockedReason = getServerDetail(error);
             // Rows past this one were marked "saving" up front and are now
             // never attempted; leave them idle rather than spinning forever.
             for (const skipped of targets.slice(i + 1)) {
