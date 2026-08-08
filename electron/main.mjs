@@ -358,6 +358,25 @@ function createMainWindow() {
     mainWin?.maximize();
   });
 
+  // Exact loopback hostnames only. String prefix checks like
+  // startsWith("http://localhost") also match http://localhost.evil.com and
+  // http://localhost@evil.com (userinfo), which would open attacker content
+  // inside the Electron shell instead of the system browser.
+  const LOCAL_APP_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+  const isLocalAppUrl = (url) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return false;
+    }
+    // The local stack is served over plain HTTP on loopback; do not treat
+    // https://localhost.evil.com style hosts as in-app either.
+    return (
+      parsed.protocol === "http:" && LOCAL_APP_HOSTNAMES.has(parsed.hostname)
+    );
+  };
+
   // Route window.open() calls appropriately.
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     // The "Login with OpenHands Cloud" device-flow opens about:blank immediately
@@ -371,11 +390,8 @@ function createMainWindow() {
         overrideBrowserWindowOptions: { width: 800, height: 700 },
       };
     }
-    // All other external URLs open directly in the system browser.
-    if (
-      !url.startsWith("http://localhost") &&
-      !url.startsWith("http://127.0.0.1")
-    ) {
+    // Non-loopback URLs open in the system browser (never as an in-app window).
+    if (!isLocalAppUrl(url)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
@@ -388,11 +404,7 @@ function createMainWindow() {
   // now-unneeded Electron popup.
   mainWin.webContents.on("did-create-window", (popupWin) => {
     popupWin.webContents.on("will-navigate", (_event, url) => {
-      if (
-        url !== "about:blank" &&
-        !url.startsWith("http://localhost") &&
-        !url.startsWith("http://127.0.0.1")
-      ) {
+      if (url !== "about:blank" && !isLocalAppUrl(url)) {
         _event.preventDefault();
         shell.openExternal(url);
         popupWin.close();
