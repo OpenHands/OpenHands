@@ -102,7 +102,8 @@ describe("useSlashCommand", () => {
     __resetActiveStoreForTests();
   });
 
-  it("excludes /new from the built-in commands on a local backend", () => {
+  // @spec SC-001 — One discoverable command registry
+  it("includes every built-in command on a local backend", () => {
     // Arrange — default active backend is the bundled local one.
     mockConversation.data = { conversation_version: "V1" };
     mockSkills.data = [makeSkill("code-search", ["/code-search"])];
@@ -113,8 +114,16 @@ describe("useSlashCommand", () => {
 
     // Assert
     const commands = result.current.filteredItems.map((i) => i.command);
-    expect(commands).not.toContain("/new");
-    expect(commands).toEqual(expect.arrayContaining(["/btw", "/code-search"]));
+    expect(commands).toEqual(
+      expect.arrayContaining([
+        "/new",
+        "/btw",
+        "/model",
+        "/goal",
+        "/help",
+        "/code-search",
+      ]),
+    );
   });
 
   it("includes /new in the built-in commands on a cloud backend", () => {
