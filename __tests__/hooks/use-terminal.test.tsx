@@ -1,3 +1,4 @@
+import { waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/stores/command-store";
@@ -23,20 +24,18 @@ function TestTerminalComponent() {
   return <div ref={ref} />;
 }
 
-describe("useTerminal", () => {
-  // Terminal is read-only - no longer tests user input functionality
-  const mockTerminal = vi.hoisted(() => ({
-    loadAddon: vi.fn(),
-    open: vi.fn(),
-    write: vi.fn(),
-    writeln: vi.fn(),
-    dispose: vi.fn(),
-    element: document.createElement("div"),
-  }));
+interface MockInstance {
+  writes: string[];
+  dispose: ReturnType<typeof vi.fn>;
+}
 
-  const mockFitAddon = vi.hoisted(() => ({
-    fit: vi.fn(),
-  }));
+describe("useTerminal", () => {
+  // Terminal is read-only - no longer tests user input functionality.
+  // open() is async, so each test waits for its instance and unmounts
+  // explicitly to keep instances from bleeding across tests.
+  const instances = vi.hoisted(() => [] as MockInstance[]);
+
+  const latest = () => instances[instances.length - 1];
 
   beforeAll(() => {
     // mock ResizeObserver - use class for Vitest 4 constructor support
@@ -48,43 +47,39 @@ describe("useTerminal", () => {
       disconnect = vi.fn();
     } as unknown as typeof ResizeObserver;
 
-    // mock Terminal - use class for Vitest 4 constructor support
-    vi.mock("@xterm/xterm", async (importOriginal) => ({
-      ...(await importOriginal<typeof import("@xterm/xterm")>()),
-      Terminal: class {
-        loadAddon = mockTerminal.loadAddon;
-
-        open = mockTerminal.open;
-
-        write = mockTerminal.write;
-
-        writeln = mockTerminal.writeln;
-
-        dispose = mockTerminal.dispose;
-
-        element = mockTerminal.element;
-      },
-    }));
-
-    // mock FitAddon
-    vi.mock("@xterm/addon-fit", () => ({
-      FitAddon: class {
-        fit = mockFitAddon.fit;
-      },
+    // mock the rioterm engine: open() resolves to a handle whose
+    // terminal records writes per instance
+    vi.mock("rioterm", () => ({
+      defaultTheme: { background: "#000", foreground: "#fff" },
+      open: vi.fn(async () => {
+        const instance: MockInstance = { writes: [], dispose: vi.fn() };
+        instances.push(instance);
+        return {
+          terminal: {
+            write: (data: string) => instance.writes.push(data),
+          },
+          renderer: {},
+          focus: vi.fn(),
+          dispose: instance.dispose,
+        };
+      }),
     }));
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    instances.length = 0;
     // Reset command store between tests
     useCommandStore.setState({ commands: [] });
   });
 
-  it("should render", () => {
-    renderWithProviders(<TestTerminalComponent />);
+  it("should render and hide the cursor once opened", async () => {
+    const { unmount } = renderWithProviders(<TestTerminalComponent />);
+    await waitFor(() => expect(latest()?.writes).toEqual(["\x1b[?25l"]));
+    unmount();
   });
 
-  it("should render the commands in the terminal", () => {
+  it("should render the commands in the terminal", async () => {
     const commands: Command[] = [
       { content: "echo hello", type: "input" },
       { content: "hello", type: "output" },
@@ -93,23 +88,38 @@ describe("useTerminal", () => {
     // Set commands in store before rendering to ensure they're picked up during initialization
     useCommandStore.setState({ commands });
 
-    renderWithProviders(<TestTerminalComponent />);
+    const { unmount } = renderWithProviders(<TestTerminalComponent />);
 
-    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
-    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
+    await waitFor(() =>
+      expect(latest()?.writes).toEqual([
+        "\x1b[?25l",
+        "$ ",
+        "echo hello\r\n",
+        "hello\r\n",
+      ]),
+    );
+    unmount();
   });
 
-  it("should not call fit() when terminal.element is null", () => {
-    // Temporarily set element to null to simulate terminal not being opened
-    const originalElement = mockTerminal.element;
-    mockTerminal.element = null as unknown as HTMLDivElement;
+  it("should render commands that arrive after initialization", async () => {
+    const { unmount } = renderWithProviders(<TestTerminalComponent />);
+    await waitFor(() => expect(latest()?.writes).toEqual(["\x1b[?25l"]));
 
-    renderWithProviders(<TestTerminalComponent />);
+    useCommandStore.setState({
+      commands: [{ content: "late output", type: "output" }],
+    });
 
-    // fit() should not be called because terminal.element is null
-    expect(mockFitAddon.fit).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(latest()?.writes).toContain("late output\r\n"),
+    );
+    unmount();
+  });
 
-    // Restore original element
-    mockTerminal.element = originalElement;
+  it("should dispose the terminal on unmount", async () => {
+    const { unmount } = renderWithProviders(<TestTerminalComponent />);
+    await waitFor(() => expect(instances).toHaveLength(1));
+
+    unmount();
+    expect(latest().dispose).toHaveBeenCalled();
   });
 });

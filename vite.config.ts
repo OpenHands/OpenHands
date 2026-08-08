@@ -249,6 +249,9 @@ export default defineConfig(({ mode }) => {
       // `include`. This prevents Vite from returning 504s while optimizing
       // newly-discovered deps - Safari doesn't retry like Chrome does.
       noDiscovery: true,
+      // rioterm loads its wasm binary relative to import.meta.url, which
+      // esbuild pre-bundling would break; serve it as-is instead.
+      exclude: ["rioterm"],
       include: [
         // Pre-bundle client entry dependencies so the first page load does not 504
         // with Vite's "Outdated Optimize Dep" before hydration finishes.
@@ -295,10 +298,6 @@ export default defineConfig(({ mode }) => {
         "react-syntax-highlighter",
         "react-syntax-highlighter/dist/esm/styles/prism",
         "react-syntax-highlighter/dist/esm/styles/hljs",
-        // Terminal dependencies - added to prevent runtime optimization
-        "@xterm/addon-fit",
-        "@xterm/xterm",
-        "@xterm/xterm/css/xterm.css",
         // OpenHands typescript client
         "@openhands/typescript-client",
         "@openhands/typescript-client/client/http-client",

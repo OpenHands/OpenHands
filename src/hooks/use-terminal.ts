@@ -1,17 +1,17 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
 import React from "react";
+import type { RioTermHandle } from "rioterm";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
 /*
-  NOTE: Tests for this hook are indirectly covered by the tests for the XTermTerminal component.
-  The reason for this is that the hook exposes a ref that requires a DOM element to be rendered.
+  NOTE: Tests for this hook are covered by __tests__/hooks/use-terminal.test.tsx
+  with the rioterm module mocked; the hook exposes a ref that requires a DOM
+  element to be rendered.
 */
 
 const renderCommand = (
   command: Command,
-  terminal: Terminal,
+  write: (data: string) => void,
   isUserInput: boolean = false,
 ) => {
   const { content, type } = command;
@@ -25,49 +25,8 @@ const renderCommand = (
   const trimmedContent = (content || "").replaceAll("\n", "\r\n").trim();
   // Only write if there's actual content to avoid empty newlines
   if (trimmedContent) {
-    terminal.writeln(parseTerminalOutput(trimmedContent));
+    write(`${parseTerminalOutput(trimmedContent)}\r\n`);
   }
-};
-
-/**
- * Check if the terminal is ready for fit operations.
- * This prevents the "Cannot read properties of undefined (reading 'dimensions')" error
- * that occurs when fit() is called on a terminal that is hidden, disposed, or not fully initialized.
- */
-const canFitTerminal = (
-  terminalInstance: Terminal | null,
-  fitAddonInstance: FitAddon | null,
-  containerElement: HTMLDivElement | null,
-): boolean => {
-  // Check terminal and fitAddon exist
-  if (!terminalInstance || !fitAddonInstance) {
-    return false;
-  }
-
-  // Check container element exists
-  if (!containerElement) {
-    return false;
-  }
-
-  // Check element is visible (not display: none)
-  // When display is none, offsetParent is null (except for fixed/body elements)
-  const computedStyle = window.getComputedStyle(containerElement);
-  if (computedStyle.display === "none") {
-    return false;
-  }
-
-  // Check element has dimensions
-  const { clientWidth, clientHeight } = containerElement;
-  if (clientWidth === 0 || clientHeight === 0) {
-    return false;
-  }
-
-  // Check terminal has been opened (element property is set after open())
-  if (!terminalInstance.element) {
-    return false;
-  }
-
-  return true;
 };
 
 function resolveTerminalForeground(host: HTMLElement): string {
@@ -91,122 +50,88 @@ const persistentLastCommandIndex = { current: 0 };
 
 export const useTerminal = () => {
   const commands = useCommandStore((state) => state.commands);
-  const terminal = React.useRef<Terminal | null>(null);
-  const fitAddon = React.useRef<FitAddon | null>(null);
+  const handle = React.useRef<RioTermHandle | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
   const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
-  const isDisposed = React.useRef(false);
 
-  const createTerminal = (host: HTMLDivElement) =>
-    new Terminal({
-      fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-      fontSize: 14,
-      scrollback: 10000,
-      scrollSensitivity: 1,
-      fastScrollSensitivity: 5,
-      disableStdin: true, // Make terminal read-only
-      // Canvas fillStyle does not resolve CSS variables; use transparency so
-      // the host / panel background shows through (`allowTransparency` required).
-      allowTransparency: true,
-      theme: {
-        background: "rgba(0, 0, 0, 0)",
-        foreground: resolveTerminalForeground(host),
-      },
-    });
-
-  const fitTerminalSafely = React.useCallback(() => {
-    if (isDisposed.current) {
+  const renderCommandsFrom = React.useCallback((start: number) => {
+    const terminal = handle.current?.terminal;
+    if (!terminal) {
       return;
     }
-    if (canFitTerminal(terminal.current, fitAddon.current, ref.current)) {
-      fitAddon.current!.fit();
-    }
-  }, []);
-
-  const initializeTerminal = () => {
-    if (terminal.current) {
-      if (fitAddon.current) terminal.current.loadAddon(fitAddon.current);
-      if (ref.current) {
-        terminal.current.open(ref.current);
-        // Hide cursor for read-only terminal using ANSI escape sequence
-        terminal.current.write("\x1b[?25l");
-        fitTerminalSafely();
+    const all = useCommandStore.getState().commands;
+    for (let i = start; i < all.length; i += 1) {
+      if (all[i].type === "input") {
+        terminal.write("$ ");
       }
+      // Don't pass isUserInput=true so previously streamed commands are
+      // shown when the terminal (re)mounts and replays the store
+      renderCommand(all[i], (data) => terminal.write(data), false);
     }
-  };
+    lastCommandIndex.current = all.length;
+  }, []);
 
   // Initialize terminal and handle cleanup
   React.useEffect(() => {
-    isDisposed.current = false;
+    let disposed = false;
     const host = ref.current;
     if (!host) {
       return undefined;
     }
 
-    terminal.current = createTerminal(host);
-    fitAddon.current = new FitAddon();
-
-    if (ref.current) {
-      initializeTerminal();
-      // Render all commands in array
-      // This happens when we just switch to Terminal from other tabs
-      if (commands.length > 0) {
-        for (let i = 0; i < commands.length; i += 1) {
-          if (commands[i].type === "input") {
-            terminal.current.write("$ ");
-          }
-          // Don't pass isUserInput=true here because we're initializing the terminal
-          // and need to show all previous commands
-          renderCommand(commands[i], terminal.current, false);
-        }
-        lastCommandIndex.current = commands.length;
+    const init = async () => {
+      // Dynamic import keeps the wasm engine out of the initial bundle
+      const { open, defaultTheme } = await import("rioterm");
+      if (disposed || !ref.current) {
+        return;
       }
-      // Don't show prompt in read-only terminal
-    }
+
+      const opened = await open(ref.current, {
+        // DOM renderer: rows of real text, so the read-only log stays
+        // selectable, translatable, and visible to assistive tech
+        renderer: "dom",
+        autoFocus: false,
+        fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+        fontSize: 14,
+        scrollback: 10000,
+        theme: {
+          ...defaultTheme,
+          background: "transparent",
+          foreground: resolveTerminalForeground(host),
+        },
+      });
+
+      if (disposed) {
+        opened.dispose();
+        return;
+      }
+      handle.current = opened;
+      // Hide cursor for read-only terminal using ANSI escape sequence
+      opened.terminal.write("\x1b[?25l");
+      // Render all commands already in the store. This happens when we
+      // just switch to Terminal from other tabs
+      renderCommandsFrom(0);
+    };
+
+    void init();
 
     return () => {
-      isDisposed.current = true;
-      terminal.current?.dispose();
+      disposed = true;
+      handle.current?.dispose();
+      handle.current = null;
       lastCommandIndex.current = 0;
     };
   }, []);
 
   React.useEffect(() => {
     if (
-      terminal.current &&
+      handle.current &&
       commands.length > 0 &&
       lastCommandIndex.current < commands.length
     ) {
-      for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
-        if (commands[i].type === "input") {
-          terminal.current.write("$ ");
-        }
-        // Pass true for isUserInput to skip rendering user input commands
-        // that have already been displayed as the user typed
-        renderCommand(commands[i], terminal.current, false);
-      }
-      lastCommandIndex.current = commands.length;
+      renderCommandsFrom(lastCommandIndex.current);
     }
-  }, [commands]);
-
-  React.useEffect(() => {
-    let resizeObserver: ResizeObserver | null = null;
-
-    resizeObserver = new ResizeObserver(() => {
-      // Use requestAnimationFrame to debounce resize events and ensure DOM is ready
-      requestAnimationFrame(() => {
-        fitTerminalSafely();
-      });
-    });
-
-    if (ref.current) {
-      resizeObserver.observe(ref.current);
-    }
-
-    return () => {
-      resizeObserver?.disconnect();
-    };
-  }, [fitTerminalSafely]);
+  }, [commands, renderCommandsFrom]);
 
   return ref;
 };

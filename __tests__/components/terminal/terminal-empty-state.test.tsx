@@ -6,25 +6,14 @@ import { AgentState } from "#/types/agent-state";
 
 vi.mock("#/hooks/use-agent-state");
 
-const mockTerminalInstance = {
-  open: vi.fn(),
-  write: vi.fn(),
-  writeln: vi.fn(),
-  dispose: vi.fn(),
-  loadAddon: vi.fn(),
-};
-
-vi.mock("@xterm/xterm", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@xterm/xterm")>()),
-  Terminal: vi.fn(function MockTerminal() {
-    return mockTerminalInstance;
-  }),
-}));
-
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: vi.fn(function MockFitAddon() {
-    return { fit: vi.fn() };
-  }),
+vi.mock("rioterm", () => ({
+  defaultTheme: { background: "#000", foreground: "#fff" },
+  open: vi.fn(async () => ({
+    terminal: { write: vi.fn() },
+    renderer: {},
+    focus: vi.fn(),
+    dispose: vi.fn(),
+  })),
 }));
 
 import { renderWithProviders } from "test-utils";
