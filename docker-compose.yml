@@ -76,6 +76,8 @@ services:
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
       CURSOR_AUTH_TOKEN: ${CURSOR_AUTH_TOKEN:-}
       CURSOR_API_ENDPOINT: ${CURSOR_API_ENDPOINT:-}
+      # Optional OpenCode ACP credentials (also configurable via Secrets in the UI).
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
       VITE_DO_NOT_TRACK: ${VITE_DO_NOT_TRACK:-}
       AUTOMATION_BASE_URL: ${AUTOMATION_BASE_URL:-}
     volumes:

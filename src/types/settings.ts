@@ -11,6 +11,7 @@ export type {
 export type {
   AppwriteIntegrationConfig,
   IntegrationsSettings,
+  PlaneIntegrationConfig,
 } from "#/types/integrations";
 
 export const ProviderOptions = {
@@ -168,8 +169,8 @@ export type Settings = {
    */
   git_providers?: GitProviderPreference[];
   /**
-   * Frontend-owned third-party integrations (AppWrite, …). Persisted under
-   * `misc_settings.integrations`; API keys live in the Secrets store.
+   * Frontend-owned third-party integrations (AppWrite, Plane, …). Persisted
+   * under `misc_settings.integrations`; API keys live in the Secrets store.
    */
   integrations?: IntegrationsSettings;
   agent_settings_schema?: SettingsSchema | null;

@@ -35,6 +35,10 @@ import {
   isAppwriteProxyRequest,
 } from "./appwrite-proxy.mjs";
 import {
+  createPlaneProxyHandler,
+  isPlaneProxyRequest,
+} from "./plane-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
@@ -163,6 +167,7 @@ export function startIngress(config) {
     process.env.OH_AGENT_SERVER_URL ||
     "http://127.0.0.1:18000";
   const handleAppwriteProxy = createAppwriteProxyHandler({ agentServerUrl });
+  const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
@@ -180,6 +185,17 @@ export function startIngress(config) {
     if (isAppwriteProxyRequest(req.url ?? "/")) {
       void handleAppwriteProxy(req, res).catch((err) => {
         console.error(`AppWrite proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isPlaneProxyRequest(req.url ?? "/")) {
+      void handlePlaneProxy(req, res).catch((err) => {
+        console.error(`Plane proxy error for ${req.url}:`, err);
         if (!res.headersSent) {
           res.writeHead(500);
           res.end("Internal Server Error");

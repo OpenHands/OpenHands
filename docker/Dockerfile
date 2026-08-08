@@ -169,6 +169,7 @@ COPY scripts/ingress.mjs /opt/agent-canvas/ingress.mjs
 COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 COPY scripts/app-login.mjs /opt/agent-canvas/app-login.mjs
 COPY scripts/appwrite-proxy.mjs /opt/agent-canvas/appwrite-proxy.mjs
+COPY scripts/plane-proxy.mjs /opt/agent-canvas/plane-proxy.mjs
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka
@@ -200,6 +201,16 @@ RUN if ! command -v curl >/dev/null 2>&1; then \
  && ln -sf /home/openhands/.local/bin/agent /usr/local/bin/agent \
  && if [ -x /home/openhands/.local/bin/cursor-agent ]; then \
       ln -sf /home/openhands/.local/bin/cursor-agent /usr/local/bin/cursor-agent; \
+    fi
+
+# OpenCode CLI for the ACP OpenCode preset (`opencode acp`).
+# Auth in-container uses OPENCODE_API_KEY from Secrets (or `opencode auth login`).
+RUN curl -fsSL https://opencode.ai/install | HOME=/home/openhands bash \
+ && chown -R openhands:openhands /home/openhands/.opencode \
+ && if [ -x /home/openhands/.opencode/bin/opencode ]; then \
+      ln -sf /home/openhands/.opencode/bin/opencode /usr/local/bin/opencode; \
+    elif [ -x /home/openhands/.local/bin/opencode ]; then \
+      ln -sf /home/openhands/.local/bin/opencode /usr/local/bin/opencode; \
     fi
 
 # Copy generated defaults.env (from config/defaults.json via config-gen stage)

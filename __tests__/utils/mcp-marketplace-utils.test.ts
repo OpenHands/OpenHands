@@ -352,3 +352,51 @@ describe("local Appwrite MCP catalog entry", () => {
     expect(match).toEqual(expect.objectContaining({ id: "stdio-0" }));
   });
 });
+
+describe("local Plane MCP catalog entry", () => {
+  it("exposes the uvx stdio Plane server in the marketplace", () => {
+    // @spec — Heimdall local catalog overlay for Plane MCP
+    const catalog = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
+    const plane = catalog.find((entry) => entry.id === "plane");
+    expect(plane).toBeDefined();
+    expect(plane?.name).toBe("Plane");
+    expect(plane?.docsUrl).toBe(
+      "https://developers.plane.so/api-reference/introduction",
+    );
+
+    const transport = getDefaultMcpTransport(plane!);
+    expect(transport?.kind).toBe("stdio");
+    if (transport?.kind !== "stdio") {
+      throw new Error("Plane transport should be stdio");
+    }
+    expect(transport.serverName).toBe("plane");
+    expect(transport.command).toBe("uvx");
+    expect(transport.args).toEqual(["plane-mcp-server", "stdio"]);
+    expect(transport.envFields?.map((field) => field.key)).toEqual([
+      "PLANE_API_KEY",
+      "PLANE_WORKSPACE_SLUG",
+      "PLANE_BASE_URL",
+    ]);
+  });
+
+  it("matches installed Plane stdio servers by name", () => {
+    const plane = getMcpMarketplaceCatalog(MCP_MARKETPLACE).find(
+      (entry) => entry.id === "plane",
+    )!;
+    const match = findInstalledMatch(getDefaultMcpTransport(plane)!, [
+      {
+        id: "stdio-plane",
+        type: "stdio",
+        name: "plane",
+        command: "uvx",
+        args: ["plane-mcp-server", "stdio"],
+        env: {
+          PLANE_API_KEY: "secret",
+          PLANE_WORKSPACE_SLUG: "heimdall",
+          PLANE_BASE_URL: "https://plane.heimdallsec.com.br",
+        },
+      },
+    ]);
+    expect(match).toEqual(expect.objectContaining({ id: "stdio-plane" }));
+  });
+});

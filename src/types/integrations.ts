@@ -2,8 +2,8 @@
  * Frontend-owned integration configs stored under
  * `misc_settings.integrations` on the agent-server.
  *
- * AppWrite is scoped per workspace: each workspace id maps to its own
- * endpoint / project / secret name.
+ * Each provider is scoped per local workspace: each workspace id maps to its
+ * own endpoint / project / secret name.
  */
 
 export type AppwriteIntegrationConfig = {
@@ -20,6 +20,25 @@ export type AppwriteIntegrationsSettings = {
   byWorkspace: Record<string, AppwriteIntegrationConfig>;
 };
 
+export type PlaneIntegrationConfig = {
+  enabled: boolean;
+  /** Self-hosted or cloud Plane base URL, e.g. `https://plane.example.com`. */
+  baseUrl: string;
+  /** Plane workspace slug used in `/api/v1/workspaces/{slug}/…`. */
+  workspaceSlug: string;
+  projectId: string;
+  /** Optional Plane module id when the project is associated with a module. */
+  moduleId?: string;
+  /** Overrides the default per-workspace secret name when set. */
+  apiKeySecretName?: string;
+};
+
+export type PlaneIntegrationsSettings = {
+  /** Map of local workspace id → Plane project config. */
+  byWorkspace: Record<string, PlaneIntegrationConfig>;
+};
+
 export type IntegrationsSettings = {
   appwrite?: AppwriteIntegrationsSettings;
+  plane?: PlaneIntegrationsSettings;
 };

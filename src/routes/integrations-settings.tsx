@@ -6,9 +6,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
 import { useAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
+import { usePlaneIntegration } from "#/hooks/query/use-plane-integration";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useSettings } from "#/hooks/query/use-settings";
 import { AppwriteService } from "#/api/integrations/appwrite-service";
+import { PlaneService } from "#/api/integrations/plane-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -22,6 +24,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { DEFAULT_APPWRITE_ENDPOINT } from "#/utils/appwrite-integration-secrets";
 import { buildAppwriteIntegrationsPatch } from "#/utils/appwrite-workspace-config";
+import { buildPlaneIntegrationsPatch } from "#/utils/plane-workspace-config";
 import { cn } from "#/utils/utils";
 
 export const handle = { hideTitle: true };
@@ -44,28 +47,54 @@ export function IntegrationsSettingsScreen() {
     }
   }, [workspaces, selectedWorkspaceId]);
 
-  const { config, apiKeyIsSet, secretName, isLoading } =
-    useAppwriteIntegration(selectedWorkspaceId);
+  const appwrite = useAppwriteIntegration(selectedWorkspaceId);
+  const plane = usePlaneIntegration(selectedWorkspaceId);
   const { mutateAsync: saveSettings, isPending: isSaving } = useSaveSettings();
   const { mutateAsync: createSecret, isPending: isSavingSecret } =
     useCreateSecret();
 
-  const [enabled, setEnabled] = React.useState(false);
-  const [endpoint, setEndpoint] = React.useState(DEFAULT_APPWRITE_ENDPOINT);
-  const [projectId, setProjectId] = React.useState("");
-  const [apiKey, setApiKey] = React.useState("");
-  const [isTesting, setIsTesting] = React.useState(false);
+  const [appwriteEnabled, setAppwriteEnabled] = React.useState(false);
+  const [appwriteEndpoint, setAppwriteEndpoint] = React.useState(
+    DEFAULT_APPWRITE_ENDPOINT,
+  );
+  const [appwriteProjectId, setAppwriteProjectId] = React.useState("");
+  const [appwriteApiKey, setAppwriteApiKey] = React.useState("");
+  const [isTestingAppwrite, setIsTestingAppwrite] = React.useState(false);
+
+  const [planeEnabled, setPlaneEnabled] = React.useState(false);
+  const [planeBaseUrl, setPlaneBaseUrl] = React.useState("");
+  const [planeWorkspaceSlug, setPlaneWorkspaceSlug] = React.useState("");
+  const [planeProjectId, setPlaneProjectId] = React.useState("");
+  const [planeModuleId, setPlaneModuleId] = React.useState("");
+  const [planeApiKey, setPlaneApiKey] = React.useState("");
+  const [isTestingPlane, setIsTestingPlane] = React.useState(false);
 
   React.useEffect(() => {
-    setEnabled(config.enabled);
-    setEndpoint(config.endpoint || DEFAULT_APPWRITE_ENDPOINT);
-    setProjectId(config.projectId);
-    setApiKey("");
+    setAppwriteEnabled(appwrite.config.enabled);
+    setAppwriteEndpoint(appwrite.config.endpoint || DEFAULT_APPWRITE_ENDPOINT);
+    setAppwriteProjectId(appwrite.config.projectId);
+    setAppwriteApiKey("");
   }, [
     selectedWorkspaceId,
-    config.enabled,
-    config.endpoint,
-    config.projectId,
+    appwrite.config.enabled,
+    appwrite.config.endpoint,
+    appwrite.config.projectId,
+  ]);
+
+  React.useEffect(() => {
+    setPlaneEnabled(plane.config.enabled);
+    setPlaneBaseUrl(plane.config.baseUrl);
+    setPlaneWorkspaceSlug(plane.config.workspaceSlug);
+    setPlaneProjectId(plane.config.projectId);
+    setPlaneModuleId(plane.config.moduleId ?? "");
+    setPlaneApiKey("");
+  }, [
+    selectedWorkspaceId,
+    plane.config.enabled,
+    plane.config.baseUrl,
+    plane.config.workspaceSlug,
+    plane.config.projectId,
+    plane.config.moduleId,
   ]);
 
   if (backend.kind !== "local") {
@@ -83,28 +112,28 @@ export function IntegrationsSettingsScreen() {
     label: workspace.name,
   }));
 
-  const handleSave = async () => {
-    if (!selectedWorkspaceId || !secretName) {
+  const handleSaveAppwrite = async () => {
+    if (!selectedWorkspaceId || !appwrite.secretName) {
       return;
     }
     try {
-      if (apiKey.trim()) {
+      if (appwriteApiKey.trim()) {
         await createSecret({
-          name: secretName,
-          value: apiKey.trim(),
+          name: appwrite.secretName,
+          value: appwriteApiKey.trim(),
           description: `AppWrite API key for workspace ${selectedWorkspaceId}`,
         });
-        setApiKey("");
+        setAppwriteApiKey("");
       }
       await saveSettings({
         integrations: buildAppwriteIntegrationsPatch(
           settings?.integrations,
           selectedWorkspaceId,
           {
-            enabled,
-            endpoint: endpoint.trim(),
-            projectId: projectId.trim(),
-            apiKeySecretName: secretName,
+            enabled: appwriteEnabled,
+            endpoint: appwriteEndpoint.trim(),
+            projectId: appwriteProjectId.trim(),
+            apiKeySecretName: appwrite.secretName,
           },
         ),
       });
@@ -115,11 +144,11 @@ export function IntegrationsSettingsScreen() {
     }
   };
 
-  const handleTest = async () => {
+  const handleTestAppwrite = async () => {
     if (!selectedWorkspaceId) {
       return;
     }
-    setIsTesting(true);
+    setIsTestingAppwrite(true);
     try {
       await AppwriteService.forWorkspace(selectedWorkspaceId).testConnection();
       displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
@@ -129,17 +158,84 @@ export function IntegrationsSettingsScreen() {
           t(I18nKey.INTEGRATIONS$TEST_FAILED),
       );
     } finally {
-      setIsTesting(false);
+      setIsTestingAppwrite(false);
     }
   };
 
-  if (isLoading || workspacesLoading) {
+  const handleSavePlane = async () => {
+    if (!selectedWorkspaceId || !plane.secretName) {
+      return;
+    }
+    try {
+      if (planeApiKey.trim()) {
+        await createSecret({
+          name: plane.secretName,
+          value: planeApiKey.trim(),
+          description: `Plane API key for workspace ${selectedWorkspaceId}`,
+        });
+        setPlaneApiKey("");
+      }
+      await saveSettings({
+        integrations: buildPlaneIntegrationsPatch(
+          settings?.integrations,
+          selectedWorkspaceId,
+          {
+            enabled: planeEnabled,
+            baseUrl: planeBaseUrl.trim(),
+            workspaceSlug: planeWorkspaceSlug.trim(),
+            projectId: planeProjectId.trim(),
+            moduleId: planeModuleId.trim(),
+            apiKeySecretName: plane.secretName,
+          },
+        ),
+      });
+      invalidate();
+      displaySuccessToast(t(I18nKey.INTEGRATIONS$SAVE_SUCCESS));
+    } catch (error) {
+      displayErrorToast(retrieveAxiosErrorMessage(error));
+    }
+  };
+
+  const handleTestPlane = async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+    setIsTestingPlane(true);
+    try {
+      await PlaneService.forWorkspace(selectedWorkspaceId).testConnection();
+      displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
+    } catch (error) {
+      displayErrorToast(
+        retrieveAxiosErrorMessage(error) ||
+          t(I18nKey.INTEGRATIONS$TEST_FAILED),
+      );
+    } finally {
+      setIsTestingPlane(false);
+    }
+  };
+
+  if (appwrite.isLoading || plane.isLoading || workspacesLoading) {
     return (
       <div className="p-4" data-testid="integrations-settings-loading">
         <Typography.Text>{t(I18nKey.HOME$LOADING)}</Typography.Text>
       </div>
     );
   }
+
+  const workspaceSelector = (
+    <SettingsDropdownInput
+      testId="integrations-workspace"
+      name="integrations-workspace"
+      label={t(I18nKey.INTEGRATIONS$WORKSPACE)}
+      items={workspaceOptions}
+      selectedKey={selectedWorkspaceId ?? undefined}
+      onSelectionChange={(key) => {
+        if (typeof key === "string") {
+          setSelectedWorkspaceId(key);
+        }
+      }}
+    />
+  );
 
   return (
     <div
@@ -155,50 +251,39 @@ export function IntegrationsSettingsScreen() {
         </Typography.Text>
       </div>
 
-      <section
-        className={cn(
-          "rounded-lg border border-[var(--oh-border)]",
-          "bg-[var(--oh-surface)] p-4 flex flex-col gap-4",
-        )}
-        data-testid="appwrite-integration-card"
-      >
-        <div>
-          <Typography.Text className="text-base font-medium text-white">
-            {t(I18nKey.INTEGRATIONS$APPWRITE_NAME)}
-          </Typography.Text>
-          <Typography.Text className="mt-1 block text-sm text-[var(--oh-muted)]">
-            {t(I18nKey.INTEGRATIONS$APPWRITE_DESCRIPTION)}
-          </Typography.Text>
-        </div>
+      {workspaceOptions.length === 0 ? (
+        <Typography.Text
+          className="text-sm text-[var(--oh-muted)]"
+          testId="appwrite-no-workspaces"
+        >
+          {t(I18nKey.INTEGRATIONS$NO_WORKSPACES)}
+        </Typography.Text>
+      ) : (
+        <>
+          {workspaceSelector}
 
-        {workspaceOptions.length === 0 ? (
-          <Typography.Text
-            className="text-sm text-[var(--oh-muted)]"
-            testId="appwrite-no-workspaces"
+          <section
+            className={cn(
+              "rounded-lg border border-[var(--oh-border)]",
+              "bg-[var(--oh-surface)] p-4 flex flex-col gap-4",
+            )}
+            data-testid="appwrite-integration-card"
           >
-            {t(I18nKey.INTEGRATIONS$NO_WORKSPACES)}
-          </Typography.Text>
-        ) : (
-          <>
-            <SettingsDropdownInput
-              testId="appwrite-workspace"
-              name="appwrite-workspace"
-              label={t(I18nKey.INTEGRATIONS$WORKSPACE)}
-              items={workspaceOptions}
-              selectedKey={selectedWorkspaceId ?? undefined}
-              onSelectionChange={(key) => {
-                if (typeof key === "string") {
-                  setSelectedWorkspaceId(key);
-                }
-              }}
-            />
+            <div>
+              <Typography.Text className="text-base font-medium text-white">
+                {t(I18nKey.INTEGRATIONS$APPWRITE_NAME)}
+              </Typography.Text>
+              <Typography.Text className="mt-1 block text-sm text-[var(--oh-muted)]">
+                {t(I18nKey.INTEGRATIONS$APPWRITE_DESCRIPTION)}
+              </Typography.Text>
+            </div>
 
             <label className="flex items-center gap-2 text-sm text-white">
               <input
                 type="checkbox"
                 data-testid="appwrite-enabled"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
+                checked={appwriteEnabled}
+                onChange={(e) => setAppwriteEnabled(e.target.checked)}
                 className="size-4"
               />
               {t(I18nKey.INTEGRATIONS$ENABLED)}
@@ -208,8 +293,8 @@ export function IntegrationsSettingsScreen() {
               testId="appwrite-endpoint"
               label={t(I18nKey.INTEGRATIONS$ENDPOINT)}
               type="url"
-              value={endpoint}
-              onChange={setEndpoint}
+              value={appwriteEndpoint}
+              onChange={setAppwriteEndpoint}
               placeholder={DEFAULT_APPWRITE_ENDPOINT}
             />
 
@@ -217,8 +302,8 @@ export function IntegrationsSettingsScreen() {
               testId="appwrite-project-id"
               label={t(I18nKey.INTEGRATIONS$PROJECT_ID)}
               type="text"
-              value={projectId}
-              onChange={setProjectId}
+              value={appwriteProjectId}
+              onChange={setAppwriteProjectId}
             />
 
             <div className="flex flex-col gap-1">
@@ -226,11 +311,11 @@ export function IntegrationsSettingsScreen() {
                 testId="appwrite-api-key"
                 label={t(I18nKey.INTEGRATIONS$API_KEY)}
                 type="password"
-                value={apiKey}
-                onChange={setApiKey}
+                value={appwriteApiKey}
+                onChange={setAppwriteApiKey}
                 placeholder={t(I18nKey.INTEGRATIONS$API_KEY_PLACEHOLDER)}
               />
-              {apiKeyIsSet && (
+              {appwrite.apiKeyIsSet && (
                 <Typography.Text
                   className="text-xs text-[var(--oh-muted)]"
                   testId="appwrite-api-key-set"
@@ -245,7 +330,7 @@ export function IntegrationsSettingsScreen() {
                 type="button"
                 variant="primary"
                 testId="appwrite-save"
-                onClick={() => void handleSave()}
+                onClick={() => void handleSaveAppwrite()}
                 isDisabled={
                   isSaving || isSavingSecret || !selectedWorkspaceId
                 }
@@ -256,15 +341,126 @@ export function IntegrationsSettingsScreen() {
                 type="button"
                 variant="secondary"
                 testId="appwrite-test"
-                onClick={() => void handleTest()}
-                isDisabled={isTesting || !enabled || !selectedWorkspaceId}
+                onClick={() => void handleTestAppwrite()}
+                isDisabled={
+                  isTestingAppwrite || !appwriteEnabled || !selectedWorkspaceId
+                }
               >
                 {t(I18nKey.INTEGRATIONS$TEST_CONNECTION)}
               </BrandButton>
             </div>
-          </>
-        )}
-      </section>
+          </section>
+
+          <section
+            className={cn(
+              "rounded-lg border border-[var(--oh-border)]",
+              "bg-[var(--oh-surface)] p-4 flex flex-col gap-4",
+            )}
+            data-testid="plane-integration-card"
+          >
+            <div>
+              <Typography.Text className="text-base font-medium text-white">
+                {t(I18nKey.INTEGRATIONS$PLANE_NAME)}
+              </Typography.Text>
+              <Typography.Text className="mt-1 block text-sm text-[var(--oh-muted)]">
+                {t(I18nKey.INTEGRATIONS$PLANE_DESCRIPTION)}
+              </Typography.Text>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-white">
+              <input
+                type="checkbox"
+                data-testid="plane-enabled"
+                checked={planeEnabled}
+                onChange={(e) => setPlaneEnabled(e.target.checked)}
+                className="size-4"
+              />
+              {t(I18nKey.INTEGRATIONS$ENABLED)}
+            </label>
+
+            <SettingsInput
+              testId="plane-base-url"
+              label={t(I18nKey.INTEGRATIONS$PLANE_URL)}
+              type="url"
+              value={planeBaseUrl}
+              onChange={setPlaneBaseUrl}
+              placeholder={t(I18nKey.INTEGRATIONS$PLANE_URL_PLACEHOLDER)}
+            />
+
+            <SettingsInput
+              testId="plane-workspace-slug"
+              label={t(I18nKey.INTEGRATIONS$PLANE_WORKSPACE_SLUG)}
+              type="text"
+              value={planeWorkspaceSlug}
+              onChange={setPlaneWorkspaceSlug}
+              placeholder={t(
+                I18nKey.INTEGRATIONS$PLANE_WORKSPACE_SLUG_PLACEHOLDER,
+              )}
+            />
+
+            <SettingsInput
+              testId="plane-project-id"
+              label={t(I18nKey.INTEGRATIONS$PROJECT_ID)}
+              type="text"
+              value={planeProjectId}
+              onChange={setPlaneProjectId}
+            />
+
+            <SettingsInput
+              testId="plane-module-id"
+              label={t(I18nKey.INTEGRATIONS$PLANE_MODULE_ID)}
+              type="text"
+              value={planeModuleId}
+              onChange={setPlaneModuleId}
+              placeholder={t(I18nKey.INTEGRATIONS$PLANE_MODULE_ID_PLACEHOLDER)}
+            />
+
+            <div className="flex flex-col gap-1">
+              <SettingsInput
+                testId="plane-api-key"
+                label={t(I18nKey.INTEGRATIONS$API_KEY)}
+                type="password"
+                value={planeApiKey}
+                onChange={setPlaneApiKey}
+                placeholder={t(I18nKey.INTEGRATIONS$API_KEY_PLACEHOLDER)}
+              />
+              {plane.apiKeyIsSet && (
+                <Typography.Text
+                  className="text-xs text-[var(--oh-muted)]"
+                  testId="plane-api-key-set"
+                >
+                  {t(I18nKey.INTEGRATIONS$API_KEY_SET)}
+                </Typography.Text>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <BrandButton
+                type="button"
+                variant="primary"
+                testId="plane-save"
+                onClick={() => void handleSavePlane()}
+                isDisabled={
+                  isSaving || isSavingSecret || !selectedWorkspaceId
+                }
+              >
+                {t(I18nKey.INTEGRATIONS$SAVE)}
+              </BrandButton>
+              <BrandButton
+                type="button"
+                variant="secondary"
+                testId="plane-test"
+                onClick={() => void handleTestPlane()}
+                isDisabled={
+                  isTestingPlane || !planeEnabled || !selectedWorkspaceId
+                }
+              >
+                {t(I18nKey.INTEGRATIONS$TEST_CONNECTION)}
+              </BrandButton>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

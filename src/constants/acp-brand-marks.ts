@@ -21,3 +21,8 @@ export const GEMINI_VIEWBOX = "0 0 24 24";
 export const CURSOR_MARK_PATH =
   "M4 2.5L4 18.5L8.2 14.8L11.1 21.5L14.2 20.2L11.2 13.3L16.5 13.3L4 2.5Z";
 export const CURSOR_VIEWBOX = "0 0 24 24";
+
+// Simplified OpenCode mark — rounded square with a chevron (currentColor).
+export const OPENCODE_MARK_PATH =
+  "M5 3.5C5 2.67 5.67 2 6.5 2H17.5C18.33 2 19 2.67 19 3.5V20.5C19 21.33 18.33 22 17.5 22H6.5C5.67 22 5 21.33 5 20.5V3.5ZM10.2 8.2L14.8 12L10.2 15.8V13.9L12.6 12L10.2 10.1V8.2Z";
+export const OPENCODE_VIEWBOX = "0 0 24 24";
