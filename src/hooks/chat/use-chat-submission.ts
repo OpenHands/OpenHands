@@ -28,9 +28,15 @@ export const useChatSubmission = (
 
     onSubmit(message);
 
-    // Clear the input
-    clearTextContent(chatInputRef.current);
-    clearFileInput(fileInputRef.current);
+    if (hasAttachments) {
+      // Keep the prompt text visible during file upload — it will be
+      // cleared by the chat input once the upload completes.
+      clearFileInput(fileInputRef.current);
+    } else {
+      // No attachments: clear immediately as before.
+      clearTextContent(chatInputRef.current);
+      clearFileInput(fileInputRef.current);
+    }
 
     // Reset height and show suggestions again
     smartResize();

@@ -19,7 +19,7 @@ export function UploadedFile({
   return (
     <div className="group flex gap-2 rounded-lg bg-[var(--oh-interactive-hover)] max-w-[160px] px-3 py-1 relative">
       <div className="flex flex-col justify-center gap-0.25">
-        <RemoveFileButton onClick={onRemove} />
+        {!isLoading && <RemoveFileButton onClick={onRemove} />}
         <div className="flex items-center gap-2 w-full">
           <span
             className={cn(

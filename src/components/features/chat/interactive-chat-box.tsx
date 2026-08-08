@@ -28,7 +28,7 @@ export function InteractiveChatBox({
     images,
     files,
     imagesMarkedUploadAsFile,
-    clearAllFiles,
+    isUploading,
     subConversationTaskId,
   } = useConversationStore();
   const { curAgentState } = useAgentState();
@@ -50,7 +50,7 @@ export function InteractiveChatBox({
       imagesMarkedUploadAsFile,
     );
     onSubmit(message, imagesToEmbed, [...files, ...imagesAsFiles]);
-    clearAllFiles();
+    // Files are cleared by handleSendMessage after upload completes
   });
   const handleAfterModel = useGoalInterceptor(conversationId, handleAfterGoal);
   const handleSubmit = useModelInterceptor(conversationId, handleAfterModel);
@@ -61,6 +61,7 @@ export function InteractiveChatBox({
 
   const isDisabled =
     disabled ||
+    isUploading ||
     curAgentState === AgentState.AWAITING_USER_CONFIRMATION ||
     isTaskPolling(subConversationTaskStatus);
 

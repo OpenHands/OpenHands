@@ -64,6 +64,7 @@ function getEntryPoint(
 export function ChatInterface() {
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
   const { setMessageToSend } = useConversationStore();
+  const { setIsUploading, clearAllFiles } = useConversationStore();
   const { errorMessage, errorCode, removeErrorMessage, setErrorMessage } =
     useErrorMessageStore();
   const navigate = useNavigate();
@@ -329,6 +330,7 @@ export function ChatInterface() {
 
     if (!validation.isValid) {
       displayErrorToast(`Error: ${validation.errorMessage}`);
+      clearAllFiles();
       return; // Stop processing if validation fails
     }
 
@@ -337,10 +339,25 @@ export function ChatInterface() {
 
     const timestamp = new Date().toISOString();
 
-    const { skipped_files: skippedFiles, uploaded_files: uploadedFiles } =
-      files.length > 0
-        ? await uploadFiles({ conversationId: conversationId!, files })
-        : { skipped_files: [], uploaded_files: [] };
+    if (files.length > 0) {
+      setIsUploading(true);
+    }
+
+    let uploadedFiles: string[] = [];
+    let skippedFiles: { name: string; reason: string }[] = [];
+    try {
+      const result =
+        files.length > 0
+          ? await uploadFiles({ conversationId: conversationId!, files })
+          : { skipped_files: [], uploaded_files: [] };
+      uploadedFiles = result.uploaded_files;
+      skippedFiles = result.skipped_files;
+    } finally {
+      if (files.length > 0) {
+        setIsUploading(false);
+        clearAllFiles();
+      }
+    }
 
     skippedFiles.forEach((f) => displayErrorToast(f.reason));
 

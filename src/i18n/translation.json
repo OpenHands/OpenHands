@@ -9893,6 +9893,23 @@
     "uk": "ДОДАНО НОВІ ФАЙЛИ",
     "ca": "FITXERS NOUS AFEGITS"
   },
+  "CHAT_INTERFACE$UPLOADING_FILES": {
+    "en": "Uploading files...",
+    "tr": "Dosyalar yükleniyor...",
+    "de": "Dateien werden hochgeladen...",
+    "zh-CN": "正在上传文件...",
+    "zh-TW": "正在上傳檔案...",
+    "ko-KR": "파일 업로드 중...",
+    "ja": "ファイルをアップロード中...",
+    "fr": "Téléchargement des fichiers...",
+    "es": "Subiendo archivos...",
+    "pt": "Enviando arquivos...",
+    "it": "Caricamento file...",
+    "ar": "جاري تحميل الملفات...",
+    "no": "Laster opp filer...",
+    "uk": "Завантаження файлів...",
+    "ca": "S'estan pujant fitxers..."
+  },
   "CHAT_INTERFACE$DISCONNECTED": {
     "en": "Disconnected",
     "ja": "切断されました",

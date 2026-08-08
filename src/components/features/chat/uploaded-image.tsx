@@ -46,7 +46,7 @@ export function UploadedImage({
           />
         )
       )}
-      <RemoveFileButton onClick={onRemove} />
+      {!isLoading && <RemoveFileButton onClick={onRemove} />}
       {showUploadAsFileToggle && onToggleUploadAsFile && (
         <PastedImageUploadAsFileButton
           active={uploadAsFileActive}
