@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
       enable_iterative_refinement: false,
     },
     enable_sub_agents: false,
+    enable_switch_llm_tool: true,
     mcp_config: {},
   },
   conversation_settings_schema: null,

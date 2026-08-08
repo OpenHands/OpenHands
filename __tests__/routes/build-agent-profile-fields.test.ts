@@ -9,8 +9,24 @@ const baseAcp = {
   commandTokens: ["npx", "-y", "@zed-industries/claude-code-acp"],
   acpModel: "claude-opus-4-8",
   subAgentsEnabled: false,
+  switchLlmToolField: undefined,
+  switchLlmToolEnabled: false,
   toolConcurrencyField: undefined,
   toolConcurrency: "",
+};
+
+const switchLlmToolField: SettingsFieldSchema = {
+  key: "enable_switch_llm_tool",
+  label: "Enable LLM switching tool",
+  section: "general",
+  section_label: "General",
+  value_type: "boolean",
+  default: true,
+  choices: [],
+  depends_on: [],
+  prominence: "major",
+  secret: false,
+  required: false,
 };
 
 const concurrencyField: SettingsFieldSchema = {
@@ -82,6 +98,8 @@ describe("buildAgentProfileFields — OpenHands", () => {
     commandTokens: [],
     acpModel: "",
     subAgentsEnabled: true,
+    switchLlmToolField: undefined,
+    switchLlmToolEnabled: false,
     toolConcurrencyField: undefined,
     toolConcurrency: "",
   };
@@ -91,6 +109,30 @@ describe("buildAgentProfileFields — OpenHands", () => {
       agent_kind: "openhands",
       enable_sub_agents: true,
     });
+  });
+
+  it("emits enable_switch_llm_tool when the schema exposes the field", () => {
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      switchLlmToolField,
+      switchLlmToolEnabled: true,
+    });
+    if (fields.agent_kind === "openhands") {
+      expect(fields.enable_switch_llm_tool).toBe(true);
+    }
+  });
+
+  it("omits enable_switch_llm_tool when the schema predates the field", () => {
+    // Older agent-servers would reject the unknown key on the whole-profile
+    // overwrite, so the key is only emitted when the schema advertises it.
+    const fields = buildAgentProfileFields({
+      ...baseOh,
+      switchLlmToolField: undefined,
+      switchLlmToolEnabled: true,
+    });
+    if (fields.agent_kind === "openhands") {
+      expect(fields).not.toHaveProperty("enable_switch_llm_tool");
+    }
   });
 
   it("coerces a valid tool_concurrency_limit to a number", () => {

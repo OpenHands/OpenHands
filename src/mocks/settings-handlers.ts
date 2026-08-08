@@ -89,6 +89,21 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           required: false,
         },
         {
+          key: "enable_switch_llm_tool",
+          label: "Enable LLM switching tool",
+          description:
+            "Allow the agent to move the conversation to another saved LLM profile on its own.",
+          section: "general",
+          section_label: "General",
+          value_type: "boolean",
+          default: true,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
           key: "tool_concurrency_limit",
           label: "Parallel tool calls",
           description:
