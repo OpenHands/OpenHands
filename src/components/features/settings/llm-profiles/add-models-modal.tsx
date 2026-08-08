@@ -241,6 +241,13 @@ export function AddModelsModal({
   const isLoadingModels = provider !== null && models.isLoading;
   const showEmpty =
     provider !== null && !isLoadingModels && visibleRows.length === 0;
+  // Empty because the provider has nothing, or empty because the filter hid
+  // everything it has. Telling the user the provider is bare when the fix is
+  // one checkbox away sends them looking in the wrong place.
+  const emptyMessage =
+    showEmpty && rows.length > 0
+      ? I18nKey.COMMON$NO_RESULTS
+      : I18nKey.SETTINGS$ADD_MODELS_EMPTY;
 
   const footer = (
     <>
@@ -335,7 +342,7 @@ export function AddModelsModal({
             data-testid="add-models-empty"
             className="text-sm text-[var(--oh-muted)]"
           >
-            {t(I18nKey.SETTINGS$ADD_MODELS_EMPTY)}
+            {t(emptyMessage)}
           </p>
         )}
 

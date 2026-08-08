@@ -18,6 +18,7 @@ vi.mock("react-i18next", () => ({
         SETTINGS$ADD_MODELS_VERIFIED_ONLY: "Verified models only",
         SETTINGS$ADD_MODELS_SELECT_ALL: "Select all",
         SETTINGS$ADD_MODELS_EMPTY: "No models found for this provider.",
+        COMMON$NO_RESULTS: "No results found",
         SETTINGS$ADD_MODELS_NAME_TAKEN: "Name already exists",
         SETTINGS$ADD_N_PROFILES: `Add ${params?.count ?? "?"} profiles`,
         SETTINGS$MODELS_ADDED: `Added ${params?.count ?? "?"} profiles`,
@@ -169,6 +170,41 @@ describe("AddModelsModal", () => {
     await userEvent.click(screen.getByTestId("add-models-verified-only"));
 
     await screen.findByTestId("add-models-row-openhands/unverified-model");
+  });
+
+  it("distinguishes a provider with no models from a filter hiding them all", async () => {
+    // Saying "no models found for this provider" when the provider has models
+    // and the filter is hiding them sends the user looking for the wrong thing.
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [
+        { provider: "openhands", name: "unverified-only", verified: false },
+      ],
+      next_page_id: null,
+    });
+    renderModal();
+    await pickProvider();
+
+    await screen.findByTestId("add-models-empty");
+    expect(screen.getByTestId("add-models-empty")).toHaveTextContent(
+      "No results found",
+    );
+
+    await userEvent.click(screen.getByTestId("add-models-verified-only"));
+    await screen.findByTestId("add-models-row-openhands/unverified-only");
+  });
+
+  it("says the provider is empty when it really has no models", async () => {
+    vi.mocked(ConfigService.searchModels).mockResolvedValue({
+      items: [],
+      next_page_id: null,
+    });
+    renderModal();
+    await pickProvider();
+
+    await screen.findByTestId("add-models-empty");
+    expect(screen.getByTestId("add-models-empty")).toHaveTextContent(
+      "No models found for this provider.",
+    );
   });
 
   it("flags names that collide with existing profiles and excludes them", async () => {
