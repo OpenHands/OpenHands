@@ -9,8 +9,11 @@ import { useAcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
+  ACP_CUSTOM_PRESET_KEY,
+  getAcpProvider,
   getAcpProviderDisplayName,
   getAcpPreferredDefaultModel,
+  isBackendUnsupportedAcpServer,
 } from "#/constants/acp-providers";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
 import { type OnboardingAgentId } from "./choose-agent-step";
@@ -123,10 +126,15 @@ export function SetupAcpSecretsStep({
       // step never renders for "openhands" (the modal shows SetupLlmStep
       // there), so the guard just narrows the type for `acp_server`.
       if (providerKey !== "openhands") {
+        const wireAsCustom = isBackendUnsupportedAcpServer(providerKey);
+        const defaultCommand = getAcpProvider(providerKey)?.default_command;
         await applyAgentProfile({
           agent_kind: "acp",
-          acp_server: providerKey,
+          acp_server: wireAsCustom ? ACP_CUSTOM_PRESET_KEY : providerKey,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
+          ...(wireAsCustom && defaultCommand
+            ? { acp_command: defaultCommand.join(" ") }
+            : {}),
         });
       }
       onNext();

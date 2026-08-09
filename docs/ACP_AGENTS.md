@@ -1,7 +1,8 @@
 # Using ACP agents
 
 Agent Canvas can drive your conversations with the built-in **OpenHands** agent or
-with an external **ACP agent** — Claude Code, Codex, Gemini CLI, or Cursor. This guide
+with an external **ACP agent** — Claude Code, Codex, Gemini CLI, Cursor, or
+OpenCode. This guide
 explains what ACP agents are, how to onboard one, and how to switch agents or
 models later.
 
@@ -44,12 +45,18 @@ changing a provider happens upstream in the SDK, not here.
 | **Codex** | `npx -y @agentclientprotocol/codex-acp` |
 | **Gemini CLI** | `npx -y @google/gemini-cli --acp` |
 | **Cursor** | `agent acp` |
+| **OpenCode** | `opencode acp` |
 
 See [Authentication](#authentication) for how each one authenticates.
 
 > **Cursor CLI required.** The Cursor preset expects the Cursor CLI (`agent`) on
 > `PATH` — install with `curl https://cursor.com/install -fsS | bash` (or the
 > Windows installer). In the all-in-one Docker image the CLI is pre-installed.
+
+> **OpenCode CLI required.** The OpenCode preset expects the OpenCode CLI
+> (`opencode`) on `PATH` — install with
+> `curl -fsSL https://opencode.ai/install | bash` (or `npm i -g opencode-ai`).
+> In the all-in-one Docker image the CLI is pre-installed.
 
 ## Authentication
 
@@ -75,6 +82,7 @@ needed instead.
 | **Codex** | A ChatGPT login (`codex login`) cached at `~/.codex/auth.json` | `OPENAI_API_KEY` *(onboarding)* |
 | **Gemini CLI** | Your Google login (`gemini`/`gemini --acp`) cached at `~/.gemini/oauth_creds.json` | `GEMINI_API_KEY` *(onboarding)* |
 | **Cursor** | A Cursor CLI login (`agent login`) | `CURSOR_API_KEY` / `CURSOR_AUTH_TOKEN` *(required in Docker/headless)* |
+| **OpenCode** | An OpenCode login (`opencode auth login`) | `OPENCODE_API_KEY` *(required in Docker/headless when no login is stored)* |
 
 All three collect an *optional* API key (+ base URL) in onboarding. As noted
 above, **a subscription / OAuth login takes priority over an API key** — when the
@@ -97,6 +105,9 @@ per provider:
   RPC hangs headless. In Docker set `CURSOR_API_KEY` (or save it as a Canvas
   secret); the Agent Server passes it to `agent --api-key … acp` and skips the
   hanging authenticate call.
+- **OpenCode** — reuses `opencode auth login` on the host when present. In Docker
+  / headless, set `OPENCODE_API_KEY` (or save it as a Canvas secret) so the
+  `opencode acp` subprocess can authenticate without an interactive login.
 The one exception is the **base URL** (`*_BASE_URL`): a custom value points the
 CLI at a different endpoint (a proxy or gateway) and *does* take effect even
 under a login — for Gemini it rides the ACP `gateway` param. It's an advanced
@@ -106,8 +117,9 @@ override, not needed for normal use.
 
 First-time users get a four-step onboarding modal. To onboard an ACP agent:
 
-1. **Choose agent** — pick Claude Code, Codex, Gemini CLI, or Cursor instead of
-   OpenHands. The choice is saved immediately to your backend's settings.
+1. **Choose agent** — pick Claude Code, Codex, Gemini CLI, Cursor, or OpenCode
+   instead of OpenHands. The choice is saved immediately to your backend's
+   settings.
 2. **Check backend** — confirms Agent Canvas can reach the Agent Server.
 3. **Set up credentials** — enter the provider's credentials. Beyond the API
    key (+ optional base URL), this step also collects the credentials a
@@ -226,8 +238,8 @@ grouping isolation is separate (agent-canvas#1016).
 Open **Settings → Agent** at any time:
 
 - **Agent** — switch between **OpenHands** and **ACP**.
-- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI, Cursor) or
-  **Custom** to point at any other ACP server.
+- **Preset** — pick a built-in provider (Claude Code, Codex, Gemini CLI, Cursor,
+  OpenCode) or **Custom** to point at any other ACP server.
 - **Command** — the command line used to spawn the subprocess. Selecting a preset
   fills this in; editing it to match another preset re-detects that provider.
   API keys are *not* entered here — they live in the Secrets panel.

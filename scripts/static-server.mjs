@@ -48,6 +48,10 @@ import {
   isDependencyTrackProxyRequest,
 } from "./dependency-track-proxy.mjs";
 import {
+  createPlaneProxyHandler,
+  isPlaneProxyRequest,
+} from "./plane-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -576,6 +580,7 @@ export function startStaticServer(config) {
   const handleDependencyTrackProxy = createDependencyTrackProxyHandler({
     agentServerUrl,
   });
+  const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
@@ -605,6 +610,17 @@ export function startStaticServer(config) {
     if (isDependencyTrackProxyRequest(req.url ?? "/")) {
       void handleDependencyTrackProxy(req, res).catch((err) => {
         console.error(`Dependency-Track proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isPlaneProxyRequest(req.url ?? "/")) {
+      void handlePlaneProxy(req, res).catch((err) => {
+        console.error(`Plane proxy error for ${req.url}:`, err);
         if (!res.headersSent) {
           res.writeHead(500);
           res.end("Internal Server Error");

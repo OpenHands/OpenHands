@@ -4,10 +4,12 @@ import { screen, waitFor } from "@testing-library/react";
 import { IntegrationsSettingsScreen } from "#/routes/integrations-settings";
 import { useAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
 import { useDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
+import { usePlaneIntegration } from "#/hooks/query/use-plane-integration";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useSettings } from "#/hooks/query/use-settings";
 import { appwriteApiKeySecretName } from "#/utils/appwrite-integration-secrets";
 import { dependencyTrackApiKeySecretName } from "#/utils/dependency-track-integration-secrets";
+import { planeApiKeySecretName } from "#/utils/plane-integration-secrets";
 
 vi.mock("#/contexts/active-backend-context", () => ({
   useActiveBackend: () => ({
@@ -25,6 +27,10 @@ vi.mock("#/hooks/query/use-appwrite-integration", () => ({
 
 vi.mock("#/hooks/query/use-dependency-track-integration", () => ({
   useDependencyTrackIntegration: vi.fn(),
+}));
+
+vi.mock("#/hooks/query/use-plane-integration", () => ({
+  usePlaneIntegration: vi.fn(),
 }));
 
 vi.mock("#/hooks/query/use-local-workspaces", () => ({
@@ -54,7 +60,13 @@ const WORKSPACE_ID = "ws-demo";
 describe("IntegrationsSettingsScreen", () => {
   beforeEach(() => {
     vi.mocked(useSettings).mockReturnValue({
-      data: { integrations: { appwrite: { byWorkspace: {} } } },
+      data: {
+        integrations: {
+          appwrite: { byWorkspace: {} },
+          plane: { byWorkspace: {} },
+          dependencyTrack: { byWorkspace: {} },
+        },
+      },
       isLoading: false,
     } as unknown as ReturnType<typeof useSettings>);
     vi.mocked(useLocalWorkspaces).mockReturnValue({
@@ -82,6 +94,20 @@ describe("IntegrationsSettingsScreen", () => {
       isLoading: false,
       secretName: appwriteApiKeySecretName(WORKSPACE_ID),
     });
+    vi.mocked(usePlaneIntegration).mockReturnValue({
+      workspaceId: WORKSPACE_ID,
+      config: {
+        enabled: true,
+        baseUrl: "https://plane.example.com",
+        workspaceSlug: "heimdall",
+        projectId: "proj-1",
+        moduleId: "",
+      },
+      apiKeyIsSet: true,
+      isReady: true,
+      isLoading: false,
+      secretName: planeApiKeySecretName(WORKSPACE_ID),
+    });
     vi.mocked(useDependencyTrackIntegration).mockReturnValue({
       workspaceId: WORKSPACE_ID,
       config: {
@@ -96,15 +122,21 @@ describe("IntegrationsSettingsScreen", () => {
     });
   });
 
-  it("renders the AppWrite integration form for a workspace", async () => {
+  it("renders AppWrite, Plane, and Dependency-Track integration forms", async () => {
     renderWithProviders(<IntegrationsSettingsScreen />);
     await waitFor(() => {
       expect(screen.getByTestId("integrations-settings")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("integrations-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("appwrite-integration-card")).toBeInTheDocument();
-    expect(screen.getByTestId("appwrite-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("appwrite-enabled")).toBeChecked();
     expect(screen.getByTestId("appwrite-api-key-set")).toBeInTheDocument();
+    expect(screen.getByTestId("plane-integration-card")).toBeInTheDocument();
+    expect(screen.getByTestId("plane-enabled")).toBeChecked();
+    expect(screen.getByTestId("plane-base-url")).toBeInTheDocument();
+    expect(screen.getByTestId("plane-workspace-slug")).toBeInTheDocument();
+    expect(screen.getByTestId("plane-module-id")).toBeInTheDocument();
+    expect(screen.getByTestId("plane-api-key-set")).toBeInTheDocument();
     expect(
       screen.getByTestId("dependency-track-integration-card"),
     ).toBeInTheDocument();

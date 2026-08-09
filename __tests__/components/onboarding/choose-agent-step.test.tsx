@@ -179,6 +179,8 @@ describe("ChooseAgentStep", () => {
     ["codex", "codex"],
     ["gemini-cli", "gemini-cli"],
     ["cursor", "cursor"],
+    // OpenCode is not in the agent-server literal enum yet — wire as custom.
+    ["opencode", "custom"],
   ])("persists acp_server=%s for the matching tile", async (id, expected) => {
     const save = vi.spyOn(SettingsService, "saveSettings");
     renderStep(id as OnboardingAgentId);
@@ -198,10 +200,16 @@ describe("ChooseAgentStep", () => {
     // Canvas preselects the *preferred* default model — the registry default
     // for Codex, but the Vertex-safe override (gemini-2.5-pro) for Gemini:
     // gemini-cli re-resolves flash ids to its own default, which 404s on many
-    // Vertex projects (software-agent-sdk#3532).
+    // Vertex projects (software-agent-sdk#3532). Preferred model is keyed by
+    // the UI tile id, not the wire acp_server value (OpenCode → custom).
     expect(
       (call.agent_settings_diff as Record<string, unknown>).acp_model,
-    ).toBe(getAcpPreferredDefaultModel(expected));
+    ).toBe(getAcpPreferredDefaultModel(id));
+    if (id === "opencode") {
+      expect(
+        (call.agent_settings_diff as Record<string, unknown>).acp_command,
+      ).toEqual(["opencode", "acp"]);
+    }
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {

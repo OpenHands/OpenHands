@@ -36,6 +36,7 @@ import {
   buildAcpAgentSettingsDiff,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  isBackendUnsupportedAcpServer,
   normalizeAcpModelId,
   type ACPProviderConfig,
 } from "#/constants/acp-providers";
@@ -160,15 +161,19 @@ export function buildAgentProfileFields(
   if (isAcp) {
     const isBuiltinDefault =
       isDefaultProviderCommand && selectedPreset !== ACP_CUSTOM_PRESET_KEY;
+    // Fork-local presets (OpenCode) are not in the agent-server literal enum —
+    // persist as ``custom`` with an explicit command (same as settings PATCH).
+    const wireAsCustom = isBackendUnsupportedAcpServer(selectedPreset);
     return {
       agent_kind: "acp",
-      acp_server: selectedPreset,
+      acp_server: wireAsCustom ? ACP_CUSTOM_PRESET_KEY : selectedPreset,
       acp_model:
         normalizeAcpModelId(selectedPreset, acpModel.trim() || null) ??
         (acpModel.trim() || null),
-      acp_command: isBuiltinDefault
-        ? null
-        : formatCommand(commandTokens) || null,
+      acp_command:
+        wireAsCustom || !isBuiltinDefault
+          ? formatCommand(commandTokens) || null
+          : null,
       acp_args: null,
     };
   }

@@ -4,6 +4,7 @@ import {
   ACP_CUSTOM_PRESET_KEY,
   ACP_PROVIDERS,
   ACP_VERTEX_SAFE_MODEL,
+  LOCAL_ACP_PROVIDER_REGISTRY,
   buildAcpAgentSettingsDiff,
   getAcpCredentialConflicts,
   getAcpPreferredDefaultModel,
@@ -11,7 +12,9 @@ import {
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
   labelForAcpModel,
+  matchAcpProviderByCommand,
   normalizeAcpModelId,
+  resolveClientAcpProvider,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -20,6 +23,7 @@ describe("getAcpProviderDisplayName", () => {
     expect(getAcpProviderDisplayName("codex")).toBe("Codex");
     expect(getAcpProviderDisplayName("gemini-cli")).toBe("Gemini CLI");
     expect(getAcpProviderDisplayName("cursor")).toBe("Cursor");
+    expect(getAcpProviderDisplayName("opencode")).toBe("OpenCode");
   });
 
   it("returns null for the Custom-command preset so callers can fall back to the generic 'ACP' label", () => {
@@ -44,23 +48,32 @@ describe("getAcpProviderDisplayName", () => {
 });
 
 describe("ACP provider registry", () => {
-  it("sources display_name / default_command / models from the SDK, not a local mirror", () => {
+  it("sources display_name / default_command / models from the SDK (or local fallback)", () => {
     // Core invariant of agent-canvas#678: the registry data fields must come
     // straight from @openhands/typescript-client's getAcpProvider(), so the
-    // Python SDK stays the single source of truth. Only the UI-only overlay
-    // (icon + description_key) is layered on locally.
+    // Python SDK stays the single source of truth. Fork-local presets
+    // (OpenCode) may live in LOCAL_ACP_PROVIDER_REGISTRY until the SDK
+    // mirrors them. Only the UI-only overlay (icon + description_key) is
+    // layered on locally.
     for (const provider of ACP_PROVIDERS) {
-      const sdk = getClientAcpProvider(provider.key);
-      expect(sdk, provider.key).not.toBeNull();
-      expect(provider.display_name).toBe(sdk!.display_name);
-      expect(provider.default_command).toEqual([...sdk!.default_command]);
+      const source = resolveClientAcpProvider(provider.key);
+      expect(source, provider.key).not.toBeNull();
+      expect(provider.display_name).toBe(source!.display_name);
+      expect(provider.default_command).toEqual([...source!.default_command]);
       expect(provider.available_models).toEqual(
-        sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
+        source!.available_models.map((m) => ({ id: m.id, label: m.label })),
       );
-      expect(provider.default_model).toBe(sdk!.default_model ?? undefined);
+      expect(provider.default_model).toBe(source!.default_model ?? undefined);
       // UI-only overlay stays local.
       expect(provider.icon).toBeTruthy();
       expect(provider.description_key).toBeTruthy();
+      // Prefer the SDK when both exist; local registry is a gap-fill only.
+      const sdk = getClientAcpProvider(provider.key);
+      if (sdk) {
+        expect(LOCAL_ACP_PROVIDER_REGISTRY[provider.key]).toBeUndefined();
+      } else {
+        expect(LOCAL_ACP_PROVIDER_REGISTRY[provider.key]).toBeDefined();
+      }
     }
   });
 
@@ -103,11 +116,12 @@ describe("ACP provider registry", () => {
     // Preferred default = registry default everywhere except Gemini, where
     // the Vertex-safe override applies (see getAcpPreferredDefaultModel) —
     // EVERY default-model surface must agree on this, including this diff
-    // builder's fallback.
+    // builder's fallback. Fork-local providers (OpenCode) wire as ``custom``.
     for (const provider of ACP_PROVIDERS) {
+      const localOnly = Boolean(LOCAL_ACP_PROVIDER_REGISTRY[provider.key]);
       expect(buildAcpAgentSettingsDiff(provider.key)).toMatchObject({
         agent_kind: "acp",
-        acp_server: provider.key,
+        acp_server: localOnly ? ACP_CUSTOM_PRESET_KEY : provider.key,
         acp_model: getAcpPreferredDefaultModel(provider.key),
       });
     }
@@ -120,6 +134,16 @@ describe("ACP provider registry", () => {
     expect(buildAcpAgentSettingsDiff(ACP_CUSTOM_PRESET_KEY)).toMatchObject({
       agent_kind: "acp",
       acp_server: ACP_CUSTOM_PRESET_KEY,
+      acp_model: null,
+    });
+  });
+
+  it("persists OpenCode as custom + explicit command until the SDK enum accepts it", () => {
+    // Agent-server 422s on acp_server literal without 'opencode' — wire as custom.
+    expect(buildAcpAgentSettingsDiff("opencode")).toMatchObject({
+      agent_kind: "acp",
+      acp_server: ACP_CUSTOM_PRESET_KEY,
+      acp_command: ["opencode", "acp"],
       acp_model: null,
     });
   });
@@ -163,6 +187,11 @@ describe("getAcpProviderSecrets — containerized credentials", () => {
   it("collects the API key + endpoint for Cursor", () => {
     const names = getAcpProviderSecrets("cursor").map((f) => f.name);
     expect(names).toEqual(["CURSOR_API_KEY", "CURSOR_API_ENDPOINT"]);
+  });
+
+  it("collects the API key for OpenCode", () => {
+    const names = getAcpProviderSecrets("opencode").map((f) => f.name);
+    expect(names).toEqual(["OPENCODE_API_KEY"]);
   });
 
   it("renders file-content blobs as multiline secret fields", () => {
@@ -227,6 +256,7 @@ describe("getAcpPreferredDefaultModel", () => {
       getAcpProvider("claude-code")?.default_model,
     );
     expect(getAcpPreferredDefaultModel("cursor")).toBe("auto");
+    expect(getAcpPreferredDefaultModel("opencode")).toBeNull();
   });
 
   it("returns null for OpenHands / custom / unknown", () => {
@@ -295,6 +325,13 @@ describe("getAcpCredentialConflicts", () => {
       ),
     ).toEqual([]);
     expect(getAcpCredentialConflicts(null, () => true)).toEqual([]);
+  });
+});
+
+describe("matchAcpProviderByCommand", () => {
+  it("re-detects OpenCode from a custom-persisted command", () => {
+    expect(matchAcpProviderByCommand(["opencode", "acp"])).toBe("opencode");
+    expect(matchAcpProviderByCommand("opencode acp")).toBe("opencode");
   });
 });
 

@@ -5,8 +5,10 @@ import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { AgentKind, Settings, SettingsValue } from "#/types/settings";
 import {
+  ACP_CUSTOM_PRESET_KEY,
   getAcpPreferredDefaultModel,
   getAcpProvider,
+  matchAcpProviderByCommand,
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
@@ -73,7 +75,7 @@ export interface DirectConversationInfo {
     acp_model?: string | null;
     /**
      * ACP CLI identity (``claude-code`` / ``codex`` / ``gemini-cli`` /
-     * ``cursor``) from the
+     * ``cursor`` / ``opencode``) from the
      * SDK's ``ACPAgent.acp_server`` (#3692). Preferred fallback when the
      * ``acpserver`` tag is absent — e.g. a profile launch doesn't stamp the tag
      * client-side and the server may not repopulate it. Read by {@link toAppConversation}.
@@ -785,7 +787,19 @@ function isAcpAgent(settings: Settings): boolean {
 function getAcpServerTag(settings: Settings): string | undefined {
   const agentSettings = toRecord(settings.agent_settings);
   const value = agentSettings.acp_server;
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    return undefined;
+  }
+  // Fork-local presets (OpenCode) are stored as ``custom`` + command until the
+  // SDK enum accepts them — stamp the logical key on the conversation tag so
+  // the chip still shows "OpenCode" instead of a generic ACP label.
+  if (value === ACP_CUSTOM_PRESET_KEY) {
+    const fromCommand = matchAcpProviderByCommand(
+      agentSettings.acp_command as string[] | string | null | undefined,
+    );
+    if (fromCommand) return fromCommand;
+  }
+  return value;
 }
 
 function resolveAcpCommand(agentSettings: SettingsRecord): unknown {

@@ -6,7 +6,80 @@ export type ACPProviderIcon =
   | "codex"
   | "gemini"
   | "cursor"
+  | "opencode"
   | "cli-generic";
+
+/**
+ * Minimal client-registry shape Canvas needs when resolving a provider.
+ * Matches ``ACPProviderInfo`` from ``@openhands/typescript-client`` for the
+ * fields we read; local fallbacks use ``key: string`` until the SDK mirrors
+ * the provider (OpenCode is not in the pinned client yet).
+ */
+type ClientAcpProviderInfo = {
+  key: string;
+  display_name: string;
+  default_command: readonly string[];
+  api_key_env_var: string | null;
+  base_url_env_var: string | null;
+  available_models: readonly { id: string; label: string }[];
+  default_model: string | null;
+};
+
+/**
+ * Heimdall / fork-local ACP providers not yet shipped in
+ * ``@openhands/typescript-client``. Dropped once the SDK registry includes
+ * the same key.
+ */
+export const LOCAL_ACP_PROVIDER_REGISTRY: Record<string, ClientAcpProviderInfo> =
+  {
+    opencode: {
+      key: "opencode",
+      display_name: "OpenCode",
+      default_command: ["opencode", "acp"],
+      api_key_env_var: "OPENCODE_API_KEY",
+      base_url_env_var: null,
+      available_models: [],
+      default_model: null,
+    },
+  };
+
+/**
+ * Resolve ACP provider metadata from the pinned typescript-client registry,
+ * falling back to {@link LOCAL_ACP_PROVIDER_REGISTRY} for fork-local presets.
+ */
+export function resolveClientAcpProvider(
+  key: string | null | undefined,
+): ClientAcpProviderInfo | null {
+  if (!key) return null;
+  const fromSdk = getClientAcpProvider(key);
+  if (fromSdk) {
+    return {
+      key: fromSdk.key,
+      display_name: fromSdk.display_name,
+      default_command: fromSdk.default_command,
+      api_key_env_var: fromSdk.api_key_env_var,
+      base_url_env_var: fromSdk.base_url_env_var,
+      available_models: fromSdk.available_models,
+      default_model: fromSdk.default_model,
+    };
+  }
+  return LOCAL_ACP_PROVIDER_REGISTRY[key] ?? null;
+}
+
+/**
+ * True when Canvas surfaces the provider but the pinned agent-server /
+ * typescript-client literal enum does not accept the key yet (e.g. OpenCode).
+ * Those presets must be persisted as ``acp_server: "custom"`` with an explicit
+ * ``acp_command`` until the SDK registry catches up.
+ */
+export function isBackendUnsupportedAcpServer(
+  key: string | null | undefined,
+): boolean {
+  if (!key) return false;
+  return Boolean(
+    LOCAL_ACP_PROVIDER_REGISTRY[key] && !getClientAcpProvider(key),
+  );
+}
 
 export const ACP_PROVIDER_FALLBACK_ICON: ACPProviderIcon = "cli-generic";
 
@@ -153,16 +226,21 @@ const ACP_PROVIDER_UI: Record<
     icon: "cursor",
     description_key: I18nKey.ONBOARDING$AGENT_CURSOR_DESCRIPTION,
   },
+  opencode: {
+    icon: "opencode",
+    description_key: I18nKey.ONBOARDING$AGENT_OPENCODE_DESCRIPTION,
+  },
 };
 
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
 // Canvas UI metadata above. Model lists + defaults are no longer hand-kept
-// here (closes agent-canvas#740) — they track the SDK via the pinned client.
+// here (closes agent-canvas#740) — they track the SDK via the pinned client,
+// with {@link LOCAL_ACP_PROVIDER_REGISTRY} covering fork-local presets.
 export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   ACP_PROVIDER_UI,
 ).map(([key, ui]) => {
-  const info = getClientAcpProvider(key);
+  const info = resolveClientAcpProvider(key);
   return {
     key,
     display_name: info?.display_name ?? key,
@@ -178,6 +256,29 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
 });
 
 export const ACP_CUSTOM_PRESET_KEY = "custom";
+
+/**
+ * Match a stored ACP command line against a built-in / local provider's
+ * default command. Used to re-detect fork-local presets that were persisted
+ * as ``acp_server: "custom"``.
+ */
+export function matchAcpProviderByCommand(
+  command: readonly string[] | string | null | undefined,
+): string | null {
+  const tokens = Array.isArray(command)
+    ? command.filter((part) => typeof part === "string" && part.trim())
+    : typeof command === "string"
+      ? command.trim().split(/\s+/).filter(Boolean)
+      : [];
+  if (tokens.length === 0) return null;
+  const normalized = tokens.join(" ");
+  for (const provider of ACP_PROVIDERS) {
+    if (provider.default_command.join(" ") === normalized) {
+      return provider.key;
+    }
+  }
+  return null;
+}
 
 /**
  * A credential an ACP provider authenticates with, surfaced during onboarding
@@ -371,7 +472,7 @@ export function getAcpProviderSecrets(
   key: string | null | undefined,
 ): ACPProviderSecretField[] {
   if (!key) return [];
-  const info = getClientAcpProvider(key);
+  const info = resolveClientAcpProvider(key);
   if (!info) return [];
   // Subscription / Vertex credentials first — they're the primary auth path for
   // ACP providers (Claude Pro/Max OAuth token, Codex ChatGPT auth.json), with
@@ -562,6 +663,19 @@ export function buildAcpAgentSettingsDiff(
       ? getAcpPreferredDefaultModel(providerKey)
       : normalizeAcpModelId(providerKey, options.model);
 
+  // Fork-local providers (OpenCode) are not in the agent-server's
+  // ``acp_server`` literal enum yet — persist as ``custom`` with an explicit
+  // command so PATCH /api/settings accepts the payload. The Settings UI
+  // re-detects the preset from the command via {@link matchAcpProviderByCommand}.
+  const wireAsCustom = isBackendUnsupportedAcpServer(providerKey);
+  const wireServer = wireAsCustom ? ACP_CUSTOM_PRESET_KEY : providerKey;
+  const explicitCommand =
+    options.command && options.command.length > 0
+      ? options.command
+      : wireAsCustom && provider
+        ? [...provider.default_command]
+        : (options.command ?? []);
+
   // ``acp_args: []`` resets any API-set ``acp_args`` that would
   // otherwise survive and concatenate to ``acp_command`` at spawn time
   // (the agent-server merges the two before exec). Callers building the
@@ -570,8 +684,8 @@ export function buildAcpAgentSettingsDiff(
   // ``acp_command`` here, so no args are lost.
   return {
     agent_kind: "acp",
-    acp_server: providerKey,
-    acp_command: options.command ?? [],
+    acp_server: wireServer,
+    acp_command: explicitCommand,
     acp_args: [],
     acp_model: model ?? null,
   };
