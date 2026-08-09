@@ -35,7 +35,7 @@ describe("ConversationService", () => {
     // @spec WUP-001 — The default fallback working dir is relative
     // (`workspace/project`); the upload path is resolved against the
     // agent-server's home directory via /api/file/home.
-    it("uploads files through RemoteWorkspace and reports successes", async () => {
+    it("uploads files through RemoteWorkspace and reports their absolute paths", async () => {
       fileUploadMock.mockResolvedValue(undefined);
 
       const result = await ConversationService.uploadFiles("conv-1", [
@@ -58,12 +58,15 @@ describe("ConversationService", () => {
         "/Users/agent/workspace/project/b.txt",
       );
       expect(result).toEqual({
-        uploaded_files: ["a.txt", "b.txt"],
+        uploaded_files: [
+          "/Users/agent/workspace/project/a.txt",
+          "/Users/agent/workspace/project/b.txt",
+        ],
         skipped_files: [],
       });
     });
 
-    it("uploads using only the basename of user-provided file names", async () => {
+    it("sanitizes user-provided file names and reports the resolved path", async () => {
       fileUploadMock.mockResolvedValue(undefined);
 
       const result = await ConversationService.uploadFiles("conv-1", [
@@ -75,7 +78,7 @@ describe("ConversationService", () => {
         "/Users/agent/workspace/project/evil.txt",
       );
       expect(result).toEqual({
-        uploaded_files: ["evil.txt"],
+        uploaded_files: ["/Users/agent/workspace/project/evil.txt"],
         skipped_files: [],
       });
     });
@@ -113,7 +116,7 @@ describe("ConversationService", () => {
         expect.objectContaining({ apiKey: "session-key" }),
       );
       expect(result).toEqual({
-        uploaded_files: ["ok.txt"],
+        uploaded_files: ["/Users/agent/workspace/project/ok.txt"],
         skipped_files: [{ name: "bad.txt", reason: "too large" }],
       });
     });
@@ -136,7 +139,9 @@ describe("ConversationService", () => {
 
       expect(fileUploadMock).toHaveBeenCalledTimes(7);
       expect(maxActiveUploads).toBe(5);
-      expect(result.uploaded_files).toEqual(files.map((file) => file.name));
+      expect(result.uploaded_files).toEqual(
+        files.map((file) => `/Users/agent/workspace/project/${file.name}`),
+      );
       expect(result.skipped_files).toEqual([]);
     });
   });

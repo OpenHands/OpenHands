@@ -4,6 +4,7 @@ import AgentServerGitService from "#/api/git-service/agent-server-git-service.ap
 import { useConversationId } from "#/hooks/use-conversation-id";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
+import { WORKSPACE_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { getGitPath } from "#/utils/get-git-path";
 import type { GitChange } from "#/api/open-hands.types";
 
@@ -25,13 +26,12 @@ export const useUnifiedGetGitChanges = () => {
   );
 
   const result = useQuery({
-    queryKey: [
-      "file_changes",
+    queryKey: WORKSPACE_QUERY_KEYS.fileChanges(
       conversationId,
       conversationUrl,
       sessionApiKey,
       gitPath,
-    ],
+    ),
     queryFn: async () => {
       if (!conversationId) throw new Error("No conversation ID");
 

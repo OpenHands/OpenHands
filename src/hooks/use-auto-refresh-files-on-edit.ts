@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useEventStore, type OHEvent } from "#/stores/use-event-store";
 import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
+import { WORKSPACE_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 // `kind` values we treat as a file-mutation observation.
 const FILE_EDIT_OBSERVATION_KINDS = new Set([
@@ -132,12 +133,16 @@ export function useAutoRefreshFilesOnEdit(): void {
     // observation); per-commit queries (`commit_changes` /
     // `commit_file_diff`) are sha-addressed and immutable, so they are
     // deliberately NOT invalidated.
-    queryClient.invalidateQueries({ queryKey: ["file_changes"] });
+    queryClient.invalidateQueries({
+      queryKey: WORKSPACE_QUERY_KEYS.allFileChanges,
+    });
     queryClient.invalidateQueries({ queryKey: ["file_diff"] });
     queryClient.invalidateQueries({ queryKey: ["git_commits"] });
 
     if (hasNewFileEdits) {
-      queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+      queryClient.invalidateQueries({
+        queryKey: WORKSPACE_QUERY_KEYS.allFiles,
+      });
       queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
       // Force iframes / <img> tags pointing at the static workspace
       // fileserver to re-fetch. Without this they happily keep showing the
