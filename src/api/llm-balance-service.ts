@@ -1,5 +1,8 @@
 import { getAgentServerClientOptions } from "./agent-server-client-options";
-import { LLM_BALANCE_PATH } from "#/constants/llm-balance";
+import {
+  LLM_BALANCE_PATH,
+  LLM_BALANCE_TIMEOUT_MS,
+} from "#/constants/llm-balance";
 
 /**
  * Credit balance reported by the agent server for the active LLM provider
@@ -27,6 +30,14 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/** `AbortSignal.timeout` rejects with a `TimeoutError`; a manual abort uses `AbortError`. */
+function isAbortLike(error: unknown): boolean {
+  return (
+    isRecord(error) &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
 function normalizeBalance(raw: unknown): LLMBalance | null {
   if (!isRecord(raw) || typeof raw.provider !== "string") return null;
 
@@ -49,7 +60,11 @@ class LLMBalanceService {
    * Returns `null` when the server answers 404 (older servers without the
    * endpoint, or a provider that doesn't support balance reporting) or when
    * the response doesn't match the expected shape — callers hide the balance
-   * UI in that case. Other HTTP failures throw.
+   * UI in that case. Other HTTP failures throw, as does a request that outlives
+   * `LLM_BALANCE_TIMEOUT_MS`. A timeout stays an error rather than collapsing
+   * into `null`: `null` means "this server has no balance to report" and is
+   * cached under `staleTime: Infinity`, so treating a transient stall as an
+   * absent endpoint would hide the card for the rest of the conversation.
    */
   static async getBalance(): Promise<LLMBalance | null> {
     // Raw fetch is deliberate: /api/llm/balance has no typed client in
@@ -62,7 +77,21 @@ class LLMBalanceService {
       headers.set("X-Session-API-Key", apiKey);
     }
 
-    const response = await fetch(`${host}${LLM_BALANCE_PATH}`, { headers });
+    let response: Response;
+    try {
+      response = await fetch(`${host}${LLM_BALANCE_PATH}`, {
+        headers,
+        signal: AbortSignal.timeout(LLM_BALANCE_TIMEOUT_MS),
+      });
+    } catch (error) {
+      if (isAbortLike(error)) {
+        throw new Error(
+          `Balance request timed out after ${LLM_BALANCE_TIMEOUT_MS}ms`,
+        );
+      }
+      throw error;
+    }
+
     if (response.status === 404) return null;
     if (!response.ok) {
       throw new Error(`Balance request failed with ${response.status}`);

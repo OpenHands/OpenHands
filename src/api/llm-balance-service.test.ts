@@ -106,4 +106,31 @@ describe("LLMBalanceService.getBalance", () => {
       "Balance request failed with 500",
     );
   });
+
+  it("bounds the request with an abort signal", async () => {
+    const fetchMock = mockFetchResponse(200, balancePayload);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await LLMBalanceService.getBalance();
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("throws a named error when the request times out", async () => {
+    // A server that accepts the connection and never answers: fetch rejects
+    // with the signal's TimeoutError rather than resolving.
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockRejectedValue(
+          new DOMException("The operation was aborted.", "TimeoutError"),
+        ),
+    );
+
+    await expect(LLMBalanceService.getBalance()).rejects.toThrow(
+      "Balance request timed out",
+    );
+  });
 });
