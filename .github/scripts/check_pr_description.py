@@ -7,6 +7,9 @@ Additional checks:
   checked.
 - If frontend code was touched, the description must include a screenshot or
   video.
+- The body must reference at least one issue (e.g. `Fixes #123`) and at least
+  one referenced issue must carry the `ready-for-dev` label. The API lookup is
+  only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
 
 Local usage example:
     python .github/scripts/check_pr_description.py --body-file /tmp/pr-body.md \
@@ -57,6 +60,17 @@ FRONTEND_CONFIG_GLOBS: tuple[str, ...] = (
 HUMAN_TESTED_RE = re.compile(
     r"(?im)^\s*[-*]\s*\[(?P<box>[ xX])\]\s*.*?human has tested these changes"
 )
+
+# Issue references in the PR body: "Fixes #123", "Closes #123", "Resolves #123",
+# or a bare "#123" in the Issue Number section. We capture the issue number.
+# GitHub auto-linking keywords: close, closes, closed, fix, fixes, fixed,
+# resolve, resolves, resolved (case-insensitive).
+ISSUE_REF_RE = re.compile(
+    r"(?i)(?:fix|clos|resolv)(?:es|ed|ing)?\s+#(\d+)"
+)
+BARE_ISSUE_REF_RE = re.compile(r"(?<!\w)#(\d+)")
+
+READY_FOR_DEV_LABEL = "ready-for-dev"
 
 # Markdown image: ![alt](url)
 MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
@@ -182,6 +196,103 @@ def validate_frontend_screenshot(body: str, files: list[str]) -> list[str]:
         "video. Add one under `## Video/Screenshots` (drag a file into the editor "
         "or paste a video link)."
     ]
+
+
+def extract_linked_issue_numbers(body: str) -> list[int]:
+    """Return issue numbers referenced in the PR body.
+
+    Looks for GitHub auto-close keywords (`Fixes #N`, `Closes #N`,
+    `Resolves #N`) anywhere in the body, plus bare `#N` references inside the
+    `## Issue Number` section.
+    """
+    numbers: list[int] = []
+    seen: set[int] = set()
+
+    for match in ISSUE_REF_RE.finditer(body):
+        number = int(match.group(1))
+        if number not in seen:
+            numbers.append(number)
+            seen.add(number)
+
+    sections = extract_sections(body)
+    issue_section = sections.get("Issue Number", "")
+    if visible_text(issue_section):
+        for match in BARE_ISSUE_REF_RE.finditer(issue_section):
+            number = int(match.group(1))
+            if number not in seen:
+                numbers.append(number)
+                seen.add(number)
+
+    return numbers
+
+
+def fetch_issue_labels(repo: str, issue_number: int, token: str) -> list[str]:
+    """Fetch label names for an issue via the GitHub REST API."""
+    import urllib.request
+
+    url = f"https://api.github.com/repos/{repo}/issues/{issue_number}/labels"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:  # noqa: S310 - trusted HTTPS API
+        data = json.loads(resp.read().decode())
+    return [label["name"] for label in data if isinstance(label, dict)]
+
+
+def validate_linked_issue_ready(
+    body: str, repo: str | None = None, token: str | None = None
+) -> list[str]:
+    """Require a linked issue carrying the `ready-for-dev` label.
+
+    When `repo` and `token` are not provided (local `--body-file` mode), only
+    checks that the body references at least one issue — the API lookup is
+    skipped.
+    """
+    errors: list[str] = []
+
+    numbers = extract_linked_issue_numbers(body)
+    if not numbers:
+        errors.append(
+            "Link an issue in the `## Issue Number` section (e.g. `Fixes #123`). "
+            "The issue must carry the `ready-for-dev` label."
+        )
+        return errors
+
+    if not repo or not token:
+        return errors
+
+    import urllib.error
+
+    checked: list[int] = []
+    for number in numbers:
+        try:
+            labels = fetch_issue_labels(repo, number, token)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            raise
+        checked.append(number)
+        if READY_FOR_DEV_LABEL in labels:
+            return errors
+
+    if checked:
+        ref = ", ".join(f"#{n}" for n in checked)
+        errors.append(
+            f"None of the linked issues ({ref}) carry the `ready-for-dev` label. "
+            "The issue must meet the type-specific readiness criteria before a PR "
+            "can be opened against it."
+        )
+    else:
+        errors.append(
+            f"Referenced issue(s) {', '.join(f'#{n}' for n in numbers)} could not "
+            "be found in this repository. Link an issue in this repo."
+        )
+
+    return errors
 
 
 def validate_pr_body(body: str, files: list[str] | None = None) -> list[str]:
@@ -313,6 +424,15 @@ def main() -> int:
         files = []
 
     errors = validate_pr_body(body, files)
+
+    repo = None
+    token = os.environ.get("GITHUB_TOKEN")
+    if args.event_path is not None and args.body_file is None:
+        payload = json.loads(args.event_path.read_text())
+        repo = payload.get("repository", {}).get("full_name")
+
+    errors.extend(validate_linked_issue_ready(body, repo, token))
+
     for error in errors:
         print(f"::error::{error}")
 
