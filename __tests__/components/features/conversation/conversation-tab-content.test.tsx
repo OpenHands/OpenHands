@@ -47,6 +47,12 @@ vi.mock("#/components/features/terminal/terminal", () => ({
   ),
 }));
 
+vi.mock("#/routes/security-tab", () => ({
+  default: () => (
+    <div data-testid="security-tab-content">Security Tab Content</div>
+  ),
+}));
+
 // Mock ConversationLoading component
 vi.mock("#/components/features/conversation/conversation-loading", () => ({
   ConversationLoading: () => (
@@ -138,6 +144,16 @@ describe("ConversationTabContent", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("planner-tab-content")).toBeInTheDocument();
+      });
+    });
+
+    it("should render security tab when selected", async () => {
+      setSelectedTab("security");
+
+      render(<ConversationTabContent />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("security-tab-content")).toBeInTheDocument();
       });
     });
   });
