@@ -14,6 +14,7 @@ const BrowserTab = lazy(() => import("#/routes/browser-tab"));
 const PlannerTab = lazy(() => import("#/routes/planner-tab"));
 const TaskListTab = lazy(() => import("#/routes/task-list-tab"));
 const CloudAiTab = lazy(() => import("#/routes/cloudai-tab"));
+const SecurityTab = lazy(() => import("#/routes/security-tab"));
 const Terminal = lazy(() => import("#/components/features/terminal/terminal"));
 
 const TAB_CONFIG = {
@@ -23,6 +24,7 @@ const TAB_CONFIG = {
   terminal: { component: Terminal },
   planner: { component: PlannerTab },
   cloudai: { component: CloudAiTab },
+  security: { component: SecurityTab },
 };
 
 export function ConversationTabContent() {

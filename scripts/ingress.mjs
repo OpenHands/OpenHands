@@ -35,6 +35,10 @@ import {
   isAppwriteProxyRequest,
 } from "./appwrite-proxy.mjs";
 import {
+  createDependencyTrackProxyHandler,
+  isDependencyTrackProxyRequest,
+} from "./dependency-track-proxy.mjs";
+import {
   createPlaneProxyHandler,
   isPlaneProxyRequest,
 } from "./plane-proxy.mjs";
@@ -167,6 +171,9 @@ export function startIngress(config) {
     process.env.OH_AGENT_SERVER_URL ||
     "http://127.0.0.1:18000";
   const handleAppwriteProxy = createAppwriteProxyHandler({ agentServerUrl });
+  const handleDependencyTrackProxy = createDependencyTrackProxyHandler({
+    agentServerUrl,
+  });
   const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
@@ -185,6 +192,17 @@ export function startIngress(config) {
     if (isAppwriteProxyRequest(req.url ?? "/")) {
       void handleAppwriteProxy(req, res).catch((err) => {
         console.error(`AppWrite proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isDependencyTrackProxyRequest(req.url ?? "/")) {
+      void handleDependencyTrackProxy(req, res).catch((err) => {
+        console.error(`Dependency-Track proxy error for ${req.url}:`, err);
         if (!res.headersSent) {
           res.writeHead(500);
           res.end("Internal Server Error");

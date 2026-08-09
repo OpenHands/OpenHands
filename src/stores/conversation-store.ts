@@ -11,7 +11,8 @@ export type ConversationTab =
   | "terminal"
   | "planner"
   | "tasklist"
-  | "cloudai";
+  | "cloudai"
+  | "security";
 
 export type ConversationMode = "code" | "plan";
 

@@ -3,30 +3,30 @@ import { renderWithProviders } from "test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { IntegrationsSettingsScreen } from "#/routes/integrations-settings";
 import { useAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
+import { useDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
 import { usePlaneIntegration } from "#/hooks/query/use-plane-integration";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useSettings } from "#/hooks/query/use-settings";
 import { appwriteApiKeySecretName } from "#/utils/appwrite-integration-secrets";
+import { dependencyTrackApiKeySecretName } from "#/utils/dependency-track-integration-secrets";
 import { planeApiKeySecretName } from "#/utils/plane-integration-secrets";
 
-vi.mock("#/contexts/active-backend-context", async () => {
-  const actual = await vi.importActual<
-    typeof import("#/contexts/active-backend-context")
-  >("#/contexts/active-backend-context");
-  return {
-    ...actual,
-    useActiveBackend: () => ({
-      backend: {
-        kind: "local",
-        id: "default-local",
-        host: "http://localhost:8000",
-      },
-    }),
-  };
-});
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: {
+      kind: "local",
+      id: "default-local",
+      host: "http://localhost:8000",
+    },
+  }),
+}));
 
 vi.mock("#/hooks/query/use-appwrite-integration", () => ({
   useAppwriteIntegration: vi.fn(),
+}));
+
+vi.mock("#/hooks/query/use-dependency-track-integration", () => ({
+  useDependencyTrackIntegration: vi.fn(),
 }));
 
 vi.mock("#/hooks/query/use-plane-integration", () => ({
@@ -64,6 +64,7 @@ describe("IntegrationsSettingsScreen", () => {
         integrations: {
           appwrite: { byWorkspace: {} },
           plane: { byWorkspace: {} },
+          dependencyTrack: { byWorkspace: {} },
         },
       },
       isLoading: false,
@@ -107,9 +108,21 @@ describe("IntegrationsSettingsScreen", () => {
       isLoading: false,
       secretName: planeApiKeySecretName(WORKSPACE_ID),
     });
+    vi.mocked(useDependencyTrackIntegration).mockReturnValue({
+      workspaceId: WORKSPACE_ID,
+      config: {
+        enabled: true,
+        baseUrl: "https://dtrack.example.com",
+        projectUuid: "proj-uuid-1",
+      },
+      apiKeyIsSet: true,
+      isReady: true,
+      isLoading: false,
+      secretName: dependencyTrackApiKeySecretName(WORKSPACE_ID),
+    });
   });
 
-  it("renders AppWrite and Plane integration forms for a workspace", async () => {
+  it("renders AppWrite, Plane, and Dependency-Track integration forms", async () => {
     renderWithProviders(<IntegrationsSettingsScreen />);
     await waitFor(() => {
       expect(screen.getByTestId("integrations-settings")).toBeInTheDocument();
@@ -124,6 +137,11 @@ describe("IntegrationsSettingsScreen", () => {
     expect(screen.getByTestId("plane-workspace-slug")).toBeInTheDocument();
     expect(screen.getByTestId("plane-module-id")).toBeInTheDocument();
     expect(screen.getByTestId("plane-api-key-set")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("dependency-track-integration-card"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("dependency-track-enabled")).toBeChecked();
+    expect(screen.getByTestId("dependency-track-api-key-set")).toBeInTheDocument();
   });
 
   it("prompts to add a workspace when none exist", async () => {

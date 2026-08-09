@@ -38,7 +38,21 @@ export type PlaneIntegrationsSettings = {
   byWorkspace: Record<string, PlaneIntegrationConfig>;
 };
 
+export type DependencyTrackIntegrationConfig = {
+  enabled: boolean;
+  /** Dependency-Track base URL, e.g. `https://dtrack.example.com`. */
+  baseUrl: string;
+  /** Target project UUID in Dependency-Track. */
+  projectUuid: string;
+  apiKeySecretName?: string;
+};
+
+export type DependencyTrackIntegrationsSettings = {
+  byWorkspace: Record<string, DependencyTrackIntegrationConfig>;
+};
+
 export type IntegrationsSettings = {
   appwrite?: AppwriteIntegrationsSettings;
   plane?: PlaneIntegrationsSettings;
+  dependencyTrack?: DependencyTrackIntegrationsSettings;
 };
