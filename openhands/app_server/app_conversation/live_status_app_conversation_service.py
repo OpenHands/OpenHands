@@ -1836,16 +1836,16 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
 
         # SaaS profiles live on the user/org record, not the sandbox
         # filesystem, so we attach the agent's built-in switch_llm tool
-        # ourselves rather than relying on create_agent()'s gating. Enabled
-        # whenever there are at least two valid saved profiles (a switch needs
-        # a target).
+        # ourselves when enabled and whenever there are at least two valid saved profiles
+        # (a switch needs a target).
         valid_profile_names = [
             name
             for name in user.llm_profiles.profiles
             if PROFILE_NAME_REGEX.match(name)
         ]
         if (
-            len(valid_profile_names) >= 2
+            configured_agent_settings.enable_switch_llm_tool
+            and len(valid_profile_names) >= 2
             and SwitchLLMTool.__name__ not in agent.include_default_tools
         ):
             agent = agent.model_copy(
