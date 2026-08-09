@@ -53,9 +53,25 @@ describe("transformVSCodeUrl", () => {
     expect(transformVSCodeUrl(input)).toBe(input);
   });
 
-  it("should handle invalid URLs gracefully", () => {
+  it("should return null for invalid URLs", () => {
     const input = "not-a-valid-url";
 
+    expect(transformVSCodeUrl(input)).toBeNull();
+  });
+
+  it("should allow vscode: scheme URLs", () => {
+    const input = "vscode://file/workspace/app.ts";
+
     expect(transformVSCodeUrl(input)).toBe(input);
+  });
+
+  it("should return null for javascript: scheme", () => {
+    expect(
+      transformVSCodeUrl("javascript:alert(document.domain)"),
+    ).toBeNull();
+  });
+
+  it("should return null for data: scheme", () => {
+    expect(transformVSCodeUrl("data:text/html,<script>alert(1)</script>")).toBeNull();
   });
 });
