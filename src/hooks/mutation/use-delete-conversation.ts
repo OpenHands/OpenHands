@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { useSecurityScanResultsStore } from "#/stores/security-scan-results-store";
 import { clearConversationLocalStorage } from "#/utils/conversation-local-storage";
 
 export const useDeleteConversation = () => {
@@ -30,6 +31,9 @@ export const useDeleteConversation = () => {
 
     onSuccess: (_, variables) => {
       clearConversationLocalStorage(variables.conversationId);
+      useSecurityScanResultsStore
+        .getState()
+        .clearConversation(variables.conversationId);
     },
 
     onError: (err, variables, context) => {

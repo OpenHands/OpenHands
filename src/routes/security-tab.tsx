@@ -1,21 +1,30 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Shield } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { SecurityFindingsPanel } from "#/components/features/security/security-findings-panel";
 import { useConversationDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
+import { useConversationId } from "#/hooks/use-conversation-id";
 import { useSecuritySastScan } from "#/hooks/query/use-security-sast-scan";
 import { useSecurityScaScan } from "#/hooks/query/use-security-sca-scan";
-import type { ScaScanResult, SecurityScanResult } from "#/types/security-scan";
+import { useSecurityScanResultsStore } from "#/stores/security-scan-results-store";
 import { cn } from "#/utils/utils";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 export default function SecurityTab() {
   const { t } = useTranslation("openhands");
-  const [lastSastResult, setLastSastResult] = useState<SecurityScanResult | null>(
-    null,
+  const { conversationId } = useConversationId();
+  const lastSastResult = useSecurityScanResultsStore(
+    (state) => state.resultsByConversationId[conversationId]?.sast ?? null,
   );
-  const [lastScaResult, setLastScaResult] = useState<ScaScanResult | null>(null);
+  const lastScaResult = useSecurityScanResultsStore(
+    (state) => state.resultsByConversationId[conversationId]?.sca ?? null,
+  );
+  const setSastResult = useSecurityScanResultsStore(
+    (state) => state.setSastResult,
+  );
+  const setScaResult = useSecurityScanResultsStore(
+    (state) => state.setScaResult,
+  );
   const sastMutation = useSecuritySastScan();
   const scaMutation = useSecurityScaScan();
   const dtIntegration = useConversationDependencyTrackIntegration();
@@ -23,18 +32,18 @@ export default function SecurityTab() {
   const handleSastScan = async () => {
     try {
       const result = await sastMutation.mutateAsync();
-      setLastSastResult(result);
+      setSastResult(conversationId, result);
     } catch {
-      setLastSastResult(null);
+      // Keep previously persisted findings for this conversation.
     }
   };
 
   const handleScaScan = async () => {
     try {
       const result = await scaMutation.mutateAsync();
-      setLastScaResult(result);
+      setScaResult(conversationId, result);
     } catch {
-      setLastScaResult(null);
+      // Keep previously persisted findings for this conversation.
     }
   };
 

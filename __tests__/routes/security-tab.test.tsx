@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import SecurityTab from "#/routes/security-tab";
+import { NavigationProvider } from "#/context/navigation-context";
+import { useSecurityScanResultsStore } from "#/stores/security-scan-results-store";
+
+const CONVERSATION_ID = "test-conversation-id";
 
 const sastMutateAsync = vi.fn();
 const scaMutateAsync = vi.fn();
@@ -63,13 +67,30 @@ vi.mock("#/components/features/security/security-findings-panel", () => ({
   ),
 }));
 
-describe("SecurityTab", () => {
-  let queryClient: QueryClient;
+function renderSecurityTab() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <NavigationProvider
+        value={{
+          currentPath: `/conversations/${CONVERSATION_ID}`,
+          conversationId: CONVERSATION_ID,
+          isNavigating: false,
+          navigate: vi.fn(),
+        }}
+      >
+        <SecurityTab />
+      </NavigationProvider>
+    </QueryClientProvider>,
+  );
+}
 
+describe("SecurityTab", () => {
   beforeEach(() => {
-    queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    window.localStorage.clear();
+    useSecurityScanResultsStore.setState({ resultsByConversationId: {} });
     sastMutateAsync.mockReset();
     scaMutateAsync.mockReset();
     sastMutateAsync.mockResolvedValue({
@@ -87,11 +108,7 @@ describe("SecurityTab", () => {
   it("renders SAST and SCA scan buttons and triggers scans", async () => {
     const user = userEvent.setup();
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <SecurityTab />
-      </QueryClientProvider>,
-    );
+    renderSecurityTab();
 
     expect(screen.getByTestId("security-tab")).toBeInTheDocument();
     expect(screen.getByTestId("security-sast-scan-button")).toHaveTextContent(
@@ -124,5 +141,25 @@ describe("SecurityTab", () => {
         screen.getByTestId("security-findings-panel-mock"),
       ).toHaveTextContent("has-sast|has-sca");
     });
+  });
+
+  it("keeps scan results after the tab unmounts and remounts", async () => {
+    const user = userEvent.setup();
+
+    const { unmount } = renderSecurityTab();
+
+    await user.click(screen.getByTestId("security-sast-scan-button"));
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("security-findings-panel-mock"),
+      ).toHaveTextContent("has-sast|no-sca");
+    });
+
+    unmount();
+    renderSecurityTab();
+
+    expect(
+      screen.getByTestId("security-findings-panel-mock"),
+    ).toHaveTextContent("has-sast|no-sca");
   });
 });
