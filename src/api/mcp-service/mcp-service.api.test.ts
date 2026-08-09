@@ -5,7 +5,7 @@ import {
   setRegisteredBackends,
 } from "../backend-registry/active-store";
 import SettingsService from "../settings-service/settings-service.api";
-import McpService from "./mcp-service.api";
+import McpService, { isValidAuthorizationUrl } from "./mcp-service.api";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -234,5 +234,23 @@ describe("McpService.testServer", () => {
 
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("isValidAuthorizationUrl", () => {
+  it("allows http(s) OAuth authorization URLs", () => {
+    expect(isValidAuthorizationUrl("https://auth.example/authorize")).toBe(
+      true,
+    );
+    expect(isValidAuthorizationUrl("http://127.0.0.1:8080/authorize")).toBe(
+      true,
+    );
+  });
+
+  it("rejects non-http(s) schemes", () => {
+    expect(isValidAuthorizationUrl("javascript:alert(1)")).toBe(false);
+    expect(isValidAuthorizationUrl("data:text/html,hi")).toBe(false);
+    expect(isValidAuthorizationUrl("file:///etc/passwd")).toBe(false);
+    expect(isValidAuthorizationUrl("not a url")).toBe(false);
   });
 });
