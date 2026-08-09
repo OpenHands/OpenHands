@@ -352,4 +352,47 @@ describe("CustomServerEditor", () => {
       },
     });
   });
+
+  it("offers the callback URL relay and stays dismissible while OAuth authorization is pending", async () => {
+    // Arrange: authorization starts, reports its job id, and never resolves —
+    // the state a user is in while the popup waits on the provider.
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettingsWithMcp({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          mcp_config: {
+            superhuman_mail: {
+              url: "https://mcp.mail.superhuman.com/mcp",
+              transport: "http",
+              auth: {
+                strategy: "oauth2",
+                authentication: { type: "oauth", client_auth_method: "none" },
+              },
+            },
+          },
+        },
+      }),
+    );
+    vi.spyOn(McpService, "authorizeOAuth").mockImplementation(
+      (_server, options) => {
+        options?.onJobStarted?.("job-1");
+        return new Promise(() => {});
+      },
+    );
+
+    // Act
+    const onClose = vi.fn();
+    renderWith(<EditOAuthEditorOnceSettingsLoaded onClose={onClose} />);
+    await screen.findByTestId("mcp-custom-editor");
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // Assert: the relay is offered, and abandoning the (up to 300s)
+    // interactive wait is still possible — the close button must not be
+    // disabled for its duration.
+    expect(
+      await screen.findByTestId("mcp-oauth-callback-fallback-toggle"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("mcp-custom-editor-close"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
