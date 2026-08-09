@@ -1,0 +1,76 @@
+---
+name: Issue Readiness Check
+
+# Manages the `ready-for-dev` label based on type-specific readiness criteria.
+#
+# Bug reports (label `bug`): the body must contain a Reproduction section that
+# references a supported run method (`agent-canvas`, `npm run`, or
+# `app.all-hands.dev/canvas`) and embeds a screenshot or video, plus an
+# Acceptance Criteria section with at least one checklist item.
+#
+# Enhancements (label `enhancement`): the body must contain Desired Behavior and
+# Acceptance Criteria sections, the latter with at least one checklist item.
+#
+# When criteria are met the label is added (idempotently); when they are not the
+# label is removed and a comment explains what is missing. The check runs on
+# issue open/edit/reopen and whenever labels change, so editing the body to fix
+# a gap re-evaluates automatically.
+
+on:
+    issues:
+        types: [opened, edited, reopened, labeled, unlabeled]
+
+permissions:
+    issues: write
+    contents: read
+
+concurrency:
+    group: issue-readiness-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    check:
+        if: github.event.issue.state == 'open' && github.event.issue.pull_request == null
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        steps:
+            - name: Checkout trusted workflow scripts
+              uses: actions/checkout@v7
+
+            - name: Evaluate issue readiness
+              id: readiness
+              env:
+                  GITHUB_EVENT_PATH: ${{ github.event_path }}
+              run: |
+                  set -euo pipefail
+                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json
+                  echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
+                  # Write reasons to a file so the comment step can read them
+                  # without shell-escaping multiline text.
+                  jq -r '.reasons[]?' /tmp/result.json > /tmp/reasons.txt || true
+                  echo "reasons_file=/tmp/reasons.txt" >> "$GITHUB_OUTPUT"
+
+            - name: Add ready-for-dev label
+              if: steps.readiness.outputs.ready == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  gh issue edit "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --add-label "ready-for-dev" 2>/dev/null || true
+
+            - name: Remove ready-for-dev label and comment
+              if: steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev')
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  # Remove may no-op if a concurrent run already removed it.
+                  gh issue edit "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --remove-label "ready-for-dev" 2>/dev/null || true
+                  node .github/scripts/post-readiness-comment.mjs \
+                      --issue-number "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --reasons-file "${{ steps.readiness.outputs.reasons_file }}"

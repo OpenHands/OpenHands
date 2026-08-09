@@ -89,17 +89,53 @@ body:
       required: false
 
   - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Required for the `ready-for-dev` label. Show how to reproduce the bug in a
+        live Agent Canvas session using one of the supported run methods, and
+        attach a screenshot or video of the bug in this section.
+        Run methods (reference at least one):
+          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
+          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
+          - The hosted canvas at `app.all-hands.dev/canvas`
+        Drag a screenshot/video into this field, or paste a link.
+      placeholder: |
+        Run method: `npm run dev`
+
+        1. npm install && npm run dev
+        2. Open http://localhost:3001
+        3. …
+        4. Observed the error shown in the attached screenshot.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        Required for the `ready-for-dev` label. Testable, checkable bullets a
+        reviewer can verify. Describe the *fixed* state, not the bug.
+      placeholder: |
+        - [ ] The bug no longer occurs when …
+        - [ ] …
+    validations:
+      required: false
+
+  - type: textarea
     id: screenshots
     attributes:
       label: Screenshots
       description: Drag and drop or paste any screenshots that help explain the issue.
-    validations:
-      required: false
+      validations:
+        required: false
 
   - type: textarea
     id: additional
     attributes:
       label: Additional Context
       description: Anything else that might be helpful (config, workarounds tried, etc.).
-    validations:
-      required: false
+      validations:
+        required: false
