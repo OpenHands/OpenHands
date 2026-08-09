@@ -1,5 +1,6 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
+import type { LocalWorkspace } from "#/types/workspace";
 import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
@@ -419,6 +420,7 @@ export function groupConversations(
   backendKind: BackendKind,
   sortField: ConversationSortField,
   labels: { emptyWorkspace: string; emptyRepository: string },
+  knownWorkspaces?: readonly LocalWorkspace[],
 ): {
   id: string;
   label: string;
@@ -429,6 +431,15 @@ export function groupConversations(
     string,
     { label: string; conversations: AppConversation[] }
   >();
+
+  if (backendKind === "local" && knownWorkspaces) {
+    for (const ws of knownWorkspaces) {
+      const normalized = ws.path.trim().replace(/\/+$/, "");
+      if (normalized) {
+        byId.set(`ws:${normalized}`, { label: ws.name, conversations: [] });
+      }
+    }
+  }
 
   for (const c of items) {
     const { id, label: rawLabel } = getConversationGroupIdentity(
