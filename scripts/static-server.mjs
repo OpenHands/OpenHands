@@ -44,6 +44,10 @@ import {
   isAppwriteProxyRequest,
 } from "./appwrite-proxy.mjs";
 import {
+  createDependencyTrackProxyHandler,
+  isDependencyTrackProxyRequest,
+} from "./dependency-track-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -569,6 +573,9 @@ export function startStaticServer(config) {
     process.env.OH_AGENT_SERVER_URL ||
     "http://127.0.0.1:18000";
   const handleAppwriteProxy = createAppwriteProxyHandler({ agentServerUrl });
+  const handleDependencyTrackProxy = createDependencyTrackProxyHandler({
+    agentServerUrl,
+  });
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
@@ -587,6 +594,17 @@ export function startStaticServer(config) {
     if (isAppwriteProxyRequest(req.url ?? "/")) {
       void handleAppwriteProxy(req, res).catch((err) => {
         console.error(`AppWrite proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isDependencyTrackProxyRequest(req.url ?? "/")) {
+      void handleDependencyTrackProxy(req, res).catch((err) => {
+        console.error(`Dependency-Track proxy error for ${req.url}:`, err);
         if (!res.headersSent) {
           res.writeHead(500);
           res.end("Internal Server Error");

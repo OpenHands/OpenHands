@@ -3,28 +3,28 @@ import { renderWithProviders } from "test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { IntegrationsSettingsScreen } from "#/routes/integrations-settings";
 import { useAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
+import { useDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useSettings } from "#/hooks/query/use-settings";
 import { appwriteApiKeySecretName } from "#/utils/appwrite-integration-secrets";
+import { dependencyTrackApiKeySecretName } from "#/utils/dependency-track-integration-secrets";
 
-vi.mock("#/contexts/active-backend-context", async () => {
-  const actual = await vi.importActual<
-    typeof import("#/contexts/active-backend-context")
-  >("#/contexts/active-backend-context");
-  return {
-    ...actual,
-    useActiveBackend: () => ({
-      backend: {
-        kind: "local",
-        id: "default-local",
-        host: "http://localhost:8000",
-      },
-    }),
-  };
-});
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: {
+      kind: "local",
+      id: "default-local",
+      host: "http://localhost:8000",
+    },
+  }),
+}));
 
 vi.mock("#/hooks/query/use-appwrite-integration", () => ({
   useAppwriteIntegration: vi.fn(),
+}));
+
+vi.mock("#/hooks/query/use-dependency-track-integration", () => ({
+  useDependencyTrackIntegration: vi.fn(),
 }));
 
 vi.mock("#/hooks/query/use-local-workspaces", () => ({
@@ -82,6 +82,18 @@ describe("IntegrationsSettingsScreen", () => {
       isLoading: false,
       secretName: appwriteApiKeySecretName(WORKSPACE_ID),
     });
+    vi.mocked(useDependencyTrackIntegration).mockReturnValue({
+      workspaceId: WORKSPACE_ID,
+      config: {
+        enabled: true,
+        baseUrl: "https://dtrack.example.com",
+        projectUuid: "proj-uuid-1",
+      },
+      apiKeyIsSet: true,
+      isReady: true,
+      isLoading: false,
+      secretName: dependencyTrackApiKeySecretName(WORKSPACE_ID),
+    });
   });
 
   it("renders the AppWrite integration form for a workspace", async () => {
@@ -93,6 +105,11 @@ describe("IntegrationsSettingsScreen", () => {
     expect(screen.getByTestId("appwrite-workspace")).toBeInTheDocument();
     expect(screen.getByTestId("appwrite-enabled")).toBeChecked();
     expect(screen.getByTestId("appwrite-api-key-set")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("dependency-track-integration-card"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("dependency-track-enabled")).toBeChecked();
+    expect(screen.getByTestId("dependency-track-api-key-set")).toBeInTheDocument();
   });
 
   it("prompts to add a workspace when none exist", async () => {

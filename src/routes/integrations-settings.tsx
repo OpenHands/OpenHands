@@ -6,9 +6,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useCreateSecret } from "#/hooks/mutation/use-create-secret";
 import { useAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
+import { useDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useSettings } from "#/hooks/query/use-settings";
 import { AppwriteService } from "#/api/integrations/appwrite-service";
+import { DependencyTrackService } from "#/api/integrations/dependency-track-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
@@ -22,6 +24,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { SETTINGS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { DEFAULT_APPWRITE_ENDPOINT } from "#/utils/appwrite-integration-secrets";
 import { buildAppwriteIntegrationsPatch } from "#/utils/appwrite-workspace-config";
+import { buildDependencyTrackIntegrationsPatch } from "#/utils/dependency-track-workspace-config";
 import { cn } from "#/utils/utils";
 
 export const handle = { hideTitle: true };
@@ -46,6 +49,12 @@ export function IntegrationsSettingsScreen() {
 
   const { config, apiKeyIsSet, secretName, isLoading } =
     useAppwriteIntegration(selectedWorkspaceId);
+  const {
+    config: dtConfig,
+    apiKeyIsSet: dtApiKeyIsSet,
+    secretName: dtSecretName,
+    isLoading: dtConfigLoading,
+  } = useDependencyTrackIntegration(selectedWorkspaceId);
   const { mutateAsync: saveSettings, isPending: isSaving } = useSaveSettings();
   const { mutateAsync: createSecret, isPending: isSavingSecret } =
     useCreateSecret();
@@ -55,6 +64,12 @@ export function IntegrationsSettingsScreen() {
   const [projectId, setProjectId] = React.useState("");
   const [apiKey, setApiKey] = React.useState("");
   const [isTesting, setIsTesting] = React.useState(false);
+
+  const [dtEnabled, setDtEnabled] = React.useState(false);
+  const [dtBaseUrl, setDtBaseUrl] = React.useState("");
+  const [dtProjectUuid, setDtProjectUuid] = React.useState("");
+  const [dtApiKey, setDtApiKey] = React.useState("");
+  const [isDtTesting, setIsDtTesting] = React.useState(false);
 
   React.useEffect(() => {
     setEnabled(config.enabled);
@@ -66,6 +81,18 @@ export function IntegrationsSettingsScreen() {
     config.enabled,
     config.endpoint,
     config.projectId,
+  ]);
+
+  React.useEffect(() => {
+    setDtEnabled(dtConfig.enabled);
+    setDtBaseUrl(dtConfig.baseUrl);
+    setDtProjectUuid(dtConfig.projectUuid);
+    setDtApiKey("");
+  }, [
+    selectedWorkspaceId,
+    dtConfig.enabled,
+    dtConfig.baseUrl,
+    dtConfig.projectUuid,
   ]);
 
   if (backend.kind !== "local") {
@@ -133,7 +160,62 @@ export function IntegrationsSettingsScreen() {
     }
   };
 
-  if (isLoading || workspacesLoading) {
+  const handleDtSave = async () => {
+    if (!selectedWorkspaceId || !dtSecretName) {
+      return;
+    }
+    try {
+      if (dtApiKey.trim()) {
+        await createSecret({
+          name: dtSecretName,
+          value: dtApiKey.trim(),
+          description: `Dependency-Track API key for workspace ${selectedWorkspaceId}`,
+        });
+        setDtApiKey("");
+      }
+      await saveSettings({
+        integrations: {
+          ...settings?.integrations,
+          ...buildDependencyTrackIntegrationsPatch(
+            settings?.integrations,
+            selectedWorkspaceId,
+            {
+              enabled: dtEnabled,
+              baseUrl: dtBaseUrl.trim(),
+              projectUuid: dtProjectUuid.trim(),
+              apiKeySecretName: dtSecretName,
+            },
+          ),
+        },
+      });
+      invalidate();
+      displaySuccessToast(t(I18nKey.INTEGRATIONS$SAVE_SUCCESS));
+    } catch (error) {
+      displayErrorToast(retrieveAxiosErrorMessage(error));
+    }
+  };
+
+  const handleDtTest = async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+    setIsDtTesting(true);
+    try {
+      await DependencyTrackService.forWorkspace(
+        selectedWorkspaceId,
+      ).testConnection();
+      displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
+    } catch (error) {
+      displayErrorToast(
+        retrieveAxiosErrorMessage(error) ||
+          t(I18nKey.INTEGRATIONS$TEST_FAILED),
+      );
+    } finally {
+      setIsDtTesting(false);
+    }
+  };
+
+  if (isLoading || workspacesLoading || dtConfigLoading) {
     return (
       <div className="p-4" data-testid="integrations-settings-loading">
         <Typography.Text>{t(I18nKey.HOME$LOADING)}</Typography.Text>
@@ -258,6 +340,117 @@ export function IntegrationsSettingsScreen() {
                 testId="appwrite-test"
                 onClick={() => void handleTest()}
                 isDisabled={isTesting || !enabled || !selectedWorkspaceId}
+              >
+                {t(I18nKey.INTEGRATIONS$TEST_CONNECTION)}
+              </BrandButton>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section
+        className={cn(
+          "rounded-lg border border-[var(--oh-border)]",
+          "bg-[var(--oh-surface)] p-4 flex flex-col gap-4",
+        )}
+        data-testid="dependency-track-integration-card"
+      >
+        <div>
+          <Typography.Text className="text-base font-medium text-white">
+            {t(I18nKey.INTEGRATIONS$DEPENDENCY_TRACK_NAME)}
+          </Typography.Text>
+          <Typography.Text className="mt-1 block text-sm text-[var(--oh-muted)]">
+            {t(I18nKey.INTEGRATIONS$DEPENDENCY_TRACK_DESCRIPTION)}
+          </Typography.Text>
+        </div>
+
+        {workspaceOptions.length === 0 ? (
+          <Typography.Text
+            className="text-sm text-[var(--oh-muted)]"
+            testId="dependency-track-no-workspaces"
+          >
+            {t(I18nKey.INTEGRATIONS$NO_WORKSPACES)}
+          </Typography.Text>
+        ) : (
+          <>
+            <SettingsDropdownInput
+              testId="dependency-track-workspace"
+              name="dependency-track-workspace"
+              label={t(I18nKey.INTEGRATIONS$WORKSPACE)}
+              items={workspaceOptions}
+              selectedKey={selectedWorkspaceId ?? undefined}
+              onSelectionChange={(key) => {
+                if (typeof key === "string") {
+                  setSelectedWorkspaceId(key);
+                }
+              }}
+            />
+
+            <label className="flex items-center gap-2 text-sm text-white">
+              <input
+                type="checkbox"
+                data-testid="dependency-track-enabled"
+                checked={dtEnabled}
+                onChange={(e) => setDtEnabled(e.target.checked)}
+                className="size-4"
+              />
+              {t(I18nKey.INTEGRATIONS$ENABLED)}
+            </label>
+
+            <SettingsInput
+              testId="dependency-track-base-url"
+              label={t(I18nKey.INTEGRATIONS$BASE_URL)}
+              type="url"
+              value={dtBaseUrl}
+              onChange={setDtBaseUrl}
+              placeholder={t(I18nKey.INTEGRATIONS$BASE_URL_PLACEHOLDER)}
+            />
+
+            <SettingsInput
+              testId="dependency-track-project-uuid"
+              label={t(I18nKey.INTEGRATIONS$PROJECT_UUID)}
+              type="text"
+              value={dtProjectUuid}
+              onChange={setDtProjectUuid}
+            />
+
+            <div className="flex flex-col gap-1">
+              <SettingsInput
+                testId="dependency-track-api-key"
+                label={t(I18nKey.INTEGRATIONS$API_KEY)}
+                type="password"
+                value={dtApiKey}
+                onChange={setDtApiKey}
+                placeholder={t(I18nKey.INTEGRATIONS$API_KEY_PLACEHOLDER)}
+              />
+              {dtApiKeyIsSet && (
+                <Typography.Text
+                  className="text-xs text-[var(--oh-muted)]"
+                  testId="dependency-track-api-key-set"
+                >
+                  {t(I18nKey.INTEGRATIONS$API_KEY_SET)}
+                </Typography.Text>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              <BrandButton
+                type="button"
+                variant="primary"
+                testId="dependency-track-save"
+                onClick={() => void handleDtSave()}
+                isDisabled={
+                  isSaving || isSavingSecret || !selectedWorkspaceId
+                }
+              >
+                {t(I18nKey.INTEGRATIONS$SAVE)}
+              </BrandButton>
+              <BrandButton
+                type="button"
+                variant="secondary"
+                testId="dependency-track-test"
+                onClick={() => void handleDtTest()}
+                isDisabled={isDtTesting || !dtEnabled || !selectedWorkspaceId}
               >
                 {t(I18nKey.INTEGRATIONS$TEST_CONNECTION)}
               </BrandButton>

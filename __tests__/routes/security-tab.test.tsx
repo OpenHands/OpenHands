@@ -4,14 +4,31 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import SecurityTab from "#/routes/security-tab";
 
-const mutateAsync = vi.fn();
+const sastMutateAsync = vi.fn();
+const scaMutateAsync = vi.fn();
 
 vi.mock("#/hooks/query/use-security-sast-scan", () => ({
   useSecuritySastScan: () => ({
-    mutateAsync,
+    mutateAsync: sastMutateAsync,
     isPending: false,
     isError: false,
     error: null,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-security-sca-scan", () => ({
+  useSecurityScaScan: () => ({
+    mutateAsync: scaMutateAsync,
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock("#/hooks/query/use-dependency-track-integration", () => ({
+  useConversationDependencyTrackIntegration: () => ({
+    isReady: true,
+    isLoading: false,
   }),
 }));
 
@@ -20,11 +37,13 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => {
       const labels: Record<string, string> = {
         "COMMON$SECURITY": "Security",
-        "SECURITY$SCAN": "Scan",
+        "SECURITY$SCAN_SAST": "Scan SAST",
+        "SECURITY$SCAN_SCA": "Scan SCA",
         "SECURITY$SCANNING": "Scanning…",
-        "SECURITY$SCAN_COMPLETE": "Scan complete",
+        "SECURITY$SAST_SCAN_COMPLETE": "SAST scan complete",
+        "SECURITY$SCA_SCAN_COMPLETE": "SCA scan complete",
         "SECURITY$SAST_TITLE": "SAST (OpenGrep)",
-        "SECURITY$EMPTY_STATE": "Run a scan to find security issues.",
+        "SECURITY$SCA_TITLE": "SCA (Syft + Dependency-Track)",
       };
       return labels[key] ?? key;
     },
@@ -33,8 +52,16 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("#/components/features/security/security-scan-results", () => ({
   SecurityScanResults: ({ result }: { result: unknown }) => (
-    <div data-testid="security-results-mock">
-      {result ? "has-result" : "no-result"}
+    <div data-testid="security-sast-results-mock">
+      {result ? "has-sast-result" : "no-sast-result"}
+    </div>
+  ),
+}));
+
+vi.mock("#/components/features/security/security-sca-results", () => ({
+  SecurityScaResults: ({ result }: { result: unknown }) => (
+    <div data-testid="security-sca-results-mock">
+      {result ? "has-sca-result" : "no-sca-result"}
     </div>
   ),
 }));
@@ -46,15 +73,21 @@ describe("SecurityTab", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    mutateAsync.mockReset();
-    mutateAsync.mockResolvedValue({
+    sastMutateAsync.mockReset();
+    scaMutateAsync.mockReset();
+    sastMutateAsync.mockResolvedValue({
       tool: "opengrep",
+      scannedAt: "2026-08-09T00:00:00.000Z",
+      findings: [],
+    });
+    scaMutateAsync.mockResolvedValue({
+      tool: "dependency-track",
       scannedAt: "2026-08-09T00:00:00.000Z",
       findings: [],
     });
   });
 
-  it("renders the scan button and triggers a SAST scan", async () => {
+  it("renders SAST and SCA scan buttons and triggers scans", async () => {
     const user = userEvent.setup();
 
     render(
@@ -64,17 +97,34 @@ describe("SecurityTab", () => {
     );
 
     expect(screen.getByTestId("security-tab")).toBeInTheDocument();
-    expect(screen.getByTestId("security-scan-button")).toHaveTextContent("Scan");
+    expect(screen.getByTestId("security-sast-scan-button")).toHaveTextContent(
+      "Scan SAST",
+    );
+    expect(screen.getByTestId("security-sca-scan-button")).toHaveTextContent(
+      "Scan SCA",
+    );
 
-    await user.click(screen.getByTestId("security-scan-button"));
+    await user.click(screen.getByTestId("security-sast-scan-button"));
 
     await waitFor(() => {
-      expect(mutateAsync).toHaveBeenCalledTimes(1);
+      expect(sastMutateAsync).toHaveBeenCalledTimes(1);
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("security-results-mock")).toHaveTextContent(
-        "has-result",
+      expect(screen.getByTestId("security-sast-results-mock")).toHaveTextContent(
+        "has-sast-result",
+      );
+    });
+
+    await user.click(screen.getByTestId("security-sca-scan-button"));
+
+    await waitFor(() => {
+      expect(scaMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("security-sca-results-mock")).toHaveTextContent(
+        "has-sca-result",
       );
     });
   });
