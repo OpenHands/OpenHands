@@ -16,6 +16,7 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { isValidVerificationUrl } from "#/utils/verification-url";
 
 const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
 const MIN_DEVICE_POLL_INTERVAL_SECONDS = 1;
@@ -24,8 +25,21 @@ interface OpenAISubscriptionAuthCardProps {
   isDisabled?: boolean;
 }
 
-function openVerificationUrl(challenge: LLMSubscriptionDeviceChallenge) {
+function resolveVerificationUrl(
+  challenge: LLMSubscriptionDeviceChallenge,
+): string | null {
   const url = challenge.verificationUriComplete ?? challenge.verificationUri;
+  if (!url || !isValidVerificationUrl(url)) {
+    return null;
+  }
+  return url;
+}
+
+function openVerificationUrl(challenge: LLMSubscriptionDeviceChallenge) {
+  const url = resolveVerificationUrl(challenge);
+  if (!url) {
+    return;
+  }
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
@@ -149,6 +163,10 @@ export function OpenAISubscriptionAuthCard({
     setIsPendingLogin(false);
   };
 
+  const verificationUrl = challenge
+    ? resolveVerificationUrl(challenge)
+    : null;
+
   return (
     <section
       data-testid="openai-subscription-auth-card"
@@ -215,17 +233,17 @@ export function OpenAISubscriptionAuthCard({
               mode={copied ? "copied" : "copy"}
             />
           </div>
-          <a
-            href={
-              challenge.verificationUriComplete ?? challenge.verificationUri
-            }
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-[var(--oh-accent)] underline"
-          >
-            {t(I18nKey.SETTINGS$SUBSCRIPTION_OPEN_LOGIN)}
-            <ExternalLink size={14} aria-hidden />
-          </a>
+          {verificationUrl ? (
+            <a
+              href={verificationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-[var(--oh-accent)] underline"
+            >
+              {t(I18nKey.SETTINGS$SUBSCRIPTION_OPEN_LOGIN)}
+              <ExternalLink size={14} aria-hidden />
+            </a>
+          ) : null}
           {isPendingLogin ? (
             <span className="text-warning">
               {t(I18nKey.SETTINGS$SUBSCRIPTION_PENDING_TOAST)}
