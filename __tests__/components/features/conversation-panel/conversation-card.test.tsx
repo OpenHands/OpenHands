@@ -1013,6 +1013,23 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("labels a free OpenHands route on native conversation chips", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="openhands"
+          llmModel="openhands/glm-5.2"
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("OpenHands GLM-5.2 (free)");
+      expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
+    });
+
     it("hides the chip for OpenHands conversations with no model", () => {
       // Toggle on, but no model string and no ACP server — nothing to
       // display, so the chip collapses rather than showing a bare logo.
