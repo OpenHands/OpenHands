@@ -57,7 +57,9 @@ test("an uploaded file reaches the agent by absolute path and appears without a 
     await expect(
       page.getByTestId("files-tab-diff-toggle-option-off"),
     ).toHaveAttribute("aria-checked", "true");
-    await page.getByTestId("file-quick-row-tree-toggle").click();
+    const fileTreeToggle = page.getByTestId("file-quick-row-tree-toggle");
+    await expect(fileTreeToggle).toBeVisible();
+    await fileTreeToggle.click({ force: true });
     await expect(page.getByTestId("files-tab-tree")).toBeVisible();
 
     await page.getByTestId("upload-image-input").setInputFiles({
