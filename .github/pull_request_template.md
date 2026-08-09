@@ -44,6 +44,9 @@ If you could not test this, say why.
 <!--
 Provide a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
 
+For bug fixes: reproduction evidence is required. Show the bug reproduced (the
+error state) and then the result after your fix. A terminal screenshot or video
+is fine for non-UI bugs.
 -->
 
 ## Type

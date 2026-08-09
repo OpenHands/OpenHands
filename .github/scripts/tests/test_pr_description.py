@@ -11,6 +11,7 @@ from check_pr_description import (
     extract_linked_issue_numbers,
     extract_pr_type,
     validate_linked_issue_ready,
+    validate_bug_fix_evidence,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
     READY_FOR_DEV_LABEL,
@@ -143,4 +144,72 @@ def test_type_check_no_type_checked_no_type_error():
     body = "## Issue Number\n\nFixes #123\n"
     with patch("check_pr_description.fetch_issue_labels", return_value=["ready-for-dev"]):
         errors = validate_linked_issue_ready(body, "owner/repo", "fake-token")
+    assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# validate_bug_fix_evidence
+# ---------------------------------------------------------------------------
+
+BUG_FIX_BODY_NO_EVIDENCE = """## Type
+
+- [x] Bug fix
+- [ ] Feature
+"""
+
+BUG_FIX_BODY_WITH_SCREENSHOT = """## Type
+
+- [x] Bug fix
+- [ ] Feature
+
+## Video/Screenshots
+
+![before](https://example.com/before.png) → ![after](https://example.com/after.png)
+"""
+
+FEATURE_BODY = """## Type
+
+- [ ] Bug fix
+- [x] Feature
+"""
+
+def test_bug_fix_no_screenshot_errors():
+    errors = validate_bug_fix_evidence(BUG_FIX_BODY_NO_EVIDENCE)
+    assert len(errors) == 1
+    assert "reproduction evidence" in errors[0].lower()
+
+def test_bug_fix_with_screenshot_no_errors():
+    errors = validate_bug_fix_evidence(BUG_FIX_BODY_WITH_SCREENSHOT)
+    assert errors == []
+
+def test_feature_no_bug_evidence_check():
+    errors = validate_bug_fix_evidence(FEATURE_BODY)
+    assert errors == []
+
+def test_no_type_no_bug_evidence_check():
+    errors = validate_bug_fix_evidence("## Summary\n\nNo type\n")
+    assert errors == []
+
+def test_bug_fix_with_github_attachment_no_errors():
+    body = """## Type
+
+- [x] Bug fix
+
+## Video/Screenshots
+
+https://github.com/user-attachments/assets/abc123
+"""
+    errors = validate_bug_fix_evidence(body)
+    assert errors == []
+
+def test_bug_fix_with_video_link_no_errors():
+    body = """## Type
+
+- [x] Bug fix
+
+## Video/Screenshots
+
+https://youtube.com/watch?v=abc123
+"""
+    errors = validate_bug_fix_evidence(body)
     assert errors == []
