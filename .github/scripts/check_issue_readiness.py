@@ -2,11 +2,10 @@
 
 The criteria are type-specific:
 
-- Bug reports (labeled `bug`): the body must contain a Reproduction section
-  whose text references at least one supported run method
-  (`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`) *and* embeds a
-  screenshot or video in that section, plus a non-empty Acceptance Criteria
-  section with at least one checklist item.
+- Bug reports (labeled `bug`): the Actual Behavior section must reference at
+  least one supported run method (`agent-canvas`, `npm run`, or
+  `app.all-hands.dev/canvas`) *and* embed a screenshot or video, plus a
+  non-empty Acceptance Criteria section with at least one checklist item.
 
 - Enhancements (labeled `enhancement`): the body must contain non-empty
   Desired Behavior and Acceptance Criteria sections, the latter with at least
@@ -153,22 +152,22 @@ def has_checklist_item(text: str) -> bool:
 def check_bug(body: str, sections: dict[str, str]) -> ReadinessResult:
     result = ReadinessResult(ready=True)
 
-    reproduction = visible_text(find_section(sections, "reproduction"))
-    if not reproduction:
+    actual = visible_text(find_section(sections, "actual behavior", "actual"))
+    if not actual:
         result.add(
-            "Add a `### Reproduction` section showing how to reproduce the bug in a "
-            "live Agent Canvas session."
+            "Fill in the `### Actual Behavior` section showing how you reproduced "
+            "the bug in a live Agent Canvas session."
         )
     else:
-        if not references_run_method(reproduction):
+        if not references_run_method(actual):
             result.add(
-                "The Reproduction section must reference a supported run method: "
+                "The Actual Behavior section must reference a supported run method: "
                 "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`."
             )
-        if not has_screenshot_or_video(reproduction):
+        if not has_screenshot_or_video(actual):
             result.add(
-                "The Reproduction section must include a screenshot or video of the "
-                "bug (drag a file into the field or paste a link)."
+                "The Actual Behavior section must include a screenshot or video of "
+                "the bug (drag a file into the field or paste a link)."
             )
 
     acceptance = visible_text(find_section(sections, "acceptance criteria", "acceptance"))

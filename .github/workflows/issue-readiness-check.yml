@@ -3,9 +3,9 @@ name: Issue Readiness Check
 
 # Manages the `ready-for-dev` label based on type-specific readiness criteria.
 #
-# Bug reports (label `bug`): the body must contain a Reproduction section that
-# references a supported run method (`agent-canvas`, `npm run`, or
-# `app.all-hands.dev/canvas`) and embeds a screenshot or video, plus an
+# Bug reports (label `bug`): the Actual Behavior section must reference a
+# supported run method (`agent-canvas`, `npm run`, or
+# `app.all-hands.dev/canvas`) and embed a screenshot or video, plus an
 # Acceptance Criteria section with at least one checklist item.
 #
 # Enhancements (label `enhancement`): the body must contain Desired Behavior and

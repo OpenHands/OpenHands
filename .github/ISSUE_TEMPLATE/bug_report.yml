@@ -67,7 +67,23 @@ body:
     id: actual
     attributes:
       label: Actual Behavior
-      description: What actually happened?
+      description: |
+        What actually happened? To qualify for the `ready-for-dev` label, show
+        how you reproduced the bug in a live Agent Canvas session using one of
+        the supported run methods, and attach a screenshot or video of the bug
+        in this section.
+        Run methods (reference at least one):
+          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
+          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
+          - The hosted canvas at `app.all-hands.dev/canvas`
+        Drag a screenshot/video into this field, or paste a link.
+      placeholder: |
+        Run method: `npm run dev`
+
+        1. npm install && npm run dev
+        2. Open http://localhost:3001
+        3. …
+        4. Observed the error shown in the attached screenshot.
     validations:
       required: true
 
@@ -85,29 +101,6 @@ body:
       label: Relevant Logs
       description: Paste any error messages or console output. Content is auto-wrapped in a code block.
       render: shell
-    validations:
-      required: false
-
-  - type: textarea
-    id: reproduction
-    attributes:
-      label: Reproduction
-      description: |
-        Required for the `ready-for-dev` label. Show how to reproduce the bug in a
-        live Agent Canvas session using one of the supported run methods, and
-        attach a screenshot or video of the bug in this section.
-        Run methods (reference at least one):
-          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
-          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
-          - The hosted canvas at `app.all-hands.dev/canvas`
-        Drag a screenshot/video into this field, or paste a link.
-      placeholder: |
-        Run method: `npm run dev`
-
-        1. npm install && npm run dev
-        2. Open http://localhost:3001
-        3. …
-        4. Observed the error shown in the attached screenshot.
     validations:
       required: false
 
