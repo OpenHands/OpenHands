@@ -11,6 +11,7 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/integrations/appwrite-service.ts",
   "api/integrations/dependency-track-service.ts",
   "api/integrations/plane-service.ts",
+  "api/integrations/translate-service.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {

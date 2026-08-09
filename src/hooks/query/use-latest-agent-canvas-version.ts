@@ -5,12 +5,14 @@ import { APP_UPDATE_QUERY_KEYS } from "./query-keys";
 /**
  * Latest published Agent Canvas version (npm `latest` dist-tag).
  *
- * Information-only: failures must stay quiet (`meta.disableToast`) — the
- * settings update card renders them inline. The card's "Check for updates"
- * button is `refetch()`, which bypasses `staleTime`.
+ * Heimdall fork: disabled by default — this tree has diverged from upstream
+ * OpenHands/`@openhands/agent-canvas`, so we do not poll npm for updates.
+ * Pass ``enabled: true`` only in unit tests of the legacy update UI.
+ *
+ * Information-only: failures must stay quiet (`meta.disableToast`).
  */
 export function useLatestAgentCanvasVersion({
-  enabled = true,
+  enabled = false,
 }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: APP_UPDATE_QUERY_KEYS.latestVersion,

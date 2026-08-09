@@ -170,6 +170,10 @@ COPY scripts/proxy-utils.mjs /opt/agent-canvas/proxy-utils.mjs
 COPY scripts/app-login.mjs /opt/agent-canvas/app-login.mjs
 COPY scripts/appwrite-proxy.mjs /opt/agent-canvas/appwrite-proxy.mjs
 COPY scripts/plane-proxy.mjs /opt/agent-canvas/plane-proxy.mjs
+# Imported by static-server.mjs / ingress.mjs for /api/integrations/dependency-track.
+COPY scripts/dependency-track-proxy.mjs /opt/agent-canvas/dependency-track-proxy.mjs
+# Imported by static-server.mjs / ingress.mjs for /api/integrations/translate.
+COPY scripts/translate-proxy.mjs /opt/agent-canvas/translate-proxy.mjs
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka

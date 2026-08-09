@@ -2,6 +2,10 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, Info, Package, ShieldAlert } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  displayTranslatedText,
+  useTranslatedTexts,
+} from "#/hooks/use-translated-texts";
 import type {
   ScaFinding,
   ScaScanResult,
@@ -74,7 +78,13 @@ function severityBadgeClass(severity: SecurityFindingSeverity): string {
   }
 }
 
-function ScaFindingRow({ finding }: { finding: ScaFinding }) {
+function ScaFindingRow({
+  finding,
+  description,
+}: {
+  finding: ScaFinding;
+  description: string;
+}) {
   const { t } = useTranslation("openhands");
 
   return (
@@ -98,7 +108,7 @@ function ScaFindingRow({ finding }: { finding: ScaFinding }) {
               {finding.cveId}
             </span>
           </div>
-          <p className="text-sm text-white">{finding.description}</p>
+          <p className="text-sm text-white">{description}</p>
           <p className="mt-2 font-mono text-xs text-[var(--oh-muted)]">
             {finding.packageName}@{finding.packageVersion}
           </p>
@@ -120,6 +130,12 @@ export function SecurityScaResults({ result }: SecurityScaResultsProps) {
         a.cveId.localeCompare(b.cveId),
     );
   }, [result]);
+
+  const descriptions = useMemo(
+    () => sortedFindings.map((finding) => finding.description),
+    [sortedFindings],
+  );
+  const { translations } = useTranslatedTexts(descriptions);
 
   if (!result) {
     return (
@@ -156,7 +172,14 @@ export function SecurityScaResults({ result }: SecurityScaResultsProps) {
       </p>
       <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
         {sortedFindings.map((finding) => (
-          <ScaFindingRow key={finding.id} finding={finding} />
+          <ScaFindingRow
+            key={finding.id}
+            finding={finding}
+            description={displayTranslatedText(
+              finding.description,
+              translations,
+            )}
+          />
         ))}
       </ul>
     </div>

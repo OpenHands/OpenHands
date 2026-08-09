@@ -2,6 +2,10 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, FileWarning, Info, ShieldAlert } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  displayTranslatedText,
+  useTranslatedTexts,
+} from "#/hooks/use-translated-texts";
 import type {
   SecurityFinding,
   SecurityFindingSeverity,
@@ -80,7 +84,13 @@ function severityBadgeClass(severity: SecurityFindingSeverity): string {
   }
 }
 
-function SecurityFindingRow({ finding }: { finding: SecurityFinding }) {
+function SecurityFindingRow({
+  finding,
+  message,
+}: {
+  finding: SecurityFinding;
+  message: string;
+}) {
   const { t } = useTranslation("openhands");
 
   return (
@@ -104,7 +114,7 @@ function SecurityFindingRow({ finding }: { finding: SecurityFinding }) {
               {finding.ruleId}
             </span>
           </div>
-          <p className="text-sm text-white">{finding.message}</p>
+          <p className="text-sm text-white">{message}</p>
           <p className="mt-2 font-mono text-xs text-[var(--oh-muted)]">
             {finding.filePath}:{finding.startLine}:{finding.startCol}
           </p>
@@ -126,6 +136,12 @@ export function SecurityScanResults({ result }: SecurityScanResultsProps) {
         a.startLine - b.startLine,
     );
   }, [result]);
+
+  const messages = useMemo(
+    () => sortedFindings.map((finding) => finding.message),
+    [sortedFindings],
+  );
+  const { translations } = useTranslatedTexts(messages);
 
   if (!result) {
     return (
@@ -160,7 +176,11 @@ export function SecurityScanResults({ result }: SecurityScanResultsProps) {
       </p>
       <ul className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
         {sortedFindings.map((finding) => (
-          <SecurityFindingRow key={finding.id} finding={finding} />
+          <SecurityFindingRow
+            key={finding.id}
+            finding={finding}
+            message={displayTranslatedText(finding.message, translations)}
+          />
         ))}
       </ul>
     </div>

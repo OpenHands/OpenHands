@@ -6,6 +6,7 @@ import type { SecurityScanResult } from "#/types/security-scan";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string, options?: { count?: number }) => {
       if (key.includes("FINDINGS_COUNT") && options?.count != null) {
         return `${options.count} issue(s) found`;

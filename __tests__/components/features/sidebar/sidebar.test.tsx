@@ -95,19 +95,6 @@ vi.mock("#/components/shared/modals/settings/settings-modal", () => ({
   SettingsModal: () => null,
 }));
 
-vi.mock("#/components/features/settings/agent-canvas-version-tile", () => ({
-  AgentCanvasVersionTile: ({
-    hideWhenUpToDate,
-  }: {
-    hideWhenUpToDate?: boolean;
-  } = {}) =>
-    hideWhenUpToDate ? (
-      <button type="button" data-testid="agent-canvas-version-tile">
-        Agent Canvas version
-      </button>
-    ) : null,
-}));
-
 vi.mock("#/components/features/backends/backend-selector", () => ({
   BackendSelector: ({
     onSelectOption,
@@ -305,25 +292,6 @@ describe("Sidebar", () => {
 
     fireEvent.click(sidebar);
     expect(sidebar.dataset.collapsed).toBe("false");
-  });
-
-  it("shows the version tile above the backend selector when expanded", () => {
-    renderSidebar("/conversations");
-
-    const versionTile = screen.getByTestId("agent-canvas-version-tile");
-    const backendSelector = screen.getByTestId("backend-selector");
-    expect(versionTile.compareDocumentPosition(backendSelector)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-  });
-
-  it("hides the version tile when the sidebar is collapsed", () => {
-    useSidebarStore.setState({ collapsed: true });
-    renderSidebar("/conversations");
-
-    expect(
-      screen.queryByTestId("agent-canvas-version-tile"),
-    ).not.toBeInTheDocument();
   });
 
   it("shows collapsed server/settings action icons when sidebar is collapsed", () => {

@@ -34,6 +34,7 @@ vi.mock("#/hooks/query/use-dependency-track-integration", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string) => {
       const labels: Record<string, string> = {
         "COMMON$SECURITY": "Security",
@@ -42,26 +43,22 @@ vi.mock("react-i18next", () => ({
         "SECURITY$SCANNING": "Scanning…",
         "SECURITY$SAST_SCAN_COMPLETE": "SAST scan complete",
         "SECURITY$SCA_SCAN_COMPLETE": "SCA scan complete",
-        "SECURITY$SAST_TITLE": "SAST (OpenGrep)",
-        "SECURITY$SCA_TITLE": "SCA (Syft + Dependency-Track)",
       };
       return labels[key] ?? key;
     },
   }),
 }));
 
-vi.mock("#/components/features/security/security-scan-results", () => ({
-  SecurityScanResults: ({ result }: { result: unknown }) => (
-    <div data-testid="security-sast-results-mock">
-      {result ? "has-sast-result" : "no-sast-result"}
-    </div>
-  ),
-}));
-
-vi.mock("#/components/features/security/security-sca-results", () => ({
-  SecurityScaResults: ({ result }: { result: unknown }) => (
-    <div data-testid="security-sca-results-mock">
-      {result ? "has-sca-result" : "no-sca-result"}
+vi.mock("#/components/features/security/security-findings-panel", () => ({
+  SecurityFindingsPanel: ({
+    sastResult,
+    scaResult,
+  }: {
+    sastResult: unknown;
+    scaResult: unknown;
+  }) => (
+    <div data-testid="security-findings-panel-mock">
+      {sastResult ? "has-sast" : "no-sast"}|{scaResult ? "has-sca" : "no-sca"}
     </div>
   ),
 }));
@@ -111,9 +108,9 @@ describe("SecurityTab", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("security-sast-results-mock")).toHaveTextContent(
-        "has-sast-result",
-      );
+      expect(
+        screen.getByTestId("security-findings-panel-mock"),
+      ).toHaveTextContent("has-sast|no-sca");
     });
 
     await user.click(screen.getByTestId("security-sca-scan-button"));
@@ -123,9 +120,9 @@ describe("SecurityTab", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("security-sca-results-mock")).toHaveTextContent(
-        "has-sca-result",
-      );
+      expect(
+        screen.getByTestId("security-findings-panel-mock"),
+      ).toHaveTextContent("has-sast|has-sca");
     });
   });
 });

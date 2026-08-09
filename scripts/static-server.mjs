@@ -52,6 +52,10 @@ import {
   isPlaneProxyRequest,
 } from "./plane-proxy.mjs";
 import {
+  createTranslateProxyHandler,
+  isTranslateProxyRequest,
+} from "./translate-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -581,6 +585,7 @@ export function startStaticServer(config) {
     agentServerUrl,
   });
   const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
+  const handleTranslateProxy = createTranslateProxyHandler();
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
@@ -621,6 +626,17 @@ export function startStaticServer(config) {
     if (isPlaneProxyRequest(req.url ?? "/")) {
       void handlePlaneProxy(req, res).catch((err) => {
         console.error(`Plane proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isTranslateProxyRequest(req.url ?? "/")) {
+      void handleTranslateProxy(req, res).catch((err) => {
+        console.error(`Translate proxy error for ${req.url}:`, err);
         if (!res.headersSent) {
           res.writeHead(500);
           res.end("Internal Server Error");

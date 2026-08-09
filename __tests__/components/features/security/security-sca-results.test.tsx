@@ -5,6 +5,7 @@ import type { ScaScanResult } from "#/types/security-scan";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string, options?: { count?: number }) => {
       if (key.includes("SCA_FINDINGS_COUNT") && options?.count != null) {
         return `${options.count} vulnerable package(s)`;

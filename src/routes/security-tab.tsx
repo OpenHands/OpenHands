@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Shield } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
-import { SecurityScanResults } from "#/components/features/security/security-scan-results";
-import { SecurityScaResults } from "#/components/features/security/security-sca-results";
+import { SecurityFindingsPanel } from "#/components/features/security/security-findings-panel";
 import { useConversationDependencyTrackIntegration } from "#/hooks/query/use-dependency-track-integration";
 import { useSecuritySastScan } from "#/hooks/query/use-security-sast-scan";
 import { useSecurityScaScan } from "#/hooks/query/use-security-sca-scan";
@@ -157,18 +156,10 @@ export default function SecurityTab() {
         )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3">
-        <p className="mb-3 text-xs font-medium text-[var(--oh-muted)]">
-          {t(I18nKey.SECURITY$SAST_TITLE)}
-        </p>
-        <div className="mb-6 min-h-[160px]">
-          <SecurityScanResults result={lastSastResult} />
-        </div>
-        <p className="mb-3 text-xs font-medium text-[var(--oh-muted)]">
-          {t(I18nKey.SECURITY$SCA_TITLE)}
-        </p>
-        <div className="min-h-[160px]">
-          <SecurityScaResults result={lastScaResult} />
-        </div>
+        <SecurityFindingsPanel
+          sastResult={lastSastResult}
+          scaResult={lastScaResult}
+        />
       </div>
     </div>
   );
