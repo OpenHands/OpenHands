@@ -42,7 +42,7 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { chmodSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -61,6 +61,7 @@ const __dirname = dirname(__filename);
 const projectRoot = app.isPackaged ? __dirname : join(__dirname, "..");
 const buildDir = join(projectRoot, "build");
 const scriptsDir = join(projectRoot, "scripts");
+const defaultsPath = join(projectRoot, "config", "defaults.json");
 
 // OpenHands raised-hands app icon, used as the BrowserWindow.icon option.
 // Windows gets the multi-size icon.ico (16→256, small sizes as classic BMP
@@ -331,7 +332,7 @@ function createLoadingWindow() {
   loadingWin.once("ready-to-show", () => loadingWin?.show());
 }
 
-function createMainWindow() {
+function createMainWindow(ingressUrl = "http://localhost:8000") {
   mainWin = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -349,7 +350,7 @@ function createMainWindow() {
     },
   });
 
-  mainWin.loadURL("http://localhost:8000");
+  mainWin.loadURL(ingressUrl);
 
   mainWin.once("ready-to-show", () => {
     loadingWin?.destroy();
@@ -590,6 +591,76 @@ function handleServiceLog(name, line, level) {
   }
 }
 
+/**
+ * If preferred desktop ports are busy, propose free alternatives and ask the
+ * user whether to continue with the remapped ports. Accepted remaps are
+ * written into `process.env` so `buildConfig` / `assertPortsFree` pick them up.
+ *
+ * @returns {Promise<{ cancelled: true } | { cancelled: false, ingressPort: number }>}
+ */
+async function ensureDesktopPortsAvailable() {
+  const defaults = JSON.parse(readFileSync(defaultsPath, "utf-8"));
+  const [{ findFreePorts }, remap] = await Promise.all([
+    import(pathToFileURL(join(scriptsDir, "dev-safe.mjs")).href),
+    import(pathToFileURL(join(scriptsDir, "desktop-port-remap.mjs")).href),
+  ]);
+
+  const preferredPorts = remap.getDesktopPreferredPorts(defaults, process.env);
+  const plan = await remap.planDesktopPortRemap(preferredPorts, findFreePorts);
+  const ingressPort =
+    plan.allocated.ingress ??
+    preferredPorts.find((p) => p.name === "ingress")?.preferred ??
+    defaults.ports.proxy;
+
+  if (plan.remaps.length === 0) {
+    return { cancelled: false, ingressPort };
+  }
+
+  const detail = remap.formatPortRemapMessage(plan.remaps);
+  setBootPhase("Some ports are busy — waiting for confirmation…");
+  appendBootLog(
+    "desktop",
+    plan.remaps
+      .map((r) => `${r.label}: ${r.preferred} → ${r.actual}`)
+      .join("; "),
+    "warn",
+  );
+  console.warn(
+    "[desktop] Preferred ports busy; proposing alternatives:\n" + detail,
+  );
+
+  const dialogOptions = {
+    type: "warning",
+    buttons: ["Use alternate ports", "Quit"],
+    defaultId: 0,
+    cancelId: 1,
+    title: "Ports already in use",
+    message: "Required ports are already in use",
+    detail,
+    noLink: true,
+  };
+  const { response } =
+    loadingWin && !loadingWin.isDestroyed()
+      ? await dialog.showMessageBox(loadingWin, dialogOptions)
+      : await dialog.showMessageBox(dialogOptions);
+
+  if (response !== 0) {
+    appendBootLog("desktop", "User declined alternate ports — quitting.", "info");
+    return { cancelled: true };
+  }
+
+  Object.assign(process.env, plan.env);
+  for (const [key, value] of Object.entries(plan.env)) {
+    appendBootLog("desktop", `Using ${key}=${value}`, "info");
+    console.log(`[desktop] Using ${key}=${value}`);
+  }
+
+  return {
+    cancelled: false,
+    ingressPort: Number(plan.env.PORT ?? ingressPort),
+  };
+}
+
 async function startStack() {
   const entryUrl = pathToFileURL(
     join(scriptsDir, "dev-with-automation.mjs"),
@@ -626,6 +697,8 @@ async function startStack() {
         "Check your internet connection and try again.",
     );
   }
+
+  return result?.config ?? null;
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -659,12 +732,21 @@ app.whenReady().then(async () => {
   createLoadingWindow();
 
   try {
+    setBootPhase("Checking ports…");
+    const portPlan = await ensureDesktopPortsAvailable();
+    if (portPlan.cancelled) {
+      app.quit();
+      return;
+    }
+
     setBootPhase("Starting backend services…");
-    await startStack();
+    const stackConfig = await startStack();
+    const ingressPort = stackConfig?.ingressPort ?? portPlan.ingressPort;
+    const ingressUrl = `http://localhost:${ingressPort}`;
 
     // Stage 1: ingress proxy is bound (anything < 500 on /).
     setBootPhase("Waiting for proxy…");
-    await waitForUrl("http://localhost:8000");
+    await waitForUrl(ingressUrl);
 
     // Stage 2: the agent-server behind the proxy is actually serving
     // requests. `startStack()` already waited for this internally, but we
@@ -672,14 +754,14 @@ app.whenReady().then(async () => {
     // window between processes binding, we still open the main window with
     // a live backend. Cheap (a single 200 response) when everything is up.
     setBootPhase("Connecting to agent server…");
-    await waitForAgentServer("http://localhost:8000/server_info", 60_000);
+    await waitForAgentServer(`${ingressUrl}/server_info`, 60_000);
 
     setBootPhase("Ready.");
-    createMainWindow();
+    createMainWindow(ingressUrl);
   } catch (err) {
     const summary =
       err.message +
-      " Ensure ports 8000, 18000, and 18001 are free, then try again.";
+      " Free the default ports (or accept alternate ports on the next launch) and try again.";
     // Record the failure in the terminal and the startup-log buffer so it
     // shows (and copies) as the final console line.
     console.error("[desktop] Startup failed:", err);

@@ -271,9 +271,15 @@ export function matchAcpProviderByCommand(
       ? command.trim().split(/\s+/).filter(Boolean)
       : [];
   if (tokens.length === 0) return null;
-  const normalized = tokens.join(" ");
+  // Strip a trailing ``.cmd`` on argv[0] so Windows-normalized launches
+  // (``opencode.cmd acp``) still re-detect as the OpenCode preset.
+  const comparable = tokens
+    .map((token, index) =>
+      index === 0 ? token.replace(/\.cmd$/i, "") : token,
+    )
+    .join(" ");
   for (const provider of ACP_PROVIDERS) {
-    if (provider.default_command.join(" ") === normalized) {
+    if (provider.default_command.join(" ") === comparable) {
       return provider.key;
     }
   }

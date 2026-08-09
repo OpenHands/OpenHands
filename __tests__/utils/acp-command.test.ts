@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatCommand, parseCommand } from "#/utils/acp-command";
+import {
+  formatCommand,
+  normalizeAcpCommandForWindows,
+  parseCommand,
+} from "#/utils/acp-command";
 
 describe("parseCommand", () => {
   it("splits a simple npx invocation into argv tokens", () => {
@@ -194,5 +198,45 @@ describe("formatCommand", () => {
     // formatCommand(["bash","-c",""]) would render ``"bash -c "`` and
     // parseCommand would return ``["bash", "-c"]``, losing the empty arg.
     expect(formatCommand(["bash", "-c", ""])).toBe("bash -c ''");
+  });
+});
+
+describe("normalizeAcpCommandForWindows", () => {
+  it("appends .cmd to bare npm shims on Windows", () => {
+    // Arrange / Act / Assert — CreateProcess cannot resolve bare `opencode`.
+    expect(
+      normalizeAcpCommandForWindows(["opencode", "acp"], "win32"),
+    ).toEqual(["opencode.cmd", "acp"]);
+    expect(
+      normalizeAcpCommandForWindows(
+        ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+        "win32",
+      ),
+    ).toEqual(["npx.cmd", "-y", "@agentclientprotocol/claude-agent-acp"]);
+  });
+
+  it("leaves commands unchanged on non-Windows hosts", () => {
+    expect(
+      normalizeAcpCommandForWindows(["opencode", "acp"], "linux"),
+    ).toEqual(["opencode", "acp"]);
+  });
+
+  it("does not double-suffix or rewrite paths / native binaries", () => {
+    expect(
+      normalizeAcpCommandForWindows(["opencode.cmd", "acp"], "win32"),
+    ).toEqual(["opencode.cmd", "acp"]);
+    expect(
+      normalizeAcpCommandForWindows(
+        [String.raw`C:\Users\me\AppData\Roaming\npm\opencode.cmd`, "acp"],
+        "win32",
+      ),
+    ).toEqual([
+      String.raw`C:\Users\me\AppData\Roaming\npm\opencode.cmd`,
+      "acp",
+    ]);
+    expect(normalizeAcpCommandForWindows(["agent", "acp"], "win32")).toEqual([
+      "agent",
+      "acp",
+    ]);
   });
 });

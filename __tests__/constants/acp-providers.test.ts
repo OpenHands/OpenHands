@@ -332,6 +332,8 @@ describe("matchAcpProviderByCommand", () => {
   it("re-detects OpenCode from a custom-persisted command", () => {
     expect(matchAcpProviderByCommand(["opencode", "acp"])).toBe("opencode");
     expect(matchAcpProviderByCommand("opencode acp")).toBe("opencode");
+    // Windows-normalized spawn form must still re-detect as OpenCode.
+    expect(matchAcpProviderByCommand(["opencode.cmd", "acp"])).toBe("opencode");
   });
 });
 

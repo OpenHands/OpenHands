@@ -57,6 +57,12 @@ See [Authentication](#authentication) for how each one authenticates.
 > (`opencode`) on `PATH` — install with
 > `curl -fsSL https://opencode.ai/install | bash` (or `npm i -g opencode-ai`).
 > In the all-in-one Docker image the CLI is pre-installed.
+>
+> **Windows note.** npm installs `opencode` as a `.cmd` shim. The agent-server
+> spawns ACP via Python `CreateProcess`, which cannot resolve bare `opencode`
+> (you get `WinError 2`). Canvas rewrites the launch to `opencode.cmd` on
+> Windows at conversation start; if you override the command manually, use
+> `opencode.cmd acp` (or the absolute path from `where opencode`).
 
 ## Authentication
 

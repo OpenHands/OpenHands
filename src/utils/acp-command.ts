@@ -187,3 +187,76 @@ export function formatCommand(command: readonly string[]): string {
     )
     .join(" ");
 }
+
+/**
+ * npm global shims on Windows are ``*.cmd`` / ``*.ps1`` wrappers. Python's
+ * ``asyncio.create_subprocess_exec`` (what the agent-server uses for ACP)
+ * resolves bare names via CreateProcess and **does not** pick up those
+ * shims — ``opencode`` / ``npx`` throw ``WinError 2`` even when
+ * ``where opencode`` succeeds in a shell. Passing ``opencode.cmd`` (or the
+ * absolute path from ``where``) works.
+ *
+ * Only rewrite well-known npm CLI entrypoints; leave native ``.exe`` tools
+ * (e.g. Cursor's ``agent``) and already-qualified paths alone.
+ */
+const WINDOWS_NPM_SHIM_COMMANDS = new Set([
+  "npx",
+  "npm",
+  "opencode",
+  "yarn",
+  "pnpm",
+]);
+
+/**
+ * True when the ACP subprocess host is likely Windows. Prefer an explicit
+ * override in tests; otherwise use the browser / Node platform. Local
+ * Electron and ``npm run desktop`` run the agent-server on the same OS as
+ * the UI — cloud Linux backends should not hit this path for host CLIs.
+ */
+export function isLikelyWindowsAcpHost(
+  platform: string | null | undefined = detectAcpHostPlatform(),
+): boolean {
+  return typeof platform === "string" && /win/i.test(platform);
+}
+
+function detectAcpHostPlatform(): string | null {
+  if (typeof process !== "undefined" && typeof process.platform === "string") {
+    return process.platform;
+  }
+  if (typeof navigator !== "undefined") {
+    const uaData = (
+      navigator as Navigator & { userAgentData?: { platform?: string } }
+    ).userAgentData;
+    return uaData?.platform ?? navigator.platform ?? null;
+  }
+  return null;
+}
+
+/**
+ * Rewrite bare npm-shim ACP launch tokens for Windows so the agent-server's
+ * CreateProcess spawn succeeds. Idempotent; no-op on non-Windows hosts.
+ *
+ * @param command - ``acp_command`` argv
+ * @param platform - Override host platform (``"win32"`` / ``"linux"`` / …)
+ */
+export function normalizeAcpCommandForWindows(
+  command: readonly string[],
+  platform?: string | null,
+): string[] {
+  if (!isLikelyWindowsAcpHost(platform ?? detectAcpHostPlatform())) {
+    return [...command];
+  }
+  if (command.length === 0) return [];
+  const [head, ...rest] = command;
+  if (typeof head !== "string") return [...command];
+  const trimmed = head.trim();
+  if (!trimmed) return [...command];
+  // Already a path or already has an extension (``.cmd`` / ``.exe`` / …).
+  if (/[\\/]/.test(trimmed) || /\.[A-Za-z0-9]+$/.test(trimmed)) {
+    return [...command];
+  }
+  if (!WINDOWS_NPM_SHIM_COMMANDS.has(trimmed.toLowerCase())) {
+    return [...command];
+  }
+  return [`${trimmed}.cmd`, ...rest];
+}

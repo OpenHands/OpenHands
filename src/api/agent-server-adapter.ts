@@ -11,6 +11,7 @@ import {
   matchAcpProviderByCommand,
   resolveEffectiveAcpModel,
 } from "#/constants/acp-providers";
+import { normalizeAcpCommandForWindows } from "#/utils/acp-command";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   getCachedAgentServerInfo,
@@ -806,16 +807,25 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
   const cmd = agentSettings.acp_command;
   const isEmpty = Array.isArray(cmd) && cmd.length === 0;
   const noCommand = cmd === undefined;
-  if (!isEmpty && !noCommand) {
-    return cmd;
+  let resolved: unknown = cmd;
+  if (isEmpty || noCommand) {
+    const serverKey =
+      typeof agentSettings.acp_server === "string"
+        ? agentSettings.acp_server
+        : undefined;
+    const provider = getAcpProvider(serverKey);
+    resolved = provider ? [...provider.default_command] : cmd;
   }
 
-  const serverKey =
-    typeof agentSettings.acp_server === "string"
-      ? agentSettings.acp_server
-      : undefined;
-  const provider = getAcpProvider(serverKey);
-  return provider ? [...provider.default_command] : cmd;
+  // Windows CreateProcess cannot spawn bare npm shims (``opencode``, ``npx``)
+  // — rewrite to ``*.cmd`` at conversation-start so saved portable commands
+  // still work under Electron / local agent-server on Windows.
+  if (Array.isArray(resolved)) {
+    return normalizeAcpCommandForWindows(
+      resolved.filter((part): part is string => typeof part === "string"),
+    );
+  }
+  return resolved;
 }
 
 function buildConfiguredAcpAgentSettings(
