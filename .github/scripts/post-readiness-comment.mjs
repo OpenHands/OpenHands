@@ -48,18 +48,28 @@ function requireValue(name, value) {
 }
 
 async function listComments(repo, issueNumber, token) {
-  const url = `${API_ROOT}/repos/${repo}/issues/${issueNumber}/comments?per_page=100`;
-  const resp = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  if (!resp.ok) {
-    throw new Error(`Failed to list comments: ${resp.status} ${await resp.text()}`);
+  // Paginate through all comments so the marker is found even on issues
+  // with >100 comments.
+  const all = [];
+  let page = 1;
+  while (true) {
+    const url = `${API_ROOT}/repos/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`;
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!resp.ok) {
+      throw new Error(`Failed to list comments: ${resp.status} ${await resp.text()}`);
+    }
+    const batch = await resp.json();
+    all.push(...batch);
+    if (batch.length < 100) break;
+    page += 1;
   }
-  return resp.json();
+  return all;
 }
 
 async function createComment(repo, issueNumber, body, token) {

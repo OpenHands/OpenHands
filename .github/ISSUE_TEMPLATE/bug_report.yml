@@ -122,13 +122,13 @@ body:
     attributes:
       label: Screenshots
       description: Drag and drop or paste any screenshots that help explain the issue.
-      validations:
-        required: false
+    validations:
+      required: false
 
   - type: textarea
     id: additional
     attributes:
       label: Additional Context
       description: Anything else that might be helpful (config, workarounds tried, etc.).
-      validations:
-        required: false
+    validations:
+      required: false

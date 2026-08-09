@@ -24,11 +24,20 @@ from check_pr_description import (
 def test_extract_fixes():
     assert extract_linked_issue_numbers("## Issue Number\n\nFixes #123\n") == [123]
 
+def test_extract_fix_singular():
+    assert extract_linked_issue_numbers("## Issue Number\n\nFix #123\n") == [123]
+
 def test_extract_closes():
     assert extract_linked_issue_numbers("## Issue Number\n\nCloses #456\n") == [456]
 
+def test_extract_close_singular():
+    assert extract_linked_issue_numbers("## Issue Number\n\nClose #456\n") == [456]
+
 def test_extract_resolves():
     assert extract_linked_issue_numbers("## Issue Number\n\nResolves #789\n") == [789]
+
+def test_extract_resolve_singular():
+    assert extract_linked_issue_numbers("## Issue Number\n\nResolve #789\n") == [789]
 
 def test_extract_bare_in_issue_section():
     assert extract_linked_issue_numbers("## Issue Number\n\n#42\n") == [42]

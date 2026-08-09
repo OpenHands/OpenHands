@@ -61,9 +61,14 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
               run: |
                   set -euo pipefail
-                  gh issue edit "${{ github.event.issue.number }}" \
+                  # Capture stderr — tolerate "label already present" (exit 0
+                  # from gh) but surface unexpected errors to the step summary.
+                  if ! gh issue edit "${{ github.event.issue.number }}" \
                       --repo "${{ github.repository }}" \
-                      --add-label "ready-for-dev" 2>/dev/null || true
+                      --add-label "ready-for-dev" 2>/tmp/gh-err.txt; then
+                    echo "::warning::Failed to add ready-for-dev label:" >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
 
             - name: Remove ready-for-dev label
               if: steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev')
@@ -71,10 +76,14 @@ jobs:
                   GH_TOKEN: ${{ github.token }}
               run: |
                   set -euo pipefail
-                  # Remove may no-op if a concurrent run already removed it.
-                  gh issue edit "${{ github.event.issue.number }}" \
+                  # Capture stderr — tolerate "label already removed" but
+                  # surface unexpected errors.
+                  if ! gh issue edit "${{ github.event.issue.number }}" \
                       --repo "${{ github.repository }}" \
-                      --remove-label "ready-for-dev" 2>/dev/null || true
+                      --remove-label "ready-for-dev" 2>/tmp/gh-err.txt; then
+                    echo "::warning::Failed to remove ready-for-dev label:" >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
 
             - name: Post feedback comment
               if: >-

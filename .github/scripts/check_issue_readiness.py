@@ -33,7 +33,6 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-READY_FOR_DEV_LABEL = "ready-for-dev"
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
@@ -149,7 +148,7 @@ def has_checklist_item(text: str) -> bool:
     return bool(CHECKLIST_ITEM_RE.search(text))
 
 
-def check_bug(body: str, sections: dict[str, str]) -> ReadinessResult:
+def check_bug(sections: dict[str, str]) -> ReadinessResult:
     result = ReadinessResult(ready=True)
 
     actual = visible_text(find_section(sections, "actual behavior", "actual"))
@@ -182,7 +181,7 @@ def check_bug(body: str, sections: dict[str, str]) -> ReadinessResult:
     return result
 
 
-def check_enhancement(body: str, sections: dict[str, str]) -> ReadinessResult:
+def check_enhancement(sections: dict[str, str]) -> ReadinessResult:
     result = ReadinessResult(ready=True)
 
     desired = visible_text(find_section(sections, "desired behavior", "desired"))
@@ -214,9 +213,9 @@ def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     sections = extract_sections(body or "")
 
     if BUG_LABEL in label_set:
-        return check_bug(body or "", sections)
+        return check_bug(sections)
     if ENHANCEMENT_LABEL in label_set:
-        return check_enhancement(body or "", sections)
+        return check_enhancement(sections)
 
     return ReadinessResult(
         ready=False,

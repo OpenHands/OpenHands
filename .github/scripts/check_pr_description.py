@@ -73,7 +73,7 @@ HUMAN_TESTED_RE = re.compile(
 # GitHub auto-linking keywords: close, closes, closed, fix, fixes, fixed,
 # resolve, resolves, resolved (case-insensitive).
 ISSUE_REF_RE = re.compile(
-    r"(?i)(?:fix|clos|resolv)(?:es|ed|ing)?\s+#(\d+)"
+    r"(?i)(?:fix|clos|resolv)(?:e?(?:s|d)?|ing)?\s+#(\d+)"
 )
 BARE_ISSUE_REF_RE = re.compile(r"(?<!\w)#(\d+)")
 
