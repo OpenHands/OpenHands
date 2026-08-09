@@ -11,7 +11,8 @@
  *   node post-readiness-comment.mjs \
  *     --issue-number 123 \
  *     --repo OpenHands/OpenHands \
- *     --reasons-file /tmp/reasons.txt
+ *     --reasons-file /tmp/reasons.txt \
+ *     --ready           # optional: post a "ready" message instead of "not ready"
  */
 
 import { readFileSync } from "node:fs";
@@ -104,6 +105,7 @@ async function main() {
   const token = process.env.GH_TOKEN;
   if (!token) throw new Error("GH_TOKEN env var is required");
 
+  const isReady = args.ready === "" || args.ready === "true";
   const reasonsFile = args.reasons_file || args.reasons;
   const reasons = reasonsFile
     ? readFileSync(reasonsFile, "utf8")
@@ -116,32 +118,43 @@ async function main() {
     ? reasons.map((r) => `- ${r}`).join("\n")
     : "- The issue does not meet the ready-for-dev criteria.";
 
-  const body = [
-    MARKER,
-    "### `ready-for-dev` label removed",
-    "",
-    "This issue was labeled `ready-for-dev` but does not yet meet the readiness",
-    "criteria, so the label was removed. The criteria are type-specific:",
-    "",
-    "**Bug reports** (`bug` label):",
-    "- The `### Actual Behavior` section must reference a supported run method",
-    "  (`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`) **and** include",
-    "  a screenshot or video of the bug.",
-    "- An `### Acceptance Criteria` section with at least one checklist item (`- [ ] …`).",
-    "",
-    "**Enhancements** (`enhancement` label):",
-    "- A `### Desired Behavior` section.",
-    "- An `### Acceptance Criteria` section with at least one checklist item.",
-    "",
-    "What is missing:",
-    "",
-    reasonList,
-    "",
-    "Edit the issue to address the gaps and the `ready-for-dev` label will be",
-    "re-applied automatically.",
-    "",
-    "_This is an automated check — no AI was used to generate this comment._",
-  ].join("\n");
+  const body = isReady
+    ? [
+        MARKER,
+        "### ✅ `ready-for-dev` label applied",
+        "",
+        "This issue meets the readiness criteria and is ready for contribution.",
+        "A contributor can now open a PR that links this issue (`Fixes #<number>`).",
+        "",
+        "_This is an automated check — no AI was used to generate this comment._",
+      ].join("\n")
+    : [
+        MARKER,
+        "### ⚠️ Not yet `ready-for-dev`",
+        "",
+        "This issue does not yet meet the readiness criteria, so the",
+        "`ready-for-dev` label has not been applied (or has been removed).",
+        "The criteria are type-specific:",
+        "",
+        "**Bug reports** (`bug` label):",
+        "- The `### Actual Behavior` section must reference a supported run method",
+        "  (`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`) **and** include",
+        "  a screenshot or video of the bug.",
+        "- An `### Acceptance Criteria` section with at least one checklist item (`- [ ] …`).",
+        "",
+        "**Enhancements** (`enhancement` label):",
+        "- A `### Desired Behavior` section.",
+        "- An `### Acceptance Criteria` section with at least one checklist item.",
+        "",
+        "What is missing:",
+        "",
+        reasonList,
+        "",
+        "Edit the issue to address the gaps and the `ready-for-dev` label will be",
+        "applied automatically.",
+        "",
+        "_This is an automated check — no AI was used to generate this comment._",
+      ].join("\n");
 
   const comments = await listComments(repo, issueNumber, token);
   const existing = comments.find((comment) => comment.body?.includes(MARKER));

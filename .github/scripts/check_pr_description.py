@@ -10,6 +10,10 @@ Additional checks:
 - The body must reference at least one issue (e.g. `Fixes #123`) and at least
   one referenced issue must carry the `ready-for-dev` label. The API lookup is
   only performed in CI (when GITHUB_EVENT_PATH and GITHUB_TOKEN are available).
+- The PR's Type checkbox must match the linked issue's labels: a "Bug fix" PR
+  should link an issue with the `bug` label; a "Feature" PR should link one
+  with the `enhancement` label. This prevents a contributor from bypassing
+  bug-specific requirements by mislabeling the PR type.
 
 Local usage example:
     python .github/scripts/check_pr_description.py --body-file /tmp/pr-body.md \
@@ -71,6 +75,17 @@ ISSUE_REF_RE = re.compile(
 BARE_ISSUE_REF_RE = re.compile(r"(?<!\w)#(\d+)")
 
 READY_FOR_DEV_LABEL = "ready-for-dev"
+BUG_LABEL = "bug"
+ENHANCEMENT_LABEL = "enhancement"
+
+# PR Type checkboxes in the `## Type` section. We capture which type the author
+# checked so we can cross-check it against the linked issue's labels.
+PR_TYPE_BUG_RE = re.compile(
+    r"(?im)^\s*[-*]\s*\[(?P<box>[ xX])\]\s*Bug fix"
+)
+PR_TYPE_FEATURE_RE = re.compile(
+    r"(?im)^\s*[-*]\s*\[(?P<box>[ xX])\]\s*Feature"
+)
 
 # Markdown image: ![alt](url)
 MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
@@ -226,6 +241,22 @@ def extract_linked_issue_numbers(body: str) -> list[int]:
     return numbers
 
 
+def extract_pr_type(body: str) -> str | None:
+    """Return the checked PR type from the `## Type` section.
+
+    Returns "bug" if the "Bug fix" checkbox is checked, "enhancement" if the
+    "Feature" checkbox is checked, or None if neither is checked or the section
+    is absent.
+    """
+    bug_match = PR_TYPE_BUG_RE.search(body)
+    if bug_match and bug_match.group("box").strip().lower() == "x":
+        return BUG_LABEL
+    feature_match = PR_TYPE_FEATURE_RE.search(body)
+    if feature_match and feature_match.group("box").strip().lower() == "x":
+        return ENHANCEMENT_LABEL
+    return None
+
+
 def fetch_issue_labels(repo: str, issue_number: int, token: str) -> list[str]:
     """Fetch label names for an issue via the GitHub REST API."""
     import urllib.request
@@ -248,6 +279,10 @@ def validate_linked_issue_ready(
 ) -> list[str]:
     """Require a linked issue carrying the `ready-for-dev` label.
 
+    Also cross-checks the PR's Type checkbox against the linked issue's labels:
+    a "Bug fix" PR must link an issue with the `bug` label, and a "Feature" PR
+    must link one with the `enhancement` label.
+
     When `repo` and `token` are not provided (local `--body-file` mode), only
     checks that the body references at least one issue — the API lookup is
     skipped.
@@ -267,7 +302,12 @@ def validate_linked_issue_ready(
 
     import urllib.error
 
+    pr_type = extract_pr_type(body)
+
     checked: list[int] = []
+    found_ready = False
+    found_type_match = False
+
     for number in numbers:
         try:
             labels = fetch_issue_labels(repo, number, token)
@@ -276,20 +316,34 @@ def validate_linked_issue_ready(
                 continue
             raise
         checked.append(number)
-        if READY_FOR_DEV_LABEL in labels:
-            return errors
 
-    if checked:
+        if READY_FOR_DEV_LABEL in labels:
+            found_ready = True
+
+        if pr_type and pr_type in [label.lower() for label in labels]:
+            found_type_match = True
+
+    if not found_ready:
+        if checked:
+            ref = ", ".join(f"#{n}" for n in checked)
+            errors.append(
+                f"None of the linked issues ({ref}) carry the `ready-for-dev` label. "
+                "The issue must meet the type-specific readiness criteria before a PR "
+                "can be opened against it."
+            )
+        else:
+            errors.append(
+                f"Referenced issue(s) {', '.join(f'#{n}' for n in numbers)} could not "
+                "be found in this repository. Link an issue in this repo."
+            )
+
+    if pr_type and not found_type_match and checked:
+        type_name = "bug" if pr_type == BUG_LABEL else "enhancement"
         ref = ", ".join(f"#{n}" for n in checked)
         errors.append(
-            f"None of the linked issues ({ref}) carry the `ready-for-dev` label. "
-            "The issue must meet the type-specific readiness criteria before a PR "
-            "can be opened against it."
-        )
-    else:
-        errors.append(
-            f"Referenced issue(s) {', '.join(f'#{n}' for n in numbers)} could not "
-            "be found in this repository. Link an issue in this repo."
+            f"This PR is marked as `{type_name}` but none of the linked issues "
+            f"({ref}) carry the `{pr_type}` label. Ensure the linked issue has the "
+            f"correct type label (`{pr_type}`)."
         )
 
     return errors

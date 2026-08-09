@@ -12,9 +12,14 @@ name: Issue Readiness Check
 # Acceptance Criteria sections, the latter with at least one checklist item.
 #
 # When criteria are met the label is added (idempotently); when they are not the
-# label is removed and a comment explains what is missing. The check runs on
-# issue open/edit/reopen and whenever labels change, so editing the body to fix
-# a gap re-evaluates automatically.
+# label is removed. A feedback comment is posted (or updated) in three cases:
+#   1. The issue is first opened or reopened — always comment so the author
+#      knows whether their issue is ready or what is missing.
+#   2. The label is being added (issue became ready) — comment celebrating it.
+#   3. The label is being removed (issue was ready but is no longer) — comment
+#      explaining what changed.
+# Edits that do not change the label state do not produce a new comment. All
+# comments are upserted by a hidden marker so there is at most one per issue.
 
 on:
     issues:
@@ -60,7 +65,7 @@ jobs:
                       --repo "${{ github.repository }}" \
                       --add-label "ready-for-dev" 2>/dev/null || true
 
-            - name: Remove ready-for-dev label and comment
+            - name: Remove ready-for-dev label
               if: steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev')
               env:
                   GH_TOKEN: ${{ github.token }}
@@ -70,7 +75,25 @@ jobs:
                   gh issue edit "${{ github.event.issue.number }}" \
                       --repo "${{ github.repository }}" \
                       --remove-label "ready-for-dev" 2>/dev/null || true
-                  node .github/scripts/post-readiness-comment.mjs \
-                      --issue-number "${{ github.event.issue.number }}" \
-                      --repo "${{ github.repository }}" \
-                      --reasons-file "${{ steps.readiness.outputs.reasons_file }}"
+
+            - name: Post feedback comment
+              if: >-
+                  github.event.action == 'opened'
+                  || github.event.action == 'reopened'
+                  || (steps.readiness.outputs.ready == 'true' && !contains(github.event.issue.labels.*.name, 'ready-for-dev'))
+                  || (steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev'))
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  if [ "${{ steps.readiness.outputs.ready }}" = "true" ]; then
+                    node .github/scripts/post-readiness-comment.mjs \
+                        --issue-number "${{ github.event.issue.number }}" \
+                        --repo "${{ github.repository }}" \
+                        --ready
+                  else
+                    node .github/scripts/post-readiness-comment.mjs \
+                        --issue-number "${{ github.event.issue.number }}" \
+                        --repo "${{ github.repository }}" \
+                        --reasons-file "${{ steps.readiness.outputs.reasons_file }}"
+                  fi
