@@ -54,7 +54,9 @@ test("an uploaded file reaches the agent by absolute path and appears without a 
     await expect(panelToggle).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("conversation-tab-files").click();
     await expect(page.getByTestId("files-tab-diff-toggle")).toBeVisible();
-    await page.getByTestId("files-tab-diff-toggle-option-off").click();
+    await expect(
+      page.getByTestId("files-tab-diff-toggle-option-off"),
+    ).toHaveAttribute("aria-checked", "true");
     await page.getByTestId("file-quick-row-tree-toggle").click();
     await expect(page.getByTestId("files-tab-tree")).toBeVisible();
 
