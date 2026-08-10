@@ -28,6 +28,11 @@ import {
   toPluginCoordinates,
   type WorkspaceMode,
 } from "#/api/conversation-metadata-store";
+import type {
+  AutonomyMode,
+  PentestRuntimeProfile,
+  WorkspaceType,
+} from "#/types/workspace-types";
 
 export interface CreateConversationVariables {
   query?: string;
@@ -48,6 +53,11 @@ export interface CreateConversationVariables {
   // launch from the user's selected profile (#3727).
   agentProfileId?: string;
   entryPoint?: string; // analytics only; not forwarded to the service
+  /** Workspace type for pentest vs code creation (PROJETOSIN-183). */
+  workspaceType?: WorkspaceType;
+  engagementId?: string;
+  autonomyMode?: AutonomyMode;
+  runtimeProfile?: PentestRuntimeProfile;
 }
 
 export const CREATE_CONVERSATION_MUTATION_KEY = ["create-conversation"];
@@ -90,6 +100,10 @@ export const useCreateConversation = () => {
         parentConversationId,
         agentType,
         agentProfileId,
+        workspaceType,
+        engagementId,
+        autonomyMode,
+        runtimeProfile,
       } = variables;
 
       // The active AgentProfile is the default launch profile for new
@@ -280,7 +294,12 @@ export const useCreateConversation = () => {
         resolvedAgentProfile?.agent_kind === "openhands"
           ? resolvedAgentProfile.llm_profile_ref
           : (llmProfiles?.active_profile ?? null);
-      if (localConversationId && (activeProfile || attachedPlugins.length)) {
+      const hasPentestMeta =
+        workspaceType === "pentest" && Boolean(engagementId);
+      if (
+        localConversationId &&
+        (activeProfile || attachedPlugins.length || hasPentestMeta)
+      ) {
         const prev = getStoredConversationMetadata(localConversationId);
         setStoredConversationMetadata(localConversationId, {
           selected_repository: prev?.selected_repository ?? null,
@@ -292,6 +311,10 @@ export const useCreateConversation = () => {
           plugins: attachedPlugins.length
             ? attachedPlugins
             : (prev?.plugins ?? null),
+          workspace_type: workspaceType ?? prev?.workspace_type ?? "code",
+          engagement_id: engagementId ?? prev?.engagement_id ?? null,
+          autonomy_mode: autonomyMode ?? prev?.autonomy_mode ?? null,
+          runtime_profile: runtimeProfile ?? prev?.runtime_profile ?? null,
         });
       }
 

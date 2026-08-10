@@ -66,6 +66,17 @@ export const APP_LOGIN_QUERY_KEYS = {
   users: ["app-login", "users"] as const,
 } as const;
 
+/** Pentest RBAC capabilities (PROJETOSIN-182). */
+export const PENTEST_CAPABILITIES_QUERY_KEYS = {
+  all: ["pentest-capabilities"] as const,
+  me: ["pentest-capabilities", "me"] as const,
+} as const;
+
+/** Engagement Manager list for workspace creation (PROJETOSIN-183/185). */
+export const PENTEST_ENGAGEMENTS_QUERY_KEYS = {
+  all: ["pentest-engagements"] as const,
+} as const;
+
 export const APPWRITE_QUERY_KEYS = {
   all: ["appwrite"] as const,
   databases: ["appwrite", "databases"] as const,

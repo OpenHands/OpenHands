@@ -12,6 +12,7 @@ import {
 } from "#/hooks/mutation/use-local-workspaces-mutations";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
+import { usePentestEngagements } from "#/hooks/use-pentest-capabilities";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import {
@@ -21,9 +22,16 @@ import {
 } from "#/utils/dropdown-classes";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
 import RepoIcon from "#/icons/repo.svg?react";
+import type { AutonomyMode, WorkspaceType } from "#/types/workspace-types";
 
 import { FolderBrowserModal } from "#/components/features/home/workspace-dropdown/folder-browser-modal";
 import { ManageWorkspacesModal } from "#/components/features/home/workspace-dropdown/manage-workspaces-modal";
+import { WorkspaceTypeSelector } from "#/components/features/pentest/workspace-type-selector";
+import { PentestWorkspaceFields } from "#/components/features/pentest/pentest-workspace-fields";
+import {
+  hasUnauthorizedScope,
+  isPentestCreationBlocked,
+} from "#/components/features/pentest/pentest-creation-validation";
 
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { Divider } from "#/ui/divider";
@@ -88,10 +96,32 @@ export function LocalNewConversationMenu({
   );
   const [browserOpen, setBrowserOpen] = React.useState(false);
   const [manageOpen, setManageOpen] = React.useState(false);
+  const [workspaceType, setWorkspaceType] =
+    React.useState<WorkspaceType>("code");
+  const [engagementId, setEngagementId] = React.useState<string | null>(null);
+  const [autonomyMode, setAutonomyMode] =
+    React.useState<AutonomyMode>("manual");
+  const { engagements, isLoading: isLoadingEngagements } =
+    usePentestEngagements();
 
   const { mutate: createConversation, isPending } = useCreateConversation();
   const isCreatingElsewhere = useIsCreatingConversation();
   const isCreating = isPending || isCreatingElsewhere;
+
+  const pentestState = { workspaceType, engagementId, autonomyMode };
+  const pentestBlocked = isPentestCreationBlocked(pentestState, engagements);
+  const scopeUnauthorized = hasUnauthorizedScope(pentestState, engagements);
+  const scopeError = scopeUnauthorized
+    ? t(I18nKey.WORKSPACE_TYPE$SCOPE_UNAUTHORIZED)
+    : null;
+
+  const handleWorkspaceTypeChange = React.useCallback((type: WorkspaceType) => {
+    setWorkspaceType(type);
+    if (type === "code") {
+      setEngagementId(null);
+      setAutonomyMode("manual");
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!open || browserOpen || manageOpen) return undefined;
@@ -119,9 +149,20 @@ export function LocalNewConversationMenu({
   }, [open, browserOpen, manageOpen]);
 
   const launch = (workingDir?: string) => {
-    if (isCreating) return;
+    if (isCreating || pentestBlocked) return;
     createConversation(
-      { workingDir, entryPoint: "sidebar_local_menu" },
+      {
+        workingDir,
+        entryPoint: "sidebar_local_menu",
+        workspaceType,
+        ...(workspaceType === "pentest" && engagementId
+          ? {
+              engagementId,
+              autonomyMode,
+              runtimeProfile: "web" as const,
+            }
+          : {}),
+      },
       {
         onSuccess: (data) => {
           setOpen(false);
@@ -208,6 +249,24 @@ export function LocalNewConversationMenu({
           )}
           style={fixedStyle}
         >
+          <div className="flex flex-col gap-2 px-2 pt-2 pb-1">
+            <WorkspaceTypeSelector
+              value={workspaceType}
+              onChange={handleWorkspaceTypeChange}
+            />
+            {workspaceType === "pentest" && (
+              <PentestWorkspaceFields
+                engagements={engagements}
+                isLoadingEngagements={isLoadingEngagements}
+                engagementId={engagementId}
+                onEngagementChange={setEngagementId}
+                autonomyMode={autonomyMode}
+                onAutonomyChange={setAutonomyMode}
+                scopeError={scopeError}
+              />
+            )}
+          </div>
+
           <ul
             className={cn(
               "max-h-[40vh] overflow-y-auto sm:max-h-[280px]",
@@ -217,7 +276,7 @@ export function LocalNewConversationMenu({
             <li>
               <button
                 type="button"
-                disabled={isCreating}
+                disabled={isCreating || pentestBlocked}
                 data-testid="launch-no-workspace"
                 onClick={() => launch()}
                 className={itemClass}
@@ -231,7 +290,7 @@ export function LocalNewConversationMenu({
               <li key={w.id}>
                 <button
                   type="button"
-                  disabled={isCreating}
+                  disabled={isCreating || pentestBlocked}
                   data-testid="launch-workspace"
                   data-workspace-path={w.path}
                   onClick={() => launch(w.path)}

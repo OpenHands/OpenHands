@@ -31,6 +31,7 @@ import { AppLoginService } from "#/api/app-login-service";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { APP_LOGIN_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { useInvalidatePentestCapabilities } from "#/hooks/use-pentest-capabilities";
 
 export const handle = { hideTitle: false };
 
@@ -38,6 +39,7 @@ export function UsersSettingsScreen() {
   const { t } = useTranslation("openhands");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const invalidatePentestCapabilities = useInvalidatePentestCapabilities();
   const statusQuery = useAppLoginStatus();
   const enabled = statusQuery.data?.enabled === true;
   const usersQuery = useAppLoginUsers(enabled);
@@ -55,9 +57,7 @@ export function UsersSettingsScreen() {
   }, [enabled, navigate, statusQuery.isSuccess]);
 
   const canCreate =
-    username.trim().length > 0 &&
-    password.length >= 4 &&
-    !createUser.isPending;
+    username.trim().length > 0 && password.length >= 4 && !createUser.isPending;
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,6 +93,7 @@ export function UsersSettingsScreen() {
 
   const handleLogout = async () => {
     await AppLoginService.logout();
+    invalidatePentestCapabilities();
     await queryClient.invalidateQueries({
       queryKey: APP_LOGIN_QUERY_KEYS.session,
     });
@@ -176,7 +177,9 @@ export function UsersSettingsScreen() {
               <div className={settingsListTableCellClassName}>
                 {user.username}
               </div>
-              <div className={cn(settingsListTableCellClassName, "justify-end")}>
+              <div
+                className={cn(settingsListTableCellClassName, "justify-end")}
+              >
                 <button
                   type="button"
                   data-testid={`users-settings-delete-${user.username}`}
