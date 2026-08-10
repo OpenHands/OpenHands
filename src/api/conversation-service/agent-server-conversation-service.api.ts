@@ -321,11 +321,6 @@ function requireAppConversation(
 
 /**
  * Options for {@link AgentServerConversationService.createConversation}.
- *
- * Everything is optional; callers pass only the fields they need, so a plain
- * create stays byte-identical to the legacy agent_settings path and the
- * profile tail is a simple conditional spread instead of position-skipping
- * arguments (#1587).
  */
 export interface CreateConversationOptions {
   initialUserMsg?: string;
