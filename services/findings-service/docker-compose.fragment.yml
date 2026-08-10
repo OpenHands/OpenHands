@@ -8,6 +8,8 @@ services:
       - SESSION_API_KEY=${SESSION_API_KEY:?SESSION_API_KEY is required}
       - DEFECTDOJO_API_URL=${DEFECTDOJO_API_URL:-https://defectdojo.heimdall.local}
       - DEFECTDOJO_API_TOKEN=${DEFECTDOJO_API_TOKEN:-}
+      - DEFECTDOJO_PRODUCT_TYPE_DEFAULT=${DEFECTDOJO_PRODUCT_TYPE_DEFAULT:-Pentest}
+      - DEFECTDOJO_VERIFY_TLS=${DEFECTDOJO_VERIFY_TLS:-true}
     depends_on:
       findings-db:
         condition: service_healthy

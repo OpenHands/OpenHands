@@ -18,6 +18,11 @@ os.environ["DEFAULT_PENTEST_PROFILE"] = "pentester"
 os.environ["FINDINGS_DB_URL"] = "sqlite+aiosqlite:///:memory:"
 # Explicit test flag — production runtime must NOT set this.
 os.environ["PENTEST_ALLOW_PROFILE_HEADER"] = "1"
+# Token present for happy-path sync; individual tests may clear it (AC-189-B4).
+os.environ["DEFECTDOJO_API_TOKEN"] = "test-dd-token"
+os.environ["DEFECTDOJO_API_URL"] = "https://defectdojo.test"
+# Scaffold path for endpoint tests that do not inject httpx mocks.
+os.environ["DEFECTDOJO_DRY_RUN"] = "1"
 
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine, init_db
@@ -28,6 +33,7 @@ get_settings.cache_clear()
 
 @pytest_asyncio.fixture(autouse=True)
 async def prepare_db():
+    get_settings.cache_clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)

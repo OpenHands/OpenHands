@@ -1,0 +1,23 @@
+{
+  "Results": [
+    {
+      "Target": "requirements.txt",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2023-12345",
+          "PkgName": "requests",
+          "Severity": "CRITICAL",
+          "Title": "Remote code execution",
+          "Description": "Example critical CVE"
+        },
+        {
+          "VulnerabilityID": "CVE-2023-99999",
+          "PkgName": "urllib3",
+          "Severity": "LOW",
+          "Title": "Info leak",
+          "Description": "Example low CVE"
+        }
+      ]
+    }
+  ]
+}

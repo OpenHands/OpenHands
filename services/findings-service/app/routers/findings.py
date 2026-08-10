@@ -44,7 +44,20 @@ async def sync_defectdojo(
     payload: SyncDefectDojoRequest,
     ctx: AuthContext = require_capability("pentest.findings.export_dd"),
 ):
+    """
+    Queue a one-way Findings → DefectDojo sync job.
+
+    Job store is in-memory (single-process MVP). Requires DEFECTDOJO_API_TOKEN.
+    """
+    from app.config import get_settings
     from app.db import SessionLocal
+
+    settings = get_settings()
+    if not settings.defectdojo_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="DefectDojo is not configured (DEFECTDOJO_API_TOKEN missing)",
+        )
 
     job_id = sync_jobs.enqueue(payload.engagement_id, list(payload.status_filter))
     engagement_id = payload.engagement_id
@@ -53,14 +66,19 @@ async def sync_defectdojo(
 
     async def _run() -> None:
         sync_jobs.set_status(job_id, "running")
+        svc: DefectDojoSyncService | None = None
         try:
             async with SessionLocal() as session:
-                await DefectDojoSyncService(session).sync_engagement_findings(
+                svc = DefectDojoSyncService(session)
+                await svc.sync_engagement_findings(
                     engagement_id, status_filter, created_by=owner
                 )
             sync_jobs.set_status(job_id, "completed")
         except Exception:
             sync_jobs.set_status(job_id, "failed")
+        finally:
+            if svc is not None:
+                await svc.aclose()
 
     asyncio.create_task(_run())
     return SyncJobResponse(job_id=job_id, status="queued")

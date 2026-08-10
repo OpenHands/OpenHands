@@ -1,0 +1,14 @@
+{
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.hardcoded-password",
+      "path": "app/settings.py",
+      "start": {"line": 42},
+      "extra": {
+        "message": "Hardcoded password detected",
+        "severity": "ERROR",
+        "metadata": {}
+      }
+    }
+  ]
+}

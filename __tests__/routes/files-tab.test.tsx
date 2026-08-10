@@ -65,11 +65,13 @@ vi.mock("@monaco-editor/react", () => ({
   Editor: (props: {
     value?: string;
     language?: string;
+    path?: string;
     onChange?: (value: string | undefined) => void;
   }) => (
     <textarea
       data-testid="monaco-editor-mock"
       data-language={props.language}
+      data-path={props.path}
       value={props.value}
       onChange={(event) => props.onChange?.(event.target.value)}
     />
