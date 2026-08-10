@@ -38,7 +38,7 @@ body:
         Required for the `ready-for-dev` label. Testable, checkable bullets a
         reviewer can verify to confirm the feature is done.
       placeholder: |
-        - [ ] Given …, when …, then …
+        - [ ] A screenshot/video demonstrating the feature behavior is attached to the PR.
         - [ ] …
     validations:
       required: true

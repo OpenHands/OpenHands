@@ -112,7 +112,8 @@ body:
         Required for the `ready-for-dev` label. Testable, checkable bullets a
         reviewer can verify. Describe the *fixed* state, not the bug.
       placeholder: |
-        - [ ] The bug no longer occurs when …
+        - [ ] A screenshot/video demonstrating the bug can be replicated on main is attached to the PR.
+        - [ ] A screenshot/video demonstrating that the bug is fixed on the PR branch is attached to the PR.
         - [ ] …
     validations:
       required: false
