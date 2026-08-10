@@ -5,7 +5,9 @@ veredicto: PASS
 agente: qa
 data: 2026-08-10
 tip: 4869b7758f5c442bd371adde5355e3b3adf49b71
+laudo_commit: fdbc65844
 ci: pytest services/engagement-manager/tests/test_runtime_provisioner.py (9 passed) + cenário QA independente (asyncio render/teardown)
+pr_review: comment (approve bloqueado — mesmo login do autor)
 repo: klebersjunior/OpenHands
 branch: feat/fase2-emulator-engmgr-191
 worktree: .tmp/worktrees/191
