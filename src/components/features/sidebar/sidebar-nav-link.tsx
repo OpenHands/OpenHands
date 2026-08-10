@@ -69,9 +69,11 @@ export function SidebarNavLink({
     <NavigationLink
       to={to}
       end={end}
+      // NavigationLink skips client-side navigation when target is "_blank",
+      // so target/rel are all an external link needs; `external` stays local
+      // to this component as the switch that derives them.
       target={external ? (target ?? "_blank") : target}
       rel={external ? (rel ?? "noopener noreferrer") : rel}
-      external={external}
       data-testid={testId}
       tabIndex={disabled ? -1 : 0}
       aria-label={collapsed ? label : undefined}
