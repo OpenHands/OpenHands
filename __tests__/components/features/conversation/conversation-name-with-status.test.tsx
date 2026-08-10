@@ -125,7 +125,9 @@ describe("ConversationNameWithStatus", () => {
     const hoverTarget = trigger.parentElement;
     expect(hoverTarget).not.toBeNull();
 
-    fireEvent.pointerEnter(hoverTarget!, { pointerType: "mouse" });
+    // pointerover is the event React delegates for onPointerEnter synthesis,
+    // so it reaches the handler reliably across jsdom setups.
+    fireEvent.pointerOver(hoverTarget!, { pointerType: "mouse" });
     expect(
       screen.getByTestId("server-status-context-menu"),
     ).toBeInTheDocument();
@@ -156,7 +158,7 @@ describe("ConversationNameWithStatus", () => {
 
     // Compatibility mouseenter must not open-then-close against the tap.
     fireEvent.mouseEnter(hoverTarget!);
-    fireEvent.pointerEnter(hoverTarget!, { pointerType: "touch" });
+    fireEvent.pointerOver(hoverTarget!, { pointerType: "touch" });
     fireEvent.click(trigger);
 
     expect(

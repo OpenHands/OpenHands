@@ -1,16 +1,12 @@
 import { cn } from "#/utils/utils";
 
 /**
- * Devices where CSS `:hover` is a reliable primary interaction (mouse/trackpad).
- * Coarse-pointer / touch-primary devices match the inverse and should keep
- * overflow actions always visible + clickable.
- */
-export const FINE_HOVER_MEDIA = "(hover: hover) and (pointer: fine)";
-
-/**
- * Full Tailwind candidates for fine-hover media. Kept as complete string literals
- * so the production CSS scanner can emit the arbitrary-variant rules (dynamic
- * prefix concatenation is not discoverable).
+ * Full Tailwind candidates for fine-hover media — devices where CSS `:hover`
+ * is a reliable primary interaction (mouse/trackpad). Coarse-pointer /
+ * touch-primary devices match the inverse and keep overflow actions always
+ * visible + clickable. Kept as complete string literals so the production CSS
+ * scanner can emit the arbitrary-variant rules (dynamic prefix concatenation
+ * is not discoverable).
  */
 export const FINE_HOVER_ACTION_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
@@ -41,21 +37,6 @@ export const FINE_HOVER_PINNED_TIMESTAMP_CLASSES = [
   "[@media(hover:hover)_and_(pointer:fine)]:group-hover:hidden",
   "[@media(hover:hover)_and_(pointer:fine)]:group-focus-within:hidden",
 ] as const;
-
-/**
- * True when the primary pointer supports reliable hover (mouse/trackpad).
- * Touch-primary phones/tablets return false so callers can prefer click.
- * Prefer per-event `pointerType` checks for open/close handlers on hybrid devices.
- */
-export function canHoverReliably(): boolean {
-  if (
-    typeof window === "undefined" ||
-    typeof window.matchMedia !== "function"
-  ) {
-    return false;
-  }
-  return window.matchMedia(FINE_HOVER_MEDIA).matches;
-}
 
 /**
  * Overlay action chrome (ellipsis, pin, etc.): always interactable on touch;

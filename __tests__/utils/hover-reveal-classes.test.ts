@@ -1,10 +1,9 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { compile } from "tailwindcss";
 import {
-  canHoverReliably,
   FINE_HOVER_ACTION_CLASSES,
   FINE_HOVER_PINNED_TIMESTAMP_CLASSES,
   FINE_HOVER_RESERVE_CLASSES,
@@ -39,10 +38,6 @@ async function loadStylesheet(id: string, base: string) {
 }
 
 describe("hover-reveal-classes", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("keeps overflow actions visible by default and only hides them under fine-hover media", () => {
     const classes = hoverRevealActionClassName();
 
@@ -118,18 +113,5 @@ describe("hover-reveal-classes", () => {
     expect(css).toContain("pointer-events: auto");
     expect(css).toContain("opacity: 0");
     expect(css).toContain("min-width: 3.75rem");
-  });
-
-  it("reports canHoverReliably from the fine-hover media query", () => {
-    const matchMedia = vi.fn().mockReturnValue({ matches: true });
-    vi.stubGlobal("matchMedia", matchMedia);
-
-    expect(canHoverReliably()).toBe(true);
-    expect(matchMedia).toHaveBeenCalledWith(
-      "(hover: hover) and (pointer: fine)",
-    );
-
-    matchMedia.mockReturnValue({ matches: false });
-    expect(canHoverReliably()).toBe(false);
   });
 });
