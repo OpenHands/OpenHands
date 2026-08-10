@@ -1,3 +1,6 @@
+# Mobile engagement sandbox (PROJETOSIN-191).
+# Emulator + MobSF stay on the internal Docker network only — no host port publish.
+# UI proxy (/api/emulator) is PROJETOSIN-192.
 services:
   {{ project }}-runtime:
     image: {{ runtime_image }}
@@ -7,10 +10,55 @@ services:
     environment:
       ALLOW_RULES: {{ allow_rules | tojson }}
       DENY_RULES: {{ deny_rules | tojson }}
+      PENTEST_SCOPE_ALLOWLIST: {{ allow_rules | tojson }}
+      ADB_HOST: "{{ project }}-emulator"
+      ADB_PORT: "5555"
+      MOBSF_URL: "http://{{ project }}-mobsf:8000"
+      MOBSF_API_KEY: "{{ mobsf_api_key }}"
+      PENTEST_MCP_MOBILE_CMD: "{{ mcp_mobile_cmd | default('') }}"
+    depends_on:
+      - {{ project }}-emulator
+      - {{ project }}-mobsf
+    labels:
+      heimdall.runtime.profile: "mobile"
+
   {{ project }}-emulator:
-    image: ghcr.io/heimdall/android-emulator:latest
+    image: {{ android_emulator_image }}
+    privileged: true
     networks:
       - {{ network_internal }}
+    environment:
+      EMULATOR_DEVICE: "{{ emulator_device | default('Samsung Galaxy S10') }}"
+      WEB_VNC: "true"
+{% if not kvm_available %}
+      EMULATOR_ACCEL: "false"
+{% endif %}
+{% if kvm_available %}
+    devices:
+      - /dev/kvm
+{% endif %}
+    # Host publish omitted — ADB 5555 and noVNC 6080 stay internal-only (AC-191-3).
+    healthcheck:
+      test: ["CMD-SHELL", "adb devices 2>/dev/null | grep -qE 'device$' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 12
+      start_period: 180s
+    labels:
+      heimdall.emulator.adb: "{{ project }}-emulator:5555"
+      heimdall.emulator.vnc_internal: "http://{{ project }}-emulator:6080"
+      heimdall.emulator.service: "{{ project }}-emulator"
+
+  {{ project }}-mobsf:
+    image: {{ mobsf_image }}
+    networks:
+      - {{ network_internal }}
+    environment:
+      MOBSF_API_KEY: "{{ mobsf_api_key }}"
+    volumes:
+      - {{ volume_prefix }}-mobsf-data:/home/mobsf/.MobSF
+    labels:
+      heimdall.mobsf.url_internal: "http://{{ project }}-mobsf:8000"
 
 networks:
   {{ network_internal }}:
@@ -18,3 +66,6 @@ networks:
     internal: true
   {{ network_egress }}:
     driver: bridge
+
+volumes:
+  {{ volume_prefix }}-mobsf-data:

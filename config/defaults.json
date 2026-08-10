@@ -14,7 +14,10 @@
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",
-    "agentCanvas": "ghcr.io/openhands/agent-canvas"
+    "agentCanvas": "ghcr.io/openhands/agent-canvas",
+    "_comment_mobile": "PROJETOSIN-191 — EngMgr compose-mobile-runtime pins (no host publish). Override via ANDROID_EMULATOR_IMAGE / MOBSF_IMAGE env on EngMgr.",
+    "androidEmulator": "budtmo/docker-android:emulator_13.0",
+    "mobsf": "opensecurity/mobile-security-framework-mobsf:latest"
   },
   "ports": {
     "agentServer": 18000,
