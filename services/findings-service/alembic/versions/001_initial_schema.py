@@ -47,6 +47,7 @@ def upgrade() -> None:
         sa.Column("cvss_score", sa.Numeric(4, 1), nullable=True),
         sa.Column("cve_ids", postgresql.ARRAY(sa.Text()), nullable=True),
         sa.Column("tags", postgresql.ARRAY(sa.Text()), nullable=True),
+        sa.Column("created_by", sa.String(256), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -70,6 +71,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("idx_findings_engagement_id", "findings", ["engagement_id"])
+    op.create_index("idx_findings_created_by", "findings", ["created_by"])
     op.create_index("idx_findings_status", "findings", ["status"])
     op.create_index("idx_findings_severity", "findings", ["severity"])
     op.execute(
@@ -82,5 +84,6 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_findings_dedupe")
     op.drop_index("idx_findings_severity", table_name="findings")
     op.drop_index("idx_findings_status", table_name="findings")
+    op.drop_index("idx_findings_created_by", table_name="findings")
     op.drop_index("idx_findings_engagement_id", table_name="findings")
     op.drop_table("findings")

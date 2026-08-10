@@ -20,10 +20,14 @@ from app.routers import findings, me, triage
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
-    os.environ.setdefault("SESSION_API_KEY", settings.session_api_key)
+    if settings.session_api_key:
+        os.environ.setdefault("SESSION_API_KEY", settings.session_api_key)
     os.environ.setdefault(
         "DEFAULT_PENTEST_PROFILE", settings.default_pentest_profile
     )
+    from shared.auth_middleware import assert_session_api_key_not_insecure_default
+
+    assert_session_api_key_not_insecure_default()
     await init_db()
     yield
 

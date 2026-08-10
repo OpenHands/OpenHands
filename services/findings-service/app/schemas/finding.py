@@ -67,6 +67,7 @@ class FindingOut(BaseModel):
     cvss_score: Decimal | None
     cve_ids: list[str] | None
     tags: list[str] | None
+    created_by: str
     created_at: datetime
     updated_at: datetime
 

@@ -18,7 +18,9 @@ async def triage_finding(
     finding_id: uuid.UUID,
     payload: TriageRequest,
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.findings.triage"),
+    ctx: AuthContext = require_capability("pentest.findings.triage"),
 ):
-    finding = await FindingsService(db).triage(finding_id, payload)
+    finding = await FindingsService(db).triage(
+        finding_id, payload, created_by=ctx.user_id
+    )
     return FindingOut.model_validate(finding)

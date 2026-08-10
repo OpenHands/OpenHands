@@ -15,6 +15,9 @@ from .capabilities import (
     PentestProfile,
 )
 
+# Predictable scaffold default — forbidden unless PENTEST_ALLOW_DEV_SESSION_KEY=1.
+INSECURE_DEV_SESSION_KEY = "dev-session-key"
+
 
 @dataclass(frozen=True)
 class AuthContext:
@@ -24,6 +27,27 @@ class AuthContext:
     user_id: str
     profile: PentestProfile | None
     capabilities: list[PentestCapability]
+
+
+def _profile_header_allowed() -> bool:
+    return os.environ.get("PENTEST_ALLOW_PROFILE_HEADER", "").strip() == "1"
+
+
+def assert_session_api_key_not_insecure_default() -> None:
+    """
+    Fail-fast when SESSION_API_KEY is the published scaffold default.
+
+    Opt-in for local/dev/tests: PENTEST_ALLOW_DEV_SESSION_KEY=1.
+    """
+    key = os.environ.get("SESSION_API_KEY", "").strip()
+    if key != INSECURE_DEV_SESSION_KEY:
+        return
+    if os.environ.get("PENTEST_ALLOW_DEV_SESSION_KEY", "").strip() == "1":
+        return
+    raise RuntimeError(
+        "SESSION_API_KEY=dev-session-key is forbidden outside explicit "
+        "dev mode (set PENTEST_ALLOW_DEV_SESSION_KEY=1)"
+    )
 
 
 def _parse_key_profile_map() -> dict[str, str]:
@@ -52,16 +76,21 @@ def resolve_profile_for_key(
     Resolve pentest profile for a valid session key.
 
     Precedence:
-    1. PENTEST_SESSION_PROFILES JSON map (key → profile)
-    2. X-Pentest-Profile header (dev/test)
+    1. PENTEST_SESSION_PROFILES JSON map (key → profile) — always honored
+    2. X-Pentest-Profile header — only when PENTEST_ALLOW_PROFILE_HEADER=1
+       (explicit test/dev flag; never trusted in normal runtime)
     3. DEFAULT_PENTEST_PROFILE env (default: pentester)
 
     Profile value ``none`` means authenticated with zero pentest capabilities.
     """
     mapped = _parse_key_profile_map().get(session_api_key)
-    raw = mapped or (profile_header or "").strip() or os.environ.get(
-        "DEFAULT_PENTEST_PROFILE", "pentester"
-    )
+    if mapped is not None:
+        raw = mapped
+    elif _profile_header_allowed() and (profile_header or "").strip():
+        raw = (profile_header or "").strip()
+    else:
+        raw = os.environ.get("DEFAULT_PENTEST_PROFILE", "pentester")
+
     if raw == "none":
         return None
     if raw not in PROFILE_CAPABILITIES:

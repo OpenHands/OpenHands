@@ -120,6 +120,56 @@ async def test_missing_capability_403(client):
 
 
 @pytest.mark.asyncio
+async def test_cross_key_finding_access_returns_404(client, monkeypatch):
+    """MEDIUM IDOR: other session key cannot read/triage another owner's finding."""
+    import json
+
+    from tests.conftest import auth_headers
+
+    monkeypatch.setenv(
+        "PENTEST_SESSION_PROFILES",
+        json.dumps(
+            {
+                "test-session-key": "pentester",
+                "other-session-key": "pentester",
+            }
+        ),
+    )
+    owner_headers = auth_headers()
+    created = await client.post(
+        "/api/pentest/findings",
+        json=_payload(title="owner-only"),
+        headers=owner_headers,
+    )
+    assert created.status_code == 201
+    finding_id = created.json()["id"]
+
+    other = {
+        "X-Session-API-Key": "other-session-key",
+        "X-Pentest-Profile": "pentester",
+    }
+    get_resp = await client.get(
+        f"/api/pentest/findings/{finding_id}", headers=other
+    )
+    assert get_resp.status_code == 404
+
+    list_resp = await client.get(
+        "/api/pentest/findings",
+        params={"engagement_id": ENGAGEMENT_ID},
+        headers=other,
+    )
+    assert list_resp.status_code == 200
+    assert list_resp.json()["total"] == 0
+
+    triage_resp = await client.post(
+        f"/api/pentest/findings/{finding_id}/triage",
+        json={"new_status": "triaging", "triaged_by": "attacker"},
+        headers=other,
+    )
+    assert triage_resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_alembic_migration_module_loads():
     import importlib.util
     from pathlib import Path

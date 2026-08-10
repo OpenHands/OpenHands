@@ -100,6 +100,7 @@ async def test_sync_service_payload_shape():
             asset="1.2.3.4",
             endpoint=None,
             status="confirmed",
+            created_by="session:test-ses",
         )
         session.add(finding)
         await session.commit()

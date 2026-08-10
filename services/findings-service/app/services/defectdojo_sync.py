@@ -99,12 +99,15 @@ class DefectDojoSyncService:
         self,
         engagement_id: uuid.UUID,
         status_filter: list[str] | None = None,
+        *,
+        created_by: str,
     ) -> SyncResult:
         statuses = status_filter or ["confirmed"]
         findings = (
             await self.db.scalars(
                 select(Finding).where(
                     Finding.engagement_id == engagement_id,
+                    Finding.created_by == created_by,
                     Finding.status.in_(statuses),
                 )
             )

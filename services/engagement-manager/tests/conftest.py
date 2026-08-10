@@ -18,6 +18,8 @@ os.environ["PROVISIONER_DRY_RUN"] = "true"
 os.environ["COMPOSE_WORK_DIR"] = str(
     Path(__file__).resolve().parent / ".tmp-compose"
 )
+# Explicit test flag — production runtime must NOT set this.
+os.environ["PENTEST_ALLOW_PROFILE_HEADER"] = "1"
 
 from app.config import get_settings
 from app.db import Base, engine

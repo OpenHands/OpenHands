@@ -7,8 +7,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - engagement-manager-data:/data
     environment:
-      - ENGMGR_DB_URL=postgresql+asyncpg://engmgr:${ENGMGR_DB_PASSWORD:-engmgr}@engmgr-db/engmgr
-      - SESSION_API_KEY=${SESSION_API_KEY:-dev-session-key}
+      - ENGMGR_DB_URL=postgresql+asyncpg://engmgr:${ENGMGR_DB_PASSWORD}@engmgr-db/engmgr
+      - SESSION_API_KEY=${SESSION_API_KEY:?SESSION_API_KEY is required}
       - DEFECTDOJO_API_URL=${DEFECTDOJO_API_URL:-https://defectdojo.heimdall.local}
       - DEFECTDOJO_API_TOKEN=${DEFECTDOJO_API_TOKEN:-}
       - PROVISIONER_DRY_RUN=${PROVISIONER_DRY_RUN:-true}
@@ -24,7 +24,7 @@ services:
     environment:
       POSTGRES_DB: engmgr
       POSTGRES_USER: engmgr
-      POSTGRES_PASSWORD: ${ENGMGR_DB_PASSWORD:-engmgr}
+      POSTGRES_PASSWORD: ${ENGMGR_DB_PASSWORD:?ENGMGR_DB_PASSWORD is required}
     volumes:
       - engmgr-db-data:/var/lib/postgresql/data
     healthcheck:

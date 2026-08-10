@@ -47,6 +47,8 @@ class Finding(Base):
     cvss_score: Mapped[Decimal | None] = mapped_column(Numeric(4, 1), nullable=True)
     cve_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Ownership claim until EngMgr membership roundtrip exists (fail-closed IDOR).
+    created_by: Mapped[str] = mapped_column(String(256), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -19,10 +19,19 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 
 
 class FindingsService:
+    """
+    Findings CRUD with fail-closed ownership via ``created_by``.
+
+    Full engagement membership requires EngMgr roundtrip (not ready). Until then,
+    callers only see/mutate findings they created (``AuthContext.user_id``).
+    Cross-user access returns 404 (no existence leak). Admin delete may omit
+    ownership when gated by ``pentest.admin.users``.
+    """
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, payload: FindingCreate) -> Finding:
+    async def create(self, payload: FindingCreate, *, created_by: str) -> Finding:
         dedupe = compute_dedupe_hash(
             str(payload.engagement_id),
             payload.title,
@@ -30,7 +39,10 @@ class FindingsService:
             payload.endpoint,
         )
         existing = await self.db.scalar(
-            select(Finding).where(Finding.dedupe_hash == dedupe)
+            select(Finding).where(
+                Finding.dedupe_hash == dedupe,
+                Finding.created_by == created_by,
+            )
         )
         if existing is not None:
             raise HTTPException(
@@ -55,6 +67,7 @@ class FindingsService:
             cvss_score=payload.cvss_score,
             cve_ids=payload.cve_ids,
             tags=payload.tags,
+            created_by=created_by,
         )
         self.db.add(finding)
         await self.db.commit()
@@ -65,11 +78,15 @@ class FindingsService:
         self,
         *,
         engagement_id: uuid.UUID,
+        created_by: str,
         status: str | None,
         severity: str | None,
         source_tool: str | None,
     ) -> Select[tuple[Finding]]:
-        stmt = select(Finding).where(Finding.engagement_id == engagement_id)
+        stmt = select(Finding).where(
+            Finding.engagement_id == engagement_id,
+            Finding.created_by == created_by,
+        )
         if status:
             stmt = stmt.where(Finding.status == status)
         if severity:
@@ -82,6 +99,7 @@ class FindingsService:
         self,
         *,
         engagement_id: uuid.UUID,
+        created_by: str,
         status: str | None = None,
         severity: str | None = None,
         source_tool: str | None = None,
@@ -92,6 +110,7 @@ class FindingsService:
         page = max(page, 1)
         base = self._list_query(
             engagement_id=engagement_id,
+            created_by=created_by,
             status=status,
             severity=severity,
             source_tool=source_tool,
@@ -104,14 +123,20 @@ class FindingsService:
         ).all()
         return list(rows), int(total or 0)
 
-    async def get(self, finding_id: uuid.UUID) -> Finding:
+    async def get(
+        self, finding_id: uuid.UUID, *, created_by: str | None = None
+    ) -> Finding:
         finding = await self.db.get(Finding, finding_id)
         if finding is None:
             raise HTTPException(status_code=404, detail="Finding not found")
+        if created_by is not None and finding.created_by != created_by:
+            raise HTTPException(status_code=404, detail="Finding not found")
         return finding
 
-    async def update(self, finding_id: uuid.UUID, payload: FindingUpdate) -> Finding:
-        finding = await self.get(finding_id)
+    async def update(
+        self, finding_id: uuid.UUID, payload: FindingUpdate, *, created_by: str
+    ) -> Finding:
+        finding = await self.get(finding_id, created_by=created_by)
         data = payload.model_dump(exclude_unset=True)
         if "status" in data and data["status"] is not None:
             self._assert_transition(finding.status, data["status"])
@@ -123,12 +148,15 @@ class FindingsService:
         return finding
 
     async def delete(self, finding_id: uuid.UUID) -> None:
+        # Admin path — capability gate lives on the router.
         finding = await self.get(finding_id)
         await self.db.delete(finding)
         await self.db.commit()
 
-    async def triage(self, finding_id: uuid.UUID, payload: TriageRequest) -> Finding:
-        finding = await self.get(finding_id)
+    async def triage(
+        self, finding_id: uuid.UUID, payload: TriageRequest, *, created_by: str
+    ) -> Finding:
+        finding = await self.get(finding_id, created_by=created_by)
         self._assert_transition(finding.status, payload.new_status)
         if payload.new_status == "false_positive" and not payload.fp_reason:
             raise HTTPException(
@@ -143,11 +171,14 @@ class FindingsService:
         await self.db.refresh(finding)
         return finding
 
-    async def stats(self, engagement_id: uuid.UUID) -> dict:
+    async def stats(self, engagement_id: uuid.UUID, *, created_by: str) -> dict:
         rows = (
             await self.db.execute(
                 select(Finding.severity, Finding.status, func.count())
-                .where(Finding.engagement_id == engagement_id)
+                .where(
+                    Finding.engagement_id == engagement_id,
+                    Finding.created_by == created_by,
+                )
                 .group_by(Finding.severity, Finding.status)
             )
         ).all()

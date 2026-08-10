@@ -4,8 +4,8 @@ services:
       context: ..
       dockerfile: findings-service/Dockerfile
     environment:
-      - FINDINGS_DB_URL=postgresql+asyncpg://findings:${FINDINGS_DB_PASSWORD:-findings}@findings-db/findings
-      - SESSION_API_KEY=${SESSION_API_KEY:-dev-session-key}
+      - FINDINGS_DB_URL=postgresql+asyncpg://findings:${FINDINGS_DB_PASSWORD}@findings-db/findings
+      - SESSION_API_KEY=${SESSION_API_KEY:?SESSION_API_KEY is required}
       - DEFECTDOJO_API_URL=${DEFECTDOJO_API_URL:-https://defectdojo.heimdall.local}
       - DEFECTDOJO_API_TOKEN=${DEFECTDOJO_API_TOKEN:-}
     depends_on:
@@ -19,7 +19,7 @@ services:
     environment:
       POSTGRES_DB: findings
       POSTGRES_USER: findings
-      POSTGRES_PASSWORD: ${FINDINGS_DB_PASSWORD:-findings}
+      POSTGRES_PASSWORD: ${FINDINGS_DB_PASSWORD:?FINDINGS_DB_PASSWORD is required}
     volumes:
       - findings-db-data:/var/lib/postgresql/data
     healthcheck:

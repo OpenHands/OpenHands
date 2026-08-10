@@ -32,28 +32,31 @@ async def capabilities_redirect():
 async def finding_stats(
     engagement_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.findings.view"),
+    ctx: AuthContext = require_capability("pentest.findings.view"),
 ):
-    return await FindingsService(db).stats(engagement_id)
+    return await FindingsService(db).stats(
+        engagement_id, created_by=ctx.user_id
+    )
 
 
 @router.post("/sync-defectdojo", response_model=SyncJobResponse, status_code=202)
 async def sync_defectdojo(
     payload: SyncDefectDojoRequest,
-    _: AuthContext = require_capability("pentest.findings.export_dd"),
+    ctx: AuthContext = require_capability("pentest.findings.export_dd"),
 ):
     from app.db import SessionLocal
 
     job_id = sync_jobs.enqueue(payload.engagement_id, list(payload.status_filter))
     engagement_id = payload.engagement_id
     status_filter = list(payload.status_filter)
+    owner = ctx.user_id
 
     async def _run() -> None:
         sync_jobs.set_status(job_id, "running")
         try:
             async with SessionLocal() as session:
                 await DefectDojoSyncService(session).sync_engagement_findings(
-                    engagement_id, status_filter
+                    engagement_id, status_filter, created_by=owner
                 )
             sync_jobs.set_status(job_id, "completed")
         except Exception:
@@ -72,10 +75,11 @@ async def list_findings(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.findings.view"),
+    ctx: AuthContext = require_capability("pentest.findings.view"),
 ):
     items, total = await FindingsService(db).list(
         engagement_id=engagement_id,
+        created_by=ctx.user_id,
         status=status,
         severity=severity,
         source_tool=source_tool,
@@ -96,9 +100,9 @@ async def list_findings(
 async def create_finding(
     payload: FindingCreate,
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.scan.passive"),
+    ctx: AuthContext = require_capability("pentest.scan.passive"),
 ):
-    finding = await FindingsService(db).create(payload)
+    finding = await FindingsService(db).create(payload, created_by=ctx.user_id)
     return FindingOut.model_validate(finding)
 
 
@@ -106,9 +110,9 @@ async def create_finding(
 async def get_finding(
     finding_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.findings.view"),
+    ctx: AuthContext = require_capability("pentest.findings.view"),
 ):
-    finding = await FindingsService(db).get(finding_id)
+    finding = await FindingsService(db).get(finding_id, created_by=ctx.user_id)
     return FindingOut.model_validate(finding)
 
 
@@ -117,9 +121,11 @@ async def patch_finding(
     finding_id: uuid.UUID,
     payload: FindingUpdate,
     db: AsyncSession = Depends(get_db),
-    _: AuthContext = require_capability("pentest.findings.triage"),
+    ctx: AuthContext = require_capability("pentest.findings.triage"),
 ):
-    finding = await FindingsService(db).update(finding_id, payload)
+    finding = await FindingsService(db).update(
+        finding_id, payload, created_by=ctx.user_id
+    )
     return FindingOut.model_validate(finding)
 
 

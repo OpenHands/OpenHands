@@ -16,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ["SESSION_API_KEY"] = "test-session-key"
 os.environ["DEFAULT_PENTEST_PROFILE"] = "pentester"
 os.environ["FINDINGS_DB_URL"] = "sqlite+aiosqlite:///:memory:"
+# Explicit test flag — production runtime must NOT set this.
+os.environ["PENTEST_ALLOW_PROFILE_HEADER"] = "1"
 
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine, init_db
