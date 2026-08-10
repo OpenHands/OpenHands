@@ -1,0 +1,29 @@
+services:
+  {{ project }}-runtime:
+    image: {{ runtime_image }}
+    networks:
+      - {{ network_internal }}
+      - {{ network_egress }}
+    volumes:
+      - {{ volume_prefix }}-data:/data
+    environment:
+      ALLOW_RULES: {{ allow_rules | tojson }}
+      DENY_RULES: {{ deny_rules | tojson }}
+
+  {{ project }}-egress-proxy:
+    image: ghcr.io/heimdall/egress-proxy:latest
+    networks:
+      - {{ network_egress }}
+    environment:
+      ALLOW_RULES: {{ allow_rules | tojson }}
+      DENY_RULES: {{ deny_rules | tojson }}
+
+networks:
+  {{ network_internal }}:
+    driver: bridge
+    internal: true
+  {{ network_egress }}:
+    driver: bridge
+
+volumes:
+  {{ volume_prefix }}-data:

@@ -1,0 +1,6 @@
+.tmp-compose/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/

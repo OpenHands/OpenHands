@@ -7,7 +7,7 @@
  *
  * Usage:
  *   node scripts/ingress.mjs [options]
- *   node scripts/ingress.mjs --port 8000 --route "/api/automation=http://localhost:18001" --route "/api=http://localhost:18000" --default "http://localhost:3001"
+ *   node scripts/ingress.mjs --port 8000 --route "/api/automation=http://localhost:18001" --route "/api/pentest/findings=http://localhost:18002" --route "/api/pentest/engagements=http://localhost:18003" --route "/api/pentest/me=http://localhost:18002" --route "/api=http://localhost:18000" --default "http://localhost:3001"
  *
  * Environment variables:
  *   INGRESS_PORT          - Port to listen on (default: 8000)

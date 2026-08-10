@@ -667,6 +667,9 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const AUTOMATION_ROUTE_PREFIX = "/api/automation";
+const PENTEST_FINDINGS_ROUTE_PREFIX = "/api/pentest/findings";
+const PENTEST_ENGAGEMENTS_ROUTE_PREFIX = "/api/pentest/engagements";
+const PENTEST_ME_ROUTE_PREFIX = "/api/pentest/me";
 const AGENT_SERVER_ROUTE_PREFIXES = [
   "/api",
   "/sockets",
@@ -689,6 +692,26 @@ function getLocalServiceRoutes(config) {
       `http://127.0.0.1:${config.autoBackendPort}`,
     ]);
   }
+
+  // Fase 0 pentest services (PROJETOSIN-184/185) — longer prefixes before /api
+  const findingsPort =
+    config.findingsServicePort ??
+    (Number(process.env.OH_FINDINGS_SERVICE_PORT) || 18002);
+  const engmgrPort =
+    config.engagementManagerPort ??
+    (Number(process.env.OH_ENGMGR_PORT) || 18003);
+  routes.push([
+    PENTEST_FINDINGS_ROUTE_PREFIX,
+    `http://127.0.0.1:${findingsPort}`,
+  ]);
+  routes.push([
+    PENTEST_ENGAGEMENTS_ROUTE_PREFIX,
+    `http://127.0.0.1:${engmgrPort}`,
+  ]);
+  routes.push([
+    PENTEST_ME_ROUTE_PREFIX,
+    `http://127.0.0.1:${findingsPort}`,
+  ]);
 
   if (config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
