@@ -382,6 +382,10 @@ class AgentServerConversationService {
     // encrypted-settings builder; cloud sends it as a flat request field.
     agentProfileId?: string,
     agentProfileKind?: AgentKind,
+    // Cloud still accepts a flat llm_model field. Keep sending the effective
+    // model alongside agent_profile_id so app-server billing/model gates can
+    // classify free models before the profile-resolved runtime is provisioned.
+    cloudLlmModel?: string | null,
   ): Promise<AppConversationStartTask> {
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
@@ -407,6 +411,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        llm_model: cloudLlmModel ?? null,
       };
       return createCloudAppConversation(request);
     }
