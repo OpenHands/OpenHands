@@ -38,6 +38,10 @@ import {
   LEGACY_CANVAS_UI_TOOL_NAME,
   type ClientToolSpec,
 } from "./canvas-ui-client-tool";
+import {
+  LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+} from "./launch-child-conversation-client-tool";
 
 export interface DirectConversationInfo {
   id: string;
@@ -430,19 +434,63 @@ type ConversationSettingsPayload = SettingsRecord & {
 
 export const ACP_SERVER_TAG_KEY = "acpserver";
 
+export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
+export const AUTOMATION_ID_TAG_KEY = "automationid";
+export const AUTOMATION_NAME_TAG_KEY = "automationname";
+export const AUTOMATION_RUN_ID_TAG_KEY = "automationrunid";
+
 /**
- * Conversation tag keys Canvas itself stamps/consumes for internal routing.
- * They are already surfaced through dedicated UI (the ACP provider chip), so
- * the generic tag-chip display filters them out.
+ * Tag keys stamped on conversations created by automation runs (see the SDK's
+ * `RemoteWorkspace.default_conversation_tags`). The presence of any of these
+ * marks a conversation as automation-born.
+ */
+export const AUTOMATION_TAG_KEYS: readonly string[] = [
+  AUTOMATION_TRIGGER_TAG_KEY,
+  AUTOMATION_ID_TAG_KEY,
+  AUTOMATION_NAME_TAG_KEY,
+  AUTOMATION_RUN_ID_TAG_KEY,
+];
+
+/**
+ * Conversation tag keys that must not appear as generic chips / hovercard
+ * rows. Each is either already surfaced by a first-class UI source or is
+ * internal routing data:
+ * - ``acpserver`` → ACP provider chip
+ * - ``title`` → conversation card heading
+ * - git / repo / branch / workspace stamps → repo-branch metadata + directory
+ *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
+ *   ``git_provider``, ``workspace.working_dir``)
+ * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
+ *   conversation panel's automation filter (chip noise), while
+ *   ``automationname`` / ``automationtrigger`` stay visible
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  AUTOMATION_ID_TAG_KEY,
+  AUTOMATION_RUN_ID_TAG_KEY,
+  "title",
+  "git_provider",
+  "repo_name",
+  "repo",
+  "repository",
+  "selected_branch",
+  "branch",
+  "archiveworkspacepath",
+  "workspace",
+  "working_dir",
 ]);
 
 /**
+ * High-signal tag keys shown first in the chip row (before A–Z). Automations
+ * often stamp ``origin``; remaining free-form tags sort alphabetically.
+ */
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
+
+/**
  * User-facing subset of a conversation's server-side tags: everything except
- * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries
- * sorted by key so chip order doesn't shuffle between refetches.
+ * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
+ * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
+ * the rest sort A–Z so chip order doesn't shuffle between refetches.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
@@ -450,9 +498,31 @@ export function getDisplayConversationTags(
   if (!tags) {
     return [];
   }
+  // Both the reserved-key check and the priority lookup must see the same
+  // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
+  // ranking those off the raw key would silently drop them out of first place.
+  const priorityRank = (key: string): number => {
+    const index = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(
+      key.trim().toLowerCase(),
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
+
   return Object.entries(tags)
-    .filter(([key]) => !RESERVED_CONVERSATION_TAG_KEYS.has(key))
-    .sort(([a], [b]) => a.localeCompare(b));
+    .filter(
+      ([key, value]) =>
+        !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
+    .sort(([a], [b]) => {
+      const aRank = priorityRank(a);
+      const bRank = priorityRank(b);
+      if (aRank !== bRank) {
+        return aRank - bRank;
+      }
+      return a.localeCompare(b);
+    });
 }
 
 const FERNET_TOKEN_PREFIX = "gAAAAA";
@@ -933,6 +1003,7 @@ type StartConversationPayload = Record<string, unknown> & {
   worktree: boolean;
   secrets_encrypted?: true;
   conversation_id?: string;
+  parent_conversation_id?: string;
   secrets?: Record<string, LookupSecret>;
   tags?: Record<string, string>;
   client_tools: ClientToolSpec[];
@@ -945,6 +1016,11 @@ export interface StartConversationOptions {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  // Links the new conversation to an existing one as its child. The
+  // agent-server requires the parent to exist and to share this
+  // conversation's requested `workspace.working_dir` (software-agent-sdk
+  // #4188, agent-server >= 1.37.1); older servers ignore the field.
+  parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
   encryptedAgentSettings?: Record<string, SettingsValue>;
@@ -1020,8 +1096,15 @@ export function buildStartConversationRequest(
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
+    // The agent-server caches each client tool's schema per tool *name* for the
+    // life of the process and rejects a re-registration with a different schema
+    // (`ClientToolSchemaConflictError`). Editing either schema below therefore
+    // requires restarting a long-running dev agent-server before new
+    // conversations can start.
     client_tools:
-      launchAgentKind === "openhands" ? [CANVAS_UI_CLIENT_TOOL] : [],
+      launchAgentKind === "openhands"
+        ? [CANVAS_UI_CLIENT_TOOL, LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL]
+        : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
     max_iterations:
@@ -1060,6 +1143,10 @@ export function buildStartConversationRequest(
     payload.conversation_id = options.conversationId;
   }
 
+  if (options.parentConversationId) {
+    payload.parent_conversation_id = options.parentConversationId;
+  }
+
   const securityAnalyzer =
     getConversationSecurityAnalyzer(conversationSettings);
   if (securityAnalyzer) {
@@ -1085,6 +1172,7 @@ export function buildStartConversationRequest(
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
+  delete toolModuleQualnames[LAUNCH_CHILD_CONVERSATION_TOOL_NAME];
   if (Object.keys(toolModuleQualnames).length > 0) {
     payload.tool_module_qualnames = toolModuleQualnames;
   }
@@ -1150,6 +1238,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
   agentProfileId?: string;

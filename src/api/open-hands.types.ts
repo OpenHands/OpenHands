@@ -60,7 +60,8 @@ export type ConversationTrigger =
   | "resolver"
   | "gui"
   | "suggested_task"
-  | "microagent_management";
+  | "microagent_management"
+  | "automation";
 
 export interface Conversation {
   conversation_id: string;

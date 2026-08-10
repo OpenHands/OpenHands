@@ -463,6 +463,40 @@ describe("AgentServerConversationService", () => {
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(true);
     });
+
+    it("links a local conversation to its parent", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "/Users/jane/projects/foo",
+        "new_worktree",
+        "parent-conversation-id",
+      );
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      expect(payloadCall[1]).toMatchObject({
+        parent_conversation_id: "parent-conversation-id",
+      });
+    });
   });
 
   describe("downloadConversation local branch", () => {

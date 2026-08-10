@@ -233,3 +233,58 @@ describe("ActivityLogItem — timestamp fallback", () => {
     expect(container.textContent).not.toContain("2030");
   });
 });
+
+describe("ActivityLogItem — run cost", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows the accumulated LLM cost reported for the run", () => {
+    // Arrange
+    const run = makeRun({ cost: 0.4213 });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(screen.getByText("$0.4213")).toBeInTheDocument();
+  });
+
+  it("shows a measured zero cost instead of hiding it", () => {
+    // Arrange: the service stores 0 only when the SDK reported a real
+    // zero-cost run, so it must stay distinguishable from an unknown cost.
+    const run = makeRun({ cost: 0 });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(screen.getByText("$0.0000")).toBeInTheDocument();
+  });
+
+  // `null` is a run whose cost the service could not determine (cancelled,
+  // watchdog timeout, or predating cost tracking); `undefined` is an
+  // automation service too old to send the field at all. Neither has a cost
+  // to show.
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+  ])("shows no cost when the reported cost is %s", (_label, cost) => {
+    // Arrange
+    const run = makeRun({ cost });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(
+      screen.queryByText((content) => content.startsWith("$")),
+    ).not.toBeInTheDocument();
+  });
+});

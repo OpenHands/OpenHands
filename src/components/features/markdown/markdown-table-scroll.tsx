@@ -68,6 +68,11 @@ export function MarkdownTableScroll({ children }: MarkdownTableScrollProps) {
       >
         {children}
       </div>
+      {/* The fades blend into whatever surface the table sits on, which differs
+          between the chat stream and cards like the markdown artifact preview.
+          Set `--oh-scroll-fade-from` on any ancestor to match another surface.
+          The value is inlined at both edges because Tailwind only extracts
+          classes from literal strings, not interpolated constants. */}
       <div
         aria-hidden
         data-testid="markdown-table-scroll-fade-left"
@@ -75,7 +80,7 @@ export function MarkdownTableScroll({ children }: MarkdownTableScrollProps) {
         className={cn(
           "pointer-events-none absolute inset-y-0 left-0 z-10",
           FADE_WIDTH_CLASS,
-          "bg-gradient-to-r from-base to-transparent",
+          "bg-gradient-to-r from-[var(--oh-scroll-fade-from,var(--oh-color-base))] to-transparent",
           "transition-opacity duration-300 ease-out motion-reduce:transition-none",
           fadeState.left ? "opacity-100" : "opacity-0",
         )}
@@ -87,7 +92,7 @@ export function MarkdownTableScroll({ children }: MarkdownTableScrollProps) {
         className={cn(
           "pointer-events-none absolute inset-y-0 right-0 z-10",
           FADE_WIDTH_CLASS,
-          "bg-gradient-to-l from-base to-transparent",
+          "bg-gradient-to-l from-[var(--oh-scroll-fade-from,var(--oh-color-base))] to-transparent",
           "transition-opacity duration-300 ease-out motion-reduce:transition-none",
           fadeState.right ? "opacity-100" : "opacity-0",
         )}

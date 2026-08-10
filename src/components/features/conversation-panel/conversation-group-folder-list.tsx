@@ -30,6 +30,7 @@ interface ConversationGroupFolderListProps {
   setGroupFolderOrder: (order: readonly string[]) => void;
   collapsedGroupIds: ReadonlySet<string>;
   expandedGroupPreviewIds: ReadonlySet<string>;
+  discoveryConversationIds: ReadonlySet<string> | null;
   onToggleGroupCollapsed: (groupId: string) => void;
   onToggleGroupPreviewExpanded: (groupId: string) => void;
   isCreatingConversationFlow: boolean;
@@ -45,6 +46,7 @@ export function ConversationGroupFolderList({
   setGroupFolderOrder,
   collapsedGroupIds,
   expandedGroupPreviewIds,
+  discoveryConversationIds,
   onToggleGroupCollapsed,
   onToggleGroupPreviewExpanded,
   isCreatingConversationFlow,
@@ -151,6 +153,7 @@ export function ConversationGroupFolderList({
           animateLayout={animateLayout}
           isCreatingConversationFlow={isCreatingConversationFlow}
           activeConversationId={activeConversationId}
+          discoveryConversationIds={discoveryConversationIds}
           onToggleExpanded={() => onToggleGroupCollapsed(group.id)}
           onDragStart={() => {
             setAnimateLayout(true);

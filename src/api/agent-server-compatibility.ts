@@ -65,7 +65,9 @@ export const isAgentServerUnavailableError = (
   (typeof error === "object" &&
     error !== null &&
     "name" in error &&
-    error.name === "AgentServerUnavailableError");
+    (error.name === "AgentServerUnavailableError" ||
+      error.name === "AgentServerUnsupportedVersionError" ||
+      error.name === "AgentServerUnknownVersionError"));
 
 export class AgentServerUnsupportedVersionError extends AgentServerUnavailableError {
   readonly code = AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE;

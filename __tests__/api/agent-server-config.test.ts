@@ -46,6 +46,7 @@ describe("agent server config", () => {
 
   it("uses the browser origin when no backend URL is configured", () => {
     mockWindowLocation("https://work-1.example.dev/settings");
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
 
     expect(getAgentServerBaseUrl()).toBe("https://work-1.example.dev");
   });
