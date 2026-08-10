@@ -480,7 +480,7 @@ describe("stack mode routing", () => {
     });
   });
 
-  it("routes only agent-server and automation in backend-only mode", async () => {
+  it("routes only local services through IPv4 in backend-only mode", async () => {
     const config = await buildConfig(
       { backendOnly: true },
       envWithIsolatedKeyPath(),
@@ -494,19 +494,19 @@ describe("stack mode routing", () => {
     const routes = getLocalServiceRoutes(config);
     expect(routes).toContainEqual([
       "/api/automation",
-      `http://localhost:${config.autoBackendPort}`,
+      `http://127.0.0.1:${config.autoBackendPort}`,
     ]);
     expect(routes).toContainEqual([
       "/api",
-      `http://localhost:${config.agentServerPort}`,
+      `http://127.0.0.1:${config.agentServerPort}`,
     ]);
 
     const routeArgs = buildRouteArgs(routes);
     expect(routeArgs).toContain(
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
+      `/api/automation=http://127.0.0.1:${config.autoBackendPort}`,
     );
     expect(routeArgs).toContain(
-      `/server_info=http://localhost:${config.agentServerPort}`,
+      `/server_info=http://127.0.0.1:${config.agentServerPort}`,
     );
     expect(routeArgs).not.toContain("--default");
   });

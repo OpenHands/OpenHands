@@ -48,11 +48,16 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.39.1 leaves agent-client-protocol
+// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
   SHARED_DEFAULTS.constraints?.agentClientProtocol;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
+  SHARED_DEFAULTS.telemetry.posthogApiKey;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
+  SHARED_DEFAULTS.telemetry.posthogHost;
+const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -401,7 +406,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.39.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.40.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -434,6 +439,8 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `local (${localPath})`;
@@ -458,6 +465,8 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `git (${gitRef})`;
@@ -478,6 +487,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -496,6 +506,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
@@ -685,8 +696,52 @@ function buildConfigFromPorts(ports, cwd, env) {
  * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
  * @returns {Record<string, string>} Environment variables for agent-server
  */
-export function buildAgentServerEnv(config) {
+export function buildAgentServerTelemetryEnv(env = process.env) {
+  const telemetryDisabled =
+    env.VITE_DO_NOT_TRACK === "1" || env.DO_NOT_TRACK === "1";
+  const result = {};
+
+  for (const key of [
+    "OH_TELEMETRY_EXPORTER",
+    "OH_TELEMETRY_POSTHOG_API_KEY",
+    "OH_TELEMETRY_POSTHOG_HOST",
+    "OH_TELEMETRY_HTTP_ENDPOINT",
+    "OH_TELEMETRY_HTTP_TOKEN",
+    "OH_TELEMETRY_CONSENT",
+    "OH_TELEMETRY_CONSENT_MODE",
+    "OH_TELEMETRY_SALT",
+  ]) {
+    if (env[key]) result[key] = env[key];
+  }
+
+  if (telemetryDisabled) {
+    result.DO_NOT_TRACK = "1";
+  }
+
+  const apiKey =
+    env.OH_TELEMETRY_POSTHOG_API_KEY ||
+    env.VITE_POSTHOG_API_KEY ||
+    (telemetryDisabled ? "" : DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY);
+  const exporter = env.OH_TELEMETRY_EXPORTER || (apiKey ? "posthog" : "");
+
+  if (exporter) {
+    result.OH_TELEMETRY_EXPORTER = exporter;
+  }
+
+  if (exporter === "posthog" && apiKey) {
+    result.OH_TELEMETRY_POSTHOG_API_KEY = apiKey;
+    result.OH_TELEMETRY_POSTHOG_HOST =
+      env.OH_TELEMETRY_POSTHOG_HOST ||
+      env.VITE_POSTHOG_HOST ||
+      DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST;
+  }
+
+  return result;
+}
+
+export function buildAgentServerEnv(config, env = process.env) {
   return {
+    ...buildAgentServerTelemetryEnv(env),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).

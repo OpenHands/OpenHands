@@ -171,6 +171,7 @@ describe("recommended automations", () => {
       "linear-triage-assistant",
       "jira-issue-to-pr",
       "research-brief-writer",
+      "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
   });
@@ -195,7 +196,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("5")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -521,8 +522,8 @@ describe("recommended automations", () => {
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const createSpy = vi
+      .spyOn(SettingsService, "createMcpServer")
       .mockResolvedValue(true);
 
     renderLauncher();
@@ -538,7 +539,7 @@ describe("recommended automations", () => {
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
-    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
         "/automations/new/github-pr-reviewer",

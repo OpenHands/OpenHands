@@ -1,10 +1,18 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { BackendKind } from "#/api/backend-registry/types";
 import type { Provider } from "#/types/settings";
+import {
+  AUTOMATION_NAME_TAG_KEY,
+  AUTOMATION_TAG_KEYS,
+} from "#/api/agent-server-adapter";
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
 export type OrganizeMode = "grouped" | "chronological";
+export type AutomationFilterMode =
+  | "all"
+  | "hide-automations"
+  | "only-automations";
 
 /** Max conversations shown under a workspace/repo folder before "View more". */
 export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;
@@ -83,6 +91,94 @@ export function filterOutPinnedConversations(
   return conversations.filter(
     (conversation) => !pinnedSet.has(conversation.id),
   );
+}
+
+/**
+ * Facet bucket for automation-born conversations that carry no
+ * `automationname` tag (double-underscore prefix mirrors the
+ * `__none_workspace` group-id idiom).
+ */
+export const UNNAMED_AUTOMATION_FACET = "__unnamed__";
+
+/**
+ * Whether a conversation was created by an automation run: the cloud backend
+ * stamps `trigger: "automation"`, while local agent-server conversations are
+ * recognized by the automation tags the SDK workspace attaches at creation.
+ */
+export function isAutomationConversation(
+  conversation: AppConversation,
+): boolean {
+  if (conversation.trigger === "automation") {
+    return true;
+  }
+  const tags = conversation.tags;
+  if (!tags) {
+    return false;
+  }
+  return AUTOMATION_TAG_KEYS.some((key) => Boolean(tags[key]));
+}
+
+export function getAutomationNameFacet(conversation: AppConversation): string {
+  const name = conversation.tags?.[AUTOMATION_NAME_TAG_KEY]?.trim();
+  return name || UNNAMED_AUTOMATION_FACET;
+}
+
+/**
+ * Unique automation names among the given conversations, sorted for stable
+ * menu order; the unnamed bucket (if present) is appended last.
+ */
+export function collectAutomationNameFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const names = new Set<string>();
+  let hasUnnamed = false;
+  for (const conversation of conversations) {
+    if (!isAutomationConversation(conversation)) {
+      continue;
+    }
+    const facet = getAutomationNameFacet(conversation);
+    if (facet === UNNAMED_AUTOMATION_FACET) {
+      hasUnnamed = true;
+    } else {
+      names.add(facet);
+    }
+  }
+  const sorted = [...names].sort((a, b) => a.localeCompare(b));
+  if (hasUnnamed) {
+    sorted.push(UNNAMED_AUTOMATION_FACET);
+  }
+  return sorted;
+}
+
+export function applyAutomationConversationFilter(
+  conversations: readonly AppConversation[],
+  mode: AutomationFilterMode,
+  selectedNames: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  if (mode === "all") {
+    return [...conversations];
+  }
+  if (mode === "hide-automations") {
+    return conversations.filter(
+      (conversation) => !isAutomationConversation(conversation),
+    );
+  }
+  // "only-automations": an empty selection means every automation run, and a
+  // selection that no longer intersects the available facets (stale names
+  // persisted from another backend, renamed automations) degrades the same
+  // way instead of yielding an unfillable empty list.
+  const facetSet = new Set(availableFacets);
+  const effectiveNames = selectedNames.filter((name) => facetSet.has(name));
+  const narrowing = effectiveNames.length > 0 ? new Set(effectiveNames) : null;
+  return conversations.filter((conversation) => {
+    if (!isAutomationConversation(conversation)) {
+      return false;
+    }
+    return (
+      narrowing === null || narrowing.has(getAutomationNameFacet(conversation))
+    );
+  });
 }
 
 /** Subset of `useCreateConversation` variables for launching from a group row */

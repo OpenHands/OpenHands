@@ -9,6 +9,7 @@ import { cn } from "#/utils/utils";
 import { ConversationStatusDot } from "./conversation-status-dot";
 import { ConversationCardFooter } from "./conversation-card/conversation-card-footer";
 import { I18nKey } from "#/i18n/declaration";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 
 interface CompactConversationRowProps {
   conversationId: string;
@@ -55,6 +56,7 @@ export function CompactConversationRow({
   showTags = false,
 }: CompactConversationRowProps) {
   const { t } = useTranslation("openhands");
+  const backendScopedPath = useBackendScopedPath();
   const disableAnimation = import.meta.env.MODE === "test";
 
   const preview = (
@@ -95,7 +97,7 @@ export function CompactConversationRow({
       disableAnimation={disableAnimation}
     >
       <NavigationLink
-        to={`/conversations/${conversationId}`}
+        to={backendScopedPath(`/conversations/${conversationId}`)}
         onClick={onClose}
         data-testid="compact-conversation-row"
         data-conversation-id={conversationId}
