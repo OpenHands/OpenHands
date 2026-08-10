@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@heroui/react": "2.8.10",
-    "@microlink/react-json-view": "1.31.20",
+    "@microlink/react-json-view": "1.31.25",
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.16.0",
     "@openhands/typescript-client": "1.36.1",
