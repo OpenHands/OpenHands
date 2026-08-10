@@ -1,108 +1,111 @@
 ---
 card: PROJETOSIN-187
 pr: 5
-veredicto: FAIL
+veredicto: PASS
 agente: appsec
 data: 2026-08-10
-tip: 9aaeb874b
-ci: review-manual services/mcp-servers + PoC Python; npm N/A (escopo Python)
+tip: fc1474a13
+ci: review-manual + PoC Python + pytest mcp-recon (9) + mcp-webscan (9) = 18 passed
 repo: klebersjunior/OpenHands
 branch: feat/fase1-mcp-recon-webscan-187
+re_gate: true
+prev_fail_tip: 9aaeb874b
 ---
 
-# AppSecurity — PROJETOSIN-187 (mcp-recon + mcp-webscan)
+# AppSecurity — PROJETOSIN-187 (mcp-recon + mcp-webscan) — re-gate
 
-**Veredicto:** FAIL
+**Veredicto:** PASS
 
-Revisor ≠ autor (implementação: Backend; QA laudo separado). Escopo: `services/mcp-servers/**`, packaging mínimo `docker/runtimes/web/`, `.env.sample`. Spec `docs/specs/fase-1/187-mcp-recon-webscan.md` § Segurança · ADR-0001 · PR [#5](https://github.com/klebersjunior/OpenHands/pull/5) @ `9aaeb874b`.
+Revisor ≠ autor (implementação/fix: Backend @ `fc1474a13`; laudo AppSec emitido neste re-gate). Escopo: `services/mcp-servers/**`, packaging mínimo `docker/runtimes/web/`, `.env.sample`. Spec `docs/specs/fase-1/187-mcp-recon-webscan.md` § Segurança · ADR-0001 · PR [#5](https://github.com/klebersjunior/OpenHands/pull/5).
 
-**Não mergeable** enquanto HIGH abaixo não forem remediados e re-gate PASS. QA PASS permanece válido no eixo AC; AppSec bloqueia merge.
+**FAIL anterior** @ `9aaeb874b` (HIGH-1 startswith bypass; HIGH-2 `autonomy_mode` no schema MCP). Remediação verificada neste tip.
+
+**Mergeable (eixo AppSec):** sim, contanto que QA PASS permaneça válido no tip atual (QA tip anterior `04ab2f4cf`; regressão pytest AppSec no tip do fix = 18 passed — Tech Lead confirma se QA precisa re-gate formal no tip `fc1474a13`).
 
 ## Checklist
 
 - [x] Sem segredos versionados / hardcoded (`SESSION_API_KEY` / tokens só via env; `.env.sample` sem valores reais)
 - [x] `npm audit` N/A ao diff Python MCP (sem mudança npm de superfície neste card)
 - [x] Session key não bakeada em bundle público (stdio MCP server-side)
-- [ ] Scope allowlist fail-closed **sem bypass** — **FAIL (HIGH-1)**
-- [ ] Confirmation gate não contornável pelo agente — **FAIL (HIGH-2)**
+- [x] Scope allowlist fail-closed **sem bypass** — HIGH-1 remediado
+- [x] Confirmation gate não contornável pelo agente — HIGH-2 remediado
 - [x] Findings auth: `SESSION_API_KEY` obrigatória; 401/403 → `FindingsAuthError` (não engolido)
 - [x] Evidence: sem log de bodies em INFO (`findings_client` só loga dedupe 409)
 - [x] Command injection: `create_subprocess_exec` + args list (sem `shell=True`)
-- [ ] Rate limit sqlmap/ZAP active — **ausente (MEDIUM)**
+- [ ] Rate limit sqlmap/ZAP active — **ausente (MEDIUM residual)**
 - [x] Proxies/VNC/Cloud fora de escopo deste card
 
-## Findings
+## Re-gate: HIGH-1 / HIGH-2
 
-### HIGH-1 — Bypass de `PENTEST_SCOPE_ALLOWLIST` via `str.startswith` — **BLOCK**
+### HIGH-1 — `assert_in_scope` / `_host_matches` — **PASS (fechado)**
 
-**Arquivo:** `services/mcp-servers/shared/normalize.py` (`assert_in_scope`)
+**Arquivo:** `services/mcp-servers/shared/normalize.py`
 
-Após falhar `_host_matches`, o código aceita:
+- Removido o ramo `any(target.startswith(entry) …)`.
+- Matching só via `extract_host` + `_host_matches` (exact, subdomain `host.endswith("." + pat)`, wildcard `*.`, CIDR).
+- Entradas URL na allowlist usam hostname parseado (`extract_host(entry)` se `://` presente), nunca prefixo cru.
 
-```python
-if any(target.startswith(entry) or entry == target for entry in allowlist):
-    return
-```
+PoC re-gate (`PENTEST_SCOPE_ALLOWLIST=example.com`):
 
-Com allowlist `example.com`, o target bare `example.com.evil.com` (e `example.com.attacker.net`) é **permitido**. PoC local (tip `9aaeb874b`):
+| Target | Resultado |
+|--------|-----------|
+| `example.com` / `www.example.com` / `api.example.com` | ALLOW |
+| `example.com.evil.com` | DENY `scope_violation` |
+| `example.com.attacker.net` | DENY |
+| `https://example.com.evil.com/` | DENY |
 
-```
-ALLOW (bypass?): example.com.evil.com
-ALLOW (bypass?): example.com.attacker.net
-```
+Regressão: `test_high1_scope_startswith_bypass_rejected`, `test_high1_url_allowlist_matches_host_not_prefix`.
 
-Impacto: agente/tool pode varrer e POST findings contra hosts fora do engagement (SSRF/scan off-scope), violando AC-187-4 e § Segurança (“fail-closed”).
+### HIGH-2 — autonomia server-side — **PASS (fechado)**
 
-**Remediação:** remover o ramo `startswith` para entradas de host/CIDR; matching só via host normalizado (`extract_host` + `_host_matches`). Se precisar prefixo de URL, exigir entrada com `://` **e** comparar hostname parseado (nunca `startswith` no string cru). Adicionar teste negativo `example.com.evil.com` → `scope_violation`.
+**Arquivos:** `shared/confirmation.py`, `mcp-webscan/server.py`, runners `zap_active` / `sqlmap` / `nuclei`
 
-### HIGH-2 — Confirmation gate contornável por `autonomy_mode` controlado pelo agente — **BLOCK**
+- Autonomia só via `PENTEST_AUTONOMY_MODE` (`get_autonomy_mode()`); default `semi_autonomous`; valores desconhecidos fail-closed para semi.
+- `autonomy_mode` removido do schema MCP das tools ativas e das assinaturas dos runners.
+- `require_confirmation` **não** aceita override de autonomia do caller — params: `tool_name`, `payload`, `confirmation_token` apenas.
 
-**Arquivos:** `mcp-webscan/server.py` (args MCP), `shared/confirmation.py` (`MAX_RISK_TOOLS` vazio)
+PoC / testes: `test_high2_agent_cannot_bypass_gate_via_autonomy_arg`, `test_high2_mcp_schema_omits_autonomy_mode`; sob env `semi_autonomous`, ZAP active sem token → `confirmation_required` + zero POST.
 
-Tools ativas expõem `autonomy_mode: str = "semi_autonomous"` como parâmetro MCP. O LLM pode passar `autonomy_mode="autonomous"`; com `MAX_RISK_TOOLS == ∅`, `_needs_gate` retorna `False` e o gate não dispara.
-
-PoC: `run_zap_active(target="example.com.evil.com", autonomy_mode="autonomous")` → `ok: true` + POST Findings (1), sem `confirmation_required`. Combina com HIGH-1.
-
-Impacto: blueprint §5.4 / AC-187-5 (semi sem token → confirmação) é inócuo se o caller escolhe o modo. Scan intrusivo (ZAP active / sqlmap) sem aprovação humana.
-
-**Remediação:** ler autonomia de fonte server-side confiável (`PENTEST_AUTONOMY_MODE` / sessão / engagement), **não** do argumento da tool controlado pelo agente. Remover ou ignorar `autonomy_mode` no schema MCP (ou fixar e validar contra env). Teste: chamada com `autonomy_mode=autonomous` sob env `semi_autonomous` ainda exige token.
+## Residuals (não bloqueiam)
 
 ### MEDIUM — Rate limit ausente em sqlmap / ZAP active
 
-Spec § Segurança: “sqlmap/ZAP active: rate limit e timeout obrigatórios”. Timeout existe via `MCP_WEBSCAN_TIMEOUT_SEC` / `run_binary`, mas runners ativos atuais são stubs sem rate limit real. Não bloqueia sozinho; remediar junto do wire-up de binários.
+Spec § Segurança: rate limit + timeout. Timeout via env/`run_binary`; runners ativos ainda stubs sem rate limit real. Remediar no wire-up de binários.
 
 ### MEDIUM — Token de confirmação reutilizável / env sticky
 
 - `_approved_tokens` não é single-use.
-- `OPENHANDS_CONFIRMATION_TOKEN` igual ao token aprovado libera **todas** as tools gated sem passar `confirmation_token` de novo (`confirmation.py` L103–104).
-- Match `confirmation_token == env_token` sem exigir que o token tenha sido emitido via `approve_confirmation` (L101–102) — se o env for secreto estático, vira bypass permanente.
-
-Aceitável como stub MVP **após** HIGH-2; endurecer no canal UI real (single-use, binding a `request_id`+tool+target).
+- `OPENHANDS_CONFIRMATION_TOKEN` sticky / match estático pode liberar tools gated.
+- Aceitável como stub MVP; endurecer no canal UI (single-use, binding `request_id`+tool+target).
 
 ### LOW — Achados de recon sem re-checagem de host descoberto
 
-`recon_subfinder` valida o domínio raiz; hosts derivados (`www.{domain}`) são postados sem `assert_in_scope` individual. Baixo risco com allowlist de domínio (suffix match). Preferível revalidar cada asset antes do POST.
+Hosts derivados postados sem `assert_in_scope` individual após validar o domínio raiz. Preferível revalidar cada asset antes do POST.
 
-## Controles OK (não bloqueantes)
+## Controles OK
 
 | Controle | Evidência |
 |----------|-----------|
-| Fail-closed se allowlist vazia/ausente | PoC: unset → `ScopeViolationError` |
-| Findings auth | `session_auth.py` + `FindingsAuthError` em missing key / 401/403 |
+| Fail-closed se allowlist vazia/ausente | `ScopeViolationError` |
+| Findings auth | `session_auth.py` + `FindingsAuthError` |
 | Sem segredo hardcoded | AC-187-9; fixtures `test-session-key` |
 | Sem shell injection | `asyncio.create_subprocess_exec` |
-| Evidence não logada em INFO | só mensagem de dedupe 409 |
+| Evidence não logada em INFO | só dedupe 409 |
 | `.env.sample` | vars documentadas, sem valores secretos |
 
 ## Dependências
 
-Escopo Python (`mcp`, `httpx` em pyproject). Sem `npm audit` aplicável ao diff do card. CVEs de binários ofensivos do runtime-web ficam no residual de PROJETOSIN-186.
+Escopo Python (`mcp`, `httpx`). Sem `npm audit` aplicável ao diff do card. CVEs de binários ofensivos do runtime-web → residual PROJETOSIN-186.
 
-## Ação requerida (bloqueia merge)
+## Evidência de regressão (re-gate)
 
-1. **Corrigir HIGH-1** (matching de escopo sem `startswith` inseguro) + teste de regressão.
-2. **Corrigir HIGH-2** (autonomia server-side; agente não escolhe `autonomous` para pular gate) + teste de regressão.
-3. Re-gate AppSec no mesmo PR após tip com fix.
-4. Plane: label **Blocked** enquanto FAIL.
+```
+mcp-webscan: 9 passed
+mcp-recon:   9 passed
+```
 
-Tech Lead: **não mergear** com QA PASS isolado — gate AppSec = FAIL.
+## Ação
+
+1. Label **Blocked** removida no Plane (AppSec PASS).
+2. Tech Lead: merge só com QA PASS + AppSec PASS no tip; residuals MEDIUM/LOW não bloqueiam este card.
+3. Não auto-assinar QA neste re-gate.
