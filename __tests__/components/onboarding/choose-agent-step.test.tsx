@@ -216,6 +216,11 @@ describe("ChooseAgentStep", () => {
         (call.agent_settings_diff as Record<string, unknown>).acp_command,
       ).toEqual(["agent", "acp"]);
     }
+    if (id === "cursor") {
+      expect(
+        (call.agent_settings_diff as Record<string, unknown>).acp_command,
+      ).toEqual(["agent", "acp"]);
+    }
   });
 
   it("rebuilds the diff cleanly when the user flips between ACP providers", async () => {
