@@ -23,8 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-# Frida client tools
-RUN pip3 install --no-cache-dir frida-tools
+# Frida client tools + MCP SDK deps for mcp-mobile (stdio; MobSF stays sidecar)
+COPY requirements.txt /tmp/requirements-mobile.txt
+RUN pip3 install --no-cache-dir frida-tools \
+    && pip3 install --no-cache-dir -r /tmp/requirements-mobile.txt \
+    && rm -f /tmp/requirements-mobile.txt
 
 # apktool (official GitHub release JAR)
 RUN curl -fsSL \
