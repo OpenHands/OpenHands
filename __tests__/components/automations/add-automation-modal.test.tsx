@@ -75,16 +75,22 @@ function renderModal(isOpen = true) {
 }
 
 describe("AddAutomationModal", () => {
-  it("renders the create instructions content when open", () => {
+  it("renders separate discovery and custom automation paths when open", () => {
     renderModal();
 
     expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
     expect(
-      screen.getByTestId("automations-create-instructions-example"),
-    ).toHaveTextContent("help me figure out what I should automate");
+      screen.getByTestId("automations-discovery-option"),
+    ).toHaveTextContent(I18nKey.AUTOMATIONS$DISCOVERY_OPTION_TITLE);
+    expect(screen.getByTestId("automations-custom-option")).toHaveTextContent(
+      I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE,
+    );
+    expect(
+      screen.getByTestId("automations-find-opportunities"),
+    ).toHaveTextContent(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON);
     expect(
       screen.getByTestId("automations-create-automation"),
-    ).toHaveTextContent(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON);
+    ).toHaveTextContent(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON);
     expect(
       screen.queryByText(I18nKey.AUTOMATIONS$EMPTY_OPTION_PLUGIN_TITLE),
     ).not.toBeInTheDocument();
@@ -93,7 +99,9 @@ describe("AddAutomationModal", () => {
   it("does not render when closed", () => {
     renderModal(false);
 
-    expect(screen.queryByTestId("add-automation-modal")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-automation-modal"),
+    ).not.toBeInTheDocument();
   });
 
   it("calls onClose when the close button is clicked", async () => {

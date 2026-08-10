@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import ChevronDownIcon from "#/icons/chevron-down.svg?react";
 import MessageSquareShareIcon from "#/icons/message-square-share.svg?react";
@@ -12,34 +12,6 @@ import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
 const DOCS_URL = getAutomationsDocsUrl();
 
-function InlineExampleWrap({ children }: { children?: ReactNode }) {
-  return <span className="whitespace-nowrap">{children}</span>;
-}
-
-function InlineCodeChip({ children }: { children?: ReactNode }) {
-  return (
-    <code
-      data-testid="automations-create-instructions-example"
-      className={cn(
-        "mx-0.5 inline-block rounded-sm border border-[var(--oh-border-subtle)]",
-        "bg-[var(--oh-surface-raised)] px-1.5 py-0.5 align-baseline font-mono text-[11px] text-white",
-      )}
-    >
-      {children}
-    </code>
-  );
-}
-
-function InlinePunctuation({ children }: { children?: ReactNode }) {
-  return <>{children}</>;
-}
-
-const CREATE_INSTRUCTIONS_INLINE_COMPONENTS = {
-  example: <InlineExampleWrap />,
-  cmd: <InlineCodeChip />,
-  punct: <InlinePunctuation />,
-};
-
 interface CreateInstructionsProps {
   /** If true, the instructions are collapsible and start collapsed */
   collapsible?: boolean;
@@ -47,6 +19,47 @@ interface CreateInstructionsProps {
 
 interface CreateInstructionsContentProps {
   onLaunch?: () => void;
+}
+
+interface AutomationStartOptionProps {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  testId: string;
+  buttonTestId: string;
+  onClick: () => void;
+}
+
+function AutomationStartOption({
+  title,
+  description,
+  buttonLabel,
+  testId,
+  buttonTestId,
+  onClick,
+}: AutomationStartOptionProps) {
+  return (
+    <section
+      data-testid={testId}
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+    >
+      <div className="min-w-0">
+        <h4 className="text-sm font-medium text-content">{title}</h4>
+        <p className="mt-1 text-xs leading-relaxed text-tertiary-light">
+          {description}
+        </p>
+      </div>
+      <BrandButton
+        type="button"
+        variant="primary"
+        testId={buttonTestId}
+        onClick={onClick}
+        startContent={<MessageSquareShareIcon className="size-4" aria-hidden />}
+      >
+        {buttonLabel}
+      </BrandButton>
+    </section>
+  );
 }
 
 export function CreateInstructionsContent({
@@ -57,43 +70,48 @@ export function CreateInstructionsContent({
   const active = useActiveBackend();
   const { trackAutomationCreatedButton } = useTracking();
 
-  const handleCreateAutomation = () => {
+  const launchAutomationPrompt = (prompt: string) => {
     trackAutomationCreatedButton({ backendKind: active.backend.kind });
-    launchInChat(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT), onLaunch);
+    launchInChat(prompt, onLaunch);
+  };
+
+  const handleFindOpportunities = () => {
+    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
+  };
+
+  const handleCreateCustomAutomation = () => {
+    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT));
   };
 
   return (
     <div className="flex flex-col gap-5">
-      <p className="text-sm leading-relaxed text-tertiary-light">
-        <Trans
-          ns="openhands"
-          i18nKey={I18nKey.AUTOMATIONS$EMPTY_OPTION_CONVERSATION_DESC}
-          components={CREATE_INSTRUCTIONS_INLINE_COMPONENTS}
-        />{" "}
-        {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
-      </p>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <a
-          href={DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-muted underline transition-colors hover:text-foreground"
-        >
-          {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
-        </a>
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="automations-create-automation"
-          onClick={handleCreateAutomation}
-          startContent={
-            <MessageSquareShareIcon className="size-4" aria-hidden />
-          }
-        >
-          {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-        </BrandButton>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <AutomationStartOption
+          title={t(I18nKey.AUTOMATIONS$DISCOVERY_OPTION_TITLE)}
+          description={t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
+          buttonLabel={t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+          testId="automations-discovery-option"
+          buttonTestId="automations-find-opportunities"
+          onClick={handleFindOpportunities}
+        />
+        <AutomationStartOption
+          title={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE)}
+          description={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC)}
+          buttonLabel={t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON)}
+          testId="automations-custom-option"
+          buttonTestId="automations-create-automation"
+          onClick={handleCreateCustomAutomation}
+        />
       </div>
+
+      <a
+        href={DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm text-muted underline transition-colors hover:text-foreground"
+      >
+        {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
+      </a>
     </div>
   );
 }

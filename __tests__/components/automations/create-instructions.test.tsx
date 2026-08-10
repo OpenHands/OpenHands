@@ -24,7 +24,15 @@ vi.mock("react-i18next", () => ({
         [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT]:
           "Help me figure out what I should automate.",
         [I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE]:
-          "OpenHands will ask about your recurring work, tools, and handoffs, then recommend useful automations before creating anything.",
+          "OpenHands can help identify high-value automations from your recurring work.",
+        [I18nKey.AUTOMATIONS$DISCOVERY_OPTION_TITLE]: "Need ideas?",
+        [I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE]: "Already know the workflow?",
+        [I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC]:
+          "Describe what should happen, when it should run, and where results should go.",
+        [I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON]:
+          "Create custom automation",
+        [I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT]:
+          "Help me create a custom automation.",
       };
       return translations[key] || key;
     },
@@ -97,11 +105,28 @@ describe("CreateInstructions", () => {
     captureMock.mockRestore();
   });
 
-  it("captures automation_created_button with the active backend kind when the discovery CTA is clicked", async () => {
+  it("renders separate discovery and custom automation paths", () => {
+    renderCreateInstructions();
+
+    expect(
+      screen.getByTestId("automations-discovery-option"),
+    ).toHaveTextContent("Need ideas?");
+    expect(screen.getByTestId("automations-custom-option")).toHaveTextContent(
+      "Already know the workflow?",
+    );
+    expect(
+      screen.getByTestId("automations-find-opportunities"),
+    ).toHaveTextContent("Find automation opportunities");
+    expect(
+      screen.getByTestId("automations-create-automation"),
+    ).toHaveTextContent("Create custom automation");
+  });
+
+  it("captures automation_created_button with the active backend kind when a CTA is clicked", async () => {
     const user = userEvent.setup();
     renderCreateInstructions();
 
-    await user.click(screen.getByTestId("automations-create-automation"));
+    await user.click(screen.getByTestId("automations-find-opportunities"));
 
     expect(captureMock).toHaveBeenCalledWith(
       "automation_created_button",
@@ -109,7 +134,23 @@ describe("CreateInstructions", () => {
     );
   });
 
-  it("navigates to conversations with a discovery prompt when the CTA is clicked", async () => {
+  it("navigates to conversations with a discovery prompt when the discovery CTA is clicked", async () => {
+    const user = userEvent.setup();
+    const setMessageToSend = vi.fn();
+    useConversationStore.setState({ setMessageToSend });
+    const { navigate } = renderCreateInstructions();
+
+    await user.click(screen.getByTestId("automations-find-opportunities"));
+
+    expect(navigate).toHaveBeenCalledWith("/conversations");
+    await waitFor(() => {
+      expect(setMessageToSend).toHaveBeenCalledWith(
+        "Help me figure out what I should automate.",
+      );
+    });
+  });
+
+  it("navigates to conversations with a custom automation prompt when the custom CTA is clicked", async () => {
     const user = userEvent.setup();
     const setMessageToSend = vi.fn();
     useConversationStore.setState({ setMessageToSend });
@@ -120,7 +161,7 @@ describe("CreateInstructions", () => {
     expect(navigate).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
       expect(setMessageToSend).toHaveBeenCalledWith(
-        "Help me figure out what I should automate.",
+        "Help me create a custom automation.",
       );
     });
   });

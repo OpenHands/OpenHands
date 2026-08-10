@@ -34,6 +34,10 @@ export default function AutomationTemplates() {
     launchInChat(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
   };
 
+  const handleCreateCustomAutomation = () => {
+    launchInChat(t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT));
+  };
+
   return (
     <ManifestSubpageLayout
       heading={nav.heading}
@@ -46,24 +50,34 @@ export default function AutomationTemplates() {
       </div>
       <section
         data-testid="automation-opportunities-cta"
-        className="flex flex-col gap-4 rounded-xl border border-[var(--oh-border)] bg-surface-raised p-4 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-4 rounded-xl border border-[var(--oh-border)] bg-surface-raised p-4 lg:flex-row lg:items-center lg:justify-between"
       >
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-content">
-            {t(I18nKey.AUTOMATIONS$EMPTY_HOW_TO_CREATE_TITLE)}
+            {t(I18nKey.AUTOMATIONS$TEMPLATES_CTA_TITLE)}
           </h2>
           <p className="mt-1 text-sm leading-relaxed text-muted">
-            {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
+            {t(I18nKey.AUTOMATIONS$TEMPLATES_CTA_DESC)}
           </p>
         </div>
-        <BrandButton
-          type="button"
-          variant="primary"
-          testId="automation-opportunities-cta-button"
-          onClick={handleFindOpportunities}
-        >
-          {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-        </BrandButton>
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <BrandButton
+            type="button"
+            variant="primary"
+            testId="automation-opportunities-cta-find"
+            onClick={handleFindOpportunities}
+          >
+            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+          </BrandButton>
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automation-opportunities-cta-custom"
+            onClick={handleCreateCustomAutomation}
+          >
+            {t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON)}
+          </BrandButton>
+        </div>
       </section>
       <div className="flex max-w-xl items-stretch">
         <SearchInput value={searchQuery} onChange={setSearchQuery} />

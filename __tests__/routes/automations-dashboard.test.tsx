@@ -241,11 +241,12 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
       }),
       description: screen.getByText("Pick a proven widget to start from."),
       opportunityTitle: within(cta).getByText(
-        "Find automation opportunities",
+        I18nKey.AUTOMATIONS$TEMPLATES_CTA_TITLE,
         { selector: "h2" },
       ),
-      opportunityButton: within(cta).getByTestId(
-        "automation-opportunities-cta-button",
+      findButton: within(cta).getByTestId("automation-opportunities-cta-find"),
+      customButton: within(cta).getByTestId(
+        "automation-opportunities-cta-custom",
       ),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toBeTruthy();
