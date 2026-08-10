@@ -5,10 +5,9 @@ import ChevronDownIcon from "#/icons/chevron-down.svg?react";
 import MessageSquareShareIcon from "#/icons/message-square-share.svg?react";
 import { cn } from "#/utils/utils";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
-import { useActiveBackend } from "#/contexts/active-backend-context";
-import { useTracking } from "#/hooks/use-tracking";
 import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
+import { AutomationConversationLaunchModal } from "./automation-conversation-launch-modal";
+import type { AutomationConversationLaunchRequest } from "./use-launch-automation-conversation";
 
 const DOCS_URL = getAutomationsDocsUrl();
 
@@ -69,53 +68,66 @@ export function CreateInstructionsContent({
   onLaunch,
 }: CreateInstructionsContentProps = {}) {
   const { t } = useTranslation("openhands");
-  const launchInChat = useLaunchSkillInChat();
-  const active = useActiveBackend();
-  const { trackAutomationCreatedButton } = useTracking();
-
-  const launchAutomationPrompt = (prompt: string) => {
-    trackAutomationCreatedButton({ backendKind: active.backend.kind });
-    launchInChat(prompt, onLaunch);
-  };
+  const [launchRequest, setLaunchRequest] =
+    useState<AutomationConversationLaunchRequest | null>(null);
 
   const handleFindOpportunities = () => {
-    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
+    setLaunchRequest({
+      intent: "find_opportunities",
+      source: "empty_state",
+      prompt: t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT),
+    });
   };
 
   const handleAddAutomation = () => {
-    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT));
+    setLaunchRequest({
+      intent: "add_automation",
+      source: "empty_state",
+      prompt: t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT),
+    });
+  };
+
+  const handleLaunchModalClose = () => {
+    setLaunchRequest(null);
+    onLaunch?.();
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <AutomationStartOption
-          title={t(I18nKey.AUTOMATIONS$DISCOVERY_OPTION_TITLE)}
-          description={t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
-          buttonLabel={t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-          testId="automations-discovery-option"
-          buttonTestId="automations-find-opportunities"
-          onClick={handleFindOpportunities}
-        />
-        <AutomationStartOption
-          title={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE)}
-          description={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC)}
-          buttonLabel={t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-          testId="automations-add-option"
-          buttonTestId="automations-add-known-automation"
-          onClick={handleAddAutomation}
-        />
-      </div>
+    <>
+      <div className="flex flex-col gap-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <AutomationStartOption
+            title={t(I18nKey.AUTOMATIONS$DISCOVERY_OPTION_TITLE)}
+            description={t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}
+            buttonLabel={t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+            testId="automations-discovery-option"
+            buttonTestId="automations-find-opportunities"
+            onClick={handleFindOpportunities}
+          />
+          <AutomationStartOption
+            title={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE)}
+            description={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC)}
+            buttonLabel={t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
+            testId="automations-add-option"
+            buttonTestId="automations-add-known-automation"
+            onClick={handleAddAutomation}
+          />
+        </div>
 
-      <a
-        href={DOCS_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-muted underline transition-colors hover:text-foreground"
-      >
-        {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
-      </a>
-    </div>
+        <a
+          href={DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-muted underline transition-colors hover:text-foreground"
+        >
+          {t(I18nKey.AUTOMATIONS$EMPTY_LEARN_MORE)}
+        </a>
+      </div>
+      <AutomationConversationLaunchModal
+        request={launchRequest}
+        onClose={handleLaunchModalClose}
+      />
+    </>
   );
 }
 

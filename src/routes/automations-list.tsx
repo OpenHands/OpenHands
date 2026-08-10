@@ -40,8 +40,9 @@ import { DeleteConfirmationModal } from "#/components/features/automations/delet
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
+import { AutomationConversationLaunchModal } from "#/components/features/automations/automation-conversation-launch-modal";
+import type { AutomationConversationLaunchRequest } from "#/components/features/automations/use-launch-automation-conversation";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
 import { useTracking } from "#/hooks/use-tracking";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
@@ -105,6 +106,8 @@ export default function AutomationsList() {
   } | null>(null);
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
+  const [launchRequest, setLaunchRequest] =
+    useState<AutomationConversationLaunchRequest | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const active = useActiveBackend();
@@ -130,12 +133,8 @@ export default function AutomationsList() {
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,
   });
-  const {
-    trackPrebuiltAutomationEnabled,
-    trackAutomationExported,
-    trackAutomationCreatedButton,
-  } = useTracking();
-  const launchInChat = useLaunchSkillInChat();
+  const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
+    useTracking();
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
   const dispatchMutation = useDispatchAutomation();
@@ -213,17 +212,20 @@ export default function AutomationsList() {
     }
   };
 
-  const launchAutomationPrompt = (prompt: string) => {
-    trackAutomationCreatedButton({ backendKind: active.backend.kind });
-    launchInChat(prompt);
-  };
-
   const handleFindOpportunities = () => {
-    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
+    setLaunchRequest({
+      intent: "find_opportunities",
+      source: "dashboard_header",
+      prompt: t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT),
+    });
   };
 
   const handleAddAutomation = () => {
-    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT));
+    setLaunchRequest({
+      intent: "add_automation",
+      source: "dashboard_header",
+      prompt: t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT),
+    });
   };
 
   const handleExport = (automation: Automation) => {
@@ -554,6 +556,11 @@ export default function AutomationsList() {
           onClose={() => setEditTarget(null)}
         />
       )}
+
+      <AutomationConversationLaunchModal
+        request={launchRequest}
+        onClose={() => setLaunchRequest(null)}
+      />
 
       <ImportAutomationModal
         isOpen={importSpec !== null}

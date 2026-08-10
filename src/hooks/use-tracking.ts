@@ -255,10 +255,18 @@ export const useTracking = () => {
 
   const trackAutomationCreatedButton = ({
     backendKind,
+    intent,
+    source,
   }: {
     backendKind: BackendKind;
+    intent: "find_opportunities" | "add_automation";
+    source: "dashboard_header" | "templates_banner" | "empty_state";
   }) => {
-    track("automation_created_button", { backend_kind: backendKind });
+    track("automation_created_button", {
+      backend_kind: backendKind,
+      intent,
+      source,
+    });
   };
 
   const trackAutomationExecuted = ({

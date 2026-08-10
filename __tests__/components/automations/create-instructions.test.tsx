@@ -11,8 +11,25 @@ import { I18nKey } from "#/i18n/declaration";
 import { useConversationStore } from "#/stores/conversation-store";
 import * as telemetry from "#/services/telemetry";
 
+const automationConversationMocks = vi.hoisted(() => ({
+  createConversationMutate: vi.fn(),
+  isCreatingConversation: vi.fn(() => false),
+}));
+
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
+}));
+
+vi.mock("#/hooks/mutation/use-create-conversation", () => ({
+  useCreateConversation: () => ({
+    mutate: automationConversationMocks.createConversationMutate,
+    isPending: false,
+  }),
+}));
+
+vi.mock("#/hooks/use-is-creating-conversation", () => ({
+  useIsCreatingConversation: () =>
+    automationConversationMocks.isCreatingConversation(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -32,6 +49,8 @@ vi.mock("react-i18next", () => ({
         [I18nKey.AUTOMATIONS$ADD_AUTOMATION]: "Add automation",
         [I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT]:
           "Help me add an automation.",
+        [I18nKey.HOME$CREATING_CONVERSATION]: "Creating conversation…",
+        [I18nKey.ERROR$GENERIC]: "Something went wrong.",
       };
       return translations[key] || key;
     },
@@ -97,11 +116,24 @@ describe("CreateInstructions", () => {
     captureMock = vi
       .spyOn(telemetry, "trackEvent")
       .mockResolvedValue(undefined);
+    automationConversationMocks.isCreatingConversation.mockReturnValue(false);
+    automationConversationMocks.createConversationMutate.mockImplementation(
+      (_variables, options) => {
+        options?.onSuccess?.({
+          conversation_id: "automation-conversation",
+          session_api_key: null,
+          url: null,
+        });
+      },
+    );
     useConversationStore.setState({ messageToSend: null });
   });
 
   afterEach(() => {
     captureMock.mockRestore();
+    automationConversationMocks.createConversationMutate.mockReset();
+    automationConversationMocks.isCreatingConversation.mockReset();
+    window.localStorage.clear();
   });
 
   it("renders separate discovery and custom automation paths", () => {
@@ -121,7 +153,7 @@ describe("CreateInstructions", () => {
     ).toHaveTextContent("Add automation");
   });
 
-  it("captures automation_created_button with the active backend kind when a CTA is clicked", async () => {
+  it("captures automation_created_button with intent and source when a CTA is clicked", async () => {
     const user = userEvent.setup();
     renderCreateInstructions();
 
@@ -129,11 +161,29 @@ describe("CreateInstructions", () => {
 
     expect(captureMock).toHaveBeenCalledWith(
       "automation_created_button",
-      expect.objectContaining({ backend_kind: "local" }),
+      expect.objectContaining({
+        backend_kind: "local",
+        intent: "find_opportunities",
+        source: "empty_state",
+      }),
     );
   });
 
-  it("navigates to conversations with a discovery prompt when the discovery CTA is clicked", async () => {
+  it("shows a launch modal while creating the seeded conversation", async () => {
+    const user = userEvent.setup();
+    automationConversationMocks.createConversationMutate.mockImplementationOnce(
+      () => {},
+    );
+    renderCreateInstructions();
+
+    await user.click(screen.getByTestId("automations-find-opportunities"));
+
+    expect(
+      await screen.findByTestId("automation-conversation-launch-modal"),
+    ).toHaveTextContent("Creating conversation…");
+  });
+
+  it("creates a conversation with a discovery prompt when the discovery CTA is clicked", async () => {
     const user = userEvent.setup();
     const setMessageToSend = vi.fn();
     useConversationStore.setState({ setMessageToSend });
@@ -141,7 +191,22 @@ describe("CreateInstructions", () => {
 
     await user.click(screen.getByTestId("automations-find-opportunities"));
 
-    expect(navigate).toHaveBeenCalledWith("/conversations");
+    expect(
+      automationConversationMocks.createConversationMutate,
+    ).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
+    expect(navigate).toHaveBeenCalledWith(
+      "/conversations/automation-conversation",
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          "conversation-state-automation-conversation",
+        ) ?? "{}",
+      ).draftMessage,
+    ).toBe("Help me figure out what I should automate.");
     await waitFor(() => {
       expect(setMessageToSend).toHaveBeenCalledWith(
         "Help me figure out what I should automate.",
@@ -149,7 +214,7 @@ describe("CreateInstructions", () => {
     });
   });
 
-  it("navigates to conversations with an add automation prompt when the known-workflow CTA is clicked", async () => {
+  it("creates a conversation with an add automation prompt when the known-workflow CTA is clicked", async () => {
     const user = userEvent.setup();
     const setMessageToSend = vi.fn();
     useConversationStore.setState({ setMessageToSend });
@@ -157,7 +222,16 @@ describe("CreateInstructions", () => {
 
     await user.click(screen.getByTestId("automations-add-known-automation"));
 
-    expect(navigate).toHaveBeenCalledWith("/conversations");
+    expect(navigate).toHaveBeenCalledWith(
+      "/conversations/automation-conversation",
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          "conversation-state-automation-conversation",
+        ) ?? "{}",
+      ).draftMessage,
+    ).toBe("Help me add an automation.");
     await waitFor(() => {
       expect(setMessageToSend).toHaveBeenCalledWith(
         "Help me add an automation.",
