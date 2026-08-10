@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@heroui/react": "2.8.10",
-    "@microlink/react-json-view": "1.31.20",
+    "@microlink/react-json-view": "1.31.25",
     "@monaco-editor/react": "4.7.0",
     "@openhands/extensions": "0.16.0",
     "@openhands/typescript-client": "1.36.1",
@@ -41,7 +41,7 @@
     "httpxy": "0.5.3",
     "i18next": "26.3.6",
     "i18next-browser-languagedetector": "8.2.1",
-    "i18next-http-backend": "4.0.0",
+    "i18next-http-backend": "4.0.1",
     "isbot": "5.1.39",
     "lucide-react": "1.25.0",
     "monaco-editor": "0.56.0",
@@ -69,7 +69,7 @@
     "vite": "8.0.16",
     "winston": "3.19.0",
     "winston-daily-rotate-file": "5.0.0",
-    "zustand": "5.0.12"
+    "zustand": "5.0.14"
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev-with-automation.mjs",
@@ -126,10 +126,10 @@
     ]
   },
   "devDependencies": {
-    "@eslint/eslintrc": "3.3.1",
+    "@eslint/eslintrc": "3.3.6",
     "@eslint/js": "9.39.4",
     "@mswjs/socket.io-binding": "0.2.0",
-    "@playwright/test": "1.62.0",
+    "@playwright/test": "1.62.1",
     "@react-router/dev": "7.18.2",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
@@ -141,8 +141,8 @@
     "@testing-library/user-event": "14.6.1",
     "@types/mdast": "4.0.4",
     "@types/node": "26.1.2",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@types/react-syntax-highlighter": "15.5.13",
     "@typescript-eslint/eslint-plugin": "8.59.2",
     "@typescript-eslint/parser": "8.59.2",
@@ -163,7 +163,7 @@
     "eslint-plugin-unused-imports": "4.4.1",
     "globals": "16.5.0",
     "husky": "9.1.7",
-    "jsdom": "30.0.0",
+    "jsdom": "30.0.1",
     "lint-staged": "16.4.0",
     "msw": "2.15.0",
     "png2icons": "2.0.1",

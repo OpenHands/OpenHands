@@ -2025,6 +2025,195 @@ describe("ConversationPanel", () => {
         ).not.toBeInTheDocument();
       });
     });
+
+    it("keeps collapsed folder previews stable while still exposing later-page conversations on expand", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
+        createMockConversation({
+          id: `no-workspace-${index + 1}`,
+          title: `No workspace ${index + 1}`,
+        }),
+      );
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: noWorkspaceConversations,
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "no-workspace-7",
+              title: "No workspace 7",
+            }),
+            createMockConversation({
+              id: "no-workspace-8",
+              title: "No workspace 8",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha",
+              title: "Alpha conversation",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const noWorkspaceFolder = await screen.findByTestId(
+        "thread-folder-__none_workspace",
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
+
+      // A single click walks past the deepen-only page 2 (its rows are hidden
+      // from the collapsed preview, so they are not success) and keeps paging
+      // until the brand-new folder on page 3 is discovered.
+      await user.click(screen.getByTestId("load-more-conversations"));
+      await screen.findByTestId("thread-folder-ws--workspace-alpha");
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
+
+      // Collapsed preview stays frozen; expanding reveals every loaded row.
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      await user.click(
+        within(noWorkspaceFolder).getByTestId(
+          "thread-folder-view-more-__none_workspace",
+        ),
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(8);
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 7"),
+      ).toBeInTheDocument();
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 8"),
+      ).toBeInTheDocument();
+    });
+
+    it("caps a grouped load-more click at three pages when no new folder appears", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const deepenOnlyPage = (page: number, nextPageId: string) => ({
+        items: Array.from({ length: 2 }, (_, index) =>
+          createMockConversation({
+            id: `no-workspace-p${page}-${index + 1}`,
+            title: `No workspace p${page}-${index + 1}`,
+          }),
+        ),
+        next_page_id: nextPageId,
+      });
+      // Exactly four pages are queued: the drive must consume the initial page
+      // plus MAX_PAGES_PER_LOAD_MORE_CLICK more and stop — a fetch beyond the
+      // cap would find no queued response and fail the test loudly.
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce(deepenOnlyPage(1, "page-2"))
+        .mockResolvedValueOnce(deepenOnlyPage(2, "page-3"))
+        .mockResolvedValueOnce(deepenOnlyPage(3, "page-4"))
+        .mockResolvedValueOnce(deepenOnlyPage(4, "page-5"));
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      await screen.findByTestId("thread-folder-__none_workspace");
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Every remaining page only deepens the existing folder, so the driver
+      // must stop at the per-click page cap instead of draining the cursor.
+      await user.click(screen.getByTestId("load-more-conversations"));
+      await waitFor(() => {
+        expect(searchSpy).toHaveBeenCalledTimes(4);
+      });
+      // The drive has ended: the control is idle again and no further page
+      // was requested beyond the cap.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("load-more-conversations"),
+        ).toBeInTheDocument();
+      });
+      expect(searchSpy).toHaveBeenCalledTimes(4);
+    });
+
+    it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      vi.spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: Array.from({ length: 5 }, (_, index) =>
+            createMockConversation({
+              id: `alpha-${index + 1}`,
+              title: `Alpha ${index + 1}`,
+              selected_workspace: "/workspace/alpha",
+            }),
+          ),
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-active",
+              title: "Alpha Active",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel({
+        navigation: {
+          conversationId: "alpha-active",
+          currentPath: "/conversations/alpha-active",
+        },
+      });
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+      expect(
+        within(alphaFolder).queryByText("Alpha Active"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("load-more-conversations"));
+
+      await waitFor(() => {
+        expect(
+          within(
+            screen.getByTestId("thread-folder-ws--workspace-alpha"),
+          ).getByText("Alpha Active"),
+        ).toBeInTheDocument();
+      });
+      // Still a collapsed preview (limit 5), not the full expanded list.
+      expect(
+        within(
+          screen.getByTestId("thread-folder-ws--workspace-alpha"),
+        ).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+    });
   });
 
   it("reorders grouped folders via drag and drop", async () => {
