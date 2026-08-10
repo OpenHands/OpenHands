@@ -17,6 +17,8 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/pentest-service/pentest-service.api.ts",
   // POST /api/workspaces/clone not yet in published typescript-client 1.37.0.
   "api/workspaces-service/workspaces-service.api.ts",
+  // Findings Service (PROJETOSIN-188) — dedicated local pentest HTTP client.
+  "api/pentest/findings-service.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {

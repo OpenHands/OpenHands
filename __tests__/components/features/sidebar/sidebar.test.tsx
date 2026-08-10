@@ -51,16 +51,24 @@ vi.mock("#/hooks/query/use-settings", () => ({
   getErrorStatus: () => undefined,
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackendContext: () => ({
-    backends: [{ id: "local", name: "Local", kind: "local" }],
-    active: {
-      backend: { id: "local", name: "Local", kind: "local" },
-      orgId: null,
-    },
-    setActive: vi.fn(),
-  }),
-}));
+vi.mock("#/contexts/active-backend-context", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/contexts/active-backend-context")>();
+  const localActive = {
+    backend: { id: "local", name: "Local", kind: "local" as const },
+    orgId: null,
+  };
+  return {
+    ...actual,
+    useActiveBackendContext: () => ({
+      backends: [localActive.backend],
+      active: localActive,
+      setActive: vi.fn(),
+    }),
+    // CapabilityGate → useHasPentestCapability needs this export on the mock.
+    useActiveBackend: () => localActive,
+  };
+});
 
 vi.mock("#/hooks/query/use-backends-health", () => ({
   useBackendsHealth: () => ({
