@@ -20,6 +20,7 @@ import {
   WORKSPACES_HANDLERS,
   resetMockWorkspaces,
 } from "./workspaces-handlers";
+import { PROVIDER_CONNECTIONS_HANDLERS } from "./provider-connections-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -34,6 +35,7 @@ export const handlers = [
   ...AUTOMATION_HANDLERS,
   ...MCP_HANDLERS,
   ...WORKSPACES_HANDLERS,
+  ...PROVIDER_CONNECTIONS_HANDLERS,
 ];
 
 export {
