@@ -23,7 +23,8 @@ export default function AppLoginScreen() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const canSubmit = username.trim().length > 0 && password.length > 0 && !isSubmitting;
+  const canSubmit =
+    username.trim().length > 0 && password.length > 0 && !isSubmitting;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -65,7 +66,9 @@ export default function AppLoginScreen() {
         )}
       >
         <div className="px-6 pt-6 pb-2">
-          <h2 className="text-lg font-semibold">{t(I18nKey.APP_LOGIN$TITLE)}</h2>
+          <h2 className="text-lg font-semibold">
+            {t(I18nKey.APP_LOGIN$TITLE)}
+          </h2>
           <p className="mt-1 text-sm text-tertiary">
             {t(I18nKey.APP_LOGIN$SUBTITLE)}
           </p>

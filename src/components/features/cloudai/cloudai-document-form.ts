@@ -256,7 +256,11 @@ function coerceFormValue(
   // Fallback inference when no schema.
   if (!attr) {
     if (raw === "true" || raw === "false") return raw === "true";
-    if (raw.trim() !== "" && !Number.isNaN(Number(raw)) && /^-?\d+(\.\d+)?$/.test(raw.trim())) {
+    if (
+      raw.trim() !== "" &&
+      !Number.isNaN(Number(raw)) &&
+      /^-?\d+(\.\d+)?$/.test(raw.trim())
+    ) {
       return Number(raw);
     }
     if (

@@ -150,7 +150,10 @@ export function CloudAiStatus({
   const { t } = useTranslation("openhands");
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 py-6" data-testid="cloudai-loading">
+      <div
+        className="flex items-center gap-2 py-6"
+        data-testid="cloudai-loading"
+      >
         <LoadingSpinner size="small" />
         <Typography.Text className="text-sm text-[var(--oh-muted)]">
           {t(I18nKey.CLOUDAI$LOADING)}
@@ -214,7 +217,8 @@ export function CloudAiRow({
       className={cn(
         "group flex items-start gap-2 rounded-lg border border-[var(--oh-border)]",
         "bg-[var(--oh-surface)] px-3 py-2.5 transition-colors",
-        onOpen && "hover:border-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)]",
+        onOpen &&
+          "hover:border-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)]",
       )}
     >
       <button

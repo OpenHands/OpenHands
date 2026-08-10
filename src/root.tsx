@@ -278,8 +278,7 @@ export default function App() {
     appLoginStatus.isSuccess && appLoginEnabled,
   );
   const waitingForAppLogin =
-    appLoginStatus.isPending ||
-    (appLoginEnabled && appLoginSession.isPending);
+    appLoginStatus.isPending || (appLoginEnabled && appLoginSession.isPending);
   const needsAppLogin =
     appLoginEnabled && appLoginSession.data?.authenticated !== true;
 

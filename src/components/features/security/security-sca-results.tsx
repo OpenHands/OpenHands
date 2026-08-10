@@ -36,7 +36,9 @@ function severityRank(severity: SecurityFindingSeverity): number {
 
 function SeverityIcon({ severity }: { severity: SecurityFindingSeverity }) {
   if (severity === "CRITICAL" || severity === "HIGH" || severity === "ERROR") {
-    return <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />;
+    return (
+      <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />
+    );
   }
   if (severity === "WARNING" || severity === "MEDIUM") {
     return (
@@ -158,7 +160,9 @@ export function SecurityScaResults({ result }: SecurityScaResultsProps) {
         data-testid="sca-no-findings"
       >
         <ShieldAlert className="h-8 w-8 text-emerald-400" aria-hidden />
-        <p className="text-sm text-white">{t(I18nKey.SECURITY$SCA_NO_FINDINGS)}</p>
+        <p className="text-sm text-white">
+          {t(I18nKey.SECURITY$SCA_NO_FINDINGS)}
+        </p>
       </div>
     );
   }

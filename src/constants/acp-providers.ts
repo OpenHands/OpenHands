@@ -30,18 +30,33 @@ type ClientAcpProviderInfo = {
  * ``@openhands/typescript-client``. Dropped once the SDK registry includes
  * the same key.
  */
-export const LOCAL_ACP_PROVIDER_REGISTRY: Record<string, ClientAcpProviderInfo> =
-  {
-    opencode: {
-      key: "opencode",
-      display_name: "OpenCode",
-      default_command: ["opencode", "acp"],
-      api_key_env_var: "OPENCODE_API_KEY",
-      base_url_env_var: null,
-      available_models: [],
-      default_model: null,
-    },
-  };
+export const LOCAL_ACP_PROVIDER_REGISTRY: Record<
+  string,
+  ClientAcpProviderInfo
+> = {
+  cursor: {
+    key: "cursor",
+    display_name: "Cursor",
+    default_command: ["agent", "acp"],
+    api_key_env_var: "CURSOR_API_KEY",
+    base_url_env_var: "CURSOR_API_ENDPOINT",
+    available_models: [
+      { id: "auto", label: "Auto" },
+      { id: "composer-2.5", label: "Composer 2.5" },
+      { id: "composer-2", label: "Composer 2" },
+    ],
+    default_model: "auto",
+  },
+  opencode: {
+    key: "opencode",
+    display_name: "OpenCode",
+    default_command: ["opencode", "acp"],
+    api_key_env_var: "OPENCODE_API_KEY",
+    base_url_env_var: null,
+    available_models: [],
+    default_model: null,
+  },
+};
 
 /**
  * Resolve ACP provider metadata from the pinned typescript-client registry,
@@ -136,9 +151,7 @@ export function resolveEffectiveAcpModel(inputs: {
   ]) {
     const value = realAcpModel(candidate);
     if (value) {
-      return (
-        normalizeAcpModelId(inputs.providerKey, value) ?? value
-      );
+      return normalizeAcpModelId(inputs.providerKey, value) ?? value;
     }
   }
   return inputs.providerDefault ?? null;
@@ -274,9 +287,7 @@ export function matchAcpProviderByCommand(
   // Strip a trailing ``.cmd`` on argv[0] so Windows-normalized launches
   // (``opencode.cmd acp``) still re-detect as the OpenCode preset.
   const comparable = tokens
-    .map((token, index) =>
-      index === 0 ? token.replace(/\.cmd$/i, "") : token,
-    )
+    .map((token, index) => (index === 0 ? token.replace(/\.cmd$/i, "") : token))
     .join(" ");
   for (const provider of ACP_PROVIDERS) {
     if (provider.default_command.join(" ") === comparable) {
@@ -589,7 +600,10 @@ export function normalizeAcpModelId(
   if (byIdOrLabel) return byIdOrLabel.id;
 
   // Cursor ACP sometimes reports a placeholder when no ``--model`` was pinned.
-  if (serverKey === "cursor" && (trimmed === "default[]" || trimmed === "default")) {
+  if (
+    serverKey === "cursor" &&
+    (trimmed === "default[]" || trimmed === "default")
+  ) {
     return provider.default_model ?? "auto";
   }
 

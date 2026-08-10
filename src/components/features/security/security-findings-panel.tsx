@@ -39,7 +39,9 @@ function SeverityIcon({
   bucket: SecurityFindingViewModel["severityBucket"];
 }) {
   if (bucket === "high") {
-    return <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />;
+    return (
+      <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />
+    );
   }
   if (bucket === "medium") {
     return (
@@ -49,7 +51,9 @@ function SeverityIcon({
   if (bucket === "low") {
     return <Info className="h-4 w-4 shrink-0 text-sky-400" aria-hidden />;
   }
-  return <Info className="h-4 w-4 shrink-0 text-[var(--oh-muted)]" aria-hidden />;
+  return (
+    <Info className="h-4 w-4 shrink-0 text-[var(--oh-muted)]" aria-hidden />
+  );
 }
 
 function severityLabelKey(
@@ -219,7 +223,9 @@ export function SecurityFindingsPanel({
           data-testid="security-no-findings"
         >
           <ShieldAlert className="h-8 w-8 text-emerald-400" aria-hidden />
-          <p className="text-sm text-white">{t(I18nKey.SECURITY$NO_FINDINGS)}</p>
+          <p className="text-sm text-white">
+            {t(I18nKey.SECURITY$NO_FINDINGS)}
+          </p>
         </div>
       ) : filteredFindings.length === 0 ? (
         <div
@@ -253,7 +259,5 @@ export function SecurityFindingsPanel({
 }
 
 function SearchEmptyIcon() {
-  return (
-    <Info className="h-8 w-8 text-[var(--oh-muted)]" aria-hidden />
-  );
+  return <Info className="h-8 w-8 text-[var(--oh-muted)]" aria-hidden />;
 }

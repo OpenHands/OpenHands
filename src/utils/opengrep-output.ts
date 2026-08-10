@@ -81,7 +81,7 @@ export function parseOpengrepJsonOutput(raw: string): SecurityScanResult {
 
 export const OPENGREP_SCAN_COMMAND = [
   'OPENGREP_BIN=""',
-  'if command -v opengrep >/dev/null 2>&1; then',
+  "if command -v opengrep >/dev/null 2>&1; then",
   '  OPENGREP_BIN="opengrep"',
   'elif [ -x "$HOME/.opengrep/cli/latest/opengrep" ]; then',
   '  OPENGREP_BIN="$HOME/.opengrep/cli/latest/opengrep"',

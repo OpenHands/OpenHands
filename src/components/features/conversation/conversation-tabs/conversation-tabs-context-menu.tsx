@@ -10,7 +10,13 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Globe, ListTodo, Monitor, Shield, SquareChevronRight } from "lucide-react";
+import {
+  Globe,
+  ListTodo,
+  Monitor,
+  Shield,
+  SquareChevronRight,
+} from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";

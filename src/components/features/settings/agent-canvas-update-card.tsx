@@ -5,8 +5,10 @@
  * OpenHands / `@openhands/agent-canvas`; we do not poll npm for updates.
  * Interesting upstream changes are ported on request.
  */
-export function AgentCanvasUpdateCard(_props: {
-  hideWhenUpToDate?: boolean;
-} = {}) {
+export function AgentCanvasUpdateCard(
+  _props: {
+    hideWhenUpToDate?: boolean;
+  } = {},
+) {
   return null;
 }

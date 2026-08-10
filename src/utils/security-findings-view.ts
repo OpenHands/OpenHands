@@ -74,7 +74,9 @@ export function severityBucket(
   }
 }
 
-export function toSastViewModel(finding: SecurityFinding): SecurityFindingViewModel {
+export function toSastViewModel(
+  finding: SecurityFinding,
+): SecurityFindingViewModel {
   return {
     id: `sast:${finding.id}`,
     tool: "sast",
@@ -124,10 +126,7 @@ export function buildUnifiedSecurityFindings(
   );
 }
 
-function matchesQuery(
-  row: SecurityFindingViewModel,
-  query: string,
-): boolean {
+function matchesQuery(row: SecurityFindingViewModel, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (
@@ -146,10 +145,7 @@ export function filterSecurityFindings(
 ): SecurityFindingViewModel[] {
   return rows.filter((row) => {
     if (filters.tool !== "all" && row.tool !== filters.tool) return false;
-    if (
-      filters.severity !== "all" &&
-      row.severityBucket !== filters.severity
-    ) {
+    if (filters.severity !== "all" && row.severityBucket !== filters.severity) {
       return false;
     }
     return matchesQuery(row, filters.query);

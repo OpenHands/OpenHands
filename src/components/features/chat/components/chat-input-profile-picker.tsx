@@ -153,12 +153,8 @@ export function ChatInputProfileMenuContent({
  */
 export function ChatInputProfilePicker() {
   const { t } = useTranslation("openhands");
-  const {
-    profiles,
-    currentProfileName,
-    isLoading,
-    isSwitching,
-  } = useChatInputProfileState();
+  const { profiles, currentProfileName, isLoading, isSwitching } =
+    useChatInputProfileState();
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const popoverRef = useClickOutsideElement<HTMLUListElement>(
@@ -171,8 +167,7 @@ export function ChatInputProfilePicker() {
   }
 
   const current = profiles.find((p) => p.name === currentProfileName);
-  const label =
-    currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
+  const label = currentProfileName ?? t(I18nKey.CHAT$AGENT_PROFILE_PLACEHOLDER);
 
   return (
     <div className="relative min-w-0">

@@ -31,7 +31,11 @@ function TerminalSession({
   });
 
   return (
-    <div ref={ref} className="h-full w-full" data-testid="terminal-xterm-host" />
+    <div
+      ref={ref}
+      className="h-full w-full"
+      data-testid="terminal-xterm-host"
+    />
   );
 }
 

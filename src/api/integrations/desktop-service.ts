@@ -100,13 +100,10 @@ async function desktopRequest<T>(
     }
     if (isAxiosError(err)) {
       const status = err.response?.status ?? 0;
-      throw new DesktopRequestError(
-        err.message || "Desktop request failed",
-        {
-          status,
-          unavailable: status === 404 || status === 503,
-        },
-      );
+      throw new DesktopRequestError(err.message || "Desktop request failed", {
+        status,
+        unavailable: status === 404 || status === 503,
+      });
     }
     throw err;
   }

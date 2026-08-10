@@ -175,12 +175,9 @@ export function CloudAiDatabasesPanel() {
       } else if (level === "documents" && databaseId && collectionId) {
         const parsed = formValuesToDocumentData(formValues, attributes.data);
         if (editingId) {
-          await client.updateDocument(
-            databaseId,
-            collectionId,
-            editingId,
-            { data: parsed },
-          );
+          await client.updateDocument(databaseId, collectionId, editingId, {
+            data: parsed,
+          });
         } else {
           await client.createDocument(databaseId, collectionId, {
             documentId: formValues.id || "unique()",
@@ -234,13 +231,11 @@ export function CloudAiDatabasesPanel() {
         : documents;
 
   const databaseItems = useMemo(
-    () =>
-      filterByName(databases.data ?? [], search, (d) => [d.name, d.$id]),
+    () => filterByName(databases.data ?? [], search, (d) => [d.name, d.$id]),
     [databases.data, search],
   );
   const collectionItems = useMemo(
-    () =>
-      filterByName(collections.data ?? [], search, (c) => [c.name, c.$id]),
+    () => filterByName(collections.data ?? [], search, (c) => [c.name, c.$id]),
     [collections.data, search],
   );
   const documentItems = useMemo(
@@ -294,9 +289,7 @@ export function CloudAiDatabasesPanel() {
           !editingId,
         )
       : [
-          ...(editingId
-            ? []
-            : [{ key: "id", label: t(I18nKey.CLOUDAI$ID) }]),
+          ...(editingId ? [] : [{ key: "id", label: t(I18nKey.CLOUDAI$ID) }]),
           { key: "name", label: t(I18nKey.CLOUDAI$NAME) },
         ];
 
@@ -350,11 +343,7 @@ export function CloudAiDatabasesPanel() {
             >
               {t(I18nKey.CLOUDAI$SAVE_RULES)}
             </BrandButton>
-            <BrandButton
-              type="button"
-              variant="secondary"
-              onClick={handleBack}
-            >
+            <BrandButton type="button" variant="secondary" onClick={handleBack}>
               {t(I18nKey.BUTTON$CANCEL)}
             </BrandButton>
           </div>

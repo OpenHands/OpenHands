@@ -69,10 +69,7 @@ export async function saveWorkspaceFile(options: {
     conversationUrl,
     sessionApiKey,
   });
-  const destinationPath = joinWorkspaceRelativePath(
-    absoluteDir,
-    relativePath,
-  );
+  const destinationPath = joinWorkspaceRelativePath(absoluteDir, relativePath);
   const fileName = getSafeUploadFileName(relativePath);
 
   const workspace = new RemoteWorkspace(
@@ -83,11 +80,7 @@ export async function saveWorkspaceFile(options: {
     }),
   );
 
-  const result = await workspace.uploadText(
-    content,
-    destinationPath,
-    fileName,
-  );
+  const result = await workspace.uploadText(content, destinationPath, fileName);
 
   if (result.success === false) {
     throw new Error(result.error || "Failed to save file");

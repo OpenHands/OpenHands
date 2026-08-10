@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { ScaScanResult, SecurityScanResult } from "#/types/security-scan";
 
-export const SECURITY_SCAN_RESULTS_STORAGE_KEY = "openhands-security-scan-results";
+export const SECURITY_SCAN_RESULTS_STORAGE_KEY =
+  "openhands-security-scan-results";
 
 export interface ConversationSecurityScanResults {
   sast: SecurityScanResult | null;

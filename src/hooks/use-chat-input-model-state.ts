@@ -75,12 +75,11 @@ export function useChatInputModelState(): ChatInputModelState {
     // ACP conversations store llm_model as the acp_model (persisted at
     // creation time). Use it directly if available; fall back to the
     // settings-configured model or provider default so the chip stays visible.
-    currentModelId =
-      resolveEffectiveAcpModel({
-        configured: conversation?.llm_model ?? acpConfiguredModel,
-        providerDefault: getAcpPreferredDefaultModel(acpServerKey),
-        providerKey: acpServerKey,
-      });
+    currentModelId = resolveEffectiveAcpModel({
+      configured: conversation?.llm_model ?? acpConfiguredModel,
+      providerDefault: getAcpPreferredDefaultModel(acpServerKey),
+      providerKey: acpServerKey,
+    });
   } else if (isHomeAcp) {
     currentModelId = resolveEffectiveAcpModel({
       configured: acpConfiguredModel,

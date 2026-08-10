@@ -1,4 +1,11 @@
-import { AppWindow, Brain, GitBranch, Puzzle, Shield, Users } from "lucide-react";
+import {
+  AppWindow,
+  Brain,
+  GitBranch,
+  Puzzle,
+  Shield,
+  Users,
+} from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";

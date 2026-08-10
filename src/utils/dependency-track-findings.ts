@@ -44,7 +44,10 @@ function normalizeSeverity(value: string | undefined): SecurityFindingSeverity {
   return "INFO";
 }
 
-function buildFindingId(finding: DependencyTrackFinding, index: number): string {
+function buildFindingId(
+  finding: DependencyTrackFinding,
+  index: number,
+): string {
   return (
     finding.uuid ||
     finding.matrix ||

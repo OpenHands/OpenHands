@@ -15,6 +15,8 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/integrations/desktop-service.ts",
   // Pentest Fase-0 endpoints are not yet in typescript-client (PROJETOSIN-182/185).
   "api/pentest-service/pentest-service.api.ts",
+  // POST /api/workspaces/clone not yet in published typescript-client 1.37.0.
+  "api/workspaces-service/workspaces-service.api.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {

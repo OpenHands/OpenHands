@@ -21,10 +21,7 @@ export default function CloudAiTab() {
   ];
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col"
-      data-testid="cloudai-tab"
-    >
+    <div className="flex h-full min-h-0 flex-col" data-testid="cloudai-tab">
       <div className="shrink-0 border-b border-[var(--oh-border)] px-3 pt-3 pb-2">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--oh-muted)]">
           {t(I18nKey.COMMON$CLOUDAI)}

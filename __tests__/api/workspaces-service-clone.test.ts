@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import axios from "axios";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 
-const cloneRepository = vi.fn();
+vi.mock("axios", () => ({
+  default: {
+    post: vi.fn(),
+  },
+}));
 
 vi.mock("@openhands/typescript-client/clients", async (importOriginal) => {
   const actual =
@@ -9,7 +14,6 @@ vi.mock("@openhands/typescript-client/clients", async (importOriginal) => {
   return {
     ...actual,
     WorkspacesClient: class {
-      cloneRepository = cloneRepository;
       listWorkspaces = vi.fn();
       addWorkspaces = vi.fn();
       deleteWorkspace = vi.fn();
@@ -25,13 +29,25 @@ vi.mock("#/api/agent-server-client-options", () => ({
     host: "http://localhost:18000",
     apiKey: "test",
   }),
+  NoBackendAvailableError: class NoBackendAvailableError extends Error {
+    constructor() {
+      super("No backend is configured.");
+      this.name = "NoBackendAvailableError";
+    }
+  },
 }));
 
 describe("WorkspacesService.cloneRepository", () => {
-  it("forwards the clone request to WorkspacesClient", async () => {
-    cloneRepository.mockResolvedValue({
-      path: "/data/workspaces/demo",
-      name: "demo",
+  beforeEach(() => {
+    vi.mocked(axios.post).mockReset();
+  });
+
+  it("forwards the clone request to POST /api/workspaces/clone", async () => {
+    vi.mocked(axios.post).mockResolvedValue({
+      data: {
+        path: "/data/workspaces/demo",
+        name: "demo",
+      },
     });
 
     const result = await WorkspacesService.cloneRepository({
@@ -40,11 +56,18 @@ describe("WorkspacesService.cloneRepository", () => {
       providerId: "github_work",
     });
 
-    expect(cloneRepository).toHaveBeenCalledWith({
-      url: "https://github.com/org/demo.git",
-      parentPath: "/data/workspaces",
-      providerId: "github_work",
-    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "http://localhost:18000/api/workspaces/clone",
+      {
+        url: "https://github.com/org/demo.git",
+        parentPath: "/data/workspaces",
+        providerId: "github_work",
+      },
+      {
+        timeout: 300_000,
+        headers: { "X-Session-API-Key": "test" },
+      },
+    );
     expect(result).toEqual({ path: "/data/workspaces/demo", name: "demo" });
   });
 });
