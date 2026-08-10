@@ -194,6 +194,32 @@ describe("MCPServerForm validation", () => {
     });
   });
 
+  it("keeps raw protocol headers in the pre-save connection-test candidate", () => {
+    const onTest = vi.fn();
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "docs",
+          type: "shttp",
+          name: "docs",
+          url: "https://docs.example/mcp",
+          headers: { "X-Workspace": "canvas" },
+        }}
+        existingServers={[]}
+        onSubmit={noop}
+        onCancel={noop}
+        onTest={onTest}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("mcp-test-connection"));
+
+    expect(onTest).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { "X-Workspace": "canvas" } }),
+    );
+  });
+
   it("rejects an sse/shttp server name with unsafe characters", () => {
     const onSubmit = vi.fn();
 
@@ -285,6 +311,39 @@ describe("MCPServerForm validation", () => {
         authentication: { type: "oauth", client_auth_method: "none" },
         state: oauthState,
       },
+    });
+  });
+
+  it("keeps a disabled server disabled when its configuration is edited", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <MCPServerForm
+        mode="edit"
+        server={{
+          id: "stdio-0",
+          type: "stdio",
+          name: "github",
+          command: "docker",
+          enabled: false,
+        }}
+        existingServers={[]}
+        onSubmit={onSubmit}
+        onCancel={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "podman" },
+    });
+    fireEvent.click(screen.getByTestId("submit-button"));
+
+    // Enable/disable lives on the card, not in this form, so an edit must
+    // carry the existing state forward instead of switching the server on.
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      command: "podman",
+      enabled: false,
     });
   });
 

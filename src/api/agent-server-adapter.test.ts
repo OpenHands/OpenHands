@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { Settings } from "#/types/settings";
 import { buildStartConversationRequest } from "./agent-server-adapter";
@@ -16,6 +17,19 @@ function makeSettings(agentSettings: Settings["agent_settings"]): Settings {
       max_iterations: 20,
     },
   };
+}
+
+function getAgentContextSkillNames(
+  payload: ReturnType<typeof buildStartConversationRequest>,
+): Array<string | undefined> {
+  const agentSettings = payload.agent_settings as
+    | {
+        agent_context?: {
+          skills?: Array<{ name?: string }>;
+        };
+      }
+    | undefined;
+  return agentSettings?.agent_context?.skills?.map((skill) => skill.name) ?? [];
 }
 
 describe("buildStartConversationRequest", () => {
@@ -109,6 +123,55 @@ describe("buildStartConversationRequest", () => {
     expect(payload.agent_settings!.agent_kind).toBe("acp");
     expect(payload.secrets_encrypted).toBeUndefined();
   });
+
+  it("excludes disabled skills from OpenHands conversation context", () => {
+    const settings = makeSettings({
+      agent_kind: "openhands",
+      llm: {
+        model: "litellm_proxy/openai/gpt-5.5",
+        api_key: "sk-test",
+      },
+      agent_context: {
+        skills: [
+          { name: "disabled-custom", content: "disabled" },
+          { name: "enabled-custom", content: "enabled" },
+        ],
+      },
+    });
+    settings.disabled_skills = ["agent-memory", "disabled-custom"];
+
+    const payload = buildStartConversationRequest({ settings });
+    const skillNames = getAgentContextSkillNames(payload);
+
+    expect(skillNames).not.toContain("agent-memory");
+    expect(skillNames).not.toContain("disabled-custom");
+    expect(skillNames).toContain("enabled-custom");
+    expect(skillNames).toContain("add-javadoc");
+  });
+
+  it("excludes disabled skills from ACP conversation context", () => {
+    const settings = makeSettings({
+      agent_kind: "acp",
+      acp_server: "codex",
+      acp_command: ["codex-acp"],
+      acp_model: "gpt-5.5/medium",
+      agent_context: {
+        skills: [
+          { name: "disabled-custom", content: "disabled" },
+          { name: "enabled-custom", content: "enabled" },
+        ],
+      },
+    });
+    settings.disabled_skills = ["agent-memory", "disabled-custom"];
+
+    const payload = buildStartConversationRequest({ settings });
+    const skillNames = getAgentContextSkillNames(payload);
+
+    expect(skillNames).not.toContain("agent-memory");
+    expect(skillNames).not.toContain("disabled-custom");
+    expect(skillNames).toContain("enabled-custom");
+    expect(skillNames).toContain("add-javadoc");
+  });
 });
 
 describe("buildStartConversationRequest — agentProfileId path", () => {
@@ -128,6 +191,7 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
     expect(payload.agent_settings).toBeUndefined();
     expect(payload.client_tools.map((tool) => tool.name)).toEqual([
       CANVAS_UI_CLIENT_TOOL_NAME,
+      LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
     ]);
   });
 

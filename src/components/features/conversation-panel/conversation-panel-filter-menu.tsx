@@ -16,6 +16,7 @@ import {
   Star,
   Tag,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import type { BackendKind } from "#/api/backend-registry/types";
@@ -25,10 +26,12 @@ import {
   dropdownMenuListClassName,
   dropdownMenuViewportScrollClassName,
 } from "#/utils/dropdown-classes";
-import type {
-  ConversationSortField,
-  OrganizeMode,
-  ThreadScope,
+import {
+  UNNAMED_AUTOMATION_FACET,
+  type AutomationFilterMode,
+  type ConversationSortField,
+  type OrganizeMode,
+  type ThreadScope,
 } from "./conversation-panel-list-helpers";
 import { MenuHeading } from "./menu-heading";
 import { MenuSeparator } from "./menu-separator";
@@ -48,6 +51,11 @@ export interface ConversationPanelFilterMenuProps {
   setConversationSort: (sort: ConversationSortField) => void;
   threadScope: ThreadScope;
   setThreadScope: (scope: ThreadScope) => void;
+  automationFilterMode: AutomationFilterMode;
+  setAutomationFilterMode: (mode: AutomationFilterMode) => void;
+  selectedAutomationNames: string[];
+  onToggleAutomationName: (name: string) => void;
+  automationNameFacets: string[];
   showOlderConversations: boolean;
   showArchivedConversations: boolean;
   toggleShowArchivedConversations: () => void;
@@ -75,6 +83,11 @@ export function ConversationPanelFilterMenu({
   setConversationSort,
   threadScope,
   setThreadScope,
+  automationFilterMode,
+  setAutomationFilterMode,
+  selectedAutomationNames,
+  onToggleAutomationName,
+  automationNameFacets,
   showOlderConversations,
   showArchivedConversations,
   toggleShowArchivedConversations,
@@ -159,7 +172,7 @@ export function ConversationPanelFilterMenu({
         aria-expanded={filterMenuOpen}
         onClick={() => setFilterMenuOpen(!filterMenuOpen)}
         className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
+          "relative inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
           dropdownInstantColorClassName,
         )}
       >
@@ -170,6 +183,13 @@ export function ConversationPanelFilterMenu({
           strokeWidth={2}
           aria-hidden
         />
+        {automationFilterMode !== "all" ? (
+          <span
+            aria-hidden
+            data-testid="automation-filter-active-indicator"
+            className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--oh-accent)]"
+          />
+        ) : null}
       </button>
 
       {filterMenuOpen ? (
@@ -265,17 +285,59 @@ export function ConversationPanelFilterMenu({
           />
 
           <MenuSeparator />
-          <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$METADATA)}</MenuHeading>
+          <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS)}</MenuHeading>
           <MenuRow
-            icon={Bot}
-            label={t(I18nKey.CONVERSATION_PANEL$LLM_MODEL)}
-            selected={showLlmProfiles}
-            testId="toggle-llm-profiles"
+            icon={MessageCircle}
+            label={t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS_ALL)}
+            selected={automationFilterMode === "all"}
+            testId="automation-filter-all"
             onClick={() => {
-              toggleShowLlmProfiles();
+              setAutomationFilterMode("all");
               setFilterMenuOpen(false);
             }}
           />
+          <MenuRow
+            icon={EyeOff}
+            label={t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS_HIDE)}
+            selected={automationFilterMode === "hide-automations"}
+            testId="automation-filter-hide"
+            onClick={() => {
+              setAutomationFilterMode("hide-automations");
+              setFilterMenuOpen(false);
+            }}
+          />
+          <MenuRow
+            icon={Workflow}
+            label={t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS_ONLY)}
+            selected={automationFilterMode === "only-automations"}
+            testId="automation-filter-only"
+            onClick={() => {
+              setAutomationFilterMode("only-automations");
+              setFilterMenuOpen(false);
+            }}
+          />
+          {automationFilterMode === "only-automations"
+            ? automationNameFacets.map((facet) => (
+                <MenuRow
+                  key={facet}
+                  icon={Tag}
+                  label={
+                    facet === UNNAMED_AUTOMATION_FACET
+                      ? t(I18nKey.CONVERSATION_PANEL$AUTOMATION_UNNAMED)
+                      : facet
+                  }
+                  selected={selectedAutomationNames.includes(facet)}
+                  testId={`automation-name-filter-${facet}`}
+                  // Multi-select name rows keep the menu open (unlike the
+                  // mode radios above) so several names can be toggled in
+                  // one visit.
+                  onClick={() => onToggleAutomationName(facet)}
+                />
+              ))
+            : null}
+
+          <MenuSeparator />
+          <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$METADATA)}</MenuHeading>
           <MenuRow
             icon={GitBranch}
             label={t(I18nKey.CONVERSATION_PANEL$REPO_BRANCH)}
@@ -283,6 +345,16 @@ export function ConversationPanelFilterMenu({
             testId="toggle-repo-branch-metadata"
             onClick={() => {
               toggleShowRepoBranchMetadata();
+              setFilterMenuOpen(false);
+            }}
+          />
+          <MenuRow
+            icon={Bot}
+            label={t(I18nKey.CONVERSATION_PANEL$LLM_MODEL)}
+            selected={showLlmProfiles}
+            testId="toggle-llm-profiles"
+            onClick={() => {
+              toggleShowLlmProfiles();
               setFilterMenuOpen(false);
             }}
           />

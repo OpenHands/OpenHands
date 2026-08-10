@@ -23,6 +23,12 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import { automationSetupPath } from "#/manifests/automation-interface";
+import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
+import {
+  getAutomationLaunchPrompt,
+  getRequiredIntegrationIds,
+} from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
@@ -34,21 +40,16 @@ interface RecommendedAutomationsLauncherProps {
   scrollableGrid?: boolean;
 }
 
+/**
+ * The marketplace entries a launch waits on. An integration the automation is
+ * willing to start without is deliberately absent, so it never queues an
+ * install modal the user has to dismiss.
+ */
 function getRequiredEntries(automation: RecommendedAutomation) {
   const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
-  return automation.requiredIntegrationIds
+  return getRequiredIntegrationIds(automation)
     .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
     .filter((entry): entry is MarketplaceEntry => !!entry);
-}
-
-/**
- * The catalog prompt (or slash command) is passed through as-is.
- * API routing (host, auth) is discovered by the agent at runtime from
- * `<RUNTIME_SERVICES>` in the system prompt — the skills themselves
- * contain the instructions for reading that block.
- */
-export function buildAutomationPrompt(basePrompt: string): string {
-  return basePrompt;
 }
 
 export function RecommendedAutomationsLauncher({
@@ -75,8 +76,11 @@ export function RecommendedAutomationsLauncher({
 
   const installedMcpConfig = useMemo(
     () =>
-      flattenMcpConfig(parseMcpConfig(settings?.agent_settings?.mcp_config)),
-    [settings?.agent_settings?.mcp_config],
+      flattenMcpConfig(
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
+      ).filter((server) => server.enabled !== false),
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(
@@ -90,7 +94,16 @@ export function RecommendedAutomationsLauncher({
       }
       launchInFlightRef.current = true;
 
-      const prompt = buildAutomationPrompt(automation.prompt);
+      // An automation that ships a setup experience is configured from its own
+      // form, so the answers are collected before anything is created. The rest
+      // still hand a slash command to an agent to interpret.
+      if (SETUP_REGISTRY.findById(automation.id)) {
+        navigate?.(automationSetupPath(automation.id));
+        onLaunched?.();
+        return;
+      }
+
+      const prompt = getAutomationLaunchPrompt(automation);
 
       createConversation.mutate(
         {},

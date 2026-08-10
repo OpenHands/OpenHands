@@ -31,6 +31,8 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -123,6 +125,8 @@ describe("ConversationPanel", () => {
     useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: false,
+      automationFilterMode: "all",
+      selectedAutomationNames: [],
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -136,6 +140,21 @@ describe("ConversationPanel", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  it("pins the active backend onto each conversation link", async () => {
+    // A tab opened with cmd/ctrl-click does not reliably inherit the opener's
+    // sessionStorage, so the link has to carry the backend it belongs to or
+    // the new tab resolves the conversation against whichever backend
+    // localStorage happens to hold.
+    renderConversationPanel();
+    const cards = await screen.findAllByTestId("conversation-card");
+
+    const href = cards[0].closest("a")?.getAttribute("href");
+    expect(href).toBe(`/conversations/1?backend=${SEEDED_DEFAULT_BACKEND_ID}`);
   });
 
   it("should render the conversations", async () => {
@@ -219,7 +238,9 @@ describe("ConversationPanel", () => {
     renderConversationPanel();
 
     await screen.findByText("CONVERSATION$NO_CONVERSATIONS");
-    expect(screen.queryByText("Unarchived on next page")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Unarchived on next page"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("load-more-conversations"));
 
@@ -228,6 +249,89 @@ describe("ConversationPanel", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText("CONVERSATION$NO_CONVERSATIONS"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("scopes the list to the automation filter mode across hide and only", async () => {
+    // Arrange: two manual conversations plus one automation run recognized
+    // by its tags (local backend) and one by its trigger (cloud backend).
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({ id: "1", title: "Manual 1" }),
+        createMockConversation({ id: "2", title: "Manual 2" }),
+        createMockConversation({
+          id: "3",
+          title: "Tagged Run",
+          tags: { automationname: "Nightly Audit", automationtrigger: "cron" },
+        }),
+        createMockConversation({
+          id: "4",
+          title: "Cloud Run",
+          trigger: "automation",
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "hide-automations",
+    });
+
+    // Act + Assert: hide mode keeps only the manual conversations.
+    renderConversationPanel();
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    expect(screen.queryByText("Tagged Run")).not.toBeInTheDocument();
+    expect(screen.queryByText("Cloud Run")).not.toBeInTheDocument();
+
+    // Act + Assert: only mode inverts the scope.
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        automationFilterMode: "only-automations",
+      });
+    });
+    expect(await screen.findByText("Tagged Run")).toBeInTheDocument();
+    expect(screen.getByText("Cloud Run")).toBeInTheDocument();
+    expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
+  });
+
+  it("keeps load more reachable with the filtered empty message when the automation filter hides every loaded conversation", async () => {
+    // Arrange: page 1 holds only an automation run (hidden by the active
+    // filter); a manual conversation sits on page 2.
+    const user = userEvent.setup();
+    vi.spyOn(AgentServerConversationService, "searchConversations")
+      .mockResolvedValueOnce({
+        items: [
+          createMockConversation({
+            id: "run",
+            title: "Tagged Run",
+            tags: { automationrunid: "run-1" },
+          }),
+        ],
+        next_page_id: "page-2",
+      })
+      .mockResolvedValueOnce({
+        items: [createMockConversation({ id: "manual", title: "Manual 1" })],
+        next_page_id: null,
+      });
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "hide-automations",
+    });
+
+    renderConversationPanel();
+
+    // Assert: the filter-specific empty message shows and load more stays
+    // reachable.
+    await screen.findByText("CONVERSATION_PANEL$NO_AUTOMATION_MATCHES");
+    const loadMore = await screen.findByTestId("load-more-conversations");
+
+    // Act: fetching the next page surfaces the manual conversation.
+    await user.click(loadMore);
+    expect(await screen.findByText("Manual 1")).toBeInTheDocument();
+    expect(
+      screen.queryByText("CONVERSATION_PANEL$NO_AUTOMATION_MATCHES"),
     ).not.toBeInTheDocument();
   });
 
@@ -1920,71 +2024,6 @@ describe("ConversationPanel", () => {
           screen.queryByTestId("load-more-conversations"),
         ).not.toBeInTheDocument();
       });
-    });
-
-    it("loads hidden workspace folders without adding conversations to an exposed folder", async () => {
-      useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
-      });
-      const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
-        createMockConversation({
-          id: `no-workspace-${index + 1}`,
-          title: `No workspace ${index + 1}`,
-        }),
-      );
-      const searchSpy = vi
-        .spyOn(AgentServerConversationService, "searchConversations")
-        .mockResolvedValueOnce({
-          items: noWorkspaceConversations,
-          next_page_id: "page-2",
-        })
-        .mockResolvedValueOnce({
-          items: [
-            createMockConversation({
-              id: "no-workspace-7",
-              title: "No workspace 7",
-            }),
-            createMockConversation({
-              id: "no-workspace-8",
-              title: "No workspace 8",
-            }),
-          ],
-          next_page_id: "page-3",
-        })
-        .mockResolvedValueOnce({
-          items: [
-            createMockConversation({
-              id: "alpha",
-              title: "Alpha conversation",
-              selected_workspace: "/workspace/alpha",
-            }),
-          ],
-          next_page_id: null,
-        });
-
-      const user = userEvent.setup();
-      renderConversationPanel();
-
-      const noWorkspaceFolder = await screen.findByTestId(
-        "thread-folder-__none_workspace",
-      );
-      expect(
-        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
-      ).toHaveLength(5);
-
-      await user.click(screen.getByTestId("load-more-conversations"));
-
-      await screen.findByTestId("thread-folder-ws--workspace-alpha");
-      expect(searchSpy).toHaveBeenCalledTimes(3);
-
-      await user.click(
-        within(noWorkspaceFolder).getByTestId(
-          "thread-folder-view-more-__none_workspace",
-        ),
-      );
-      expect(
-        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
-      ).toHaveLength(6);
     });
   });
 

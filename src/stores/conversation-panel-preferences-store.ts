@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  type AutomationFilterMode,
   type ConversationSortField,
   type OrganizeMode,
   type ThreadScope,
@@ -29,6 +30,8 @@ interface ConversationPanelPreferencesState {
   organizeMode: OrganizeMode;
   conversationSort: ConversationSortField;
   threadScope: ThreadScope;
+  automationFilterMode: AutomationFilterMode;
+  selectedAutomationNames: string[];
   groupFolderOrder: string[];
 }
 
@@ -48,6 +51,8 @@ interface ConversationPanelPreferencesActions {
   setOrganizeMode: (value: OrganizeMode) => void;
   setConversationSort: (value: ConversationSortField) => void;
   setThreadScope: (value: ThreadScope) => void;
+  setAutomationFilterMode: (value: AutomationFilterMode) => void;
+  toggleAutomationName: (name: string) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -58,12 +63,14 @@ const initialState: ConversationPanelPreferencesState = {
   showOlderConversations: true,
   showArchivedConversations: false,
   showRepoBranchMetadata: false,
-  showLlmProfiles: true,
-  showTagsMetadata: true,
+  showLlmProfiles: false,
+  showTagsMetadata: false,
   showHoverMetadata: true,
   organizeMode: "chronological",
   conversationSort: "updated",
   threadScope: "all",
+  automationFilterMode: "all",
+  selectedAutomationNames: [],
   groupFolderOrder: [],
 };
 
@@ -118,6 +125,18 @@ export const useConversationPanelPreferencesStore =
         setConversationSort: (value) =>
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
+        setAutomationFilterMode: (value) =>
+          set(() => ({ automationFilterMode: value })),
+        toggleAutomationName: (name) =>
+          set((state) => ({
+            selectedAutomationNames: state.selectedAutomationNames.includes(
+              name,
+            )
+              ? state.selectedAutomationNames.filter(
+                  (existing) => existing !== name,
+                )
+              : [...state.selectedAutomationNames, name],
+          })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
       }),
@@ -135,6 +154,8 @@ export const useConversationPanelPreferencesStore =
           organizeMode: state.organizeMode,
           conversationSort: state.conversationSort,
           threadScope: state.threadScope,
+          automationFilterMode: state.automationFilterMode,
+          selectedAutomationNames: state.selectedAutomationNames,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

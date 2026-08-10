@@ -1,4 +1,11 @@
-import type { MCPTestFailureKind } from "@openhands/typescript-client";
+import type {
+  AgentServerMCPOAuthStatusResponse,
+  AgentServerMCPStartOAuthResponse,
+  AgentServerMCPTestResponse,
+  AgentServerMCPToolCall,
+  AgentServerMCPToolCallResult,
+  MCPTestFailureKind,
+} from "@openhands/typescript-client";
 import type { MCPAuthCredential, MCPOAuthState } from "./mcp-auth";
 
 export type MCPServerType = "sse" | "stdio" | "shttp";
@@ -14,54 +21,53 @@ export interface MCPServerConfig {
   args?: string[];
   env?: Record<string, string>;
   auth?: MCPAuthCredential;
+  /**
+   * Whether the agent may use this server. Absent means enabled — only an
+   * explicit `false` disables, so existing configs stay untouched.
+   */
+  enabled?: boolean;
 }
 
-export interface MCPTestToolCall {
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-export interface MCPTestToolResult {
-  is_error: boolean;
-  text: string;
-}
+export type MCPTestToolCall = AgentServerMCPToolCall;
+export type MCPTestToolResult = AgentServerMCPToolCallResult;
 
 export type ExtendedMCPTestFailureKind = MCPTestFailureKind | "credentials";
 
-export interface ExtendedMCPTestSuccess {
+type GeneratedMCPTestSuccess = Extract<
+  AgentServerMCPTestResponse,
+  { ok?: true }
+>;
+type GeneratedMCPTestFailure = Extract<
+  AgentServerMCPTestResponse,
+  { error: string }
+>;
+
+export type ExtendedMCPTestSuccess = Omit<
+  GeneratedMCPTestSuccess,
+  "ok" | "tools" | "oauth_state"
+> & {
   ok: true;
   tools: string[];
   tool_result?: MCPTestToolResult | null;
   oauth_state?: MCPOAuthState | null;
-}
+};
 
-export interface ExtendedMCPTestFailure {
+export type ExtendedMCPTestFailure = Omit<
+  GeneratedMCPTestFailure,
+  "ok" | "error_kind"
+> & {
   ok: false;
-  error: string;
   error_kind: ExtendedMCPTestFailureKind;
-}
+};
 
 export type ExtendedMCPTestResponse =
   | ExtendedMCPTestSuccess
   | ExtendedMCPTestFailure;
 
-export interface MCPOAuthStartResponse {
-  ok: boolean;
-  job_id?: string | null;
-  authorization_url?: string | null;
-  error?: string | null;
-  error_kind?: MCPTestFailureKind | null;
-}
-
-export interface MCPOAuthStatusResponse {
-  ok: boolean;
-  status: "pending" | "authorizing" | "succeeded" | "failed";
-  job_id: string;
-  authorization_url?: string | null;
-  callback_ready?: boolean;
-  tools?: string[] | null;
-  tool_result?: MCPTestToolResult | null;
+export type MCPOAuthStartResponse = AgentServerMCPStartOAuthResponse;
+export type MCPOAuthStatusResponse = Omit<
+  AgentServerMCPOAuthStatusResponse,
+  "oauth_state"
+> & {
   oauth_state?: MCPOAuthState | null;
-  error?: string | null;
-  error_kind?: MCPTestFailureKind | null;
-}
+};

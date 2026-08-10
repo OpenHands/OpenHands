@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
@@ -35,8 +36,9 @@ import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-threa
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
+  applyAutomationConversationFilter,
   applyGroupFolderOrder,
-  filterToGroupDiscoveryPages,
+  collectAutomationNameFacets,
   filterOutPinnedConversations,
   groupConversations,
   resolvePinnedConversations,
@@ -91,6 +93,7 @@ export function ConversationPanel({
   const { t } = useTranslation("openhands");
   const { conversationId: currentConversationId, navigate } = useNavigation();
   const { backend: activeBackend } = useActiveBackend();
+  const backendScopedPath = useBackendScopedPath();
   // Click-outside is only relevant in the legacy drawer mode where an
   // onClose handler is provided. When the panel is rendered inline (e.g.
   // as the always-visible conversation list pane), clicking outside should
@@ -162,6 +165,18 @@ export function ConversationPanel({
   );
   const setThreadScope = useConversationPanelPreferencesStore(
     (state) => state.setThreadScope,
+  );
+  const automationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.automationFilterMode,
+  );
+  const setAutomationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.setAutomationFilterMode,
+  );
+  const selectedAutomationNames = useConversationPanelPreferencesStore(
+    (state) => state.selectedAutomationNames,
+  );
+  const toggleAutomationName = useConversationPanelPreferencesStore(
+    (state) => state.toggleAutomationName,
   );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
@@ -296,20 +311,28 @@ export function ConversationPanel({
     );
   }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
 
-  // Grouped pagination is folder-oriented. Record the first backend page for
-  // every conversation so later pages can introduce new folders without
-  // mutating the contents of folders that are already visible.
-  const conversationPageById = React.useMemo(() => {
-    const pageById = new Map<string, number>();
-    data?.pages.forEach((page, pageIndex) => {
-      page.items.forEach((conversation) => {
-        if (!pageById.has(conversation.id)) {
-          pageById.set(conversation.id, pageIndex);
-        }
-      });
-    });
-    return pageById;
-  }, [data]);
+  // Facets derive from the unfiltered list so the automation-name rows in the
+  // filter menu don't vanish while a narrowing selection is active.
+  const automationNameFacets = React.useMemo(
+    () => collectAutomationNameFacets(conversations),
+    [conversations],
+  );
+
+  const automationFilteredConversations = React.useMemo(
+    () =>
+      applyAutomationConversationFilter(
+        conversations,
+        automationFilterMode,
+        selectedAutomationNames,
+        automationNameFacets,
+      ),
+    [
+      automationFilterMode,
+      automationNameFacets,
+      conversations,
+      selectedAutomationNames,
+    ],
+  );
 
   const pinnedConversations = React.useMemo(
     () => resolvePinnedConversations(pinnedIds, conversations),
@@ -336,10 +359,14 @@ export function ConversationPanel({
   }, [pinnedIds.length]);
 
   const scopedConversations = React.useMemo(() => {
+    // The pinned section intentionally bypasses the automation filter (same
+    // exemption the thread scope has): a pin is an explicit user override.
     const scopeFiltered =
       threadScope === "relevant"
-        ? conversations.filter((c) => isExecutionActive(c.execution_status))
-        : conversations;
+        ? automationFilteredConversations.filter((c) =>
+            isExecutionActive(c.execution_status),
+          )
+        : automationFilteredConversations;
 
     // In the expanded panel, pinned conversations should only appear inside
     // the dedicated pinned section (not duplicated in grouped/flat lists).
@@ -348,7 +375,7 @@ export function ConversationPanel({
     }
 
     return filterOutPinnedConversations(scopeFiltered, pinnedIds);
-  }, [compact, conversations, pinnedIds, threadScope]);
+  }, [automationFilteredConversations, compact, pinnedIds, threadScope]);
 
   const { recent: recentScoped, older: olderScoped } = React.useMemo(
     () => partitionByCutoff(scopedConversations),
@@ -387,13 +414,8 @@ export function ConversationPanel({
       ...recentScoped,
       ...(showOlderConversations ? olderScoped : []),
     ];
-    const folderDiscoveryConversations = filterToGroupDiscoveryPages(
-      merged,
-      conversationPageById,
-      activeBackend.kind,
-    );
     return groupConversations(
-      folderDiscoveryConversations,
+      merged,
       activeBackend.kind,
       conversationSort,
       groupLabels,
@@ -401,7 +423,6 @@ export function ConversationPanel({
   }, [
     activeBackend.kind,
     compact,
-    conversationPageById,
     conversationSort,
     groupLabels,
     olderScoped,
@@ -442,8 +463,17 @@ export function ConversationPanel({
       ? visibleGroupCount === 0
       : visibleFlatCount === 0;
 
-  // Grouped pagination succeeds only when it discovers another folder;
-  // chronological pagination still succeeds when another row appears.
+  // Attribution is exact: the automation filter step itself produced zero
+  // rows out of a non-empty loaded set (not merely threadScope/older-cutoff
+  // effects). Used to pick the empty-state message.
+  const emptyDueToAutomationFilter =
+    listIsEffectivelyEmpty &&
+    automationFilterMode !== "all" &&
+    conversations.length > 0 &&
+    automationFilteredConversations.length === 0;
+
+  // Number of conversations actually rendered in the list right now, in the
+  // current organize mode. "Load more" succeeds only when this number grows.
   const visibleCount =
     organizeMode === "grouped" && !compact
       ? visibleGroupCount
@@ -526,12 +556,12 @@ export function ConversationPanel({
   const olderHidden = olderScoped.length > 0 && !showOlderConversations;
   // Compact mode also hides "Load more" — paginating into stale conversations
   // contradicts the "active only" intent of the icon rail.
-  // Availability tracks backend exhaustion, never visible emptiness: archiving
-  // (like any client-side filter) can hide every row of the loaded pages, and
-  // hiding the control there would strand the remaining pages behind a "No
-  // conversations found" message with no way forward. `requestLoadMore`'s floor
-  // driver keeps paging until a visible row appears, so a single click walks
-  // past pages that are entirely archived.
+  // Availability tracks backend exhaustion, never visible emptiness: a
+  // client-side filter (archiving, the automation filter) can hide every row
+  // of the loaded pages, and hiding the control there would strand the
+  // remaining pages behind an empty-state message with no way forward.
+  // `requestLoadMore`'s floor driver keeps paging until a visible row
+  // appears, so a single click walks past pages that are entirely filtered.
   const showLoadMore = !!hasNextPage && !olderHidden && !compact;
 
   const { mutate: createConversation } = useCreateConversation();
@@ -720,7 +750,7 @@ export function ConversationPanel({
             !showHoverMetadata || openContextMenuId === conversation.id
           }
           disableAnimation={import.meta.env.MODE === "test"}
-          className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+          className="max-w-none overflow-visible rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
           content={
             <ConversationCardPreview
               title={conversation.title ?? ""}
@@ -736,12 +766,15 @@ export function ConversationPanel({
                 conversation.workspace?.working_dir
               }
               llmModel={conversation.llm_model}
+              agentKind={conversation.agent_kind}
+              acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
+              tags={conversation.tags}
             />
           }
         >
           <NavigationLink
-            to={`/conversations/${conversation.id}`}
+            to={backendScopedPath(`/conversations/${conversation.id}`)}
             onClick={onClose}
             className={cn(
               "block rounded-md transition-colors",
@@ -890,6 +923,11 @@ export function ConversationPanel({
                 setConversationSort={setConversationSort}
                 threadScope={threadScope}
                 setThreadScope={setThreadScope}
+                automationFilterMode={automationFilterMode}
+                setAutomationFilterMode={setAutomationFilterMode}
+                selectedAutomationNames={selectedAutomationNames}
+                onToggleAutomationName={toggleAutomationName}
+                automationNameFacets={automationNameFacets}
                 showOlderConversations={showOlderConversations}
                 showArchivedConversations={showArchivedConversations}
                 toggleShowArchivedConversations={
@@ -931,7 +969,11 @@ export function ConversationPanel({
             className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
           >
             <p className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+              {t(
+                emptyDueToAutomationFilter
+                  ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
+                  : I18nKey.CONVERSATION$NO_CONVERSATIONS,
+              )}
             </p>
           </div>
         )}
@@ -957,7 +999,7 @@ export function ConversationPanel({
           startTasks?.map((task) => (
             <NavigationLink
               key={task.id}
-              to={`/conversations/task-${task.id}`}
+              to={backendScopedPath(`/conversations/task-${task.id}`)}
               onClick={onClose}
               className="block"
             >

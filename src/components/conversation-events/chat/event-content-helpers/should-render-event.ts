@@ -1,3 +1,4 @@
+import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   isActionEvent,
@@ -24,17 +25,30 @@ const GOAL_REPROMPT_PREFIXES = [
   "Resuming a goal that was paused or interrupted.",
 ];
 
-const isGoalLoopReprompt = (event: MessageEvent): boolean => {
-  if (event.llm_message?.role !== "user") return false;
+const userMessageText = (event: MessageEvent): string | null => {
+  if (event.llm_message?.role !== "user") return null;
   const content = event.llm_message.content;
-  const text = Array.isArray(content)
+  return Array.isArray(content)
     ? content
         .filter((c) => c.type === "text")
         .map((c) => c.text)
         .join("\n")
     : "";
+};
+
+const isGoalLoopReprompt = (event: MessageEvent): boolean => {
+  const text = userMessageText(event);
+  if (text === null) return false;
   return GOAL_REPROMPT_PREFIXES.some((prefix) => text.startsWith(prefix));
 };
+
+// The frontend posts the outcome of a `launch_child_conversation` call back as
+// a `user` message because client tools have no result channel (see
+// `services/child-conversation-launch.ts`). It is a JSON payload addressed to
+// the agent, which reports the child's id and link in its own reply, so the
+// raw message does not belong in the chat.
+const isChildConversationResult = (event: MessageEvent): boolean =>
+  userMessageText(event)?.startsWith(CHILD_CONVERSATION_RESULT_PREFIX) ?? false;
 
 export const shouldRenderEvent = (event: OpenHandsEvent) => {
   if (isConversationStateUpdateEvent(event)) {
@@ -90,9 +104,11 @@ export const shouldRenderEvent = (event: OpenHandsEvent) => {
 
   // Render message events (user and assistant messages), except the goal loop's
   // injected re-prompts — the judge feedback they carry is shown in the goal
-  // banner, so otherwise they leak into the chat as fake user turns.
+  // banner, so otherwise they leak into the chat as fake user turns — and the
+  // child-conversation launch results, which are machine payloads the agent
+  // relays in its own reply.
   if (isMessageEvent(event)) {
-    return !isGoalLoopReprompt(event);
+    return !isGoalLoopReprompt(event) && !isChildConversationResult(event);
   }
 
   // Render agent error events

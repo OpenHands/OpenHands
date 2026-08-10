@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyAutomationConversationFilter,
   applyGroupFolderOrder,
-  filterToGroupDiscoveryPages,
+  collectAutomationNameFacets,
   getGroupConversationPreview,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
+  isAutomationConversation,
   parseConversationTimeMs,
   moveGroupFolderOrder,
   resolvePinnedConversations,
   sortConversationsByField,
+  UNNAMED_AUTOMATION_FACET,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -256,43 +259,6 @@ describe("conversation-panel-list-helpers", () => {
     expect(GROUP_CONVERSATIONS_PREVIEW_LIMIT).toBe(5);
   });
 
-  it("keeps only the discovery page for each workspace folder", () => {
-    // Later pages may still contain rows for already-visible folders; those
-    // must stay out of the grouped list so global Load more only reveals new
-    // folders.
-    const items = [
-      {
-        ...base,
-        id: "none-1",
-        title: "None 1",
-        selected_workspace: null,
-      },
-      {
-        ...base,
-        id: "none-2",
-        title: "None 2",
-        selected_workspace: null,
-      },
-      {
-        ...base,
-        id: "alpha-1",
-        title: "Alpha 1",
-        selected_workspace: "/workspace/alpha",
-      },
-    ] as AppConversation[];
-    const pageByConversationId = new Map([
-      ["none-1", 0],
-      ["none-2", 1],
-      ["alpha-1", 1],
-    ]);
-
-    expect(
-      filterToGroupDiscoveryPages(items, pageByConversationId, "local").map(
-        (conversation) => conversation.id,
-      ),
-    ).toEqual(["none-1", "alpha-1"]);
-  });
-
   it("resolvePinnedConversations preserves pin order and drops missing ids", () => {
     const conversations = [
       { ...base, id: "a", title: "A" },
@@ -451,5 +417,137 @@ describe("conversation-panel-list-helpers", () => {
       "ws:/workspace/beta",
       "ws:/workspace/alpha",
     ]);
+  });
+
+  it("recognizes automation-born conversations via automation tags or the cloud trigger", () => {
+    // Bundles the recognition facets: any automation tag key marks the
+    // conversation (local backend, where `trigger` is always null), the
+    // cloud backend's `trigger: "automation"` marks it even without tags,
+    // and unrelated tags / null triggers do not.
+    const taggedByName: AppConversation = {
+      ...base,
+      id: "tagged-name",
+      title: "tagged-name",
+      tags: { automationname: "Nightly Audit" },
+    };
+    const taggedByRunId: AppConversation = {
+      ...base,
+      id: "tagged-run",
+      title: "tagged-run",
+      tags: { automationrunid: "run-1" },
+    };
+    const cloudTriggered: AppConversation = {
+      ...base,
+      id: "cloud",
+      title: "cloud",
+      trigger: "automation",
+    };
+    const manual: AppConversation = {
+      ...base,
+      id: "manual",
+      title: "manual",
+      tags: { origin: "slack" },
+    };
+    expect(
+      [taggedByName, taggedByRunId, cloudTriggered, manual].map(
+        isAutomationConversation,
+      ),
+    ).toEqual([true, true, true, false]);
+  });
+
+  it("collects unique sorted automation-name facets with the unnamed bucket last", () => {
+    const conversations: AppConversation[] = [
+      {
+        ...base,
+        id: "b1",
+        title: "b1",
+        tags: { automationname: "PR Review Bot" },
+      },
+      {
+        ...base,
+        id: "unnamed",
+        title: "unnamed",
+        tags: { automationrunid: "run-1" },
+      },
+      {
+        ...base,
+        id: "a1",
+        title: "a1",
+        tags: { automationname: "Nightly Audit" },
+      },
+      {
+        ...base,
+        id: "a2",
+        title: "a2",
+        tags: { automationname: "Nightly Audit" },
+      },
+      { ...base, id: "manual", title: "manual" },
+    ];
+    expect(collectAutomationNameFacets(conversations)).toEqual([
+      "Nightly Audit",
+      "PR Review Bot",
+      UNNAMED_AUTOMATION_FACET,
+    ]);
+  });
+
+  const automationFilterFixtures: AppConversation[] = [
+    { ...base, id: "manual", title: "manual" },
+    {
+      ...base,
+      id: "audit",
+      title: "audit",
+      tags: { automationname: "Nightly Audit" },
+    },
+    {
+      ...base,
+      id: "unnamed",
+      title: "unnamed",
+      tags: { automationrunid: "run-1" },
+    },
+  ];
+  const automationFilterFacets = ["Nightly Audit", UNNAMED_AUTOMATION_FACET];
+
+  it("hides automation runs under the hide-automations filter mode", () => {
+    expect(
+      applyAutomationConversationFilter(
+        automationFilterFixtures,
+        "hide-automations",
+        [],
+        automationFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["manual"]);
+  });
+
+  it("keeps only automation runs under only-automations, narrowed by the selected name facets", () => {
+    expect(
+      applyAutomationConversationFilter(
+        automationFilterFixtures,
+        "only-automations",
+        [],
+        automationFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["audit", "unnamed"]);
+
+    expect(
+      applyAutomationConversationFilter(
+        automationFilterFixtures,
+        "only-automations",
+        [UNNAMED_AUTOMATION_FACET],
+        automationFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["unnamed"]);
+  });
+
+  it("degrades a stale name selection to all automation runs instead of an empty list", () => {
+    // Selected names persist across backends/renames; when none intersect
+    // the currently available facets the narrowing must self-heal.
+    expect(
+      applyAutomationConversationFilter(
+        automationFilterFixtures,
+        "only-automations",
+        ["Renamed Automation"],
+        automationFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["audit", "unnamed"]);
   });
 });

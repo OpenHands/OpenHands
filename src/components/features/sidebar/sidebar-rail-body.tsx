@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import {
+  automationListPath,
+  getInterfaceCopy,
+} from "#/manifests/automation-interface";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
@@ -17,6 +21,7 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import { BackendStatusDot } from "#/components/features/backends/backend-status-dot";
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
+import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { SidebarConversationList } from "./sidebar-conversation-list";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import {
@@ -199,8 +204,10 @@ export function SidebarRailBody({
           }
         />
         <SidebarNavLink
-          to="/automations"
-          label={t(I18nKey.SIDEBAR$AUTOMATIONS)}
+          to={automationListPath()}
+          label={
+            getInterfaceCopy().sidebarLabel ?? t(I18nKey.SIDEBAR$AUTOMATIONS)
+          }
           testId="sidebar-automations-link"
           collapsed={collapsed}
           icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
@@ -304,10 +311,11 @@ export function SidebarRailBody({
       {!collapsed ? (
         <div
           className={cn(
-            "flex flex-col items-stretch max-w-none box-border shrink-0",
+            "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
             "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
           )}
         >
+          <AgentCanvasVersionTile hideWhenUpToDate />
           <BackendSelector sidebarCollapsed={collapsed} openUpward />
         </div>
       ) : null}
