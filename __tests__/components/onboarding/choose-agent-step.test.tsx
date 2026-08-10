@@ -178,8 +178,9 @@ describe("ChooseAgentStep", () => {
   it.each([
     ["codex", "codex"],
     ["gemini-cli", "gemini-cli"],
-    ["cursor", "cursor"],
-    // OpenCode is not in the agent-server literal enum yet — wire as custom.
+    // Cursor / OpenCode are not in the pinned typescript-client enum yet —
+    // wire as custom with an explicit command (LOCAL_ACP_PROVIDER_REGISTRY).
+    ["cursor", "custom"],
     ["opencode", "custom"],
   ])("persists acp_server=%s for the matching tile", async (id, expected) => {
     const save = vi.spyOn(SettingsService, "saveSettings");
@@ -209,6 +210,11 @@ describe("ChooseAgentStep", () => {
       expect(
         (call.agent_settings_diff as Record<string, unknown>).acp_command,
       ).toEqual(["opencode", "acp"]);
+    }
+    if (id === "cursor") {
+      expect(
+        (call.agent_settings_diff as Record<string, unknown>).acp_command,
+      ).toEqual(["agent", "acp"]);
     }
   });
 

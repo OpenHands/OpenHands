@@ -208,6 +208,10 @@ describe("useCreateConversation persists selected repository metadata", () => {
       workspace_mode: null,
       active_profile: "team-default",
       plugins: null,
+      workspace_type: "code",
+      engagement_id: null,
+      autonomy_mode: null,
+      runtime_profile: null,
     });
   });
 

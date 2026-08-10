@@ -1,5 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -184,8 +186,8 @@ describe("buildStartConversationRequest", () => {
       // source must be an absolute path to the skill's SKILL.md so the
       // Python agent-server can resolve bundled resources (scripts/, references/).
       const source = skill.source as string;
-      expect(source).toMatch(/^\//);
-      expect(source).toMatch(
+      expect(path.isAbsolute(source)).toBe(true);
+      expect(source.replaceAll("\\", "/")).toMatch(
         new RegExp(`/${skill.name as string}/SKILL\\.md$`),
       );
       expect(skill).toHaveProperty("is_agentskills_format", true);
@@ -684,7 +686,10 @@ describe("buildStartConversationRequest", () => {
         settings: DEFAULT_SETTINGS,
       });
 
-      expect(payload.client_tools).toHaveLength(1);
+      expect(payload.client_tools.map((tool) => tool.name)).toEqual([
+        CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      ]);
       expect(payload.client_tools[0]).toMatchObject({
         name: CANVAS_UI_CLIENT_TOOL_NAME,
         parameters: {
@@ -767,6 +772,7 @@ describe("buildStartConversationRequest", () => {
 
       expect(payload.client_tools.map((tool) => tool.name)).toEqual([
         CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
       ]);
     });
 
@@ -779,6 +785,7 @@ describe("buildStartConversationRequest", () => {
       expect(payload.conversation_id).toBe("legacy-conversation-id");
       expect(payload.client_tools.map((tool) => tool.name)).toEqual([
         CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
       ]);
     });
 

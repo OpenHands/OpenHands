@@ -147,6 +147,15 @@ describe("ACP provider registry", () => {
       acp_model: null,
     });
   });
+
+  it("persists Cursor as custom + explicit command until the SDK enum accepts it", () => {
+    expect(buildAcpAgentSettingsDiff("cursor")).toMatchObject({
+      agent_kind: "acp",
+      acp_server: ACP_CUSTOM_PRESET_KEY,
+      acp_command: ["agent", "acp"],
+      acp_model: "auto",
+    });
+  });
 });
 
 describe("getAcpProviderSecrets — containerized credentials", () => {

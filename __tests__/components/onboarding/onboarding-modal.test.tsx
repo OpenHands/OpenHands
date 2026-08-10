@@ -40,6 +40,19 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       getSettings: vi.fn().mockResolvedValue({}),
     };
   }),
+  // Onboarding activates an agent profile via AgentProfilesService; without
+  // this export the clients mock throws and only logs (best-effort), which
+  // polluted CI output after the 1.37.0 pin.
+  AgentProfilesClient: vi.fn(function AgentProfilesClientMock() {
+    return {
+      saveAgentProfile: vi.fn().mockResolvedValue({ name: "default" }),
+      getAgentProfile: vi.fn().mockResolvedValue({
+        profile: { id: "profile-default", name: "default" },
+      }),
+      activateAgentProfile: vi.fn().mockResolvedValue(undefined),
+      listAgentProfiles: vi.fn().mockResolvedValue({ profiles: [] }),
+    };
+  }),
 }));
 
 vi.mock("#/api/cloud/organization-service.api", () => ({

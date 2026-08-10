@@ -202,7 +202,8 @@ describe("useSettingsNavItems", () => {
       .map((item) => (item.type === "item" ? item.item.to : null));
 
     expect(paths).not.toContain("/settings/agent-server");
-    expect(paths).not.toContain("/settings/integrations");
+    // Heimdall keeps Integrations as a local-only settings page.
+    expect(paths).toContain("/settings/integrations");
     expect(paths).not.toContain("/settings/skills");
     expect(paths).not.toContain("/settings/mcp");
   });
