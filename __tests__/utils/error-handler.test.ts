@@ -8,6 +8,9 @@ vi.mock("#/services/telemetry", () => ({
 
 describe("Error Handler", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/test-error");
+  });
+  beforeEach(() => {
     vi.clearAllMocks();
   });
 
@@ -24,6 +27,7 @@ describe("Error Handler", () => {
       trackError(error);
 
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        current_url: window.location.href,
         error_source: "test",
         error_kind: "unknown",
         error_telemetry: "diagnostic",
@@ -45,6 +49,7 @@ describe("Error Handler", () => {
       trackError(error);
 
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        current_url: window.location.href,
         error_source: "test",
         error_kind: "unknown",
         error_telemetry: "diagnostic",
@@ -65,6 +70,7 @@ describe("Error Handler", () => {
       });
 
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        current_url: window.location.href,
         error_source: "agent",
         error_kind: "internal",
         error_id: "error-123",
@@ -79,6 +85,7 @@ describe("Error Handler", () => {
       });
 
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        current_url: window.location.href,
         error_source: "chat",
         error_kind: "unknown",
         error_id: "evt-42",
@@ -103,6 +110,7 @@ describe("Error Handler", () => {
       expect(trackEvent).toHaveBeenCalledWith(
         "error_outcome",
         expect.objectContaining({
+          current_url: window.location.href,
           error_id: "cls-7",
           error_telemetry: "outcome",
         }),
@@ -124,6 +132,7 @@ describe("Error Handler", () => {
       });
 
       expect(trackEvent).toHaveBeenCalledWith("error_outcome", {
+        current_url: window.location.href,
         error_source: "agent",
         error_kind: "auth",
         error_telemetry: "outcome",

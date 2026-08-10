@@ -36,6 +36,7 @@ export function trackError({
 
   void trackEvent("error_outcome", {
     ...extra,
+    current_url: window.location.href,
     error_source: source || "unknown",
     error_kind: kind,
     // Keep diagnostic errors correlatable without capturing raw messages.
