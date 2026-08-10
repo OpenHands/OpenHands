@@ -1,5 +1,191 @@
-# Repository Notes
+# AGENTS.md
 
+Modelo de orquestração de agentes do **OpenHands Agent Canvas** (HeimdallSec) — frontend/control center self-hosted para coding agents e automações.
+
+**Repositório:** `@openhands/agent-canvas` (React Router · Vite · TypeScript · HeroUI · Zustand · TanStack Query).
+
+| Área | Stack / papel |
+|------|----------------|
+| Frontend / SPA | React 19 · React Router 7 · Vite · HeroUI · Tailwind · i18n |
+| API client | `@openhands/typescript-client` → Agent Server local; Cloud via `callCloudProxy` |
+| Runtime local | `scripts/` + `bin/agent-canvas.mjs` — ingress, static-server, uvx agent-server + automation |
+| Docker / Electron | `docker/` (imagem all-in-one), `electron/` (app desktop) |
+| Backend externo | OpenHands Agent Server (`software-agent-sdk`) + Automation backend — **não** vivem neste repo |
+
+**Auth local:** session API key (`X-Session-API-Key` / `VITE_SESSION_API_KEY`). **Cloud:** device authorization + bearer via proxy. **Config central:** `config/defaults.json`.
+
+As definições vivem em [`.claude/agents/`](.claude/agents/). Cada agente é especialista, isolado e com escopo de ferramentas mínimo.
+
+Notas técnicas detalhadas do codebase (API rules, telemetry, E2E, etc.) ficam em [§ Repository Notes](#repository-notes) abaixo — leia-as antes de implementar.
+
+## Time
+
+| Agente | Papel | Fala com o usuário? | Pode bloquear? | Ferramentas |
+|--------|-------|:---:|:---:|-------------|
+| **[pm](.claude/agents/pm.md)** | Product Manager — única interface, especifica a demanda e orquestra | ✅ (único) | — | todas |
+| **[tech-lead](.claude/agents/tech-lead.md)** | Tech Lead/Arquiteto — decompõe, define spec técnica, gate de ADR/PR | ❌ | ✅ (ADR/PR) | Read, Write, Edit, Glob, Grep, Bash, TodoWrite, Plane † |
+| **[backend](.claude/agents/backend.md)** | Backend Dev — scripts Node, proxies, adapters API, integração Agent Server | ❌ | — | Read, Write, Edit, Glob, Grep, Bash, Plane † |
+| **[frontend](.claude/agents/frontend.md)** | Frontend Dev — UI/estado React, i18n, hooks, stores | ❌ | — | Read, Write, Edit, Glob, Grep, Bash, Plane † |
+| **[design](.claude/agents/design.md)** | Product Designer — define e revisa UI/UX/acessibilidade | ❌ | ✅ (UI) | Read, Write, Edit, Glob, Grep, Plane † |
+| **[qa](.claude/agents/qa.md)** | QA — valida AC, Vitest, Playwright (mock-LLM / live) | ❌ | ✅ (AC/regressão) | Read, Write, Edit, Glob, Grep, Bash, Plane † |
+| **[appsecurity](.claude/agents/appsecurity.md)** | AppSec — segredos, deps, AuthZ, superfície de sandbox/proxy | ❌ | ✅ (critical/high/segredo) | Read, Glob, Grep, Bash (leitura) + Plane † |
+| **[devops](.claude/agents/devops.md)** | DevOps — Docker, CI workflows, Electron packaging, launchers | ❌ | — | Read, Write, Edit, Glob, Grep, Bash, Plane † |
+
+† **Plane** = tools MCP `update_work_item`, `create_work_item_comment`, `list_states`, `retrieve_work_item_by_identifier`, `list_labels`, `manage_work_item_label`. O PM (`todas`) também cria via `create_work_item`, lista modules e vincula Module.
+
+## Regra de ouro
+
+**O PM é a única interface com o usuário.** Todo trabalho técnico segue:
+
+```
+Usuário ─▶ PM ─▶ Tech Lead ─▶ Executores (backend · frontend · design · qa · appsecurity · devops)
+                     ▲                              │
+                     └──────── report / bloqueio ───┘
+```
+
+- Executores **nunca** recebem requisito bruto do usuário nem reportam a ele.
+- Escalonamento humano: Executor → Tech Lead → PM → Usuário.
+
+## Fluxo de uma demanda
+
+1. **Intake (PM)** — captura requisito, registra ADR em `docs/adrs/NNNN-titulo.md` (template MADR) e faz handoff ao Tech Lead.
+2. **Spec (Tech Lead)** — valida ADR, define contratos (UI/API client/runtime), AuthZ, AC; decompõe em sub-tasks.
+3. **Design (Design)** — define UI/UX/acessibilidade antes do Frontend implementar (quando houver UI).
+4. **Implementação (backend / frontend / devops)** — conforme spec e design; abrem PR referenciando a ADR e `Plane: PROJETOSIN-<n>`.
+5. **Gates** — Design (UI) · QA (AC + regressão) · AppSecurity (sem critical/high, sem segredos). Cada laudo vai em `docs/gates/` **e** como review formal no PR GitHub (revisor ≠ autor).
+6. **Merge (Tech Lead)** — só com ADR compliant e todos os gates em PASS; PM notifica o usuário.
+
+⛔ **`mergeable: CLEAN` não significa compatível.** O GitHub reporta ausência de **conflito textual**, não compatibilidade **semântica**. Antes de mesclar PR que conviveu com outra em aberto: rebase sobre `main` e rode a suíte **depois** do rebase. Ao remover um mecanismo, remova também os testes que o afirmam — não os inverta.
+
+**Quem delega:** o PM aciona o Tech Lead; **o Tech Lead aciona os executores e os gates** com a ferramenta de subagente. Em Claude Code: `subagent_type` = nome do arquivo em `.claude/agents/` (`backend`, `frontend`, `design`, `qa`, `appsecurity`, `devops`, `tech-lead`, `pm`). Em Cursor Task, quando o enum diferir, use o alias mais próximo (`techlead` ↔ `tech-lead`, `secops` / `security-review` ↔ `appsecurity`; `design` / `devops` via agente dedicado ou `generalPurpose` com o prompt do `.claude/agents/*.md`). Pode despachar **mais de um** quando o trabalho for claramente independente e os checkouts/escopos estiverem isolados (ver § Paralelismo abaixo).
+
+**Gate não se auto-assina.** Quem escreveu o código não emite o laudo de QA nem de AppSec. Se a delegação estiver indisponível, o Tech Lead **para e reporta ao PM**.
+
+## Paralelismo de agentes — decisão do PO (2026-08-01)
+
+**Agentes PODEM atuar em paralelo** quando o trabalho for claramente independente — por exemplo cards, branches ou worktrees distintos, ou gates em PRs diferentes.
+
+### Quando paralelizar
+
+- Cards/sub-tasks com **branches ou worktrees distintas** e escopos que não se sobrepõem.
+- Gates em **PRs diferentes**.
+- PM e Tech Lead podem despachar vários executores **se** cada um tiver checkout/escopo isolado.
+
+### Salvaguardas (obrigatórias)
+
+- **Um escritor por checkout.** Nunca dois agentes **escrevendo** na mesma working tree ao mesmo tempo.
+- **Gates no mesmo PR** ainda devem ser **sequenciais** se ambos mutam laudo, fixture ou testes no mesmo tree.
+- **Mesmo card / mesma branch sem isolamento** → sequencial.
+- **Antes de redespachar por suspeita de morte, confirme que morreu** (`git log`, PR aberto, comentário no card). **Lentidão não é morte.**
+- **Encerrar thread também exige confirmação.** Silêncio não é evidência de nada.
+
+**Quando duas linhas já colidiram:** designe **uma** dona da branch, não acorde a outra, e trie a árvore hunk por hunk — `reset --hard` / `checkout --` / `clean` destroem correção não commitada.
+
+## Gates de bloqueio
+
+| Gate | Dono | Bloqueia quando |
+|------|------|-----------------|
+| **ADR / PR** | tech-lead | Viola ADR aprovada, contrato ou regras de API (`no-direct-agent-server-calls`, i18n, etc.) |
+| **UI** | design | UI fora do design system (HeroUI/tokens) ou falha de acessibilidade |
+| **AC / regressão** | qa | AC não atingido ou `npm test` / E2E relevante vermelho |
+| **Segurança** | appsecurity | Critical/high, segredo exposto, AuthZ quebrada, proxy/sandbox inseguro |
+
+## Rastreamento no Plane
+
+**Todo trabalho tem um work item no Plane.** Criar, mover e comentar é responsabilidade de cada agente conforme o pipeline.
+
+### O card é o estado da verdade — atualize durante, não no fim
+
+**Regra que não admite exceção: o work item precisa refletir onde o trabalho está, no momento em que está.**
+
+Três momentos obrigatórios em toda atividade:
+
+1. **Ao começar** — leve o state ao grupo correto e comente a fase (`fase: desenvolvimento (Frontend)`, `fase: testing (QA)`…).
+2. **Durante** — a cada achado que muda escopo, decisão ou bloqueio, comente **na hora**.
+3. **Ao terminar ou parar** — registre o resultado (PR, veredicto, motivo da parada) antes de devolver o controle.
+
+Trabalho entregue com card desatualizado **não conta como entregue** — o Tech Lead deve devolver.
+
+- **Workspace slug:** `heimdall`
+- **Projeto:** `Projetos Internos` / identificador `PROJETOSIN` (id `e04ca7d6-ebed-4382-8021-e6ee930d4fb8`) — https://plane.heimdallsec.com.br/heimdall/projects/e04ca7d6-ebed-4382-8021-e6ee930d4fb8
+- **Module no escopo deste repositório:** somente **`OpenHands`** (id `ca14b364-4575-40dd-9967-238a8d1b61e5`) — https://plane.heimdallsec.com.br/heimdall/projects/e04ca7d6-ebed-4382-8021-e6ee930d4fb8/modules/ca14b364-4575-40dd-9967-238a8d1b61e5
+- Outros modules do projeto (OpenxChats, APISEC, etc.) **estão fora do escopo** — não criar, priorizar nem reportar como backlog deste repo.
+- **MCP:** `create_work_item` (só PM), `update_work_item`, `create_work_item_comment`, `list_states`, `list_modules`, `manage_module_work_items`, `retrieve_work_item_by_identifier`, `list_labels`, `manage_work_item_label`
+
+### Contrato MCP (obrigatório — falha se ignorado)
+
+1. **`project_id` e `work_item_id` são UUIDs.** O identificador humano (ex. `PROJETOSIN-12`) serve para PRs e texto; para tools, resolva com `retrieve_work_item_by_identifier(work_item_identifier="PROJETOSIN-12")`.
+2. **`state` é UUID**, nunca o nome. Antes de mover: `list_states(project_id)` e escolha pelo **grupo** (`backlog` / `unstarted` / `started` / `completed` / `cancelled`).
+3. **Comentários usam `comment_html`** (HTML, ex. `<p>fase: desenvolvimento (Frontend)</p>`).
+4. **Prioridade Plane:** `urgent` \| `high` \| `medium` \| `low` \| `none`. Mapeamento: **P0 → `urgent`**, **P1 → `high`**, **P2 → `medium`**.
+5. **Module obrigatório (`OpenHands`):** PM: `list_modules` → `create_work_item` → vincular ao Module OpenHands. Sem Module no escopo, não criar “órfã”.
+
+### Labels obrigatórias
+
+| Label | id | Quando aplicar |
+|-------|----|----------------|
+| `Epic` | `1d533061-d5fd-40c5-9b34-6a8ed86ffcc3` | Todo épico, sempre |
+| `Blocked` | `c7b11bb4-67a8-4c02-bb11-a0ec4eb47cac` | Toda tarefa bloqueada, enquanto durar o bloqueio |
+| `BUG` | `3f92b9db-2200-47cc-888d-8145f8cf3f5d` | Defects / regressões |
+
+`Blocked` é estado vivo: remova ao desbloquear.
+
+### Campos de lista: fallback `[PLANE-PENDENTE]`
+
+Se `manage_module_work_items` / `manage_work_item_label` falharem (serialização de listas no MCP), **não trave**: reporte `[PLANE-PENDENTE]` com a transição pretendida, labels e texto do comentário para o orquestrador/PM aplicar. Leitura e escrita de campo escalar (`state`, `priority`, comentário) seguem pelo MCP normalmente.
+
+### Pipeline por grupo de state
+
+Confirme sempre com `list_states`. Mapeie a fase ao **grupo**; o detalhe vai no `comment_html`.
+
+| Grupo Plane | State típico | Responsável | Quando mover |
+|-------------|--------------|-------------|--------------|
+| `backlog` / `unstarted` | Backlog / Todo | PM | Work item criado, ainda não iniciado |
+| `started` | In Progress | PM → Tech Lead → Executores / gates | Intake, spec, implementação ou review/teste |
+| `completed` | Done | PM | Merge realizado; entrega confirmada (todos os gates PASS) |
+| `cancelled` | Cancelled | PM | Work item cancelado |
+
+**Retrabalho / bloqueio:** mantenha em `started`, aplique label `Blocked`, comente o FAIL.
+
+### Regras de rastreamento
+
+1. **PM cria o work item** e **imediatamente** vincula o Module `OpenHands`; se for épico, aplica label `Epic`; ao iniciar intake, move para state do grupo `started`.
+2. **Cada agente atualiza o card** ao entrar, durante e ao sair. Card desatualizado = entrega recusada.
+3. **Todo PR** cita: `Plane: PROJETOSIN-<n>` (e link do work item quando disponível).
+4. **Bloqueios** → label `Blocked` + comentário; **desbloqueio** → remove `Blocked`.
+5. **Gate FAIL** → comentário + `Blocked`; gates PASS → merge pelo Tech Lead.
+6. **Após merge + gates PASS**, PM move para grupo `completed` e comenta o merge SHA.
+
+## Identificadores de trabalho
+
+**Identificadores canônicos são sempre do Plane:** `PROJETOSIN-<n>`.
+
+Não use IDs de outros boards (ex. `VP-*` do VivaPlastica) neste repositório.
+
+## Convenções do projeto
+
+- **Frontend:** React em `src/` — componentes em `src/components/`, rotas em `src/routes/`, API em `src/api/`. Sem imports diretos de `react-router` em `src/components/` (usar NavigationProvider).
+- **API local:** sempre `@openhands/typescript-client` via `getAgentServerClientOptions()` — nunca `axios`/`fetch` cru para Agent Server (exceto exceções listadas em § API Access Rules).
+- **Cloud:** sempre `callCloudProxy()` — nunca fetch direto a hosts Cloud.
+- **i18n:** strings de UI via `t(I18nKey.…)` + `src/i18n/translation.json`; rodar `npm run make-i18n` / `check-translation-completeness`.
+- **ADRs:** `docs/adrs/NNNN-titulo.md` (MADR). Aprovadas são imutáveis — mudança = nova versão via PM.
+- **Laudos de gate:** `docs/gates/<card>/qa.md`, `appsec.md`, `design.md` — ver [docs/gates/README.md](docs/gates/README.md).
+- **Verificação local (antes de gate/merge):**
+  ```bash
+  npm run lint
+  npm test
+  npm run build
+  # quando o escopo tocar E2E / stack:
+  # npm run test:e2e:mock-llm
+  ```
+- **CI GitHub:** `.github/workflows/ci.yml` roda lint/test/build; workflows mock-LLM/Docker/live existem e devem ser respeitados quando o diff os aciona.
+- **Segredos:** `.env` (ver `.env.sample`); nunca hardcoded. Inclui `SESSION_API_KEY`, `OH_SECRET_KEY`, `VITE_SESSION_API_KEY`, chaves LLM, PostHog.
+- **Config:** bumps de versão/portas em `config/defaults.json` — única fonte de verdade.
+- **Arquitetura:** [docs/architecture.md](docs/architecture.md), [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md).
+
+---
+
+# Repository Notes
 ## General
 
 - This repository is a near-direct port of the OpenHands frontend. Local backends talk straight to `software-agent-sdk` / `agent_server`; optional Cloud backends use the service layer under `src/api/cloud/` and the local cloud proxy.
