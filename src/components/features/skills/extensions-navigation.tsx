@@ -29,13 +29,13 @@ interface ExtensionNavItem {
 export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   {
     to: "/mcp",
-    label: "MCP Servers",
+    label: "Cortex Integrations (MCP)",
     icon: <ServerProcessIcon width={16} height={16} />,
     end: true,
   },
   {
     to: "/skills",
-    label: "Skills",
+    label: "Cortex Skills",
     icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
     end: true,
   },
