@@ -84,10 +84,12 @@ describe("EmulatorPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByTestId("emulator-unavailable")).toBeInTheDocument();
     expect(
-      screen.getByTestId("emulator-status-message"),
-    ).toHaveTextContent("EMULATOR$UNAVAILABLE");
+      await screen.findByTestId("emulator-unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("emulator-status-message")).toHaveTextContent(
+      "EMULATOR$UNAVAILABLE",
+    );
     expect(
       screen.queryByTestId("emulator-start-button"),
     ).not.toBeInTheDocument();
@@ -139,9 +141,9 @@ describe("EmulatorPanel", () => {
       dataTransfer: { files: [file] },
     });
 
-    expect(await screen.findByTestId("emulator-upload-error")).toHaveTextContent(
-      "EMULATOR$UPLOAD_REJECT_IPA",
-    );
+    expect(
+      await screen.findByTestId("emulator-upload-error"),
+    ).toHaveTextContent("EMULATOR$UPLOAD_REJECT_IPA");
     expect(MobileArtifactsService.uploadApk).not.toHaveBeenCalled();
   });
 

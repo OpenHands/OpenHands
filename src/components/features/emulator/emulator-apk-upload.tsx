@@ -7,19 +7,12 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 
 type EmulatorApkUploadProps = {
   uploading: boolean;
-  errorKey?:
-    | "ipa"
-    | "type"
-    | "size"
-    | "failed"
-    | null;
+  errorKey?: "ipa" | "type" | "size" | "failed" | null;
   offlineHint?: boolean;
   onFileAccepted: (file: File) => void;
 };
 
-function rejectKey(
-  reason: "ipa" | "type" | "size",
-): I18nKey {
+function rejectKey(reason: "ipa" | "type" | "size"): I18nKey {
   if (reason === "ipa") return I18nKey.EMULATOR$UPLOAD_REJECT_IPA;
   if (reason === "size") return I18nKey.EMULATOR$UPLOAD_REJECT_SIZE;
   return I18nKey.EMULATOR$UPLOAD_REJECT_TYPE;
@@ -107,7 +100,9 @@ export function EmulatorApkUpload({
         onChange={(event) => {
           const file = event.target.files?.[0];
           handleFile(file);
-          event.target.value = "";
+          if (inputRef.current) {
+            inputRef.current.value = "";
+          }
         }}
       />
       {offlineHint && (

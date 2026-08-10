@@ -82,9 +82,7 @@ export function isEmulatorStaticAssetPath(urlPath) {
  * @param {string} sessionApiKey
  */
 export function emulatorAuthToken(sessionApiKey) {
-  return createHash("sha256")
-    .update(`emulator:${sessionApiKey}`)
-    .digest("hex");
+  return createHash("sha256").update(`emulator:${sessionApiKey}`).digest("hex");
 }
 
 /**
@@ -122,7 +120,7 @@ export function resolveEmulatorUpstreamUrl(options = {}) {
       typeof runtime.services === "object" &&
       runtime.services.android_emulator &&
       typeof runtime.services.android_emulator === "object"
-      ? runtime.services.android_emulator.url_from_agent ?? ""
+      ? (runtime.services.android_emulator.url_from_agent ?? "")
       : "",
   ).trim();
   if (fromRuntime) return fromRuntime.replace(/\/+$/, "");
@@ -608,8 +606,7 @@ export function createEmulatorProxyHandler(options) {
       }
       if (!sessionApiKey) {
         writeJson(res, 401, {
-          detail:
-            "Missing emulator authentication (start the emulator first)",
+          detail: "Missing emulator authentication (start the emulator first)",
         });
         return;
       }
@@ -665,7 +662,9 @@ export function createEmulatorProxyHandler(options) {
 
     const upstream = getUpstream();
     if (!upstream) {
-      socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+      socket.write(
+        "HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n",
+      );
       socket.destroy();
       return true;
     }

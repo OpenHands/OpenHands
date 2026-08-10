@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -119,9 +119,7 @@ export function EmulatorPanel() {
 
   const refreshIframe = useCallback(() => {
     setView((prev) =>
-      prev.kind === "live"
-        ? { ...prev, iframeKey: prev.iframeKey + 1 }
-        : prev,
+      prev.kind === "live" ? { ...prev, iframeKey: prev.iframeKey + 1 } : prev,
     );
   }, []);
 
@@ -165,18 +163,22 @@ export function EmulatorPanel() {
   const stageUnavailable =
     (view.kind === "idle" && view.unavailable) ||
     (view.kind === "error" && view.unavailable);
-  // Uncontrolled disclosure: closed by default in live, open otherwise.
-  // Remount on live↔rest so defaultOpen applies; user can still open/close freely.
-  const railPhaseKey = view.kind === "live" ? "live" : "rest";
+  // Controlled disclosure: closed by default in live, open otherwise.
+  // Reset only on live↔rest; refetch must not remount/close user toggle.
+  const railDefaultOpen = view.kind !== "live";
+  const [railOpen, setRailOpen] = useState(railDefaultOpen);
+  const prevRailDefaultOpen = useRef(railDefaultOpen);
+
+  useEffect(() => {
+    if (prevRailDefaultOpen.current !== railDefaultOpen) {
+      prevRailDefaultOpen.current = railDefaultOpen;
+      setRailOpen(railDefaultOpen);
+    }
+  }, [railDefaultOpen]);
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col"
-      data-testid="emulator-panel"
-    >
-      {view.kind === "live" && (
-        <EmulatorToolbar onRefresh={refreshIframe} />
-      )}
+    <div className="flex h-full min-h-0 flex-col" data-testid="emulator-panel">
+      {view.kind === "live" && <EmulatorToolbar onRefresh={refreshIframe} />}
 
       <div className="flex min-h-0 flex-1 flex-col">
         {view.kind === "live" ? (
@@ -204,7 +206,9 @@ export function EmulatorPanel() {
             }
             message={view.kind === "error" ? view.message : undefined}
             onStart={
-              stageUnavailable || view.kind === "loading" || view.kind === "starting"
+              stageUnavailable ||
+              view.kind === "loading" ||
+              view.kind === "starting"
                 ? undefined
                 : () => void startEmulator()
             }
@@ -213,9 +217,11 @@ export function EmulatorPanel() {
       </div>
 
       <details
-        key={railPhaseKey}
         className="shrink-0 border-t border-[var(--oh-border)]"
-        defaultOpen={view.kind !== "live"}
+        open={railOpen}
+        onToggle={(event) => {
+          setRailOpen(event.currentTarget.open);
+        }}
         data-testid="emulator-artifacts-rail"
       >
         <summary className="cursor-pointer px-3 py-2 text-sm text-[var(--foreground)]">
