@@ -78,9 +78,9 @@ export function AgentProfileActionsMenu({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (menuRef.current && !menuRef.current.contains(target)) {
-        onClose();
-      }
+      if (menuRef.current?.contains(target)) return;
+      if (anchorElement?.contains(target)) return;
+      onClose();
     };
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -91,7 +91,7 @@ export function AgentProfileActionsMenu({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [onClose]);
+  }, [anchorElement, onClose]);
 
   const handleAction = (action: () => void) => {
     action();
