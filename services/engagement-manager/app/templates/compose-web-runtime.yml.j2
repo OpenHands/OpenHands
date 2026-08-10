@@ -9,6 +9,7 @@ services:
     environment:
       ALLOW_RULES: {{ allow_rules | tojson }}
       DENY_RULES: {{ deny_rules | tojson }}
+      PENTEST_AUTONOMY_MODE: "{{ autonomy_mode }}"
 
   {{ project }}-egress-proxy:
     image: ghcr.io/heimdall/egress-proxy:latest

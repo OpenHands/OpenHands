@@ -59,14 +59,48 @@ class EngagementService:
 
     async def update(
         self, engagement_id: uuid.UUID, payload: EngagementUpdate, *, user_id: str
-    ) -> Engagement:
+    ) -> tuple[Engagement, str | None]:
+        """Update engagement fields.
+
+        Returns ``(engagement, propagation)`` where ``propagation`` is set when
+        ``autonomy_mode`` changes (PROJETOSIN-195):
+        ``applied`` | ``pending_restart`` | ``n/a``.
+        """
         eng = await self.get(engagement_id, user_id=user_id)
-        for key, value in payload.model_dump(exclude_unset=True).items():
+        changes = payload.model_dump(exclude_unset=True)
+        autonomy_changed = "autonomy_mode" in changes
+        for key, value in changes.items():
             setattr(eng, key, value)
         eng.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(eng)
-        return eng
+
+        propagation: str | None = None
+        if autonomy_changed:
+            propagation = await self.propagate_autonomy_env(eng, user_id=user_id)
+        return eng, propagation
+
+    async def propagate_autonomy_env(
+        self, eng: Engagement, *, user_id: str
+    ) -> str:
+        """Best-effort rewrite of compose env for ``PENTEST_AUTONOMY_MODE``.
+
+        Live container recreate is deferred in MVP — when a compose project
+        exists and the sandbox is running, return ``pending_restart`` so the UI
+        can show the banner (AC-195-5).
+        """
+        if not eng.sandbox_compose_project:
+            return "n/a"
+        try:
+            rules = await self.list_scope(eng.id, user_id=user_id)
+            rewritten = await self.provisioner.rewrite_compose(eng, rules)
+            if rewritten is None:
+                return "n/a"
+            if eng.sandbox_status == "running":
+                return "pending_restart"
+            return "n/a"
+        except Exception:
+            return "pending_restart"
 
     async def delete(self, engagement_id: uuid.UUID) -> None:
         eng = await self.get(engagement_id)

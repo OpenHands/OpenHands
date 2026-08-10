@@ -125,6 +125,7 @@ class RuntimeProvisioner:
             "volume_prefix": short,
             "allow_rules": allow,
             "deny_rules": deny,
+            "autonomy_mode": engagement.autonomy_mode or "semi_autonomous",
             "runtime_image": (
                 f"ghcr.io/heimdall/runtime-{engagement.runtime_profile}:latest"
             ),
@@ -196,3 +197,21 @@ class RuntimeProvisioner:
             code = await self.runner(args, work)
             if code != 0:
                 raise RuntimeError(f"docker compose down failed with {code}")
+
+    async def rewrite_compose(
+        self, engagement: Engagement, scope_rules: list[ScopeRule]
+    ) -> Path | None:
+        """Rewrite compose YAML with current engagement fields (e.g. autonomy).
+
+        Does not restart containers — callers decide applied vs pending_restart.
+        """
+        project = engagement.sandbox_compose_project or self.project_name(engagement)
+        work = self.work_root / project
+        if not work.exists() and not self.dry_run:
+            return None
+        work.mkdir(parents=True, exist_ok=True)
+        compose_path = work / "docker-compose.yml"
+        compose_path.write_text(
+            self._render(engagement, scope_rules), encoding="utf-8"
+        )
+        return compose_path

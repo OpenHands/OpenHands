@@ -4,10 +4,11 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 EngagementStatus = Literal["draft", "active", "paused", "completed", "archived"]
 AutonomyMode = Literal["manual", "semi_autonomous", "autonomous"]
+AutonomyPropagation = Literal["applied", "pending_restart", "n/a"]
 RuntimeProfile = Literal["web", "network", "mobile", "sast"]
 SandboxStatus = Literal["stopped", "provisioning", "running", "error"]
 
@@ -46,6 +47,8 @@ class EngagementOut(BaseModel):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    # Set on PATCH when autonomy_mode changes (PROJETOSIN-195).
+    propagation: AutonomyPropagation | None = None
 
 
 class EngagementListResponse(BaseModel):

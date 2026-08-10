@@ -96,3 +96,34 @@ async def test_forbidden_403(client):
         headers=auth_headers("client"),
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_patch_autonomy_returns_propagation_n_a(client):
+    """PROJETOSIN-195: PATCH autonomy_mode persists and reports propagation."""
+    from tests.conftest import auth_headers
+
+    created = await client.post(
+        "/api/pentest/engagements",
+        json={"name": "autonomy-patch", "client_name": "ACME"},
+        headers=auth_headers(),
+    )
+    assert created.status_code == 201
+    eng_id = created.json()["id"]
+    assert created.json()["autonomy_mode"] == "semi_autonomous"
+
+    patched = await client.patch(
+        f"/api/pentest/engagements/{eng_id}",
+        json={"autonomy_mode": "manual"},
+        headers=auth_headers(),
+    )
+    assert patched.status_code == 200
+    body = patched.json()
+    assert body["autonomy_mode"] == "manual"
+    assert body["propagation"] == "n/a"
+
+    fetched = await client.get(
+        f"/api/pentest/engagements/{eng_id}", headers=auth_headers()
+    )
+    assert fetched.status_code == 200
+    assert fetched.json()["autonomy_mode"] == "manual"

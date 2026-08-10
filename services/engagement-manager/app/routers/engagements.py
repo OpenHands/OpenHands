@@ -57,10 +57,13 @@ async def patch_engagement(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = require_capability("pentest.engagement.create"),
 ):
-    eng = await EngagementService(db).update(
+    eng, propagation = await EngagementService(db).update(
         engagement_id, payload, user_id=ctx.user_id
     )
-    return EngagementOut.model_validate(eng)
+    out = EngagementOut.model_validate(eng)
+    if propagation is not None:
+        out = out.model_copy(update={"propagation": propagation})
+    return out
 
 
 @router.delete("/{engagement_id}", status_code=204)

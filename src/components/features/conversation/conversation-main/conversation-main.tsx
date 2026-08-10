@@ -11,11 +11,59 @@ import {
   SIDEBAR_RAIL_COLLAPSE_MAX_WIDTH,
 } from "#/hooks/use-breakpoint";
 import { SidebarMobileMenuToggle } from "#/components/features/sidebar/sidebar-mobile-menu-toggle";
+import {
+  PentestAutonomyBanners,
+  PentestAutonomyHeaderControls,
+  usePentestConversationAutonomy,
+} from "#/components/features/pentest/pentest-autonomy-header";
 
 function getDesktopTabPanelClass(isRightPanelShown: boolean) {
   return isRightPanelShown
     ? "translate-x-0 opacity-100"
     : "w-0 translate-x-full opacity-0";
+}
+
+function ChatPaneHeader({
+  isSidebarRailHidden,
+}: {
+  isSidebarRailHidden: boolean;
+}) {
+  const autonomy = usePentestConversationAutonomy();
+
+  return (
+    <>
+      <div
+        data-testid="chat-pane-header"
+        className={cn(
+          "flex h-10 min-h-10 shrink-0 items-center",
+          isSidebarRailHidden && "gap-2 pl-2.5",
+        )}
+      >
+        {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
+        <div className="min-w-0 flex-1">
+          <ConversationNameWithStatus
+            trailing={
+              autonomy.active ? (
+                <PentestAutonomyHeaderControls
+                  autonomyMode={autonomy.autonomyMode}
+                  isLoading={autonomy.isLoading}
+                  isSaving={autonomy.isSaving}
+                  isArchived={autonomy.isArchived}
+                  onChange={autonomy.patchAutonomy}
+                />
+              ) : null
+            }
+          />
+        </div>
+      </div>
+      {autonomy.active && (
+        <PentestAutonomyBanners
+          pendingRestart={autonomy.propagation === "pending_restart"}
+          errorMessage={autonomy.errorMessage}
+        />
+      )}
+    </>
+  );
 }
 
 export function ConversationMain() {
@@ -70,18 +118,7 @@ export function ConversationMain() {
               : undefined
           }
         >
-          <div
-            data-testid="chat-pane-header"
-            className={cn(
-              "flex h-10 min-h-10 shrink-0 items-center",
-              isSidebarRailHidden && "gap-2 pl-2.5",
-            )}
-          >
-            {isSidebarRailHidden ? <SidebarMobileMenuToggle /> : null}
-            <div className="min-w-0 flex-1">
-              <ConversationNameWithStatus />
-            </div>
-          </div>
+          <ChatPaneHeader isSidebarRailHidden={isSidebarRailHidden} />
           <div className="flex-1 min-h-0 flex flex-col">
             <ChatInterfaceWrapper
               isRightPanelShown={!isMobile && isRightPanelShown}

@@ -100,7 +100,7 @@ export function LocalNewConversationMenu({
     React.useState<WorkspaceType>("code");
   const [engagementId, setEngagementId] = React.useState<string | null>(null);
   const [autonomyMode, setAutonomyMode] =
-    React.useState<AutonomyMode>("manual");
+    React.useState<AutonomyMode>("semi_autonomous");
   const { engagements, isLoading: isLoadingEngagements } =
     usePentestEngagements();
 
@@ -117,9 +117,9 @@ export function LocalNewConversationMenu({
 
   const handleWorkspaceTypeChange = React.useCallback((type: WorkspaceType) => {
     setWorkspaceType(type);
+    setAutonomyMode("semi_autonomous");
     if (type === "code") {
       setEngagementId(null);
-      setAutonomyMode("manual");
     }
   }, []);
 

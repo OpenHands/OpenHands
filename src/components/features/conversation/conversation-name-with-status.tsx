@@ -18,7 +18,11 @@ import {
   isExecutionPaused,
 } from "#/utils/status";
 
-export function ConversationNameWithStatus() {
+export function ConversationNameWithStatus({
+  trailing,
+}: {
+  trailing?: React.ReactNode;
+}) {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
   const { curAgentState } = useAgentState();
@@ -80,6 +84,7 @@ export function ConversationNameWithStatus() {
           />
         </div>
         <ConversationName />
+        {trailing}
       </div>
       <RightPanelToggle className="mr-2" />
     </div>

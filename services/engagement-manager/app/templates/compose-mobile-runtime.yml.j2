@@ -11,6 +11,7 @@ services:
       ALLOW_RULES: {{ allow_rules | tojson }}
       DENY_RULES: {{ deny_rules | tojson }}
       PENTEST_SCOPE_ALLOWLIST: {{ allow_rules | tojson }}
+      PENTEST_AUTONOMY_MODE: "{{ autonomy_mode }}"
       ADB_HOST: "{{ project }}-emulator"
       ADB_PORT: "5555"
       MOBSF_URL: "http://{{ project }}-mobsf:8000"

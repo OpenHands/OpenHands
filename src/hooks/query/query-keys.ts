@@ -75,6 +75,8 @@ export const PENTEST_CAPABILITIES_QUERY_KEYS = {
 /** Engagement Manager list for workspace creation (PROJETOSIN-183/185). */
 export const PENTEST_ENGAGEMENTS_QUERY_KEYS = {
   all: ["pentest-engagements"] as const,
+  detail: (engagementId: string) =>
+    ["pentest-engagements", "detail", engagementId] as const,
 } as const;
 
 /** Findings Service list / detail / stats (PROJETOSIN-188). */
