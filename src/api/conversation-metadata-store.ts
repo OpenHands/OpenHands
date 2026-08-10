@@ -1,5 +1,10 @@
 import { Provider } from "#/types/settings";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type {
+  AutonomyMode,
+  PentestRuntimeProfile,
+  WorkspaceType,
+} from "#/types/workspace-types";
 
 const STORAGE_KEY = "openhands-agent-server-conversation-metadata";
 
@@ -37,6 +42,12 @@ export interface ConversationMetadata {
   active_profile?: string | null;
   /** Store plugin coordinates only; parameters may contain secrets. */
   plugins?: PluginSpec[] | null;
+  /** Workspace kind chosen at creation (`code` default when omitted). */
+  workspace_type?: WorkspaceType | null;
+  /** Engagement Manager id — required for pentest workspaces. */
+  engagement_id?: string | null;
+  autonomy_mode?: AutonomyMode | null;
+  runtime_profile?: PentestRuntimeProfile | null;
 }
 
 export const toPluginCoordinates = (plugin: PluginSpec): PluginSpec => ({
