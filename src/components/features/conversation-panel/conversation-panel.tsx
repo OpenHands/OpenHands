@@ -364,7 +364,7 @@ export function ConversationPanel({
   );
 
   React.useEffect(() => {
-    if (!isFetched) {
+    if (!isFetched || hasNextPage) {
       return;
     }
     // Prune pins against the unfiltered loaded pages so archived-but-still-
@@ -374,7 +374,13 @@ export function ConversationPanel({
     const loadedIds =
       data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
     pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
+  }, [
+    activeBackend.id,
+    data,
+    hasNextPage,
+    isFetched,
+    pruneMissingPinnedConversations,
+  ]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
