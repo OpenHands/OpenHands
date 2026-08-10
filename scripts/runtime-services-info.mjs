@@ -2,19 +2,19 @@
  * Single source of truth for the `<RUNTIME_SERVICES>` block.
  *
  * Builds a structured description of the services that are reachable from
- * inside the agent's sandbox. The frontend forwards it (verbatim, as a JSON
- * string) and renders it into the system prompt via
- * `AgentContext.system_message_suffix`, so the agent sees a
+ * inside the agent's sandbox. Agent Canvas backend-serving processes attach it
+ * to `/server_info.runtime_services`; the frontend renders that backend value
+ * into `AgentContext.system_message_suffix`, so the agent sees a
  * `<RUNTIME_SERVICES>` block listing what's available without having to probe.
  *
  * Two callers share this one definition:
  *   - the dev launchers (scripts/dev-*.mjs), which know the stack as a set of
- *     ports and bake the result into `VITE_RUNTIME_SERVICES_INFO` at build time;
+ *     ports and pass the result to ingress/static-server for `/server_info`;
  *   - docker/entrypoint.sh, which runs this file as a CLI (see the bottom of
  *     this module) because in a container the URLs are *runtime* config — the
  *     ports and base URLs are overridable at `docker run` and therefore cannot
- *     be baked into the image at build time. The JSON it prints is injected
- *     into index.html at serve time by scripts/static-server.mjs.
+ *     be baked into the image at build time. The JSON it prints is passed to
+ *     scripts/static-server.mjs and exposed through `/server_info`.
  *
  * URLs are written from the *agent's* point of view (i.e. as the agent should
  * curl/fetch them from inside its sandbox), which is deliberately not the

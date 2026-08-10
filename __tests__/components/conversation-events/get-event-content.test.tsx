@@ -4,6 +4,10 @@ import {
   CANVAS_UI_CLIENT_ACTION_KIND,
   CANVAS_UI_CLIENT_TOOL_NAME,
 } from "#/constants/canvas-ui";
+import {
+  LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
+  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+} from "#/constants/child-conversation";
 import { getEventContent } from "#/components/conversation-events/chat";
 import {
   ActionEvent,
@@ -423,5 +427,60 @@ describe("getEventContent", () => {
     expect(details).toBe(
       "UI command 'open_tab' dispatched to the Agent Canvas frontend.",
     );
+  });
+
+  // Without the explicit mapping the default branch would surface the SDK's
+  // generated discriminator ("CLIENTACTION_LAUNCH_CHILD_CONVERSATION") to users.
+  it("titles the launch-child-conversation tool call and its acknowledgement", () => {
+    const launchAction: ActionEvent = {
+      id: "action-launch",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
+        target: "local",
+        task: "Add a regression test for the parser",
+      },
+      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_call_id: "tool-launch",
+      tool_call: {
+        id: "tool-launch",
+        type: "function",
+        function: {
+          name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+          arguments: '{"target":"local","task":"Add a regression test"}',
+        },
+      },
+      llm_response_id: "response-launch",
+      security_risk: SecurityRisk.LOW,
+      summary: "",
+    };
+    const launchObservation: ObservationEvent = {
+      id: "obs-launch",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_call_id: "tool-launch",
+      action_id: "action-launch",
+      observation: {
+        kind: "ClientToolObservation",
+        content: [{ type: "text", text: "Tool call dispatched to client." }],
+        is_error: false,
+      },
+    };
+
+    render(<span>{getEventContent(launchAction).title}</span>);
+    expect(
+      screen.getByText("ACTION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+    ).toBeInTheDocument();
+
+    render(
+      <span>{getEventContent(launchObservation, launchAction).title}</span>,
+    );
+    expect(
+      screen.getByText("OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+    ).toBeInTheDocument();
   });
 });

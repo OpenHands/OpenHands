@@ -1,47 +1,19 @@
-export type MCPOAuthClientAuthMethod =
-  | "none"
-  | "client_secret_post"
-  | "client_secret_basic"
-  | "private_key_jwt";
+import type {
+  MCPAuthCredential,
+  MCPOAuthAuthentication,
+} from "@openhands/typescript-client";
 
-export type MCPJsonValue =
-  | boolean
-  | number
-  | string
-  | null
-  | MCPJsonValue[]
-  | { [key: string]: MCPJsonValue };
+export type {
+  MCPAuthCredential,
+  MCPOAuthAuthentication,
+  MCPOAuthState,
+} from "@openhands/typescript-client";
 
-export interface MCPOAuthAuthenticationConfig {
-  type: "oauth";
-  client_auth_method?: MCPOAuthClientAuthMethod | null;
-  scopes?: string | string[] | null;
-  client_name?: string | null;
-  client_metadata_url?: string | null;
-  client_id?: string | null;
-  client_secret?: string | null;
-  additional_client_metadata?: Record<string, MCPJsonValue> | null;
-}
-
-export type MCPAuthenticationConfig = MCPOAuthAuthenticationConfig;
-
-export interface MCPOAuthState {
-  tokens?: Record<string, MCPJsonValue> | null;
-  client_info?: Record<string, MCPJsonValue> | null;
-  token_expires_at?: number | null;
-}
-
-export type MCPAuthCredential =
-  | { strategy: "none" }
-  | { strategy: "api_key"; value?: string | null; header_name?: string | null }
-  | { strategy: "bearer"; value?: string | null }
-  | { strategy: "basic"; username: string; password?: string | null }
-  | { strategy: "header"; headers?: Record<string, string> | null }
-  | {
-      strategy: "oauth2";
-      authentication?: MCPAuthenticationConfig | null;
-      state?: MCPOAuthState | null;
-    };
+export type MCPAuthenticationConfig = MCPOAuthAuthentication;
+export type MCPOAuthAuthenticationConfig = MCPOAuthAuthentication;
+export type MCPOAuthClientAuthMethod = NonNullable<
+  MCPOAuthAuthentication["client_auth_method"]
+>;
 
 export const MCP_AUTH_STRATEGIES = [
   "none",

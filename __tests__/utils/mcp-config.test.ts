@@ -1,421 +1,463 @@
 import { describe, expect, it } from "vitest";
+import type { MCPConfig } from "@openhands/typescript-client";
+import type { MCPServerConfig } from "#/types/mcp-server";
+import {
+  buildMcpServerPatch,
+  buildRenameMcpConfigPatch,
+  MCP_HEADER_REMOVAL_ERROR,
+  MCP_RENAME_CREDENTIAL_ERROR,
+  parseMcpConfig,
+  REDACTED_MCP_SECRET_VALUE,
+  toCanonicalMcpServer,
+} from "#/utils/mcp-config";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 
-import { parseMcpConfig, toSdkMcpConfig } from "#/utils/mcp-config";
-import type { MCPConfig } from "#/types/settings";
-
-describe("toSdkMcpConfig", () => {
-  it("uses bare base names when there are no collisions across server types", () => {
-    // The bug we're guarding against: a shared monotonic counter would
-    // emit "sse", "shttp_1", "myname_2" — bumping the stdio suffix every
-    // time another server type's count changes. With per-base collision
-    // suffixing, unrelated entries keep their bare names.
-    const config: MCPConfig = {
-      sse_servers: [{ url: "https://sse.example" }],
-      shttp_servers: [{ url: "https://shttp.example" }],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out).not.toBeNull();
-    expect(Object.keys(out!)).toEqual(["sse", "shttp", "myname"]);
-  });
-
-  it("only suffixes when the same base actually collides", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { url: "https://a.example" },
-        { url: "https://b.example" },
-        { url: "https://c.example" },
-      ],
-      shttp_servers: [
-        { url: "https://d.example" },
-        { url: "https://e.example" },
-      ],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual([
-      "sse",
-      "sse_1",
-      "sse_2",
-      "shttp",
-      "shttp_1",
-    ]);
-  });
-
-  it("preserves stdio names verbatim when distinct, even with sse/shttp present", () => {
-    // Adding sse/shttp servers must not rename existing stdio entries.
-    // This is the exact scenario the user reported: numbers appearing
-    // on their stdio MCP server names when they edit unrelated entries.
-    const config: MCPConfig = {
-      sse_servers: [{ url: "https://x" }, { url: "https://y" }],
-      shttp_servers: [{ url: "https://z" }],
-      stdio_servers: [
-        { name: "github", command: "/bin/gh" },
-        { name: "filesystem", command: "/bin/fs" },
-      ],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out!).toMatchObject({
-      sse: { url: "https://x" },
-      sse_1: { url: "https://y" },
-      shttp: { url: "https://z" },
-      github: { command: "/bin/gh" },
-      filesystem: { command: "/bin/fs" },
-    });
-  });
-
-  it("suffixes only colliding stdio names", () => {
-    const config: MCPConfig = {
-      sse_servers: [],
-      shttp_servers: [],
-      stdio_servers: [
-        { name: "tool", command: "/bin/a" },
-        { name: "tool", command: "/bin/b" },
-        { name: "other", command: "/bin/c" },
-      ],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["tool", "tool_1", "other"]);
-  });
-
-  it("falls back to a 'stdio' base when a stdio entry has no name", () => {
-    const config: MCPConfig = {
-      sse_servers: [],
-      shttp_servers: [],
-      stdio_servers: [
-        { name: "", command: "/bin/a" },
-        { name: "", command: "/bin/b" },
-      ],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["stdio", "stdio_1"]);
-  });
-
-  it("uses a user-given name as the sse/shttp dict key", () => {
-    const config: MCPConfig = {
-      sse_servers: [{ name: "my_search", url: "https://sse.example" }],
-      shttp_servers: [{ name: "my_docs", url: "https://shttp.example" }],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["my_search", "my_docs"]);
-    expect(out!.my_search).toMatchObject({
-      url: "https://sse.example",
-      transport: "sse",
-    });
-  });
-
-  it("preserves valid hyphenated MCP server names as SDK keys", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { name: "integrations-hub", url: "https://hub.example/mcp" },
-      ],
-      shttp_servers: [],
-      stdio_servers: [{ name: "docs-server", command: "npx" }],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual([
-      "integrations-hub",
-      "docs-server",
-    ]);
-  });
-
-  it("falls back to the base name for unnamed sse/shttp entries", () => {
-    const config: MCPConfig = {
-      sse_servers: [{ name: "named", url: "https://a" }, { url: "https://b" }],
-      shttp_servers: [{ url: "https://c" }],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["named", "sse", "shttp"]);
-  });
-
-  it("de-dups colliding user-given sse/shttp names with a suffix", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        { name: "search", url: "https://a" },
-        { name: "search", url: "https://b" },
-      ],
-      shttp_servers: [],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(Object.keys(out!)).toEqual(["search", "search_1"]);
-  });
-
-  it("round-trips a user-given sse/shttp name through parse → write", () => {
-    const persisted = {
-      my_search: { url: "https://x", transport: "sse" },
-      my_docs: { url: "https://y" },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.sse_servers).toEqual([
-      { name: "my_search", url: "https://x" },
-    ]);
-    expect(parsed.shttp_servers).toEqual([
-      { name: "my_docs", url: "https://y" },
-    ]);
-
-    const written = toSdkMcpConfig(parsed);
-    expect(Object.keys(written!).sort()).toEqual(["my_docs", "my_search"]);
-  });
-
-  it("parses cloud SDK MCPConfig wrapper shape", () => {
-    const persisted = {
-      mcpServers: {
-        "cloud-weather": {
-          url: "https://weather.example/mcp",
-          transport: "http",
-        },
-        "cloud-files": {
-          command: "uvx",
-          args: ["mcp-server-files"],
-        },
+describe("canonical MCP configuration", () => {
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("keeps settings map keys as stable identities across transport grouping", () => {
+    const first = parseMcpConfig({
+      github: {
+        transport: "http",
+        url: "https://github.example/mcp",
       },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.shttp_servers).toEqual([
-      { name: "cloud-weather", url: "https://weather.example/mcp" },
-    ]);
-    expect(parsed.stdio_servers).toEqual([
-      {
-        name: "cloud-files",
-        command: "uvx",
-        args: ["mcp-server-files"],
+      filesystem: {
+        transport: "stdio",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem"],
       },
-    ]);
-  });
-
-  it("does not unwrap a valid server named mcpServers", () => {
-    const parsed = parseMcpConfig({
-      mcpServers: {
-        url: "https://meta.example/mcp",
+    });
+    const reordered = parseMcpConfig({
+      filesystem: {
+        transport: "stdio",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem"],
+      },
+      github: {
+        transport: "http",
+        url: "https://github.example/mcp",
       },
     });
 
-    expect(parsed.shttp_servers).toEqual([
-      { name: "mcpServers", url: "https://meta.example/mcp" },
-    ]);
-  });
-
-  it("does not surface auto-generated sse/shttp keys as user names", () => {
-    // Keys matching the fallback pattern carry no user intent, so parsing
-    // must leave `name` unset — otherwise the auto key would become a
-    // sticky, user-facing name on the next edit.
-    const persisted = {
-      sse: { url: "https://a", transport: "sse" },
-      sse_1: { url: "https://b", transport: "sse" },
-      shttp: { url: "https://c" },
-      shttp_2: { url: "https://d" },
-    };
-
-    const parsed = parseMcpConfig(persisted);
-
-    expect(parsed.sse_servers).toEqual([
-      { url: "https://a" },
-      { url: "https://b" },
-    ]);
-    expect(parsed.shttp_servers).toEqual([
-      { url: "https://c" },
-      { url: "https://d" },
-    ]);
-  });
-
-  it("returns null when there are no servers", () => {
     expect(
-      toSdkMcpConfig({ sse_servers: [], shttp_servers: [], stdio_servers: [] }),
-    ).toBeNull();
+      flattenMcpConfig(first)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["filesystem", "github"]);
+    expect(
+      flattenMcpConfig(reordered)
+        .map(({ id }) => id)
+        .sort(),
+    ).toEqual(["filesystem", "github"]);
   });
 
-  it("serializes remote API keys through the FastMCP auth field", () => {
-    const config: MCPConfig = {
-      sse_servers: [
-        {
-          url: "https://sse.example",
-          auth: { strategy: "bearer", value: "sse-secret" },
+  it("normalizes the cloud wrapper while preserving tagged auth and OAuth state", () => {
+    expect(
+      parseMcpConfig({
+        mcpServers: {
+          github: {
+            url: "https://github.example/mcp",
+            transport: "streamable-http",
+            auth: {
+              strategy: "oauth2",
+              authentication: {
+                type: "oauth",
+                client_auth_method: "client_secret_post",
+              },
+              state: {
+                tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+              },
+            },
+          },
         },
-      ],
-      shttp_servers: [
-        {
-          url: "https://shttp.example",
-          auth: { strategy: "bearer", value: "shttp-secret" },
+      }),
+    ).toEqual({
+      github: {
+        transport: "streamable-http",
+        url: "https://github.example/mcp",
+        auth: {
+          strategy: "oauth2",
+          authentication: {
+            type: "oauth",
+            client_auth_method: "client_secret_post",
+          },
+          state: {
+            tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+          },
         },
-      ],
-      stdio_servers: [],
-    };
-
-    const out = toSdkMcpConfig(config);
-
-    expect(out).toEqual({
-      sse: {
-        url: "https://sse.example",
-        transport: "sse",
-        auth: { strategy: "bearer", value: "sse-secret" },
-      },
-      shttp: {
-        url: "https://shttp.example",
-        transport: "http",
-        auth: { strategy: "bearer", value: "shttp-secret" },
       },
     });
   });
 
-  it("keeps names stable across a parse → write round trip", () => {
-    // Simulates loading the user's persisted settings, parsing them,
-    // and re-serializing on save (which is what happens on every edit).
-    // The keys must not drift between trips.
-    const persisted = {
-      sse: { url: "https://x", transport: "sse" },
-      sse_1: { url: "https://y", transport: "sse" },
-      shttp: { url: "https://z" },
-      github: { command: "/bin/gh" },
-    };
+  it("preserves a disabled server while treating omitted enabled as true", () => {
+    const config = parseMcpConfig({
+      disabled: { command: "npx", enabled: false },
+      enabled: { command: "npx" },
+    });
 
-    const parsed = parseMcpConfig(persisted);
-    const written = toSdkMcpConfig(parsed);
-
-    expect(written).not.toBeNull();
-    expect(Object.keys(written!).sort()).toEqual(Object.keys(persisted).sort());
-  });
-
-  it("does not bump the suffix on a stdio name when an sse server is added", () => {
-    // Concretely demonstrates the user's report: editing/adding an sse
-    // server must leave the stdio name untouched. The previous shared
-    // counter implementation would rename "myname" → "myname_2" here.
-    const before: MCPConfig = {
-      sse_servers: [{ url: "https://a" }],
-      shttp_servers: [],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-    const after: MCPConfig = {
-      sse_servers: [{ url: "https://a" }, { url: "https://b" }],
-      shttp_servers: [],
-      stdio_servers: [{ name: "myname", command: "/bin/run" }],
-    };
-
-    const out1 = toSdkMcpConfig(before)!;
-    const out2 = toSdkMcpConfig(after)!;
-
-    expect("myname" in out1).toBe(true);
-    expect("myname" in out2).toBe(true);
+    expect(flattenMcpConfig(config)).toEqual([
+      expect.objectContaining({ id: "disabled", enabled: false }),
+      expect.objectContaining({ id: "enabled", enabled: undefined }),
+    ]);
+    expect(toCanonicalMcpServer({
+      id: "disabled",
+      type: "stdio",
+      command: "npx",
+      enabled: false,
+    })).toMatchObject({ enabled: false });
   });
 });
 
-describe("parseMcpConfig / toSdkMcpConfig — enabled flag", () => {
-  it("round-trips a disabled server without flagging its enabled siblings", () => {
-    // Every mutation re-serializes the whole map, so a disabled server has to
-    // survive edits made to unrelated entries. An *enabled* server must come
-    // back out with no flag at all — the SDK defaults `enabled` to true, and
-    // omitting it is what clears a previously persisted `enabled: false`.
-    const persisted = {
-      off_remote: { url: "https://off.example/mcp", enabled: false },
-      on_remote: { url: "https://on.example/mcp" },
-      off_stdio: { command: "/bin/off", enabled: false },
+describe("MCP sparse patches", () => {
+  const storedRemote: MCPConfig["github"] = {
+    transport: "http",
+    url: "https://github.example/mcp",
+    auth: {
+      strategy: "bearer",
+      value: REDACTED_MCP_SECRET_VALUE,
+    },
+  };
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("omits unchanged redacted auth while updating a non-secret field", () => {
+    const edited: MCPServerConfig = {
+      id: "github",
+      type: "shttp",
+      name: "github",
+      url: "https://github.example/v2/mcp",
+      auth: storedRemote.auth ?? undefined,
     };
 
-    const roundTripped = toSdkMcpConfig(parseMcpConfig(persisted));
-
-    expect(roundTripped).toEqual({
-      off_remote: {
-        url: "https://off.example/mcp",
-        transport: "http",
-        enabled: false,
-      },
-      on_remote: { url: "https://on.example/mcp", transport: "http" },
-      off_stdio: { command: "/bin/off", enabled: false },
-    });
-  });
-});
-
-describe("parseMcpConfig / toSdkMcpConfig — auth: oauth round-trip", () => {
-  it("round-trips auth metadata and state for remote OAuth servers", () => {
-    const persisted = {
-      superhuman_mail: {
-        url: "https://mcp.mail.superhuman.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "none",
-          },
-          state: {
-            tokens: { access_token: "gAAAAencrypted-access-token" },
-            token_expires_at: 12345,
-          },
-        },
-      },
-    };
-
-    const roundTripped = toSdkMcpConfig(parseMcpConfig(persisted));
-
-    expect(roundTripped).toEqual({
-      superhuman_mail: {
-        url: "https://mcp.mail.superhuman.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "none",
-          },
-          state: {
-            tokens: { access_token: "gAAAAencrypted-access-token" },
-            token_expires_at: 12345,
-          },
-        },
-      },
+    expect(buildMcpServerPatch(storedRemote, edited)).toEqual({
+      transport: "http",
+      url: "https://github.example/v2/mcp",
     });
   });
 
-  it("keeps private_key_jwt OAuth client authentication metadata", () => {
-    const persisted = {
-      oauth: {
-        url: "https://mcp.example.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "private_key_jwt",
-          },
+  it("replaces auth when the user enters a new credential", () => {
+    const edited: MCPServerConfig = {
+      id: "github",
+      type: "shttp",
+      name: "github",
+      url: storedRemote.url,
+      auth: { strategy: "bearer", value: "github_pat_replacement" },
+    };
+
+    expect(buildMcpServerPatch(storedRemote, edited)).toMatchObject({
+      auth: { strategy: "bearer", value: "github_pat_replacement" },
+    });
+  });
+
+  it("clears auth explicitly when the user selects no authentication", () => {
+    const edited: MCPServerConfig = {
+      id: "github",
+      type: "shttp",
+      name: "github",
+      url: storedRemote.url,
+    };
+
+    expect(buildMcpServerPatch(storedRemote, edited)).toMatchObject({
+      auth: null,
+    });
+  });
+
+  it("deletes stale auth fields when replacing one strategy with another", () => {
+    const storedOAuth = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: { type: "oauth" as const, scopes: "mail.read" },
+        state: { tokens: { access_token: REDACTED_MCP_SECRET_VALUE } },
+      },
+    };
+    const bearerEdit: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: storedOAuth.url,
+      auth: { strategy: "bearer", value: "replacement-token" },
+    };
+
+    expect(buildMcpServerPatch(storedOAuth, bearerEdit).auth).toEqual({
+      strategy: "bearer",
+      value: "replacement-token",
+      authentication: null,
+      state: null,
+    });
+
+    const storedHeader = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: { "X-API-Key": REDACTED_MCP_SECRET_VALUE },
+      },
+    };
+    const oauthEdit: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: storedHeader.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth", scopes: "mail.read" },
+      },
+    };
+
+    expect(buildMcpServerPatch(storedHeader, oauthEdit).auth).toEqual({
+      strategy: "oauth2",
+      authentication: { type: "oauth", scopes: "mail.read" },
+      headers: null,
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("applies added and changed header-auth headers while preserving redacted leaves", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "us-east-1",
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "header",
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "eu-west-1",
+          "X-Trace": "on",
         },
       },
     };
 
-    expect(toSdkMcpConfig(parseMcpConfig(persisted))).toEqual({
-      oauth: {
-        url: "https://mcp.example.com/mcp",
-        transport: "http",
-        auth: {
-          strategy: "oauth2",
-          authentication: {
-            type: "oauth",
-            client_auth_method: "private_key_jwt",
-          },
+    expect(buildMcpServerPatch(stored, edited).auth).toEqual({
+      strategy: "header",
+      headers: { "X-Region": "eu-west-1", "X-Trace": "on" },
+    });
+  });
+
+  // @spec MCP-002 — Secret patches preserve user intent
+  it("rejects removing an individual header from header auth", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "header" as const,
+        headers: {
+          "X-API-Key": REDACTED_MCP_SECRET_VALUE,
+          "X-Region": "us-east-1",
         },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "header",
+        headers: { "X-Region": "eu-west-1" },
+      },
+    };
+
+    expect(() => buildMcpServerPatch(stored, edited)).toThrow(
+      MCP_HEADER_REMOVAL_ERROR,
+    );
+  });
+
+  it("patches OAuth metadata and a replacement secret without sending redacted state", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: {
+          type: "oauth" as const,
+          client_auth_method: "client_secret_post" as const,
+          scopes: "mail.read",
+          client_name: "OpenHands Canvas",
+          client_metadata_url: "https://mail.example/oauth/client.json",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+        },
+        state: {
+          tokens: {
+            access_token: REDACTED_MCP_SECRET_VALUE,
+            refresh_token: REDACTED_MCP_SECRET_VALUE,
+          },
+          token_expires_at: 123,
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: {
+          type: "oauth",
+          client_auth_method: "client_secret_basic",
+          scopes: "mail.read mail.send",
+          client_id: "new-client",
+          client_secret: "replacement-secret",
+        },
+        state: stored.auth.state,
+      },
+    };
+
+    const patch = buildMcpServerPatch(stored, edited);
+
+    expect(patch.auth).toEqual({
+      strategy: "oauth2",
+      authentication: {
+        type: "oauth",
+        client_auth_method: "client_secret_basic",
+        scopes: "mail.read mail.send",
+        client_id: "new-client",
+        client_secret: "replacement-secret",
+      },
+    });
+    expect(JSON.stringify(patch)).not.toContain(REDACTED_MCP_SECRET_VALUE);
+  });
+
+  it("sends nested nulls for explicitly cleared OAuth authentication fields", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://mail.example/mcp",
+      auth: {
+        strategy: "oauth2" as const,
+        authentication: {
+          type: "oauth" as const,
+          client_auth_method: "client_secret_post" as const,
+          scopes: "mail.read",
+          client_id: "old-client",
+          client_secret: REDACTED_MCP_SECRET_VALUE,
+        },
+        state: {
+          tokens: { access_token: REDACTED_MCP_SECRET_VALUE },
+        },
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "mail",
+      type: "shttp",
+      name: "mail",
+      url: stored.url,
+      auth: {
+        strategy: "oauth2",
+        authentication: { type: "oauth" },
+        state: stored.auth.state,
+      },
+    };
+
+    expect(buildMcpServerPatch(stored, edited).auth).toEqual({
+      strategy: "oauth2",
+      authentication: {
+        type: "oauth",
+        client_auth_method: null,
+        scopes: null,
+        client_id: null,
+        client_secret: null,
+      },
+    });
+  });
+
+  it("omits unchanged redacted env leaves and deletes removed env entries", () => {
+    const stored = {
+      transport: "stdio" as const,
+      command: "npx",
+      env: {
+        API_KEY: REDACTED_MCP_SECRET_VALUE,
+        REGION: "us-east-1",
+      },
+    };
+    const edited: MCPServerConfig = {
+      id: "worker",
+      type: "stdio",
+      name: "worker",
+      command: "npx",
+      env: {
+        API_KEY: REDACTED_MCP_SECRET_VALUE,
+        REGION: "eu-west-1",
+      },
+    };
+
+    expect(buildMcpServerPatch(stored, edited)).toMatchObject({
+      env: { REGION: "eu-west-1" },
+    });
+
+    delete edited.env!.REGION;
+    expect(buildMcpServerPatch(stored, edited)).toMatchObject({
+      env: { REGION: null },
+    });
+  });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("builds a rename as one map patch and rejects hidden secrets", () => {
+    const uncredentialed = {
+      transport: "http" as const,
+      url: "https://docs.example/mcp",
+    };
+    const renamed: MCPServerConfig = {
+      id: "docs",
+      type: "shttp",
+      name: "reference",
+      url: uncredentialed.url,
+    };
+
+    expect(
+      buildRenameMcpConfigPatch("docs", "reference", uncredentialed, renamed),
+    ).toEqual({
+      docs: null,
+      reference: toCanonicalMcpServer(renamed),
+    });
+    expect(() =>
+      buildRenameMcpConfigPatch("github", "github-renamed", storedRemote, {
+        id: "github",
+        type: "shttp",
+        name: "github-renamed",
+        url: storedRemote.url,
+        auth: storedRemote.auth ?? undefined,
+      }),
+    ).toThrow(MCP_RENAME_CREDENTIAL_ERROR);
+  });
+
+  // @spec MCP-003 — Settings map keys are stable MCP identities
+  it("preserves stored remote metadata when renaming a server", () => {
+    const stored = {
+      transport: "http" as const,
+      url: "https://catalog.example/mcp",
+      description: "Catalog-managed server",
+      icon: "catalog-icon",
+      headers: { "X-Catalog-Mode": "managed" },
+      sse_read_timeout: 5_000,
+      keep_alive: true,
+    };
+    const renamed: MCPServerConfig = {
+      id: "catalog",
+      type: "shttp",
+      name: "renamed-catalog",
+      url: "https://catalog.example/v2/mcp",
+    };
+
+    expect(
+      buildRenameMcpConfigPatch("catalog", "renamed-catalog", stored, renamed),
+    ).toEqual({
+      catalog: null,
+      "renamed-catalog": {
+        ...stored,
+        url: renamed.url,
       },
     });
   });

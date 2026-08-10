@@ -38,8 +38,10 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
   ConversationErrorEvent,
@@ -643,6 +645,17 @@ export function ConversationWebSocketProvider({
           // the actual UI change happens here on the client.
           if (isCanvasUIActionEvent(event)) {
             handleCanvasUIAction(event.action, conversationId ?? null);
+          }
+
+          // Same client-tool pattern, but the work is a network call: launch
+          // the requested child conversation and post the outcome back so the
+          // agent learns the id the server-side acknowledgement can't carry.
+          if (conversationId && isLaunchChildConversationActionEvent(event)) {
+            void handleLaunchChildConversationAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
           }
         }
       } catch (error) {
