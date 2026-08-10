@@ -60,32 +60,35 @@ if (typeof requestAnimationFrame === "undefined") {
   );
 }
 
-if (typeof ProgressEvent === "undefined") {
-  class MockProgressEvent extends Event {
-    readonly lengthComputable: boolean;
+// MSW's XMLHttpRequest interceptor may dispatch progress events while
+// Vitest/jsdom is tearing down globals between files (or after afterAll).
+// Always reinstall a process-level ProgressEvent outside `vi.stubGlobal()`
+// so late interceptor callbacks do not hit `ReferenceError: ProgressEvent is
+// not defined` (seen on ubuntu CI via home-chat-launcher → @mswjs/interceptors).
+class MockProgressEvent extends Event {
+  readonly lengthComputable: boolean;
 
-    readonly loaded: number;
+  readonly loaded: number;
 
-    readonly total: number;
+  readonly total: number;
 
-    constructor(type: string, eventInitDict: ProgressEventInit = {}) {
-      super(type, eventInitDict);
-      this.lengthComputable = eventInitDict.lengthComputable ?? false;
-      this.loaded = eventInitDict.loaded ?? 0;
-      this.total = eventInitDict.total ?? 0;
-    }
+  constructor(type: string, eventInitDict: ProgressEventInit = {}) {
+    super(type, eventInitDict);
+    this.lengthComputable = eventInitDict.lengthComputable ?? false;
+    this.loaded = eventInitDict.loaded ?? 0;
+    this.total = eventInitDict.total ?? 0;
   }
+}
 
-  // MSW's XMLHttpRequest interceptor may dispatch progress events while
-  // Vitest is tearing down globals between files. Keep this process-level
-  // fallback outside `vi.stubGlobal()` so `vi.unstubAllGlobals()` does not
-  // remove it before late interceptor callbacks settle.
+function installProgressEventPolyfill(): void {
   Object.defineProperty(globalThis, "ProgressEvent", {
     configurable: true,
     writable: true,
     value: MockProgressEvent,
   });
 }
+
+installProgressEventPolyfill();
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
@@ -151,8 +154,11 @@ afterEach(async () => {
   // tests that install fake timers.
   await Promise.resolve();
   await Promise.resolve();
+  // jsdom file teardown can drop ProgressEvent; reinstall before late MSW XHR.
+  installProgressEventPolyfill();
 });
 afterAll(() => {
   server.close();
   vi.unstubAllGlobals();
+  installProgressEventPolyfill();
 });
