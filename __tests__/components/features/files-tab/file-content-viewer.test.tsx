@@ -121,4 +121,28 @@ describe("FileContentViewer", () => {
       ).toBeInTheDocument();
     },
   );
+
+  // Regression test for the "PDF previews render blank — 'This page has been
+  // blocked by Chrome'" bug (#16474). Chromium refuses to run its built-in
+  // PDF viewer inside a sandboxed browsing context, so the PDF iframe must
+  // NOT carry a `sandbox` attribute. The file is served same-origin from the
+  // agent-server workspace fileserver, so omitting the sandbox keeps the
+  // parent's origin rules intact while letting Chrome's PDF viewer engage.
+  it("renders the PDF preview iframe WITHOUT a sandbox attribute so Chromium's built-in PDF viewer is not blocked", async () => {
+    // Arrange: a `.pdf` extension routes the file through the `kind === "pdf"`
+    // branch without fetching the body (image/pdf never go through `fetch`).
+    renderViewer("deck.pdf", "rich");
+
+    // Act: locate the preview iframe by its stable test id.
+    const iframe = await screen.findByTestId("file-content-viewer-iframe");
+
+    // Assert: the iframe points at the workspace fileserver URL (built from
+    // the session base URL + relative path) — the base URL may carry a
+    // cache-buster query param appended by the consumer, so we assert the
+    // path prefix rather than the full string. Critically, it does NOT
+    // carry a `sandbox` attribute, which is what caused "This page has
+    // been blocked by Chrome" before the fix.
+    expect(iframe.getAttribute("src")).toMatch(new RegExp(`^${BASE_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}deck\\.pdf`));
+    expect(iframe.hasAttribute("sandbox")).toBe(false);
+  });
 });
