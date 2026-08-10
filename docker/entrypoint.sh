@@ -65,6 +65,9 @@ fi
 PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
+# Internal KasmVNC port (loopback only; never published). Used by desktop-proxy.
+DESKTOP_VNC_PORT="${DESKTOP_VNC_PORT:-${CONFIG_DESKTOP_VNC_PORT:-6901}}"
+export DESKTOP_VNC_PORT
 AGENT_CANVAS_BASE_PATH="${AGENT_CANVAS_BASE_PATH:-${CONFIG_CANVAS_BASE_PATH:-/canvas}}"
 
 # Normalize stack mode (full | backend). Accept common aliases.

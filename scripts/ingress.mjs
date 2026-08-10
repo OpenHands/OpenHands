@@ -47,6 +47,10 @@ import {
   isTranslateProxyRequest,
 } from "./translate-proxy.mjs";
 import {
+  createDesktopProxyHandler,
+  isDesktopProxyRequest,
+} from "./desktop-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
@@ -180,6 +184,7 @@ export function startIngress(config) {
   });
   const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
   const handleTranslateProxy = createTranslateProxyHandler();
+  const handleDesktopProxy = createDesktopProxyHandler({ agentServerUrl });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
@@ -238,6 +243,17 @@ export function startIngress(config) {
       return;
     }
 
+    if (isDesktopProxyRequest(req.url ?? "/")) {
+      void handleDesktopProxy(req, res).catch((err) => {
+        console.error(`Desktop proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
     const backend = route(req.url ?? "/");
 
     if (!backend) {
@@ -260,6 +276,14 @@ export function startIngress(config) {
 
   // Handle WebSocket upgrades
   server.on("upgrade", (req, socket, head) => {
+    if (isDesktopProxyRequest(req.url ?? "/")) {
+      void handleDesktopProxy.handleUpgrade(req, socket, head).catch((err) => {
+        console.error(`Desktop WS proxy error for ${req.url}:`, err);
+        socket.destroy();
+      });
+      return;
+    }
+
     const backend = route(req.url ?? "/");
 
     if (!backend) {

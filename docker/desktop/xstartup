@@ -1,0 +1,18 @@
+#!/bin/sh
+# XFCE session for KasmVNC (agent-canvas Desktop).
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=XFCE
+
+# Prefer the Docker-safe Chromium wrapper when present.
+if [ -x /usr/local/bin/chromium-desktop ]; then
+  export BROWSER=/usr/local/bin/chromium-desktop
+fi
+
+if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-launch >/dev/null 2>&1; then
+  eval "$(dbus-launch --sh-syntax)"
+  export DBUS_SESSION_BUS_ADDRESS
+fi
+
+exec startxfce4

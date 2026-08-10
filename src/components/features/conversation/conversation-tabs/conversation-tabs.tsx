@@ -1,7 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Cloud, Globe, ListTodo, Shield, SquareChevronRight } from "lucide-react";
+import {
+  Cloud,
+  Globe,
+  ListTodo,
+  Monitor,
+  Shield,
+  SquareChevronRight,
+} from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -129,6 +136,15 @@ export function ConversationTabs({
       tooltipContent: t(I18nKey.COMMON$SECURITY),
       tooltipAriaLabel: t(I18nKey.COMMON$SECURITY),
       label: t(I18nKey.COMMON$SECURITY),
+    },
+    {
+      tabValue: "desktop",
+      isActive: isTabActive("desktop"),
+      icon: Monitor,
+      onClick: () => selectTab("desktop"),
+      tooltipContent: t(I18nKey.COMMON$DESKTOP),
+      tooltipAriaLabel: t(I18nKey.COMMON$DESKTOP),
+      label: t(I18nKey.COMMON$DESKTOP),
     },
   ];
 

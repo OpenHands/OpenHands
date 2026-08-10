@@ -73,6 +73,7 @@ RUN node -e " \
     'CONFIG_AGENT_SERVER_PORT=' + c.ports.agentServer, \
     'CONFIG_AUTOMATION_PORT=' + c.ports.automation, \
     'CONFIG_PROXY_PORT=' + c.ports.proxy, \
+    'CONFIG_DESKTOP_VNC_PORT=' + c.ports.desktopVnc, \
     'CONFIG_STATE_SUBDIR=' + c.paths.stateSubdir, \
     'CONFIG_CONVERSATIONS=' + c.paths.conversations, \
     'CONFIG_BASH_EVENTS=' + c.paths.bashEvents, \
@@ -109,10 +110,109 @@ ENV VITE_POSTHOG_API_KEY=${VITE_POSTHOG_API_KEY}
 USER root
 
 # Install system deps required by automation's transitive dependencies
-# (asyncpg needs libpq, which the agent-server base image may not include).
+# (asyncpg needs libpq, which the agent-server base image may not include),
+# plus a light XFCE desktop + KasmVNC for the on-demand Desktop tab.
+# KasmVNC listens on loopback only (ports.desktopVnc); ingress proxies it.
+ARG KASMVNC_VERSION=1.3.4
 RUN if command -v apt-get >/dev/null 2>&1; then \
       apt-get update && \
-      apt-get install -y --no-install-recommends libpq-dev && \
+      apt-get install -y --no-install-recommends \
+        libpq-dev \
+        ca-certificates \
+        curl \
+        wget \
+        dbus-x11 \
+        xfce4 \
+        xfce4-terminal \
+        thunar \
+        xdg-utils \
+        chromium \
+        fonts-liberation \
+        fonts-dejavu-core \
+      || apt-get install -y --no-install-recommends \
+        libpq-dev \
+        ca-certificates \
+        curl \
+        wget \
+        dbus-x11 \
+        xfce4 \
+        xfce4-terminal \
+        thunar \
+        xdg-utils \
+        fonts-dejavu-core; \
+      # Chromium in Docker needs --no-sandbox; wrap and register as default browser.
+      if command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1; then \
+        CHROME_BIN="$(command -v chromium || command -v chromium-browser)"; \
+        printf '%s\n' \
+          '#!/bin/sh' \
+          "exec \"${CHROME_BIN}\" --no-sandbox --disable-dev-shm-usage --disable-gpu \"\$@\"" \
+          > /usr/local/bin/chromium-desktop && chmod +x /usr/local/bin/chromium-desktop; \
+        printf '%s\n' \
+          '[Desktop Entry]' \
+          'Version=1.0' \
+          'Name=Chromium' \
+          'GenericName=Web Browser' \
+          'Comment=Access the Internet' \
+          'Exec=/usr/local/bin/chromium-desktop %U' \
+          'Terminal=false' \
+          'Type=Application' \
+          'Icon=chromium' \
+          'Categories=Network;WebBrowser;' \
+          'MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;' \
+          'StartupNotify=true' \
+          > /usr/share/applications/chromium-desktop.desktop; \
+        # Point stock Chromium .desktop entries and XFCE "Web Browser" at the wrapper.
+        for desk in /usr/share/applications/chromium.desktop \
+                    /usr/share/applications/chromium-browser.desktop; do \
+          if [ -f "${desk}" ]; then \
+            sed -i -E \
+              's|^Exec=([^ ]*chromium(-browser)?)|Exec=/usr/local/bin/chromium-desktop|' \
+              "${desk}" || true; \
+          fi; \
+        done; \
+        mkdir -p /home/openhands/.config/xfce4 /usr/share/xfce4/helpers; \
+        printf '%s\n' \
+          '[Desktop Entry]' \
+          'Version=1.0' \
+          'Type=X-XFCE-Helper' \
+          'Name=Chromium' \
+          'Icon=chromium' \
+          'StartupNotify=true' \
+          'X-XFCE-Binaries=chromium-desktop;chromium;chromium-browser;' \
+          'X-XFCE-Category=WebBrowser' \
+          'X-XFCE-Commands=%B;%B' \
+          'X-XFCE-CommandsWithParameter=%B \"%s\";%B \"%s\"' \
+          > /usr/share/xfce4/helpers/chromium-desktop.desktop; \
+        printf '%s\n' 'WebBrowser=chromium-desktop' \
+          > /home/openhands/.config/xfce4/helpers.rc; \
+        printf '%s\n' \
+          '[Default Applications]' \
+          'text/html=chromium-desktop.desktop' \
+          'x-scheme-handler/http=chromium-desktop.desktop' \
+          'x-scheme-handler/https=chromium-desktop.desktop' \
+          'x-scheme-handler/about=chromium-desktop.desktop' \
+          'x-scheme-handler/unknown=chromium-desktop.desktop' \
+          > /home/openhands/.config/mimeapps.list; \
+        chown -R openhands:openhands /home/openhands/.config; \
+        update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/local/bin/chromium-desktop 200 || true; \
+        update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/local/bin/chromium-desktop 200 || true; \
+      else \
+        echo "WARN: Chromium not available from apt — Desktop browser shortcut may fail"; \
+      fi; \
+      . /etc/os-release; \
+      case "${VERSION_CODENAME:-}" in \
+        jammy|noble|focal) KASM_DISTRO=jammy ;; \
+        bookworm|trixie|bullseye) KASM_DISTRO=bookworm ;; \
+        *) KASM_DISTRO=jammy ;; \
+      esac; \
+      ARCH="$(dpkg --print-architecture)"; \
+      KASM_DEB="kasmvncserver_${KASM_DISTRO}_${KASMVNC_VERSION}_${ARCH}.deb"; \
+      wget -q -O "/tmp/${KASM_DEB}" \
+        "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/${KASM_DEB}" \
+      && apt-get install -y --no-install-recommends "/tmp/${KASM_DEB}" \
+      && rm -f "/tmp/${KASM_DEB}" \
+      && (getent group ssl-cert >/dev/null && usermod -aG ssl-cert openhands || true) \
+      || echo "WARN: KasmVNC install failed — Desktop tab will report unavailable"; \
       rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -174,6 +274,12 @@ COPY scripts/plane-proxy.mjs /opt/agent-canvas/plane-proxy.mjs
 COPY scripts/dependency-track-proxy.mjs /opt/agent-canvas/dependency-track-proxy.mjs
 # Imported by static-server.mjs / ingress.mjs for /api/integrations/translate.
 COPY scripts/translate-proxy.mjs /opt/agent-canvas/translate-proxy.mjs
+# Imported by static-server.mjs / ingress.mjs for /api/desktop (KasmVNC).
+COPY scripts/desktop-proxy.mjs /opt/agent-canvas/desktop-proxy.mjs
+COPY docker/desktop/ /opt/agent-canvas/desktop/
+RUN chmod +x /opt/agent-canvas/desktop/start-desktop.sh \
+             /opt/agent-canvas/desktop/stop-desktop.sh \
+             /opt/agent-canvas/desktop/xstartup
 COPY --from=frontend-build /build/node_modules/httpxy /opt/agent-canvas/node_modules/httpxy
 COPY --from=frontend-build /build/node_modules/sirv /opt/agent-canvas/node_modules/sirv
 COPY --from=frontend-build /build/node_modules/@polka /opt/agent-canvas/node_modules/@polka

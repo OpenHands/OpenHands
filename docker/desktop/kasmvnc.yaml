@@ -1,0 +1,20 @@
+# KasmVNC config for agent-canvas Desktop tab.
+# Bound to loopback only — ingress/static-server proxy is the sole entrypoint.
+network:
+  protocol: http
+  interface: 127.0.0.1
+  websocket_port: 6901
+  use_ipv4: true
+  use_ipv6: false
+  ssl:
+    require_ssl: false
+
+desktop:
+  resolution:
+    width: 1280
+    height: 720
+  allow_resize: true
+  pixel_depth: 24
+
+command_line:
+  prompt: false

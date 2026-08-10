@@ -35,7 +35,7 @@
 services:
   agent-canvas:
     # x-release-please-version
-    image: ${AGENT_CANVAS_IMAGE:-ghcr.io/openhands/agent-canvas:1.10.0}
+    image: agent-canvas:local
     build:
       context: .
       dockerfile: docker/Dockerfile
