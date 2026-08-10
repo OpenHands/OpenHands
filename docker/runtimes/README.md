@@ -127,6 +127,40 @@ Workflow: `.github/workflows/docker-runtimes.yml`
 - Nikto installed from upstream git (`sullo/nikto`) — not in Debian bookworm main.
 - Nuclei pinned to **3.3.9** (linux amd64).
 
+## MCP servers (PROJETOSIN-187)
+
+`runtime-web` installs the Python MCP SDK (`mcp`, `httpx`) via `requirements.txt`.
+The stdio servers live in-repo at `services/mcp-servers/` (`mcp-recon`, `mcp-webscan`)
+and are launched on demand by the agent-server — **not** by `entrypoint.sh`.
+
+Mount or bake the package tree at `/opt/mcp-servers` (compose volume is fine for MVP):
+
+```yaml
+volumes:
+  - ./services/mcp-servers:/opt/mcp-servers:ro
+environment:
+  PENTEST_MCP_RECON_CMD: "python /opt/mcp-servers/mcp-recon/server.py"
+  PENTEST_MCP_WEBSCAN_CMD: "python /opt/mcp-servers/mcp-webscan/server.py"
+  PENTEST_SCOPE_ALLOWLIST: "example.com,10.0.0.0/8"
+  FINDINGS_SERVICE_URL: "http://findings-service:8000"
+  SESSION_API_KEY: "${SESSION_API_KEY}"
+```
+
+Example Agent Server / engagement `config.toml` fragment:
+
+```toml
+[mcp.mcp-recon]
+command = "python"
+args = ["/opt/mcp-servers/mcp-recon/server.py"]
+
+[mcp.mcp-webscan]
+command = "python"
+args = ["/opt/mcp-servers/mcp-webscan/server.py"]
+```
+
+Attach `mcp-recon` only when the session has `pentest.recon.run`; attach passive
+webscan tools with `pentest.scan.passive` and active tools with `pentest.scan.active`.
+
 ## Size targets (AC-186-6)
 
 | Image | Soft limit |

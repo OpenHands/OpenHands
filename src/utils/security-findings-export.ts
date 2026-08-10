@@ -107,9 +107,7 @@ export function serializeSecurityFindingsCsv(
   const lines = [header];
   for (const row of rows) {
     const values = rowValues(row, labels);
-    lines.push(
-      EXPORT_COLUMNS.map((key) => csvEscape(values[key])).join(","),
-    );
+    lines.push(EXPORT_COLUMNS.map((key) => csvEscape(values[key])).join(","));
   }
   // UTF-8 BOM so Excel on Windows opens Portuguese accents correctly.
   return `\uFEFF${lines.join("\n")}\n`;
@@ -220,7 +218,10 @@ export function openSecurityFindingsPrintPdf(
   const popup = window.open(url, "_blank", "noopener,noreferrer");
   if (!popup) {
     // Popup blocked — fall back to downloading the HTML report.
-    downloadBlob(blob, getSecurityFindingsExportFilename("pdf").replace(/\.pdf$/, ".html"));
+    downloadBlob(
+      blob,
+      getSecurityFindingsExportFilename("pdf").replace(/\.pdf$/, ".html"),
+    );
     URL.revokeObjectURL(url);
     return;
   }

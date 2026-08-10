@@ -60,7 +60,8 @@ export const LOCAL_MCP_CATALOG: IntegrationCatalogEntry[] = [
               type: "text",
               placeholder: "your-project-id",
               required: true,
-              helperText: "Project ID from the Appwrite Console project settings.",
+              helperText:
+                "Project ID from the Appwrite Console project settings.",
               helperLink: "https://cloud.appwrite.io/console",
             },
             {
@@ -71,8 +72,7 @@ export const LOCAL_MCP_CATALOG: IntegrationCatalogEntry[] = [
               required: true,
               helperText:
                 "API endpoint ending in /v1 (Cloud or self-hosted). Example: https://cloud.appwrite.io/v1",
-              helperLink:
-                "https://appwrite.io/docs/advanced/self-hosting/mcp",
+              helperLink: "https://appwrite.io/docs/advanced/self-hosting/mcp",
             },
           ],
         },

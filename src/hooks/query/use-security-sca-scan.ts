@@ -97,7 +97,12 @@ export function useSecurityScaScan() {
       projectUuid,
     ],
     mutationFn: async () => {
-      if (!runtimeIsReady || !conversationUrl || !sessionApiKey || !workingDir) {
+      if (
+        !runtimeIsReady ||
+        !conversationUrl ||
+        !sessionApiKey ||
+        !workingDir
+      ) {
         throw {
           code: "runtime_unavailable",
           message: "runtime_unavailable",

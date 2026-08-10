@@ -129,8 +129,7 @@ async function appwriteRequest<T>(
     params: options.params,
     responseType: options.responseType,
     headers: {
-      Accept:
-        options.responseType === "blob" ? "*/*" : "application/json",
+      Accept: options.responseType === "blob" ? "*/*" : "application/json",
       [APPWRITE_WORKSPACE_ID_HEADER]: workspaceId,
       ...(apiKey ? { "X-Session-API-Key": apiKey } : {}),
       ...options.headers,

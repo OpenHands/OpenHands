@@ -52,8 +52,7 @@ export function CloudAiFunctionsPanel() {
   };
 
   const filteredFunctions = useMemo(
-    () =>
-      filterByName(functions.data ?? [], search, (fn) => [fn.name, fn.$id]),
+    () => filterByName(functions.data ?? [], search, (fn) => [fn.name, fn.$id]),
     [functions.data, search],
   );
 
@@ -236,7 +235,9 @@ export function CloudAiFunctionsPanel() {
                   key={variable.$id}
                   title={variable.key}
                   subtitle={variable.$id}
-                  badge={variable.secret ? t(I18nKey.CLOUDAI$SECRETS) : undefined}
+                  badge={
+                    variable.secret ? t(I18nKey.CLOUDAI$SECRETS) : undefined
+                  }
                   onEdit={() => {
                     setEditingId(variable.$id);
                     setFormValues({

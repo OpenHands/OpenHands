@@ -18,7 +18,9 @@ export function useTranslatedTexts(texts: readonly string[]): {
   const target = resolveUiTranslateTarget(i18n.language);
   const fingerprint = useMemo(
     () =>
-      [...new Set(texts.map((t) => t.trim()).filter(Boolean))].sort().join("\0"),
+      [...new Set(texts.map((t) => t.trim()).filter(Boolean))]
+        .sort()
+        .join("\0"),
     [texts],
   );
 

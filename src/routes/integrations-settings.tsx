@@ -176,8 +176,7 @@ export function IntegrationsSettingsScreen() {
       displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
     } catch (error) {
       displayErrorToast(
-        retrieveAxiosErrorMessage(error) ||
-          t(I18nKey.INTEGRATIONS$TEST_FAILED),
+        retrieveAxiosErrorMessage(error) || t(I18nKey.INTEGRATIONS$TEST_FAILED),
       );
     } finally {
       setIsTestingAppwrite(false);
@@ -228,8 +227,7 @@ export function IntegrationsSettingsScreen() {
       displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
     } catch (error) {
       displayErrorToast(
-        retrieveAxiosErrorMessage(error) ||
-          t(I18nKey.INTEGRATIONS$TEST_FAILED),
+        retrieveAxiosErrorMessage(error) || t(I18nKey.INTEGRATIONS$TEST_FAILED),
       );
     } finally {
       setIsTestingPlane(false);
@@ -280,8 +278,7 @@ export function IntegrationsSettingsScreen() {
       displaySuccessToast(t(I18nKey.INTEGRATIONS$TEST_SUCCESS));
     } catch (error) {
       displayErrorToast(
-        retrieveAxiosErrorMessage(error) ||
-          t(I18nKey.INTEGRATIONS$TEST_FAILED),
+        retrieveAxiosErrorMessage(error) || t(I18nKey.INTEGRATIONS$TEST_FAILED),
       );
     } finally {
       setIsDtTesting(false);
@@ -410,9 +407,7 @@ export function IntegrationsSettingsScreen() {
                 variant="primary"
                 testId="appwrite-save"
                 onClick={() => void handleSaveAppwrite()}
-                isDisabled={
-                  isSaving || isSavingSecret || !selectedWorkspaceId
-                }
+                isDisabled={isSaving || isSavingSecret || !selectedWorkspaceId}
               >
                 {t(I18nKey.INTEGRATIONS$SAVE)}
               </BrandButton>
@@ -519,9 +514,7 @@ export function IntegrationsSettingsScreen() {
                 variant="primary"
                 testId="plane-save"
                 onClick={() => void handleSavePlane()}
-                isDisabled={
-                  isSaving || isSavingSecret || !selectedWorkspaceId
-                }
+                isDisabled={isSaving || isSavingSecret || !selectedWorkspaceId}
               >
                 {t(I18nKey.INTEGRATIONS$SAVE)}
               </BrandButton>
@@ -608,9 +601,7 @@ export function IntegrationsSettingsScreen() {
                 variant="primary"
                 testId="dependency-track-save"
                 onClick={() => void handleSaveDependencyTrack()}
-                isDisabled={
-                  isSaving || isSavingSecret || !selectedWorkspaceId
-                }
+                isDisabled={isSaving || isSavingSecret || !selectedWorkspaceId}
               >
                 {t(I18nKey.INTEGRATIONS$SAVE)}
               </BrandButton>
@@ -619,9 +610,7 @@ export function IntegrationsSettingsScreen() {
                 variant="secondary"
                 testId="dependency-track-test"
                 onClick={() => void handleTestDependencyTrack()}
-                isDisabled={
-                  isDtTesting || !dtEnabled || !selectedWorkspaceId
-                }
+                isDisabled={isDtTesting || !dtEnabled || !selectedWorkspaceId}
               >
                 {t(I18nKey.INTEGRATIONS$TEST_CONNECTION)}
               </BrandButton>

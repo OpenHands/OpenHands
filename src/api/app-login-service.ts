@@ -29,7 +29,10 @@ async function parseJson<T>(response: Response): Promise<T> {
 async function request<T>(
   path: string,
   init: RequestInit = {},
-): Promise<{ ok: true; data: T; status: number } | { ok: false; error: string; status: number }> {
+): Promise<
+  | { ok: true; data: T; status: number }
+  | { ok: false; error: string; status: number }
+> {
   const response = await fetch(`${APP_LOGIN_BASE}${path}`, {
     credentials: "include",
     headers: {
@@ -101,7 +104,10 @@ export class AppLoginService {
     return result.data.users;
   }
 
-  static async createUser(username: string, password: string): Promise<AppLoginUser> {
+  static async createUser(
+    username: string,
+    password: string,
+  ): Promise<AppLoginUser> {
     const result = await request<AppLoginUser>("/users", {
       method: "POST",
       body: JSON.stringify({ username, password }),

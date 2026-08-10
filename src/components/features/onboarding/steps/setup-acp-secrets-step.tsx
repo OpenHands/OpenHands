@@ -128,9 +128,14 @@ export function SetupAcpSecretsStep({
       if (providerKey !== "openhands") {
         const wireAsCustom = isBackendUnsupportedAcpServer(providerKey);
         const defaultCommand = getAcpProvider(providerKey)?.default_command;
+        // Fork-local providers (cursor, opencode) persist as ``custom`` until the
+        // published typescript-client enum accepts them (ACPServerKind).
+        const acpServer = wireAsCustom
+          ? ACP_CUSTOM_PRESET_KEY
+          : (providerKey as "claude-code" | "codex" | "gemini-cli");
         await applyAgentProfile({
           agent_kind: "acp",
-          acp_server: wireAsCustom ? ACP_CUSTOM_PRESET_KEY : providerKey,
+          acp_server: acpServer,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
           ...(wireAsCustom && defaultCommand
             ? { acp_command: defaultCommand.join(" ") }

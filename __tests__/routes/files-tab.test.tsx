@@ -54,6 +54,28 @@ vi.mock("#/routes/commits-tab", () => ({
   default: () => <div data-testid="commits-tab-content">Commits View</div>,
 }));
 
+vi.mock("#/hooks/mutation/use-save-workspace-file", () => ({
+  useSaveWorkspaceFile: () => ({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  }),
+}));
+
+vi.mock("@monaco-editor/react", () => ({
+  Editor: (props: {
+    value?: string;
+    language?: string;
+    onChange?: (value: string | undefined) => void;
+  }) => (
+    <textarea
+      data-testid="monaco-editor-mock"
+      data-language={props.language}
+      value={props.value}
+      onChange={(event) => props.onChange?.(event.target.value)}
+    />
+  ),
+}));
+
 function renderTab(conversationId: string | null = null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -359,7 +381,7 @@ describe("FilesTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows highlighted source (not rich markdown) when toggled to plain on a .md", async () => {
+  it("shows editable source (not rich markdown) when toggled to plain on a .md", async () => {
     useHasAttachedSourceMock.mockReturnValue({
       hasAttachedSource: false,
       isLoading: false,
@@ -384,16 +406,18 @@ describe("FilesTab", () => {
 
     renderTab();
 
-    // Toggle to plain — markdown source should now be syntax-highlighted
-    // as `markdown`, not rendered.
+    // Toggle to plain — markdown source should open in the editable Monaco
+    // view, not the rich renderer.
     await user.click(
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
 
-    const highlighted = await screen.findByTestId(
-      "file-content-viewer-highlighted",
+    const editable = await screen.findByTestId("editable-source-view");
+    expect(editable).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor-mock")).toHaveAttribute(
+      "data-language",
+      "markdown",
     );
-    expect(highlighted.getAttribute("data-language")).toBe("markdown");
     // Confirm the rich-rendered <h1> is gone.
     expect(
       screen.queryByRole("heading", { level: 1, name: "Hello" }),
@@ -471,15 +495,15 @@ describe("FilesTab", () => {
     await user.click(
       screen.getByTestId("files-tab-content-mode-toggle-option-plain"),
     );
-    // `src/main.ts` resolves to a Prism grammar (`typescript`), so the
-    // plain view is a syntax-highlighted source view rather than a raw
-    // `<pre>`. We assert the highlighted container and its data-language
-    // attribute as a regression guard.
-    const highlighted = await screen.findByTestId(
-      "file-content-viewer-highlighted",
+    // Plain mode for source files uses the editable Monaco view (replacing
+    // the old Prism highlighter). Assert the editor mounts with the
+    // TypeScript language as a regression guard.
+    const editable = await screen.findByTestId("editable-source-view");
+    expect(editable).toBeInTheDocument();
+    expect(screen.getByTestId("monaco-editor-mock")).toHaveAttribute(
+      "data-language",
+      "typescript",
     );
-    expect(highlighted).toBeInTheDocument();
-    expect(highlighted.getAttribute("data-language")).toBe("typescript");
   });
 
   it("shows the refresh button inside the files-tab toolbar and triggers a refetch", async () => {

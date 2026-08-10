@@ -60,9 +60,7 @@ export class TranslateService {
     }
 
     const unique = [
-      ...new Set(
-        texts.map((t) => t.trim()).filter((t) => t.length > 0),
-      ),
+      ...new Set(texts.map((t) => t.trim()).filter((t) => t.length > 0)),
     ];
     const missing: string[] = [];
     for (const text of unique) {

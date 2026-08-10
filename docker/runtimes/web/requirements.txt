@@ -1,2 +1,6 @@
-# MCP server deps for runtime-web (PROJETOSIN-186).
-# Keep minimal until the Web MCP service lands; empty extra deps are intentional.
+# MCP servers — recon + webscan (PROJETOSIN-187)
+#
+# stdio MCP packages installed into runtime-web. Launched on demand by the
+# agent-server; entrypoint.sh does not start them as daemons.
+mcp>=1.6.0
+httpx>=0.28.0

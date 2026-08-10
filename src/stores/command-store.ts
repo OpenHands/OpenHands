@@ -139,10 +139,7 @@ export const useCommandStore = create<CommandState>((set, get) => ({
     set((state) => {
       if (conversationId === state.activeConversationId) {
         // Still ensure the conversation entry exists.
-        if (
-          conversationId &&
-          !state.byConversation[conversationId]
-        ) {
+        if (conversationId && !state.byConversation[conversationId]) {
           return withSyncedCommands({
             ...state,
             byConversation: {
@@ -215,8 +212,7 @@ export const useCommandStore = create<CommandState>((set, get) => ({
       ]);
     }),
 
-  clearTerminal: () =>
-    set((state) => updateActiveTabCommands(state, () => [])),
+  clearTerminal: () => set((state) => updateActiveTabCommands(state, () => [])),
 
   addTab: () => {
     const state = get();

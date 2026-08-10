@@ -52,7 +52,8 @@ RUN curl -fsSL \
 # Python scanners
 RUN pip install --no-cache-dir wapiti3 sqlmap
 
-# MCP server deps (stub-friendly; see requirements.txt)
+# MCP SDK (stdio servers from services/mcp-servers mounted or copied at /opt/mcp-servers)
+# Plane: PROJETOSIN-187 — see docker/runtimes/README.md § MCP servers
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 

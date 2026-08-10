@@ -23,9 +23,7 @@ type RunCommand = (
   timeout: number,
 ) => Promise<CommandResult>;
 
-function mapScanFailure(
-  result: CommandResult,
-): SecurityScanError {
+function mapScanFailure(result: CommandResult): SecurityScanError {
   if (result.exit_code === 127) {
     return {
       code: "opengrep_not_installed",

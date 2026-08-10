@@ -3,16 +3,14 @@ import type {
   DependencyTrackIntegrationsSettings,
   IntegrationsSettings,
 } from "#/types/integrations";
-import type { LocalWorkspace } from "#/types/workspace";
 import { dependencyTrackApiKeySecretName } from "#/utils/dependency-track-integration-secrets";
 import { findWorkspaceIdForPath } from "#/utils/appwrite-workspace-config";
 
-export const EMPTY_DEPENDENCY_TRACK_CONFIG: DependencyTrackIntegrationConfig =
-  {
-    enabled: false,
-    baseUrl: "",
-    projectUuid: "",
-  };
+export const EMPTY_DEPENDENCY_TRACK_CONFIG: DependencyTrackIntegrationConfig = {
+  enabled: false,
+  baseUrl: "",
+  projectUuid: "",
+};
 
 export function normalizeDependencyTrackIntegrations(
   raw: unknown,

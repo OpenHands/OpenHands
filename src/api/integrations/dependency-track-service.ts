@@ -5,8 +5,7 @@ import { APPWRITE_WORKSPACE_ID_HEADER } from "#/utils/appwrite-integration-secre
 import type { DependencyTrackFinding } from "#/utils/dependency-track-findings";
 import { encodeBomForDependencyTrack } from "#/utils/syft-output";
 
-export const DEPENDENCY_TRACK_PROXY_BASE =
-  "/api/integrations/dependency-track";
+export const DEPENDENCY_TRACK_PROXY_BASE = "/api/integrations/dependency-track";
 
 const BOM_POLL_INTERVAL_MS = 2000;
 const BOM_POLL_MAX_ATTEMPTS = 90;
@@ -75,12 +74,16 @@ export class DependencyTrackService {
       },
 
       async uploadBom(bomJson: string, projectUuid: string): Promise<string> {
-        const response = await request<{ token?: string }>("PUT", "/api/v1/bom", {
-          data: {
-            project: projectUuid,
-            bom: encodeBomForDependencyTrack(bomJson),
+        const response = await request<{ token?: string }>(
+          "PUT",
+          "/api/v1/bom",
+          {
+            data: {
+              project: projectUuid,
+              bom: encodeBomForDependencyTrack(bomJson),
+            },
           },
-        });
+        );
         const token = response.token?.trim();
         if (!token) {
           throw new Error("Dependency-Track BOM upload did not return a token");

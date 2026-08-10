@@ -260,7 +260,6 @@ export const useTerminal = (options: UseTerminalOptions = {}) => {
       isRunning.current = false;
     };
     // Interactive mode is fixed for the lifetime of this mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interactive]);
 
   React.useEffect(() => {
@@ -270,7 +269,9 @@ export const useTerminal = (options: UseTerminalOptions = {}) => {
       lastCommandIndex.current < commands.length
     ) {
       const pending = commands.slice(lastCommandIndex.current);
-      const hasVisibleUpdate = pending.some((command) => !command.alreadyDisplayed);
+      const hasVisibleUpdate = pending.some(
+        (command) => !command.alreadyDisplayed,
+      );
 
       // Clear the idle prompt so agent I/O does not stack on "$ $ …"
       if (

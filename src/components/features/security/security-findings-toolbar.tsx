@@ -1,9 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Download, Search } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
-import type {
-  SecurityFindingsExportFormat,
-} from "#/utils/security-findings-export";
+import type { SecurityFindingsExportFormat } from "#/utils/security-findings-export";
 import type {
   SecurityFindingsFilters,
   SecuritySeverityFilter,

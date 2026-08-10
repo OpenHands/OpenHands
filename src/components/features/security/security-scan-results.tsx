@@ -34,13 +34,11 @@ function severityRank(severity: SecurityFindingSeverity): number {
   return index === -1 ? SEVERITY_ORDER.length : index;
 }
 
-function SeverityIcon({
-  severity,
-}: {
-  severity: SecurityFindingSeverity;
-}) {
+function SeverityIcon({ severity }: { severity: SecurityFindingSeverity }) {
   if (severity === "CRITICAL" || severity === "HIGH" || severity === "ERROR") {
-    return <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />;
+    return (
+      <ShieldAlert className="h-4 w-4 shrink-0 text-red-400" aria-hidden />
+    );
   }
   if (severity === "WARNING" || severity === "MEDIUM") {
     return (
@@ -50,9 +48,7 @@ function SeverityIcon({
   return <Info className="h-4 w-4 shrink-0 text-sky-400" aria-hidden />;
 }
 
-function severityLabelKey(
-  severity: SecurityFindingSeverity,
-): I18nKey {
+function severityLabelKey(severity: SecurityFindingSeverity): I18nKey {
   switch (severity) {
     case "CRITICAL":
     case "HIGH":
@@ -170,7 +166,10 @@ export function SecurityScanResults({ result }: SecurityScanResultsProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="security-results">
+    <div
+      className="flex h-full min-h-0 flex-col"
+      data-testid="security-results"
+    >
       <p className="mb-3 text-xs text-[var(--oh-muted)]">
         {t(I18nKey.SECURITY$FINDINGS_COUNT, { count: sortedFindings.length })}
       </p>

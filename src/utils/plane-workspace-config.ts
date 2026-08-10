@@ -85,7 +85,8 @@ export function buildPlaneIntegrationsPatch(
           projectId: config.projectId.trim(),
           ...(moduleId ? { moduleId } : {}),
           apiKeySecretName:
-            config.apiKeySecretName?.trim() || planeApiKeySecretName(workspaceId),
+            config.apiKeySecretName?.trim() ||
+            planeApiKeySecretName(workspaceId),
         },
       },
     },
