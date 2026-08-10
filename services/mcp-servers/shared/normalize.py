@@ -1,9 +1,10 @@
-"""Finding payload normalization and scope allowlist (fail-closed)."""
+"""Finding payload normalization, scope allowlist, workspace guard, severity maps."""
 
 from __future__ import annotations
 
 import ipaddress
 import os
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -19,10 +20,16 @@ SOURCE_TOOLS = frozenset(
         "subfinder",
         "httpx",
         "reconftw",
+        "semgrep",
+        "trivy",
+        "nmap",
+        "mobsf",
     }
 )
 
 SCOPE_ALLOWLIST_ENV = "PENTEST_SCOPE_ALLOWLIST"
+WORKSPACE_DIR_ENV = "PENTEST_WORKSPACE_DIR"
+DEFAULT_WORKSPACE_DIR = "/workspace/project"
 
 
 class ScopeViolationError(Exception):
@@ -38,6 +45,48 @@ class ScopeViolationError(Exception):
         return {"error": self.code, "target": self.target, "message": str(self)}
 
 
+class PathTraversalError(Exception):
+    """Requested path escapes the engagement workspace."""
+
+    code = "path_traversal"
+
+    def __init__(self, path: str, message: str | None = None):
+        self.path = path
+        super().__init__(message or f"Path outside workspace: {path}")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"error": self.code, "path": self.path, "message": str(self)}
+
+
+def workspace_root() -> Path:
+    raw = os.environ.get(WORKSPACE_DIR_ENV, DEFAULT_WORKSPACE_DIR).strip()
+    return Path(raw or DEFAULT_WORKSPACE_DIR).resolve()
+
+
+def resolve_workspace_path(path: str | None = None) -> Path:
+    """
+    Resolve ``path`` under the engagement workspace.
+
+    Raises PathTraversalError when the resolved path escapes the workspace.
+    """
+    root = workspace_root()
+    if not path or path in (".", ""):
+        return root
+    candidate_input = Path(path)
+    try:
+        if candidate_input.is_absolute():
+            resolved = candidate_input.resolve()
+        else:
+            resolved = (root / path).resolve()
+    except OSError as exc:
+        raise PathTraversalError(path, str(exc)) from exc
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise PathTraversalError(path) from exc
+    return resolved
+
+
 def normalize_finding(
     *,
     engagement_id: str,
@@ -48,6 +97,9 @@ def normalize_finding(
     asset: str | None = None,
     endpoint: str | None = None,
     evidence: dict[str, Any] | None = None,
+    cvss_score: float | None = None,
+    cve_ids: list[str] | None = None,
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     if source_tool not in SOURCE_TOOLS:
         raise ValueError(f"Unsupported source_tool: {source_tool}")
@@ -63,7 +115,43 @@ def normalize_finding(
         "endpoint": endpoint,
         "evidence": evidence or {},
     }
+    if cvss_score is not None:
+        payload["cvss_score"] = cvss_score
+    if cve_ids is not None:
+        payload["cve_ids"] = cve_ids
+    if tags is not None:
+        payload["tags"] = tags
     return payload
+
+
+def map_semgrep_severity(raw: str | None) -> Severity:
+    """Map Semgrep severity strings to Findings enum."""
+    value = (raw or "INFO").strip().upper()
+    mapping: dict[str, Severity] = {
+        "ERROR": "high",
+        "WARNING": "medium",
+        "INFO": "info",
+        "CRITICAL": "critical",
+        "HIGH": "high",
+        "MEDIUM": "medium",
+        "LOW": "low",
+    }
+    return mapping.get(value, "info")
+
+
+def map_trivy_severity(raw: str | None) -> Severity:
+    """Map Trivy severity strings to Findings enum."""
+    value = (raw or "UNKNOWN").strip().upper()
+    mapping: dict[str, Severity] = {
+        "CRITICAL": "critical",
+        "HIGH": "high",
+        "MEDIUM": "medium",
+        "LOW": "low",
+        "UNKNOWN": "info",
+        "INFO": "info",
+        "NEGLIGIBLE": "info",
+    }
+    return mapping.get(value, "info")
 
 
 def _parse_allowlist() -> list[str]:

@@ -1,12 +1,13 @@
-# MCP Servers — Pentest (PROJETOSIN-187)
+# MCP Servers — Pentest (PROJETOSIN-187 / 189)
 
-stdio MCP servers for the Web offensive runtime. **ADR-0001**.
+stdio MCP servers for offensive runtimes. **ADR-0001**.
 
 ```
 services/mcp-servers/
 ├── shared/          # findings client, session auth, confirmation, normalize/scope
 ├── mcp-recon/       # subfinder / httpx / reconftw
-└── mcp-webscan/     # ZAP / Nuclei / Wapiti / Nikto / sqlmap
+├── mcp-webscan/     # ZAP / Nuclei / Wapiti / Nikto / sqlmap
+└── mcp-sast/        # Semgrep + Trivy (PROJETOSIN-189)
 ```
 
 ## Capabilities
@@ -16,6 +17,7 @@ services/mcp-servers/
 | `mcp-recon` (all) | `pentest.recon.run` |
 | webscan passive (spider, passive ZAP, nuclei default, wapiti, nikto) | `pentest.scan.passive` |
 | webscan active (`web_zap_active_scan`, `web_sqlmap_run`, nuclei intrusive) | `pentest.scan.active` |
+| `mcp-sast` (Semgrep / Trivy) | `pentest.sast.run` |
 
 Session registration should only attach a server when the authenticated profile
 has the minimum capability (Fase 0 RBAC).
@@ -27,11 +29,18 @@ has the minimum capability (Fase 0 RBAC).
 | `SESSION_API_KEY` | Sent as `X-Session-API-Key` to Findings Service |
 | `FINDINGS_SERVICE_URL` | Default `http://findings-service:8000` |
 | `PENTEST_SCOPE_ALLOWLIST` | CSV of hosts/CIDRs (fail-closed if empty) |
+| `PENTEST_WORKSPACE_DIR` | Workspace root for SAST path guard (default `/workspace/project`) |
 | `PENTEST_AUTONOMY_MODE` | Server-side only: `manual` \| `semi_autonomous` \| `autonomous` (default semi). Never taken from agent tool args. |
 | `OPENHANDS_CONFIRMATION_TOKEN` | Optional env token after UI approval |
 | `PENTEST_MCP_RECON_CMD` | Override launch command for mcp-recon |
 | `PENTEST_MCP_WEBSCAN_CMD` | Override launch command for mcp-webscan |
+| `PENTEST_MCP_SAST_CMD` | Override launch command for mcp-sast |
 | `MCP_WEBSCAN_TIMEOUT_SEC` | Timeout for intrusive tools (default 300) |
+| `DEFECTDOJO_API_URL` | One-way DefectDojo mirror base URL |
+| `DEFECTDOJO_API_TOKEN` | DefectDojo API token |
+| `DEFECTDOJO_PRODUCT_TYPE_DEFAULT` | Default product type (e.g. `Pentest`) |
+| `DEFECTDOJO_VERIFY_TLS` | TLS verify for DefectDojo (`true`/`false`) |
+| `DEFECTDOJO_DRY_RUN` | `1` to skip real DefectDojo writes |
 
 ## Local run
 
@@ -45,6 +54,10 @@ python services/mcp-servers/mcp-recon/server.py
 
 export PYTHONPATH=services/mcp-servers:services/mcp-servers/mcp-webscan
 python services/mcp-servers/mcp-webscan/server.py
+
+export PYTHONPATH=services/mcp-servers:services/mcp-servers/mcp-sast
+export PENTEST_WORKSPACE_DIR=/workspace/project
+python services/mcp-servers/mcp-sast/server.py
 ```
 
 ## Register with Agent Canvas / Agent Server
@@ -55,6 +68,7 @@ stdio commands via settings / MCP API or env:
 ```bash
 PENTEST_MCP_RECON_CMD='python /opt/mcp-servers/mcp-recon/server.py'
 PENTEST_MCP_WEBSCAN_CMD='python /opt/mcp-servers/mcp-webscan/server.py'
+PENTEST_MCP_SAST_CMD='python /opt/mcp-servers/mcp-sast/server.py'
 ```
 
 Example `config.toml` fragment (engagement):
@@ -67,6 +81,10 @@ args = ["/opt/mcp-servers/mcp-recon/server.py"]
 [mcp.mcp-webscan]
 command = "python"
 args = ["/opt/mcp-servers/mcp-webscan/server.py"]
+
+[mcp.mcp-sast]
+command = "python"
+args = ["/opt/mcp-servers/mcp-sast/server.py"]
 ```
 
 ## Confirmation gate (stub)
@@ -86,4 +104,5 @@ or set `OPENHANDS_CONFIRMATION_TOKEN` / pass `confirmation_token` on re-run.
 ```bash
 cd services/mcp-servers/mcp-recon && PYTHONPATH=..:. pytest -q
 cd ../mcp-webscan && PYTHONPATH=..:. pytest -q
+cd ../mcp-sast && PYTHONPATH=..:. pytest -q
 ```
