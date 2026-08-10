@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Awaitable, Callable
 
 from shared.confirmation import ConfirmationRequiredError, require_confirmation
@@ -12,6 +13,7 @@ TOOL_GATE_NAME = "adb_shell_mutant"
 Runner = Callable[[str], Awaitable[tuple[int, str, str]]]
 
 # Safe read-only / low-risk prefixes (no confirmation in semi_autonomous).
+# Matched with token boundary: ^prefix(\s|$), never loose startswith.
 SAFE_PREFIXES: tuple[str, ...] = (
     "pm list",
     "pm path",
@@ -25,8 +27,7 @@ SAFE_PREFIXES: tuple[str, ...] = (
     "id",
     "whoami",
     "uname",
-    "ls ",
-    "ls\t",
+    "ls",
 )
 
 # Allowed but mutating — confirmation gate in semi_autonomous.
@@ -37,7 +38,7 @@ MUTANT_PREFIXES: tuple[str, ...] = (
     "am kill",
     "setprop",
     "settings put",
-    "input ",
+    "input",
     "cmd package install",
 )
 
@@ -53,24 +54,42 @@ BLOCKED_SUBSTRINGS: tuple[str, ...] = (
     "poweroff",
 )
 
+# Shell chaining / injection metacharacters — deny before allowlist match.
+# Covers ; && || | ` $() ${} redirects and newlines.
+_SHELL_META_RE = re.compile(r"[;|&`$<>\n\r]|\$\(|\$\{")
+
+
+def _matches_prefix(command: str, prefix: str) -> bool:
+    """True when ``command`` equals ``prefix`` or continues with whitespace."""
+    p = prefix.strip().lower()
+    if not p:
+        return False
+    return re.match(rf"^{re.escape(p)}(?:\s|$)", command.lower()) is not None
+
 
 def classify_shell_command(command: str) -> str:
     """
     Return ``safe`` | ``mutant`` | ``blocked`` | ``denied``.
 
-    ``denied`` = not on allowlist.
+    ``denied`` = not on allowlist, or contains shell metacharacters.
     """
-    cmd = " ".join(command.strip().split())
+    raw = command.strip()
+    if not raw:
+        return "denied"
+    # Reject injection/chaining before whitespace normalize (preserves \n/\r).
+    if _SHELL_META_RE.search(raw):
+        return "denied"
+
+    cmd = " ".join(raw.split())
     lower = cmd.lower()
     for bad in BLOCKED_SUBSTRINGS:
         if bad in lower:
             return "blocked"
     for prefix in MUTANT_PREFIXES:
-        if lower == prefix.strip() or lower.startswith(prefix.lower()):
+        if _matches_prefix(cmd, prefix):
             return "mutant"
     for prefix in SAFE_PREFIXES:
-        p = prefix.lower().rstrip()
-        if lower == p or lower.startswith(p + " ") or lower.startswith(prefix.lower()):
+        if _matches_prefix(cmd, prefix):
             return "safe"
     return "denied"
 

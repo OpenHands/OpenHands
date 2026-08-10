@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Awaitable, Callable
 
 from shared.confirmation import ConfirmationRequiredError, require_confirmation
+from shared.normalize import PathTraversalError, resolve_workspace_path
 from shared.tool_result import err, ok
 from tools._common import run_cmd, use_real_binaries
 
@@ -52,10 +53,17 @@ async def run_frida_attach(
     if not package.strip():
         return err("invalid_args", message="package is required")
 
+    resolved_script: str | None = None
+    if script is not None and script.strip():
+        try:
+            resolved_script = str(resolve_workspace_path(script))
+        except PathTraversalError as exc:
+            return err(exc.code, path=exc.path, message=str(exc))
+
     gate_payload = {
         "engagement_id": engagement_id,
         "package": package,
-        "script": script,
+        "script": resolved_script,
         "tool": "mobile_frida_attach",
     }
     try:
@@ -68,7 +76,7 @@ async def run_frida_attach(
         return err(**exc.as_dict())
 
     run = runner or _default_attach
-    code, stdout, stderr = await run(package, script)
+    code, stdout, stderr = await run(package, resolved_script)
     if use_real_binaries() and code != 0:
         return err("frida_attach_failed", message=(stderr or stdout)[:300])
     return ok(
