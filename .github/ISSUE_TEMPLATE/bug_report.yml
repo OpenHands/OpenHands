@@ -81,7 +81,7 @@ body:
         Run method: `npm run dev`
 
         1. npm install && npm run dev
-        2. Open http://localhost:3001
+        2. Open http://localhost:8000
         3. …
         4. Observed the error shown in the attached screenshot.
     validations:
