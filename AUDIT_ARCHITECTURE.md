@@ -9,7 +9,7 @@ La règle fondamentale de notre plateforme est :
 
 ## 1. STRATÉGIE DE COUPLAGE ET BOUNDARIES
 
-Cortex se positionne comme la couche d'orchestration supérieure, encapsulant les capacités de bas niveau d'OpenHands sans perturber leur fonctionnement éprouvé.
+Cortex se positionne comme la couche d'orchestration supérieure, encapsulant les capacités de bas niveau d'OpenHands (dont le support MCP) sans perturber leur fonctionnement éprouvé.
 
 ```
 +-----------------------------------------------------------------------+
@@ -29,7 +29,7 @@ Cortex se positionne comme la couche d'orchestration supérieure, encapsulant le
 |                           OPENHANDS CORE                              |
 |                                                                       |
 |   +-----------------------+  +------------------+  +--------------+   |
-|   |     Agent Runtime     |  |      Tools       |  |   Sandbox    |   |
+|   |     Agent Runtime     |  |  Tools & MCP     |  |   Sandbox    |   |
 |   +-----------------------+  +------------------+  +--------------+   |
 |   |       Terminal        |  |     Browser      |  |  Workspace   |   |
 |   +-----------------------+  +------------------+  +--------------+   |
@@ -37,8 +37,8 @@ Cortex se positionne comme la couche d'orchestration supérieure, encapsulant le
 ```
 
 ### 1.1 Rôles Respectifs
-- **Moteur OpenHands (Agent Server / Core)** : Fournit le Runtime de l'agent, l'exécution des commandes, la gestion et la persistance des fichiers de workspace, les terminaux `xterm.js`, l'accès au navigateur interne, et les protocoles WebSocket/REST de communication temps réel.
-- **Produit Cortex** : Gère l'expérience utilisateur globale, le design system, l'orchestration des flux de décision, les contrôles d'autorisation interactifs (Human-in-the-Loop), et l'extensibilité par compétences métier (Skills).
+- **Moteur OpenHands (Agent Server / Core)** : Fournit le Runtime de l'agent, l'exécution des commandes, les protocoles WebSocket/REST de communication temps réel, et le support complet de **Model Context Protocol (MCP)** pour connecter des serveurs stdio ou SSE tiers.
+- **Produit Cortex** : Gère l'expérience utilisateur globale, le design system, l'orchestration des flux de décision, les contrôles d'autorisation interactifs (Human-in-the-Loop), et l'intégration unifiée de **Cortex Skills & Integrations** pour encapsuler les serveurs MCP existants dans une interface moderne.
 
 ---
 
@@ -52,10 +52,10 @@ L'expérience utilisateur est profondément modernisée sous le design system **
 - Les étapes de pensée interne des agents OpenHands sont enveloppées de manière non-intrusive (Collapsible Thinking) pour une lisibilité maximale.
 - Les actions nécessitant des permissions (ex: modification de configuration, exécution de commandes critiques) passent par un composant d'approbation dédié **Cortex Permissions** avec boutons `Approuver`, `Modifier`, `Refuser`.
 
-### 2.2 Cortex Orchestrator & Skills
-L'orchestration Cortex permet de guider l'agent avant l'exécution finale :
+### 2.2 Cortex Orchestrator & Skills (MCP Integration)
+L'orchestration Cortex permet d'étendre dynamiquement les capacités de l'agent :
 - **Cortex Orchestrator** : Traduit les requêtes utilisateur de haut niveau, sélectionne les compétences appropriées, et configure le payload de conversation envoyé au moteur OpenHands.
-- **Cortex Skills** : Une architecture extensible pour encapsuler les capacités spécialisées. Les compétences (ex: développement web, debugging de test, DevOps, déploiement) sont déclarées dynamiquement et associées au runtime sous forme d'outils complémentaires.
+- **Cortex Skills & Integrations** : Une architecture extensible pour encapsuler les capacités spécialisées et les serveurs MCP. Les compétences (ex: développement web, debugging de test, DevOps, déploiement) et les intégrations de serveurs externes (comme Slack, GitHub, ou des bases de données SQL) sont déclarées dynamiquement et associées au runtime sous forme d'outils complémentaires via les protocoles MCP.
 
 ---
 

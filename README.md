@@ -14,29 +14,29 @@
 
 Cortex est une plateforme de développement agentique avancée combinant :
 
-1. **Le moteur OpenHands** : Assure l'infrastructure agentique, le runtime, l'exécution des outils, la sandbox sécurisée, les terminaux et l'accès au workspace.
-2. **La couche Cortex** : Fournit notre nouvelle couche produit, notre identité, notre UX, nos compétences d'orchestration (Skills) et notre workflow d'autorisation.
+1. **Le moteur OpenHands** : Assure l'infrastructure agentique, le runtime, l'exécution des outils, la sandbox sécurisée, les terminaux, l'accès au workspace et le support des serveurs **Model Context Protocol (MCP)**.
+2. **La couche Cortex** : Fournit notre nouvelle couche produit, notre identité, notre UX, nos compétences d'orchestration (Skills) et nos **intégrations MCP** encapsulées de manière transparente.
 
 ---
 
 ## 🏛️ ARCHITECTURE FONDAMENTALE
 
 Cortex respecte scrupuleusement la distinction suivante :
-- **OpenHands** = moteur / infrastructure agentique de bas niveau.
-- **Cortex** = produit / couche d'orchestration / expérience utilisateur / compétences de haut niveau.
+- **OpenHands** = moteur / infrastructure de communication de bas niveau (y compris l'interface client-serveur MCP).
+- **Cortex** = produit / couche d'orchestration / expérience utilisateur / compétences unifiées de haut niveau (Cortex Skills Dashboard & Integrations).
 
 ```
                     CORTEX (EXPÉRIENCE UTILSATEUR)
                                │
        ├── Cortex UI & Chat (Copilot UI)
        ├── Cortex Orchestrator (Planification & Abstraction)
-       └── Cortex Skills (Compétences thématiques extensibles)
+       └── Cortex Skills & Integrations (Abstractions de serveurs MCP et compétences)
                                │
                                ▼
                   OPENHANDS CORE (INFRASTRUCTURE)
                                │
        ├── Agent Runtime & Tools (Terminal, Browser, Workspace)
-       └── Sandbox Execution (Docker / Host isolation)
+       └── MCP Host Core (Protocoles de communication stdio/SSE)
 ```
 
 ---

@@ -7,7 +7,7 @@ import {
   Server,
   Settings,
 } from "lucide-react";
-import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
+import { CortexLogoButton } from "#/components/shared/buttons/cortex-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   automationListPath,
@@ -101,7 +101,7 @@ export function SidebarRailBody({
               collapsed && showCollapsedExpandButton && "opacity-0",
             )}
           >
-            <OpenHandsLogoButton
+            <CortexLogoButton
               logoWidth={SIDEBAR_LOGO_WIDTH}
               logoHeight={SIDEBAR_LOGO_HEIGHT}
               logoClassName="max-w-none"

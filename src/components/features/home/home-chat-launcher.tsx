@@ -219,9 +219,18 @@ export function HomeChatLauncher() {
   return (
     <div
       data-testid="home-chat-launcher"
-      className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
+      className="flex w-full flex-col items-center pt-[max(4rem,24vh)] pb-10"
     >
-      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4 animate-fade-in">
+        {/* Sleek, premium CORTEX branding header */}
+        <div className="flex flex-col items-center justify-center gap-3 mb-2 text-center">
+          <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/5 text-indigo-400 text-xs font-semibold tracking-wider uppercase shadow-[0_0_15px_rgba(99,102,241,0.05)]">
+            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+            {/* eslint-disable-next-line i18next/no-literal-string */}
+            {"CORTEX active — powered by OpenHands Core"}
+          </div>
+        </div>
+
         <div className="flex w-full justify-center">
           <HomeHeaderTitle />
         </div>
