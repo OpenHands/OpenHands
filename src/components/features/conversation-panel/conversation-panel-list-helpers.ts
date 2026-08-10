@@ -49,6 +49,9 @@ function resolveCollapsedPreviewPool(
     discoveryConversationIds.has(conversation.id),
   );
 
+  // The load-bearing active-conversation guarantee lives in
+  // `getGroupDiscoveryConversationIds` (`forceIncludeConversationId`); this
+  // fallback only covers callers that pass a discovery set built without it.
   if (
     activeConversationId != null &&
     !pool.some((conversation) => conversation.id === activeConversationId)
@@ -351,9 +354,11 @@ function getConversationGroupIdentity(
 }
 
 /**
- * Max backend pages fetched for a single grouped/chronological "Load more"
- * click. Prevents one click from walking the entire remaining cursor when
- * later pages only deepen already-visible folders.
+ * Max backend pages fetched for a single grouped "Load more" click. The
+ * driver walks past pages that only deepen already-visible folders looking
+ * for a new folder, and this cap prevents one click from walking the entire
+ * remaining cursor when no undiscovered folder exists. Chronological mode is
+ * not capped — it keeps its pre-existing fetch-until-visible behavior.
  */
 export const MAX_PAGES_PER_LOAD_MORE_CLICK = 3;
 
@@ -373,23 +378,28 @@ export function getGroupDiscoveryConversationIds(
   backendKind: BackendKind,
   options?: { forceIncludeConversationId?: string | null },
 ): Set<string> {
-  const discoveryPageByGroupId = new Map<string, number>();
+  // Resolve each conversation's folder identity exactly once; both passes
+  // below (finding each folder's discovery page, then collecting the ids on
+  // that page) read from this record instead of re-running the
+  // workspace/repository normalization.
+  const resolved = items.map((conversation) => ({
+    conversationId: conversation.id,
+    groupId: getConversationGroupIdentity(conversation, backendKind).id,
+    page: pageByConversationId.get(conversation.id) ?? 0,
+  }));
 
-  for (const conversation of items) {
-    const { id } = getConversationGroupIdentity(conversation, backendKind);
-    const page = pageByConversationId.get(conversation.id) ?? 0;
-    const currentDiscoveryPage = discoveryPageByGroupId.get(id);
+  const discoveryPageByGroupId = new Map<string, number>();
+  for (const { groupId, page } of resolved) {
+    const currentDiscoveryPage = discoveryPageByGroupId.get(groupId);
     if (currentDiscoveryPage === undefined || page < currentDiscoveryPage) {
-      discoveryPageByGroupId.set(id, page);
+      discoveryPageByGroupId.set(groupId, page);
     }
   }
 
   const discoveryIds = new Set<string>();
-  for (const conversation of items) {
-    const { id } = getConversationGroupIdentity(conversation, backendKind);
-    const page = pageByConversationId.get(conversation.id) ?? 0;
-    if (page === discoveryPageByGroupId.get(id)) {
-      discoveryIds.add(conversation.id);
+  for (const { conversationId, groupId, page } of resolved) {
+    if (page === discoveryPageByGroupId.get(groupId)) {
+      discoveryIds.add(conversationId);
     }
   }
 

@@ -2079,26 +2079,18 @@ describe("ConversationPanel", () => {
         within(noWorkspaceFolder).queryByText("No workspace 7"),
       ).not.toBeInTheDocument();
 
-      // First click deepens the existing folder; the driver must stop instead of
-      // walking every remaining page looking for a brand-new folder.
+      // A single click walks past the deepen-only page 2 (its rows are hidden
+      // from the collapsed preview, so they are not success) and keeps paging
+      // until the brand-new folder on page 3 is discovered.
       await user.click(screen.getByTestId("load-more-conversations"));
-      await waitFor(() => {
-        expect(searchSpy).toHaveBeenCalledTimes(2);
-      });
-      expect(
-        screen.queryByTestId("thread-folder-ws--workspace-alpha"),
-      ).not.toBeInTheDocument();
+      await screen.findByTestId("thread-folder-ws--workspace-alpha");
+      expect(searchSpy).toHaveBeenCalledTimes(3);
       expect(
         within(noWorkspaceFolder).getAllByTestId("conversation-card"),
       ).toHaveLength(5);
       expect(
         within(noWorkspaceFolder).queryByText("No workspace 7"),
       ).not.toBeInTheDocument();
-
-      // Second click discovers the next folder.
-      await user.click(screen.getByTestId("load-more-conversations"));
-      await screen.findByTestId("thread-folder-ws--workspace-alpha");
-      expect(searchSpy).toHaveBeenCalledTimes(3);
 
       // Collapsed preview stays frozen; expanding reveals every loaded row.
       expect(
@@ -2120,14 +2112,56 @@ describe("ConversationPanel", () => {
       ).toBeInTheDocument();
     });
 
+    it("caps a grouped load-more click at three pages when no new folder appears", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const deepenOnlyPage = (page: number, nextPageId: string) => ({
+        items: Array.from({ length: 2 }, (_, index) =>
+          createMockConversation({
+            id: `no-workspace-p${page}-${index + 1}`,
+            title: `No workspace p${page}-${index + 1}`,
+          }),
+        ),
+        next_page_id: nextPageId,
+      });
+      // Exactly four pages are queued: the drive must consume the initial page
+      // plus MAX_PAGES_PER_LOAD_MORE_CLICK more and stop — a fetch beyond the
+      // cap would find no queued response and fail the test loudly.
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce(deepenOnlyPage(1, "page-2"))
+        .mockResolvedValueOnce(deepenOnlyPage(2, "page-3"))
+        .mockResolvedValueOnce(deepenOnlyPage(3, "page-4"))
+        .mockResolvedValueOnce(deepenOnlyPage(4, "page-5"));
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      await screen.findByTestId("thread-folder-__none_workspace");
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Every remaining page only deepens the existing folder, so the driver
+      // must stop at the per-click page cap instead of draining the cursor.
+      await user.click(screen.getByTestId("load-more-conversations"));
+      await waitFor(() => {
+        expect(searchSpy).toHaveBeenCalledTimes(4);
+      });
+      // The drive has ended: the control is idle again and no further page
+      // was requested beyond the cap.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("load-more-conversations"),
+        ).toBeInTheDocument();
+      });
+      expect(searchSpy).toHaveBeenCalledTimes(4);
+    });
+
     it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
       useConversationPanelPreferencesStore.setState({
         organizeMode: "grouped",
       });
-      vi.spyOn(
-        AgentServerConversationService,
-        "searchConversations",
-      )
+      vi.spyOn(AgentServerConversationService, "searchConversations")
         .mockResolvedValueOnce({
           items: Array.from({ length: 5 }, (_, index) =>
             createMockConversation({

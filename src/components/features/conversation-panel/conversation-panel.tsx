@@ -305,6 +305,13 @@ export function ConversationPanel({
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
   // mutating the contents of folders that are already visible.
+  //
+  // Known limitation: the mapping is recomputed from `data.pages` on the 10s
+  // background refetch, so a conversation whose `updated_at` shifts can move
+  // to an earlier page and change its recorded discovery page. The blast
+  // radius is only which rows a collapsed preview shows (expanding a folder
+  // always reveals every loaded conversation); pinning discovery pages across
+  // refetches is not worth the extra bookkeeping today.
   const conversationPageById = React.useMemo(() => {
     const pageById = new Map<string, number>();
     data?.pages.forEach((page, pageIndex) => {
@@ -515,15 +522,14 @@ export function ConversationPanel({
     automationFilteredConversations.length === 0;
 
   // Grouped pagination prefers discovering another folder; chronological
-  // pagination succeeds when another row appears. Grouped mode also treats
-  // newly loaded conversations as progress so one click cannot walk every
-  // remaining page just to deepen already-visible folders.
+  // pagination succeeds when another row appears. Pages that only deepen
+  // already-visible folders are not success for the grouped control — the
+  // driver walks past them (bounded by the per-click page cap) so a single
+  // click can still reach a folder hiding behind deepen-only pages.
   const visibleCount =
     organizeMode === "grouped" && !compact
       ? visibleGroupCount
       : visibleFlatCount;
-  const groupedSourceConversationCount =
-    groupedSourceConversations?.length ?? 0;
   const loadedPageCount = data?.pages.length ?? 0;
 
   // KNOWN ISSUE (unresolved as of 2026-05-29): users still report that the
@@ -543,36 +549,27 @@ export function ConversationPanel({
   // background refetch is in flight, and (2) a fetched page can yield zero
   // *visible* rows (filtered out by the active scope, or deduped as overlap),
   // so the list does not appear to grow. We capture floors at click time and
-  // keep fetching — once idle — until the primary visible count grows, grouped
-  // mode gains conversations, the per-click page cap is hit, or pages run out.
-  // `loadedPageCount` keeps the driver advancing when a fetched page contains
-  // only folders that were already discovered.
+  // keep fetching — once idle — until the visible count grows, the grouped
+  // per-click page cap is hit, or pages run out. `loadedPageCount` keeps the
+  // driver advancing when a fetched page contains only folders that were
+  // already discovered.
   const [loadMoreFloor, setLoadMoreFloor] = React.useState<number | null>(null);
-  const [loadMoreDataFloor, setLoadMoreDataFloor] = React.useState<
-    number | null
-  >(null);
   const [loadMorePageFloor, setLoadMorePageFloor] = React.useState<
     number | null
   >(null);
   const visibleCountRef = React.useRef(visibleCount);
   visibleCountRef.current = visibleCount;
-  const groupedSourceConversationCountRef = React.useRef(
-    groupedSourceConversationCount,
-  );
-  groupedSourceConversationCountRef.current = groupedSourceConversationCount;
   const loadedPageCountRef = React.useRef(loadedPageCount);
   loadedPageCountRef.current = loadedPageCount;
 
   const clearLoadMoreRequest = React.useCallback(() => {
     setLoadMoreFloor(null);
-    setLoadMoreDataFloor(null);
     setLoadMorePageFloor(null);
   }, []);
 
   const requestLoadMore = React.useCallback(() => {
     if (hasNextPage) {
       setLoadMoreFloor(visibleCountRef.current);
-      setLoadMoreDataFloor(groupedSourceConversationCountRef.current);
       setLoadMorePageFloor(loadedPageCountRef.current);
     }
   }, [hasNextPage]);
@@ -586,19 +583,14 @@ export function ConversationPanel({
       clearLoadMoreRequest();
       return;
     }
-    // Grouped secondary success: a page deepened an existing folder without
-    // introducing a new one. Stop so one click cannot drain the cursor.
+    // Hard cap (grouped only): pages that merely deepen already-visible
+    // folders are walked past — a new folder may sit right behind them — but
+    // never unbounded many, so one click cannot drain the whole cursor.
+    // Chronological mode keeps its pre-existing behavior: fetch until a
+    // visible row appears or pages run out.
     if (
       organizeMode === "grouped" &&
       !compact &&
-      loadMoreDataFloor != null &&
-      groupedSourceConversationCount > loadMoreDataFloor
-    ) {
-      clearLoadMoreRequest();
-      return;
-    }
-    // Hard cap: never fetch unbounded pages for a single click.
-    if (
       loadMorePageFloor != null &&
       loadedPageCount >= loadMorePageFloor + MAX_PAGES_PER_LOAD_MORE_CLICK
     ) {
@@ -620,11 +612,9 @@ export function ConversationPanel({
   }, [
     clearLoadMoreRequest,
     compact,
-    loadMoreDataFloor,
     loadMoreFloor,
     loadMorePageFloor,
     visibleCount,
-    groupedSourceConversationCount,
     loadedPageCount,
     organizeMode,
     hasNextPage,
