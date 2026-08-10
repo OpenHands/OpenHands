@@ -9,6 +9,9 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
+import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useGoalStore } from "#/stores/goal-store";
+import { ExecutionStatus } from "#/types/agent-server/core";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import EventService from "#/api/event-service/event-service.api";
 import {
@@ -27,6 +30,8 @@ type CapturedWebSocketOptions = {
 const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
   mainOptions: null as CapturedWebSocketOptions | null,
+  planningOnMessage: null as null | ((event: { data: string }) => void),
+  planningOptions: null as CapturedWebSocketOptions | null,
   calls: [] as Array<{
     url: string;
     options?: CapturedWebSocketOptions;
@@ -49,6 +54,15 @@ vi.mock("#/hooks/use-websocket", () => ({
     ) {
       wsCapture.mainOnMessage = options.onMessage;
       wsCapture.mainOptions = options;
+    }
+    if (
+      url &&
+      options?.onMessage &&
+      options.queryParams &&
+      "resend_all" in options.queryParams
+    ) {
+      wsCapture.planningOnMessage = options.onMessage;
+      wsCapture.planningOptions = options;
     }
     return { socket: null, reconnect: vi.fn() };
   }),
@@ -91,6 +105,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
   beforeEach(() => {
     wsCapture.mainOnMessage = null;
     wsCapture.mainOptions = null;
+    wsCapture.planningOnMessage = null;
+    wsCapture.planningOptions = null;
     wsCapture.calls.length = 0;
     window.localStorage.clear();
     queryClient = new QueryClient({
@@ -108,6 +124,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     useMetricsStore.getState().resetMetrics();
     useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
+    useConversationStateStore.getState().reset();
+    useGoalStore.setState({ statusByConversation: {} });
 
     vi.mocked(useUserConversation).mockReturnValue({
       data: { conversation_url: "http://localhost/api", session_api_key: null },
@@ -420,6 +438,210 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // It must stay dismissed.
       deliver(errorEvent);
       expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    });
+  });
+
+  // The `isConversationStateUpdateEvent` branches used to carry a bare
+  // `// TODO: Tests` — these cover the main and planning socket handlers for
+  // every key (`full_state`, `execution_status`, `stats`, `goal`).
+  describe("conversation state update events", () => {
+    const makeStateUpdate = (key: string, value: unknown) => ({
+      id: `evt-state-${key}`,
+      timestamp: new Date().toISOString(),
+      source: "environment" as const,
+      kind: "ConversationStateUpdateEvent",
+      key,
+      value,
+    });
+
+    const renderMainCaptured = async (conversationId: string) => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId={conversationId}
+            conversationUrl="http://localhost/api"
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    };
+
+    const deliverMain = (event: unknown) =>
+      act(() => {
+        wsCapture.mainOnMessage!({ data: JSON.stringify(event) });
+      });
+
+    it("sets execution status from a full_state update", async () => {
+      await renderMainCaptured("conv-state");
+
+      deliverMain(
+        makeStateUpdate("full_state", {
+          execution_status: ExecutionStatus.RUNNING,
+        }),
+      );
+
+      expect(useConversationStateStore.getState().execution_status).toBe(
+        ExecutionStatus.RUNNING,
+      );
+    });
+
+    it("sets execution status from an execution_status update", async () => {
+      await renderMainCaptured("conv-state");
+
+      deliverMain(makeStateUpdate("execution_status", ExecutionStatus.PAUSED));
+
+      expect(useConversationStateStore.getState().execution_status).toBe(
+        ExecutionStatus.PAUSED,
+      );
+    });
+
+    it("updates the metrics store from a stats update", async () => {
+      await renderMainCaptured("conv-state");
+
+      deliverMain(
+        makeStateUpdate("stats", {
+          usage_to_metrics: {
+            default: {
+              model_name: "gpt-4o",
+              accumulated_cost: 1.25,
+              max_budget_per_task: 10,
+              accumulated_token_usage: {
+                model: "gpt-4o",
+                prompt_tokens: 100,
+                completion_tokens: 50,
+                cache_read_tokens: 10,
+                cache_write_tokens: 5,
+                reasoning_tokens: 0,
+                context_window: 128_000,
+                per_turn_token: 500,
+                response_id: "resp-1",
+              },
+              costs: [],
+              response_latencies: [],
+              token_usages: [],
+            },
+          },
+        }),
+      );
+
+      const metrics = useMetricsStore.getState();
+      expect(metrics.cost).toBe(1.25);
+      expect(metrics.max_budget_per_task).toBe(10);
+      expect(metrics.usage).toMatchObject({
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        cache_read_tokens: 10,
+        cache_write_tokens: 5,
+        context_window: 128_000,
+        per_turn_token: 500,
+      });
+    });
+
+    it("mirrors goal status into the goal store keyed by conversation", async () => {
+      await renderMainCaptured("conv-state");
+
+      const goalStatus = {
+        active: true,
+        status: "running" as const,
+        iteration: 1,
+        max_iterations: 5,
+        objective: "Fix the bug",
+        verdict: null,
+      };
+      deliverMain(makeStateUpdate("goal", goalStatus));
+
+      expect(
+        useGoalStore.getState().statusByConversation["conv-state"],
+      ).toEqual(goalStatus);
+    });
+
+    it("scopes cache invalidation to the main conversation id", async () => {
+      await renderMainCaptured("conv-main");
+      const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+      deliverMain({
+        id: "evt-action-1",
+        timestamp: new Date().toISOString(),
+        source: "agent",
+        thought: [],
+        thinking_blocks: [],
+        action: { kind: "ExecuteBashAction", command: "echo hi" },
+        tool_name: "execute_bash",
+        tool_call_id: "call-1",
+      });
+
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        { queryKey: ["file_changes", "conv-main"] },
+        { cancelRefetch: false },
+      );
+    });
+
+    it("scopes cache invalidation to the planning sub-conversation id", async () => {
+      const planningConversation: AppConversation = {
+        id: "planning-cache",
+        created_by_user_id: null,
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        title: "Planner",
+        trigger: null,
+        pr_number: [],
+        llm_model: null,
+        metrics: null,
+        created_at: "2026-07-28T00:00:00Z",
+        updated_at: "2026-07-28T00:00:00Z",
+        execution_status: null,
+        conversation_url:
+          "http://planner.example/api/conversations/planning-cache",
+        session_api_key: null,
+        sandbox_id: null,
+        sub_conversation_ids: [],
+      };
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-main"
+            conversationUrl="http://localhost/api"
+            subConversationIds={[planningConversation.id]}
+            subConversations={[planningConversation]}
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+
+      // Sanity-check the captured planning socket before delivering events:
+      // it must be the planning connection (resend_all) so the invalidation
+      // below is provably scoped by the sub-conversation id, not the main one.
+      expect(wsCapture.planningOptions?.queryParams).toEqual({
+        resend_all: true,
+      });
+
+      const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+      act(() => {
+        wsCapture.planningOnMessage!({
+          data: JSON.stringify({
+            id: "evt-plan-action-1",
+            timestamp: new Date().toISOString(),
+            source: "agent",
+            thought: [],
+            thinking_blocks: [],
+            action: { kind: "ExecuteBashAction", command: "echo hi" },
+            tool_name: "execute_bash",
+            tool_call_id: "call-plan-1",
+          }),
+        });
+      });
+
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        { queryKey: ["file_changes", "planning-cache"] },
+        { cancelRefetch: false },
+      );
     });
   });
 

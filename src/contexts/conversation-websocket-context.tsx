@@ -578,19 +578,18 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle cache invalidation for ActionEvent
-          if (isActionEvent(event)) {
-            const currentConversationId =
-              conversationId || "test-conversation-id"; // TODO: Get from context
+          // Handle cache invalidation for ActionEvent. The main WebSocket only
+          // opens when `conversationId` is present (see `wsUrl` below), so it
+          // is always defined for events arriving over this socket.
+          if (isActionEvent(event) && conversationId) {
             handleActionEventCacheInvalidation(
               event,
-              currentConversationId,
+              conversationId,
               queryClient,
             );
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             if (isFullStateConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value.execution_status);
@@ -794,20 +793,21 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle cache invalidation for ActionEvent
+          // Handle cache invalidation for ActionEvent. The planning socket only
+          // opens when the first sub-conversation has an id (see
+          // `planningAgentWsUrl` below), so it is always defined here.
           if (isActionEvent(event)) {
             const planningAgentConversation = subConversations?.[0];
-            const currentConversationId =
-              planningAgentConversation?.id || "test-conversation-id"; // TODO: Get from context
-            handleActionEventCacheInvalidation(
-              event,
-              currentConversationId,
-              queryClient,
-            );
+            if (planningAgentConversation?.id) {
+              handleActionEventCacheInvalidation(
+                event,
+                planningAgentConversation.id,
+                queryClient,
+              );
+            }
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             if (isFullStateConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value.execution_status);
