@@ -1,3 +1,39 @@
+export const FREE_MODEL_BADGE_LABEL = "Free";
+
+export const FREE_OPENHANDS_MODELS = {
+  "openhands/glm-5.2": "OpenHands GLM-5.2 (free)",
+  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
+  "openhands/minimax-m2.7": "OpenHands MiniMax M2.7 (free)",
+} as const;
+
+export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
+export const FREE_OPENHANDS_MODEL_NOTE = `Free OpenHands models: ${FREE_OPENHANDS_MODEL_IDS.join(
+  ", ",
+)}. Other provider endpoints with similar model names may require separate billing.`;
+
+export const isFreeOpenHandsModel = (
+  model: string | null | undefined,
+): model is keyof typeof FREE_OPENHANDS_MODELS =>
+  Boolean(model && model in FREE_OPENHANDS_MODELS);
+
+export function formatModelNameForDisplay(
+  model: string | null | undefined,
+): string | null {
+  if (!model) return null;
+  return isFreeOpenHandsModel(model) ? FREE_OPENHANDS_MODELS[model] : model;
+}
+
+export function formatProviderModelNameForDisplay(
+  provider: string | null | undefined,
+  model: string | null | undefined,
+): string | null {
+  if (!model) return null;
+  const fullModel = provider ? `${provider}/${model}` : model;
+  return isFreeOpenHandsModel(fullModel)
+    ? FREE_OPENHANDS_MODELS[fullModel]
+    : model;
+}
+
 /**
  * Format a native (OpenHands-kind) routing model string for display, stripping
  * the provider route prefix (e.g. ``"anthropic/claude-sonnet-4-5-20250929"`` →
@@ -16,6 +52,7 @@ export function formatNativeModelName(
   model: string | null | undefined,
 ): string | null {
   if (!model) return null;
+  if (isFreeOpenHandsModel(model)) return FREE_OPENHANDS_MODELS[model];
   const lastSegment = model.split("/").pop();
   return lastSegment || model;
 }

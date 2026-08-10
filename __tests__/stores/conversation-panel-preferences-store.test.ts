@@ -8,15 +8,17 @@ describe("conversation-panel-preferences store", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to showing older conversations, LLM profiles, chronological list, and expected toggles", () => {
+  it("defaults to showing older conversations, chronological list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
     expect(state.showRepoBranchMetadata).toBe(false);
-    expect(state.showLlmProfiles).toBe(true);
-    expect(state.showTagsMetadata).toBe(true);
+    expect(state.showLlmProfiles).toBe(false);
+    expect(state.showTagsMetadata).toBe(false);
     expect(state.organizeMode).toBe("chronological");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
+    expect(state.automationFilterMode).toBe("all");
+    expect(state.selectedAutomationNames).toEqual([]);
   });
 
   it("toggles showOlderConversations and persists the new value to localStorage", () => {
@@ -71,9 +73,11 @@ describe("conversation-panel-preferences store", () => {
       window.localStorage.getItem(STORAGE_KEY) ?? "{}",
     );
     expect(Object.keys(persisted.state).sort()).toEqual([
+      "automationFilterMode",
       "conversationSort",
       "groupFolderOrder",
       "organizeMode",
+      "selectedAutomationNames",
       "showHoverMetadata",
       "showLlmProfiles",
       "showOlderConversations",
@@ -115,6 +119,30 @@ describe("conversation-panel-preferences store", () => {
     });
   });
 
+  it("updates the automation filter mode and toggles selected names via their actions", () => {
+    const store = useConversationPanelPreferencesStore.getState();
+    store.setAutomationFilterMode("only-automations");
+    store.toggleAutomationName("Nightly Audit");
+    store.toggleAutomationName("PR Review Bot");
+    store.toggleAutomationName("Nightly Audit");
+
+    const next = useConversationPanelPreferencesStore.getState();
+    expect({
+      automationFilterMode: next.automationFilterMode,
+      selectedAutomationNames: next.selectedAutomationNames,
+    }).toEqual({
+      automationFilterMode: "only-automations",
+      // Toggling twice removes the name again; the other selection stays.
+      selectedAutomationNames: ["PR Review Bot"],
+    });
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+      selectedAutomationNames: [],
+    });
+  });
+
   it("rehydrates legacy localStorage payloads (older fields preserved, new fields filled with defaults)", async () => {
     // Simulate a user upgrading from a build that only persisted the two
     // original preferences. After rehydration the store should keep the
@@ -145,21 +173,21 @@ describe("conversation-panel-preferences store", () => {
       showOlderConversations: false,
       showRepoBranchMetadata: true,
       // Filled with defaults for missing fields.
-      showLlmProfiles: true,
+      showLlmProfiles: false,
       organizeMode: "chronological",
       conversationSort: "updated",
       threadScope: "all",
     });
   });
 
-  it("preserves an explicitly hidden LLM-profiles preference from persisted storage", async () => {
+  it("preserves an explicitly enabled LLM-profiles preference from persisted storage", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         state: {
           showOlderConversations: true,
           showRepoBranchMetadata: false,
-          showLlmProfiles: false,
+          showLlmProfiles: true,
         },
         version: 0,
       }),
@@ -169,6 +197,6 @@ describe("conversation-panel-preferences store", () => {
 
     expect(
       useConversationPanelPreferencesStore.getState().showLlmProfiles,
-    ).toBe(false);
+    ).toBe(true);
   });
 });
