@@ -170,6 +170,38 @@ describe("getEventContent", () => {
     expect(screen.getByText("/workspace/README.md")).toBeInTheDocument();
   });
 
+  it.each([
+    ["create", "OBSERVATION_MESSAGE$WRITE"],
+    ["str_replace", "OBSERVATION_MESSAGE$EDIT"],
+  ])(
+    "titles a %s file-editor observation with %s",
+    (command, expectedTitleKey) => {
+      const fileEditorObservation: ObservationEvent = {
+        id: "obs-2",
+        timestamp: new Date().toISOString(),
+        source: "environment",
+        tool_name: "file_editor",
+        tool_call_id: "tool-2",
+        action_id: "action-2",
+        observation: {
+          kind: "FileEditorObservation",
+          command: command as "create" | "str_replace",
+          output: "",
+          path: "/workspace/canvas.md",
+          prev_exist: command !== "create",
+          old_content: null,
+          new_content: "# Canvas",
+          error: null,
+        },
+      };
+
+      const { title } = getEventContent(fileEditorObservation);
+
+      render(<span>{title}</span>);
+      expect(screen.getByText(expectedTitleKey)).toBeInTheDocument();
+    },
+  );
+
   it("shows action kind for action-like events missing tool_name/tool_call_id", () => {
     // Simulate an event that has an action object but fails the strict isActionEvent() guard
     const malformedEvent = {

@@ -67,7 +67,23 @@ body:
     id: actual
     attributes:
       label: Actual Behavior
-      description: What actually happened?
+      description: |
+        What actually happened? To qualify for the `ready-for-dev` label, show
+        how you reproduced the bug in a live Agent Canvas session using one of
+        the supported run methods, and attach a screenshot or video of the bug
+        in this section.
+        Run methods (reference at least one):
+          - `npx @openhands/agent-canvas` (or `agent-canvas` if installed globally)
+          - `npm run dev` / `npm run dev:minimal` (from a source checkout)
+          - The hosted canvas at `app.all-hands.dev/canvas`
+        Drag a screenshot/video into this field, or paste a link.
+      placeholder: |
+        Run method: `npm run dev`
+
+        1. npm install && npm run dev
+        2. Open http://localhost:8000
+        3. …
+        4. Observed the error shown in the attached screenshot.
     validations:
       required: true
 
@@ -85,6 +101,20 @@ body:
       label: Relevant Logs
       description: Paste any error messages or console output. Content is auto-wrapped in a code block.
       render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        Required for the `ready-for-dev` label. Testable, checkable bullets a
+        reviewer can verify. Describe the *fixed* state, not the bug.
+      placeholder: |
+        - [ ] A screenshot/video demonstrating the bug can be replicated on main is attached to the PR.
+        - [ ] A screenshot/video demonstrating that the bug is fixed on the PR branch is attached to the PR.
+        - [ ] …
     validations:
       required: false
 

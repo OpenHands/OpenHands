@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Archive,
   Bot,
   CalendarArrowDown,
   Clock3,
@@ -56,6 +57,8 @@ export interface ConversationPanelFilterMenuProps {
   onToggleAutomationName: (name: string) => void;
   automationNameFacets: string[];
   showOlderConversations: boolean;
+  showArchivedConversations: boolean;
+  toggleShowArchivedConversations: () => void;
   toggleShowOlderConversations: () => void;
   showRepoBranchMetadata: boolean;
   toggleShowRepoBranchMetadata: () => void;
@@ -86,6 +89,8 @@ export function ConversationPanelFilterMenu({
   onToggleAutomationName,
   automationNameFacets,
   showOlderConversations,
+  showArchivedConversations,
+  toggleShowArchivedConversations,
   toggleShowOlderConversations,
   showRepoBranchMetadata,
   toggleShowRepoBranchMetadata,
@@ -265,6 +270,16 @@ export function ConversationPanelFilterMenu({
             selected={threadScope === "relevant"}
             onClick={() => {
               setThreadScope("relevant");
+              setFilterMenuOpen(false);
+            }}
+          />
+          <MenuRow
+            icon={Archive}
+            label={t(I18nKey.CONVERSATION_PANEL$SHOW_ARCHIVED)}
+            selected={showArchivedConversations}
+            testId="toggle-show-archived"
+            onClick={() => {
+              toggleShowArchivedConversations();
               setFilterMenuOpen(false);
             }}
           />
