@@ -41,7 +41,7 @@ function AutomationStartOption({
   return (
     <section
       data-testid={testId}
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+      className="flex h-full min-w-0 flex-col justify-between gap-4 rounded-lg border border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
     >
       <div className="min-w-0">
         <h4 className="text-sm font-medium text-content">{title}</h4>
@@ -53,8 +53,11 @@ function AutomationStartOption({
         type="button"
         variant="primary"
         testId={buttonTestId}
+        className="mt-auto h-auto min-h-10 w-full px-4 py-2 text-center leading-tight"
         onClick={onClick}
-        startContent={<MessageSquareShareIcon className="size-4" aria-hidden />}
+        startContent={
+          <MessageSquareShareIcon className="size-4 shrink-0" aria-hidden />
+        }
       >
         {buttonLabel}
       </BrandButton>

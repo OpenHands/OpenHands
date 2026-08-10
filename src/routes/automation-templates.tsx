@@ -65,6 +65,7 @@ export default function AutomationTemplates() {
             type="button"
             variant="primary"
             testId="automation-opportunities-cta-find"
+            className="px-4 text-center"
             onClick={handleFindOpportunities}
           >
             {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
@@ -73,6 +74,7 @@ export default function AutomationTemplates() {
             type="button"
             variant="secondary"
             testId="automation-opportunities-cta-custom"
+            className="px-4 text-center"
             onClick={handleCreateCustomAutomation}
           >
             {t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON)}
