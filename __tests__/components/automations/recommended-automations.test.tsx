@@ -423,6 +423,40 @@ describe("recommended automations", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not silently hide an unknown required integration ID", () => {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "jira-issue-to-pr",
+    )!;
+    const mutableAutomation = automation as RecommendedAutomation & {
+      requires: { integrations: Record<string, unknown> };
+    };
+    const originalIntegrations = mutableAutomation.requires.integrations;
+    mutableAutomation.requires.integrations = {
+      ...originalIntegrations,
+      "unknown-integration": { required: true },
+    };
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      // The current implementation drops unknown IDs while resolving the
+      // catalog, so this assertion intentionally fails until they are surfaced.
+      expect(
+        screen.getByTestId(
+          "recommended-automation-integration-unknown-integration",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      mutableAutomation.requires.integrations = originalIntegrations;
+    }
+  });
+
   it("queues installs only for MCP-installable required integrations", async () => {
     renderLauncher();
 
