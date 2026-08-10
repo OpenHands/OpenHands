@@ -42,7 +42,7 @@ vi.mock("react-i18next", () => ({
                   ? React.cloneElement(
                       components.cmd,
                       {},
-                      "Create an automation",
+                      "help me figure out what I should automate",
                     )
                   : null}
                 {components.punct
@@ -81,7 +81,7 @@ describe("AddAutomationModal", () => {
     expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
     expect(
       screen.getByTestId("automations-create-instructions-example"),
-    ).toHaveTextContent("Create an automation");
+    ).toHaveTextContent("help me figure out what I should automate");
     expect(
       screen.getByTestId("automations-create-automation"),
     ).toHaveTextContent(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON);

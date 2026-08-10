@@ -234,11 +234,19 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
     renderAt("/automations/templates", <AutomationTemplates />);
 
     // Assert
+    const cta = await screen.findByTestId("automation-opportunities-cta");
     expect({
       title: await screen.findByText("Widget templates", {
         selector: "h1",
       }),
       description: screen.getByText("Pick a proven widget to start from."),
+      opportunityTitle: within(cta).getByText(
+        "Find automation opportunities",
+        { selector: "h2" },
+      ),
+      opportunityButton: within(cta).getByTestId(
+        "automation-opportunities-cta-button",
+      ),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toBeTruthy();
   });

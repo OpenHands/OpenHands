@@ -19,10 +19,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON]: "Create Automation",
-        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT]: "Create an automation",
+        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON]:
+          "Find automation opportunities",
+        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT]:
+          "Help me figure out what I should automate.",
         [I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE]:
-          "Include what the automation should do, when it should run, and where to send the results.",
+          "OpenHands will ask about your recurring work, tools, and handoffs, then recommend useful automations before creating anything.",
       };
       return translations[key] || key;
     },
@@ -50,7 +52,7 @@ vi.mock("react-i18next", () => ({
                   ? React.cloneElement(
                       components.cmd,
                       {},
-                      "Create an automation",
+                      "help me figure out what I should automate",
                     )
                   : null}
                 {components.punct
@@ -95,7 +97,7 @@ describe("CreateInstructions", () => {
     captureMock.mockRestore();
   });
 
-  it("captures automation_created_button with the active backend kind when Create Automation is clicked", async () => {
+  it("captures automation_created_button with the active backend kind when the discovery CTA is clicked", async () => {
     const user = userEvent.setup();
     renderCreateInstructions();
 
@@ -107,7 +109,7 @@ describe("CreateInstructions", () => {
     );
   });
 
-  it("navigates to conversations with a prefilled prompt when Create Automation is clicked", async () => {
+  it("navigates to conversations with a discovery prompt when the CTA is clicked", async () => {
     const user = userEvent.setup();
     const setMessageToSend = vi.fn();
     useConversationStore.setState({ setMessageToSend });
@@ -117,7 +119,9 @@ describe("CreateInstructions", () => {
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
-      expect(setMessageToSend).toHaveBeenCalledWith("Create an automation");
+      expect(setMessageToSend).toHaveBeenCalledWith(
+        "Help me figure out what I should automate.",
+      );
     });
   });
 });
