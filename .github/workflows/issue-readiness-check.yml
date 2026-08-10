@@ -48,7 +48,14 @@ jobs:
                   GITHUB_EVENT_PATH: ${{ github.event_path }}
               run: |
                   set -euo pipefail
+                  set +e
                   python .github/scripts/check_issue_readiness.py --json > /tmp/result.json
+                  status=$?
+                  set -e
+                  if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+                    echo "::error::Readiness evaluator failed unexpectedly with exit code $status"
+                    exit "$status"
+                  fi
                   echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
                   # Write reasons to a file so the comment step can read them
                   # without shell-escaping multiline text.
