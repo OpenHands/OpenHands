@@ -15,13 +15,19 @@ export interface MetricsState {
 
 export interface MetricsStore extends MetricsState {
   setMetrics: (metrics: MetricsState) => void;
+  resetMetrics: () => void;
 }
 
-const useMetricsStore = create<MetricsStore>((set) => ({
+const EMPTY_METRICS: MetricsState = {
   cost: null,
   max_budget_per_task: null,
   usage: null,
+};
+
+const useMetricsStore = create<MetricsStore>((set) => ({
+  ...EMPTY_METRICS,
   setMetrics: (metrics) => set(metrics),
+  resetMetrics: () => set(EMPTY_METRICS),
 }));
 
 // Dev-only console handle for inspecting the live WS metrics while

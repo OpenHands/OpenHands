@@ -288,6 +288,11 @@ export function ConversationWebSocketProvider({
     // half-applied state (events gone but the old id still reported).
     clearEventsForConversation(nextId);
     resetBrowserStore();
+    // The metrics store is conversation-scoped state too: without a reset the
+    // previous conversation's usage/cost keeps rendering in the new
+    // conversation's meter until fresh WS stats arrive — and a brand-new
+    // conversation sends none, so the stale figure stuck indefinitely.
+    useMetricsStore.getState().resetMetrics();
   }, [conversationId, clearEventsForConversation, resetBrowserStore]);
 
   useLayoutEffect(() => {

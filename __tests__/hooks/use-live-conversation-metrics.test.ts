@@ -28,9 +28,7 @@ const CONVERSATION = {
 
 // The wire can deliver nulls for any token field even though the SDK type
 // says number; the hook's `?? 0` coercion is what these tests pin.
-const restUsage = (
-  overrides: Record<string, number | null> = {},
-): TokenUsage =>
+const restUsage = (overrides: Record<string, number | null> = {}): TokenUsage =>
   ({
     prompt_tokens: 10,
     completion_tokens: 20,
@@ -75,24 +73,13 @@ describe("useLiveConversationMetrics", () => {
     useConversationMetricsMock.mockReturnValue({ data: undefined });
   });
 
-  it("prefers the REST snapshot over the live store", () => {
+  it("prefers the live store over the REST snapshot", () => {
     useMetricsStore.setState(storeMetrics);
     useConversationMetricsMock.mockReturnValue({ data: snapshot() });
 
     const { result } = renderHook(() => useLiveConversationMetrics());
 
-    expect(result.current).toEqual({
-      cost: 1.23,
-      max_budget_per_task: 5,
-      usage: {
-        prompt_tokens: 10,
-        completion_tokens: 20,
-        cache_read_tokens: 1,
-        cache_write_tokens: 2,
-        context_window: 128_000,
-        per_turn_token: 500,
-      },
-    });
+    expect(result.current).toEqual(storeMetrics);
   });
 
   it("coerces null token fields from the wire to zero", () => {
@@ -132,12 +119,23 @@ describe("useLiveConversationMetrics", () => {
     });
   });
 
-  it("falls back to the live store while there is no REST snapshot", () => {
-    useMetricsStore.setState(storeMetrics);
+  it("falls back to the REST snapshot while the store is empty", () => {
+    useConversationMetricsMock.mockReturnValue({ data: snapshot() });
 
     const { result } = renderHook(() => useLiveConversationMetrics());
 
-    expect(result.current).toEqual(storeMetrics);
+    expect(result.current).toEqual({
+      cost: 1.23,
+      max_budget_per_task: 5,
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        cache_read_tokens: 1,
+        cache_write_tokens: 2,
+        context_window: 128_000,
+        per_turn_token: 500,
+      },
+    });
   });
 
   it("threads the enabled flag through to the polling query", () => {
