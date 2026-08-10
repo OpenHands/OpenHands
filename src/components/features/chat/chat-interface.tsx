@@ -86,6 +86,12 @@ export function ChatInterface() {
   const markPendingMessageError = useOptimisticUserMessageStore(
     (state) => state.markPendingMessageError,
   );
+  const updatePendingMessage = useOptimisticUserMessageStore(
+    (state) => state.updatePendingMessage,
+  );
+  const updatePendingMessageProgress = useOptimisticUserMessageStore(
+    (state) => state.updatePendingMessageProgress,
+  );
   const pendingMessages = useOptimisticUserMessageStore(
     (state) => state.pendingMessages,
   );
@@ -337,41 +343,60 @@ export function ChatInterface() {
 
     const timestamp = new Date().toISOString();
 
-    const { skipped_files: skippedFiles, uploaded_files: uploadedFiles } =
-      files.length > 0
-        ? await uploadFiles({ conversationId: conversationId!, files })
-        : { skipped_files: [], uploaded_files: [] };
-
-    skippedFiles.forEach((f) => displayErrorToast(f.reason));
-
-    const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
-    const prompt =
-      uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
-
-    // Enqueue the message into the local pending queue with status "sending"
-    // so the user immediately sees it in the chat with a faded treatment. The
-    // entry is removed when the WebSocket echoes back the corresponding
-    // `UserMessageEvent`. If the API call to send the message fails, the entry
-    // is flipped to "error" with a retry link.
+    // --- KEY FIX for #16430 ---
+    // Enqueue the pending bubble IMMEDIATELY — before any network I/O — so
+    // the user's prompt is always visible in the chat stream. When files are
+    // attached we start in "uploading" state; otherwise we go straight to
+    // "sending". Either way the user never sees a blank chat during the wait.
+    const hasFiles = files.length > 0;
     const pendingId = enqueuePendingMessage({
       conversationId: conversationId!,
-      // `text` is what the user sees in the bubble; `content` is what we
-      // actually hand to the server (the prompt may include an appended
-      // "Files uploaded: …" block) and is what the echo will be matched
-      // against. They're different when there are file attachments.
       text: content,
-      content: prompt,
+      // `content` will be updated with the file-annotated prompt once upload
+      // succeeds. For now we use the raw user text so the bubble is readable.
+      content,
       imageUrls,
-      fileUrls: uploadedFiles,
+      fileUrls: [],
       timestamp,
+      status: hasFiles ? "uploading" : "sending",
+      uploadProgress: hasFiles ? 0 : undefined,
     });
-    // Submitting a new prompt should always pull the chat back to the
-    // latest message even if the user had scrolled up. This also re-arms
-    // autoScroll so the streamed agent reply auto-follows.
+
+    // Scroll to bottom and clear the draft so the composer is immediately
+    // responsive for the next message.
     scrollDomToBottom();
     setMessageToSend("");
 
     try {
+      let uploadedFiles: string[] = [];
+
+      if (hasFiles) {
+        const { skipped_files: skippedFiles, uploaded_files: uploaded } =
+          await uploadFiles({
+            conversationId: conversationId!,
+            files,
+            onProgress: ({ percentage }) => {
+              updatePendingMessageProgress(pendingId, percentage);
+            },
+          });
+
+        skippedFiles.forEach((f) => displayErrorToast(f.reason));
+        uploadedFiles = uploaded;
+      }
+
+      const filePrompt = `${t(I18nKey.CHAT_INTERFACE$AUGMENTED_PROMPT_FILES_TITLE)}: ${uploadedFiles.join("\n\n")}`;
+      const prompt =
+        uploadedFiles.length > 0 ? `${content}\n\n${filePrompt}` : content;
+
+      // Transition the bubble from "uploading" → "sending" and bake in the
+      // final prompt + file paths so echo-matching works correctly.
+      updatePendingMessage(pendingId, {
+        content: prompt,
+        fileUrls: uploadedFiles,
+        status: "sending",
+        uploadProgress: undefined,
+      });
+
       await send(
         createChatMessage(prompt, imageUrls, uploadedFiles, timestamp),
       );
