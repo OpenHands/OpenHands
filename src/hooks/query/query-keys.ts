@@ -77,6 +77,17 @@ export const PENTEST_ENGAGEMENTS_QUERY_KEYS = {
   all: ["pentest-engagements"] as const,
 } as const;
 
+/** Findings Service list / detail / stats (PROJETOSIN-188). */
+export const FINDINGS_QUERY_KEYS = {
+  all: ["findings"] as const,
+  lists: ["findings", "list"] as const,
+  list: (engagementId: string, filters: Record<string, unknown>) =>
+    ["findings", "list", engagementId, filters] as const,
+  details: ["findings", "detail"] as const,
+  detail: (id: string) => ["findings", "detail", id] as const,
+  stats: (engagementId: string) => ["findings", "stats", engagementId] as const,
+} as const;
+
 export const APPWRITE_QUERY_KEYS = {
   all: ["appwrite"] as const,
   databases: ["appwrite", "databases"] as const,

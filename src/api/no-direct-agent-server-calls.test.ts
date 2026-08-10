@@ -15,8 +15,13 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/integrations/desktop-service.ts",
   // Pentest Fase-0 endpoints are not yet in typescript-client (PROJETOSIN-182/185).
   "api/pentest-service/pentest-service.api.ts",
+<<<<<<< HEAD
   // POST /api/workspaces/clone not yet in published typescript-client 1.37.0.
   "api/workspaces-service/workspaces-service.api.ts",
+=======
+  // Findings Service (PROJETOSIN-188) — dedicated local pentest HTTP client.
+  "api/pentest/findings-service.ts",
+>>>>>>> 722351dcd (feat(findings): add /findings panel UI for PROJETOSIN-188)
 ]);
 
 function collectSourceFiles(dir: string): string[] {
