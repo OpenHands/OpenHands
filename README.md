@@ -1,144 +1,93 @@
 <a name="readme-top"></a>
 
 <div align="center">
-  <img src="https://assets.openhands.dev/logo-whitebackground.png" alt="OpenHands logo" width="340">
-  <h1 align="center" style="border-bottom: none">Agent Canvas</h1>
+  <h1 align="center" style="border-bottom: none">🌌 AURORA AI</h1>
   <p align="center">
-    <strong>The self-hosted developer control center for coding agents and automations.</strong>
+    <strong>La plateforme souveraine de développement IA de nouvelle génération.</strong>
   </p>
   <p align="center">
-    Run OpenHands, Claude Code, Codex, Gemini, or any ACP-compatible agent across local, remote, and cloud backends.
+    Combinant la puissance des agents autonomes d'OpenHands et l'excellence de l'environnement Code - OSS.
   </p>
 </div>
-<div align="center">
-  <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
-  <a href="https://github.com/OpenHands/OpenHands/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/OpenHands/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
-  <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
-  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
-  <a href="https://go.openhands.dev/slack"><img src="https://img.shields.io/badge/Slack-Join%20the%20community-611f69?logo=slack&logoColor=white&style=for-the-badge" alt="Join us on Slack"></a>
-</div>
-<div align="center">
-  <a href="#quickstart">Quickstart</a> |
-  <a href="./docs/README.md">Docs</a> |
-  <a href="./docs/SELF_HOSTING.md">Self-Hosting</a> |
-  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents">ACP Agents</a> |
-  <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations">Automations</a> |
-  <a href="https://go.openhands.dev/slack">Slack</a>
-</div>
-<p align="center">
-  <img src="https://assets.openhands.dev/screenshot/automation-preview.png" alt="Agent Canvas automation preview" width="100%">
-</p>
+
 <hr>
 
-OpenHands Agent Canvas turns your coding agents into a self-hosted, always-on engineering team. It's a developer control center for starting conversations and automating everyday tasks — like generating reports that publish to Slack or automatically decomposing GitHub issues into tasks.
+Aurora AI est une plateforme web d'intelligence artificielle avancée conçue pour les équipes de développement modernes. Elle fusionne :
 
-It runs locally on your machine by default, but can connect to multiple “agent backends”, e.g. running agents in Docker containers, on VMs, or within your company infrastructure. You can optionally choose to run agents on OpenHands Cloud or OpenHands Enterprise infrastructure.
-
-Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use any third-party agent like Claude Code and Codex.
-
-|                                                                                                                      |                                                                                                                                          |
-| -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [**Self-host your way**](https://docs.openhands.dev/openhands/usage/agent-canvas/backend-setup/vm)                   | Run agents locally, in Docker, on VMs, or anywhere you can run an agent server backend                                                   |
-| [**Switch between different backends**](https://docs.openhands.dev/openhands/usage/agent-canvas/backends)            | Switch between local, remote, and cloud agents without losing focus                                                                      |
-| [**Create automations**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations)               | Create automations and workflows that integrate with Slack, GitHub, Linear, and more. Run on a schedule or in response to webhook events |
-| [**Integrate with the tools you use**](https://docs.openhands.dev/openhands/usage/agent-canvas/prebuilt-automations) | Connect your automations with third-party services like Slack, GitHub, Notion, and more to automate workflows                            |
-| [**Bring your own model**](https://docs.openhands.dev/openhands/usage/settings/llm-settings#llm-profiles)            | Use with any LLM                                                                                                                         |
-| [**Use with any agent**](https://docs.openhands.dev/openhands/usage/agent-canvas/acp-agents)                         | Use with OpenHands, Claude Code, Codex, Gemini, or any agent with Agent-Client Protocol (ACP).                                           |
-
-If you have questions or feedback, please open a GitHub issue or join the [#proj-agent-canvas channel in Slack](https://openhands.dev/joinslack).
-
-## Quickstart
-
-You can install OpenHands to run agents on any machine: on your laptop, on a dedicated computer like a Mac Mini,
-or on a server in the cloud.
-
-The most powerful way to run OpenHands is on a server in the cloud. This allows your agents to continue running
-even when your laptop is shut, and makes it easier to trigger your agents through third-party services
-like Slack, GitHub, and Datadog. See [SELF_HOSTING.md](docs/SELF_HOSTING.md) for details, especially with respect to security hardening.
-
-Notably, you can run the backend in _multiple different environments_, and switch between
-them from the same Agent Canvas frontend. E.g. you can share an Agent Server with your team for agents doing
-code review and dependency updates, then have your personal agents running on your laptop.
-
-### Option 1: Without a Sandbox
-
-> [!WARNING]
-> This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
-
-**Prerequisites**: Node.js 22.12.x or later, `uv`
-
-```sh
-npm install -g @openhands/agent-canvas
-agent-canvas
-```
-
-The `agent-canvas` command starts the full local stack by default. You can also split it when you want to run pieces separately:
-
-```sh
-agent-canvas --frontend-only  # static frontend + ingress only
-agent-canvas --backend-only   # agent server + automation backend + ingress only
-```
-
-### Option 2: With a Docker Sandbox
-
-**Prerequisites**:
-
-- Docker: Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
-- A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
-
-**macOS / Linux:**
-
-```sh
-export PROJECTS_PATH="$HOME/projects"  # directory containing your project folders
-mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
-
-docker run -it --rm \
-  -p 8000:8000 \
-  -v "$HOME/.openhands:/home/openhands/.openhands" \
-  -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
-```
-
-**Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
-
-The agent will be able to access any project under `PROJECTS_PATH`.
-
-### Option 3: From Source
-
-> [!WARNING]
-> This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
-
-**Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
-
-```sh
-git clone https://github.com/OpenHands/OpenHands.git
-cd OpenHands
-npm install
-npm run dev
-```
+1. **La puissance d'OpenHands** comme moteur d'agent IA autonome (gestion des tâches, exécution, outil de commande).
+2. **L'ergonomie de Code - OSS / VS Code** (éditeur Monaco, explorateur, terminaux multiples).
+3. **Une interface utilisateur propriétaire haut de gamme** (Next.js, Tailwind CSS, Radix UI, Framer Motion) offrant une expérience "Copilot" centralisée.
 
 ---
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+## 🚀 DÉMARRAGE RAPIDE (QUICKSTART)
 
-# Architecture
+Pour exécuter Aurora AI localement sur votre machine de développement :
 
-Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
+### Prérequis
+- **Node.js** v22.12.x ou supérieur
+- **npm** v10.x ou supérieur
+- **uv** (pour l'installation automatique du serveur d'agent en arrière-plan)
 
-You can run an Agent Server anywhere:
+### Cloner et Installer
+```bash
+# 1. Cloner notre dépôt souverain
+git clone https://github.com/Frankenstein-dev197/OpenHands.git
+cd OpenHands
 
-- Directly on your laptop (be careful!)
-- On a dedicated machine like a Mac Mini
-- On a virtual machine in the cloud
-- Inside OpenHands Cloud (our commercial offering)
+# 2. Installer les dépendances
+npm ci
 
-The Agent Server is often paired with an [Automation Server](https://github.com/OpenHands/automation), which lets you set up agents that run on a schedule or in response to events.
+# 3. Lancer l'environnement de développement complet (Vite, Ingress, Agent, Automations)
+npm run dev
+```
 
-<img width="1456" height="1258" alt="image" src="https://github.com/user-attachments/assets/cb6de6f5-ac30-4d04-a76a-b5c259f0c163" />
+Une fois démarré, accédez à la plateforme à l'adresse [http://localhost:8000](http://localhost:8000).
 
-## More documentation
+---
 
-- [Documentation index](./docs/README.md)
-- [Architecture overview](./docs/architecture.md)
-- [Development guide](./docs/DEVELOPMENT.md)
-- [Self-hosting guide](./docs/SELF_HOSTING.md)
+## 🏛️ ARCHITECTURE TECHNIQUE
+
+L'architecture d'Aurora AI repose sur deux couches robustes :
+
+```
+               UTILISATEUR (AURORA AI UI)
+                     |
+                     v
+           CENTRE DE CONTRÔLE IA
+              (Chat UI Copilot)
+                     |
+         +-----------+-----------+
+         |           |           |
+         v           v           v
+    ÉDITEUR MONACO TERMINAL   NAVIGATEUR
+         |           |           |
+         +-----------+-----------+
+                     |
+                     v
+             COORDINATEUR AGENT
+           (OpenHands SDK Engine)
+```
+
+- **Frontend Propriétaire (Aurora UI)** : Développé en Next.js, React, Tailwind CSS et Radix UI. Il gère l'historique de chat avec streaming, le panneau des tâches, l'affichage de diffs Monaco en temps réel, et le workflow d'approbation (Human-in-the-Loop).
+- **Moteur d'Agent (OpenHands Agent Server)** : Gère les sandboxes Docker, le cycle de vie de l'agent, et la communication bidirectionnelle en WebSocket.
+
+---
+
+## 🔒 WORKFLOW D'APPROBATION ET DE SÉCURITÉ
+
+Avant chaque opération critique (par exemple la modification d'un fichier de configuration ou l'exécution de commandes sensibles), l'agent présente une demande claire à l'utilisateur :
+
+- **Approuver (✔)** : L'action est exécutée immédiatement dans la sandbox.
+- **Modifier (✏)** : L'utilisateur ajuste la commande ou le code proposé avant exécution.
+- **Refuser (✖)** : L'action est avortée et l'agent s'adapte en conséquence.
+
+---
+
+## 📜 LICENCES ET CONDITIONS D'UTILISATION
+
+Ce projet réutilise des composants open source conformément à leurs licences respectives :
+- **OpenHands / OpenDevin** (MIT License) : Copyright (c) 2025 OpenHands contributors.
+- **Code - OSS / Monaco Editor** (MIT License) : Copyright (c) Microsoft Corporation.
+
+Pour plus de détails sur les choix d'architecture, l'audit de licence et les règles d'intégration, consultez le document [AUDIT_ARCHITECTURE.md](./AUDIT_ARCHITECTURE.md).
