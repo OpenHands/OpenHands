@@ -23,7 +23,9 @@ import {
   AppConversation,
   AppConversationPage,
   SandboxStatus,
+  RuntimeConversationStats,
 } from "./conversation-service/agent-server-conversation-service.types";
+import { getCombinedMetricsFromStats } from "#/utils/conversation-metrics";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -63,6 +65,7 @@ export interface DirectConversationInfo {
       per_turn_token?: number;
     } | null;
   } | null;
+  stats?: RuntimeConversationStats | null;
   agent?: {
     /**
      * Pydantic discriminator from the SDK union: ``"ACPAgent"`` for ACP CLI
@@ -375,7 +378,9 @@ export function toAppConversation(
               }
             : null,
         }
-      : null,
+      : info.stats
+        ? getCombinedMetricsFromStats(info.stats)
+        : null,
     created_at: info.created_at,
     updated_at: info.updated_at,
     execution_status:

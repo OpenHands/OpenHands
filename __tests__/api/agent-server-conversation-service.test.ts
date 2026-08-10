@@ -648,6 +648,74 @@ describe("AgentServerConversationService", () => {
       expect(result.items[0]?.sandbox_status).toBe("PAUSED");
     });
 
+    it("surfaces usage metrics from conversation search results", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-with-usage",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            stats: {
+              usage_to_metrics: {
+                agent: {
+                  model_name: "test-model",
+                  accumulated_cost: 1.25,
+                  max_budget_per_task: null,
+                  accumulated_token_usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 25,
+                    cache_read_tokens: 10,
+                    cache_write_tokens: 5,
+                    context_window: 1_000,
+                    per_turn_token: 125,
+                  },
+                  costs: [],
+                  response_latencies: [],
+                  token_usages: [],
+                },
+                condenser: {
+                  model_name: "test-model",
+                  accumulated_cost: 0.75,
+                  max_budget_per_task: null,
+                  accumulated_token_usage: {
+                    prompt_tokens: 40,
+                    completion_tokens: 15,
+                    cache_read_tokens: 4,
+                    cache_write_tokens: 2,
+                    context_window: 2_000,
+                    per_turn_token: 55,
+                  },
+                  costs: [],
+                  response_latencies: [],
+                  token_usages: [],
+                },
+              },
+            },
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.metrics).toEqual({
+        accumulated_cost: 2,
+        max_budget_per_task: null,
+        accumulated_token_usage: {
+          prompt_tokens: 140,
+          completion_tokens: 40,
+          cache_read_tokens: 14,
+          cache_write_tokens: 7,
+          context_window: 2_000,
+          per_turn_token: 125,
+        },
+      });
+    });
+
     it("preserves the launched Agent Profile through the wire normalizer", async () => {
       mockHttpGet.mockResolvedValue({
         data: [

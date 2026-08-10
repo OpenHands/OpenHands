@@ -64,10 +64,15 @@ import type {
   AppConversationPage,
   AppConversationStartRequest,
   AppConversationStartTask,
+  Cost,
   MetricsSnapshot,
+  ResponseLatency,
+  RuntimeConversationStats,
   RuntimeConversationInfo,
+  RuntimeMetrics,
   SendMessageRequest,
   SendMessageResponse,
+  TokenUsage,
 } from "./agent-server-conversation-service.types";
 
 const DEFAULT_CONVERSATION_TIMESTAMP = "1970-01-01T00:00:00.000Z";
@@ -133,6 +138,78 @@ function normalizeMetrics(value: unknown): MetricsSnapshot | null {
     max_budget_per_task: numberOrNull(value.max_budget_per_task),
     accumulated_token_usage: normalizeTokenUsage(value.accumulated_token_usage),
   };
+}
+
+function normalizeCosts(value: unknown): Cost[] {
+  if (!Array.isArray(value)) return [];
+
+  const costs: Cost[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const model = stringOrNull(entry.model);
+    const cost = numberOrNull(entry.cost);
+    const timestamp = numberOrNull(entry.timestamp);
+    if (model === null || cost === null || timestamp === null) continue;
+    costs.push({ model, cost, timestamp });
+  }
+  return costs;
+}
+
+function normalizeResponseLatencies(value: unknown): ResponseLatency[] {
+  if (!Array.isArray(value)) return [];
+
+  const responseLatencies: ResponseLatency[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const model = stringOrNull(entry.model);
+    const latency = numberOrNull(entry.latency);
+    const responseId = stringOrNull(entry.response_id);
+    if (model === null || latency === null || responseId === null) continue;
+    responseLatencies.push({
+      model,
+      latency,
+      response_id: responseId,
+    });
+  }
+  return responseLatencies;
+}
+
+function normalizeTokenUsages(value: unknown): TokenUsage[] {
+  if (!Array.isArray(value)) return [];
+
+  const tokenUsages: TokenUsage[] = [];
+  for (const entry of value) {
+    const tokenUsage = normalizeTokenUsage(entry);
+    if (tokenUsage) tokenUsages.push(tokenUsage);
+  }
+  return tokenUsages;
+}
+
+function normalizeRuntimeStats(
+  value: unknown,
+): RuntimeConversationStats | null {
+  if (!isRecord(value) || !isRecord(value.usage_to_metrics)) return null;
+
+  const usageToMetrics: Record<string, RuntimeMetrics> = {};
+  for (const [usageId, rawMetrics] of Object.entries(value.usage_to_metrics)) {
+    if (!isRecord(rawMetrics)) continue;
+
+    usageToMetrics[usageId] = {
+      model_name: stringOrNull(rawMetrics.model_name) ?? "",
+      accumulated_cost: numberOrZero(rawMetrics.accumulated_cost),
+      max_budget_per_task: numberOrNull(rawMetrics.max_budget_per_task),
+      accumulated_token_usage: normalizeTokenUsage(
+        rawMetrics.accumulated_token_usage,
+      ),
+      costs: normalizeCosts(rawMetrics.costs),
+      response_latencies: normalizeResponseLatencies(
+        rawMetrics.response_latencies,
+      ),
+      token_usages: normalizeTokenUsages(rawMetrics.token_usages),
+    };
+  }
+
+  return { usage_to_metrics: usageToMetrics };
 }
 
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
@@ -244,6 +321,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
     metrics: normalizeMetrics(item.metrics),
+    stats: normalizeRuntimeStats(item.stats),
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
     tags: normalizeTags(item.tags),
