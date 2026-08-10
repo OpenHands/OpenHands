@@ -38,8 +38,10 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
+import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
 import type {
   ConversationErrorEvent,
@@ -644,6 +646,17 @@ export function ConversationWebSocketProvider({
           if (isCanvasUIActionEvent(event)) {
             handleCanvasUIAction(event.action, conversationId ?? null);
           }
+
+          // Same client-tool pattern, but the work is a network call: launch
+          // the requested child conversation and post the outcome back so the
+          // agent learns the id the server-side acknowledgement can't carry.
+          if (conversationId && isLaunchChildConversationActionEvent(event)) {
+            void handleLaunchChildConversationAction(
+              event.action,
+              conversationId,
+              event.tool_call_id,
+            );
+          }
         }
       } catch (error) {
         console.warn("Failed to parse WebSocket message as JSON:", error);
@@ -863,13 +876,9 @@ export function ConversationWebSocketProvider({
       ? { resend_mode: "since", after_timestamp: initialAfterTimestamp }
       : { resend_mode: "all" };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
-
     return {
       queryParams,
+      sessionApiKey,
       reconnect: { enabled: true },
       onOpen: () => {
         setMainConnectionState("OPEN");
@@ -902,15 +911,13 @@ export function ConversationWebSocketProvider({
       resend_all: true,
     };
 
-    // Add session_api_key if available
-    if (sessionApiKey) {
-      queryParams.session_api_key = sessionApiKey;
-    }
-
     const planningAgentConversation = subConversations?.[0];
+    const planningApiKey =
+      planningAgentConversation?.session_api_key ?? sessionApiKey;
 
     return {
       queryParams,
+      sessionApiKey: planningApiKey,
       reconnect: { enabled: true },
       onOpen: async () => {
         setPlanningConnectionState("OPEN");

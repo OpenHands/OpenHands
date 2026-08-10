@@ -12,6 +12,8 @@ interface ConversationCardActionsProps {
   contextMenuOpen: boolean;
   onContextMenuToggle: (isOpen: boolean) => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -25,6 +27,8 @@ export function ConversationCardActions({
   contextMenuOpen,
   onContextMenuToggle,
   onDelete,
+  onArchive,
+  onUnarchive,
   onStop,
   onEdit,
   onDownloadViaVSCode,
@@ -75,7 +79,7 @@ export function ConversationCardActions({
     // bottom that opening downward would clip the menu, flip it above
     // the anchor instead. Slight over-estimate is fine — it just means
     // we flip a few pixels earlier than strictly necessary.
-    const ESTIMATED_MENU_HEIGHT = 280;
+    const ESTIMATED_MENU_HEIGHT = 320;
     const gutter = 8;
     const overflowsDownward = bottom + ESTIMATED_MENU_HEIGHT + gutter > vh;
     const top = overflowsDownward
@@ -110,6 +114,8 @@ export function ConversationCardActions({
               floatingStyle={floatingStyle}
               onClose={() => onContextMenuToggle(false)}
               onDelete={onDelete}
+              onArchive={onArchive}
+              onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
               onDownloadViaVSCode={

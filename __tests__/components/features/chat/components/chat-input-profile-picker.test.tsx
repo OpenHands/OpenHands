@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { setStoredConversationMetadata } from "#/api/conversation-metadata-store";
@@ -17,7 +17,7 @@ vi.mock("#/hooks/query/use-active-conversation", () => ({
 }));
 
 vi.mock("#/hooks/mutation/use-create-conversation", () => ({
-  useCreateConversation: () => ({ mutate: createConversationMutate }),
+  useCreateConversation: () => ({ mutateAsync: createConversationMutate }),
   CREATE_CONVERSATION_MUTATION_KEY: ["create-conversation"],
 }));
 
@@ -29,19 +29,24 @@ vi.mock("#/hooks/mutation/use-activate-agent-profile", () => ({
   ACTIVATE_AGENT_PROFILE_MUTATION_KEY: ["activate-agent-profile"],
 }));
 
-import { ChatInputProfilePicker } from "#/components/features/chat/components/chat-input-profile-picker";
+import { ChatInputProfileMenuContent } from "#/components/features/chat/components/chat-input-profile-picker";
 
 const PROFILES = [
   { id: "id-default", name: "Default", agent_kind: "openhands" },
   { id: "id-codex", name: "Codex", agent_kind: "acp" },
 ];
 
-describe("ChatInputProfilePicker", () => {
+describe("ChatInputProfileMenuContent", () => {
+  const onClose = vi.fn();
+
   beforeEach(() => {
     useAgentProfilesMock.mockReset();
     useActiveConversationMock.mockReset();
     activateProfileMutate.mockReset();
     createConversationMutate.mockReset();
+    // selectProfile chains .then off mutateAsync — keep a resolved default.
+    createConversationMutate.mockResolvedValue({ conversation_id: "conv-x" });
+    onClose.mockReset();
     localStorage.clear();
 
     useAgentProfilesMock.mockReturnValue({
@@ -54,66 +59,48 @@ describe("ChatInputProfilePicker", () => {
     });
   });
 
-  const renderHomePicker = () =>
-    renderWithProviders(<ChatInputProfilePicker />, {
-      navigation: { conversationId: null },
-    });
-
-  it("renders nothing when there are no profiles", () => {
-    useAgentProfilesMock.mockReturnValue({
-      data: { profiles: [], active_agent_profile_id: null },
-      isLoading: false,
-    });
-
-    const { container } = renderHomePicker();
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("renders nothing while a cloud start task is provisioning", () => {
-    const { container } = renderWithProviders(<ChatInputProfilePicker />, {
-      navigation: { conversationId: "task-start-1" },
-    });
-
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("labels the button with the active profile", () => {
-    renderHomePicker();
-    expect(screen.getByTestId("chat-input-agent-profile")).toHaveTextContent(
-      "Default",
+  // The menu content renders <li> children (it lives inside the tools menu's
+  // submenu <ContextMenu> in the app), so tests wrap it in a bare <ul>.
+  const renderMenu = (navigation: object = { conversationId: null }) =>
+    renderWithProviders(
+      <ul>
+        <ChatInputProfileMenuContent onClose={onClose} />
+      </ul>,
+      { navigation },
     );
-  });
 
-  it("activates the picked profile", () => {
-    renderHomePicker();
-    fireEvent.click(screen.getByTestId("chat-input-agent-profile"));
+  it("activates the picked profile on the home page", () => {
+    renderMenu();
     fireEvent.click(
       screen.getByTestId("chat-input-agent-profile-option-Codex"),
     );
 
     expect(activateProfileMutate).toHaveBeenCalledWith("id-codex");
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("does not activate when the active profile is re-selected", () => {
-    renderHomePicker();
-    fireEvent.click(screen.getByTestId("chat-input-agent-profile"));
+    renderMenu();
     fireEvent.click(
       screen.getByTestId("chat-input-agent-profile-option-Default"),
     );
 
     expect(activateProfileMutate).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("links to the AgentProfile library in settings", () => {
-    const { container } = renderHomePicker();
-    fireEvent.click(screen.getByTestId("chat-input-agent-profile"));
+    const { container } = renderMenu();
 
     expect(
       container.ownerDocument.querySelector('a[href="/settings/agents"]'),
     ).not.toBeNull();
   });
 
-  it("shows the launched profile inside a blank conversation", () => {
+  it("treats the launched profile as current inside a blank conversation", () => {
+    // The active pointer is Codex, but this blank conversation was launched
+    // from Default — re-selecting Default must be a no-op (no replacement
+    // conversation, no activate).
     useAgentProfilesMock.mockReturnValue({
       data: { profiles: PROFILES, active_agent_profile_id: "id-codex" },
       isLoading: false,
@@ -129,17 +116,18 @@ describe("ChatInputProfilePicker", () => {
       isLoading: false,
     });
 
-    renderWithProviders(<ChatInputProfilePicker />, {
-      navigation: { conversationId: "conv-1" },
-    });
-
-    expect(screen.getByTestId("chat-input-agent-profile")).toHaveTextContent(
-      "Default",
+    renderMenu({ conversationId: "conv-1" });
+    fireEvent.click(
+      screen.getByTestId("chat-input-agent-profile-option-Default"),
     );
+
+    expect(createConversationMutate).not.toHaveBeenCalled();
+    expect(activateProfileMutate).not.toHaveBeenCalled();
   });
 
-  it("starts a replacement conversation with the selected profile and workspace", () => {
+  it("starts a replacement conversation with the selected profile and workspace", async () => {
     const navigate = vi.fn();
+    createConversationMutate.mockResolvedValue({ conversation_id: "conv-2" });
     useActiveConversationMock.mockReturnValue({
       data: {
         id: "conv-workspace",
@@ -153,30 +141,25 @@ describe("ChatInputProfilePicker", () => {
       isLoading: false,
     });
 
-    renderWithProviders(<ChatInputProfilePicker />, {
-      navigation: { conversationId: "conv-workspace", navigate },
-    });
-    fireEvent.click(screen.getByTestId("chat-input-agent-profile"));
+    renderMenu({ conversationId: "conv-workspace", navigate });
 
     expect(screen.getByText("CHAT$START_NEW_WITH_PROFILE_HINT")).toBeVisible();
     fireEvent.click(
       screen.getByTestId("chat-input-agent-profile-option-Codex"),
     );
 
-    expect(createConversationMutate).toHaveBeenCalledWith(
-      {
-        agentProfileId: "id-codex",
-        entryPoint: "blank_conversation_profile_picker",
-        workingDir: "/workspace/alpha",
-        workspaceMode: "local_repo",
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    );
+    expect(createConversationMutate).toHaveBeenCalledWith({
+      agentProfileId: "id-codex",
+      entryPoint: "blank_conversation_profile_picker",
+      workingDir: "/workspace/alpha",
+      workspaceMode: "local_repo",
+    });
     expect(activateProfileMutate).not.toHaveBeenCalled();
 
-    const onSuccess = createConversationMutate.mock.calls[0]?.[1]?.onSuccess;
-    onSuccess({ conversation_id: "conv-2" });
-    expect(navigate).toHaveBeenCalledWith("/conversations/conv-2");
+    // Navigation rides the mutateAsync promise (survives the menu unmounting).
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith("/conversations/conv-2"),
+    );
   });
 
   it("preserves repository and plugin context when changing a blank conversation profile", () => {
@@ -206,10 +189,7 @@ describe("ChatInputProfilePicker", () => {
       isLoading: false,
     });
 
-    renderWithProviders(<ChatInputProfilePicker />, {
-      navigation: { conversationId: "conv-repo" },
-    });
-    fireEvent.click(screen.getByTestId("chat-input-agent-profile"));
+    renderMenu({ conversationId: "conv-repo" });
     fireEvent.click(
       screen.getByTestId("chat-input-agent-profile-option-Codex"),
     );
@@ -230,7 +210,6 @@ describe("ChatInputProfilePicker", () => {
           },
         ],
       }),
-      expect.any(Object),
     );
   });
 });

@@ -124,6 +124,7 @@ const makeTaskTrackerObservation = (
 const makeAgentErrorEvent = (id: string): AgentErrorEvent => ({
   id,
   timestamp: new Date().toISOString(),
+  kind: "AgentErrorEvent",
   source: "agent",
   tool_name: "execute_bash",
   tool_call_id: `call_${id}`,

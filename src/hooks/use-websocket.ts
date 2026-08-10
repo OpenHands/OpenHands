@@ -1,7 +1,9 @@
 import React from "react";
+import { sendWebSocketAuth } from "#/utils/websocket-auth";
 
 export interface WebSocketHookOptions {
   queryParams?: Record<string, string | boolean>;
+  sessionApiKey?: string | null;
   onOpen?: (event: Event) => void;
   onClose?: (event: CloseEvent) => void;
   onMessage?: (event: MessageEvent) => void;
@@ -56,6 +58,7 @@ export const useWebSocket = <T = string>(
     allowedToReconnectRef.current.add(ws);
 
     ws.onopen = (event) => {
+      sendWebSocketAuth(ws, optionsRef.current?.sessionApiKey);
       setIsConnected(true);
       setError(null); // Clear any previous errors
       setIsReconnecting(false);

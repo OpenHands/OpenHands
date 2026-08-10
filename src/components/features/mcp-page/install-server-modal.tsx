@@ -1,7 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { AxiosError } from "axios";
-import { v4 as uuidv4 } from "uuid";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -406,7 +405,7 @@ export function InstallServerModal({
       auth = { strategy: "header", headers: fieldHeaders };
     }
     const payload: MCPServerConfig = {
-      id: `${template.kind}-${uuidv4()}`,
+      id: "",
       type: template.kind,
       // Name remote servers after the catalog slug (e.g. "github") so they
       // get a referenceable, LLM-tool-safe mcp_config key instead of the
@@ -458,7 +457,7 @@ export function InstallServerModal({
     }
 
     const payload: MCPServerConfig = {
-      id: `stdio-${uuidv4()}`,
+      id: "",
       type: "stdio",
       name: stdio.serverName,
       command: stdio.command,

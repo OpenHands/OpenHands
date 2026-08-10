@@ -5,6 +5,7 @@ import { Microagent } from "#/api/open-hands.types";
 import { BUILT_IN_COMMANDS, MODEL_COMMAND } from "#/utils/constants";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 
 export type SlashCommandSkill = SkillInfo | Microagent;
 
@@ -88,7 +89,7 @@ export const useSlashCommand = (
           name: profile.name,
           type: "agentskills",
           content: profile.model
-            ? `Switch to ${profile.model}`
+            ? `Switch to ${formatModelNameForDisplay(profile.model)}`
             : "Switch to this LLM profile",
           triggers: [command],
         },

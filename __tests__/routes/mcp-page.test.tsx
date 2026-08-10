@@ -254,24 +254,20 @@ describe("MCPPage", () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       settingsWithSlack,
     );
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const deleteSpy = vi
+      .spyOn(SettingsService, "deleteMcpServer")
       .mockResolvedValue(true);
 
     renderPage();
 
-    const deleteBtn = await screen.findByTestId("mcp-installed-toggle-stdio-0");
-    fireEvent.click(deleteBtn);
+    fireEvent.click(await screen.findByTestId("mcp-server-item"));
+    fireEvent.click(await screen.findByTestId("mcp-custom-editor-delete"));
 
     const confirmBtn = await screen.findByTestId("confirm-button");
     fireEvent.click(confirmBtn);
 
-    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
-    const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
-      .agent_settings_diff as { mcp_config: unknown };
-    // Server gets pulled out of mcp_config entirely (parseMcpConfig
-    // emits `null` once the last entry is removed).
-    expect(sent.mcp_config).toBeNull();
+    await waitFor(() => expect(deleteSpy).toHaveBeenCalledTimes(1));
+    expect(deleteSpy).toHaveBeenCalledWith("slack");
   });
 
   it("shows the catalog description and URL on installed server cards", async () => {
@@ -293,12 +289,12 @@ describe("MCPPage", () => {
 
     const card = await screen.findByTestId("mcp-server-item");
     expect(
-      within(card).getByTestId("mcp-server-description-shttp-0"),
+      within(card).getByTestId("mcp-server-description-github"),
     ).toHaveTextContent(
       "Search code, manage issues and pull requests, and inspect repos via the GitHub API.",
     );
     expect(
-      within(card).getByTestId("mcp-server-detail-shttp-0"),
+      within(card).getByTestId("mcp-server-detail-github"),
     ).toHaveTextContent("https://api.githubcopilot.com/mcp/");
   });
 
@@ -352,7 +348,7 @@ describe("MCPPage", () => {
       }),
     );
     const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+      .spyOn(SettingsService, "createMcpServer")
       .mockResolvedValue(true);
 
     renderPage();
@@ -379,19 +375,11 @@ describe("MCPPage", () => {
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
-    const sent = (saveSpy.mock.calls[0][0] as Record<string, unknown>)
-      .agent_settings_diff as {
-      mcp_config: Record<string, unknown>;
-    };
-    // The original Slack stdio entry is preserved and the new stdio
-    // install is suffixed rather than overwriting it.
-    expect(Object.keys(sent.mcp_config).sort()).toEqual([
-      "slack",
-      "slack_1",
-    ]);
-    expect(sent.mcp_config).toMatchObject({
-      slack: { env: { SLACK_BOT_TOKEN: "xoxb-old" } },
-      slack_1: { env: { SLACK_BOT_TOKEN: "xoxb-new", SLACK_TEAM_ID: "T02" } },
+    expect(saveSpy).toHaveBeenCalledWith("slack_1", {
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@zencoderai/slack-mcp-server"],
+      env: { SLACK_BOT_TOKEN: "xoxb-new", SLACK_TEAM_ID: "T02" },
     });
   });
 
