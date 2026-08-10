@@ -60,6 +60,14 @@ import {
   isDesktopProxyRequest,
 } from "./desktop-proxy.mjs";
 import {
+  createEmulatorProxyHandler,
+  isEmulatorProxyRequest,
+} from "./emulator-proxy.mjs";
+import {
+  createMobileArtifactsProxyHandler,
+  isMobileArtifactsProxyRequest,
+} from "./mobile-artifacts-proxy.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -591,6 +599,13 @@ export function startStaticServer(config) {
   const handlePlaneProxy = createPlaneProxyHandler({ agentServerUrl });
   const handleTranslateProxy = createTranslateProxyHandler();
   const handleDesktopProxy = createDesktopProxyHandler({ agentServerUrl });
+  const handleEmulatorProxy = createEmulatorProxyHandler({
+    agentServerUrl,
+    runtimeServicesInfo: config.runtimeServicesInfo,
+  });
+  const handleMobileArtifactsProxy = createMobileArtifactsProxyHandler({
+    agentServerUrl,
+  });
 
   const uninstallDiagnostics = proxy.installDiagnostics();
 
@@ -661,6 +676,28 @@ export function startStaticServer(config) {
       return;
     }
 
+    if (isEmulatorProxyRequest(req.url ?? "/")) {
+      void handleEmulatorProxy(req, res).catch((err) => {
+        console.error(`Emulator proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
+    if (isMobileArtifactsProxyRequest(req.url ?? "/")) {
+      void handleMobileArtifactsProxy(req, res).catch((err) => {
+        console.error(`Mobile artifacts proxy error for ${req.url}:`, err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      });
+      return;
+    }
+
     const backend = route(req.url ?? "/");
     if (backend) {
       if (
@@ -695,6 +732,13 @@ export function startStaticServer(config) {
     if (isDesktopProxyRequest(req.url ?? "/")) {
       void handleDesktopProxy.handleUpgrade(req, socket, head).catch((err) => {
         console.error(`Desktop WS proxy error for ${req.url}:`, err);
+        socket.destroy();
+      });
+      return;
+    }
+    if (isEmulatorProxyRequest(req.url ?? "/")) {
+      void handleEmulatorProxy.handleUpgrade(req, socket, head).catch((err) => {
+        console.error(`Emulator WS proxy error for ${req.url}:`, err);
         socket.destroy();
       });
       return;

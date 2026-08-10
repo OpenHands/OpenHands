@@ -88,6 +88,14 @@ export const FINDINGS_QUERY_KEYS = {
   stats: (engagementId: string) => ["findings", "stats", engagementId] as const,
 } as const;
 
+/** Mobile APK artifacts (PROJETOSIN-192). */
+export const MOBILE_ARTIFACTS_QUERY_KEYS = {
+  all: ["mobile-artifacts"] as const,
+  lists: ["mobile-artifacts", "list"] as const,
+  list: (engagementId: string) =>
+    ["mobile-artifacts", "list", engagementId] as const,
+} as const;
+
 export const APPWRITE_QUERY_KEYS = {
   all: ["appwrite"] as const,
   databases: ["appwrite", "databases"] as const,

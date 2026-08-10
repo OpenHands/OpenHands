@@ -7,6 +7,7 @@ import {
   ListTodo,
   Monitor,
   Shield,
+  Smartphone,
   SquareChevronRight,
 } from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
@@ -30,6 +31,7 @@ import { AgentState } from "#/types/agent-state";
 import { Typography } from "#/ui/typography";
 import { mobileTopBarIconClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 import { useConversationAppwriteIntegration } from "#/hooks/query/use-appwrite-integration";
+import { useHasPentestCapability } from "#/hooks/use-pentest-capabilities";
 
 export function ConversationTabs({
   variant = "default",
@@ -50,6 +52,7 @@ export function ConversationTabs({
   const { hasTaskList } = useTaskList();
   const { backend } = useActiveBackend();
   const { isReady: isCloudAiReady } = useConversationAppwriteIntegration();
+  const canUseEmulator = useHasPentestCapability("pentest.mobile.dynamic");
 
   const { handleBuildPlanClick } = useHandleBuildPlanClick();
   const { curAgentState } = useAgentState();
@@ -147,6 +150,18 @@ export function ConversationTabs({
       label: t(I18nKey.COMMON$DESKTOP),
     },
   ];
+
+  if (canUseEmulator) {
+    tabs.push({
+      tabValue: "emulator",
+      isActive: isTabActive("emulator"),
+      icon: Smartphone,
+      onClick: () => selectTab("emulator"),
+      tooltipContent: t(I18nKey.COMMON$EMULATOR),
+      tooltipAriaLabel: t(I18nKey.COMMON$EMULATOR),
+      label: t(I18nKey.COMMON$EMULATOR),
+    });
+  }
 
   if (isCloudAiReady) {
     tabs.push({
@@ -262,6 +277,7 @@ export function ConversationTabs({
     selectedTab,
     isRightPanelShown,
     i18n.language,
+    canUseEmulator,
   ]);
 
   const safeInlineTabCount = Math.min(inlineTabCount, visibleTabs.length);
