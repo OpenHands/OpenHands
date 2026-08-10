@@ -63,21 +63,42 @@ export const useUnifiedGetGitChanges = () => {
 
         // Figure out new items by comparing with what we already have
         if (Array.isArray(currentData)) {
-          const currentIds = new Set(currentData.map((item) => item.path));
-          const existingIds = new Set(orderedChanges.map((item) => item.path));
+          // The API can return duplicate entries for the same path (e.g.
+          // staged and unstaged entries for one file); keep only the first
+          // occurrence so the diff list shows one entry per changed file
+          const seenPaths = new Set<string>();
+          const uniqueCurrentData = currentData.filter((item) => {
+            if (seenPaths.has(item.path)) {
+              return false;
+            }
+            seenPaths.add(item.path);
+            return true;
+          });
 
-          // Filter out items that already exist in orderedChanges
-          const newItems = currentData.filter(
-            (item) => !existingIds.has(item.path),
+          const currentIds = new Set(
+            uniqueCurrentData.map((item) => item.path),
           );
 
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
+          // Merge against the latest stored changes (functional update) so
+          // entries already processed in previous renders are never re-added
+          setOrderedChanges((previousChanges) => {
+            const existingIds = new Set(
+              previousChanges.map((item) => item.path),
+            );
 
-          // Add new items to the beginning
-          setOrderedChanges([...newItems, ...existingItems]);
+            // Filter out items that already exist in orderedChanges
+            const newItems = uniqueCurrentData.filter(
+              (item) => !existingIds.has(item.path),
+            );
+
+            // Filter out items that no longer exist in the API response
+            const existingItems = previousChanges.filter((item) =>
+              currentIds.has(item.path),
+            );
+
+            // Add new items to the beginning
+            return [...newItems, ...existingItems];
+          });
         } else {
           // If not an array, just use the data directly
           setOrderedChanges([currentData]);
