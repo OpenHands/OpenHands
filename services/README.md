@@ -10,7 +10,8 @@ Todos vivem neste monorepo conforme decisão pós-intake do PO (2026-08-10).
 services/
 ├── shared/                  # Middleware Python compartilhado (auth, capabilities)
 ├── findings-service/        # PROJETOSIN-184 — FastAPI + Postgres, fonte de verdade de findings
-└── engagement-manager/      # PROJETOSIN-185 — FastAPI + Postgres, provisionamento de sandboxes
+├── engagement-manager/      # PROJETOSIN-185 — FastAPI + Postgres, provisionamento de sandboxes
+└── mcp-servers/             # PROJETOSIN-187 — mcp-recon + mcp-webscan (stdio)
 ```
 
 ## Specs técnicas
@@ -20,6 +21,7 @@ services/
 - `docs/specs/fase-0/184-findings-service.md`
 - `docs/specs/fase-0/185-engagement-manager.md`
 - `docs/specs/fase-0/186-dockerfiles-runtimes.md`
+- `docs/specs/fase-1/187-mcp-recon-webscan.md`
 
 ## Portas (dev local)
 
