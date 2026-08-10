@@ -250,6 +250,38 @@ describe("useWorkspaceFileContent", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("fetches file content even when runtimeIsReady is false, as long as baseUrl is available (issue #16331)", async () => {
+    // Simulate the streaming scenario: the workspace session was already
+    // minted (baseUrl is set), but runtimeIsReady transiently flips false
+    // due to fast-poll conversation refetches / WS state oscillation.
+    // The query must stay enabled and fetch successfully.
+    useRuntimeIsReadyMock.mockReturnValue(false);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("# Hello")),
+    });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_URL}docs/readme.md`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(result.current.data).toEqual({
+      path: "docs/readme.md",
+      kind: "text",
+      text: "# Hello",
+      staticUrl: `${BASE_URL}docs/readme.md`,
+      mimeType: "text/markdown",
+    });
+  });
+
   it("surfaces a non-OK response as an error", async () => {
     fetchMock.mockResolvedValue({
       ok: false,

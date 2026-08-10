@@ -4,7 +4,6 @@ import { readCloudConversationFile } from "#/api/cloud/conversation-service.api"
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { getGitPath } from "#/utils/get-git-path";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
-import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import {
   joinWorkspaceUrl,
   useWorkspaceSession,
@@ -141,7 +140,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
  */
 export function useWorkspaceFileContent(relativePath: string | null) {
   const { data: conversation } = useActiveConversation();
-  const runtimeIsReady = useRuntimeIsReady();
   const { data: workspaceSession } = useWorkspaceSession();
   // Bump on every agent-side file mutation so the query refetches the
   // currently-selected file's body even when the *path* hasn't changed.
@@ -290,11 +288,19 @@ export function useWorkspaceFileContent(relativePath: string | null) {
         mimeType,
       };
     },
-    enabled:
-      runtimeIsReady &&
-      !!conversationId &&
-      !!relativePath &&
-      (isCloud || !!baseUrl),
+    // Gate on the stable prerequisites only: a conversation id, a selected
+    // file, and (for local backends) a minted workspace-session baseUrl. We
+    // intentionally do NOT gate on `runtimeIsReady` here — that signal
+    // oscillates during active streaming (fast-poll conversation refetches
+    // and transient WS state updates flip it false), which repeatedly
+    // disables and re-enables the query so the file never finishes loading
+    // (issue #16331). `baseUrl` already provides a latching runtime-ready
+    // signal: `useWorkspaceSession` is itself gated on `runtimeIsReady` but
+    // caches with `staleTime: Infinity` / `gcTime: Infinity`, so once the
+    // session is minted `baseUrl` persists across transient readiness flips.
+    // On cloud, `conversationId` alone is sufficient — the cloud file
+    // endpoint serves content as long as the conversation exists.
+    enabled: !!conversationId && !!relativePath && (isCloud || !!baseUrl),
     retry: false,
     staleTime: 1000 * 5,
     gcTime: 1000 * 60,
