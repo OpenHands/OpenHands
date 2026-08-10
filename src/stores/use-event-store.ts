@@ -129,20 +129,30 @@ const sortEventState = (state: EventState): EventState => ({
   uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
 });
 
+/**
+ * Resorts only `events`, the raw append log: `uiEvents` is display-ordered by
+ * handleEventForUI, which deliberately places a finalized reply above a
+ * mid-stream message even though the reply's timestamp is later (#1899).
+ * Resorting `uiEvents` by raw timestamp here would silently undo that
+ * placement the next time any event — e.g. a trailing state snapshot — arrives
+ * with a timestamp earlier than the array's current last element.
+ */
+const sortEvents = (state: EventState): EventState => ({
+  ...state,
+  events: [...state.events].sort(compareEventsByTimestamp),
+});
+
 const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
   const next = appendEvent(state, event);
   if (next === state) {
     return state;
   }
 
-  if (
-    !needsSorting(state.events, event) &&
-    !needsSorting(state.uiEvents, event)
-  ) {
+  if (!needsSorting(state.events, event)) {
     return next;
   }
 
-  return sortEventState(next);
+  return sortEvents(next);
 };
 
 export const useEventStore = create<EventState>()((set) => ({

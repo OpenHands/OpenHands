@@ -8,6 +8,7 @@ import {
   SecurityRisk,
 } from "#/types/agent-server/core";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
+import { makeExecutionStatusUpdate } from "../helpers/conversation-state-update-fixtures";
 
 const mockUserMessageEvent: MessageEvent = {
   id: "test-event-1",
@@ -91,6 +92,19 @@ const makeUserMessageEvent = (id: string, timestamp: string): MessageEvent => ({
   ...mockUserMessageEvent,
   id,
   timestamp,
+});
+
+const makeAgentMessageEvent = (
+  id: string,
+  timestamp: string,
+  text: string,
+): MessageEvent => ({
+  id,
+  timestamp,
+  source: "agent",
+  llm_message: { role: "assistant", content: [{ type: "text", text }] },
+  activated_microagents: [],
+  extended_content: [],
 });
 
 describe("useEventStore", () => {
@@ -227,6 +241,63 @@ describe("useEventStore", () => {
       { ...first, content: "hello world" },
       midStream,
     ]);
+  });
+
+  it("keeps the finalized reply above a mid-stream message when a later-arriving event is stamped earlier (#1899)", () => {
+    const { result } = renderHook(() => useEventStore());
+    const first = {
+      ...makeStreamingDeltaEvent("delta-1", "hello "),
+      timestamp: "2024-03-01T00:00:01.000Z",
+    };
+    const midStream = makeUserMessageEvent(
+      "user-1",
+      "2024-03-01T00:00:01.500Z",
+    );
+    const second = {
+      ...makeStreamingDeltaEvent("delta-2", "world"),
+      timestamp: "2024-03-01T00:00:02.000Z",
+    };
+    const final = makeAgentMessageEvent(
+      "agent-final",
+      "2024-03-01T00:00:02.500Z",
+      "hello world",
+    );
+
+    act(() => {
+      result.current.addEvent(first);
+      result.current.addEvent(midStream);
+      result.current.addEvent(second);
+      result.current.addEvent(final);
+    });
+
+    // The reducer places the finalized reply above the mid-stream message.
+    expect(result.current.uiEvents).toEqual([final, midStream]);
+
+    // A trailing state snapshot arrives after finalization, but stamped
+    // earlier than `final` (e.g. captured a moment before finalization
+    // completed server-side) — the kind of ~ms out-of-order arrival that
+    // routinely follows a finalized reply in production.
+    const trailingSnapshot = makeExecutionStatusUpdate(
+      "trailing-snapshot",
+      "idle",
+      "2024-03-01T00:00:02.200Z",
+    );
+
+    act(() => {
+      result.current.addEvent(trailingSnapshot);
+    });
+
+    // The raw log re-sorts chronologically...
+    expect(result.current.events.map((event) => event.id)).toEqual([
+      "delta-1",
+      "user-1",
+      "delta-2",
+      "trailing-snapshot",
+      "agent-final",
+    ]);
+    // ...but the finalized reply must stay above the mid-stream message.
+    expect(result.current.uiEvents[0]).toEqual(final);
+    expect(result.current.uiEvents[1]).toEqual(midStream);
   });
 
   it("should not compact streaming deltas from different senders (#1656)", () => {

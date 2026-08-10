@@ -9,6 +9,10 @@ import {
 import { ACPToolCallEvent } from "#/types/agent-server/core/events/acp-tool-call-event";
 import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-delta-event";
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
+import {
+  makeExecutionStatusUpdate,
+  makeFullStateSnapshot,
+} from "../helpers/conversation-state-update-fixtures";
 
 describe("handleEventForUI", () => {
   const mockObservationEvent: ObservationEvent = {
@@ -505,14 +509,10 @@ describe("handleEventForUI", () => {
     it("keeps deltas from older turns when a later turn finishes", () => {
       // The status update on leaving RUNNING ends the old turn's dangling delta,
       // distinguishing it from a mid-stream message (#1899).
-      const executionStatusUpdate = {
-        id: "execution-status-idle",
-        timestamp: Date.now().toString(),
-        source: "environment",
-        kind: "ConversationStateUpdateEvent",
-        key: "execution_status",
-        value: "idle",
-      } as unknown as OpenHandsEvent;
+      const executionStatusUpdate = makeExecutionStatusUpdate(
+        "execution-status-idle",
+        "idle",
+      );
       const oldUserMessage: MessageEvent = {
         ...mockMessageEvent,
         id: "old-user-message",
@@ -565,14 +565,10 @@ describe("handleEventForUI", () => {
         );
 
       // Captured live between the two deltas, agent still RUNNING.
-      const runningStateSnapshot = {
-        id: "state-running",
-        timestamp: Date.now().toString(),
-        source: "environment",
-        kind: "ConversationStateUpdateEvent",
-        key: "full_state",
-        value: { execution_status: "running" },
-      } as unknown as OpenHandsEvent;
+      const runningStateSnapshot = makeFullStateSnapshot(
+        "state-running",
+        "running",
+      );
 
       it("keeps the reply in one bubble, with the message below it", () => {
         const result = replay([
@@ -790,7 +786,9 @@ describe("handleEventForUI", () => {
         planningDelta,
       ]);
 
-      expect(result).toEqual([mockMessageEvent, planningDelta, mainFinal]);
+      // The main agent's final message splices in where its own trailing run
+      // ended (right after mainDelta), not after the unrelated planning delta.
+      expect(result).toEqual([mockMessageEvent, mainFinal, planningDelta]);
     });
   });
 
@@ -910,14 +908,10 @@ describe("handleEventForUI", () => {
       const thought = "Let me gather accurate information.";
       const earlierTurnDelta = makeStreamingDelta("delta-old", thought);
       // The status update on leaving RUNNING ends the earlier turn's run (#1899).
-      const executionStatusUpdate = {
-        id: "execution-status-idle",
-        timestamp: Date.now().toString(),
-        source: "environment",
-        kind: "ConversationStateUpdateEvent",
-        key: "execution_status",
-        value: "idle",
-      } as unknown as OpenHandsEvent;
+      const executionStatusUpdate = makeExecutionStatusUpdate(
+        "execution-status-idle",
+        "idle",
+      );
       const laterUserMessage: MessageEvent = {
         ...mockMessageEvent,
         id: "user-2",

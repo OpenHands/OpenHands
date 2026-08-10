@@ -5,6 +5,7 @@ import { StreamingDeltaEvent } from "#/types/agent-server/core/events/streaming-
 import { handleEventForUI } from "#/utils/handle-event-for-ui";
 import { Messages } from "#/components/conversation-events/chat/messages";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { makeFullStateSnapshot } from "../../../helpers/conversation-state-update-fixtures";
 
 // Regression for #1899, driving the real reducer + <Messages> tree: a message
 // sent mid-stream must not split the reply into two bubbles.
@@ -73,14 +74,11 @@ const render = (allEvents: OpenHandsEvent[]) =>
   );
 
 // Captured live between the two halves, agent still RUNNING.
-const runningStateSnapshot = {
-  id: "state-running",
-  timestamp: "2026-06-12T12:00:02.5Z",
-  source: "environment",
-  kind: "ConversationStateUpdateEvent",
-  key: "full_state",
-  value: { execution_status: "running" },
-} as unknown as OpenHandsEvent;
+const runningStateSnapshot = makeFullStateSnapshot(
+  "state-running",
+  "running",
+  "2026-06-12T12:00:02.5Z",
+);
 
 describe("issue #1899 — message sent mid-stream splits the reply", () => {
   const streaming = [
@@ -108,8 +106,9 @@ describe("issue #1899 — message sent mid-stream splits the reply", () => {
     expect(countOccurrences(text, REPLY)).toBe(1);
     expect(countOccurrences(text, SECOND_HALF)).toBe(1);
 
-    // Not asserting reply-above here: the store re-sorts uiEvents by timestamp
-    // when the server's trailing snapshots arrive ~ms out of order, settling the
-    // reply below the message (also where a reload puts it). See PR notes.
+    // Contiguous reply, still above the message once finalized. A trailing
+    // state snapshot arriving ~ms out of order no longer undoes this — see
+    // the store-level regression test in use-event-store.test.ts.
+    expect(text.indexOf(REPLY)).toBeLessThan(text.indexOf("also update"));
   });
 });

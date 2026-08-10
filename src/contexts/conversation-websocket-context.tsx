@@ -26,8 +26,7 @@ import {
   isUserMessageEvent,
   isActionEvent,
   isConversationStateUpdateEvent,
-  isFullStateConversationStateUpdateEvent,
-  isAgentStatusConversationStateUpdateEvent,
+  getExecutionStatusFromConversationStateUpdate,
   isStatsConversationStateUpdateEvent,
   isGoalConversationStateUpdateEvent,
   isExecuteBashActionEvent,
@@ -556,11 +555,10 @@ export function ConversationWebSocketProvider({
           // Handle conversation state updates
           // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
-            if (isFullStateConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value.execution_status);
-            }
-            if (isAgentStatusConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value);
+            const executionStatus =
+              getExecutionStatusFromConversationStateUpdate(event);
+            if (executionStatus !== null) {
+              setExecutionStatus(executionStatus);
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);
@@ -773,11 +771,10 @@ export function ConversationWebSocketProvider({
           // Handle conversation state updates
           // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
-            if (isFullStateConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value.execution_status);
-            }
-            if (isAgentStatusConversationStateUpdateEvent(event)) {
-              setExecutionStatus(event.value);
+            const executionStatus =
+              getExecutionStatusFromConversationStateUpdate(event);
+            if (executionStatus !== null) {
+              setExecutionStatus(executionStatus);
             }
             if (isStatsConversationStateUpdateEvent(event)) {
               updateMetricsFromStats(event);

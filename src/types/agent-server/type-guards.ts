@@ -18,6 +18,7 @@ import {
   SwitchLLMObservation,
   CanvasUIAction,
   LaunchChildConversationAction,
+  ExecutionStatus,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
 import { MessageEvent } from "./core/events/message-event";
@@ -234,6 +235,22 @@ export const isStatsConversationStateUpdateEvent = (
 export const isGoalConversationStateUpdateEvent = (
   event: ConversationStateUpdateEvent,
 ): event is ConversationStateUpdateEventGoal => event.key === "goal";
+
+/**
+ * The execution status a ConversationStateUpdateEvent reports, or null for
+ * variants that don't carry one (stats / goal snapshots).
+ */
+export const getExecutionStatusFromConversationStateUpdate = (
+  event: ConversationStateUpdateEvent,
+): ExecutionStatus | null => {
+  if (isFullStateConversationStateUpdateEvent(event)) {
+    return event.value.execution_status;
+  }
+  if (isAgentStatusConversationStateUpdateEvent(event)) {
+    return event.value;
+  }
+  return null;
+};
 
 /**
  * Type guard function to check if an event is a conversation error event
