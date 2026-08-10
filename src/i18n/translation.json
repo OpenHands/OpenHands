@@ -37894,6 +37894,23 @@
     "uk": "Не вдалося стиснути історію розмови.",
     "ca": "No s’ha pogut condensar l’historial de la conversa."
   },
+  "SLASH_COMMAND$CONDENSE_NOT_ENOUGH_HISTORY": {
+    "en": "There isn't enough conversation history to condense yet.",
+    "ja": "圧縮するには会話履歴がまだ十分ではありません。",
+    "zh-CN": "当前对话历史不足，暂时无法压缩。",
+    "zh-TW": "目前對話歷史不足，暫時無法壓縮。",
+    "ko-KR": "아직 요약할 대화 기록이 충분하지 않습니다.",
+    "no": "Det er ikke nok samtalehistorikk å komprimere ennå.",
+    "it": "La cronologia della conversazione non è ancora sufficiente per essere condensata.",
+    "pt": "Ainda não há histórico de conversa suficiente para condensar.",
+    "es": "Todavía no hay suficiente historial de conversación para condensar.",
+    "ar": "لا يوجد سجل محادثة كافٍ للتلخيص بعد.",
+    "fr": "L’historique de la conversation n’est pas encore suffisant pour être condensé.",
+    "tr": "Henüz özetlemek için yeterli konuşma geçmişi yok.",
+    "de": "Es gibt noch nicht genügend Gesprächsverlauf zum Komprimieren.",
+    "uk": "Історії розмови ще недостатньо для стискання.",
+    "ca": "Encara no hi ha prou historial de conversa per condensar."
+  },
   "SLASH_COMMAND$CONDENSE_UNSUPPORTED": {
     "en": "This backend does not support conversation condensation.",
     "ja": "このバックエンドは会話履歴の要約をサポートしていません。",

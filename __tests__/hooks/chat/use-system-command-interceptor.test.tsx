@@ -184,6 +184,29 @@ describe("useSystemCommandInterceptor", () => {
   );
 
   // @spec SC-005 — Conversation condensation
+  it("explains when the conversation has too little history to condense", async () => {
+    mockCondenseConversation.mockRejectedValueOnce({
+      status: 500,
+      response: {
+        detail:
+          "NoCondensationAvailableException: Cannot condense 0 events.",
+      },
+    });
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
+    );
+
+    act(() => result.current("/condense"));
+
+    await waitFor(() => {
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith(
+        "SLASH_COMMAND$CONDENSE_NOT_ENOUGH_HISTORY",
+      );
+    });
+  });
+
+  // @spec SC-005 — Conversation condensation
   it("uses the localized generic message for other condensation failures", async () => {
     mockCondenseConversation.mockRejectedValueOnce(new Error("private detail"));
     const onSubmit = vi.fn();
