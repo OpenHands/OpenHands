@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
+import json
+import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from app.config import get_settings
 from app.models.engagement import Engagement, ScopeRule
 
 ComposeRunner = Callable[[list[str], Path], Awaitable[int]]
+
+DRY_RUN_MOBSF_API_KEY = "test-mobsf-key"
 
 
 async def _default_runner(args: list[str], cwd: Path) -> int:
@@ -32,6 +35,24 @@ RUNTIME_TEMPLATES = {
 }
 
 
+def build_mobile_network_metadata(project: str) -> dict:
+    """Internal endpoints for UI proxy (PROJETOSIN-192) — never host-published."""
+    return {
+        "emulator": {
+            "adb": f"{project}-emulator:5555",
+            "vnc_internal": f"http://{project}-emulator:6080",
+            "service_name": f"{project}-emulator",
+        },
+        "mobsf": {
+            "url_internal": f"http://{project}-mobsf:8000",
+        },
+    }
+
+
+def kvm_device_available() -> bool:
+    return Path("/dev/kvm").exists()
+
+
 class RuntimeProvisioner:
     def __init__(
         self,
@@ -44,6 +65,10 @@ class RuntimeProvisioner:
         self.dry_run = settings.provisioner_dry_run if dry_run is None else dry_run
         self.runner = runner or _default_runner
         self.work_root = Path(settings.compose_work_dir)
+        self.android_emulator_image = settings.android_emulator_image
+        self.mobsf_image = settings.mobsf_image
+        self.allow_slow_emulator = settings.allow_slow_emulator
+        self.mcp_mobile_cmd = settings.mcp_mobile_cmd
         base = templates_dir or (
             Path(__file__).resolve().parents[1] / "templates"
         )
@@ -52,9 +77,31 @@ class RuntimeProvisioner:
             autoescape=select_autoescape(enabled_extensions=()),
         )
         self.last_commands: list[list[str]] = []
+        self.last_metadata: dict | None = None
 
     def project_name(self, engagement: Engagement) -> str:
         return f"eng-{str(engagement.id).replace('-', '')[:8]}"
+
+    def _mobsf_api_key(self) -> str:
+        if self.dry_run:
+            return DRY_RUN_MOBSF_API_KEY
+        return secrets.token_urlsafe(32)
+
+    def _resolve_kvm(self) -> bool:
+        if self.dry_run:
+            # Dry-run assumes KVM path for stable fixtures; host check is live-only.
+            return True
+        available = kvm_device_available()
+        if available:
+            return True
+        if self.allow_slow_emulator:
+            return False
+        raise RuntimeError(
+            "Android emulator requires /dev/kvm on the Docker host. "
+            "Set ALLOW_SLOW_EMULATOR=1 for software fallback (very slow), "
+            "or provision on a Linux host with KVM. "
+            "Windows/macOS Docker Desktop: see docker/runtimes/README.md."
+        )
 
     def _render(
         self, engagement: Engagement, scope_rules: list[ScopeRule]
@@ -71,15 +118,29 @@ class RuntimeProvisioner:
             for r in scope_rules
             if r.rule_type == "deny"
         ]
-        return self.env.get_template(template_name).render(
-            project=short,
-            network_internal=f"{short}-internal",
-            network_egress=f"{short}-egress",
-            volume_prefix=short,
-            allow_rules=allow,
-            deny_rules=deny,
-            runtime_image=f"ghcr.io/heimdall/runtime-{engagement.runtime_profile}:latest",
-        )
+        ctx: dict = {
+            "project": short,
+            "network_internal": f"{short}-internal",
+            "network_egress": f"{short}-egress",
+            "volume_prefix": short,
+            "allow_rules": allow,
+            "deny_rules": deny,
+            "runtime_image": (
+                f"ghcr.io/heimdall/runtime-{engagement.runtime_profile}:latest"
+            ),
+        }
+        if engagement.runtime_profile == "mobile":
+            ctx.update(
+                {
+                    "android_emulator_image": self.android_emulator_image,
+                    "mobsf_image": self.mobsf_image,
+                    "mobsf_api_key": self._mobsf_api_key(),
+                    "mcp_mobile_cmd": self.mcp_mobile_cmd,
+                    "kvm_available": self._resolve_kvm(),
+                    "emulator_device": "Samsung Galaxy S10",
+                }
+            )
+        return self.env.get_template(template_name).render(**ctx)
 
     async def provision(
         self, engagement: Engagement, scope_rules: list[ScopeRule]
@@ -91,7 +152,24 @@ class RuntimeProvisioner:
         compose_path.write_text(
             self._render(engagement, scope_rules), encoding="utf-8"
         )
-        args = ["docker", "compose", "-p", project, "-f", str(compose_path), "up", "-d"]
+        if engagement.runtime_profile == "mobile":
+            meta = build_mobile_network_metadata(project)
+            self.last_metadata = meta
+            (work / "runtime-metadata.json").write_text(
+                json.dumps(meta, indent=2) + "\n", encoding="utf-8"
+            )
+        else:
+            self.last_metadata = None
+        args = [
+            "docker",
+            "compose",
+            "-p",
+            project,
+            "-f",
+            str(compose_path),
+            "up",
+            "-d",
+        ]
         self.last_commands.append(args)
         if not self.dry_run:
             code = await self.runner(args, work)

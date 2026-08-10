@@ -82,27 +82,40 @@ docker run --rm -e MSF_PASSWORD='<from-secret-store>' -p 55553:55553 -p 8091:809
   ghcr.io/heimdall/runtime-network:latest
 ```
 
-## Mobile sidecars (not in this image)
+## Mobile sidecars (PROJETOSIN-191 — EngMgr compose)
 
 MobSF and the Android emulator stay **out of** `runtime-mobile` to keep the image slim
-and avoid privileged tooling in the main agent workspace container.
+and avoid privileged tooling in the main agent workspace container. Canonical template:
+`services/engagement-manager/app/templates/compose-mobile-runtime.yml.j2`.
+
+Image pins (source of truth): `config/defaults.json` → `images.androidEmulator`,
+`images.mobsf`.
 
 **Production MobSF fragment (no host port publish):** see
 `docker/runtimes/mobile/compose.mobsf.fragment.yml` (PROJETOSIN-190). Reach MobSF at
 `http://mobsf:8000` on the engagement network; UI/proxy is PROJETOSIN-192.
 
 ```yaml
-# Dev-only sketch — emulator ports may be published locally; MobSF should stay internal.
-# Prefer compose.mobsf.fragment.yml for MobSF (no ports:).
-  android-emulator:
-    image: budtmo/docker-android:emulator_13.0
+# Production EngMgr fragment — NO host port publish (AC-191-3).
+# ADB :5555 and noVNC :6080 are reachable only on the engagement internal network.
+# Authenticated UI proxy is PROJETOSIN-192 (/api/emulator).
+  eng-xxxx-emulator:
+    image: budtmo/docker-android:emulator_13.0   # defaults.json images.androidEmulator
     privileged: true
-    # Dev: ADB / noVNC may be published; production EngMgr (191) keeps them internal.
-    ports:
-      - "5555:5555"   # ADB over TCP (dev)
-      - "6901:6901"   # noVNC (GUI web, dev)
+    devices: ["/dev/kvm"]                          # omit + EMULATOR_ACCEL=false if ALLOW_SLOW_EMULATOR
     environment:
-      - DEVICE=Samsung Galaxy S10
+      EMULATOR_DEVICE: "Samsung Galaxy S10"
+      WEB_VNC: "true"
+    networks: [eng-xxxx-internal]
+    # no ports:
+
+  eng-xxxx-mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    environment:
+      MOBSF_API_KEY: "<injected-by-provisioner>"
+    volumes:
+      - eng-xxxx-mobsf-data:/home/mobsf/.MobSF
+    networks: [eng-xxxx-internal]
 ```
 
 Only the emulator sidecar should be privileged — not `runtime-mobile`.
@@ -117,6 +130,20 @@ MOBSF_API_KEY=<from-secret-store>
 ADB_HOST=android-emulator
 ADB_PORT=5555
 ```
+
+### KVM / boot / fallback
+
+| Host | Behavior |
+|------|----------|
+| Linux + `/dev/kvm` | Preferred: `devices: [/dev/kvm]` + `privileged: true` |
+| Linux without KVM | EngMgr fail-fast unless `ALLOW_SLOW_EMULATOR=1` (software accel — often 5–15+ min) |
+| Docker Desktop (Win/mac) | Nested virt / hypervisor; treat as slow path; physical device bridge = Fase 3 |
+
+Cold boot of `budtmo/docker-android` is commonly **60–180 seconds** before `adb devices`
+shows `device`. Runtime clients should retry ADB connect; EngMgr healthcheck uses
+`start_period: 180s`.
+
+Teardown: `docker compose … down -v` removes the MobSF named volume for that project.
 
 ## CI
 
