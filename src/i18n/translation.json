@@ -33625,6 +33625,23 @@
     "tr": "Harici kurulum gerektirir",
     "uk": "Потрібне зовнішнє налаштування"
   },
+  "RECOMMENDED_AUTOMATIONS$UNKNOWN_SETUP": {
+    "en": "Integration unavailable",
+    "ja": "統合を利用できません",
+    "zh-CN": "集成不可用",
+    "zh-TW": "整合不可用",
+    "ko-KR": "통합을 사용할 수 없음",
+    "no": "Integrasjonen er ikke tilgjengelig",
+    "ar": "التكامل غير متاح",
+    "de": "Integration nicht verfügbar",
+    "fr": "Intégration indisponible",
+    "it": "Integrazione non disponibile",
+    "pt": "Integração indisponível",
+    "es": "Integración no disponible",
+    "ca": "Integració no disponible",
+    "tr": "Entegrasyon kullanılamıyor",
+    "uk": "Інтеграція недоступна"
+  },
   "RECOMMENDED_AUTOMATIONS$MODAL_AGENT_PROMPT": {
     "en": "Agent prompt",
     "ja": "エージェントプロンプト",

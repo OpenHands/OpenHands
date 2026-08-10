@@ -428,12 +428,17 @@ describe("recommended automations", () => {
       (item) => item.id === "jira-issue-to-pr",
     )!;
     const mutableAutomation = automation as RecommendedAutomation & {
-      requires: { integrations: Record<string, unknown> };
+      requires: {
+        integrations: Record<
+          string,
+          { required?: false; setupRequired?: boolean }
+        >;
+      };
     };
     const originalIntegrations = mutableAutomation.requires.integrations;
     mutableAutomation.requires.integrations = {
       ...originalIntegrations,
-      "unknown-integration": { required: true },
+      "unknown-integration": {},
     };
 
     try {
