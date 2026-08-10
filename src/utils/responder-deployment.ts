@@ -1,29 +1,26 @@
 import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import { I18nKey } from "#/i18n/declaration";
+import { getResponderIntegrationIds } from "#/manifests/automation-interface";
+import { getRequiredIntegrationIds } from "#/utils/automation-catalog";
 import { PRODUCT_URL } from "#/utils/constants";
 
 /** OpenHands Cloud integrations page — where always-on responders are set up. */
 export const OPENHANDS_CLOUD_INTEGRATIONS_URL = `${PRODUCT_URL.PRODUCTION}/settings/integrations`;
 
 /**
- * Integrations whose automations are treated as event "responders" that poll
- * continuously. A responder is an automation whose required integrations are
- * exclusively from this set, so multi-tool digests (e.g. slack + linear +
- * notion) are not treated as Slack responders.
- */
-const RESPONDER_INTEGRATION_IDS = ["github", "slack"];
-
-/**
  * Single source of truth for "does this automation get the deployment-choice
- * modal?" — true only for pure GitHub/Slack responders.
+ * modal?" — true only for automations whose required integrations are
+ * exclusively responder ones (owned by the interface manifest, GitHub/Slack by
+ * default), so multi-tool digests (e.g. slack + linear + notion) are not
+ * treated as Slack responders. An integration the automation can start without
+ * does not decide where it runs, so only the required ones are classified.
  */
 export function isResponderAutomation(
   automation: RecommendedAutomation,
 ): boolean {
-  const ids = automation.requiredIntegrationIds;
-  return (
-    ids.length > 0 && ids.every((id) => RESPONDER_INTEGRATION_IDS.includes(id))
-  );
+  const responderIds = getResponderIntegrationIds();
+  const ids = getRequiredIntegrationIds(automation);
+  return ids.length > 0 && ids.every((id) => responderIds.includes(id));
 }
 
 /**

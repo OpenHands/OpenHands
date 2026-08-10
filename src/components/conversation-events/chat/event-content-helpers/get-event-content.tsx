@@ -1,9 +1,7 @@
 import { Trans } from "react-i18next";
 import React from "react";
-import {
-  CANVAS_UI_CLIENT_ACTION_KIND,
-  CANVAS_UI_CLIENT_TOOL_NAME,
-} from "#/constants/canvas-ui";
+import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import {
   OpenHandsEvent,
   ObservationEvent,
@@ -30,16 +28,17 @@ import { SkillReadyEvent, isSkillReadyEvent } from "./create-skill-ready-event";
 import { resolveVisualizerBody } from "../../../features/chat/tool-visualizers/dispatcher";
 import i18n from "#/i18n";
 import { I18nKey } from "#/i18n/declaration";
-
-const trimText = (text: string, maxLength: number): string => {
-  if (!text) return "";
-  return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
-};
+import {
+  getActionEventTitleDescriptor,
+  getActionSummaryTitle,
+  trimEventTitleText,
+  type EventTitleDescriptor,
+} from "./get-action-event-title";
 
 // Helper function to create title from translation key
 const createTitleFromKey = (
   key: string,
-  values: Record<string, unknown>,
+  values: Readonly<Record<string, unknown>>,
 ): React.ReactNode => {
   if (!i18n.exists(key)) {
     return key;
@@ -58,26 +57,12 @@ const createTitleFromKey = (
   );
 };
 
-/**
- * Detects the agent-server's default summary fallback, which has the shape
- * `{tool_name}: {json-args}` (see `_extract_summary` in
- * `openhands/sdk/agent/agent.py`). When the LLM omits a summary the server
- * dumps the raw arguments JSON, which renders as a huge unreadable blob in
- * the chat. Treat that case as "no summary" so the action-kind specific
- * title (e.g. "Editing <path>", "Running <cmd>") is used instead.
- */
-const isServerFallbackSummary = (summary: string): boolean =>
-  /^[a-z][a-z0-9_]*\s*:\s*[[{]/i.test(summary);
-
-const getSummaryTitleForActionEvent = (
-  event: ActionEvent,
-): React.ReactNode | null => {
-  const summary = event.summary?.trim().replace(/\s+/g, " ") || "";
-  if (!summary || isServerFallbackSummary(summary)) {
-    return null;
-  }
-  return summary;
-};
+const renderTitleDescriptor = (
+  descriptor: EventTitleDescriptor,
+): React.ReactNode =>
+  descriptor.kind === "text"
+    ? descriptor.text
+    : createTitleFromKey(descriptor.key, descriptor.values);
 
 const getNonEmptyString = (
   value: unknown,
@@ -92,7 +77,7 @@ const getNonEmptyString = (
     return null;
   }
 
-  return maxLength ? trimText(trimmed, maxLength) : trimmed;
+  return maxLength ? trimEventTitleText(trimmed, maxLength) : trimmed;
 };
 
 const getVisionInspectActionTitle = (
@@ -154,106 +139,7 @@ const getActionEventTitle = (event: OpenHandsEvent): React.ReactNode => {
     return visionInspectTitle;
   }
 
-  const summaryTitle = getSummaryTitleForActionEvent(event);
-  if (summaryTitle) {
-    return summaryTitle;
-  }
-
-  const actionType = event.action.kind;
-  let actionKey = "";
-  let actionValues: Record<string, unknown> = {};
-
-  switch (actionType) {
-    case "ExecuteBashAction":
-    case "TerminalAction":
-      actionKey = "ACTION_MESSAGE$RUN";
-      actionValues = {
-        command: trimText(event.action.command, 80),
-      };
-      break;
-    case "FileEditorAction":
-    case "StrReplaceEditorAction":
-      if (event.action.command === "view") {
-        actionKey = "ACTION_MESSAGE$READ";
-      } else if (event.action.command === "create") {
-        actionKey = "ACTION_MESSAGE$WRITE";
-      } else {
-        actionKey = "ACTION_MESSAGE$EDIT";
-      }
-      actionValues = {
-        path: event.action.path,
-      };
-      break;
-    case "MCPToolAction":
-      actionKey = "ACTION_MESSAGE$CALL_TOOL_MCP";
-      actionValues = {
-        mcp_tool_name: event.tool_name,
-      };
-      break;
-    case "InvokeSkillAction":
-      actionKey = "ACTION_MESSAGE$INVOKE_SKILL";
-      actionValues = {
-        name: event.action.name,
-      };
-      break;
-    case "TaskAction":
-      actionKey = "ACTION_MESSAGE$TASK";
-      actionValues = {
-        name: event.action.subagent_type,
-      };
-      break;
-    case "ThinkAction":
-      actionKey = "ACTION_MESSAGE$THINK";
-      break;
-    case "FinishAction":
-      actionKey = "ACTION_MESSAGE$FINISH";
-      break;
-    case "TaskTrackerAction":
-      actionKey = "ACTION_MESSAGE$TASK_TRACKING";
-      break;
-    case "GrepAction":
-      actionKey = "ACTION_MESSAGE$GREP";
-      actionValues = {
-        pattern:
-          "pattern" in event.action && event.action.pattern
-            ? trimText(String(event.action.pattern), 50)
-            : "",
-      };
-      break;
-    case "GlobAction":
-      actionKey = "ACTION_MESSAGE$GLOB";
-      actionValues = {
-        pattern:
-          "pattern" in event.action && event.action.pattern
-            ? trimText(String(event.action.pattern), 50)
-            : "",
-      };
-      break;
-    case "BrowserNavigateAction":
-    case "BrowserClickAction":
-    case "BrowserTypeAction":
-    case "BrowserGetStateAction":
-    case "BrowserGetContentAction":
-    case "BrowserScrollAction":
-    case "BrowserGoBackAction":
-    case "BrowserListTabsAction":
-    case "BrowserSwitchTabAction":
-    case "BrowserCloseTabAction":
-      actionKey = "ACTION_MESSAGE$BROWSE";
-      break;
-    case "CanvasUIAction":
-    case CANVAS_UI_CLIENT_ACTION_KIND:
-      return "CANVASUI";
-    default:
-      // For unknown actions, use the type name
-      return String(actionType).replace("Action", "").toUpperCase();
-  }
-
-  if (actionKey) {
-    return createTitleFromKey(actionKey, actionValues);
-  }
-
-  return actionType;
+  return renderTitleDescriptor(getActionEventTitleDescriptor(event));
 };
 
 // Observation Event Processing
@@ -280,7 +166,7 @@ const getObservationEventTitle = (
       return visionInspectTitle;
     }
 
-    const summaryTitle = getSummaryTitleForActionEvent(correspondingAction);
+    const summaryTitle = getActionSummaryTitle(correspondingAction);
     if (summaryTitle) {
       return summaryTitle;
     }
@@ -296,7 +182,7 @@ const getObservationEventTitle = (
       observationKey = "OBSERVATION_MESSAGE$RUN";
       observationValues = {
         command: event.observation.command
-          ? trimText(event.observation.command, 80)
+          ? trimEventTitleText(event.observation.command, 80)
           : "",
       };
       break;
@@ -337,6 +223,10 @@ const getObservationEventTitle = (
         observationKey = "OBSERVATION_MESSAGE$CANVAS_UI";
         break;
       }
+      if (event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME) {
+        observationKey = "OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION";
+        break;
+      }
       return observationType.replace("Observation", "").toUpperCase();
     case "SwitchLLMObservation":
       observationKey = event.observation.is_error
@@ -366,7 +256,7 @@ const getObservationEventTitle = (
       observationKey = "OBSERVATION_MESSAGE$GLOB";
       observationValues = {
         pattern: event.observation.pattern
-          ? trimText(event.observation.pattern, 50)
+          ? trimEventTitleText(event.observation.pattern, 50)
           : "",
       };
       break;
@@ -374,7 +264,7 @@ const getObservationEventTitle = (
       observationKey = "OBSERVATION_MESSAGE$GREP";
       observationValues = {
         pattern: event.observation.pattern
-          ? trimText(event.observation.pattern, 50)
+          ? trimEventTitleText(event.observation.pattern, 50)
           : "",
       };
       break;
