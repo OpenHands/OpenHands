@@ -88,6 +88,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     authRequired: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
+    sidebarLinks: null,
     basePath: "/",
   };
 
@@ -129,6 +130,9 @@ export function parseArgs(argv = process.argv.slice(2)) {
         break;
       case "--lock-to-cloud":
         config.lockToCloud = argv[++i] || null;
+        break;
+      case "--sidebar-links":
+        config.sidebarLinks = argv[++i] || null;
         break;
       case "--base-path":
         config.basePath = normalizeBasePath(argv[++i]);
@@ -208,6 +212,11 @@ OPTIONS:
   --lock-to-cloud <cloud-url>  Lock backend setup to a single OpenHands Cloud
                                URL. Hides manual/local backend setup and the
                                custom Cloud URL field in the pre-built frontend.
+  --sidebar-links <json>       Inject a JSON array of extra sidebar nav links
+                               ({id, label, url, icon?}) into index.html so an
+                               operator can add e.g. an OpenHands Enterprise
+                               link to the pre-built frontend without
+                               VITE_SIDEBAR_LINKS baked in.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -265,6 +274,12 @@ ROUTING:
  *   `agent-server-config.ts` so pre-built frontend bundles can hide manual
  *   backend setup and the custom Cloud URL field at runtime.
  *
+ * - `sidebarLinks`: a JSON string describing extra sidebar nav links, exposed
+ *   as `window.__AGENT_CANVAS_SIDEBAR_LINKS__`. Read by
+ *   `getConfiguredSidebarLinks()` in `#/config/sidebar-links` as a fallback
+ *   when `VITE_SIDEBAR_LINKS` is empty, so an operator can add e.g. an
+ *   OpenHands Enterprise link to a published build without a rebuild.
+ *
  * - `basePath`: the path prefix the SPA is mounted under, exposed as
  *   `window.__AGENT_CANVAS_BASE_PATH__` so runtime static assets like locale
  *   files can resolve through the same subpath as the built bundle.
@@ -274,6 +289,7 @@ function makeConfigInjectionScript(
   authRequired,
   runtimeServicesInfo,
   lockToCloud,
+  sidebarLinks,
   basePath,
 ) {
   const parts = [];
@@ -318,6 +334,15 @@ function makeConfigInjectionScript(
     );
   }
 
+  if (sidebarLinks) {
+    // Stored as the raw JSON string, same reasoning as runtimeServicesInfo:
+    // the browser-side parser (getConfiguredSidebarLinks) JSON.parses it
+    // exactly like the VITE_SIDEBAR_LINKS env var.
+    parts.push(
+      `window.__AGENT_CANVAS_SIDEBAR_LINKS__=${JSON.stringify(sidebarLinks)};`,
+    );
+  }
+
   if (basePath && basePath !== "/") {
     parts.push(
       `window.__AGENT_CANVAS_BASE_PATH__=${JSON.stringify(basePath)};`,
@@ -342,6 +367,7 @@ async function serveInjectedIndexHtml(
     authRequired,
     runtimeServicesInfo,
     lockToCloud,
+    sidebarLinks,
     basePath,
   } = {},
 ) {
@@ -357,6 +383,7 @@ async function serveInjectedIndexHtml(
     authRequired,
     runtimeServicesInfo,
     lockToCloud,
+    sidebarLinks,
     basePath,
   );
   // Inject right before </head> so the key is available before any app code runs.
@@ -406,6 +433,7 @@ function needsRuntimeInjection(injectionOpts) {
     injectionOpts.authRequired ||
     injectionOpts.runtimeServicesInfo ||
     injectionOpts.lockToCloud ||
+    injectionOpts.sidebarLinks ||
     (injectionOpts.basePath && injectionOpts.basePath !== "/"),
   );
 }
@@ -549,6 +577,7 @@ export function startStaticServer(config) {
     authRequired: config.authRequired || false,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
+    sidebarLinks: config.sidebarLinks || null,
     basePath: normalizeBasePath(config.basePath),
   };
   const basePath = injectionOpts.basePath;

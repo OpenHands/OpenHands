@@ -145,6 +145,23 @@ describe("static-server.mjs", () => {
       expect(config.lockToCloud).toBeNull();
     });
 
+    it("defaults sidebarLinks to null", () => {
+      const config = parseArgs([]);
+      expect(config.sidebarLinks).toBeNull();
+    });
+
+    it("parses --sidebar-links", () => {
+      const json =
+        '[{"id":"enterprise","label":"Enterprise","url":"https://openhands.dev"}]';
+      const config = parseArgs(["--sidebar-links", json]);
+      expect(config.sidebarLinks).toBe(json);
+    });
+
+    it("treats empty string as null for sidebarLinks", () => {
+      const config = parseArgs(["--sidebar-links", ""]);
+      expect(config.sidebarLinks).toBeNull();
+    });
+
     it("defaults basePath to root", () => {
       const config = parseArgs([]);
       expect(config.basePath).toBe("/");
@@ -372,6 +389,63 @@ describe("static-server.mjs", () => {
 
       expect(response.status).toBe(200);
       expect(body).toContain("__AGENT_CANVAS_LOCK_TO_CLOUD__");
+    });
+  });
+
+  describe("sidebar links injection", () => {
+    async function startServerWithSidebarLinks(
+      dir: string,
+      sidebarLinks: string,
+    ) {
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir,
+        routes: {},
+        sidebarLinks,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Static server did not bind to a TCP port");
+      }
+      return `http://127.0.0.1:${address.port}`;
+    }
+
+    it("exposes the sidebar links JSON on window.__AGENT_CANVAS_SIDEBAR_LINKS__", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const sidebarLinks =
+        '[{"id":"enterprise","label":"Enterprise","url":"https://openhands.dev"}]';
+      const origin = await startServerWithSidebarLinks(buildDir, sidebarLinks);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_SIDEBAR_LINKS__");
+      expect(body).toContain("https://openhands.dev");
+    });
+
+    it("injects sidebar links into SPA fallback index.html", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithSidebarLinks(
+        buildDir,
+        '[{"id":"enterprise","label":"Enterprise","url":"https://openhands.dev"}]',
+      );
+      const response = await fetch(`${origin}/some/deep/route`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("__AGENT_CANVAS_SIDEBAR_LINKS__");
     });
   });
 

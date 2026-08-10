@@ -14,6 +14,7 @@ import {
   getInterfaceCopy,
 } from "#/manifests/automation-interface";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
+import { SidebarConfiguredLinks } from "./sidebar-configured-links";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
@@ -212,6 +213,7 @@ export function SidebarRailBody({
           collapsed={collapsed}
           icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
         />
+        <SidebarConfiguredLinks collapsed={collapsed} />
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />

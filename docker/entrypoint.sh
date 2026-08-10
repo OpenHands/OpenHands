@@ -39,6 +39,10 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   AGENT_CANVAS_SIDEBAR_LINKS – JSON array of extra sidebar nav links
+#                          ({id, label, url, icon?}), e.g. an OpenHands
+#                          Enterprise link, injected into the frontend
+#                          without a rebuild (default: unset, no extra links)
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -282,6 +286,7 @@ node /opt/agent-canvas/static-server.mjs \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+  --sidebar-links "${AGENT_CANVAS_SIDEBAR_LINKS:-}" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -309,6 +314,7 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --base-path "$AGENT_CANVAS_BASE_PATH" \
     --auth-required \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
+    --sidebar-links "${AGENT_CANVAS_SIDEBAR_LINKS:-}" \
     --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
