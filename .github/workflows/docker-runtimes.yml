@@ -75,6 +75,9 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          # trivy-action@v0.33.1 defaults to Trivy v0.65.0 whose GitHub release
+          # assets 404; pin a published binary (same pin as runtime-sast).
+          version: v0.73.0
 
       - name: Push to GHCR
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
