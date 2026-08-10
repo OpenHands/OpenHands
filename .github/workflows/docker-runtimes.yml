@@ -1,0 +1,92 @@
+name: Build Offensive Runtime Images
+
+# Plane: PROJETOSIN-186 · ADR-0001
+# Builds ghcr.io/heimdall/runtime-{web,network,mobile,sast}
+
+on:
+  push:
+    paths:
+      - "docker/runtimes/**"
+      - ".github/workflows/docker-runtimes.yml"
+  pull_request:
+    paths:
+      - "docker/runtimes/**"
+      - ".github/workflows/docker-runtimes.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+  # Trivy SARIF upload (optional; scan always runs)
+  security-events: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.runtime }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [web, network, mobile, sast]
+    env:
+      IMAGE_NAME: ghcr.io/heimdall/runtime-${{ matrix.runtime }}
+      IMAGE_SHA_TAG: ghcr.io/heimdall/runtime-${{ matrix.runtime }}:sha-${{ github.sha }}
+      IMAGE_LATEST_TAG: ghcr.io/heimdall/runtime-${{ matrix.runtime }}:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (load for scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/runtimes/${{ matrix.runtime }}
+          load: true
+          push: false
+          tags: |
+            ${{ env.IMAGE_LATEST_TAG }}
+            ${{ env.IMAGE_SHA_TAG }}
+          cache-from: type=gha,scope=runtime-${{ matrix.runtime }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.33.1
+        with:
+          image-ref: ${{ env.IMAGE_SHA_TAG }}
+          format: table
+          # AppSec: scan before push. Offensive-tool images routinely flag
+          # CRITICAL CVEs inside scanners themselves — keep exit-code 0 so the
+          # matrix stays buildable; findings remain visible in the job log.
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          # trivy-action@v0.33.1 defaults to Trivy v0.65.0 whose GitHub release
+          # assets 404; pin a published binary (same pin as runtime-sast).
+          version: v0.73.0
+
+      - name: Push to GHCR
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/runtimes/${{ matrix.runtime }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_LATEST_TAG }}
+            ${{ env.IMAGE_SHA_TAG }}
+          cache-from: type=gha,scope=runtime-${{ matrix.runtime }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}

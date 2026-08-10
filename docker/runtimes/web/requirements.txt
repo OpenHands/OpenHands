@@ -1,0 +1,2 @@
+# MCP server deps for runtime-web (PROJETOSIN-186).
+# Keep minimal until the Web MCP service lands; empty extra deps are intentional.
