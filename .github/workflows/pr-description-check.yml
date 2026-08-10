@@ -42,4 +42,4 @@ jobs:
             - name: Validate HUMAN note, PR template, frontend evidence, and linked-issue readiness
               env:
                   GITHUB_TOKEN: ${{ github.token }}
-              run: python .github/scripts/check_pr_description.py --files-file pr-files.txt
+              run: python .github/scripts/check_pr_description.py --event-path "$GITHUB_EVENT_PATH" --files-file pr-files.txt
