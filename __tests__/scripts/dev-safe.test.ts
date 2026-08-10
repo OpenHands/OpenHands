@@ -16,7 +16,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
 import {
   assertPortsFree,
-  buildAgentServerEnv,
   buildSafeDevConfig,
   buildSafeDevConfigAsync,
   buildNpmScriptCommand,
