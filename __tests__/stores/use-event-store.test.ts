@@ -200,6 +200,35 @@ describe("useEventStore", () => {
     expect(result.current.eventIds.has("delta-2")).toBe(true);
   });
 
+  it("keeps the streamed reply in one uiEvents bubble across a mid-stream message (#1899)", () => {
+    const { result } = renderHook(() => useEventStore());
+    // Uniform-precision timestamps also cover applyAddEvent's sorting path.
+    const first = {
+      ...makeStreamingDeltaEvent("delta-1", "hello "),
+      timestamp: "2024-03-01T00:00:01.000Z",
+    };
+    const midStream = makeUserMessageEvent(
+      "user-1",
+      "2024-03-01T00:00:01.500Z",
+    );
+    const second = {
+      ...makeStreamingDeltaEvent("delta-2", "world"),
+      timestamp: "2024-03-01T00:00:02.000Z",
+    };
+
+    act(() => {
+      result.current.addEvent(first);
+      result.current.addEvent(midStream);
+      result.current.addEvent(second);
+    });
+
+    // One bubble for the whole reply, message below it.
+    expect(result.current.uiEvents).toEqual([
+      { ...first, content: "hello world" },
+      midStream,
+    ]);
+  });
+
   it("should not compact streaming deltas from different senders (#1656)", () => {
     const { result } = renderHook(() => useEventStore());
     const mainDelta = makeStreamingDeltaEvent("delta-1", "main ");

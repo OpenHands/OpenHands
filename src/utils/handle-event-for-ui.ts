@@ -1,12 +1,17 @@
 import {
   ActionEvent,
+  ExecutionStatus,
   ImageContent,
   OpenHandsEvent,
   TextContent,
 } from "#/types/agent-server/core";
+import { ConversationStateUpdateEvent } from "#/types/agent-server/core/events/conversation-state-event";
 import {
   isACPToolCallEvent,
   isActionEvent,
+  isAgentStatusConversationStateUpdateEvent,
+  isConversationStateUpdateEvent,
+  isFullStateConversationStateUpdateEvent,
   isMessageEvent,
   isObservationEvent,
   isStreamingDeltaEvent,
@@ -36,14 +41,94 @@ export const isSameStreamingSender = (
   b: OpenHandsEvent & { isFromPlanningAgent?: boolean },
 ): boolean => Boolean(a.isFromPlanningAgent) === Boolean(b.isFromPlanningAgent);
 
-const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
+const isUserMessage = (event: OpenHandsEvent): boolean =>
+  isMessageEvent(event) && event.source === "user";
+
+const reportsAgentLeftRunning = (
+  event: ConversationStateUpdateEvent,
+): boolean => {
+  if (isFullStateConversationStateUpdateEvent(event)) {
+    return event.value.execution_status !== ExecutionStatus.RUNNING;
+  }
+  if (isAgentStatusConversationStateUpdateEvent(event)) {
+    return event.value !== ExecutionStatus.RUNNING;
+  }
+  return false; // stats / goal snapshots are bookkeeping
+};
+
+// A mid-stream user message and a still-RUNNING state snapshot are transparent:
+// the deltas either side of them are one bubble. A snapshot that left RUNNING
+// ends the run, keeping an interrupted turn's deltas out of the next turn (#1899).
+const endsStreamingRun = (event: OpenHandsEvent): boolean => {
+  if (isUserMessage(event)) {
+    return false;
+  }
+  if (isConversationStateUpdateEvent(event)) {
+    return reportsAgentLeftRunning(event);
+  }
+  return true;
+};
+
+const findTrailingStreamStart = (events: OpenHandsEvent[]): number => {
+  let start = events.length;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (isMessageEvent(event) && event.source === "user") {
+    if (isStreamingDeltaEvent(event)) {
+      start = index;
+    } else if (endsStreamingRun(event)) {
+      break;
+    }
+  }
+  return start;
+};
+
+// The last delta of the trailing streaming run, or -1 when the tail is not one.
+const findTrailingStreamLastDeltaIndex = (events: OpenHandsEvent[]): number => {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (isStreamingDeltaEvent(event)) {
+      return index;
+    }
+    if (endsStreamingRun(event)) {
+      break;
+    }
+  }
+  return -1;
+};
+
+// One past the trailing run's last delta — where its final event belongs.
+const findTrailingStreamEnd = (events: OpenHandsEvent[]): number => {
+  const lastDeltaIndex = findTrailingStreamLastDeltaIndex(events);
+  return lastDeltaIndex === -1 ? events.length : lastDeltaIndex + 1;
+};
+
+// The current turn's boundary: the last user message not sent mid-stream.
+const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
+  for (
+    let index = findTrailingStreamStart(events) - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    if (isUserMessage(events[index])) {
       return index;
     }
   }
   return -1;
+};
+
+// The delta bubble an incoming delta merges into: the trailing run's last delta,
+// looking past a mid-stream user message so it doesn't split the reply (#1899).
+const findStreamingMergeTargetIndex = (
+  uiEvents: OpenHandsEvent[],
+  incoming: StreamingDeltaEvent,
+): number => {
+  const lastDeltaIndex = findTrailingStreamLastDeltaIndex(uiEvents);
+  if (lastDeltaIndex === -1) {
+    return -1;
+  }
+  return isSameStreamingSender(incoming, uiEvents[lastDeltaIndex])
+    ? lastDeltaIndex
+    : -1;
 };
 
 // Join text blocks WITHOUT a separator: streaming deltas concatenate content
@@ -108,6 +193,10 @@ const getTrailingDeltas = (
   for (let index = uiEvents.length - 1; index >= 0; index -= 1) {
     const event = uiEvents[index];
     if (!isStreamingDeltaEvent(event)) {
+      // A mid-stream user message / RUNNING snapshot doesn't end the run (#1899).
+      if (!endsStreamingRun(event)) {
+        continue;
+      }
       break;
     }
     if (selects(event)) {
@@ -224,13 +313,16 @@ const finalizeStreamingDeltasInPlace = (
     return null;
   }
 
+  // Render the final event where the stream ended, not at the tail, so it stays
+  // above a message the user sent mid-stream instead of jumping below it (#1899).
+  const streamEnd = findTrailingStreamEnd(uiEvents);
   const nextUiEvents = supersedeStreamingContent(
-    uiEvents,
+    uiEvents.slice(0, streamEnd),
     contentStreamingDeltas,
     eventRendersReasoning(finalEvent),
   );
   nextUiEvents.push(finalEvent);
-  return nextUiEvents;
+  return [...nextUiEvents, ...uiEvents.slice(streamEnd)];
 };
 
 /**
@@ -335,14 +427,12 @@ export const handleEventForUI = (
       return newUiEvents;
     }
 
-    const lastIndex = newUiEvents.length - 1;
-    const lastEvent = newUiEvents[lastIndex];
-    if (
-      lastEvent &&
-      isStreamingDeltaEvent(lastEvent) &&
-      isSameStreamingSender(event, lastEvent)
-    ) {
-      newUiEvents[lastIndex] = mergeStreamingDeltaEvent(event, lastEvent);
+    const mergeIndex = findStreamingMergeTargetIndex(newUiEvents, event);
+    if (mergeIndex !== -1) {
+      newUiEvents[mergeIndex] = mergeStreamingDeltaEvent(
+        event,
+        newUiEvents[mergeIndex] as StreamingDeltaEvent,
+      );
       return newUiEvents;
     }
 
