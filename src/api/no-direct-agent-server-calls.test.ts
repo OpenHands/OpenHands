@@ -13,6 +13,8 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/integrations/plane-service.ts",
   "api/integrations/translate-service.ts",
   "api/integrations/desktop-service.ts",
+  // Pentest Fase-0 endpoints are not yet in typescript-client (PROJETOSIN-182/185).
+  "api/pentest-service/pentest-service.api.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {

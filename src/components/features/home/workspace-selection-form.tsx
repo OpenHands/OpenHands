@@ -12,7 +12,9 @@ import {
 } from "#/hooks/mutation/use-local-workspaces-mutations";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
 import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
+import { usePentestEngagements } from "#/hooks/use-pentest-capabilities";
 import { LocalWorkspace } from "#/types/workspace";
+import type { AutonomyMode, WorkspaceType } from "#/types/workspace-types";
 import { I18nKey } from "#/i18n/declaration";
 import FolderIcon from "#/icons/folder.svg?react";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
@@ -21,6 +23,13 @@ import { BrandButton } from "../settings/brand-button";
 import { WorkspaceDropdown } from "./workspace-dropdown/workspace-dropdown";
 import { FolderBrowserModal } from "./workspace-dropdown/folder-browser-modal";
 import { ManageWorkspacesModal } from "./workspace-dropdown/manage-workspaces-modal";
+import { WorkspaceTypeSelector } from "#/components/features/pentest/workspace-type-selector";
+import { WorkspaceTypeBadge } from "#/components/features/pentest/workspace-type-badge";
+import { PentestWorkspaceFields } from "#/components/features/pentest/pentest-workspace-fields";
+import {
+  hasUnauthorizedScope,
+  isPentestCreationBlocked,
+} from "#/components/features/pentest/pentest-creation-validation";
 
 interface WorkspaceSelectionFormProps {
   isLoadingSettings?: boolean;
@@ -92,6 +101,13 @@ export function WorkspaceSelectionForm({
     React.useState<LocalWorkspace | null>(null);
   const [isBrowserOpen, setIsBrowserOpen] = React.useState(false);
   const [isManageOpen, setIsManageOpen] = React.useState(false);
+  const [workspaceType, setWorkspaceType] =
+    React.useState<WorkspaceType>("code");
+  const [engagementId, setEngagementId] = React.useState<string | null>(null);
+  const [autonomyMode, setAutonomyMode] =
+    React.useState<AutonomyMode>("manual");
+  const { engagements, isLoading: isLoadingEngagements } =
+    usePentestEngagements();
 
   const {
     mutate: createConversation,
@@ -101,6 +117,21 @@ export function WorkspaceSelectionForm({
   const isCreatingConversationElsewhere = useIsCreatingConversation();
   const isCreatingConversation =
     isPending || isSuccess || isCreatingConversationElsewhere;
+
+  const pentestState = { workspaceType, engagementId, autonomyMode };
+  const pentestBlocked = isPentestCreationBlocked(pentestState, engagements);
+  const scopeUnauthorized = hasUnauthorizedScope(pentestState, engagements);
+  const scopeError = scopeUnauthorized
+    ? t(I18nKey.WORKSPACE_TYPE$SCOPE_UNAUTHORIZED)
+    : null;
+
+  const handleWorkspaceTypeChange = React.useCallback((type: WorkspaceType) => {
+    setWorkspaceType(type);
+    if (type === "code") {
+      setEngagementId(null);
+      setAutonomyMode("manual");
+    }
+  }, []);
 
   const handleWorkspaceChange = React.useCallback(
     (workspace: LocalWorkspace | null) => {
@@ -156,12 +187,24 @@ export function WorkspaceSelectionForm({
 
   const handleLaunch = () => {
     if (!selectedWorkspace) return;
+    if (pentestBlocked) return;
     if (onConfirm) {
       onConfirm(selectedWorkspace);
       return;
     }
     createConversation(
-      { workingDir: selectedWorkspace.path, entryPoint: "home_workspace_form" },
+      {
+        workingDir: selectedWorkspace.path,
+        entryPoint: "home_workspace_form",
+        workspaceType,
+        ...(workspaceType === "pentest" && engagementId
+          ? {
+              engagementId,
+              autonomyMode,
+              runtimeProfile: "web" as const,
+            }
+          : {}),
+      },
       {
         onSuccess: (data) => navigate(`/conversations/${data.conversation_id}`),
       },
@@ -178,10 +221,28 @@ export function WorkspaceSelectionForm({
           <span className="leading-5 font-bold text-base text-white">
             {t(I18nKey.HOME$WORKSPACES_TAB)}
           </span>
+          {workspaceType === "pentest" && <WorkspaceTypeBadge />}
         </div>
       )}
 
       <div className="flex flex-col gap-[10px] pb-4">
+        <WorkspaceTypeSelector
+          value={workspaceType}
+          onChange={handleWorkspaceTypeChange}
+        />
+
+        {workspaceType === "pentest" && (
+          <PentestWorkspaceFields
+            engagements={engagements}
+            isLoadingEngagements={isLoadingEngagements}
+            engagementId={engagementId}
+            onEngagementChange={setEngagementId}
+            autonomyMode={autonomyMode}
+            onAutonomyChange={setAutonomyMode}
+            scopeError={scopeError}
+          />
+        )}
+
         <WorkspaceDropdown
           workspaces={workspaces}
           parents={resolvedParents}
@@ -219,6 +280,7 @@ export function WorkspaceSelectionForm({
         type="button"
         isDisabled={
           !selectedWorkspace ||
+          pentestBlocked ||
           (!onConfirm && isCreatingConversation) ||
           isLoadingSettings
         }
