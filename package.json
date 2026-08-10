@@ -126,7 +126,7 @@
     ]
   },
   "devDependencies": {
-    "@eslint/eslintrc": "3.3.1",
+    "@eslint/eslintrc": "3.3.6",
     "@eslint/js": "9.39.4",
     "@mswjs/socket.io-binding": "0.2.0",
     "@playwright/test": "1.62.0",
