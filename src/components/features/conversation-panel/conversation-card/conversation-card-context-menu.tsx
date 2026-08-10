@@ -7,6 +7,7 @@ import { ContextMenuListItem } from "../../context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ConversationNameContextMenuIconText } from "../../conversation/conversation-name-context-menu-icon-text";
 
+import { Archive, ArchiveRestore } from "lucide-react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import SkillsIcon from "#/icons/skills.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
@@ -19,6 +20,8 @@ import { Divider } from "#/ui/divider";
 interface ConversationCardContextMenuProps {
   onClose: () => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDisplayCost?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -38,6 +41,8 @@ interface ConversationCardContextMenuProps {
 export function ConversationCardContextMenu({
   onClose,
   onDelete,
+  onArchive,
+  onUnarchive,
   onStop,
   onEdit,
   onDisplayCost,
@@ -204,6 +209,30 @@ export function ConversationCardContextMenu({
               <ConversationNameContextMenuIconText
                 icon={<CreditCardIcon width={16} height={16} />}
                 text={t(I18nKey.BUTTON$DISPLAY_COST)}
+              />
+            </ContextMenuListItem>
+          ),
+          onArchive && (
+            <ContextMenuListItem
+              key="archive-button"
+              testId="archive-button"
+              onClick={onArchive}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<Archive className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.COMMON$ARCHIVE_CONVERSATION)}
+              />
+            </ContextMenuListItem>
+          ),
+          onUnarchive && (
+            <ContextMenuListItem
+              key="unarchive-button"
+              testId="unarchive-button"
+              onClick={onUnarchive}
+            >
+              <ConversationNameContextMenuIconText
+                icon={<ArchiveRestore className="h-4 w-4" aria-hidden />}
+                text={t(I18nKey.COMMON$UNARCHIVE_CONVERSATION)}
               />
             </ContextMenuListItem>
           ),

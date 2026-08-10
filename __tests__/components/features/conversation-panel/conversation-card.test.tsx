@@ -336,6 +336,30 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("should call onArchive when the archive button is clicked", async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onArchive={onArchive}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("archive-button"));
+
+    expect(onArchive).toHaveBeenCalled();
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   test("clicking the selectedRepository should not trigger the onClick handler", async () => {
     const user = userEvent.setup();
     renderWithProviders(
@@ -1011,6 +1035,23 @@ describe("ConversationCard", () => {
       expect(
         within(chip).queryByTestId("agent-brand-icon-claude-code"),
       ).not.toBeInTheDocument();
+    });
+
+    it("labels a free OpenHands route on native conversation chips", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showLlmProfiles
+          agentKind="openhands"
+          llmModel="openhands/glm-5.2"
+        />,
+      );
+
+      const chip = screen.getByTestId("conversation-card-agent-chip");
+      expect(chip).toHaveTextContent("OpenHands GLM-5.2 (free)");
+      expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
     });
 
     it("hides the chip for OpenHands conversations with no model", () => {

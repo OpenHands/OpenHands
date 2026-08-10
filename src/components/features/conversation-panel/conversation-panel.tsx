@@ -9,6 +9,7 @@ import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversat
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -44,6 +45,7 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 
 interface ConversationPanelProps {
@@ -100,6 +102,8 @@ export function ConversationPanel({
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
+  const [confirmArchiveModalVisible, setConfirmArchiveModalVisible] =
+    React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
   const [
@@ -110,6 +114,12 @@ export function ConversationPanel({
     React.useState(false);
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
+  );
+  const showArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.showArchivedConversations,
+  );
+  const toggleShowArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.toggleShowArchivedConversations,
   );
   const toggleShowOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.toggleShowOlderConversations,
@@ -193,8 +203,26 @@ export function ConversationPanel({
       state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
   const togglePin = usePinnedConversationsStore((state) => state.togglePin);
+  const unpinConversation = usePinnedConversationsStore(
+    (state) => state.unpinConversation,
+  );
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
+  );
+  const archivedIds = useArchivedConversationsStore(
+    (state) =>
+      state.archivesByBackendId[activeBackend.id] ??
+      EMPTY_PINNED_CONVERSATION_IDS,
+  );
+  const archiveConversation = useArchivedConversationsStore(
+    (state) => state.archiveConversation,
+  );
+  const archivedIdSet = React.useMemo(
+    () => new Set(archivedIds),
+    [archivedIds],
+  );
+  const removeArchivedConversation = useArchivedConversationsStore(
+    (state) => state.removeArchivedConversation,
   );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
@@ -252,7 +280,10 @@ export function ConversationPanel({
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
 
-  const conversations = React.useMemo(() => {
+  // Deduped, archive-unaware collection of every conversation currently loaded
+  // from the backend. Bulk actions like "Delete all" must use this list so
+  // hiding archived rows from the UI never shrinks what gets deleted.
+  const allLoadedConversations = React.useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
     // The 10s background refetch re-fetches every loaded page with the
     // `UPDATED_AT_DESC` cursor. If a conversation's `updated_at` shifts between
@@ -268,6 +299,17 @@ export function ConversationPanel({
       return true;
     });
   }, [data]);
+
+  // Display collection: same loaded pages, with archived rows filtered out
+  // unless the user has opted into "Show archived".
+  const conversations = React.useMemo(() => {
+    if (showArchivedConversations) {
+      return allLoadedConversations;
+    }
+    return allLoadedConversations.filter(
+      (conversation) => !archivedIdSet.has(conversation.id),
+    );
+  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
   // filter menu don't vanish while a narrowing selection is active.
@@ -301,16 +343,14 @@ export function ConversationPanel({
     if (!isFetched) {
       return;
     }
-    pruneMissingPinnedConversations(
-      activeBackend.id,
-      conversations.map((conversation) => conversation.id),
-    );
-  }, [
-    activeBackend.id,
-    conversations,
-    isFetched,
-    pruneMissingPinnedConversations,
-  ]);
+    // Prune pins against the unfiltered loaded pages so archived-but-still-
+    // pinned rows are not treated as missing. Archived IDs are intentionally
+    // not pruned here — pagination would otherwise drop archives that are not
+    // on the currently loaded pages and let them reappear in the list.
+    const loadedIds =
+      data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
+    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
+  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -416,25 +456,16 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupedCount = React.useMemo(() => {
-    if (!orderedConversationGroups) {
-      return 0;
-    }
-    return orderedConversationGroups.reduce(
-      (n, g) => n + g.conversations.length,
-      0,
-    );
-  }, [orderedConversationGroups]);
+  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
 
   const listIsEffectivelyEmpty =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount === 0
+      ? visibleGroupCount === 0
       : visibleFlatCount === 0;
 
   // Attribution is exact: the automation filter step itself produced zero
   // rows out of a non-empty loaded set (not merely threadScope/older-cutoff
-  // effects). Used to keep "Load more" reachable and to pick the empty-state
-  // message.
+  // effects). Used to pick the empty-state message.
   const emptyDueToAutomationFilter =
     listIsEffectivelyEmpty &&
     automationFilterMode !== "all" &&
@@ -445,8 +476,9 @@ export function ConversationPanel({
   // current organize mode. "Load more" succeeds only when this number grows.
   const visibleCount =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount
+      ? visibleGroupCount
       : visibleFlatCount;
+  const loadedPageCount = data?.pages.length ?? 0;
 
   // KNOWN ISSUE (unresolved as of 2026-05-29): users still report that the
   // sidebar "Load more" sometimes requires two clicks before new conversations
@@ -466,7 +498,9 @@ export function ConversationPanel({
   // *visible* rows (filtered out by the active scope, or deduped as overlap),
   // so the list does not appear to grow. We capture the visible count at click
   // time and keep fetching pages — once the query is idle — until the visible
-  // count actually increases or there are no more pages.
+  // count actually increases or there are no more pages. `loadedPageCount`
+  // keeps the driver advancing when a grouped page contains only folders that
+  // were already discovered, leaving every other effect dependency unchanged.
   const [loadMoreFloor, setLoadMoreFloor] = React.useState<number | null>(null);
   const visibleCountRef = React.useRef(visibleCount);
   visibleCountRef.current = visibleCount;
@@ -486,20 +520,22 @@ export function ConversationPanel({
       setLoadMoreFloor(null);
       return;
     }
+    // Wait for any in-flight fetch (including the background refetch) to settle
+    // before evaluating `hasNextPage`; React Query may transiently clear that
+    // flag while replacing the last page.
+    if (isFetching || isFetchingNextPage) {
+      return;
+    }
     // Nothing more to fetch — stop waiting even if the list did not grow.
     if (!hasNextPage) {
       setLoadMoreFloor(null);
-      return;
-    }
-    // Wait for any in-flight fetch (including the background refetch) to settle
-    // before requesting the next page, otherwise the request is dropped.
-    if (isFetching || isFetchingNextPage) {
       return;
     }
     fetchNextPage();
   }, [
     loadMoreFloor,
     visibleCount,
+    loadedPageCount,
     hasNextPage,
     isFetching,
     isFetchingNextPage,
@@ -518,17 +554,15 @@ export function ConversationPanel({
   // pagination, which previously caused the panel to feel like it had stray
   // scrollable space at the bottom.
   const olderHidden = olderScoped.length > 0 && !showOlderConversations;
-  // Compact mode also hides "Load more" — paginating into archived
-  // conversations contradicts the "active only" intent of the icon rail.
-  // Do not show when the visible list is empty (that state already shows
-  // "No conversations found") — unless the automation filter alone emptied
-  // it while more pages exist: then the button must stay reachable so the
-  // load-more driver can keep fetching until a matching run surfaces.
-  const showLoadMore =
-    !!hasNextPage &&
-    !olderHidden &&
-    !compact &&
-    (!listIsEffectivelyEmpty || emptyDueToAutomationFilter);
+  // Compact mode also hides "Load more" — paginating into stale conversations
+  // contradicts the "active only" intent of the icon rail.
+  // Availability tracks backend exhaustion, never visible emptiness: a
+  // client-side filter (archiving, the automation filter) can hide every row
+  // of the loaded pages, and hiding the control there would strand the
+  // remaining pages behind an empty-state message with no way forward.
+  // `requestLoadMore`'s floor driver keeps paging until a visible row
+  // appears, so a single click walks past pages that are entirely filtered.
+  const showLoadMore = !!hasNextPage && !olderHidden && !compact;
 
   const { mutate: createConversation } = useCreateConversation();
   const isCreatingConversationFlow = useIsCreatingConversation();
@@ -561,6 +595,24 @@ export function ConversationPanel({
     [],
   );
 
+  const handleArchiveProject = React.useCallback(
+    (conversationId: string, title: string) => {
+      setConfirmArchiveModalVisible(true);
+      setSelectedConversationId(conversationId);
+      setSelectedConversationTitle(title);
+    },
+    [],
+  );
+
+  // Unarchiving needs no confirmation: it restores a row the user can archive
+  // again in one click, and nothing about the conversation itself changes.
+  const handleUnarchiveProject = React.useCallback(
+    (conversationId: string) => {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    },
+    [activeBackend.id, removeArchivedConversation],
+  );
+
   const handleStopConversation = React.useCallback((conversationId: string) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
@@ -582,16 +634,29 @@ export function ConversationPanel({
 
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
+      const conversationId = selectedConversationId;
       deleteConversation(
-        { conversationId: selectedConversationId },
+        { conversationId },
         {
           onSuccess: () => {
-            if (selectedConversationId === currentConversationId) {
+            removeArchivedConversation(activeBackend.id, conversationId);
+            if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
           },
         },
       );
+    }
+  };
+
+  const handleConfirmArchive = () => {
+    if (!selectedConversationId) {
+      return;
+    }
+    archiveConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(activeBackend.id, selectedConversationId);
+    if (selectedConversationId === currentConversationId) {
+      navigate("/conversations");
     }
   };
 
@@ -604,7 +669,10 @@ export function ConversationPanel({
   };
 
   const handleConfirmDeleteAll = async () => {
-    const idsToDelete = conversations.map((c) => c.id);
+    // Delete against the unfiltered loaded set so archived (currently hidden)
+    // conversations are still removed from the server — matching the action's
+    // "delete all conversations" label and confirmation count.
+    const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
       idsToDelete.map((conversationId) =>
         deleteConversationAsync({ conversationId }),
@@ -615,6 +683,10 @@ export function ConversationPanel({
       result.status === "fulfilled" ? [idsToDelete[index]] : [],
     );
     const failedCount = results.length - deletedIds.length;
+
+    for (const conversationId of deletedIds) {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    }
 
     if (
       currentConversationId !== null &&
@@ -636,6 +708,7 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
+      const isArchived = archivedIdSet.has(conversation.id);
       if (compact) {
         return (
           <CompactConversationRow
@@ -716,6 +789,22 @@ export function ConversationPanel({
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
               }
+              // Exactly one direction is offered per row, so the menu always
+              // reflects the conversation's current archived state.
+              onArchive={
+                isArchived
+                  ? undefined
+                  : () =>
+                      handleArchiveProject(
+                        conversation.id,
+                        conversation.title ?? "",
+                      )
+              }
+              onUnarchive={
+                isArchived
+                  ? () => handleUnarchiveProject(conversation.id)
+                  : undefined
+              }
               onStop={() => handleStopConversation(conversation.id)}
               onChangeTitle={(title) =>
                 handleConversationTitleChange(conversation.id, title)
@@ -747,6 +836,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               tags={conversation.tags}
               showTags={showTagsMetadata}
+              isArchived={isArchived}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
@@ -757,11 +847,14 @@ export function ConversationPanel({
     },
     [
       activeBackend.id,
+      archivedIdSet,
       compact,
       currentConversationId,
+      handleArchiveProject,
       handleConversationTitleChange,
       handleDeleteProject,
       handleStopConversation,
+      handleUnarchiveProject,
       onClose,
       openContextMenuId,
       pinnedIds,
@@ -836,6 +929,10 @@ export function ConversationPanel({
                 onToggleAutomationName={toggleAutomationName}
                 automationNameFacets={automationNameFacets}
                 showOlderConversations={showOlderConversations}
+                showArchivedConversations={showArchivedConversations}
+                toggleShowArchivedConversations={
+                  toggleShowArchivedConversations
+                }
                 toggleShowOlderConversations={toggleShowOlderConversations}
                 showRepoBranchMetadata={showRepoBranchMetadata}
                 toggleShowRepoBranchMetadata={toggleShowRepoBranchMetadata}
@@ -845,7 +942,7 @@ export function ConversationPanel({
                 toggleShowTagsMetadata={toggleShowTagsMetadata}
                 showHoverMetadata={showHoverMetadata}
                 toggleShowHoverMetadata={toggleShowHoverMetadata}
-                totalConversationsCount={conversations.length}
+                totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
               />
             </div>
@@ -987,11 +1084,26 @@ export function ConversationPanel({
         />
       )}
 
+      {confirmArchiveModalVisible && (
+        <ConfirmArchiveModal
+          onConfirm={() => {
+            handleConfirmArchive();
+            setConfirmArchiveModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          onCancel={() => {
+            setConfirmArchiveModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          conversationTitle={selectedConversationTitle ?? undefined}
+        />
+      )}
+
       {confirmDeleteAllVisible && (
         <ConfirmDeleteModal
           title={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_TITLE)}
           description={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
-            count: conversations.length,
+            count: allLoadedConversations.length,
           })}
           onConfirm={async () => {
             await handleConfirmDeleteAll();
