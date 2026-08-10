@@ -1,0 +1,6 @@
+# MCP server deps for mcp-mobile (PROJETOSIN-190)
+#
+# stdio MCP packages are mounted or copied at /opt/mcp-servers.
+# MobSF and the Android emulator remain sidecars — not installed here.
+mcp>=1.6.0
+httpx>=0.28.0

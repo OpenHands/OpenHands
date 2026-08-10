@@ -1,0 +1,28 @@
+{
+  "package_name": "com.example.vulnerable",
+  "app_name": "Vulnerable Sample",
+  "security_score": 42,
+  "appsec": {
+    "high": [
+      {
+        "title": "Insecure WebView Implementation",
+        "description": "WebView JavaScript interface enabled without origin checks.",
+        "section": "code_analysis"
+      }
+    ],
+    "warning": [
+      {
+        "title": "Allow Backup Enabled",
+        "description": "android:allowBackup is true in the manifest.",
+        "section": "manifest"
+      }
+    ],
+    "info": [
+      {
+        "title": "Uses Cleartext Traffic",
+        "description": "Network security config permits cleartext.",
+        "section": "network"
+      }
+    ]
+  }
+}

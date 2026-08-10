@@ -87,28 +87,36 @@ docker run --rm -e MSF_PASSWORD='<from-secret-store>' -p 55553:55553 -p 8091:809
 MobSF and the Android emulator stay **out of** `runtime-mobile` to keep the image slim
 and avoid privileged tooling in the main agent workspace container.
 
-```yaml
-# fragment compose mobile
-  mobsf:
-    image: opensecurity/mobile-security-framework-mobsf:latest
-    environment:
-      - MOBSF_API_KEY=${MOBSF_API_KEY}
-    ports:
-      - "8093:8000"
-    volumes:
-      - mobsf-data:/home/mobsf/.MobSF
+**Production MobSF fragment (no host port publish):** see
+`docker/runtimes/mobile/compose.mobsf.fragment.yml` (PROJETOSIN-190). Reach MobSF at
+`http://mobsf:8000` on the engagement network; UI/proxy is PROJETOSIN-192.
 
+```yaml
+# Dev-only sketch — emulator ports may be published locally; MobSF should stay internal.
+# Prefer compose.mobsf.fragment.yml for MobSF (no ports:).
   android-emulator:
     image: budtmo/docker-android:emulator_13.0
     privileged: true
+    # Dev: ADB / noVNC may be published; production EngMgr (191) keeps them internal.
     ports:
-      - "5555:5555"   # ADB over TCP
-      - "6901:6901"   # noVNC (GUI web)
+      - "5555:5555"   # ADB over TCP (dev)
+      - "6901:6901"   # noVNC (GUI web, dev)
     environment:
       - DEVICE=Samsung Galaxy S10
 ```
 
 Only the emulator sidecar should be privileged — not `runtime-mobile`.
+
+`runtime-mobile` installs MCP SDK deps (`mcp`, `httpx`) via `requirements.txt`.
+Mount `services/mcp-servers` at `/opt/mcp-servers` and set:
+
+```bash
+PENTEST_MCP_MOBILE_CMD='python /opt/mcp-servers/mcp-mobile/server.py'
+MOBSF_URL=http://mobsf:8000
+MOBSF_API_KEY=<from-secret-store>
+ADB_HOST=android-emulator
+ADB_PORT=5555
+```
 
 ## CI
 

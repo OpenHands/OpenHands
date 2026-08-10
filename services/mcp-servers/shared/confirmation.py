@@ -12,7 +12,18 @@ AutonomyMode = Literal["manual", "semi_autonomous", "autonomous"]
 AUTONOMY_MODE_ENV = "PENTEST_AUTONOMY_MODE"
 DEFAULT_AUTONOMY_MODE: AutonomyMode = "semi_autonomous"
 
-ACTIVE_TOOLS = frozenset({"zap_active_scan", "sqlmap_run", "nuclei_intrusive"})
+ACTIVE_TOOLS = frozenset(
+    {
+        "zap_active_scan",
+        "sqlmap_run",
+        "nuclei_intrusive",
+        # mcp-mobile (PROJETOSIN-190)
+        "adb_install",
+        "adb_shell_mutant",
+        "frida_attach",
+        "mobsf_dynamic",
+    }
+)
 # Outside MVP Fase 1 — autonomous mode does not block extra tools yet.
 MAX_RISK_TOOLS: frozenset[str] = frozenset()
 

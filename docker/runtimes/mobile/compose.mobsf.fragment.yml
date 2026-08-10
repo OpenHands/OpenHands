@@ -1,0 +1,29 @@
+# MobSF sidecar for mobile engagements (PROJETOSIN-190 / ADR-0001)
+#
+# Merge into the Engagement Manager compose stack (PROJETOSIN-191).
+# MobSF is NOT baked into ghcr.io/heimdall/runtime-mobile.
+#
+# AC-190-9: do NOT publish host ports in production templates.
+# Reach MobSF only on the internal engagement network (http://mobsf:8000).
+# Browser/UI access is via engagement proxy (PROJETOSIN-192), not direct bind.
+
+services:
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    environment:
+      MOBSF_API_KEY: ${MOBSF_API_KEY:?set MOBSF_API_KEY from secret store}
+    # Intentionally no `ports:` — internal DNS only (mobsf:8000).
+    volumes:
+      - mobsf-data:/home/mobsf/.MobSF
+    networks:
+      - engagement
+    restart: unless-stopped
+    # Do not use network_mode: host. Do not bind 0.0.0.0 on the Docker host.
+
+volumes:
+  mobsf-data:
+
+networks:
+  engagement:
+    # Created/owned by Engagement Manager (191). External when merged as overlay.
+    name: engagement
