@@ -184,6 +184,42 @@ describe("EmulatorPanel", () => {
     });
     expect(await screen.findByText("app.apk")).toBeInTheDocument();
   });
+
+  it("allows opening artifacts rail while live (D-192-1)", async () => {
+    const user = userEvent.setup();
+    vi.mocked(EmulatorService.getStatus).mockResolvedValue({
+      ready: true,
+      starting: false,
+      unavailable: false,
+      url: "/api/emulator/",
+    });
+
+    renderPanel();
+    await screen.findByTestId("emulator-iframe");
+
+    const rail = screen.getByTestId("emulator-artifacts-rail");
+    expect(rail).not.toHaveAttribute("open");
+
+    await user.click(rail.querySelector("summary")!);
+
+    expect(rail).toHaveAttribute("open");
+    expect(screen.getByTestId("emulator-apk-dropzone")).toBeVisible();
+  });
+
+  it("focuses start CTA once on idle (D-192-2)", async () => {
+    vi.mocked(EmulatorService.getStatus).mockResolvedValue({
+      ready: false,
+      starting: false,
+      unavailable: false,
+      url: "/api/emulator/",
+    });
+
+    renderPanel();
+    const start = await screen.findByTestId("emulator-start-button");
+    await waitFor(() => {
+      expect(start).toHaveFocus();
+    });
+  });
 });
 
 describe("validateApkFile", () => {

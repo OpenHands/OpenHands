@@ -23,6 +23,7 @@ export function EmulatorToolbar({ onRefresh }: EmulatorToolbarProps) {
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded text-[var(--oh-muted)]",
           "cursor-pointer hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--foreground)]",
+          "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--foreground)]",
         )}
       >
         <RefreshCw className="h-4 w-4" aria-hidden />

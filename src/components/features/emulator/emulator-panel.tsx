@@ -165,7 +165,9 @@ export function EmulatorPanel() {
   const stageUnavailable =
     (view.kind === "idle" && view.unavailable) ||
     (view.kind === "error" && view.unavailable);
-  const railOpenByDefault = view.kind !== "live";
+  // Uncontrolled disclosure: closed by default in live, open otherwise.
+  // Remount on live↔rest so defaultOpen applies; user can still open/close freely.
+  const railPhaseKey = view.kind === "live" ? "live" : "rest";
 
   return (
     <div
@@ -211,8 +213,9 @@ export function EmulatorPanel() {
       </div>
 
       <details
+        key={railPhaseKey}
         className="shrink-0 border-t border-[var(--oh-border)]"
-        open={railOpenByDefault}
+        defaultOpen={view.kind !== "live"}
         data-testid="emulator-artifacts-rail"
       >
         <summary className="cursor-pointer px-3 py-2 text-sm text-[var(--foreground)]">

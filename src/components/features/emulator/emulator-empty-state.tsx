@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Smartphone } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
@@ -23,8 +24,21 @@ export function EmulatorEmptyState({
   onStart,
 }: EmulatorEmptyStateProps) {
   const { t } = useTranslation("openhands");
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const didFocusCtaRef = useRef(false);
   const canStart =
     (kind === "idle" || kind === "error") && typeof onStart === "function";
+
+  // Focus start/retry once when idle or recoverable error appears; reset when CTA hides.
+  useEffect(() => {
+    if (!canStart) {
+      didFocusCtaRef.current = false;
+      return;
+    }
+    if (didFocusCtaRef.current) return;
+    didFocusCtaRef.current = true;
+    startButtonRef.current?.focus();
+  }, [canStart, kind]);
 
   return (
     <div
@@ -59,12 +73,14 @@ export function EmulatorEmptyState({
           </p>
           {canStart && (
             <button
+              ref={startButtonRef}
               type="button"
               data-testid="emulator-start-button"
               onClick={onStart}
               className={cn(
                 "flex h-11 min-w-11 items-center justify-center rounded bg-white px-4 text-sm font-medium text-black",
                 "cursor-pointer transition-opacity hover:opacity-90",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--foreground)]",
               )}
             >
               {t(I18nKey.EMULATOR$OPEN)}
