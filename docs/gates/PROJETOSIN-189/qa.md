@@ -69,6 +69,10 @@ Suite npm completa do canvas **não** exigida pela spec (escopo Python); Vitest 
 - Trivy/Semgrep em CI usam fixture/stub (binários reais só com `MCP_SAST_USE_REAL_BINARIES=1`) — alinhado à spec (mock/fixture).
 - AppSec gate **pendente** (este laudo não cobre segurança).
 
+## Review GitHub
+
+Intent: `APPROVE`. GitHub rejeitou (`Review Can not approve your own pull request`) porque a conta `gh` = autor do PR (`klebersjunior`). Foi postado review **COMMENT** com veredicto QA **PASS** explícito. Papel do revisor (QA) ≠ autor Backend do código.
+
 ## Ação requerida
 
 Nenhuma para QA. Merge sob Tech Lead após AppSec PASS + este QA PASS.
