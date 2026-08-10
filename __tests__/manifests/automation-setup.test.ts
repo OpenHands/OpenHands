@@ -16,6 +16,7 @@ import {
 import { validateFormValues } from "#/manifests/manifest-local-validation";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import { createSetupEntry } from "./manifest-test-data";
 
 // The command a skill publishes in its own frontmatter, which the host looks
 // up rather than storing. Pinned so the assertion does not move when the
@@ -177,9 +178,13 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
-    expect({ create: [...createPaths], preflight: [...preflightPaths] }).toEqual(
-      { create: [AUTOMATION_CREATE_ENDPOINT], preflight: ["/v1/validate"] },
-    );
+    expect({
+      create: [...createPaths],
+      preflight: [...preflightPaths],
+    }).toEqual({
+      create: [AUTOMATION_CREATE_ENDPOINT],
+      preflight: ["/v1/validate"],
+    });
   });
 });
 
@@ -207,6 +212,43 @@ describe("buildCreatePayload", () => {
 
     // Assert
     expect(payload).toBeNull();
+  });
+
+  it("attaches template provenance when the entry carries a version", () => {
+    // Arrange
+    const entry = createSetupEntry({ version: "1.0.0" });
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload?.template).toEqual({
+      id: "widget-monitor",
+      version: "1.0.0",
+      config: values,
+    });
+  });
+
+  it("sends the payload unchanged for an entry without a version", () => {
+    // Arrange
+    const entry = createSetupEntry();
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload).not.toBeNull();
+    expect(payload).not.toHaveProperty("template");
   });
 });
 
@@ -257,7 +299,10 @@ describe("service rejections mapped back to fields", () => {
       );
 
       // Assert
-      expect(mapped).toEqual({ fieldErrors: expectedFieldErrors, formErrors: [] });
+      expect(mapped).toEqual({
+        fieldErrors: expectedFieldErrors,
+        formErrors: [],
+      });
     },
   );
 });

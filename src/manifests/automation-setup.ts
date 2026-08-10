@@ -126,6 +126,17 @@ export function buildCreatePayload(
     };
   }
 
+  // A versioned entry sends its provenance: the service stores it opaquely,
+  // keyed by id for idempotent creation. Form values are non-secret by design
+  // (credentials come only from connected integrations).
+  if (entry.version) {
+    payload.template = {
+      id: entry.id,
+      version: entry.version,
+      config: { ...values },
+    };
+  }
+
   return payload;
 }
 

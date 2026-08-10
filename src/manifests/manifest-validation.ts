@@ -19,6 +19,8 @@
 import { SETUP_PLACEHOLDER_NAMESPACES, SETUP_VERSION } from "./types";
 
 const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+/** Sent to the service as template provenance, so it is checked at admission. */
+const TEMPLATE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
@@ -397,6 +399,13 @@ export function validateSetupEntry(candidate: unknown): SetupValidationResult {
     !ENTRY_ID_PATTERN.test(candidate.id)
   ) {
     check.fail("id", "must be a lowercase slug");
+  }
+  if (
+    candidate.version !== undefined &&
+    (typeof candidate.version !== "string" ||
+      !TEMPLATE_VERSION_PATTERN.test(candidate.version))
+  ) {
+    check.fail("version", "must be a semver string");
   }
   check.copy(candidate.name, "name");
   check.copy(candidate.description, "description");

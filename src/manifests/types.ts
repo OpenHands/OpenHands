@@ -103,6 +103,12 @@ export interface SetupPrerequisites {
  */
 export interface SetupEntry {
   id: string;
+  /**
+   * Semantic version of the template. When present, the create payload carries
+   * template provenance so the service can dedupe repeat enables and record
+   * version identity; entries without one send the payload unchanged.
+   */
+  version?: string;
   name: string;
   description: string;
   requires: SetupPrerequisites;
