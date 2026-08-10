@@ -37,7 +37,7 @@ vi.mock("#/contexts/active-backend-context", async () => {
   };
 });
 
-const capabilityMock = vi.fn(() => false);
+const capabilityMock = vi.fn<(cap: string) => boolean>(() => false);
 
 vi.mock("#/hooks/use-pentest-capabilities", () => ({
   useHasPentestCapability: (cap: string) => capabilityMock(cap),
