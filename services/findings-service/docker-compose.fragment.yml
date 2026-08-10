@@ -1,0 +1,32 @@
+services:
+  findings-service:
+    build:
+      context: ..
+      dockerfile: findings-service/Dockerfile
+    environment:
+      - FINDINGS_DB_URL=postgresql+asyncpg://findings:${FINDINGS_DB_PASSWORD:-findings}@findings-db/findings
+      - SESSION_API_KEY=${SESSION_API_KEY:-dev-session-key}
+      - DEFECTDOJO_API_URL=${DEFECTDOJO_API_URL:-https://defectdojo.heimdall.local}
+      - DEFECTDOJO_API_TOKEN=${DEFECTDOJO_API_TOKEN:-}
+    depends_on:
+      findings-db:
+        condition: service_healthy
+    ports:
+      - "18002:8000"
+
+  findings-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: findings
+      POSTGRES_USER: findings
+      POSTGRES_PASSWORD: ${FINDINGS_DB_PASSWORD:-findings}
+    volumes:
+      - findings-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U findings"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  findings-db-data:

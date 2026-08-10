@@ -410,11 +410,22 @@ describe("stack mode routing", () => {
     expect(config.launchFrontend).toBe(true);
     expect(config.launchAgentServer).toBe(false);
     expect(config.launchAutomation).toBe(false);
-    expect(getLocalServiceRoutes(config)).toEqual([]);
+    expect(getLocalServiceRoutes(config)).toEqual([
+      ["/api/pentest/findings", "http://127.0.0.1:18002"],
+      ["/api/pentest/engagements", "http://127.0.0.1:18003"],
+      ["/api/pentest/me", "http://127.0.0.1:18002"],
+    ]);
     expect(getFrontendBackend(config)).toBe(
       `http://localhost:${config.vitePort}`,
     );
-    expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([]);
+    expect(buildRouteArgs(getLocalServiceRoutes(config))).toEqual([
+      "--route",
+      "/api/pentest/findings=http://127.0.0.1:18002",
+      "--route",
+      "/api/pentest/engagements=http://127.0.0.1:18003",
+      "--route",
+      "/api/pentest/me=http://127.0.0.1:18002",
+    ]);
   });
 
   it("does not bake a host workspace path in frontend-only mode by default", async () => {
@@ -495,6 +506,18 @@ describe("stack mode routing", () => {
     expect(routes).toContainEqual([
       "/api/automation",
       `http://127.0.0.1:${config.autoBackendPort}`,
+    ]);
+    expect(routes).toContainEqual([
+      "/api/pentest/findings",
+      "http://127.0.0.1:18002",
+    ]);
+    expect(routes).toContainEqual([
+      "/api/pentest/engagements",
+      "http://127.0.0.1:18003",
+    ]);
+    expect(routes).toContainEqual([
+      "/api/pentest/me",
+      "http://127.0.0.1:18002",
     ]);
     expect(routes).toContainEqual([
       "/api",

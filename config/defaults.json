@@ -19,6 +19,8 @@
   "ports": {
     "agentServer": 18000,
     "automation": 18001,
+    "findingsService": 18002,
+    "engagementManager": 18003,
     "proxy": 8000,
     "desktopVnc": 6901
   },

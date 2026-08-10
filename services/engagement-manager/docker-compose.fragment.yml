@@ -1,0 +1,38 @@
+services:
+  engagement-manager:
+    build:
+      context: ..
+      dockerfile: engagement-manager/Dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - engagement-manager-data:/data
+    environment:
+      - ENGMGR_DB_URL=postgresql+asyncpg://engmgr:${ENGMGR_DB_PASSWORD:-engmgr}@engmgr-db/engmgr
+      - SESSION_API_KEY=${SESSION_API_KEY:-dev-session-key}
+      - DEFECTDOJO_API_URL=${DEFECTDOJO_API_URL:-https://defectdojo.heimdall.local}
+      - DEFECTDOJO_API_TOKEN=${DEFECTDOJO_API_TOKEN:-}
+      - PROVISIONER_DRY_RUN=${PROVISIONER_DRY_RUN:-true}
+      - COMPOSE_WORK_DIR=/data/compose
+    depends_on:
+      engmgr-db:
+        condition: service_healthy
+    ports:
+      - "18003:8000"
+
+  engmgr-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: engmgr
+      POSTGRES_USER: engmgr
+      POSTGRES_PASSWORD: ${ENGMGR_DB_PASSWORD:-engmgr}
+    volumes:
+      - engmgr-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U engmgr"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  engagement-manager-data:
+  engmgr-db-data:
