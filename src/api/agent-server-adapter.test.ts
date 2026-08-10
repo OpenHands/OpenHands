@@ -209,13 +209,13 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
         .tags,
     ).toBeDefined();
 
-    // ...but a profile launch resolves the server server-side, so the tag
-    // (which may not match the launched profile) is omitted.
+    // ...but a profile launch resolves the server server-side, so the ACP
+    // server tag (which may not match the launched profile) is omitted.
     const payload = buildStartConversationRequest({
       settings: makeSettings(agentSettings),
       agentProfileId: "profile-xyz",
     });
-    expect(payload.tags).toBeUndefined();
+    expect(payload.tags).toEqual({ clientsource: "agentcanvas" });
   });
 
   it("suppresses secrets_encrypted when launching from a profile", () => {
