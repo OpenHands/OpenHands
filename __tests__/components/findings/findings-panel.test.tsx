@@ -248,6 +248,65 @@ describe("Findings panel", () => {
     expect(onSubmit).toHaveBeenCalledWith("Dev environment only");
   });
 
+  // @spec PROJETOSIN-188 — D-188-1
+  it("keeps mobile row actions outside the detail button", () => {
+    renderPage(
+      <FindingsPage
+        engagementId="eng-1"
+        page={1}
+        filters={EMPTY_FINDINGS_FILTERS}
+        newOnly={false}
+        onFiltersChange={vi.fn()}
+        onClearFilters={vi.fn()}
+        onToggleNewOnly={vi.fn()}
+        onPageChange={vi.fn()}
+      />,
+    );
+
+    const actions = screen.getAllByTestId("findings-row-actions");
+    expect(actions.length).toBeGreaterThan(0);
+    for (const actionRoot of actions) {
+      expect(actionRoot.closest("button")).toBeNull();
+    }
+  });
+
+  // @spec PROJETOSIN-188 — D-188-2
+  it("restores focus to the trigger when the FP modal closes", async () => {
+    const onCancel = vi.fn();
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <>
+          <button type="button" data-testid="fp-focus-trigger" />
+
+          <FindingFpModal
+            isOpen={open}
+            isPending={false}
+            onCancel={onCancel}
+            onSubmit={vi.fn()}
+          />
+        </>
+      );
+    }
+
+    const { rerender } = render(<Harness open={false} />);
+    const trigger = screen.getByTestId("fp-focus-trigger");
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+
+    rerender(<Harness open />);
+    await waitFor(() => {
+      expect(screen.getByTestId("finding-fp-modal")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("finding-fp-cancel"));
+    expect(onCancel).toHaveBeenCalled();
+    rerender(<Harness open={false} />);
+
+    await waitFor(() => {
+      expect(trigger).toHaveFocus();
+    });
+  });
+
   // @spec PROJETOSIN-188 — AC-188-1
   it("renders populated table when engagement and capability are present", () => {
     renderPage(

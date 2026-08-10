@@ -129,33 +129,33 @@ export function FindingsTable({
       <ul className="flex flex-col gap-2 md:hidden">
         {findings.map((finding) => (
           <li key={finding.id}>
-            <button
-              type="button"
+            <div
               data-testid={`findings-row-${finding.id}`}
-              className="flex w-full flex-col gap-2 rounded-xl border border-[var(--oh-border)] p-3 text-left hover:bg-[var(--oh-surface-raised)]"
-              onClick={() => onOpenDetail(finding)}
+              className="flex w-full items-start gap-2 rounded-xl border border-[var(--oh-border)] p-3 hover:bg-[var(--oh-surface-raised)]"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <FindingSeverityBadge severity={finding.severity} />
-                    <FindingStatusBadge status={finding.status} />
-                  </div>
-                  <span className="truncate text-sm text-white">
-                    {finding.title}
-                  </span>
-                  <span className="truncate font-mono text-xs text-[var(--oh-text-tertiary)]">
-                    {finding.endpoint ?? finding.asset ?? finding.source_tool}
-                  </span>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 flex-col gap-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--oh-color-primary)]"
+                onClick={() => onOpenDetail(finding)}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <FindingSeverityBadge severity={finding.severity} />
+                  <FindingStatusBadge status={finding.status} />
                 </div>
-                {canTriage ? (
-                  <FindingsRowActions
-                    findingTitle={finding.title}
-                    onAction={(action) => onTriageAction(finding, action)}
-                  />
-                ) : null}
-              </div>
-            </button>
+                <span className="truncate text-sm text-white">
+                  {finding.title}
+                </span>
+                <span className="truncate font-mono text-xs text-[var(--oh-text-tertiary)]">
+                  {finding.endpoint ?? finding.asset ?? finding.source_tool}
+                </span>
+              </button>
+              {canTriage ? (
+                <FindingsRowActions
+                  findingTitle={finding.title}
+                  onAction={(action) => onTriageAction(finding, action)}
+                />
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

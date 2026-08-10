@@ -106,6 +106,12 @@ export function FindingsRowActions({
             label={t(I18nKey.FINDINGS$ACTION_MARK_FP)}
             onSelect={() => {
               setOpen(false);
+              // Keep focus on the menu trigger so the FP modal can restore it on close.
+              rootRef.current
+                ?.querySelector<HTMLButtonElement>(
+                  'button[aria-haspopup="menu"]',
+                )
+                ?.focus();
               onAction("mark_fp");
             }}
           />
