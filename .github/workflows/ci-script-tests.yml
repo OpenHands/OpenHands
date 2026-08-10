@@ -1,0 +1,37 @@
+---
+name: CI Script Tests
+
+# Runs the pytest suite for .github/scripts/ — the Python checkers that power
+# the issue-readiness and PR-description gates. This catches regressions in the
+# checking logic whenever those scripts are modified.
+
+on:
+    pull_request:
+        paths:
+            - ".github/scripts/**"
+            - ".github/workflows/ci-script-tests.yml"
+    push:
+        branches: [main]
+        paths:
+            - ".github/scripts/**"
+            - ".github/workflows/ci-script-tests.yml"
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-python@v6
+              with:
+                  python-version: "3.13"
+
+            - name: Install pytest
+              run: pip install pytest
+
+            - name: Run script tests
+              run: python -m pytest .github/scripts/tests/ -v

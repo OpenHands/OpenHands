@@ -222,7 +222,7 @@ describe("home automations composer layout", () => {
     expect(AutomationService.getAutomations).not.toHaveBeenCalled();
   });
 
-  it("renders nothing when there are no enabled automations", async () => {
+  it("keeps the pane visible with an add prompt when there are no enabled automations", async () => {
     vi.mocked(AutomationService.getAutomations).mockResolvedValue({
       automations: [makeAutomation({ enabled: false })],
       total: 1,
@@ -233,9 +233,17 @@ describe("home automations composer layout", () => {
     await waitFor(() =>
       expect(AutomationService.getAutomations).toHaveBeenCalledTimes(1),
     );
+    // The pane stays visible to nudge users toward adding automations.
     expect(
-      screen.queryByTestId("running-automations-list"),
-    ).not.toBeInTheDocument();
+      await screen.findByTestId("running-automations-list"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("running-automations-empty-hint"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("home-automations-manage")).toHaveAttribute(
+      "href",
+      "/automations",
+    );
   });
 
   it("lists enabled automations with live run status and conversation links", async () => {

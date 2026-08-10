@@ -439,6 +439,11 @@ class AgentServerConversationService {
       conversationInstructions,
       plugins,
       conversationId,
+      // The agent-server rejects a parent in a different workspace, so callers
+      // launching a child must pass the parent's own `working_dir` as
+      // `workingDirOverride` (see `resolveConversationWorkingDir`). Servers
+      // older than 1.37.1 ignore the field and create an unlinked conversation.
+      parentConversationId,
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
@@ -631,32 +636,17 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    const active = getActiveBackend().backend;
-
     type RawRuntime = DirectConversationInfo & {
       stats?: RuntimeConversationInfo["stats"];
     };
 
-    // Cloud mode: route through the cloud-proxy to the runtime sandbox at
-    // the conversation's runtime URL — same pattern as getVSCodeUrl. Local
-    // mode forwards conversationUrl so the host explicitly resolves to the
-    // conversation's runtime instead of falling back to the active backend.
-    const response =
-      active.kind === "cloud" && conversationUrl
-        ? await callCloudProxy<RawRuntime>({
-            backend: active,
-            method: "GET",
-            hostOverride: buildHttpBaseUrl(conversationUrl),
-            path: `/api/conversations/${conversationId}`,
-            authMode: "session-api-key",
-            sessionApiKey,
-          })
-        : await new ConversationClient(
-            getAgentServerClientOptions({
-              conversationUrl,
-              sessionApiKey,
-            }),
-          ).getConversation<RawRuntime>(conversationId);
+    // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
+    const response = await new ConversationClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getConversation<RawRuntime>(conversationId);
     const data = requireDirectConversationInfo(response);
     const stats = isRecord(response) ? response.stats : null;
 
@@ -671,6 +661,36 @@ class AgentServerConversationService {
       status: toRuntimeStatus(data.execution_status),
       stats: isRecord(stats) ? stats : { usage_to_metrics: {} },
     };
+  }
+
+  /**
+   * Force condensation ("compact") of the conversation history via
+   * `POST /api/conversations/{id}/condense`. Routed the same way as
+   * {@link sendMessage}: through the cloud proxy at the conversation's own
+   * runtime host for cloud backends, directly against that runtime otherwise.
+   */
+  static async condenseConversation(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud" && conversationUrl) {
+      await callCloudProxy({
+        backend: active,
+        method: "POST",
+        hostOverride: buildHttpBaseUrl(conversationUrl),
+        path: `/api/conversations/${conversationId}/condense`,
+        authMode: "session-api-key",
+        sessionApiKey,
+      });
+      return;
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).condenseConversation(conversationId);
   }
 
   static async searchConversations(

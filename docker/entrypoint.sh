@@ -125,6 +125,30 @@ if [ -n "${AUTOMATION_POSTHOG_API_KEY:-}" ]; then
   export AUTOMATION_POSTHOG_HOST="${AUTOMATION_POSTHOG_HOST:-${VITE_POSTHOG_HOST:-${CONFIG_POSTHOG_HOST:-}}}"
 fi
 
+# Configure product analytics for the agent-server. The SDK uses its own
+# OH_TELEMETRY_* variables, so mirror the same Canvas/PostHog defaults used by
+# the frontend and automation backend while preserving explicit operator
+# overrides. Consent stays in persisted settings, where the backend/UI owns it.
+if [ "${VITE_DO_NOT_TRACK:-}" = "1" ]; then
+  export DO_NOT_TRACK="${DO_NOT_TRACK:-1}"
+fi
+
+if [ -z "${OH_TELEMETRY_POSTHOG_API_KEY:-}" ]; then
+  if [ -n "${VITE_POSTHOG_API_KEY:-}" ]; then
+    export OH_TELEMETRY_POSTHOG_API_KEY="$VITE_POSTHOG_API_KEY"
+  elif [ "${DO_NOT_TRACK:-}" != "1" ]; then
+    export OH_TELEMETRY_POSTHOG_API_KEY="${CONFIG_POSTHOG_API_KEY:-}"
+  fi
+fi
+
+if [ -z "${OH_TELEMETRY_EXPORTER:-}" ] && [ -n "${OH_TELEMETRY_POSTHOG_API_KEY:-}" ]; then
+  export OH_TELEMETRY_EXPORTER="posthog"
+fi
+
+if [ "${OH_TELEMETRY_EXPORTER:-}" = "posthog" ] && [ -n "${OH_TELEMETRY_POSTHOG_API_KEY:-}" ]; then
+  export OH_TELEMETRY_POSTHOG_HOST="${OH_TELEMETRY_POSTHOG_HOST:-${VITE_POSTHOG_HOST:-${CONFIG_POSTHOG_HOST:-}}}"
+fi
+
 # AGENT_SERVER_URL — needed by automation sandbox callbacks.
 export AGENT_SERVER_URL="${AGENT_SERVER_URL:-http://127.0.0.1:${AGENT_SERVER_PORT}}"
 
