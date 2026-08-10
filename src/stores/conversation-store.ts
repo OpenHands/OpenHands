@@ -13,7 +13,8 @@ export type ConversationTab =
   | "tasklist"
   | "cloudai"
   | "security"
-  | "desktop";
+  | "desktop"
+  | "emulator";
 
 export type ConversationMode = "code" | "plan";
 

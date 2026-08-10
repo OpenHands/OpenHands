@@ -276,6 +276,10 @@ COPY scripts/dependency-track-proxy.mjs /opt/agent-canvas/dependency-track-proxy
 COPY scripts/translate-proxy.mjs /opt/agent-canvas/translate-proxy.mjs
 # Imported by static-server.mjs / ingress.mjs for /api/desktop (KasmVNC).
 COPY scripts/desktop-proxy.mjs /opt/agent-canvas/desktop-proxy.mjs
+# Imported by static-server.mjs / ingress.mjs for /api/emulator (mobile GUI).
+COPY scripts/emulator-proxy.mjs /opt/agent-canvas/emulator-proxy.mjs
+# Imported by static-server.mjs / ingress.mjs for /api/mobile/artifacts (APK upload).
+COPY scripts/mobile-artifacts-proxy.mjs /opt/agent-canvas/mobile-artifacts-proxy.mjs
 COPY docker/desktop/ /opt/agent-canvas/desktop/
 RUN chmod +x /opt/agent-canvas/desktop/start-desktop.sh \
              /opt/agent-canvas/desktop/stop-desktop.sh \

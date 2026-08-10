@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConversationTabsContextMenu } from "#/components/features/conversation/conversation-tabs/conversation-tabs-context-menu";
 import { useConversationStore } from "#/stores/conversation-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -39,6 +40,28 @@ function seedActiveBackend(backend: Backend): void {
   __resetActiveStoreForTests();
 }
 
+function renderContextMenu(
+  ui: React.ReactElement,
+  options?: { withActiveBackend?: boolean },
+) {
+  const content = options?.withActiveBackend ? (
+    <ActiveBackendProvider>{ui}</ActiveBackendProvider>
+  ) : (
+    ui
+  );
+  return render(
+    <QueryClientProvider
+      client={
+        new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        })
+      }
+    >
+      {content}
+    </QueryClientProvider>,
+  );
+}
+
 describe("ConversationTabsContextMenu", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -52,7 +75,7 @@ describe("ConversationTabsContextMenu", () => {
   });
 
   it("should render nothing when isOpen is false", () => {
-    const { container } = render(
+    const { container } = renderContextMenu(
       <ConversationTabsContextMenu isOpen={false} onClose={vi.fn()} />,
     );
 
@@ -60,7 +83,9 @@ describe("ConversationTabsContextMenu", () => {
   });
 
   it("should render all default tabs when open", () => {
-    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
 
     const expectedTabs = ["COMMON$FILES", "COMMON$TERMINAL", "COMMON$BROWSER"];
     for (const tab of expectedTabs) {
@@ -80,10 +105,9 @@ describe("ConversationTabsContextMenu", () => {
       kind: "cloud",
     });
 
-    render(
-      <ActiveBackendProvider>
-        <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />
-      </ActiveBackendProvider>,
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+      { withActiveBackend: true },
     );
 
     expect(screen.getByText("COMMON$PLANNER")).toBeInTheDocument();
@@ -92,7 +116,9 @@ describe("ConversationTabsContextMenu", () => {
   it("should open a tab from the label button without changing pin state", async () => {
     const user = userEvent.setup();
 
-    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
 
     await user.click(screen.getByTestId("conversation-tabs-menu-open-terminal"));
 
@@ -106,7 +132,9 @@ describe("ConversationTabsContextMenu", () => {
   it("should re-pin a tab when clicking the pin control on an unpinned tab", async () => {
     const user = userEvent.setup();
 
-    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
 
     await user.click(screen.getByTestId("conversation-tabs-menu-pin-terminal"));
     let storedState = JSON.parse(
@@ -124,7 +152,9 @@ describe("ConversationTabsContextMenu", () => {
   it("should switch to another pinned tab when unpinning the currently active tab via pin control", async () => {
     const user = userEvent.setup();
 
-    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
 
     expect(useConversationStore.getState().selectedTab).toBe("files");
 
@@ -144,7 +174,9 @@ describe("ConversationTabsContextMenu", () => {
   it("should not close the right panel when unpinning a non-active tab", async () => {
     const user = userEvent.setup();
 
-    render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+    renderContextMenu(
+      <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+    );
 
     await user.click(screen.getByTestId("conversation-tabs-menu-pin-terminal"));
 
@@ -158,7 +190,9 @@ describe("ConversationTabsContextMenu", () => {
     });
 
     it("should show tasklist in context menu when hasTaskList is true", () => {
-      render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
+      renderContextMenu(
+        <ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />,
+      );
 
       expect(screen.getByText("COMMON$TASK_LIST")).toBeInTheDocument();
     });

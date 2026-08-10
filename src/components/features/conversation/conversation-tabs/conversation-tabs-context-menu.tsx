@@ -15,6 +15,7 @@ import {
   ListTodo,
   Monitor,
   Shield,
+  Smartphone,
   SquareChevronRight,
 } from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
@@ -25,6 +26,7 @@ import { useTaskList } from "#/hooks/use-task-list";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSelectConversationTab } from "#/hooks/use-select-conversation-tab";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
+import { useHasPentestCapability } from "#/hooks/use-pentest-capabilities";
 import { ArchivedDisabledTooltip } from "../../context-menu/archived-disabled-tooltip";
 import { cn } from "#/utils/utils";
 import {
@@ -94,6 +96,7 @@ export function ConversationTabsContextMenu({
   const { hasTaskList } = useTaskList();
   const { backend } = useActiveBackend();
   const isArchivedConversation = useIsArchivedConversation();
+  const canUseEmulator = useHasPentestCapability("pentest.mobile.dynamic");
 
   const tabConfig = [
     {
@@ -111,6 +114,14 @@ export function ConversationTabsContextMenu({
     { tab: "security", icon: Shield, i18nKey: I18nKey.COMMON$SECURITY },
     { tab: "desktop", icon: Monitor, i18nKey: I18nKey.COMMON$DESKTOP },
   ];
+
+  if (canUseEmulator) {
+    tabConfig.push({
+      tab: "emulator",
+      icon: Smartphone,
+      i18nKey: I18nKey.COMMON$EMULATOR,
+    });
+  }
 
   if (hasTaskList) {
     tabConfig.unshift({

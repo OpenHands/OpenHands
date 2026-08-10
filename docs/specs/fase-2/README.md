@@ -16,7 +16,7 @@
 |------|------|--------|----------|-----------|
 | PROJETOSIN-190 | [190-mcp-mobile-mobsf.md](./190-mcp-mobile-mobsf.md) | `feat/fase2-mcp-mobile-190` | `.tmp/worktrees/190` | backend |
 | PROJETOSIN-191 | [191-android-emulator-engmgr.md](./191-android-emulator-engmgr.md) | `feat/fase2-emulator-engmgr-191` | `.tmp/worktrees/191` | devops (+ backend) |
-| PROJETOSIN-192 | [192-emulator-ui-apk-upload.md](./192-emulator-ui-apk-upload.md) | `feat/fase2-emulator-ui-192` | `.tmp/worktrees/192` | design → frontend |
+| PROJETOSIN-192 | [192-emulator-ui-apk-upload.md](./192-emulator-ui-apk-upload.md) · [192-design-notes.md](./192-design-notes.md) | `feat/fase2-emulator-ui-192` | `.tmp/worktrees/192` | design → frontend |
 
 ## Paralelismo
 
