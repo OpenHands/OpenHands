@@ -54,7 +54,7 @@ interface MarkdownFilePreviewProps {
  * Resolves the file path for a file-editor action/observation, including the
  * observation's originating action when the observation omits `path`.
  */
-export function getFileEditorEventPath(
+function getFileEditorEventPath(
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
 ): string | null {
@@ -96,7 +96,7 @@ export function getFileEditorEventPath(
  * Resolves the file-editor command (`create` / `view` / …), including the
  * observation's originating action when the observation omits `command`.
  */
-export function getFileEditorEventCommand(
+function getFileEditorEventCommand(
   event: OpenHandsEvent,
   correspondingAction?: ActionEvent,
 ): string | null {
@@ -170,6 +170,9 @@ export function MarkdownFilePreview({
         data-testid="markdown-file-preview-content"
         className="max-h-40 overflow-y-auto px-4 py-3 text-white custom-scrollbar-always [--oh-scroll-fade-from:var(--oh-surface)]"
       >
+        {/* Deliberately compact: the clipped in-stream card reuses the plan
+            preview's small typography; the Files drawer renders the same
+            artifact full-size with the default components. */}
         <MarkdownRenderer
           content={content}
           includeStandard

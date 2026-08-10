@@ -1,5 +1,5 @@
 /** Extensions treated as Markdown for rich preview rendering. */
-export const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
+const MARKDOWN_EXTS = new Set(["md", "markdown", "mdx"]);
 
 /**
  * True when `path` ends with a Markdown extension (`.md`, `.markdown`, `.mdx`).
