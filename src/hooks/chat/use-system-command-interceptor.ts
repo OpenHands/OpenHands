@@ -13,6 +13,12 @@ import { I18nKey } from "#/i18n/declaration";
 import { condenseConversation } from "#/hooks/mutation/conversation-mutation-utils";
 
 const CONDENSE_UNSUPPORTED_STATUS_CODES = new Set([404, 405, 501]);
+const CONDENSE_NOT_ENOUGH_HISTORY_PATTERNS = [
+  "nocondensationavailableexception",
+  "cannot condense 0 events",
+  "unable to compute forgotten events",
+  "events forgotten below minimum progress",
+];
 
 function getHttpStatus(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) return undefined;
@@ -22,6 +28,36 @@ function getHttpStatus(error: unknown): number | undefined {
   if (typeof response !== "object" || response === null) return undefined;
   const responseStatus = (response as { status?: unknown }).status;
   return typeof responseStatus === "number" ? responseStatus : undefined;
+}
+
+function isNotEnoughHistoryError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+
+  const record = error as {
+    message?: unknown;
+    response?: unknown;
+  };
+  const response =
+    typeof record.response === "object" && record.response !== null
+      ? (record.response as { detail?: unknown; data?: unknown })
+      : undefined;
+  const responseData =
+    typeof response?.data === "object" && response.data !== null
+      ? (response.data as { detail?: unknown })
+      : undefined;
+  const details = [
+    record.message,
+    response?.detail,
+    responseData?.detail,
+    typeof record.response === "string" ? record.response : undefined,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return CONDENSE_NOT_ENOUGH_HISTORY_PATTERNS.some((pattern) =>
+    details.includes(pattern),
+  );
 }
 
 /**
@@ -65,11 +101,15 @@ export function useSystemCommandInterceptor(
           )
           .catch((error: unknown) => {
             const status = getHttpStatus(error);
-            const message =
+            let message = t(I18nKey.SLASH_COMMAND$CONDENSE_FAILED);
+            if (isNotEnoughHistoryError(error)) {
+              message = t(I18nKey.SLASH_COMMAND$CONDENSE_NOT_ENOUGH_HISTORY);
+            } else if (
               status !== undefined &&
               CONDENSE_UNSUPPORTED_STATUS_CODES.has(status)
-                ? t(I18nKey.SLASH_COMMAND$CONDENSE_UNSUPPORTED)
-                : t(I18nKey.SLASH_COMMAND$CONDENSE_FAILED);
+            ) {
+              message = t(I18nKey.SLASH_COMMAND$CONDENSE_UNSUPPORTED);
+            }
             displayErrorToast(message);
           });
         return;
