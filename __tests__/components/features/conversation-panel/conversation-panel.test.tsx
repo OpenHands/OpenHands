@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nextProvider } from "react-i18next";
 import i18n from "i18next";
@@ -18,6 +25,7 @@ import React from "react";
 import { renderWithProviders } from "test-utils";
 import { ConversationPanel } from "#/components/features/conversation-panel/conversation-panel";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
@@ -114,7 +122,9 @@ describe("ConversationPanel", () => {
     mockStopConversationMutate.mockClear();
     _mockConversationCounter = 0;
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
+    useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: false,
       automationFilterMode: "all",
       selectedAutomationNames: [],
     });
@@ -172,8 +182,14 @@ describe("ConversationPanel", () => {
     expect(emptyState).toBeInTheDocument();
   });
 
-  it("does not show load more when the visible list is empty even if another page exists", async () => {
-    vi.spyOn(AgentServerConversationService, "searchConversations").mockResolvedValue({
+  it("keeps load more available when the visible list is empty and another page exists", async () => {
+    // Client-side filters (archiving, thread scope) can hide every row of the
+    // loaded pages. Hiding "Load more" there would strand the remaining
+    // backend pages behind an empty list with no way to reach them.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
       items: [],
       next_page_id: "page-2",
     });
@@ -181,8 +197,58 @@ describe("ConversationPanel", () => {
     renderConversationPanel();
 
     await screen.findByText("CONVERSATION$NO_CONVERSATIONS");
+    expect(screen.getByTestId("load-more-conversations")).toBeInTheDocument();
+  });
+
+  it("can reach an unarchived conversation on the next page after archiving every loaded row", async () => {
+    // Archiving filters rows out of the visible list without changing
+    // backend pagination. If every currently loaded conversation is archived
+    // while hasNextPage is still true, Load more must stay available and
+    // fetching the next page must surface the unarchived conversation.
+    const user = userEvent.setup();
+    const page1 = [
+      createMockConversation({ id: "archived-1", title: "Archived 1" }),
+      createMockConversation({ id: "archived-2", title: "Archived 2" }),
+    ];
+    const page2 = [
+      createMockConversation({
+        id: "visible-next",
+        title: "Unarchived on next page",
+      }),
+    ];
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockImplementation(async (_limit, pageId) => {
+      if (pageId === "page-2") {
+        return { items: page2, next_page_id: null };
+      }
+      return { items: page1, next_page_id: "page-2" };
+    });
+
+    useArchivedConversationsStore.setState({
+      archivesByBackendId: {
+        "default-local": ["archived-1", "archived-2"],
+      },
+    });
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: false,
+    });
+
+    renderConversationPanel();
+
+    await screen.findByText("CONVERSATION$NO_CONVERSATIONS");
     expect(
-      screen.queryByTestId("load-more-conversations"),
+      screen.queryByText("Unarchived on next page"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("load-more-conversations"));
+
+    expect(
+      await screen.findByText("Unarchived on next page"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("CONVERSATION$NO_CONVERSATIONS"),
     ).not.toBeInTheDocument();
   });
 
@@ -256,8 +322,8 @@ describe("ConversationPanel", () => {
 
     renderConversationPanel();
 
-    // Assert: the filter-specific empty message shows, and unlike the
-    // genuinely-empty case above, load more stays reachable.
+    // Assert: the filter-specific empty message shows and load more stays
+    // reachable.
     await screen.findByText("CONVERSATION_PANEL$NO_AUTOMATION_MATCHES");
     const loadMore = await screen.findByTestId("load-more-conversations");
 
@@ -535,6 +601,74 @@ describe("ConversationPanel", () => {
     // Verify modal is closed after confirmation
     expect(
       screen.queryByRole("button", { name: /confirm/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should archive a conversation and remove it from the list", async () => {
+    const user = userEvent.setup();
+    renderConversationPanel();
+
+    let cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+
+    const firstCardTitle = within(cards[0]).getByText("Conversation 1");
+    expect(firstCardTitle).toBeInTheDocument();
+
+    const ellipsisButton = within(cards[0]).getByTestId("ellipsis-button");
+    await user.click(ellipsisButton);
+    await user.click(screen.getByTestId("archive-button"));
+
+    expect(
+      screen.getByText("CONVERSATION$CONFIRM_ARCHIVE"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /archive/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("CONVERSATION$CONFIRM_ARCHIVE"),
+      ).not.toBeInTheDocument();
+    });
+
+    cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(2);
+    expect(screen.queryByText("Conversation 1")).not.toBeInTheDocument();
+  });
+
+  it("shows archived conversations when the preference is on and restores them", async () => {
+    // Archiving must stay reversible — that is the whole distinction from
+    // deleting, which removes the conversation from the agent server.
+    const user = userEvent.setup();
+    useArchivedConversationsStore
+      .getState()
+      .archiveConversation("default-local", "1");
+    useConversationPanelPreferencesStore.setState({
+      showArchivedConversations: true,
+    });
+
+    renderConversationPanel();
+
+    const cards = await screen.findAllByTestId("conversation-card");
+    expect(cards).toHaveLength(3);
+    const archivedCard = cards.find((card) =>
+      within(card).queryByText("Conversation 1"),
+    )!;
+    expect(
+      within(archivedCard).getByTestId("conversation-card-archived-chip"),
+    ).toBeInTheDocument();
+
+    await user.click(within(archivedCard).getByTestId("ellipsis-button"));
+    await user.click(screen.getByTestId("unarchive-button"));
+
+    await waitFor(() => {
+      expect(
+        useArchivedConversationsStore
+          .getState()
+          .isArchived("default-local", "1"),
+      ).toBe(false);
+    });
+    expect(
+      screen.queryByTestId("conversation-card-archived-chip"),
     ).not.toBeInTheDocument();
   });
 
@@ -899,9 +1033,8 @@ describe("ConversationPanel", () => {
 
     // Test RUNNING conversation - should show stop button
     const runningCard = await getCardByTitle("Running Conversation");
-    const runningEllipsisButton = within(runningCard).getByTestId(
-      "ellipsis-button",
-    );
+    const runningEllipsisButton =
+      within(runningCard).getByTestId("ellipsis-button");
     await user.click(runningEllipsisButton);
 
     expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
@@ -916,9 +1049,8 @@ describe("ConversationPanel", () => {
 
     // Test STARTING/RUNNING conversation - should show stop button
     const startingCard = await getCardByTitle("Starting Conversation");
-    const startingEllipsisButton = within(startingCard).getByTestId(
-      "ellipsis-button",
-    );
+    const startingEllipsisButton =
+      within(startingCard).getByTestId("ellipsis-button");
     await user.click(startingEllipsisButton);
 
     expect(await screen.findByTestId("stop-button")).toBeInTheDocument();
@@ -933,9 +1065,8 @@ describe("ConversationPanel", () => {
 
     // Test STOPPED conversation - should NOT show stop button
     const stoppedCard = await getCardByTitle("Stopped Conversation");
-    const stoppedEllipsisButton = within(stoppedCard).getByTestId(
-      "ellipsis-button",
-    );
+    const stoppedEllipsisButton =
+      within(stoppedCard).getByTestId("ellipsis-button");
     await user.click(stoppedEllipsisButton);
 
     await waitFor(() => {
@@ -1559,6 +1690,75 @@ describe("ConversationPanel", () => {
       expect(deleteSpy).toHaveBeenCalledWith("recent-2");
     });
 
+    it("delete-all still deletes hidden archived conversations", async () => {
+      // "Show archived" only controls rendering. Delete all must keep using
+      // the full loaded collection so archived server-side conversations are
+      // not silently left behind (or the action disabled when every loaded
+      // row is archived).
+      const user = userEvent.setup();
+      const deleteSpy = vi
+        .spyOn(AgentServerConversationService, "deleteConversation")
+        .mockResolvedValue();
+
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "visible-1",
+            title: "Visible 1",
+            updated_at: recentIso(),
+          }),
+          createMockConversation({
+            id: "archived-1",
+            title: "Archived 1",
+            updated_at: recentIso(),
+          }),
+          createMockConversation({
+            id: "archived-2",
+            title: "Archived 2",
+            updated_at: recentIso(),
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      useArchivedConversationsStore.setState({
+        archivesByBackendId: {
+          "default-local": ["archived-1", "archived-2"],
+        },
+      });
+      useConversationPanelPreferencesStore.setState({
+        showArchivedConversations: false,
+      });
+
+      renderConversationPanel();
+      const cards = await screen.findAllByTestId("conversation-card");
+      expect(cards).toHaveLength(1);
+      expect(screen.getByText("Visible 1")).toBeInTheDocument();
+      expect(screen.queryByText("Archived 1")).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      const deleteAllButton = await screen.findByTestId(
+        "delete-all-conversations",
+      );
+      expect(deleteAllButton).toBeEnabled();
+
+      await user.click(deleteAllButton);
+      expect(
+        await screen.findByText(/CONVERSATION\$CONFIRM_DELETE_ALL_DESC/),
+      ).toBeInTheDocument();
+      await user.click(await screen.findByRole("button", { name: /confirm/i }));
+
+      await waitFor(() => {
+        expect(deleteSpy).toHaveBeenCalledTimes(3);
+      });
+      expect(deleteSpy).toHaveBeenCalledWith("visible-1");
+      expect(deleteSpy).toHaveBeenCalledWith("archived-1");
+      expect(deleteSpy).toHaveBeenCalledWith("archived-2");
+    });
+
     it("navigates away after the active conversation is deleted successfully even when another deletion fails", async () => {
       const user = userEvent.setup();
       const navigate = vi.fn();
@@ -1825,6 +2025,195 @@ describe("ConversationPanel", () => {
         ).not.toBeInTheDocument();
       });
     });
+
+    it("keeps collapsed folder previews stable while still exposing later-page conversations on expand", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
+        createMockConversation({
+          id: `no-workspace-${index + 1}`,
+          title: `No workspace ${index + 1}`,
+        }),
+      );
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: noWorkspaceConversations,
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "no-workspace-7",
+              title: "No workspace 7",
+            }),
+            createMockConversation({
+              id: "no-workspace-8",
+              title: "No workspace 8",
+            }),
+          ],
+          next_page_id: "page-3",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha",
+              title: "Alpha conversation",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      const noWorkspaceFolder = await screen.findByTestId(
+        "thread-folder-__none_workspace",
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
+
+      // A single click walks past the deepen-only page 2 (its rows are hidden
+      // from the collapsed preview, so they are not success) and keeps paging
+      // until the brand-new folder on page 3 is discovered.
+      await user.click(screen.getByTestId("load-more-conversations"));
+      await screen.findByTestId("thread-folder-ws--workspace-alpha");
+      expect(searchSpy).toHaveBeenCalledTimes(3);
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      expect(
+        within(noWorkspaceFolder).queryByText("No workspace 7"),
+      ).not.toBeInTheDocument();
+
+      // Collapsed preview stays frozen; expanding reveals every loaded row.
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+      await user.click(
+        within(noWorkspaceFolder).getByTestId(
+          "thread-folder-view-more-__none_workspace",
+        ),
+      );
+      expect(
+        within(noWorkspaceFolder).getAllByTestId("conversation-card"),
+      ).toHaveLength(8);
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 7"),
+      ).toBeInTheDocument();
+      expect(
+        within(noWorkspaceFolder).getByText("No workspace 8"),
+      ).toBeInTheDocument();
+    });
+
+    it("caps a grouped load-more click at three pages when no new folder appears", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      const deepenOnlyPage = (page: number, nextPageId: string) => ({
+        items: Array.from({ length: 2 }, (_, index) =>
+          createMockConversation({
+            id: `no-workspace-p${page}-${index + 1}`,
+            title: `No workspace p${page}-${index + 1}`,
+          }),
+        ),
+        next_page_id: nextPageId,
+      });
+      // Exactly four pages are queued: the drive must consume the initial page
+      // plus MAX_PAGES_PER_LOAD_MORE_CLICK more and stop — a fetch beyond the
+      // cap would find no queued response and fail the test loudly.
+      const searchSpy = vi
+        .spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce(deepenOnlyPage(1, "page-2"))
+        .mockResolvedValueOnce(deepenOnlyPage(2, "page-3"))
+        .mockResolvedValueOnce(deepenOnlyPage(3, "page-4"))
+        .mockResolvedValueOnce(deepenOnlyPage(4, "page-5"));
+
+      const user = userEvent.setup();
+      renderConversationPanel();
+
+      await screen.findByTestId("thread-folder-__none_workspace");
+      expect(searchSpy).toHaveBeenCalledTimes(1);
+
+      // Every remaining page only deepens the existing folder, so the driver
+      // must stop at the per-click page cap instead of draining the cursor.
+      await user.click(screen.getByTestId("load-more-conversations"));
+      await waitFor(() => {
+        expect(searchSpy).toHaveBeenCalledTimes(4);
+      });
+      // The drive has ended: the control is idle again and no further page
+      // was requested beyond the cap.
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("load-more-conversations"),
+        ).toBeInTheDocument();
+      });
+      expect(searchSpy).toHaveBeenCalledTimes(4);
+    });
+
+    it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
+      useConversationPanelPreferencesStore.setState({
+        organizeMode: "grouped",
+      });
+      vi.spyOn(AgentServerConversationService, "searchConversations")
+        .mockResolvedValueOnce({
+          items: Array.from({ length: 5 }, (_, index) =>
+            createMockConversation({
+              id: `alpha-${index + 1}`,
+              title: `Alpha ${index + 1}`,
+              selected_workspace: "/workspace/alpha",
+            }),
+          ),
+          next_page_id: "page-2",
+        })
+        .mockResolvedValueOnce({
+          items: [
+            createMockConversation({
+              id: "alpha-active",
+              title: "Alpha Active",
+              selected_workspace: "/workspace/alpha",
+            }),
+          ],
+          next_page_id: null,
+        });
+
+      const user = userEvent.setup();
+      renderConversationPanel({
+        navigation: {
+          conversationId: "alpha-active",
+          currentPath: "/conversations/alpha-active",
+        },
+      });
+
+      const alphaFolder = await screen.findByTestId(
+        "thread-folder-ws--workspace-alpha",
+      );
+      expect(
+        within(alphaFolder).queryByText("Alpha Active"),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("load-more-conversations"));
+
+      await waitFor(() => {
+        expect(
+          within(
+            screen.getByTestId("thread-folder-ws--workspace-alpha"),
+          ).getByText("Alpha Active"),
+        ).toBeInTheDocument();
+      });
+      // Still a collapsed preview (limit 5), not the full expanded list.
+      expect(
+        within(
+          screen.getByTestId("thread-folder-ws--workspace-alpha"),
+        ).getAllByTestId("conversation-card"),
+      ).toHaveLength(5);
+    });
   });
 
   it("reorders grouped folders via drag and drop", async () => {
@@ -1883,7 +2272,9 @@ describe("ConversationPanel", () => {
     const reorderedAlpha = screen.getByTestId(
       "thread-folder-ws--workspace-alpha",
     );
-    const reorderedBeta = screen.getByTestId("thread-folder-ws--workspace-beta");
+    const reorderedBeta = screen.getByTestId(
+      "thread-folder-ws--workspace-beta",
+    );
     expect(reorderedBeta.compareDocumentPosition(reorderedAlpha)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -1923,9 +2314,9 @@ describe("ConversationPanel", () => {
     const pinnedSection = await screen.findByTestId(
       "conversation-panel-pinned-section",
     );
-    expect(within(pinnedSection).getAllByTestId("conversation-card")).toHaveLength(
-      1,
-    );
+    expect(
+      within(pinnedSection).getAllByTestId("conversation-card"),
+    ).toHaveLength(1);
     expect(await screen.findAllByTestId("conversation-card")).toHaveLength(3);
     expect(screen.getAllByText("Conversation 2")).toHaveLength(1);
   });
@@ -1941,9 +2332,9 @@ describe("ConversationPanel", () => {
     const pinnedSection = await screen.findByTestId(
       "conversation-panel-pinned-section",
     );
-    expect(within(pinnedSection).getAllByTestId("conversation-card")).toHaveLength(
-      1,
-    );
+    expect(
+      within(pinnedSection).getAllByTestId("conversation-card"),
+    ).toHaveLength(1);
     expect(await screen.findAllByTestId("conversation-card")).toHaveLength(3);
     expect(screen.getAllByText("Conversation 2")).toHaveLength(1);
   });

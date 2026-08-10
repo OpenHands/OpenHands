@@ -190,6 +190,8 @@ const getObservationEventTitle = (
     case "StrReplaceEditorObservation":
       if (event.observation.command === "view") {
         observationKey = "OBSERVATION_MESSAGE$READ";
+      } else if (event.observation.command === "create") {
+        observationKey = "OBSERVATION_MESSAGE$WRITE";
       } else {
         observationKey = "OBSERVATION_MESSAGE$EDIT";
       }
