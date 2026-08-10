@@ -38,10 +38,10 @@ import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
-import { AddAutomationModal } from "#/components/features/automations/add-automation-modal";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { useLaunchSkillInChat } from "#/hooks/use-launch-skill-in-chat";
 import { useTracking } from "#/hooks/use-tracking";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
@@ -104,7 +104,6 @@ export default function AutomationsList() {
     name: string;
   } | null>(null);
   const [editTarget, setEditTarget] = useState<Automation | null>(null);
-  const [isAddAutomationOpen, setIsAddAutomationOpen] = useState(false);
   const [importSpec, setImportSpec] = useState<AutomationSpec | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,8 +130,12 @@ export default function AutomationsList() {
   const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
     enabled: isBackendHealthy && dashboard !== null,
   });
-  const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
-    useTracking();
+  const {
+    trackPrebuiltAutomationEnabled,
+    trackAutomationExported,
+    trackAutomationCreatedButton,
+  } = useTracking();
+  const launchInChat = useLaunchSkillInChat();
   const toggleMutation = useToggleAutomation();
   const deleteMutation = useDeleteAutomation();
   const dispatchMutation = useDispatchAutomation();
@@ -208,6 +211,19 @@ export default function AutomationsList() {
     if (automation) {
       setEditTarget(automation);
     }
+  };
+
+  const launchAutomationPrompt = (prompt: string) => {
+    trackAutomationCreatedButton({ backendKind: active.backend.kind });
+    launchInChat(prompt);
+  };
+
+  const handleFindOpportunities = () => {
+    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
+  };
+
+  const handleAddAutomation = () => {
+    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT));
   };
 
   const handleExport = (automation: Automation) => {
@@ -392,10 +408,19 @@ export default function AutomationsList() {
           />
           <BrandButton
             type="button"
+            variant="primary"
+            testId="automations-find-opportunities"
+            className="whitespace-nowrap px-4"
+            onClick={handleFindOpportunities}
+          >
+            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+          </BrandButton>
+          <BrandButton
+            type="button"
             variant="secondary"
             testId="automations-add-automation"
-            className="whitespace-nowrap"
-            onClick={() => setIsAddAutomationOpen(true)}
+            className="whitespace-nowrap px-4"
+            onClick={handleAddAutomation}
           >
             {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
           </BrandButton>
@@ -529,11 +554,6 @@ export default function AutomationsList() {
           onClose={() => setEditTarget(null)}
         />
       )}
-
-      <AddAutomationModal
-        isOpen={isAddAutomationOpen}
-        onClose={() => setIsAddAutomationOpen(false)}
-      />
 
       <ImportAutomationModal
         isOpen={importSpec !== null}

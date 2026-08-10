@@ -29,10 +29,9 @@ vi.mock("react-i18next", () => ({
         [I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE]: "Already know the workflow?",
         [I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC]:
           "Describe what should happen, when it should run, and where results should go.",
-        [I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON]:
-          "Create custom automation",
-        [I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT]:
-          "Help me create a custom automation.",
+        [I18nKey.AUTOMATIONS$ADD_AUTOMATION]: "Add automation",
+        [I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT]:
+          "Help me add an automation.",
       };
       return translations[key] || key;
     },
@@ -111,15 +110,15 @@ describe("CreateInstructions", () => {
     expect(
       screen.getByTestId("automations-discovery-option"),
     ).toHaveTextContent("Need ideas?");
-    expect(screen.getByTestId("automations-custom-option")).toHaveTextContent(
+    expect(screen.getByTestId("automations-add-option")).toHaveTextContent(
       "Already know the workflow?",
     );
     expect(
       screen.getByTestId("automations-find-opportunities"),
     ).toHaveTextContent("Find automation opportunities");
     expect(
-      screen.getByTestId("automations-create-automation"),
-    ).toHaveTextContent("Create custom automation");
+      screen.getByTestId("automations-add-known-automation"),
+    ).toHaveTextContent("Add automation");
   });
 
   it("captures automation_created_button with the active backend kind when a CTA is clicked", async () => {
@@ -150,18 +149,18 @@ describe("CreateInstructions", () => {
     });
   });
 
-  it("navigates to conversations with a custom automation prompt when the custom CTA is clicked", async () => {
+  it("navigates to conversations with an add automation prompt when the known-workflow CTA is clicked", async () => {
     const user = userEvent.setup();
     const setMessageToSend = vi.fn();
     useConversationStore.setState({ setMessageToSend });
     const { navigate } = renderCreateInstructions();
 
-    await user.click(screen.getByTestId("automations-create-automation"));
+    await user.click(screen.getByTestId("automations-add-known-automation"));
 
     expect(navigate).toHaveBeenCalledWith("/conversations");
     await waitFor(() => {
       expect(setMessageToSend).toHaveBeenCalledWith(
-        "Help me create a custom automation.",
+        "Help me add an automation.",
       );
     });
   });

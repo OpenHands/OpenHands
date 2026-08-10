@@ -18,6 +18,7 @@ import AutomationTemplates, {
   clientLoader as templatesLoader,
 } from "#/routes/automation-templates";
 import type { Backend } from "#/api/backend-registry/types";
+import { useConversationStore } from "#/stores/conversation-store";
 import {
   AutomationRunStatus,
   type Automation,
@@ -146,6 +147,7 @@ beforeEach(() => {
 afterEach(() => {
   window.localStorage.clear();
   __resetActiveStoreForTests();
+  useConversationStore.setState({ messageToSend: null });
 });
 
 describe("AutomationsList — manifest-declared dashboard", () => {
@@ -172,6 +174,44 @@ describe("AutomationsList — manifest-declared dashboard", () => {
       navLabels: 2,
       statsCaptions: 2,
       launcher: null,
+    });
+  });
+
+  it("launches opportunity discovery directly from the header CTA", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+
+    // Act
+    await user.click(screen.getByTestId("automations-find-opportunities"));
+
+    // Assert
+    expect(
+      screen.queryByTestId("add-automation-modal"),
+    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(useConversationStore.getState().messageToSend?.text).toBe(
+        I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT,
+      );
+    });
+  });
+
+  it("launches add automation directly from the header CTA", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+
+    // Act
+    await user.click(screen.getByTestId("automations-add-automation"));
+
+    // Assert
+    expect(
+      screen.queryByTestId("add-automation-modal"),
+    ).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(useConversationStore.getState().messageToSend?.text).toBe(
+        I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT,
+      );
     });
   });
 
@@ -245,9 +285,7 @@ describe("AutomationTemplates — manifest-declared templates page", () => {
         { selector: "h2" },
       ),
       findButton: within(cta).getByTestId("automation-opportunities-cta-find"),
-      customButton: within(cta).getByTestId(
-        "automation-opportunities-cta-custom",
-      ),
+      addButton: within(cta).getByTestId("automation-opportunities-cta-add"),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toBeTruthy();
   });

@@ -82,8 +82,8 @@ export function CreateInstructionsContent({
     launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
   };
 
-  const handleCreateCustomAutomation = () => {
-    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT));
+  const handleAddAutomation = () => {
+    launchAutomationPrompt(t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT));
   };
 
   return (
@@ -100,10 +100,10 @@ export function CreateInstructionsContent({
         <AutomationStartOption
           title={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_TITLE)}
           description={t(I18nKey.AUTOMATIONS$CUSTOM_OPTION_DESC)}
-          buttonLabel={t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON)}
-          testId="automations-custom-option"
-          buttonTestId="automations-create-automation"
-          onClick={handleCreateCustomAutomation}
+          buttonLabel={t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
+          testId="automations-add-option"
+          buttonTestId="automations-add-known-automation"
+          onClick={handleAddAutomation}
         />
       </div>
 

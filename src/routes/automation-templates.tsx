@@ -34,8 +34,8 @@ export default function AutomationTemplates() {
     launchInChat(t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT));
   };
 
-  const handleCreateCustomAutomation = () => {
-    launchInChat(t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_PROMPT));
+  const handleAddAutomation = () => {
+    launchInChat(t(I18nKey.AUTOMATIONS$ADD_AUTOMATION_PROMPT));
   };
 
   return (
@@ -73,11 +73,11 @@ export default function AutomationTemplates() {
           <BrandButton
             type="button"
             variant="secondary"
-            testId="automation-opportunities-cta-custom"
+            testId="automation-opportunities-cta-add"
             className="px-4 text-center"
-            onClick={handleCreateCustomAutomation}
+            onClick={handleAddAutomation}
           >
-            {t(I18nKey.AUTOMATIONS$CUSTOM_AUTOMATION_BUTTON)}
+            {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
           </BrandButton>
         </div>
       </section>

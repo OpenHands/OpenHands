@@ -12767,7 +12767,7 @@
     "ca": "Visualitzeu les automatitzacions actives i inactives, cerqueu per metadades i inspeccioneu els detalls de només lectura."
   },
   "AUTOMATIONS$ADD_AUTOMATION": {
-    "en": "Add Automation",
+    "en": "Add automation",
     "ja": "オートメーションを追加",
     "zh-CN": "添加自动化",
     "zh-TW": "新增自動化",
@@ -12782,6 +12782,23 @@
     "de": "Automatisierung hinzufügen",
     "uk": "Додати автоматизацію",
     "ca": "Afegeix automatització"
+  },
+  "AUTOMATIONS$ADD_AUTOMATION_PROMPT": {
+    "en": "Help me add an automation. I already know the workflow I want. Ask me for the trigger, steps, required tools and integrations, inputs, outputs, schedule, and where results should go, then choose the best setup.",
+    "ja": "オートメーションの追加を手伝ってください。実現したいワークフローは既に分かっています。トリガー、手順、必要なツールと連携、入力、出力、スケジュール、結果の送信先を確認してから、最適な設定方法を選んでください。",
+    "zh-CN": "帮我添加一个自动化。我已经知道想要的工作流。请询问触发器、步骤、所需工具和集成、输入、输出、计划以及结果应发送到哪里，然后选择最佳设置方式。",
+    "zh-TW": "幫我新增一個自動化。我已經知道想要的工作流程。請詢問觸發器、步驟、所需工具和整合、輸入、輸出、排程以及結果應送到哪裡，然後選擇最佳設定方式。",
+    "ko-KR": "자동화 추가를 도와주세요. 원하는 워크플로를 이미 알고 있습니다. 트리거, 단계, 필요한 도구와 통합, 입력, 출력, 일정, 결과를 보낼 위치를 물어본 뒤 가장 적합한 설정 방법을 선택해 주세요.",
+    "no": "Hjelp meg å legge til en automatisering. Jeg vet allerede hvilken arbeidsflyt jeg ønsker. Spør meg om utløser, trinn, nødvendige verktøy og integrasjoner, inndata, utdata, tidsplan og hvor resultatene skal sendes, og velg deretter det beste oppsettet.",
+    "it": "Aiutami ad aggiungere un’automazione. So già quale flusso di lavoro voglio. Chiedimi il trigger, i passaggi, gli strumenti e le integrazioni necessari, input, output, pianificazione e dove devono andare i risultati, poi scegli la configurazione migliore.",
+    "pt": "Ajude-me a adicionar uma automação. Eu já sei qual fluxo de trabalho quero. Pergunte-me sobre o gatilho, as etapas, as ferramentas e integrações necessárias, entradas, saídas, agenda e para onde os resultados devem ir, depois escolha a melhor configuração.",
+    "es": "Ayúdame a agregar una automatización. Ya sé qué flujo de trabajo quiero. Pregúntame por el disparador, los pasos, las herramientas e integraciones necesarias, entradas, salidas, programación y dónde deben ir los resultados, y luego elige la mejor configuración.",
+    "ar": "ساعدني في إضافة أتمتة. أعرف بالفعل سير العمل الذي أريده. اسألني عن المشغّل، والخطوات، والأدوات والتكاملات المطلوبة، والمدخلات، والمخرجات، والجدول، والمكان الذي يجب أن تذهب إليه النتائج، ثم اختر أفضل إعداد.",
+    "fr": "Aidez-moi à ajouter une automatisation. Je connais déjà le flux de travail que je veux. Demandez-moi le déclencheur, les étapes, les outils et intégrations nécessaires, les entrées, les sorties, le calendrier et où envoyer les résultats, puis choisissez la meilleure configuration.",
+    "tr": "Bir otomasyon eklememe yardım et. İstediğim iş akışını zaten biliyorum. Bana tetikleyiciyi, adımları, gerekli araçları ve entegrasyonları, girdileri, çıktıları, zamanlamayı ve sonuçların nereye gideceğini sor, ardından en iyi kurulumu seç.",
+    "de": "Hilf mir, eine Automatisierung hinzuzufügen. Ich weiß bereits, welchen Workflow ich möchte. Frage mich nach Auslöser, Schritten, benötigten Tools und Integrationen, Eingaben, Ausgaben, Zeitplan und wohin die Ergebnisse gehen sollen, und wähle dann die beste Einrichtung.",
+    "uk": "Допоможіть мені додати автоматизацію. Я вже знаю, який робочий процес хочу. Запитайте про тригер, кроки, потрібні інструменти й інтеграції, вхідні дані, результати, розклад і куди мають надходити результати, а потім виберіть найкраще налаштування.",
+    "ca": "Ajuda’m a afegir una automatització. Ja sé quin flux de treball vull. Pregunta’m pel disparador, els passos, les eines i integracions necessàries, les entrades, les sortides, la planificació i on han d’anar els resultats, i després tria la millor configuració."
   },
   "AUTOMATIONS$IMPORT": {
     "en": "Import automation",
