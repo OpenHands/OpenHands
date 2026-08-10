@@ -41,14 +41,15 @@ async def web_zap_passive_scan(target: str, engagement_id: str) -> str:
 async def web_zap_active_scan(
     target: str,
     engagement_id: str,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
 ) -> str:
-    """Run ZAP active scan. Requires pentest.scan.active + confirmation in semi mode."""
+    """Run ZAP active scan. Requires pentest.scan.active + confirmation in semi mode.
+
+    Autonomy comes from PENTEST_AUTONOMY_MODE (server-side), not tool args.
+    """
     return await run_zap_active(
         target=target,
         engagement_id=engagement_id,
-        autonomy_mode=autonomy_mode,
         confirmation_token=confirmation_token,
     )
 
@@ -58,15 +59,16 @@ async def web_nuclei_scan(
     target: str,
     engagement_id: str,
     severity_filter: list[str] | None = None,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
 ) -> str:
-    """Run Nuclei. Intrusive (critical) templates require confirmation."""
+    """Run Nuclei. Intrusive (critical) templates require confirmation.
+
+    Autonomy comes from PENTEST_AUTONOMY_MODE (server-side), not tool args.
+    """
     return await run_nuclei(
         target=target,
         engagement_id=engagement_id,
         severity_filter=severity_filter,
-        autonomy_mode=autonomy_mode,
         confirmation_token=confirmation_token,
     )
 
@@ -87,14 +89,15 @@ async def web_nikto_scan(target: str, engagement_id: str) -> str:
 async def web_sqlmap_run(
     target: str,
     engagement_id: str,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
 ) -> str:
-    """Run sqlmap (active + confirmation gate)."""
+    """Run sqlmap (active + confirmation gate).
+
+    Autonomy comes from PENTEST_AUTONOMY_MODE (server-side), not tool args.
+    """
     return await run_sqlmap(
         target=target,
         engagement_id=engagement_id,
-        autonomy_mode=autonomy_mode,
         confirmation_token=confirmation_token,
     )
 

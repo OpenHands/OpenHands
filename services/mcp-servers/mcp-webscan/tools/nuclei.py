@@ -43,7 +43,6 @@ async def run_nuclei(
     target: str,
     engagement_id: str,
     severity_filter: list[str] | None = None,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
     findings: FindingsClient | None = None,
     runner: Runner | None = None,
@@ -57,7 +56,6 @@ async def run_nuclei(
         try:
             await require_confirmation(
                 "nuclei_intrusive",
-                autonomy_mode,
                 {
                     "target": target,
                     "engagement_id": engagement_id,

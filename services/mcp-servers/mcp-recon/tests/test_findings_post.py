@@ -114,6 +114,34 @@ def test_ac_187_8_normalizer_and_scope():
         assert_in_scope("not-allowed.example.net")
 
 
+def test_high1_scope_startswith_bypass_rejected(monkeypatch):
+    """HIGH-1: example.com.evil.com must not match allowlist example.com."""
+    monkeypatch.setenv("PENTEST_SCOPE_ALLOWLIST", "example.com")
+    assert_in_scope("example.com")
+    assert_in_scope("www.example.com")
+    assert_in_scope("https://api.example.com/path")
+    for evil in (
+        "example.com.evil.com",
+        "example.com.attacker.net",
+        "https://example.com.evil.com/",
+        "http://example.com.evil.com:443/x",
+    ):
+        with pytest.raises(ScopeViolationError) as exc:
+            assert_in_scope(evil)
+        assert exc.value.code == "scope_violation"
+
+
+def test_high1_url_allowlist_matches_host_not_prefix(monkeypatch):
+    """URL allowlist entries compare hostname, never raw string startswith."""
+    monkeypatch.setenv(
+        "PENTEST_SCOPE_ALLOWLIST", "https://example.com/engagement"
+    )
+    assert_in_scope("https://example.com/other")
+    assert_in_scope("api.example.com")
+    with pytest.raises(ScopeViolationError):
+        assert_in_scope("example.com.evil.com")
+
+
 @pytest.mark.asyncio
 async def test_ac_187_3_409_dedupe_idempotent():
     transport = FakeFindingsTransport()

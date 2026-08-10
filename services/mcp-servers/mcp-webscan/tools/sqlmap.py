@@ -33,7 +33,6 @@ async def run_sqlmap(
     *,
     target: str,
     engagement_id: str,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
     findings: FindingsClient | None = None,
     runner: Runner | None = None,
@@ -46,7 +45,6 @@ async def run_sqlmap(
     try:
         await require_confirmation(
             TOOL_GATE_NAME,
-            autonomy_mode,
             {
                 "target": target,
                 "engagement_id": engagement_id,

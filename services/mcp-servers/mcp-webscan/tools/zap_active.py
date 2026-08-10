@@ -31,7 +31,6 @@ async def run_zap_active(
     *,
     target: str,
     engagement_id: str,
-    autonomy_mode: str = "semi_autonomous",
     confirmation_token: str | None = None,
     findings: FindingsClient | None = None,
     runner: Runner | None = None,
@@ -49,7 +48,6 @@ async def run_zap_active(
     try:
         await require_confirmation(
             TOOL_GATE_NAME,
-            autonomy_mode,
             gate_payload,
             confirmation_token=confirmation_token,
         )

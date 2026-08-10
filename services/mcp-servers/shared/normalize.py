@@ -116,6 +116,11 @@ def _host_matches(pattern: str, host: str) -> bool:
 def assert_in_scope(target: str) -> None:
     """
     Fail-closed: empty/missing PENTEST_SCOPE_ALLOWLIST rejects all targets.
+
+    Matching is DNS/host-safe only (exact host, subdomain suffix, wildcard, CIDR).
+    Never uses raw ``str.startswith`` on the target — that allowed
+    ``example.com.evil.com`` to pass an allowlist of ``example.com``.
+    URL allowlist entries are compared by parsed hostname, not string prefix.
     """
     allowlist = _parse_allowlist()
     if not allowlist:
@@ -124,11 +129,10 @@ def assert_in_scope(target: str) -> None:
             f"{SCOPE_ALLOWLIST_ENV} is empty or unset (fail-closed)",
         )
     host = extract_host(target)
-    if any(_host_matches(entry, host) for entry in allowlist):
-        return
-    # Also allow exact full-target match (URL allowlist entries)
-    if any(target.startswith(entry) or entry == target for entry in allowlist):
-        return
+    for entry in allowlist:
+        pattern = extract_host(entry) if "://" in entry else entry
+        if _host_matches(pattern, host):
+            return
     raise ScopeViolationError(target)
 
 

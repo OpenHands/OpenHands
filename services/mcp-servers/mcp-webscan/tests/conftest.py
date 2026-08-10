@@ -20,6 +20,7 @@ for path in (ROOT, WEBSCAN):
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("PENTEST_SCOPE_ALLOWLIST", "example.com,*.lab.local")
+    monkeypatch.setenv("PENTEST_AUTONOMY_MODE", "semi_autonomous")
     monkeypatch.setenv("SESSION_API_KEY", "test-session-key")
     monkeypatch.setenv("FINDINGS_SERVICE_URL", "http://findings.test")
     from shared.confirmation import clear_confirmation_state

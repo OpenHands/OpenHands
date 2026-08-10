@@ -27,6 +27,7 @@ has the minimum capability (Fase 0 RBAC).
 | `SESSION_API_KEY` | Sent as `X-Session-API-Key` to Findings Service |
 | `FINDINGS_SERVICE_URL` | Default `http://findings-service:8000` |
 | `PENTEST_SCOPE_ALLOWLIST` | CSV of hosts/CIDRs (fail-closed if empty) |
+| `PENTEST_AUTONOMY_MODE` | Server-side only: `manual` \| `semi_autonomous` \| `autonomous` (default semi). Never taken from agent tool args. |
 | `OPENHANDS_CONFIRMATION_TOKEN` | Optional env token after UI approval |
 | `PENTEST_MCP_RECON_CMD` | Override launch command for mcp-recon |
 | `PENTEST_MCP_WEBSCAN_CMD` | Override launch command for mcp-webscan |
