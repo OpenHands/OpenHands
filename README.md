@@ -79,6 +79,8 @@ agent-canvas --frontend-only  # static frontend + ingress only
 agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```
 
+✅ **Next**: Open [http://localhost:8000](http://localhost:8000) in your browser to access the UI.
+
 ### Option 2: With a Docker Sandbox
 
 **Prerequisites**:
@@ -103,6 +105,8 @@ docker run -it --rm \
 
 The agent will be able to access any project under `PROJECTS_PATH`.
 
+✅ **Next**: Open [http://localhost:8000/canvas](http://localhost:8000/canvas) in your browser to access the UI.
+
 ### Option 3: From Source
 
 > [!WARNING]
@@ -117,9 +121,17 @@ npm install
 npm run dev
 ```
 
----
+✅ **Next**: Open [http://localhost:8000](http://localhost:8000) in your browser to access the UI.
 
-Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
+## Next Steps
+
+After accessing the UI, you can:
+
+1. **Configure LLM**: On first launch, you'll be prompted to select your LLM provider (OpenAI, Anthropic, etc.) and enter your API key.
+2. **Start your first conversation**: Create a new conversation from the sidebar and ask the agent to help with a coding task.
+3. **Add backends (optional)**: Connect to multiple agent servers from Settings > Agent Server.
+
+For more details, see [DEVELOPMENT.md](./docs/DEVELOPMENT.md) or [SELF_HOSTING.md](./docs/SELF_HOSTING.md).
 
 # Architecture
 
