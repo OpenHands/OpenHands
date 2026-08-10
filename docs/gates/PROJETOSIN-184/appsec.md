@@ -1,9 +1,11 @@
 ---
 card: PROJETOSIN-184
 pr: 2
-veredicto: FAIL
+veredicto: PASS
 agente: appsec
 data: 2026-08-10
+re_gate: 2026-08-10
+fix_commit: d1ee30c39
 ci: npm-audit-high-clean; review manual services/findings-service + shared
 repo: klebersjunior/OpenHands
 branch: feat/fase0-backend-184-185-182
@@ -11,52 +13,46 @@ branch: feat/fase0-backend-184-185-182
 
 # AppSecurity — PROJETOSIN-184 (Findings Service)
 
-**Veredicto:** FAIL
+**Veredicto:** PASS
 
-## Resumo
+## Re-gate 2026-08-10
 
-Scaffold do Findings Service cobre auth por `X-Session-API-Key`, capabilities por rota e ORM parametrizado. O gate **bloqueia** por AuthZ quebrada no middleware compartilhado (`X-Pentest-Profile` eleva para `admin`) e por ausência de isolamento por engagement nos endpoints de findings (IDOR entre chaves/mapas de perfil).
+Revalidação após `d1ee30c39`.
 
-## Checklist
+### Checklist (atualizado)
 
-- [x] Sem segredos de produção versionados (tokens LLM/DD reais ausentes)
-- [x] `npm audit --audit-level=high` sem high/critical (apenas moderate pré-existente: dompurify/electron)
-- [ ] Session/profile AuthZ defensável em profundidade — **FAIL** (shared)
+- [x] Sem segredos de produção versionados
+- [x] `npm audit --audit-level=high` sem high/critical (moderates pré-existentes: dompurify/electron)
+- [x] Session/profile AuthZ defensável — HIGH shared fechado
 - [x] Proxies ingress `/api/pentest/findings` e `/api/pentest/me` prefixados antes de `/api`
-- [ ] Isolamento de findings por engagement/tenant — **parcial FAIL**
-- [x] DefectDojo token só via env (stub offline sem token hardcoded)
+- [x] Isolamento interim por `created_by` + 404 cross-key
+- [x] DefectDojo token só via env
+- [x] Fail-fast `dev-session-key`; compose exige `SESSION_API_KEY` / `FINDINGS_DB_PASSWORD` (`:?`); Dockerfile sem defaults de senha
 
-## Findings
+### HIGH — Privilege escalation via `X-Pentest-Profile` — **FECHADO**
 
-### HIGH — Privilege escalation via `X-Pentest-Profile` (shared)
+Ver laudo 182. Consumido via `shared.auth_middleware`; lifespan chama `assert_session_api_key_not_insecure_default()`.
 
-- **Onde:** `services/shared/auth_middleware.py` (`resolve_profile_for_key` / `get_auth_context`)
-- **Problema:** Com `SESSION_API_KEY` válida e sem entrada em `PENTEST_SESSION_PROFILES`, o cliente escolhe o perfil via header (incl. `admin` → `pentest.admin.*`, `export_dd`, etc.). Viola a premissa da spec 182 (“capabilities nunca vêm só do client-side”).
-- **Impacto em 184:** bypass de `require_capability` em triage, sync DD, delete admin.
-- **Remediação:** honrar header só com flag explícita de teste (`PENTEST_ALLOW_PROFILE_HEADER=1`); em runtime normal, perfil **somente** via mapa server-side / default env **sem** override do cliente.
+### MEDIUM — IDOR / ACL findings — **FECHADO (interim)**
 
-### MEDIUM — IDOR / falta de ACL por engagement nos findings
+- `Finding.created_by` obrigatório; list/get/update/triage/stats/sync filtram por `ctx.user_id`.
+- Cross-user → 404 (sem leak de existência).
+- Evidência: `test_cross_key_finding_access_returns_404` (16 testes findings/shared verdes).
+- Nota: membership EngMgr ainda deferred; ownership por criador é ACL fail-closed aceitável no scaffold.
 
-- **Onde:** `app/services/findings_service.py`, routers `findings` / `triage` / sync
-- **Problema:** List/get/patch/triage/sync filtram só por capability + `engagement_id`/`finding_id` informados. Não há checagem de membership/`created_by` (EngMgr faz; Findings não). Com múltiplas chaves em `PENTEST_SESSION_PROFILES`, UUID conhecido = leitura/escrita/triage cross-tenant.
-- **Remediação:** validar ownership/membership do engagement (serviço interno ou claim no token) antes de mutar/listar; negar 404 em miss.
+### MEDIUM — Default `SESSION_API_KEY=dev-session-key` — **FECHADO**
 
-### MEDIUM — Default `SESSION_API_KEY=dev-session-key`
+- `config.session_api_key` default `""`; compose `${SESSION_API_KEY:?…}` / `${FINDINGS_DB_PASSWORD:?…}`; Dockerfile sem `ENV` de DB password.
+- Boot com `dev-session-key` sem `PENTEST_ALLOW_DEV_SESSION_KEY=1` → `RuntimeError` (teste `test_dev_session_key_fail_fast`).
 
-- **Onde:** `app/config.py`, `docker-compose.fragment.yml` (`${SESSION_API_KEY:-dev-session-key}`), Dockerfile `ENV FINDINGS_DB_URL=...findings:findings...`
-- **Problema:** chave e senha de DB previsíveis se deploy omitir secrets.
-- **Remediação:** fail-fast se key default em não-dev; sem default de senha no compose/Dockerfile de imagem publicada.
+### Residual LOW
 
-### LOW — `/health` sem auth; sync job store in-memory
-
-Aceitável em scaffold; documentar que status de job não é API pública ainda.
+`/health` sem auth; sync job store in-memory; `user_id = session:{key[:8]}` (colisão teórica de prefixo).
 
 ## Dependências
 
-`npm audit --audit-level=high`: **PASS** (0 high/critical). Moderates pré-existentes fora do escopo deste PR.
+`npm audit --audit-level=high`: **PASS** (0 high/critical).
 
-## Ação requerida (bloqueio)
+## Histórico — Gate inicial (FAIL)
 
-1. Corrigir AuthZ do shared (header profile) — **obrigatório para PASS**.
-2. Definir e implementar isolamento findings↔engagement (ou documentar single-tenant explícito + guardrail).
-3. Remover/bloquear defaults inseguros de session key em caminhos de deploy.
+**Veredicto na época:** FAIL por AuthZ do middleware compartilhado e ausência de isolamento por ownership nos findings. Remediação entregue em `d1ee30c39`.
