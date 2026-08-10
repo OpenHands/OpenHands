@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -42,7 +42,43 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("useConversationMetrics", () => {
+  it("fires the query on cloud backends, fetching directly from the runtime URL", async () => {
+    // Arrange — the runtime REST fetch must work on cloud backends.
+    // getRuntimeConversation now fetches directly from the runtime
+    // sandbox URL (conversationUrl) instead of tunneling through the
+    // removed /api/cloud-proxy endpoint.
+    const spy = vi
+      .spyOn(AgentServerConversationService, "getRuntimeConversation")
+      .mockResolvedValue(runtimeInfo);
+
+    // Act
+    const { result } = renderHook(
+      () =>
+        useConversationMetrics(
+          "conv-abc",
+          "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
+          "session-key",
+          true,
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    // Assert — the query fires and resolves to the runtime data.
+    await waitFor(() => {
+      expect(result.current.data?.accumulated_cost).toBe(2.5);
+    });
+    expect(spy).toHaveBeenCalledWith(
+      "conv-abc",
+      "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
+      "session-key",
+    );
+  });
+
   it("fires the query when sessionApiKey is null (local backends without auth)", async () => {
     // Arrange
     const spy = vi
@@ -137,9 +173,9 @@ describe("useConversationMetrics", () => {
 
     // Assert
     await waitFor(() => {
-      expect(
-        result.current.data?.accumulated_token_usage?.per_turn_token,
-      ).toBe(38826);
+      expect(result.current.data?.accumulated_token_usage?.per_turn_token).toBe(
+        38826,
+      );
     });
   });
 });

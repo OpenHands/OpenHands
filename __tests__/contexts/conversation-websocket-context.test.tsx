@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createUserMessageEvent } from "test-utils";
 import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket-context";
 import { useEventStore } from "#/stores/use-event-store";
+import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
@@ -104,6 +105,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     });
     useOptimisticUserMessageStore.setState({ pendingMessages: [] });
     useBrowserStore.getState().reset();
+    useMetricsStore.getState().resetMetrics();
     useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
 
@@ -466,6 +468,39 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       expect(useBrowserStore.getState().screenshotSrc).toBe(""),
     );
     expect(useBrowserStore.getState().url).toBe("");
+  });
+
+  it("resets the metrics store when switching conversations", async () => {
+    const { rerender } = renderProvider("conv-a");
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+
+    useMetricsStore.setState({
+      cost: 1.5,
+      max_budget_per_task: 5,
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        cache_read_tokens: 1,
+        cache_write_tokens: 2,
+        context_window: 128_000,
+        per_turn_token: 500,
+      },
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-b"
+          conversationUrl={null}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(useMetricsStore.getState().usage).toBeNull());
+    expect(useMetricsStore.getState().cost).toBeNull();
+    expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
   });
 
   it("keeps events that arrived after history when re-entering the same conversation", async () => {

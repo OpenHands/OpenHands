@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   groupEvents,
   isGroupableEvent,
-  EVENT_GROUP_MIN_SIZE,
 } from "#/components/conversation-events/chat/group-events";
 import {
   ActionEvent,
@@ -15,11 +14,13 @@ import {
 import { TextContent } from "#/types/agent-server/core/base/common";
 import {
   ExecuteBashAction,
+  FileEditorAction,
   FinishAction,
   ThinkAction,
 } from "#/types/agent-server/core/base/action";
 import {
   ExecuteBashObservation,
+  FileEditorObservation,
   PlanningFileEditorObservation,
   TaskTrackerObservation,
 } from "#/types/agent-server/core/base/observation";
@@ -108,6 +109,41 @@ const makePlanObs = (
   } as PlanningFileEditorObservation,
 });
 
+const makeMarkdownFileEditorAction = (
+  id: string,
+): ActionEvent<FileEditorAction> => ({
+  ...makeBashAction(id),
+  tool_name: "file_editor",
+  action: {
+    kind: "FileEditorAction",
+    command: "create",
+    path: "canvas.md",
+    file_text: "# Demo",
+    old_str: null,
+    new_str: null,
+    insert_line: null,
+    view_range: null,
+  },
+});
+
+const makeMarkdownFileEditorObservation = (
+  id: string,
+  actionId: string,
+): ObservationEvent<FileEditorObservation> => ({
+  ...makeBashObservation(id, actionId),
+  tool_name: "file_editor",
+  observation: {
+    kind: "FileEditorObservation",
+    command: "create",
+    output: "Created canvas.md",
+    path: "canvas.md",
+    prev_exist: false,
+    old_content: null,
+    new_content: "# Demo",
+    error: null,
+  },
+});
+
 const makeTaskTrackerObservation = (
   id: string,
   actionId: string,
@@ -177,8 +213,40 @@ describe("isGroupableEvent", () => {
     expect(isGroupableEvent(makePlanObs("o1", "a1"))).toBe(false);
   });
 
+  it("does not group markdown file-editor create actions or observations", () => {
+    expect(isGroupableEvent(makeMarkdownFileEditorAction("a1"))).toBe(false);
+    expect(
+      isGroupableEvent(makeMarkdownFileEditorObservation("o1", "a1")),
+    ).toBe(false);
+  });
+
+  it("still groups markdown file-editor view observations", () => {
+    const viewObservation = makeMarkdownFileEditorObservation("o1", "a1");
+    viewObservation.observation = {
+      ...viewObservation.observation,
+      command: "view",
+      output: "",
+      new_content: null,
+      content: [{ type: "text", text: "     1\t# README" }],
+    };
+    expect(isGroupableEvent(viewObservation)).toBe(true);
+  });
+
+  it("ungroups a markdown create observation when path comes from the action", () => {
+    const action = makeMarkdownFileEditorAction("a1");
+    const observation = makeMarkdownFileEditorObservation("o1", "a1");
+    observation.observation = {
+      ...observation.observation,
+      path: null,
+    };
+    expect(isGroupableEvent(observation)).toBe(true);
+    expect(isGroupableEvent(observation, action)).toBe(false);
+  });
+
   it("does not group TaskTrackerObservation", () => {
-    expect(isGroupableEvent(makeTaskTrackerObservation("o1", "a1"))).toBe(false);
+    expect(isGroupableEvent(makeTaskTrackerObservation("o1", "a1"))).toBe(
+      false,
+    );
   });
 
   it("does not group AgentErrorEvent", () => {
@@ -307,7 +375,10 @@ describe("groupEvents", () => {
     const a2 = makeBashAction("a2");
     const a3 = makeBashAction("a3");
     const a4 = makeBashAction("a4", [
-      { type: "text", text: "Let me check tests for the new conversation button:" },
+      {
+        type: "text",
+        text: "Let me check tests for the new conversation button:",
+      },
     ]);
     const a5 = makeBashAction("a5");
     const a6 = makeBashAction("a6");
@@ -320,7 +391,16 @@ describe("groupEvents", () => {
       makeBashObservation("o5", "a5"),
       makeBashObservation("o6", "a6"),
     ];
-    const allEvents = [a1, a2, a3, ...events.slice(0, 3), a4, a5, a6, ...events.slice(3)];
+    const allEvents = [
+      a1,
+      a2,
+      a3,
+      ...events.slice(0, 3),
+      a4,
+      a5,
+      a6,
+      ...events.slice(3),
+    ];
 
     const result = groupEvents(events, undefined, allEvents);
 
@@ -365,11 +445,10 @@ describe("groupEvents", () => {
     ]);
     const observation = makeBashObservation("o1", "a1");
 
-    const result = groupEvents(
-      [action, observation],
-      undefined,
-      [action, observation],
-    );
+    const result = groupEvents([action, observation], undefined, [
+      action,
+      observation,
+    ]);
 
     expect(result.map((item) => item.kind)).toEqual(["thought", "group"]);
     if (result[1].kind === "group") {

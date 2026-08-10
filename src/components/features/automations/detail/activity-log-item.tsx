@@ -38,6 +38,19 @@ function getConversationUrl(conversationId: string): string {
   return `/conversations/${conversationId}`;
 }
 
+/**
+ * Format the run's accumulated LLM cost, or return null when it is unknown.
+ *
+ * A genuine `0` is rendered (`$0.0000`) rather than hidden: the automation
+ * service records zero only when the SDK reported a real zero-cost run, and
+ * leaves the value null when the cost could not be determined. Matches the
+ * 4-decimal USD convention used by the conversation metrics modal.
+ */
+function formatRunCost(cost: number | null | undefined): string | null {
+  if (typeof cost !== "number" || !Number.isFinite(cost)) return null;
+  return `$${cost.toFixed(4)}`;
+}
+
 export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   const { t, i18n } = useTranslation("openhands");
   const hasConversation = !!run.conversation_id;
@@ -65,6 +78,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     effectiveStartedAt,
     i18n.language,
   );
+  const formattedCost = formatRunCost(run.cost);
 
   const handleLogsClick = (
     e:
@@ -103,6 +117,15 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         )}
       </div>
       <div className="flex items-center gap-2">
+        {formattedCost && (
+          <span
+            data-testid="run-cost"
+            title={t(I18nKey.AUTOMATIONS$DETAIL$RUN_COST)}
+            className="text-xs tabular-nums text-muted"
+          >
+            {formattedCost}
+          </span>
+        )}
         {logsButton}
         <RunStatusBadge status={run.status} />
       </div>

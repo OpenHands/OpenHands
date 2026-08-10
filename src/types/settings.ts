@@ -1,5 +1,6 @@
+import type { MCPConfig } from "@openhands/typescript-client";
+export type { MCPConfig } from "@openhands/typescript-client";
 import type { SkillCategoryId } from "@openhands/extensions/skills";
-import type { MCPAuthCredential } from "./mcp-auth";
 
 export const ProviderOptions = {
   github: "github",
@@ -15,37 +16,6 @@ export type Provider = keyof typeof ProviderOptions;
 export type ProviderToken = {
   token: string;
   host: string | null;
-};
-
-export type MCPSSEServer = {
-  name?: string;
-  url: string;
-  headers?: Record<string, string>;
-  auth?: MCPAuthCredential;
-  enabled?: boolean;
-};
-
-export type MCPStdioServer = {
-  name: string;
-  command: string;
-  args?: string[];
-  env?: Record<string, string>;
-  enabled?: boolean;
-};
-
-export type MCPSHTTPServer = {
-  name?: string;
-  url: string;
-  headers?: Record<string, string>;
-  timeout?: number;
-  auth?: MCPAuthCredential;
-  enabled?: boolean;
-};
-
-export type MCPConfig = {
-  sse_servers: (string | MCPSSEServer)[];
-  stdio_servers: MCPStdioServer[];
-  shttp_servers: (string | MCPSHTTPServer)[];
 };
 
 export type SettingsChoiceValue = boolean | number | string;

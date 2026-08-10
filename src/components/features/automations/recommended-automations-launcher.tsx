@@ -79,14 +79,13 @@ export function RecommendedAutomationsLauncher({
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
 
-  // A disabled server is withheld from the agent, so treating it as installed
-  // would show "Connected" for an automation that then fails at runtime.
   const installedMcpConfig = useMemo(
     () =>
       flattenMcpConfig(
-        parseMcpConfig(settings?.agent_settings?.mcp_config),
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
-    [settings?.agent_settings?.mcp_config],
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(
