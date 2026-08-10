@@ -4,7 +4,6 @@ import {
   isObservationEvent,
   isPlanningFileEditorObservationEvent,
 } from "#/types/agent-server/type-guards";
-import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
 import { getThoughtSourceAction } from "./event-thought-helpers";
 
 /** Minimum run-length before consecutive actions get folded into a single
@@ -17,21 +16,13 @@ export const EVENT_GROUP_MIN_SIZE = 2;
  * that we want to fold into an `EventGroup` when several appear in a row.
  *
  * Events that have their own dedicated rendering (FinishAction, ThinkAction,
- * HookExecution, AgentError, MessageEvent, PlanPreview, markdown file
- * artifacts, TaskTracker) are treated as group breakers.
+ * HookExecution, AgentError, MessageEvent, PlanPreview, TaskTracker) are
+ * treated as group breakers.
  */
-export const isGroupableEvent = (
-  event: OpenHandsEvent,
-  correspondingAction?: ActionEvent,
-): boolean => {
+export const isGroupableEvent = (event: OpenHandsEvent): boolean => {
   if (isActionEvent(event)) {
     const { kind } = event.action;
     if (kind === "FinishAction" || kind === "ThinkAction") {
-      return false;
-    }
-    // Keep markdown *create* artifact cards outside collapsed groups so their
-    // clipped preview is visible without expanding a parent summary.
-    if (isMarkdownFileEditorEvent(event, correspondingAction)) {
       return false;
     }
     return true;
@@ -39,9 +30,6 @@ export const isGroupableEvent = (
 
   if (isObservationEvent(event)) {
     if (isPlanningFileEditorObservationEvent(event)) {
-      return false;
-    }
-    if (isMarkdownFileEditorEvent(event, correspondingAction)) {
       return false;
     }
     if (event.observation.kind === "TaskTrackerObservation") {
@@ -104,13 +92,7 @@ export const groupEvents = (
   };
 
   events.forEach((event, index) => {
-    const correspondingAction = isObservationEvent(event)
-      ? allEvents.find(
-          (candidate): candidate is ActionEvent =>
-            isActionEvent(candidate) && candidate.id === event.action_id,
-        )
-      : undefined;
-    if (isGroupableEvent(event, correspondingAction)) {
+    if (isGroupableEvent(event)) {
       const thoughtAction = getThoughtSourceAction(event, allEvents);
       if (thoughtAction && !emittedThoughtActionIds.has(thoughtAction.id)) {
         flushRun();

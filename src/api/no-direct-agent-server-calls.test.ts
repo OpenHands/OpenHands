@@ -8,10 +8,6 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/automation-service/automation-service.api.ts",
   "api/cloud/proxy.ts",
   "api/main-app-auth.ts",
-  // GET /api/llm/balance has no typed client in @openhands/typescript-client
-  // yet; the service resolves host/key via getAgentServerClientOptions and
-  // treats 404 as "endpoint absent" for older servers.
-  "api/llm-balance-service.ts",
 ]);
 
 function collectSourceFiles(dir: string): string[] {
@@ -69,10 +65,7 @@ describe("agent-server API access", () => {
         fileViolations.push("uses axios directly for HTTP calls");
       }
 
-      if (
-        /\bfetch\s*\([\s\S]{0,200}['"`]\/api\//.test(source) &&
-        !ALLOWED_AD_HOC_HTTP_FILES.has(relPath)
-      ) {
+      if (/\bfetch\s*\([\s\S]{0,200}['"`]\/api\//.test(source)) {
         fileViolations.push("calls an /api path with fetch directly");
       }
 

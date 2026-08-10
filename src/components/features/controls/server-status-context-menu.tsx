@@ -1,4 +1,3 @@
-import type { MouseEvent, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { ContextMenu } from "#/ui/context-menu";
@@ -14,13 +13,12 @@ import { isExecutionActive, isExecutionPaused } from "#/utils/status";
 
 interface ServerStatusContextMenuProps {
   onClose: () => void;
-  onStopServer?: (event: MouseEvent<HTMLButtonElement>) => void;
-  onStartServer?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onStopServer?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onStartServer?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   executionStatus: ExecutionStatus | null;
   position?: "top" | "bottom";
   className?: string;
   isPausing?: boolean;
-  ignoreOutsideClickRef?: RefObject<HTMLElement | null>;
 }
 
 export function ServerStatusContextMenu({
@@ -31,13 +29,9 @@ export function ServerStatusContextMenu({
   position = "top",
   className = "",
   isPausing = false,
-  ignoreOutsideClickRef,
 }: ServerStatusContextMenuProps) {
   const { t } = useTranslation("openhands");
-  const ref = useClickOutsideElement<HTMLUListElement>(
-    onClose,
-    ignoreOutsideClickRef,
-  );
+  const ref = useClickOutsideElement<HTMLUListElement>(onClose);
 
   const isActive = isExecutionActive(executionStatus);
   const isPaused = isExecutionPaused(executionStatus);

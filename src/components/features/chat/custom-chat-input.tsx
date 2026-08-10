@@ -107,7 +107,6 @@ export function CustomChatInput({
     gripRef,
     isGripVisible,
     isGripDragging,
-    canResize,
     handleTopEdgeClick,
     smartResize,
     handleGripMouseDown,
@@ -177,7 +176,6 @@ export function CustomChatInput({
           gripRef={gripRef}
           isGripVisible={isGripVisible}
           isGripDragging={isGripDragging}
-          canResize={canResize}
           handleTopEdgeClick={handleTopEdgeClick}
           handleGripMouseDown={handleGripMouseDown}
           handleGripTouchStart={handleGripTouchStart}

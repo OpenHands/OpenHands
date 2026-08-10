@@ -14,7 +14,7 @@ import type { Backend } from "#/api/backend-registry/types";
 const CONVERSATION_ID = "conv-abc123";
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: CONVERSATION_ID }),
+  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
   useConversationId: () => ({ conversationId: CONVERSATION_ID }),
 }));
 

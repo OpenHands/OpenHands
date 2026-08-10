@@ -60,19 +60,14 @@ function PathComponent(props: { children?: ReactNode }) {
       // Extract the filename from the decoded path
       const filename = extractFilename(decodedPath);
       return (
-        <span
-          className="font-mono font-normal tracking-tight"
-          title={decodedPath}
-        >
+        <span className="font-mono" title={decodedPath}>
           {filename}
         </span>
       );
     } catch (e) {
       // Just log the error without any message to avoid localization issues
       EventLogger.error(String(e));
-      return (
-        <span className="font-mono font-normal tracking-tight">{path}</span>
-      );
+      return <span className="font-mono">{path}</span>;
     }
   };
 
@@ -85,22 +80,14 @@ function PathComponent(props: { children?: ReactNode }) {
       ),
     );
 
-    return (
-      <span className="font-normal tracking-tight">{processedChildren}</span>
-    );
+    return <strong className="font-mono">{processedChildren}</strong>;
   }
 
   if (typeof children === "string") {
-    return (
-      <span className="font-normal tracking-tight">
-        {processPath(children)}
-      </span>
-    );
+    return <strong>{processPath(children)}</strong>;
   }
 
-  return (
-    <span className="font-mono font-normal tracking-tight">{children}</span>
-  );
+  return <strong className="font-mono">{children}</strong>;
 }
 
 export { PathComponent, isLikelyDirectory };

@@ -3,7 +3,7 @@ import {
   useConversationStore,
   type ConversationTab,
 } from "#/stores/conversation-store";
-import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { useConversationId } from "#/hooks/use-conversation-id";
 
 /**
  * Custom hook for selecting conversation tabs with consistent behavior.
@@ -14,7 +14,7 @@ import { useOptionalConversationId } from "#/hooks/use-conversation-id";
  * session-only — see `useConversationStore` for the rationale.
  */
 export function useSelectConversationTab() {
-  const { conversationId } = useOptionalConversationId();
+  const { conversationId } = useConversationId();
   const {
     selectedTab,
     isRightPanelShown,
@@ -23,7 +23,7 @@ export function useSelectConversationTab() {
   } = useConversationStore();
 
   const { setSelectedTab: setPersistedSelectedTab } =
-    useConversationLocalStorageState(conversationId ?? "");
+    useConversationLocalStorageState(conversationId);
 
   const onTabChange = (value: ConversationTab | null) => {
     setSelectedTab(value);

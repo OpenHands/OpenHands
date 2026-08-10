@@ -85,9 +85,9 @@ export function ProfileActionsMenu({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (menuRef.current?.contains(target)) return;
-      if (anchorElement?.contains(target)) return;
-      onClose();
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        onClose();
+      }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
@@ -103,7 +103,7 @@ export function ProfileActionsMenu({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [anchorElement, onClose]);
+  }, [onClose]);
 
   const handleAction = (action: () => void) => {
     action();

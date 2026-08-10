@@ -1,8 +1,6 @@
 import React, { useLayoutEffect, useReducer, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useTranslation } from "react-i18next";
 import { cn } from "#/utils/utils";
-import { I18nKey } from "#/i18n/declaration";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import { isExecutionActive, isExecutionPaused } from "#/utils/status";
 import { ConversationCardContextMenu } from "./conversation-card-context-menu";
@@ -12,8 +10,6 @@ interface ConversationCardActionsProps {
   contextMenuOpen: boolean;
   onContextMenuToggle: (isOpen: boolean) => void;
   onDelete?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onArchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onUnarchive?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onStop?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onEdit?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onDownloadViaVSCode?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -27,8 +23,6 @@ export function ConversationCardActions({
   contextMenuOpen,
   onContextMenuToggle,
   onDelete,
-  onArchive,
-  onUnarchive,
   onStop,
   onEdit,
   onDownloadViaVSCode,
@@ -37,7 +31,6 @@ export function ConversationCardActions({
   conversationId,
   showOptions,
 }: ConversationCardActionsProps) {
-  const { t } = useTranslation("openhands");
   const isPaused = isExecutionPaused(executionStatus);
   const isActive = isExecutionActive(executionStatus);
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -79,7 +72,7 @@ export function ConversationCardActions({
     // bottom that opening downward would clip the menu, flip it above
     // the anchor instead. Slight over-estimate is fine — it just means
     // we flip a few pixels earlier than strictly necessary.
-    const ESTIMATED_MENU_HEIGHT = 320;
+    const ESTIMATED_MENU_HEIGHT = 280;
     const gutter = 8;
     const overflowsDownward = bottom + ESTIMATED_MENU_HEIGHT + gutter > vh;
     const top = overflowsDownward
@@ -104,7 +97,6 @@ export function ConversationCardActions({
           event.stopPropagation();
           onContextMenuToggle(!contextMenuOpen);
         }}
-        ariaLabel={t(I18nKey.COMMON$MORE_OPTIONS)}
         className={cn(isPaused && "opacity-60")}
       />
       {contextMenuOpen && floatingStyle && portalTarget
@@ -114,8 +106,6 @@ export function ConversationCardActions({
               floatingStyle={floatingStyle}
               onClose={() => onContextMenuToggle(false)}
               onDelete={onDelete}
-              onArchive={onArchive}
-              onUnarchive={onUnarchive}
               onStop={isActive ? onStop : undefined}
               onEdit={onEdit}
               onDownloadViaVSCode={

@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { ExternalLink, Gauge, Share2 } from "lucide-react";
+import { ExternalLink, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
@@ -17,6 +17,7 @@ import SkillsIcon from "#/icons/skills.svg?react";
 import FishingHookIcon from "#/icons/fishing-hook.svg?react";
 import ToolsIcon from "#/icons/u-tools.svg?react";
 import DownloadIcon from "#/icons/u-download.svg?react";
+import CreditCardIcon from "#/icons/u-credit-card.svg?react";
 import CloseIcon from "#/icons/u-close.svg?react";
 import DeleteIcon from "#/icons/u-delete.svg?react";
 import CopyIcon from "#/icons/copy.svg?react";
@@ -110,7 +111,7 @@ export function ConversationNameContextMenu({
   const { backend } = useActiveBackend();
   const { data: conversation } = useActiveConversation();
   const isArchivedConversation = useIsArchivedConversation();
-  const ref = useClickOutsideElement<HTMLUListElement>(onClose, anchorRef);
+  const ref = useClickOutsideElement<HTMLUListElement>(onClose);
 
   const anchorElement = anchorRef?.current ?? null;
   const [portalStyle, setPortalStyle] = React.useState<React.CSSProperties>();
@@ -266,7 +267,7 @@ export function ConversationNameContextMenu({
           onClick={onDisplayCost}
         >
           <ConversationNameContextMenuIconText
-            icon={<Gauge size={16} />}
+            icon={<CreditCardIcon width={16} height={16} />}
             text={t(I18nKey.BUTTON$DISPLAY_COST)}
           />
         </ContextMenuListItem>

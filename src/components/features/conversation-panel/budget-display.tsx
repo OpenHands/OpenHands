@@ -18,7 +18,7 @@ export function BudgetDisplay({ cost, maxBudgetPerTask }: BudgetDisplayProps) {
   }
 
   return (
-    <div>
+    <div className="border-b border-[var(--oh-border-subtle)]">
       {maxBudgetPerTask !== null && maxBudgetPerTask > 0 ? (
         <>
           <BudgetProgressBar currentCost={cost} maxBudget={maxBudgetPerTask} />
