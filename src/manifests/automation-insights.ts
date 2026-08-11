@@ -170,6 +170,7 @@ export function getAutomationHealthDetails(
     latestRun?.blocking_reason,
     latestRun?.error_detail,
   );
+  const runBlockingReason = firstNonEmpty(latestRun?.blocking_reason);
 
   if (!automation.enabled) {
     return {
@@ -186,15 +187,33 @@ export function getAutomationHealthDetails(
     };
   }
 
+  if (
+    latestRun &&
+    (latestRun.status === AutomationRunStatus.COMPLETED ||
+      latestRun.status === AutomationRunStatus.FAILED) &&
+    runBlockingReason
+  ) {
+    return {
+      issue: "blocked",
+      failureKind: runFailureKind,
+      reason: runBlockingReason,
+    };
+  }
+
   if (latestRun?.status !== AutomationRunStatus.FAILED) {
     return { issue: null, failureKind: null, reason: null };
   }
 
+  // Older automation services only returned error_detail. Without the
+  // structured fields there is no reliable way to tell a transient provider
+  // failure from a user-actionable blocker, so leave the existing badge in
+  // charge of that response shape.
+  if (!runFailureKind && !runBlockingReason) {
+    return { issue: null, failureKind: null, reason: null };
+  }
+
   return {
-    issue: isBlockingFailure(
-      runFailureKind,
-      latestRun.blocking_reason?.trim() || null,
-    )
+    issue: isBlockingFailure(runFailureKind, runBlockingReason)
       ? "blocked"
       : "transient",
     failureKind: runFailureKind,

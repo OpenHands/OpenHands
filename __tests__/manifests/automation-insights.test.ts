@@ -159,6 +159,43 @@ describe("getAutomationHealthDetails", () => {
     });
   });
 
+  it("surfaces a blocking reason when a run reports completed", () => {
+    const details = getAutomationHealthDetails(
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          status: AutomationRunStatus.COMPLETED,
+          failure_kind: "agent_action",
+          blocking_reason: "The GitHub integration is not connected",
+        }),
+      }),
+    );
+
+    expect(details).toEqual({
+      issue: "blocked",
+      failureKind: "agent_action",
+      reason: "The GitHub integration is not connected",
+    });
+  });
+
+  it("leaves legacy failures to the existing health badge", () => {
+    const details = getAutomationHealthDetails(
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "The provider returned an error",
+        }),
+      }),
+    );
+
+    expect(details).toEqual({
+      issue: null,
+      failureKind: null,
+      reason: null,
+    });
+  });
+
   it.each([
     ["config", "blocked"],
     ["auth", "blocked"],
