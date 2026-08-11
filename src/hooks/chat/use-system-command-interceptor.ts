@@ -1,10 +1,12 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
-import { buildSlashCommandItems } from "#/hooks/chat/use-slash-command";
-import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
-import { HELP_COMMAND, CONDENSE_COMMAND } from "#/utils/constants";
+import {
+  BUILT_IN_COMMANDS,
+  HELP_COMMAND,
+  CONDENSE_COMMAND,
+} from "#/utils/constants";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -70,7 +72,6 @@ export function useSystemCommandInterceptor(
   onSubmit: (message: string) => void,
 ) {
   const { t } = useTranslation("openhands");
-  const { data: skills, refetch: refetchSkills } = useConversationSkills();
   const showHelp = useSlashCommandOutputStore((state) => state.showHelp);
 
   return useCallback(
@@ -116,18 +117,8 @@ export function useSystemCommandInterceptor(
       }
 
       // @spec SC-002 — Inline help
-      refetchSkills()
-        .then((result) => {
-          showHelp(
-            conversationId,
-            anchorEventId,
-            buildSlashCommandItems(
-              result.isError ? (skills ?? []) : (result.data ?? skills ?? []),
-            ),
-          );
-        })
-        .catch(() => displayErrorToast(t(I18nKey.ERROR$GENERIC)));
+      showHelp(conversationId, anchorEventId, BUILT_IN_COMMANDS);
     },
-    [conversationId, onSubmit, refetchSkills, showHelp, skills, t],
+    [conversationId, onSubmit, showHelp, t],
   );
 }
