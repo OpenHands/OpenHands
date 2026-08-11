@@ -19,7 +19,6 @@ from check_pr_description import (
     validate_bug_fix_evidence,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
-    READY_FOR_DEV_LABEL,
 )
 
 

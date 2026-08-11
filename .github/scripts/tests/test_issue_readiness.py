@@ -13,6 +13,7 @@ from check_issue_readiness import (
     references_run_method,
     has_checklist_item,
     visible_text,
+    main,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
 )
@@ -278,3 +279,49 @@ I ran `npm run dev` and saw the crash above.
     sections = extract_sections(body)
     assert {"relevant logs", "actual behavior", "acceptance criteria"} <= set(sections)
     assert evaluate_readiness(body, [BUG_LABEL]).ready
+
+def test_main_json_not_ready(tmp_path, capsys, monkeypatch):
+    import json
+    body_file = tmp_path / "issue.md"
+    body_file.write_text(BUG_BODY_NO_SCREENSHOT)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_issue_readiness.py",
+            "--body-file",
+            str(body_file),
+            "--labels",
+            "bug",
+            "--json",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert data["ready"] is False
+    assert len(data["reasons"]) > 0
+
+
+def test_main_json_ready(tmp_path, capsys, monkeypatch):
+    import json
+    body_file = tmp_path / "issue.md"
+    body_file.write_text(BUG_BODY_READY)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_issue_readiness.py",
+            "--body-file",
+            str(body_file),
+            "--labels",
+            "bug",
+            "--json",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert data["ready"] is True
+    assert len(data["reasons"]) == 0
+

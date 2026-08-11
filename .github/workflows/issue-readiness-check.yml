@@ -48,7 +48,7 @@ jobs:
                   GITHUB_EVENT_PATH: ${{ github.event_path }}
               run: |
                   set -euo pipefail
-                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json
+                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json || true
                   echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
                   # Write reasons to a file so the comment step can read them
                   # without shell-escaping multiline text.
