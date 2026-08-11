@@ -475,9 +475,11 @@ export function LlmSettingsLocalView() {
           isDisabled={!isNameValid || isSaving || isValidating || !saveControl}
           aria-busy={isSaving || isValidating}
         >
-          {isSaving || isValidating
-            ? t(I18nKey.STATUS$SAVING)
-            : t(I18nKey.BUTTON$SAVE)}
+          {isValidating
+            ? t(I18nKey.STATUS$VALIDATING)
+            : isSaving
+              ? t(I18nKey.STATUS$SAVING)
+              : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>

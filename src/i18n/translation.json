@@ -32401,6 +32401,11 @@
     "uk": "Вхід ще не завершено. Завершіть процес у браузері й повторіть спробу.",
     "ca": "L’inici de sessió encara no s’ha completat. Acaba el flux del navegador i torna-ho a provar."
   },
+  "STATUS$VALIDATING": {
+    "en": "Validating...",
+    "ja": "検証中...",
+    "zh-CN": "验证中..."
+  },
   "STATUS$SAVING": {
     "en": "Saving...",
     "ja": "保存中...",

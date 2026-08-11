@@ -17,6 +17,7 @@
  * fetch-based HTTP which doesn't require connection cleanup.
  */
 import {
+  AgentServerClient,
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
@@ -28,8 +29,6 @@ import {
   type ActivateProfileResponse,
   type SaveProfileRequest,
   type ExposeSecretsMode,
-  type ValidateProfileError,
-  type ValidateProfileResponse,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -42,6 +41,18 @@ import {
   saveCloudProfile,
 } from "../cloud/profiles-service.api";
 
+/** Structured error returned when pre-flight validation fails. */
+export interface ValidateProfileError {
+  type: string;
+  message: string;
+}
+
+/** Result of an LLM pre-flight check. */
+export interface ValidateProfileResponse {
+  valid: boolean;
+  error?: ValidateProfileError | null;
+}
+
 // Re-export SDK types for consumers
 export type {
   ProfileInfo,
@@ -51,12 +62,17 @@ export type {
   ActivateProfileResponse,
   SaveProfileRequest,
   ExposeSecretsMode,
-  ValidateProfileError,
-  ValidateProfileResponse,
 };
 
 function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
+}
+
+function isAbortLike(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" || error.name === "TimeoutError")
+  );
 }
 
 class ProfilesService {
@@ -132,16 +148,28 @@ class ProfilesService {
     request: SaveProfileRequest,
   ): Promise<ValidateProfileResponse | null> {
     if (isCloudBackend()) return null;
-    const client = new ProfilesClient(getAgentServerClientOptions());
+    const client = new AgentServerClient({
+      ...getAgentServerClientOptions(),
+      timeout: 30000,
+    });
     try {
-      return await client.validateProfile(name, request);
+      return await client.post<ValidateProfileResponse>(
+        `/api/profiles/${encodeURIComponent(name)}/validate`,
+        request,
+        { acceptableStatusCodes: new Set([200]) },
+      );
     } catch (error) {
       // Older agent-server versions don't have the endpoint → 404
       // Treat as "no verdict" rather than blocking the save.
+      const status =
+        error && typeof error === "object" && "status" in error
+          ? (error as { status?: unknown }).status
+          : undefined;
       if (
-        error instanceof Error &&
-        "status" in error &&
-        (error as { status: number }).status === 404
+        status === 404 ||
+        status === 429 ||
+        (typeof status === "number" && status >= 500) ||
+        isAbortLike(error)
       ) {
         return null;
       }
