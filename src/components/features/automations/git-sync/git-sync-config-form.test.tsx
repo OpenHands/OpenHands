@@ -131,4 +131,32 @@ describe("GitSyncConfigForm", () => {
 
     expect(mutate.mock.calls[0][0]).toEqual({ token: null });
   });
+
+  // Regression: these posted "" rather than null, and the backend stored the
+  // empty string as a literal override. An empty branch or path then made the
+  // next git command fatal (`git checkout -B ""`, `git add -A -- ""`), wedging
+  // every subsequent sync cycle.
+  it.each([
+    ["git-sync-branch-input", "branch"],
+    ["git-sync-path-input", "path"],
+    ["git-sync-repo-url-input", "repo_url"],
+  ])("clearing %s sends null, not an empty string", (testId, field) => {
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(mutate.mock.calls[0][0]).toEqual({ [field]: null });
+  });
+
+  it("sends a whitespace-only field as null", () => {
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.change(screen.getByTestId("git-sync-path-input"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(mutate.mock.calls[0][0]).toEqual({ path: null });
+  });
 });

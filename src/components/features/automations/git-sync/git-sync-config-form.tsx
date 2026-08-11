@@ -68,6 +68,14 @@ export function GitSyncConfigForm({
     setClearEncryptionKey(false);
   };
 
+  // A cleared field posts `null` -- clear the override and fall back to the
+  // environment default -- rather than `""`, which the backend stored as a
+  // literal empty override. An empty branch or path then made the next git
+  // command fatal (`git checkout -B ""`, `git add -A -- ""`), wedging every
+  // subsequent sync cycle with that error in the status banner.
+  const clearedFieldAsNull = (formData: FormData, name: string) =>
+    formData.get(name)?.toString().trim() || null;
+
   const formAction = (formData: FormData) => {
     const body: GitSyncConfigUpdateRequest = {};
 
@@ -80,28 +88,25 @@ export function GitSyncConfigForm({
         raw && Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : 0;
     }
     if (repoUrlHasChanged) {
-      body.repo_url = formData
-        .get("git-sync-repo-url-input")
-        ?.toString()
-        .trim();
+      body.repo_url = clearedFieldAsNull(formData, "git-sync-repo-url-input");
     }
     if (branchHasChanged) {
-      body.branch = formData.get("git-sync-branch-input")?.toString().trim();
+      body.branch = clearedFieldAsNull(formData, "git-sync-branch-input");
     }
     if (pathHasChanged) {
-      body.path = formData.get("git-sync-path-input")?.toString().trim();
+      body.path = clearedFieldAsNull(formData, "git-sync-path-input");
     }
     if (authorNameHasChanged) {
-      body.author_name = formData
-        .get("git-sync-author-name-input")
-        ?.toString()
-        .trim();
+      body.author_name = clearedFieldAsNull(
+        formData,
+        "git-sync-author-name-input",
+      );
     }
     if (authorEmailHasChanged) {
-      body.author_email = formData
-        .get("git-sync-author-email-input")
-        ?.toString()
-        .trim();
+      body.author_email = clearedFieldAsNull(
+        formData,
+        "git-sync-author-email-input",
+      );
     }
     if (clearToken) {
       body.token = null;
