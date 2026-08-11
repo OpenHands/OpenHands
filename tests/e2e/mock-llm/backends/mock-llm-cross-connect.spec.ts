@@ -863,12 +863,12 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
       })
       .toBe(`/conversations/${conversationId}`);
 
-    await expect(
-      newTab
-        .getByTestId("conversation-panel")
-        .locator(`a[href*="${conversationId}"]`)
-        .first(),
-    ).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(() => readActiveBackendId(newTab, "session"), {
+        message: "the new tab should activate the conversation's backend",
+        timeout: 20_000,
+      })
+      .toBe(backendAId);
 
     // ── 8. And the mechanism: the link named the owning backend ───────
     expect(

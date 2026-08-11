@@ -43,6 +43,7 @@ import {
 } from "#/hooks/query/use-backends-health";
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
+import { useOnboardingVisibility } from "#/components/features/onboarding/use-onboarding-visibility";
 import { useConfig } from "#/hooks/query/use-config";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
@@ -299,14 +300,20 @@ export default function App() {
   // active backend really is the locked Cloud host, so the stale-flag bypass
   // concerns above don't apply here.)
   const shouldCheckMainAppAuth = shouldUseMainAppCookieAuth();
-  const showFirstRunOnboarding = isLockedToCloud
+  const isFirstRunOnboardingEligible = isLockedToCloud
     ? !shouldCheckMainAppAuth &&
       (!isActiveLockedCloudBackend ||
         (lockedCloudAuthMode !== "cookie" && !onboardingCompleted))
-    : !isOnboardingDismissed &&
-      (authMissing ||
-        isNoBackend(active.backend) ||
-        (!isLlmReadinessLoading && !isLlmConfigured));
+    : authMissing ||
+      isNoBackend(active.backend) ||
+      (!isLlmReadinessLoading && !isLlmConfigured);
+  const showFirstRunOnboarding = useOnboardingVisibility({
+    scopeKey: "root-first-run",
+    eligible: isFirstRunOnboardingEligible,
+    dismissed: isLockedToCloud
+      ? isActiveLockedCloudBackend && onboardingCompleted
+      : isOnboardingDismissed,
+  });
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,
