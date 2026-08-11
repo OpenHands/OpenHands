@@ -65,6 +65,14 @@ export interface RunSummaryState {
   isError: boolean;
 }
 
+export type AutomationHealthIssue = "disabled" | "blocked" | "transient";
+
+export interface AutomationHealthDetails {
+  issue: AutomationHealthIssue | null;
+  failureKind: string | null;
+  reason: string | null;
+}
+
 type Summaries = ReadonlyMap<string, RunSummaryState>;
 
 const TERMINAL_STATUSES = new Set<AutomationRunStatus>([
@@ -123,6 +131,83 @@ export function deriveAutomationHealth(
     return "running";
   }
   return "healthy";
+}
+
+const USER_BLOCKING_FAILURE_KINDS = new Set(["auth", "config", "quota"]);
+
+function firstNonEmpty(
+  ...values: Array<string | null | undefined>
+): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function isBlockingFailure(
+  failureKind: string | null,
+  blockingReason: string | null,
+): boolean {
+  return (
+    (failureKind !== null && USER_BLOCKING_FAILURE_KINDS.has(failureKind)) ||
+    (failureKind === "agent_action" && blockingReason !== null)
+  );
+}
+
+/**
+ * Returns the actionable failure metadata exposed by newer automation services.
+ * Older services simply produce a null issue, leaving the existing health badge
+ * and run status as the fallback UI.
+ */
+export function getAutomationHealthDetails(
+  automation: Automation,
+  state: RunSummaryState | undefined,
+): AutomationHealthDetails {
+  const latestRun = state?.summary?.latestRun;
+  const runFailureKind = firstNonEmpty(latestRun?.failure_kind);
+  const runReason = firstNonEmpty(
+    latestRun?.blocking_reason,
+    latestRun?.error_detail,
+  );
+
+  if (!automation.enabled) {
+    return {
+      issue: "disabled",
+      failureKind: firstNonEmpty(
+        automation.disabled_failure_kind,
+        latestRun?.failure_kind,
+      ),
+      reason: firstNonEmpty(
+        automation.disabled_reason,
+        latestRun?.blocking_reason,
+        latestRun?.error_detail,
+      ),
+    };
+  }
+
+  if (latestRun?.status !== AutomationRunStatus.FAILED) {
+    return { issue: null, failureKind: null, reason: null };
+  }
+
+  return {
+    issue: isBlockingFailure(
+      runFailureKind,
+      latestRun.blocking_reason?.trim() || null,
+    )
+      ? "blocked"
+      : "transient",
+    failureKind: runFailureKind,
+    reason: runReason,
+  };
+}
+
+/** Keep backend enum values readable without assuming the enum is closed. */
+export function formatAutomationFailureKind(failureKind: string): string {
+  return failureKind
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 /** "—" unknown, seconds under a minute, minutes under an hour, else "1.5h". */

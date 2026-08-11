@@ -3,6 +3,8 @@ import {
   applyDashboardView,
   computeOverviewTile,
   deriveAutomationHealth,
+  formatAutomationFailureKind,
+  getAutomationHealthDetails,
   formatCompactDuration,
   matchesAutomationSearch,
   summarizeAutomationRuns,
@@ -116,6 +118,93 @@ describe("deriveAutomationHealth", () => {
     ],
   ])("%s", (_case, automation, state, expected) => {
     expect(deriveAutomationHealth(automation, state)).toBe(expected);
+  });
+});
+
+describe("getAutomationHealthDetails", () => {
+  it("surfaces the persisted reason for an auto-disabled automation", () => {
+    const details = getAutomationHealthDetails(
+      createAutomation({
+        enabled: false,
+        disabled_failure_kind: "config",
+        disabled_reason: "Model profile is no longer available",
+      }),
+      settled({ latestRun: createRun({ status: AutomationRunStatus.FAILED }) }),
+    );
+
+    expect(details).toEqual({
+      issue: "disabled",
+      failureKind: "config",
+      reason: "Model profile is no longer available",
+    });
+  });
+
+  it("falls back to the latest run metadata when the disabled fields are absent", () => {
+    const details = getAutomationHealthDetails(
+      createAutomation({ enabled: false }),
+      settled({
+        latestRun: createRun({
+          status: AutomationRunStatus.FAILED,
+          failure_kind: "agent_action",
+          blocking_reason: "The GitHub integration is not connected",
+          error_detail: "The run could not continue",
+        }),
+      }),
+    );
+
+    expect(details).toEqual({
+      issue: "disabled",
+      failureKind: "agent_action",
+      reason: "The GitHub integration is not connected",
+    });
+  });
+
+  it.each([
+    ["config", "blocked"],
+    ["auth", "blocked"],
+    ["quota", "blocked"],
+    ["agent_action", "blocked"],
+    ["transient", "transient"],
+    ["rate_limit", "transient"],
+  ] as const)("classifies %s as a %s failure", (failureKind, issue) => {
+    const details = getAutomationHealthDetails(
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          status: AutomationRunStatus.FAILED,
+          failure_kind: failureKind,
+          blocking_reason:
+            failureKind === "agent_action"
+              ? "The integration is missing"
+              : null,
+          error_detail: "The provider returned an error",
+        }),
+      }),
+    );
+
+    expect(details.issue).toBe(issue);
+  });
+
+  it("does not invent an issue for old or non-failed run responses", () => {
+    expect(
+      getAutomationHealthDetails(
+        createAutomation(),
+        settled({ latestRun: createRun() }),
+      ),
+    ).toEqual({ issue: null, failureKind: null, reason: null });
+    expect(getAutomationHealthDetails(createAutomation(), undefined)).toEqual({
+      issue: null,
+      failureKind: null,
+      reason: null,
+    });
+  });
+});
+
+describe("formatAutomationFailureKind", () => {
+  it("keeps unknown backend kinds readable", () => {
+    expect(formatAutomationFailureKind("provider_timeout")).toBe(
+      "Provider Timeout",
+    );
   });
 });
 
