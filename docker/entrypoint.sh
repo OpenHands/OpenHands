@@ -67,13 +67,9 @@ export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
 # ── Preflight: persistence dir must be writable ────────────────────────────
-# The image runs as uid 10001 (openhands). A bind-mounted host directory
-# (e.g. `-v ~/.openhands:/home/openhands/.openhands`) that isn't writable by
-# that uid makes BOTH the agent-server (conversations dir) and automation
-# (SQLite DB) crash at startup while the static frontend keeps serving — a
-# half-dead stack that looks fine in the browser but 502s on every API call.
-# Fail fast with an actionable message instead of letting users chase a
-# phantom backend error.
+# The image runs as uid 10001 (openhands); a host bind mount that isn't
+# writable by that uid leaves the backend half-dead (frontend serves,
+# APIs 502). Fail fast with an actionable message.
 if ! (mkdir -p "$OPENHANDS_DIR" && touch "$OPENHANDS_DIR/.write-test" 2>/dev/null); then
   log_error "Persistence directory is not writable: $OPENHANDS_DIR"
   log_error "The container runs as uid $(id -u); the bind-mounted host dir"
