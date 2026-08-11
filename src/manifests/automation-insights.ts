@@ -65,7 +65,11 @@ export interface RunSummaryState {
   isError: boolean;
 }
 
-export type AutomationHealthIssue = "disabled" | "blocked" | "transient";
+export type AutomationHealthIssue =
+  | "disabled"
+  | "blocked"
+  | "failed"
+  | "transient";
 
 export interface AutomationHealthDetails {
   issue: AutomationHealthIssue | null;
@@ -134,6 +138,7 @@ export function deriveAutomationHealth(
 }
 
 const USER_BLOCKING_FAILURE_KINDS = new Set(["auth", "config", "quota"]);
+const TRANSIENT_FAILURE_KINDS = new Set(["rate_limit", "transient"]);
 
 function firstNonEmpty(
   ...values: Array<string | null | undefined>
@@ -151,14 +156,18 @@ function isBlockingFailure(
 ): boolean {
   return (
     (failureKind !== null && USER_BLOCKING_FAILURE_KINDS.has(failureKind)) ||
-    (failureKind === "agent_action" && blockingReason !== null)
+    blockingReason !== null
   );
+}
+
+function isTransientFailure(failureKind: string | null): boolean {
+  return failureKind !== null && TRANSIENT_FAILURE_KINDS.has(failureKind);
 }
 
 /**
  * Returns the actionable failure metadata exposed by newer automation services.
- * Older services simply produce a null issue, leaving the existing health badge
- * and run status as the fallback UI.
+ * Older services still get a distinct failed state from `error_detail`, while
+ * missing detail remains safe to render through the notice's fallback copy.
  */
 export function getAutomationHealthDetails(
   automation: Automation,
@@ -204,29 +213,15 @@ export function getAutomationHealthDetails(
     return { issue: null, failureKind: null, reason: null };
   }
 
-  // Older automation services only returned error_detail. Without the
-  // structured fields there is no reliable way to tell a transient provider
-  // failure from a user-actionable blocker, so leave the existing badge in
-  // charge of that response shape.
-  if (!runFailureKind && !runBlockingReason) {
-    return { issue: null, failureKind: null, reason: null };
-  }
-
   return {
     issue: isBlockingFailure(runFailureKind, runBlockingReason)
       ? "blocked"
-      : "transient",
+      : isTransientFailure(runFailureKind)
+        ? "transient"
+        : "failed",
     failureKind: runFailureKind,
     reason: runReason,
   };
-}
-
-/** Keep backend enum values readable without assuming the enum is closed. */
-export function formatAutomationFailureKind(failureKind: string): string {
-  return failureKind
-    .trim()
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 /** "—" unknown, seconds under a minute, minutes under an hour, else "1.5h". */

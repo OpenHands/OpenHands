@@ -1,8 +1,10 @@
-import { AlertCircle, ExternalLink, RotateCcw } from "lucide-react";
+import { AlertCircle, CircleX, ExternalLink, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import type { AutomationHealthDetails } from "#/manifests/automation-insights";
-import { formatAutomationFailureKind } from "#/manifests/automation-insights";
+import type {
+  AutomationHealthDetails,
+  AutomationHealthIssue,
+} from "#/manifests/automation-insights";
 import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
 
@@ -24,12 +26,35 @@ const ISSUE_STYLES = {
       "border-[var(--oh-danger)]/40 bg-[var(--oh-danger)]/10 text-danger",
     icon: AlertCircle,
   },
+  failed: {
+    container:
+      "border-[var(--oh-danger)]/40 bg-[var(--oh-danger)]/10 text-danger",
+    icon: CircleX,
+  },
   transient: {
     container:
       "border-[var(--oh-warning)]/40 bg-[var(--oh-warning)]/10 text-[var(--oh-warning)]",
     icon: AlertCircle,
   },
 } as const;
+
+const ISSUE_LABEL_KEYS: Record<AutomationHealthIssue, I18nKey> = {
+  disabled: I18nKey.AUTOMATIONS$HEALTH_DISABLED,
+  blocked: I18nKey.AUTOMATIONS$HEALTH_BLOCKED,
+  failed: I18nKey.AUTOMATIONS$HEALTH_FAILED,
+  transient: I18nKey.AUTOMATIONS$HEALTH_TRANSIENT,
+};
+
+const FAILURE_KIND_LABEL_KEYS: Readonly<Record<string, I18nKey>> = {
+  auth: I18nKey.AUTOMATIONS$HEALTH_FAILURE_AUTH,
+  quota: I18nKey.AUTOMATIONS$HEALTH_FAILURE_QUOTA,
+  rate_limit: I18nKey.AUTOMATIONS$HEALTH_FAILURE_RATE_LIMIT,
+  config: I18nKey.AUTOMATIONS$HEALTH_FAILURE_CONFIG,
+  transient: I18nKey.AUTOMATIONS$HEALTH_FAILURE_TRANSIENT,
+  agent_action: I18nKey.AUTOMATIONS$HEALTH_FAILURE_AGENT_ACTION,
+  internal: I18nKey.AUTOMATIONS$HEALTH_FAILURE_INTERNAL,
+  unknown: I18nKey.AUTOMATIONS$HEALTH_FAILURE_UNKNOWN,
+};
 
 export function AutomationHealthNotice({
   automation,
@@ -39,10 +64,16 @@ export function AutomationHealthNotice({
   onView,
 }: AutomationHealthNoticeProps) {
   const { t } = useTranslation("openhands");
-  if (!details.issue || !details.reason) return null;
+  if (!details.issue) return null;
 
   const style = ISSUE_STYLES[details.issue];
   const Icon = style.icon;
+  const failureKindLabel = details.failureKind
+    ? t(
+        FAILURE_KIND_LABEL_KEYS[details.failureKind] ??
+          I18nKey.AUTOMATIONS$HEALTH_FAILURE_UNKNOWN,
+      )
+    : null;
 
   return (
     <div
@@ -55,21 +86,13 @@ export function AutomationHealthNotice({
       <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-medium">
-          <span>
-            {details.issue === "disabled"
-              ? t(I18nKey.AUTOMATIONS$HEALTH_DISABLED)
-              : details.issue === "blocked"
-                ? t(I18nKey.AUTOMATIONS$HEALTH_BLOCKED)
-                : t(I18nKey.AUTOMATIONS$HEALTH_TRANSIENT)}
-          </span>
-          {details.failureKind ? (
-            <span className="font-normal opacity-80">
-              ({formatAutomationFailureKind(details.failureKind)})
-            </span>
+          <span>{t(ISSUE_LABEL_KEYS[details.issue])}</span>
+          {failureKindLabel ? (
+            <span className="font-normal opacity-80">({failureKindLabel})</span>
           ) : null}
         </div>
         <p className="mt-0.5 break-words text-[11px] leading-relaxed text-content/80">
-          {details.reason}
+          {details.reason ?? t(I18nKey.AUTOMATIONS$HEALTH_NO_DETAILS)}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {details.issue === "disabled" && canManage ? (

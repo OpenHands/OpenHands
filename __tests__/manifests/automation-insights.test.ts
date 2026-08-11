@@ -3,7 +3,6 @@ import {
   applyDashboardView,
   computeOverviewTile,
   deriveAutomationHealth,
-  formatAutomationFailureKind,
   getAutomationHealthDetails,
   formatCompactDuration,
   matchesAutomationSearch,
@@ -178,24 +177,6 @@ describe("getAutomationHealthDetails", () => {
     });
   });
 
-  it("leaves legacy failures to the existing health badge", () => {
-    const details = getAutomationHealthDetails(
-      createAutomation(),
-      settled({
-        latestRun: createRun({
-          status: AutomationRunStatus.FAILED,
-          error_detail: "The provider returned an error",
-        }),
-      }),
-    );
-
-    expect(details).toEqual({
-      issue: null,
-      failureKind: null,
-      reason: null,
-    });
-  });
-
   it.each([
     ["config", "blocked"],
     ["auth", "blocked"],
@@ -203,6 +184,8 @@ describe("getAutomationHealthDetails", () => {
     ["agent_action", "blocked"],
     ["transient", "transient"],
     ["rate_limit", "transient"],
+    ["internal", "failed"],
+    ["unknown", "failed"],
   ] as const)("classifies %s as a %s failure", (failureKind, issue) => {
     const details = getAutomationHealthDetails(
       createAutomation(),
@@ -222,7 +205,25 @@ describe("getAutomationHealthDetails", () => {
     expect(details.issue).toBe(issue);
   });
 
-  it("does not invent an issue for old or non-failed run responses", () => {
+  it("keeps an older failed response distinct from a transient failure", () => {
+    const details = getAutomationHealthDetails(
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          status: AutomationRunStatus.FAILED,
+          error_detail: "The automation could not complete",
+        }),
+      }),
+    );
+
+    expect(details).toEqual({
+      issue: "failed",
+      failureKind: null,
+      reason: "The automation could not complete",
+    });
+  });
+
+  it("does not invent an issue for non-failed run responses", () => {
     expect(
       getAutomationHealthDetails(
         createAutomation(),
@@ -234,14 +235,6 @@ describe("getAutomationHealthDetails", () => {
       failureKind: null,
       reason: null,
     });
-  });
-});
-
-describe("formatAutomationFailureKind", () => {
-  it("keeps unknown backend kinds readable", () => {
-    expect(formatAutomationFailureKind("provider_timeout")).toBe(
-      "Provider Timeout",
-    );
   });
 });
 

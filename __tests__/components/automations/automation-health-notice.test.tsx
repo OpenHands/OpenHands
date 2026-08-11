@@ -3,10 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AutomationHealthNotice } from "#/components/features/automations/automation-health-notice";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
-
 describe("AutomationHealthNotice", () => {
   it("shows an auto-disable reason and offers to turn the automation back on", async () => {
     const user = userEvent.setup();
@@ -31,7 +27,7 @@ describe("AutomationHealthNotice", () => {
     ).toHaveTextContent("Model profile is no longer available");
     expect(
       screen.getByTestId("automation-health-notice-automation-1"),
-    ).toHaveTextContent("(Config)");
+    ).toHaveTextContent("AUTOMATIONS$HEALTH_FAILURE_CONFIG");
 
     await user.click(
       screen.getByRole("button", { name: "AUTOMATIONS$TURN_ON" }),
@@ -65,7 +61,7 @@ describe("AutomationHealthNotice", () => {
     expect(onView).toHaveBeenCalledOnce();
   });
 
-  it("keeps disabled and transient notices visually distinct", () => {
+  it("keeps disabled and transient notices semantically distinct", () => {
     const { rerender } = render(
       <AutomationHealthNotice
         automation={{ id: "automation-4", enabled: false }}
@@ -82,7 +78,7 @@ describe("AutomationHealthNotice", () => {
 
     expect(
       screen.getByTestId("automation-health-notice-automation-4"),
-    ).toHaveClass("bg-surface-raised");
+    ).toHaveTextContent("AUTOMATIONS$HEALTH_DISABLED");
 
     rerender(
       <AutomationHealthNotice
@@ -100,10 +96,35 @@ describe("AutomationHealthNotice", () => {
 
     expect(
       screen.getByTestId("automation-health-notice-automation-4"),
-    ).toHaveClass("bg-[var(--oh-warning)]/10");
+    ).toHaveTextContent("AUTOMATIONS$HEALTH_TRANSIENT");
   });
 
-  it("renders nothing when there is no actionable health detail", () => {
+  it("keeps the disabled action available when the backend omits a reason", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+
+    render(
+      <AutomationHealthNotice
+        automation={{ id: "automation-3", enabled: false }}
+        canManage
+        details={{ issue: "disabled", failureKind: null, reason: null }}
+        onToggle={onToggle}
+        onView={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("automation-health-notice-automation-3"),
+    ).toHaveTextContent("AUTOMATIONS$HEALTH_NO_DETAILS");
+
+    await user.click(
+      screen.getByRole("button", { name: "AUTOMATIONS$TURN_ON" }),
+    );
+
+    expect(onToggle).toHaveBeenCalledWith("automation-3", false);
+  });
+
+  it("renders nothing when there is no health issue", () => {
     const { container } = render(
       <AutomationHealthNotice
         automation={{ id: "automation-3", enabled: true }}
