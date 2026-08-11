@@ -7,6 +7,13 @@ import type { ProviderConnection } from "#/api/provider-connections-service";
 
 const mockProviders = [{ name: "openai", verified: true }];
 
+// Catalog returned by useProviderModels: two recommended, one not.
+const mockCatalog = [
+  { provider: "openai", name: "gpt-4o", verified: true },
+  { provider: "openai", name: "gpt-4o-mini", verified: true },
+  { provider: "openai", name: "o3-mini", verified: false },
+];
+
 const createdConnection: ProviderConnection = {
   id: "conn-1",
   provider: "openai",
@@ -21,9 +28,14 @@ const createMock = vi.hoisted(() => vi.fn());
 const updateMock = vi.hoisted(() => vi.fn());
 const deleteMock = vi.hoisted(() => vi.fn());
 const validateMock = vi.hoisted(() => vi.fn());
+const createProfileMock = vi.hoisted(() => vi.fn());
 
 vi.mock("#/hooks/query/use-search-providers", () => ({
   useSearchProviders: () => ({ data: mockProviders, isLoading: false }),
+}));
+
+vi.mock("#/hooks/query/use-provider-models", () => ({
+  useProviderModels: () => ({ data: mockCatalog, isLoading: false }),
 }));
 
 vi.mock("#/hooks/mutation/use-provider-connection-mutations", () => ({
@@ -44,6 +56,10 @@ vi.mock("#/hooks/mutation/use-provider-connection-mutations", () => ({
     mutateAsync: validateMock,
     isPending: false,
   }),
+  useCreateProfileFromConnection: () => ({
+    mutateAsync: createProfileMock,
+    isPending: false,
+  }),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -62,6 +78,7 @@ vi.mock("react-i18next", () => ({
       }
       return key;
     },
+    i18n: { language: "en" },
   }),
 }));
 
@@ -80,23 +97,28 @@ describe("ConnectProviderWizard", () => {
     updateMock.mockReset();
     deleteMock.mockReset();
     validateMock.mockReset();
+    createProfileMock.mockReset();
+    createProfileMock.mockResolvedValue({
+      profileName: "x",
+      model: "x",
+      provider: "openai",
+      connectionId: "conn-1",
+    });
   });
 
-  it("disables submit until provider + key are entered", () => {
+  it("disables test until provider + key are entered", () => {
     renderWithQuery(<ConnectProviderWizard isOpen onClose={vi.fn()} />);
-    const submit = screen.getByTestId("connect-provider-submit");
-    expect(submit).toBeDisabled();
+    expect(screen.getByTestId("connect-provider-test")).toBeDisabled();
   });
 
-  it("creates a connection and validates it on submit", async () => {
+  it("creates a connection, validates, and advances to the model picker", async () => {
     const user = userEvent.setup();
-    const onClose = vi.fn();
     createMock.mockResolvedValue(createdConnection);
     validateMock.mockResolvedValue({
       id: "conn-1",
       provider: "openai",
       ok: true,
-      verified: false,
+      verified: true,
       models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
       error: null,
       validatedAt: 1700000100,
@@ -105,14 +127,13 @@ describe("ConnectProviderWizard", () => {
     renderWithQuery(
       <ConnectProviderWizard
         isOpen
-        onClose={onClose}
+        onClose={vi.fn()}
         defaultProvider="openai"
       />,
     );
 
-    // Provider is preselected; enter a key.
     await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
-    await user.click(screen.getByTestId("connect-provider-submit"));
+    await user.click(screen.getByTestId("connect-provider-test"));
 
     await waitFor(() => {
       expect(createMock).toHaveBeenCalledWith({
@@ -122,12 +143,95 @@ describe("ConnectProviderWizard", () => {
       });
     });
     expect(validateMock).toHaveBeenCalledWith("conn-1");
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
-    // A committed connection is not cleaned up.
+    // Advance to the pick step: validated summary + model list render.
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-validated-summary")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("connection-model-list-verified")).toBeTruthy();
+  });
+
+  it("pre-checks recommended models by default in the picker", async () => {
+    const user = userEvent.setup();
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-model-list-verified")).toBeTruthy(),
+    );
+
+    // Both recommended models are checked by default.
+    expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked();
+    expect(screen.getByTestId("connection-model-gpt-4o-mini")).toBeChecked();
+    // The non-recommended model is behind the "More from" collapsible.
+    expect(screen.queryByTestId("connection-model-o3-mini")).not.toBeTruthy();
+    expect(screen.getByTestId("connection-more-toggle")).toBeTruthy();
+  });
+
+  it("creates one profile per selected model on save", async () => {
+    const user = userEvent.setup();
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+    await waitFor(() =>
+      expect(screen.getByTestId("connect-provider-save")).toBeTruthy(),
+    );
+
+    // Two recommended models are pre-checked; save creates two profiles.
+    await user.click(screen.getByTestId("connect-provider-save"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-done-summary")).toBeTruthy(),
+    );
+    expect(createProfileMock).toHaveBeenCalledTimes(2);
+    expect(createProfileMock).toHaveBeenCalledWith({
+      id: "conn-1",
+      request: { profileName: "gpt-4o", model: "gpt-4o" },
+    });
+    expect(createProfileMock).toHaveBeenCalledWith({
+      id: "conn-1",
+      request: { profileName: "gpt-4o-mini", model: "gpt-4o-mini" },
+    });
+    // A saved connection is not cleaned up on close.
     expect(deleteMock).not.toHaveBeenCalled();
   });
 
-  it("shows the invalid summary when validation fails", async () => {
+  it("shows the invalid summary with Try again / Use a different key when validation fails", async () => {
     const user = userEvent.setup();
     createMock.mockResolvedValue(createdConnection);
     validateMock.mockResolvedValue({
@@ -149,11 +253,13 @@ describe("ConnectProviderWizard", () => {
     );
 
     await user.type(screen.getByTestId("connection-api-key"), "sk-bad");
-    await user.click(screen.getByTestId("connect-provider-submit"));
+    await user.click(screen.getByTestId("connect-provider-test"));
 
     await waitFor(() =>
       expect(screen.getByTestId("connection-invalid-summary")).toBeTruthy(),
     );
+    expect(screen.getByTestId("connection-try-again")).toBeTruthy();
+    expect(screen.getByTestId("connection-different-key")).toBeTruthy();
   });
 
   it("rotates the same connection on retry instead of creating a second one", async () => {
@@ -188,17 +294,16 @@ describe("ConnectProviderWizard", () => {
     );
 
     await user.type(screen.getByTestId("connection-api-key"), "sk-bad");
-    await user.click(screen.getByTestId("connect-provider-submit"));
+    await user.click(screen.getByTestId("connect-provider-test"));
     await waitFor(() =>
       expect(screen.getByTestId("connection-invalid-summary")).toBeTruthy(),
     );
 
-    // Retry with a corrected key.
+    // Retry with a corrected key via "Try again".
     await user.type(screen.getByTestId("connection-api-key"), "-fixed");
-    await user.click(screen.getByTestId("connect-provider-submit"));
+    await user.click(screen.getByTestId("connection-try-again"));
 
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
-    // Only one create ever happened; the retry rotated the existing record.
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(updateMock).toHaveBeenCalledWith({
       id: "conn-1",
@@ -229,7 +334,7 @@ describe("ConnectProviderWizard", () => {
     );
 
     await user.type(screen.getByTestId("connection-api-key"), "sk-bad");
-    await user.click(screen.getByTestId("connect-provider-submit"));
+    await user.click(screen.getByTestId("connect-provider-test"));
     await waitFor(() =>
       expect(screen.getByTestId("connection-invalid-summary")).toBeTruthy(),
     );

@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import ProviderConnectionsService from "#/api/provider-connections-service";
 import type {
   CreateConnectionRequest,
+  CreateProfileFromConnectionRequest,
+  ProfileFromConnectionResponse,
   UpdateConnectionRequest,
   ValidateConnectionResponse,
 } from "#/api/provider-connections-service";
@@ -67,4 +69,23 @@ export function useValidateProviderConnection() {
   });
 }
 
-export type { ValidateConnectionResponse };
+export function useCreateProfileFromConnection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: string;
+      request: CreateProfileFromConnectionRequest;
+    }) => ProviderConnectionsService.createProfileFromConnection(id, request),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: PROVIDER_CONNECTIONS_QUERY_KEYS.all,
+      });
+    },
+    meta: { disableToast: true },
+  });
+}
+
+export type { ValidateConnectionResponse, ProfileFromConnectionResponse };

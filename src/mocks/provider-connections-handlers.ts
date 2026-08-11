@@ -157,4 +157,40 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
       validated_at: conn.last_validated_at,
     });
   }),
+
+  // POST /api/llm/connections/:id/profiles — create a profile bound to the
+  // connection's key by reference.
+  http.post(
+    "*/api/llm/connections/:id/profiles",
+    async ({ params, request }) => {
+      const id = String(params.id);
+      const conn = connections.get(id);
+      if (!conn) {
+        return HttpResponse.json(
+          { detail: "Connection not found" },
+          { status: 404 },
+        );
+      }
+      const body = (await request.json()) as {
+        profile_name?: string;
+        model?: string;
+        base_url?: string;
+      } | null;
+      if (!body?.profile_name || !body?.model) {
+        return HttpResponse.json(
+          { detail: "profile_name and model are required" },
+          { status: 400 },
+        );
+      }
+      return HttpResponse.json(
+        {
+          profile_name: body.profile_name,
+          model: body.model,
+          provider: conn.provider,
+          connection_id: id,
+        },
+        { status: 201 },
+      );
+    },
+  ),
 ];

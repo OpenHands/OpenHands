@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { SettingsInput } from "#/components/features/settings/settings-input";
 import { ConnectProviderWizard } from "./connect-provider-wizard";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import {
   useDeleteProviderConnection,
+  useUpdateProviderConnection,
   useValidateProviderConnection,
 } from "#/hooks/mutation/use-provider-connection-mutations";
 import type { ProviderConnection } from "#/api/provider-connections-service";
@@ -17,17 +19,21 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
+import { formatRelativeTime } from "#/utils/format-relative-time";
 import { I18nKey } from "#/i18n/declaration";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 
 function ConnectionRow({ connection }: { connection: ProviderConnection }) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const deleteConnection = useDeleteProviderConnection();
+  const updateConnection = useUpdateProviderConnection();
   const validateConnection = useValidateProviderConnection();
   const canManage = useCanManageOrgProfiles();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [newKey, setNewKey] = useState("");
 
-  const handleValidate = async () => {
+  const handleRefresh = async () => {
     try {
       const result = await validateConnection.mutateAsync(connection.id);
       if (result.ok) {
@@ -47,6 +53,25 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
       displayErrorToast(
         error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
       );
+    }
+  };
+
+  const handleRotate = async () => {
+    if (!newKey.trim()) return;
+    setRotating(true);
+    try {
+      await updateConnection.mutateAsync({
+        id: connection.id,
+        request: { key: newKey.trim() },
+      });
+      displaySuccessToast(t(I18nKey.SETTINGS$CONNECTION_ROTATED));
+      setNewKey("");
+      setRotating(false);
+    } catch (error) {
+      displayErrorToast(
+        error instanceof Error ? error.message : t(I18nKey.ERROR$GENERIC),
+      );
+      setRotating(false);
     }
   };
 
@@ -74,6 +99,16 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
     }
   };
 
+  const lastRefreshed = connection.lastValidatedAt
+    ? t(I18nKey.SETTINGS$CONNECTION_LAST_REFRESHED, {
+        time: formatRelativeTime(
+          new Date(connection.lastValidatedAt * 1000).toISOString(),
+          i18n.language,
+          t,
+        ),
+      })
+    : null;
+
   return (
     <li
       data-testid={`connection-row-${connection.id}`}
@@ -83,6 +118,12 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
         <span className="text-sm font-medium text-white">
           {connection.provider}
           {connection.label ? ` · ${connection.label}` : ""}
+          {connection.models.length > 0
+            ? ` · ${t(I18nKey.SETTINGS$CONNECTION_MODELS_COUNT, {
+                count: connection.models.length,
+              })}`
+            : ""}
+          {lastRefreshed ? ` · ${lastRefreshed}` : ""}
         </span>
         {connection.apiKeySet ? (
           <span
@@ -93,58 +134,85 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
           </span>
         ) : null}
       </div>
-      {connection.models.length > 0 ? (
-        <span
-          data-testid={`connection-models-${connection.id}`}
-          className="text-xs text-tertiary-light"
-        >
-          {connection.models.join(", ")}
-        </span>
-      ) : null}
       {canManage ? (
-        <div className="flex flex-wrap gap-2 pt-1">
-          <BrandButton
-            testId={`connection-revalidate-${connection.id}`}
-            type="button"
-            variant="tertiary"
-            onClick={handleValidate}
-            isDisabled={validateConnection.isPending}
-          >
-            {validateConnection.isPending
-              ? t(I18nKey.SETTINGS$CONNECTION_VALIDATING)
-              : t(I18nKey.SETTINGS$CONNECTION_REVALIDATE)}
-          </BrandButton>
-          {confirmingDelete ? (
-            <>
-              <BrandButton
-                testId={`connection-delete-confirm-${connection.id}`}
-                type="button"
-                variant="danger"
-                onClick={handleDelete}
-                isDisabled={deleteConnection.isPending}
-                aria-busy={deleteConnection.isPending}
-              >
-                {t(I18nKey.BUTTON$CONFIRM)}
-              </BrandButton>
-              <BrandButton
-                testId={`connection-delete-cancel-${connection.id}`}
-                type="button"
-                variant="secondary"
-                onClick={() => setConfirmingDelete(false)}
-              >
-                {t(I18nKey.BUTTON$CANCEL)}
-              </BrandButton>
-            </>
-          ) : (
+        <div className="flex flex-col gap-2 pt-1">
+          <div className="flex flex-wrap gap-2">
             <BrandButton
-              testId={`connection-delete-${connection.id}`}
+              testId={`connection-refresh-${connection.id}`}
               type="button"
-              variant="ghost-danger"
-              onClick={() => setConfirmingDelete(true)}
+              variant="tertiary"
+              onClick={handleRefresh}
+              isDisabled={validateConnection.isPending}
             >
-              {t(I18nKey.SETTINGS$PROFILE_DELETE)}
+              {validateConnection.isPending
+                ? t(I18nKey.SETTINGS$CONNECTION_VALIDATING)
+                : t(I18nKey.SETTINGS$CONNECTION_REFRESH)}
             </BrandButton>
-          )}
+            <BrandButton
+              testId={`connection-rotate-${connection.id}`}
+              type="button"
+              variant="tertiary"
+              onClick={() => setRotating((v) => !v)}
+            >
+              {t(I18nKey.SETTINGS$CONNECTION_ROTATE_KEY)}
+            </BrandButton>
+            {confirmingDelete ? (
+              <>
+                <BrandButton
+                  testId={`connection-disconnect-confirm-${connection.id}`}
+                  type="button"
+                  variant="danger"
+                  onClick={handleDelete}
+                  isDisabled={deleteConnection.isPending}
+                  aria-busy={deleteConnection.isPending}
+                >
+                  {t(I18nKey.BUTTON$CONFIRM)}
+                </BrandButton>
+                <BrandButton
+                  testId={`connection-disconnect-cancel-${connection.id}`}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  {t(I18nKey.BUTTON$CANCEL)}
+                </BrandButton>
+              </>
+            ) : (
+              <BrandButton
+                testId={`connection-disconnect-${connection.id}`}
+                type="button"
+                variant="ghost-danger"
+                onClick={() => setConfirmingDelete(true)}
+              >
+                {t(I18nKey.SETTINGS$CONNECTION_DISCONNECT)}
+              </BrandButton>
+            )}
+          </div>
+          {rotating ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <SettingsInput
+                testId={`connection-rotate-key-input-${connection.id}`}
+                name={`connection-rotate-key-${connection.id}`}
+                type="password"
+                label={t(I18nKey.SETTINGS$CONNECTION_ROTATE_KEY)}
+                value={newKey}
+                placeholder={t(
+                  I18nKey.SETTINGS$CONNECTION_ROTATE_KEY_PLACEHOLDER,
+                )}
+                onChange={setNewKey}
+              />
+              <BrandButton
+                testId={`connection-rotate-confirm-${connection.id}`}
+                type="button"
+                variant="primary"
+                onClick={handleRotate}
+                isDisabled={!newKey.trim() || updateConnection.isPending}
+                aria-busy={updateConnection.isPending}
+              >
+                {t(I18nKey.SETTINGS$CONNECTION_ROTATE_KEY)}
+              </BrandButton>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </li>
@@ -152,8 +220,8 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
 }
 
 /**
- * Lists connected providers with re-validate / delete actions, and a
- * "Connect a Provider" button that opens the wizard. Rendered above the
+ * Lists connected providers with Refresh / Rotate key / Disconnect actions and
+ * a "Connect a Provider" button that opens the wizard. Rendered above the
  * per-model LLM profile list so a single connection can back many profiles.
  *
  * Local-only in this release. On cloud the section hides itself (the cloud

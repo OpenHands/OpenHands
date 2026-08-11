@@ -11,3 +11,5 @@ export const PROVIDER_CONNECTION_PATH = (id: string) =>
   `${PROVIDER_CONNECTIONS_PATH}/${encodeURIComponent(id)}`;
 export const PROVIDER_CONNECTION_VALIDATE_PATH = (id: string) =>
   `${PROVIDER_CONNECTION_PATH(id)}/validate`;
+export const PROVIDER_CONNECTION_PROFILES_PATH = (id: string) =>
+  `${PROVIDER_CONNECTION_PATH(id)}/profiles`;

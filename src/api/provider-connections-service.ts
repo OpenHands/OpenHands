@@ -23,6 +23,7 @@ import { getActiveBackend } from "./backend-registry/active-store";
 import {
   PROVIDER_CONNECTION_PATH,
   PROVIDER_CONNECTIONS_PATH,
+  PROVIDER_CONNECTION_PROFILES_PATH,
   PROVIDER_CONNECTION_VALIDATE_PATH,
 } from "#/constants/provider-connections";
 
@@ -70,6 +71,19 @@ export interface DisconnectResponse {
   id: string;
   /** LLM profiles that referenced the deleted connection's key. */
   affectedProfiles: string[];
+}
+
+export interface CreateProfileFromConnectionRequest {
+  profileName: string;
+  model: string;
+  baseUrl?: string;
+}
+
+export interface ProfileFromConnectionResponse {
+  profileName: string;
+  model: string;
+  provider: string;
+  connectionId: string;
 }
 
 class ProviderConnectionsNotOnCloudError extends Error {
@@ -204,6 +218,26 @@ function normalizeDisconnect(
   };
 }
 
+function normalizeProfileFromConnection(
+  raw: unknown,
+): ProfileFromConnectionResponse {
+  if (!isRecord(raw)) {
+    throw new Error(
+      "Create-profile-from-connection response was not an object",
+    );
+  }
+  const profileName = readString(raw, ["profile_name", "profileName"]);
+  const model = readString(raw, ["model"]);
+  const provider = readString(raw, ["provider"]);
+  const connectionId = readString(raw, ["connection_id", "connectionId"]);
+  if (!profileName || !model || !provider || !connectionId) {
+    throw new Error(
+      "Create-profile-from-connection response is missing required fields",
+    );
+  }
+  return { profileName, model, provider, connectionId };
+}
+
 function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
 }
@@ -309,6 +343,27 @@ class ProviderConnectionsService {
       method: "POST",
     });
     return normalizeValidate(raw);
+  }
+
+  /**
+   * Create an LLM profile bound to a connection's key by reference (the
+   * profile stores `secret:<name>` rather than the raw key, so rotating the
+   * connection updates every profile at once). One call per selected model.
+   */
+  static async createProfileFromConnection(
+    id: string,
+    request: CreateProfileFromConnectionRequest,
+  ): Promise<ProfileFromConnectionResponse> {
+    const body: Record<string, unknown> = {
+      profile_name: request.profileName,
+      model: request.model,
+    };
+    if (request.baseUrl) body.base_url = request.baseUrl;
+    const raw = await requestConnectionEndpoint<unknown>(
+      PROVIDER_CONNECTION_PROFILES_PATH(id),
+      { method: "POST", body: JSON.stringify(body) },
+    );
+    return normalizeProfileFromConnection(raw);
   }
 }
 

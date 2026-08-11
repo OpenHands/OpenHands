@@ -232,6 +232,40 @@ describe("ProviderConnectionsService", () => {
     );
   });
 
+  it("createProfileFromConnection POSTs to {id}/profiles with snake_case body", async () => {
+    const fetchMock = mockFetchResponse(201, {
+      profile_name: "gpt-4o",
+      model: "gpt-4o",
+      provider: "openai",
+      connection_id: "conn-1",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ProviderConnectionsService.createProfileFromConnection(
+      "conn-1",
+      {
+        profileName: "gpt-4o",
+        model: "gpt-4o",
+      },
+    );
+
+    expect(result).toEqual({
+      profileName: "gpt-4o",
+      model: "gpt-4o",
+      provider: "openai",
+      connectionId: "conn-1",
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "http://localhost:3000/api/llm/connections/conn-1/profiles",
+    );
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({
+      profile_name: "gpt-4o",
+      model: "gpt-4o",
+    });
+  });
+
   it("throws with the server detail on a non-2xx response", async () => {
     const fetchMock = mockFetchResponse(400, { detail: "provider unknown" });
     vi.stubGlobal("fetch", fetchMock);
