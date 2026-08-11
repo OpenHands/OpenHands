@@ -2,7 +2,6 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
-import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -18,16 +17,20 @@ import { useNavigation } from "#/context/navigation-context";
 import { useBackendsHealth } from "#/hooks/query/use-backends-health";
 import { useTracking } from "#/hooks/use-tracking";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { getLockedCloudHost } from "#/api/agent-server-config";
-import { isOpenHandsCloudHost } from "#/api/device-flow-client";
-import {
-  assertAgentServerVersionIsSupported,
-  getDisplayAgentServerVersion,
-} from "#/api/agent-server-compatibility";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Backend, BackendKind } from "#/api/backend-registry/types";
+import {
+  inferKindFromHost,
+  isValidHostUrl,
+  normalizeHostInput,
+} from "#/api/backend-registry/backend-host";
+import {
+  fetchAgentServerVersion,
+  testBackendConnection,
+  type BackendConnectionTestMetadata,
+} from "#/api/backend-registry/backend-connection-service";
 import { getUserFacingConnectionErrorMessage } from "#/utils/user-facing-error";
 import { cn } from "#/utils/utils";
 import {
@@ -42,10 +45,6 @@ import { DeviceFlowAuth } from "./device-flow-auth";
 
 export type BackendFormMode = "add" | "edit";
 
-interface BackendConnectionTestMetadata {
-  agentServerVersion: string | null;
-}
-
 interface BackendFormModalProps {
   mode: BackendFormMode;
   /** Required when `mode === "edit"`. */
@@ -55,93 +54,6 @@ interface BackendFormModalProps {
   source?: BackendAddedSource;
   /** Hide the close button and disable backdrop/escape dismissal. Used for locked Cloud first-run. */
   hideCloseButton?: boolean;
-}
-
-/**
- * Seed the default backend kind from the host. Uses proper hostname-suffix
- * matching (via {@link isOpenHandsCloudHost}) rather than a substring test, so
- * a look-alike host such as `all-hands-testing.dev` isn't misread as cloud.
- *
- * This is only a *default*: a self-hosted OpenHands Cloud/Enterprise instance
- * on a truly custom domain is indistinguishable from a local agent-server by
- * host alone, so the manual add form lets the user override the kind
- * explicitly (see the Type selector in ManualConnectionColumn).
- */
-function inferKindFromHost(host: string): BackendKind {
-  return isOpenHandsCloudHost(host) ? "cloud" : "local";
-}
-
-/**
- * Returns true for hostnames that represent a local / private-network address.
- * Used by normalizeHost to choose http:// instead of https://.
- */
-function isLocalAddress(hostname: string): boolean {
-  // Strip IPv6 bracket notation: [::1] → ::1
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  // IPv6 loopback, any-address, and named loopback
-  if (h === "localhost" || h === "::1" || h === "::" || h === "0.0.0.0")
-    return true;
-  // 127.x.x.x loopback range + IPv4-mapped loopback (::ffff:127.x.x.x)
-  if (/^127\./.test(h) || /^::ffff:127\./i.test(h)) return true;
-  // RFC 1918 private ranges
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  // IPv6 link-local (fe80::/10) and unique local (fc00::/7)
-  if (/^fe[89ab][0-9a-f]:/i.test(h)) return true;
-  if (/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
-  // mDNS / Bonjour (.local)
-  if (h.endsWith(".local")) return true;
-  // Single-label hostnames (no dots, no colons) are local network names.
-  // Colons are excluded so bare IPv6 addresses don't accidentally match.
-  if (!h.includes(".") && !h.includes(":")) return true;
-  return false;
-}
-
-function normalizeHost(host: string): string {
-  const trimmed = host.trim().replace(/\/+$/, "");
-  if (!trimmed) return "";
-  // Already has an explicit scheme — respect it.
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  // Extract the pure hostname for scheme selection, handling three cases:
-  //   [::1]:8080  → bracket IPv6 notation → extract ::1
-  //   ::1         → bare IPv6 (multiple colons, no bracket) → whole string
-  //   host:port   → regular host:port → part before the colon
-  const bracketMatch = trimmed.match(/^\[([^\]]+)\]/);
-  const hostname = bracketMatch
-    ? bracketMatch[1]
-    : (trimmed.match(/:/g) ?? []).length > 1
-      ? trimmed
-      : trimmed.split(":")[0];
-  const scheme = isLocalAddress(hostname) ? "http" : "https";
-  return `${scheme}://${trimmed}`;
-}
-
-/**
- * Returns true when `host` represents a reachable backend URL.
- *
- * Rules (applied in order):
- *   1. Must be non-empty after trimming.
- *   2. Must contain no whitespace — spaces can never appear in a host/port.
- *   3. After normalisation (bare hosts get `https://` prepended), must parse
- *      as a valid http or https URL with a non-empty hostname.
- */
-function isValidHostUrl(host: string): boolean {
-  const trimmed = host.trim();
-  if (!trimmed) return false;
-  // Spaces anywhere in the input are an immediate rejection.
-  if (/\s/.test(trimmed)) return false;
-  const normalized = normalizeHost(trimmed);
-  if (!normalized) return false;
-  try {
-    const url = new URL(normalized);
-    return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      url.hostname.length > 0
-    );
-  } catch {
-    return false;
-  }
 }
 
 const DEFAULT_OPENHANDS_CLOUD_HOST = "https://app.all-hands.dev";
@@ -177,23 +89,6 @@ function getConnectionTestFailedMessage(title: string, error: unknown): string {
   return detail ? `${title}\n${detail}` : title;
 }
 
-async function testBackendConnection(
-  backend: Pick<Backend, "host" | "apiKey" | "kind">,
-): Promise<BackendConnectionTestMetadata> {
-  // Cloud backends authenticate via OAuth; preflight GET is not applicable.
-  if (backend.kind !== "local") return { agentServerVersion: null };
-
-  const serverInfo = await new ServerClient(
-    getAgentServerClientOptions({
-      host: backend.host,
-      sessionApiKey: backend.apiKey || null,
-      timeout: 5000,
-    }),
-  ).getServerInfo();
-  assertAgentServerVersionIsSupported(serverInfo);
-  return { agentServerVersion: getDisplayAgentServerVersion(serverInfo) };
-}
-
 /**
  * Live status row for the edit form: shows a connection dot, a
  * "Local"/"Cloud" label, and the agent server's reported version when
@@ -217,16 +112,7 @@ function BackendStatusBadge({
 
   const { data: version } = useQuery({
     queryKey: ["backend-version", backend.host, backend.apiKey],
-    queryFn: async () => {
-      const info = await new ServerClient(
-        getAgentServerClientOptions({
-          host: backend.host,
-          sessionApiKey: backend.apiKey || null,
-          timeout: 5000,
-        }),
-      ).getServerInfo();
-      return getDisplayAgentServerVersion(info);
-    },
+    queryFn: () => fetchAgentServerVersion(backend),
     retry: false,
     staleTime: 60_000,
     enabled: backend.kind === "local" && !disabled,
@@ -370,7 +256,7 @@ function useBackendForm({
 
       const payload: BackendFormSubmitPayload = {
         name: name.trim(),
-        host: normalizeHost(host),
+        host: normalizeHostInput(host),
         apiKey: apiKey.trim(),
         kind,
       };
@@ -530,7 +416,7 @@ export function BackendForm({
     onSuccess: async () => {
       const payload: BackendFormSubmitPayload = {
         name: name.trim(),
-        host: normalizeHost(host),
+        host: normalizeHostInput(host),
         apiKey: apiKey.trim(),
         kind: fixedKind ?? inferredKind,
       };
@@ -852,7 +738,7 @@ function ManualConnectionColumn({
       onConnected(
         {
           name: name.trim(),
-          host: normalizeHost(host),
+          host: normalizeHostInput(host),
           apiKey: apiKey.trim(),
           kind,
         },
@@ -994,7 +880,7 @@ function CloudLoginColumn({
     onConnected(
       {
         name: "OpenHands Cloud",
-        host: normalizeHost(effectiveHost),
+        host: normalizeHostInput(effectiveHost),
         apiKey,
         kind: "cloud",
       },
