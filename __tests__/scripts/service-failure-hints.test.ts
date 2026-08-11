@@ -4,7 +4,9 @@ import { once } from "node:events";
 import {
   describeServiceFailure,
   detectToolchainFailure,
+  isSignificantLine,
   SERVICE_OUTPUT_BUFFER_LINES,
+  SERVICE_SIGNIFICANT_LINE_LIMIT,
 } from "../../scripts/service-failure-hints.mjs";
 import {
   getServiceFailure,
@@ -125,9 +127,8 @@ describe("spawnService integration", () => {
       "-e",
       script,
     ]);
-    await once(proc, "exit");
-    // The exit handler runs on the same tick as the event; let stdio flush.
-    await new Promise((r) => setTimeout(r, 50));
+    await once(proc, "close");
+    // `close` guarantees stdio is drained, so no arbitrary wait is needed.
 
     const joined = emitted.join("\n");
     expect(joined).toContain("could not start");
@@ -140,14 +141,98 @@ describe("spawnService integration", () => {
     expect(failure?.exitCode).toBe(1);
   });
 
+  it("clears a previous failure when the same service is respawned", async () => {
+    // A service that failed once and then started cleanly must not keep
+    // reporting the old failure to anything reading the registry.
+    const failing = [
+      "console.error('Call to `maturin.build_wheel` failed (exit status: 1)');",
+      "console.error('error: rustc 1.93.1 is not supported by the following packages:');",
+      "process.exit(1);",
+    ].join("");
+    const first = spawnService("respawn-under-test", process.execPath, [
+      "-e",
+      failing,
+    ]);
+    await once(first, "close");
+    expect(getServiceFailure("respawn-under-test")).not.toBeNull();
+
+    const second = spawnService("respawn-under-test", process.execPath, [
+      "-e",
+      "process.exit(0);",
+    ]);
+    await once(second, "close");
+    expect(getServiceFailure("respawn-under-test")).toBeNull();
+  });
+
   it("leaves no failure recorded for a service that exits cleanly", async () => {
     const proc = spawnService("clean-service-under-test", process.execPath, [
       "-e",
       "process.exit(0);",
     ]);
-    await once(proc, "exit");
-    await new Promise((r) => setTimeout(r, 50));
+    await once(proc, "close");
 
     expect(getServiceFailure("clean-service-under-test")).toBeNull();
+  });
+});
+
+describe("isSignificantLine", () => {
+  it("keeps the lines a post-mortem needs", () => {
+    expect(isSignificantLine("x Failed to build `litellm==1.95.0`")).toBe(true);
+    expect(
+      isSignificantLine(
+        "Call to `maturin.build_wheel` failed (exit status: 1)",
+      ),
+    ).toBe(true);
+    expect(
+      isSignificantLine(
+        "error: rustc 1.93.1 is not supported by the following",
+      ),
+    ).toBe(true);
+    expect(isSignificantLine("aws-config@1.9.0 requires rustc 1.94.1")).toBe(
+      true,
+    );
+  });
+
+  it("ignores ordinary build chatter", () => {
+    expect(isSignificantLine("   Compiling serde v1.0.0")).toBe(false);
+    expect(isSignificantLine("Uvicorn running on http://127.0.0.1:8001")).toBe(
+      false,
+    );
+  });
+
+  it("retains evidence separated by more output than the tail holds", () => {
+    // uv prints its `Failed to build` summary first, replays the captured
+    // build log, and cargo emits a line per crate in between — so the two
+    // halves of the evidence can be far more than a tail apart.
+    const stream = [
+      "x Failed to build `litellm==1.95.0`",
+      "Call to `maturin.build_wheel` failed (exit status: 1)",
+      ...Array.from(
+        { length: SERVICE_OUTPUT_BUFFER_LINES + 50 },
+        (_, i) => `   Compiling crate-${i} v1.0.0`,
+      ),
+      "error: rustc 1.93.1 is not supported by the following packages:",
+      "aws-config@1.9.0 requires rustc 1.94.1",
+    ];
+
+    const recent: string[] = [];
+    const significant: string[] = [];
+    for (const line of stream) {
+      recent.push(line);
+      if (recent.length > SERVICE_OUTPUT_BUFFER_LINES) recent.shift();
+      if (isSignificantLine(line)) {
+        significant.push(line);
+        if (significant.length > SERVICE_SIGNIFICANT_LINE_LIMIT) {
+          significant.shift();
+        }
+      }
+    }
+
+    // The bounded tail alone has lost the build-failure half by now.
+    expect(detectToolchainFailure(recent)).toBeNull();
+    // Retaining the significant lines keeps both halves available.
+    const hit = detectToolchainFailure([...significant, ...recent]);
+    expect(hit).not.toBeNull();
+    expect(hit?.required).toBe("1.94.1");
   });
 });

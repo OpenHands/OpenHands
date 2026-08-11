@@ -73,7 +73,9 @@ import {
 import { fileLog, stripAnsi } from "./logger.mjs";
 import {
   describeServiceFailure,
+  isSignificantLine,
   SERVICE_OUTPUT_BUFFER_LINES,
+  SERVICE_SIGNIFICANT_LINE_LIMIT,
 } from "./service-failure-hints.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -588,10 +590,22 @@ function spawnService(name, command, args, options = {}) {
   // Keep a bounded tail of the service's output so that, if it dies, we can
   // look back at what it printed and explain why rather than only reporting
   // the exit code.
+  // A previous run of this service must not be reported against this one.
+  serviceFailures.delete(name);
+
   const recentOutput = [];
+  // Evidence can be separated by more output than the tail holds, so keep
+  // diagnostically-interesting lines even once they age out of it.
+  const significantOutput = [];
   const remember = (line) => {
     recentOutput.push(line);
     if (recentOutput.length > SERVICE_OUTPUT_BUFFER_LINES) recentOutput.shift();
+    if (isSignificantLine(line)) {
+      significantOutput.push(line);
+      if (significantOutput.length > SERVICE_SIGNIFICANT_LINE_LIMIT) {
+        significantOutput.shift();
+      }
+    }
   };
 
   const proc = spawn(
@@ -652,20 +666,31 @@ function spawnService(name, command, args, options = {}) {
     if (code !== 0 && code !== null && !shuttingDown) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
-
-      // A recognised failure gets an explanation and the command that fixes
-      // it. Unrecognised ones keep the generic message above - guessing would
-      // be worse than saying nothing.
-      const failure = describeServiceFailure(name, code, recentOutput);
-      if (failure) {
-        serviceFailures.set(name, failure);
-        failure.lines.forEach((hintLine) => {
-          logService(name, hintLine, c.red);
-          emitServiceLog(name, hintLine, "error");
-        });
-      }
     }
     processes.delete(name);
+  });
+
+  // Diagnose on `close` rather than `exit`: `exit` fires as soon as the child
+  // terminates, while its stdio may still hold unread data, so the output that
+  // explains the failure may not have arrived yet. `close` is emitted only
+  // once every stream is drained.
+  proc.on("close", (code, _signal) => {
+    if (code === 0 || code === null || shuttingDown) return;
+
+    // A recognised failure gets an explanation and the command that fixes it.
+    // Unrecognised ones keep the generic message above - guessing would be
+    // worse than saying nothing.
+    const failure = describeServiceFailure(name, code, [
+      ...significantOutput,
+      ...recentOutput,
+    ]);
+    if (!failure) return;
+
+    serviceFailures.set(name, failure);
+    failure.lines.forEach((hintLine) => {
+      logService(name, hintLine, c.red);
+      emitServiceLog(name, hintLine, "error");
+    });
   });
 
   processes.set(name, proc);
@@ -1242,6 +1267,25 @@ function printBanner(config) {
     `${c.green}${c.bold}╚══════════════════════════════════════════════════════════════╝${c.reset}`,
   );
   console.log("");
+
+  // A service that died during start-up must not be hidden behind a success
+  // banner. That is precisely how the toolchain failure in #16300 goes
+  // unnoticed: the stack reports itself ready, and the user only discovers
+  // the backend is unreachable once the UI fails to connect.
+  for (const failure of serviceFailures.values()) {
+    console.log(
+      `${c.red}${c.bold}✗ ${failure.service} is not running${c.reset}`,
+    );
+    failure.lines.forEach((hintLine) =>
+      console.log(`${c.red}  ${hintLine}${c.reset}`),
+    );
+    console.log("");
+    fileLog(
+      "error",
+      `[${failure.service}] not running — ${stripAnsi(failure.lines.join(" | "))}`,
+    );
+  }
+
   console.log(`${c.dim}State directory: ${config.stateDir}${c.reset}`);
   console.log(`${c.dim}Press Ctrl+C to stop${c.reset}`);
   console.log("");

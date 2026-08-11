@@ -14,6 +14,9 @@
 /** How many recent output lines a service keeps for post-mortem matching. */
 export const SERVICE_OUTPUT_BUFFER_LINES = 200;
 
+/** How many diagnostically-interesting lines are retained regardless of age. */
+export const SERVICE_SIGNIFICANT_LINE_LIMIT = 50;
+
 // `error: rustc 1.93.1 is not supported by the following packages:`
 const RUSTC_UNSUPPORTED_RE = /rustc\s+(\d+\.\d+(?:\.\d+)?)\s+is not supported/i;
 // `aws-config@1.9.0 requires rustc 1.94.1`
@@ -21,6 +24,26 @@ const RUSTC_REQUIRED_RE = /requires rustc\s+(\d+\.\d+(?:\.\d+)?)/i;
 // uv/maturin wrapper lines seen when a native wheel fails to build.
 const MATURIN_FAILURE_RE =
   /maturin\.build_wheel.*failed|Failed to build `[^`]+`/i;
+
+// Lines carrying evidence a post-mortem needs, kept even once older output has
+// been evicted from the recent-output window.
+const SIGNIFICANT_LINE_RES = [
+  MATURIN_FAILURE_RE,
+  RUSTC_UNSUPPORTED_RE,
+  RUSTC_REQUIRED_RE,
+];
+
+/**
+ * True for lines worth keeping even after they fall out of the recent window.
+ *
+ * A build failure and the reason for it can be far apart: uv prints its
+ * `Failed to build` summary first, then replays the captured build log, and
+ * cargo emits a line per crate in between. A bounded tail alone cannot
+ * guarantee both halves of the evidence are present at the same time.
+ */
+export function isSignificantLine(line) {
+  return SIGNIFICANT_LINE_RES.some((re) => re.test(line));
+}
 
 /**
  * Highest version string in `versions`, compared numerically per component.
