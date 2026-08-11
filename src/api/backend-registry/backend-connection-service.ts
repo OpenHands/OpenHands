@@ -14,7 +14,10 @@ export interface BackendConnectionTestMetadata {
 }
 
 /** The subset of a backend needed to reach its agent server. */
-export type BackendConnectionTarget = Pick<Backend, "host" | "apiKey" | "kind">;
+export type AgentServerTarget = Pick<Backend, "host" | "apiKey">;
+
+/** {@link AgentServerTarget} plus the kind, for flows that branch on it. */
+export type BackendConnectionTarget = AgentServerTarget & Pick<Backend, "kind">;
 
 /**
  * The single place a `ServerClient` is constructed for backend probes.
@@ -23,7 +26,7 @@ export type BackendConnectionTarget = Pick<Backend, "host" | "apiKey" | "kind">;
  * preflight and the edit-form status row through here keeps the client
  * options (and the timeout) identical for the two calls.
  */
-function getServerInfo(backend: BackendConnectionTarget) {
+function getServerInfo(backend: AgentServerTarget) {
   return new ServerClient(
     getAgentServerClientOptions({
       host: backend.host,
@@ -56,7 +59,7 @@ export async function testBackendConnection(
  * `kind === "local"` themselves.
  */
 export async function fetchAgentServerVersion(
-  backend: BackendConnectionTarget,
+  backend: AgentServerTarget,
 ): Promise<string | null> {
   const serverInfo = await getServerInfo(backend);
   return getDisplayAgentServerVersion(serverInfo);

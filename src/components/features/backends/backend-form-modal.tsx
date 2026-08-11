@@ -112,7 +112,8 @@ function BackendStatusBadge({
 
   const { data: version } = useQuery({
     queryKey: ["backend-version", backend.host, backend.apiKey],
-    queryFn: () => fetchAgentServerVersion(backend),
+    queryFn: () =>
+      fetchAgentServerVersion({ host: backend.host, apiKey: backend.apiKey }),
     retry: false,
     staleTime: 60_000,
     enabled: backend.kind === "local" && !disabled,
