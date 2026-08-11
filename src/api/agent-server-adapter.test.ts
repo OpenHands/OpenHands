@@ -3,7 +3,11 @@ import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import type { Settings } from "#/types/settings";
-import { buildStartConversationRequest } from "./agent-server-adapter";
+import {
+  AGENT_CANVAS_SOURCE,
+  buildStartConversationRequest,
+  CLIENT_SOURCE_TAG_KEY,
+} from "./agent-server-adapter";
 
 const encryptedValue = "gAAAAAencrypted-mcp-header";
 
@@ -215,7 +219,9 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
       settings: makeSettings(agentSettings),
       agentProfileId: "profile-xyz",
     });
-    expect(payload.tags).toEqual({ clientsource: "agentcanvas" });
+    expect(payload.tags).toEqual({
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("suppresses secrets_encrypted when launching from a profile", () => {
