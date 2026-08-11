@@ -22474,7 +22474,7 @@
     "ca": "Comencem"
   },
   "AUTH$BITBUCKET_SIGNUP_DISABLED": {
-    "en": "OpenHands Cloud has temporarily disabled Bitbucket registrations and is only accepting logins from existing users at this time. We recommend registering with GitHub or GitLab instead. We are sorry for the inconvenience.",
+    "en": "OpenHands Cloud supports Bitbucket for authentication. You can sign in or register using your Bitbucket account.",
     "ja": "OpenHands Cloudは現在、Bitbucketでの新規登録を一時的に停止しており、既存ユーザーのログインのみ受け付けています。GitHubまたはGitLabでの登録をお勧めします。ご不便をおかけして申し訳ありません。",
     "zh-CN": "OpenHands Cloud 暂时禁用了 Bitbucket 注册，目前仅接受现有用户登录。我们建议使用 GitHub 或 GitLab 注册。对此带来的不便，我们深表歉意。",
     "zh-TW": "OpenHands Cloud 暫時停用了 Bitbucket 註冊，目前僅接受現有用戶登入。我們建議使用 GitHub 或 GitLab 註冊。對此帶來的不便，我們深表歉意。",
