@@ -30,7 +30,7 @@ export function useOnboardingVisibility({
       setState({ scopeKey, isLatched: false });
       return;
     }
-    if (eligible && !state.isLatched) {
+    if (!dismissed && eligible && !state.isLatched) {
       setState({ scopeKey, isLatched: true });
     }
   }, [dismissed, eligible, scopeKey, state.isLatched, state.scopeKey]);

@@ -27,7 +27,7 @@ describe("useOnboardingVisibility", () => {
     rerender({ scopeKey: "root", eligible: false, dismissed: false });
     expect(result.current).toBe(true);
 
-    rerender({ scopeKey: "root", eligible: false, dismissed: true });
+    rerender({ scopeKey: "root", eligible: true, dismissed: true });
     expect(result.current).toBe(false);
 
     rerender({ scopeKey: "root", eligible: false, dismissed: false });
