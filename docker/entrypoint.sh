@@ -66,6 +66,24 @@ export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
+# ── Preflight: persistence dir must be writable ────────────────────────────
+# The image runs as uid 10001 (openhands). A bind-mounted host directory
+# (e.g. `-v ~/.openhands:/home/openhands/.openhands`) that isn't writable by
+# that uid makes BOTH the agent-server (conversations dir) and automation
+# (SQLite DB) crash at startup while the static frontend keeps serving — a
+# half-dead stack that looks fine in the browser but 502s on every API call.
+# Fail fast with an actionable message instead of letting users chase a
+# phantom backend error.
+if ! (mkdir -p "$OPENHANDS_DIR" && touch "$OPENHANDS_DIR/.write-test" 2>/dev/null); then
+  log_error "Persistence directory is not writable: $OPENHANDS_DIR"
+  log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+  log_error "must be writable by that uid. Fix with either:"
+  log_error "  1) chmod -R a+rwX ~/.openhands   # run ON THE HOST, not in the container"
+  log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
+  exit 1
+fi
+rm -f "$OPENHANDS_DIR/.write-test"
+
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
 # fails with a 503.  Auto-generate and persist (just like the session API key)

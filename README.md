@@ -91,6 +91,9 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 ```sh
 export PROJECTS_PATH="$HOME/projects"  # directory containing your project folders
 mkdir -p "$PROJECTS_PATH" "$HOME/.openhands"
+# The container runs as uid 10001 (openhands) — bind-mounted host dirs must be
+# writable by that uid, or the agent-server and automation crash at startup.
+chmod -R a+rwX "$HOME/.openhands" "$PROJECTS_PATH"
 
 docker run -it --rm \
   -p 8000:8000 \
@@ -98,6 +101,21 @@ docker run -it --rm \
   -v "${PROJECTS_PATH}:/projects" \
   ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
 ```
+
+> [!TIP]
+> The image's `openhands` user is **uid 10001**. Instead of `chmod`-ing the host
+> dirs, you can run the container as your own user so the bind mounts are
+> writable automatically (all persistent state lives under the mounted
+> `.openhands` dir, so this is safe in practice):
+>
+> ```sh
+> docker run -it --rm \
+>   --user "$(id -u):$(id -g)" \
+>   -p 8000:8000 \
+>   -v "$HOME/.openhands:/home/openhands/.openhands" \
+>   -v "${PROJECTS_PATH}:/projects" \
+>   ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
+> ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
