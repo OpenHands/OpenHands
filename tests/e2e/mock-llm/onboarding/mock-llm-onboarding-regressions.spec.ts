@@ -5,7 +5,11 @@ import {
   showOnboarding,
   waitForOnboardingStep,
 } from "../../support/onboarding-helpers";
-import { routeSessionApiKey, SESSION_API_KEY } from "../utils/mock-llm-helpers";
+import {
+  BACKEND_URL,
+  routeSessionApiKey,
+  SESSION_API_KEY,
+} from "../utils/mock-llm-helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -18,6 +22,7 @@ test.describe("onboarding recent regressions", () => {
   }) => {
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
+      backendUrl: BACKEND_URL,
       beforeGoto: () => routeSessionApiKey(page),
     });
 
@@ -78,6 +83,7 @@ test.describe("onboarding recent regressions", () => {
   test("defaults the LLM setup step to OpenAI GPT-5.5", async ({ page }) => {
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
+      backendUrl: BACKEND_URL,
       beforeGoto: async () => {
         await routeSessionApiKey(page);
         // Intercept GET /api/settings so the LLM form sees a clean
