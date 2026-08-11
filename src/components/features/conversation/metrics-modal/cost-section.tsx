@@ -16,13 +16,13 @@ export function CostSection({ cost, maxBudgetPerTask }: CostSectionProps) {
 
   return (
     <>
-      <div className="flex justify-between items-center pb-2">
-        <span className="text-lg font-semibold">
+      <BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} />
+      <div className="flex justify-between items-center border-t border-[var(--oh-border-subtle)] pt-2">
+        <span className="font-semibold">
           {t(I18nKey.CONVERSATION$TOTAL_COST)}
         </span>
         <span className="font-semibold">${cost.toFixed(4)}</span>
       </div>
-      <BudgetDisplay cost={cost} maxBudgetPerTask={maxBudgetPerTask} />
     </>
   );
 }

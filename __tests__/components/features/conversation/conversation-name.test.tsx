@@ -94,7 +94,7 @@ vi.mock("react-i18next", async () => {
           BUTTON$DOWNLOAD_VIA_VSCODE: "Download via VS Code",
           BUTTON$SHOW_AGENT_TOOLS_AND_METADATA: "Show Agent Tools",
           CONVERSATION$SHOW_SKILLS: "Show Skills",
-          BUTTON$DISPLAY_COST: "Display Cost",
+          BUTTON$DISPLAY_COST: "Display Usage and Cost",
           COMMON$CLOSE_CONVERSATION_STOP_RUNTIME:
             "Stop Conversation (Runtime)",
           COMMON$STOP_CONVERSATION: "Stop Conversation",
@@ -566,7 +566,7 @@ describe("ConversationNameContextMenu", () => {
       "Stop Conversation",
     );
     expect(screen.getByTestId("display-cost-button")).toHaveTextContent(
-      "Display Cost",
+      "Display Usage and Cost",
     );
     expect(screen.getByTestId("show-agent-tools-button")).toHaveTextContent(
       "Show Agent Tools",
