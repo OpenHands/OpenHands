@@ -129,6 +129,8 @@ export type SetupFormValues = Record<string, string>;
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
   ready: boolean;
+  /** Absolute timeout ceiling enforced by this deployment's automation API. */
+  maxAutomationTimeoutSeconds?: number;
   triggerKinds: string[];
   eventSources: string[];
   eventTypes: string[];
@@ -197,6 +199,8 @@ export interface InterfaceRoutes {
   setup: string;
   /** Carries the `:automationId` segment the host substitutes. */
   detail: string;
+  /** The templates sub-page. Static: there is no parameter to substitute. */
+  templates?: string;
 }
 
 /**
@@ -230,17 +234,177 @@ export interface InterfaceImportExport {
   };
 }
 
+/**
+ * The sub-page surface: navigation, overview tiles, filters, sort, and run
+ * insights for the list page, and a templates page. Every value below names
+ * something this host implements from a closed set — a metric it computes, a
+ * predicate it applies, a comparator it runs, an icon it ships — and the
+ * manifest picks and captions it, never defines it. The host carries no
+ * definitions of its own for this surface, so a manifest without it simply
+ * leaves the sub-pages unrendered.
+ */
+
+export const INTERFACE_SUB_PAGE_IDS = ["list", "templates"] as const;
+
+export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
+
+/** Icon names this host maps to artwork. A manifest cannot supply its own. */
+export const INTERFACE_ICON_SLUGS = [
+  "layout-dashboard",
+  "sparkles",
+  "bot",
+  "circle-alert",
+  "activity",
+  "timer",
+] as const;
+
+export type InterfaceIconSlug = (typeof INTERFACE_ICON_SLUGS)[number];
+
+export interface InterfaceSubPageNavItem {
+  /** The `pages` entry this item navigates to; its route comes from `routes`. */
+  page: InterfaceSubPageId;
+  label: string;
+  icon: InterfaceIconSlug;
+}
+
+/** Values this host computes over the loaded automations and their runs. */
+export const OVERVIEW_METRICS = [
+  "automations",
+  "needs-attention",
+  "total-runs",
+  "average-duration",
+] as const;
+
+export type OverviewMetric = (typeof OVERVIEW_METRICS)[number];
+
+/**
+ * Placeholder names a tile's `detail`/`zeroDetail` copy may reference inside
+ * `{{...}}`, per metric. Plain substitution, like setup copy.
+ */
+export const OVERVIEW_TILE_PLACEHOLDERS: Record<
+  OverviewMetric,
+  readonly string[]
+> = {
+  automations: ["active"],
+  "needs-attention": [],
+  "total-runs": [],
+  "average-duration": [],
+};
+
+export interface InterfaceOverviewTile {
+  metric: OverviewMetric;
+  label: string;
+  /** Caption under the value. */
+  detail: string;
+  /** Replaces `detail` while the metric's value is zero. */
+  zeroDetail?: string;
+  icon: InterfaceIconSlug;
+}
+
+export interface InterfaceOverview {
+  /** Names the tiles section for assistive technology. */
+  label: string;
+  tiles: InterfaceOverviewTile[];
+}
+
+/** Filter values name predicates this host implements, per filter id. */
+export const DASHBOARD_FILTER_VALUES = {
+  status: ["all", "active", "failing", "disabled"],
+  trigger: ["all", "schedule", "event"],
+} as const;
+
+export type DashboardFilterId = keyof typeof DASHBOARD_FILTER_VALUES;
+
+export const DASHBOARD_FILTER_IDS = Object.keys(
+  DASHBOARD_FILTER_VALUES,
+) as readonly DashboardFilterId[];
+
+export type DashboardStatusValue =
+  (typeof DASHBOARD_FILTER_VALUES.status)[number];
+
+export type DashboardTriggerValue =
+  (typeof DASHBOARD_FILTER_VALUES.trigger)[number];
+
+export interface InterfaceStatusFilter {
+  id: "status";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardStatusValue; label: string }[];
+}
+
+export interface InterfaceTriggerFilter {
+  id: "trigger";
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardTriggerValue; label: string }[];
+}
+
+export type InterfaceDashboardFilter =
+  | InterfaceStatusFilter
+  | InterfaceTriggerFilter;
+
+/** Sort values name comparators this host implements. */
+export const DASHBOARD_SORT_VALUES = ["last-run", "runs", "name"] as const;
+
+export type DashboardSortValue = (typeof DASHBOARD_SORT_VALUES)[number];
+
+export interface InterfaceDashboardSort {
+  /** The control's accessible name. */
+  label: string;
+  options: { value: DashboardSortValue; label: string }[];
+  /** One of the declared option values. */
+  default: DashboardSortValue;
+}
+
+/**
+ * Copy for the per-automation run insights on cards and rows. The states,
+ * precedence, sampling, and value formatting are this host's; the manifest
+ * names them.
+ */
+export interface InterfaceListInsights {
+  health: {
+    healthy: string;
+    failing: string;
+    running: string;
+    disabled: string;
+    neverRun: string;
+    checking: string;
+  };
+  lastRun: { label: string; never: string; justNow: string };
+  stats: { runs: string; recentSuccess: string; averageDuration: string };
+}
+
+/**
+ * The templates sub-page identity. Its body — the catalog cards and their
+ * launch behavior — is this host's existing catalog surface.
+ */
+export interface InterfaceTemplatesPage {
+  title: string;
+  description: string;
+}
+
 export interface InterfaceManifest {
   version: typeof INTERFACE_VERSION;
   routes: InterfaceRoutes;
   navigation: {
     sidebar: { label: string };
     commandMenu: { title: string; description: string; keywords: string };
+    /** The ordered sub-page navigation of the interface. */
+    subPages?: InterfaceSubPageNavItem[];
   };
   pages: {
-    list: { title: string; subtitle: string };
+    list: {
+      title: string;
+      subtitle: string;
+      overview?: InterfaceOverview;
+      /** The filter dropdowns of the list page, in render order. */
+      filters?: InterfaceDashboardFilter[];
+      sort?: InterfaceDashboardSort;
+      insights?: InterfaceListInsights;
+    };
     detail: { backLabel: string };
     edit: { title: string };
+    templates?: InterfaceTemplatesPage;
   };
   docsUrl: string;
   /**

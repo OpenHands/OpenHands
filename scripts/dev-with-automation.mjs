@@ -682,16 +682,17 @@ const AGENT_SERVER_ROUTE_PREFIXES = [
 function getLocalServiceRoutes(config) {
   const routes = [];
 
+  // These services bind to IPv4 loopback, but localhost can resolve to ::1.
   if (config.launchAutomation) {
     routes.push([
       AUTOMATION_ROUTE_PREFIX,
-      `http://localhost:${config.autoBackendPort}`,
+      `http://127.0.0.1:${config.autoBackendPort}`,
     ]);
   }
 
   if (config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
-      routes.push([prefix, `http://localhost:${config.agentServerPort}`]);
+      routes.push([prefix, `http://127.0.0.1:${config.agentServerPort}`]);
     }
   }
 

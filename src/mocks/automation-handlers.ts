@@ -214,7 +214,6 @@ export const AUTOMATION_HANDLERS = [
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
-
     const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
     const page = allRuns.slice(offset, offset + limit);
 

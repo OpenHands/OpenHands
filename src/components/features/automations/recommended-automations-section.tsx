@@ -20,7 +20,7 @@ import { MCPServerConfig } from "#/types/mcp-server";
 import {
   findInstalledEntryMatch,
   getMarketplaceEntryById,
-  getMcpMarketplaceCatalog,
+  isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
@@ -68,21 +68,38 @@ function isProvenAutomation(automation: RecommendedAutomation): boolean {
   return getFeaturedAutomationIds().includes(automation.id);
 }
 
+export interface AutomationIntegration {
+  id: string;
+  entry?: MarketplaceEntry;
+  /** False when this backend has no MCP install flow for the entry. */
+  mcpInstallable: boolean;
+}
+
 /**
  * Every integration the automation declares, including the ones it is willing
  * to start without: the card describes what the automation uses, so an
- * optional integration still belongs on it.
+ * optional integration still belongs on it. Entries are resolved against the
+ * full catalog — an integration this backend cannot install as MCP (e.g.
+ * Jira's HTTP-only option) is still a declared dependency and must stay
+ * visible rather than being silently dropped. Unknown IDs are represented as
+ * unresolved entries so catalog drift is visible to the user as well.
  */
-function getIntegrationEntries(automation: RecommendedAutomation) {
-  const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
-  return getIntegrationIds(automation)
-    .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
-    .filter((entry): entry is MarketplaceEntry => !!entry);
+function getIntegrationEntries(
+  automation: RecommendedAutomation,
+): AutomationIntegration[] {
+  return getIntegrationIds(automation).map((id) => {
+    const entry = getMarketplaceEntryById(id, MCP_MARKETPLACE);
+    return {
+      id,
+      entry,
+      mcpInstallable: !!entry && isMcpInstallableEntry(entry),
+    };
+  });
 }
 
 function automationMatchesQuery(
   automation: RecommendedAutomation,
-  entries: MarketplaceEntry[],
+  integrations: AutomationIntegration[],
   rawQuery: string,
 ) {
   const query = rawQuery.trim().toLowerCase();
@@ -92,8 +109,9 @@ function automationMatchesQuery(
     automation.category,
     automation.description,
     getAutomationLaunchPrompt(automation),
-    ...entries.map((entry) => entry.name),
-    ...entries.flatMap((entry) => entry.keywords ?? []),
+    ...integrations.flatMap(({ entry, id }) =>
+      entry ? [entry.name, id, ...(entry.keywords ?? [])] : [id],
+    ),
   ]
     .join(" ")
     .toLowerCase();
@@ -101,41 +119,56 @@ function automationMatchesQuery(
 }
 
 /**
- * Returns true only when at least one of the automation's integration IDs
- * resolves to a known marketplace entry.  An empty result means none of the
- * automation's integrations are in our catalog (or it declares none at all),
- * so there is nothing for the user to set up — hide the card.
- * NOTE: intentionally no local/cloud backend availability filter; every entry
- * with a catalog match is shown regardless of runtimeAvailability.
+ * Keep any automation with declared integrations visible, including when a
+ * catalog entry is missing. This makes catalog drift actionable instead of
+ * silently hiding the automation.
  */
 function isAutomationAvailable(automation: RecommendedAutomation) {
-  return getIntegrationEntries(automation).length > 0;
+  return getIntegrationIds(automation).length > 0;
 }
 
 function buildRecommendedAutomationPills(
-  integrationEntries: MarketplaceEntry[],
+  integrations: AutomationIntegration[],
   installedServers: MCPServerConfig[],
   missingCount: number,
   translate: TFunction,
 ): SkillCardPill[] {
-  const pills: SkillCardPill[] = integrationEntries.map((entry) => {
-    const installed = !!findInstalledEntryMatch(entry, installedServers);
+  const pills: SkillCardPill[] = integrations.map(
+    ({ id, entry, mcpInstallable }) => {
+      const installed =
+        !!entry && findInstalledEntryMatch(entry, installedServers);
+      const name = entry?.name ?? id;
 
-    return {
-      id: `mcp-${entry.id}`,
-      node: (
-        <span className={cn(extensionModuleCardPillClassName, "gap-1")}>
-          <McpLogoBadge entry={entry} size="xs" />
-          {entry.name}
-          {installed ? (
-            <span className="text-white">
-              {translate(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED)}
-            </span>
-          ) : null}
-        </span>
-      ),
-    };
-  });
+      return {
+        id: `integration-${id}`,
+        node: (
+          <span className={cn(extensionModuleCardPillClassName, "gap-1")}>
+            <McpLogoBadge entry={entry} size="xs" />
+            {name}
+            {installed ? (
+              <span className="text-white">
+                {translate(I18nKey.RECOMMENDED_AUTOMATIONS$CONNECTED)}
+              </span>
+            ) : !entry ? (
+              <span
+                className="text-tertiary-alt"
+                data-testid={`recommended-automation-integration-${id}`}
+              >
+                {translate(I18nKey.RECOMMENDED_AUTOMATIONS$UNKNOWN_SETUP)}
+              </span>
+            ) : !mcpInstallable ? (
+              <span
+                className="text-tertiary-alt"
+                data-testid={`automation-integration-external-${id}`}
+              >
+                {translate(I18nKey.RECOMMENDED_AUTOMATIONS$EXTERNAL_SETUP)}
+              </span>
+            ) : null}
+          </span>
+        ),
+      };
+    },
+  );
 
   if (missingCount > 0) {
     pills.push({
@@ -169,9 +202,15 @@ function AutomationCardGrid({
   return (
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
       {automations.map((automation) => {
-        const integrationEntries = getIntegrationEntries(automation);
-        const missingCount = integrationEntries.filter(
-          (entry) => !findInstalledEntryMatch(entry, installedServers),
+        const integrations = getIntegrationEntries(automation);
+        // "N MCPs to connect" only counts entries the install flow can
+        // actually connect; an external-setup integration is surfaced on its
+        // own pill instead.
+        const missingCount = integrations.filter(
+          ({ entry, mcpInstallable }) =>
+            !!entry &&
+            mcpInstallable &&
+            !findInstalledEntryMatch(entry, installedServers),
         ).length;
 
         return (
@@ -187,7 +226,9 @@ function AutomationCardGrid({
           >
             <div className="flex min-w-0 flex-1 items-start gap-3">
               <McpLogoStackBadge
-                entries={integrationEntries}
+                entries={integrations.flatMap(({ entry }) =>
+                  entry ? [entry] : [],
+                )}
                 testId={`recommended-automation-icon-${automation.id}`}
               />
               <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -210,7 +251,7 @@ function AutomationCardGrid({
 
                 <SkillCardPillRow
                   pills={buildRecommendedAutomationPills(
-                    integrationEntries,
+                    integrations,
                     installedServers,
                     missingCount,
                     translate,

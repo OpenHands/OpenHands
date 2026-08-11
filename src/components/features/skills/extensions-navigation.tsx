@@ -28,15 +28,15 @@ interface ExtensionNavItem {
 
 export const EXTENSIONS_NAV_ITEMS: ExtensionNavItem[] = [
   {
-    to: "/skills",
-    label: "Skills",
-    icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
-    end: true,
-  },
-  {
     to: "/mcp",
     label: "MCP Servers",
     icon: <ServerProcessIcon width={16} height={16} />,
+    end: true,
+  },
+  {
+    to: "/skills",
+    label: "Skills",
+    icon: <SkillsIcon width={16} height={16} aria-hidden="true" />,
     end: true,
   },
   {

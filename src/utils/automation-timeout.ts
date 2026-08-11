@@ -1,12 +1,10 @@
 import { I18nKey } from "#/i18n/declaration";
 
 /**
- * Per-automation run timeout bounds. These mirror the automation server
- * (`openhands/automation/utils/timeout.py`): a `null`/omitted timeout falls back
- * to the default, and the server rejects anything above the maximum.
+ * Per-automation run timeout defaults. The deployment reports the maximum it
+ * enforces through capability discovery.
  */
 export const AUTOMATION_TIMEOUT_DEFAULT_SECONDS = 600; // 10 minutes
-export const AUTOMATION_TIMEOUT_MAX_SECONDS = 1800; // 30 minutes
 
 export type AutomationTimeoutValidation =
   | { value: number | null }
@@ -15,12 +13,12 @@ export type AutomationTimeoutValidation =
 /**
  * Validate a raw timeout string from the edit form. A blank string means "use
  * the server default" (resolved as `null`). Otherwise the value must be a
- * positive integer no greater than the ceiling, which the interface manifest
- * may lower from {@link AUTOMATION_TIMEOUT_MAX_SECONDS}.
+ * positive integer. When capability discovery supplies a ceiling, values above
+ * it are rejected before the request reaches the service.
  */
 export function validateAutomationTimeout(
   raw: string,
-  maxSeconds: number = AUTOMATION_TIMEOUT_MAX_SECONDS,
+  maxSeconds?: number,
 ): AutomationTimeoutValidation {
   const trimmed = raw.trim();
   if (!trimmed) return { value: null };
@@ -32,7 +30,7 @@ export function validateAutomationTimeout(
   if (seconds <= 0) {
     return { errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_POSITIVE };
   }
-  if (seconds > maxSeconds) {
+  if (maxSeconds !== undefined && seconds > maxSeconds) {
     return { errorKey: I18nKey.AUTOMATIONS$ERROR_TIMEOUT_MAX_EXCEEDED };
   }
   return { value: seconds };
