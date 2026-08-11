@@ -48,6 +48,10 @@ export interface MiscSettings {
   app_preferences?: AppPreferences;
 }
 
+interface GetSettingsOptions {
+  throwOnError?: boolean;
+}
+
 /**
  * Response from GET /api/settings
  * Mirrors the SettingsResponse model in the agent server.
@@ -418,6 +422,19 @@ const syncDerivedSettings = (settings: Partial<Settings>): Settings => {
   return merged;
 };
 
+const handleSettingsFetchError = (
+  error: unknown,
+  options: GetSettingsOptions,
+  warning: string,
+): Settings => {
+  if (options.throwOnError) {
+    throw error;
+  }
+
+  console.warn(warning, error);
+  return syncDerivedSettings({});
+};
+
 class SettingsService {
   /**
    * Fetch settings from the agent server API with retry logic.
@@ -441,7 +458,9 @@ class SettingsService {
    * Get settings for display (secrets are redacted).
    * Uses in-memory cache for performance.
    */
-  static async getSettings(): Promise<Settings> {
+  static async getSettings(
+    options: GetSettingsOptions = {},
+  ): Promise<Settings> {
     // Cloud uses a different settings shape (flat top-level fields
     // including provider_tokens_set, llm_model, etc.). Branch out before
     // touching the local-only cache: cloud responses bypass the local
@@ -453,8 +472,11 @@ class SettingsService {
         const cloud = await withRetry(() => fetchCloudSettings());
         return syncDerivedSettings(cloud);
       } catch (error) {
-        console.warn("Failed to fetch cloud settings, using defaults:", error);
-        return syncDerivedSettings({});
+        return handleSettingsFetchError(
+          error,
+          options,
+          "Failed to fetch cloud settings, using defaults:",
+        );
       }
     }
 
@@ -470,8 +492,11 @@ class SettingsService {
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
-      console.warn("Failed to fetch settings from API, using defaults:", error);
-      return syncDerivedSettings({});
+      return handleSettingsFetchError(
+        error,
+        options,
+        "Failed to fetch settings from API, using defaults:",
+      );
     }
   }
 

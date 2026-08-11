@@ -5,9 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import App, { links } from "#/root";
 import { server } from "#/mocks/node";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  NO_BACKEND_ID,
+} from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+import { ONBOARDING_DISMISSED_SESSION_KEY_PREFIX } from "#/components/features/onboarding/use-onboarding-dismissal";
+import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 
 const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
@@ -41,11 +46,23 @@ vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
   const { useNavigation } = await import("#/context/navigation-context");
 
   return {
-    OnboardingModal: ({ onClose }: { onClose: () => void }) => {
+    OnboardingModal: ({
+      onClose,
+      initialStep,
+      isPreview,
+    }: {
+      onClose: () => void;
+      initialStep?: number;
+      isPreview?: boolean;
+    }) => {
       const { navigate } = useNavigation();
       return React.createElement(
         "div",
-        { "data-testid": "onboarding-modal" },
+        {
+          "data-testid": "onboarding-modal",
+          "data-initial-step": initialStep,
+          "data-is-preview": String(isPreview ?? false),
+        },
         React.createElement("div", {
           "data-testid": "onboarding-step-check-backend",
         }),
@@ -102,9 +119,16 @@ const renderApp = (initialEntries: string[] = ["/"]) =>
     ),
   });
 
+function dismissOnboardingForBackend(backendId = SEEDED_DEFAULT_BACKEND_ID) {
+  window.sessionStorage.setItem(
+    `${ONBOARDING_DISMISSED_SESSION_KEY_PREFIX}:${backendId}`,
+    "1",
+  );
+}
 describe("App root agent-server availability guard", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.unstubAllEnvs();
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_AUTH_REQUIRED__;
@@ -170,6 +194,28 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("preserves onboarding preview on the root first-run path", async () => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+
+    renderApp(["/?previewOnboardingStep=2"]);
+
+    const modal = await screen.findByTestId("onboarding-modal");
+    expect(modal).toHaveAttribute("data-initial-step", "2");
+    expect(modal).toHaveAttribute("data-is-preview", "true");
+
+    fireEvent.click(screen.getByTestId("mock-onboarding-launch"));
+
+    expect(
+      window.sessionStorage.getItem(
+        `${ONBOARDING_DISMISSED_SESSION_KEY_PREFIX}:${NO_BACKEND_ID}`,
+      ),
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
   it("lets root-level onboarding navigate to the launched conversation before closing", async () => {
     server.use(
       http.get("*/server_info", () =>
@@ -184,9 +230,11 @@ describe("App root agent-server availability guard", () => {
     await waitFor(() => {
       expect(screen.getByTestId("conversation-outlet")).toBeInTheDocument();
     });
-    expect(window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY)).toBe(
-      "1",
-    );
+    expect(
+      window.sessionStorage.getItem(
+        `${ONBOARDING_DISMISSED_SESSION_KEY_PREFIX}:${SEEDED_DEFAULT_BACKEND_ID}`,
+      ),
+    ).toBe("1");
     expect(
       screen.queryByTestId("first-run-onboarding-screen"),
     ).not.toBeInTheDocument();
@@ -429,13 +477,13 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the auth gate after onboarding was already completed", async () => {
+  it("shows the auth gate after onboarding was skipped for the current session", async () => {
     vi.stubEnv("VITE_AUTH_REQUIRED", "true");
     vi.stubEnv("VITE_SESSION_API_KEY", "");
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_SESSION_API_KEY__;
     window.localStorage.clear();
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend(NO_BACKEND_ID);
     __resetActiveStoreForTests();
 
     renderApp(["/"]);
@@ -447,7 +495,7 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("shows the manage-backends modal when the connected server reports an old version", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend();
     server.use(
       http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.27.1" }),
@@ -469,7 +517,7 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("shows the manage-backends modal when the server omits a version field", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend();
     server.use(
       http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0 }),
@@ -488,7 +536,7 @@ describe("App root agent-server availability guard", () => {
 
   it("shows the manage-backends modal when the backend is unreachable", async () => {
     let serverInfoRequests = 0;
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend();
 
     // Use "*" prefix to match both relative paths and absolute URLs (e.g.,
     // http://127.0.0.1:8000/server_info) when VITE_BACKEND_BASE_URL is configured.
@@ -539,7 +587,7 @@ describe("App root agent-server availability guard", () => {
       "openhands-active-backend",
       JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
     );
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend(cloudBackend.id);
     __resetActiveStoreForTests();
     server.use(
       http.get("https://app.all-hands.dev/api/keys/current", () =>
@@ -606,7 +654,7 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("renders the routed page when the agent server is reachable", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    dismissOnboardingForBackend();
 
     renderApp(["/"]);
 
@@ -619,15 +667,10 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows first-run onboarding for the launcher-seeded default-local backend even when the agent-server reports a configured LLM", async () => {
-    // Regression for mock-llm-onboarding-regressions.spec.ts:16
-    // ("keeps the modal open on backdrop click and Escape") and
-    // mock-llm-auth-modes.spec.ts:57 ("reaches the onboarding modal
-    // without pre-seeded localStorage"). The shared mock-LLM
-    // agent-server retains a previously-configured LLM across browser
-    // sessions, so a genuinely fresh browser install (launcher-seeded
-    // default-local backend, no `openhands-onboarded` flag) must NOT
-    // have onboarding auto-marked complete by backend readiness.
+  it("renders the app for a configured shared local backend in a fresh browser profile", async () => {
+    // A shared npm-installed agent-server keeps its LLM configuration across
+    // browser sessions. A fresh browser has no `openhands-onboarded` marker,
+    // but backend readiness must still suppress redundant onboarding.
     vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
     vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
     // The launcher-seeded default-local backend (id
@@ -639,8 +682,103 @@ describe("App root agent-server availability guard", () => {
         HttpResponse.json({
           llm_api_key_is_set: true,
           agent_settings: {
+            agent_kind: "openhands",
             llm: { model: "openai/gpt-5.5", api_key: "stored" },
           },
+        }),
+      ),
+      http.get("*/api/profiles", () =>
+        HttpResponse.json({
+          profiles: [
+            {
+              name: "default",
+              model: "openai/gpt-5.5",
+              base_url: null,
+              api_key_set: true,
+            },
+          ],
+          active_profile: "default",
+        }),
+      ),
+      http.get("*/api/agent-profiles", () =>
+        HttpResponse.json({
+          profiles: [
+            {
+              id: "agent-default",
+              name: "default",
+              agent_kind: "openhands",
+              llm_profile_ref: "default",
+            },
+          ],
+          active_agent_profile_id: "agent-default",
+        }),
+      ),
+      http.get("*/server_info", () =>
+        HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.28.1" }),
+      ),
+    );
+
+    renderApp(["/"]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
+
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+  });
+
+  it("shows onboarding for an unconfigured backend despite a stale browser completion marker", async () => {
+    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
+    vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
+    __resetActiveStoreForTests();
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          agent_settings: {
+            agent_kind: "openhands",
+            llm: { model: "openai/gpt-5.5" },
+          },
+        }),
+      ),
+      http.get("*/api/profiles", () =>
+        HttpResponse.json({
+          profiles: [
+            {
+              name: "default",
+              model: "openai/gpt-5.5",
+              base_url: null,
+              api_key_set: false,
+            },
+          ],
+          active_profile: "default",
+        }),
+      ),
+      http.get("*/api/profiles/default", () =>
+        HttpResponse.json({
+          name: "default",
+          config: { model: "openai/gpt-5.5" },
+          api_key_set: false,
+        }),
+      ),
+
+      http.get("*/api/agent-profiles", () =>
+        HttpResponse.json({
+          profiles: [
+            {
+              id: "agent-default",
+              name: "default",
+              agent_kind: "openhands",
+              llm_profile_ref: "default",
+            },
+          ],
+          active_agent_profile_id: "agent-default",
         }),
       ),
       http.get("*/server_info", () =>
@@ -656,10 +794,6 @@ describe("App root agent-server availability guard", () => {
       ).toBeInTheDocument();
     });
     expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
-
-    expect(
-      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
-    ).toBeNull();
   });
 
   it("renders Cloud login directly for a fresh locked-to-Cloud first run", async () => {

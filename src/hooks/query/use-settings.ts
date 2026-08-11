@@ -118,31 +118,48 @@ const normalizeSettingsResponse = (settings: Partial<Settings>): Settings => {
   };
 };
 
+interface UseSettingsOptions {
+  throwOnError?: boolean;
+}
+
 export const getSettingsQueryFn = async (
   scope: SettingsScope = "personal",
+  options: UseSettingsOptions = {},
 ): Promise<Settings> => {
   if (scope !== "personal") {
     throw new Error(`Unsupported settings scope: ${scope}`);
   }
 
-  const settings = await SettingsService.getSettings();
+  const settings = await SettingsService.getSettings({
+    throwOnError: options.throwOnError,
+  });
   return normalizeSettingsResponse(settings);
 };
 
-export const useSettings = (scope: SettingsScope = "personal") => {
+export const shouldRetrySettingsQuery = (
+  failureCount: number,
+  error: unknown,
+) => getErrorStatus(error) !== 404 && failureCount < 3;
+
+export const useSettings = (
+  scope: SettingsScope = "personal",
+  options: UseSettingsOptions = {},
+) => {
   const active = useActiveBackend();
   const hasBackend = !isNoBackend(active.backend);
+  const throwOnError = options.throwOnError === true;
   const query = useQuery({
     // Include the active backend identity so switching backends or orgs
     // produces a fresh query — the `staleTime` cache for one backend
     // never serves another's data.
-    queryKey: [
-      ...SETTINGS_QUERY_KEYS.byScope(scope),
+    queryKey: SETTINGS_QUERY_KEYS.byBackend(
+      scope,
       active.backend.id,
       active.orgId,
-    ],
-    queryFn: () => getSettingsQueryFn(scope),
-    retry: (_, error) => getErrorStatus(error) !== 404,
+      throwOnError,
+    ),
+    queryFn: () => getSettingsQueryFn(scope, { throwOnError }),
+    retry: shouldRetrySettingsQuery,
     enabled: hasBackend,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5,

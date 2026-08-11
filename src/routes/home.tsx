@@ -1,17 +1,10 @@
-import { PrefetchPageLinks, useLocation } from "react-router";
+import { PrefetchPageLinks } from "react-router";
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import { LlmNotConfiguredBanner } from "#/components/features/home/llm-not-configured-banner";
-import {
-  isOnboardingPreviewActive,
-  OnboardingHost,
-} from "#/components/features/onboarding";
 
 <PrefetchPageLinks page="/conversations/:conversationId" />;
 
 function HomeScreen() {
-  const location = useLocation();
-  const isPreview = isOnboardingPreviewActive(location.search);
-
   return (
     <div
       data-testid="home-screen"
@@ -22,8 +15,6 @@ function HomeScreen() {
       </div>
 
       <HomeChatLauncher />
-
-      {!isPreview ? <OnboardingHost /> : null}
     </div>
   );
 }
