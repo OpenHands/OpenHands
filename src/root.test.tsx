@@ -14,7 +14,6 @@ import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage"
 import { CLOUD_BACKEND_API_KEY_OR_NETWORK_ERROR } from "#/hooks/query/use-backends-health";
 import type { Backend } from "#/api/backend-registry/types";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 import App from "#/root";
 
 // The recovery screen lazy-loads the Manage Backends modal; stub it so the test
@@ -61,7 +60,6 @@ describe("App root — active cloud backend connectivity gate", () => {
   beforeEach(() => {
     localStorage.clear();
     __resetHealthStoreForTests();
-    localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
   });
