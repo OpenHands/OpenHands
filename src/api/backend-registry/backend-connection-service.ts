@@ -20,11 +20,15 @@ export type AgentServerTarget = Pick<Backend, "host" | "apiKey">;
 export type BackendConnectionTarget = AgentServerTarget & Pick<Backend, "kind">;
 
 /**
- * The single place a `ServerClient` is constructed for backend probes.
+ * The one place the backend-registry UI constructs a `ServerClient`.
  *
- * UI components must not build SDK clients directly — routing both the submit
- * preflight and the edit-form status row through here keeps the client
- * options (and the timeout) identical for the two calls.
+ * The add/edit form's submit preflight and both version badges go through
+ * here, so their client options and timeout cannot drift apart. Two other
+ * probes in the app deliberately stay separate, because their semantics
+ * differ rather than merely their spelling: `useBackendsHealth` polls with a
+ * shorter timeout and checks settings before server info, and
+ * `loadAgentServerInfo` is the cached bootstrap probe that also validates the
+ * session key.
  */
 function getServerInfo(backend: AgentServerTarget) {
   return new ServerClient(
@@ -55,7 +59,7 @@ export async function testBackendConnection(
  * Read the agent server's reported version for display.
  *
  * Unlike {@link testBackendConnection} this does not assert the version floor:
- * the status row reports whatever the server claims, and callers gate on
+ * the status badges report whatever the server claims, and callers gate on
  * `kind === "local"` themselves.
  */
 export async function fetchAgentServerVersion(

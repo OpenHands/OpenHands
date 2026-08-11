@@ -38,11 +38,16 @@ export const isNoBackendAvailableError = (
 
 /**
  * Only the trailing-slash primitive is applied here, not the full
- * `normalizeHostInput` used by the backend form. The hosts reaching this
- * function are already absolute — persisted backends were normalised when
- * they were saved, and `conversationUrl` arrives as an absolute URL — so
- * re-inferring a scheme would rewrite a caller-supplied override rather than
- * normalise it. Sharing the primitive keeps the two paths from drifting.
+ * `normalizeHostInput` used by the backend form.
+ *
+ * Every host reaching this function is already absolute, by three separate
+ * routes: hosts typed into the backend form pass through `normalizeHostInput`
+ * before they are stored; seeded backends take their host from
+ * `getAgentServerBaseUrl()` / `getCookieAuthCloudHost()`, which return either
+ * a `normalizeBaseUrl()`-ed value or `window.location.origin`; and
+ * `conversationUrl` arrives absolute from `buildHttpBaseUrl`. Re-inferring a
+ * scheme here would therefore rewrite a caller-supplied override rather than
+ * normalise it. Sharing the primitive keeps the trailing-slash rule single.
  */
 function resolveHost(
   overrides: AgentServerClientOverrides,
