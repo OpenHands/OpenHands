@@ -16,7 +16,6 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import translations from "#/i18n/translation.json";
-import { OPENHANDS_SLACK_INVITE_URL } from "#/utils/constants";
 
 // The global `useTranslation` mock in `vitest.setup.ts` returns the key
 // as-is. Override it here so `t(...)` resolves keys via the source-of-truth
@@ -327,26 +326,18 @@ describe("Sidebar", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders a Join Slack link in the expanded sidebar footer", () => {
-    renderSidebar("/conversations");
+  it.each([
+    { collapsed: false, testId: "sidebar-join-slack-link" },
+    { collapsed: true, testId: "collapsed-join-slack-link" },
+  ])(
+    "does not render Join Slack at the top level when collapsed=$collapsed",
+    ({ collapsed, testId }) => {
+      useSidebarStore.setState({ collapsed });
+      renderSidebar("/conversations");
 
-    const link = screen.getByTestId("sidebar-join-slack-link");
-    expect(link).toHaveAttribute("href", OPENHANDS_SLACK_INVITE_URL);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveTextContent("Join Slack");
-  });
-
-  it("renders a labeled Join Slack icon link when the sidebar is collapsed", () => {
-    useSidebarStore.setState({ collapsed: true });
-    renderSidebar("/conversations");
-
-    const link = screen.getByTestId("collapsed-join-slack-link");
-    expect(link).toHaveAttribute("href", OPENHANDS_SLACK_INVITE_URL);
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveAccessibleName("Join Slack");
-  });
+      expect(screen.queryByTestId(testId)).not.toBeInTheDocument();
+    },
+  );
 
   it("shows collapsed server/settings action icons when sidebar is collapsed", () => {
     useSidebarStore.setState({ collapsed: true });

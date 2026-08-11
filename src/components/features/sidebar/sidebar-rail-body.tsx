@@ -7,7 +7,6 @@ import {
   Server,
   Settings,
 } from "lucide-react";
-import { SiSlack } from "react-icons/si";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
@@ -24,7 +23,6 @@ import { BackendStatusDot } from "#/components/features/backends/backend-status-
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { SidebarConversationList } from "./sidebar-conversation-list";
-import { OPENHANDS_SLACK_INVITE_URL } from "#/utils/constants";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import {
   SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
@@ -226,26 +224,6 @@ export function SidebarRailBody({
           )}
         >
           <StyledTooltip
-            content={t(I18nKey.SIDEBAR$JOIN_SLACK)}
-            placement="right"
-          >
-            <a
-              href={OPENHANDS_SLACK_INVITE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="collapsed-join-slack-link"
-              aria-label={t(I18nKey.SIDEBAR$JOIN_SLACK)}
-              className={sidebarNavRowClassName({ collapsed: true })}
-            >
-              <SidebarCollapsedIconSlot active={false}>
-                <SiSlack size={ICON_SIZE} aria-hidden />
-              </SidebarCollapsedIconSlot>
-              <span className={sidebarNavLabelClassName(true)}>
-                {t(I18nKey.SIDEBAR$JOIN_SLACK)}
-              </span>
-            </a>
-          </StyledTooltip>
-          <StyledTooltip
             content={t(I18nKey.SIDEBAR$SETTINGS)}
             placement="right"
           >
@@ -337,25 +315,6 @@ export function SidebarRailBody({
             "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
           )}
         >
-          {showCollapseToggle ? (
-            <a
-              href={OPENHANDS_SLACK_INVITE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="sidebar-join-slack-link"
-              className={cn(
-                sidebarNavRowClassName(),
-                "text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)]",
-              )}
-            >
-              <span className={SIDEBAR_ICON_SLOT_CLASS}>
-                <SiSlack size={ICON_SIZE} aria-hidden />
-              </span>
-              <span className={sidebarNavLabelClassName(false)}>
-                {t(I18nKey.SIDEBAR$JOIN_SLACK)}
-              </span>
-            </a>
-          ) : null}
           <AgentCanvasVersionTile hideWhenUpToDate />
           <BackendSelector sidebarCollapsed={collapsed} openUpward />
         </div>

@@ -7,6 +7,7 @@ import { AgentCanvasUpdateCard } from "#/components/features/settings/agent-canv
 import { BackendSyncedSettingsBadge } from "#/components/features/settings/backend-synced-settings-badge";
 import { CloudSettingsLink } from "#/components/features/settings/cloud-settings-link";
 import { IntegrationsSettingsLink } from "#/components/features/settings/integrations-settings-link";
+import { JoinSlackSettingsLink } from "#/components/features/settings/join-slack-settings-link";
 
 interface SettingsMobileHubProps {
   navigationItems: SettingsNavRenderedItem[];
@@ -39,6 +40,7 @@ export function SettingsMobileHub({ navigationItems }: SettingsMobileHubProps) {
         ))}
         <IntegrationsSettingsLink />
         <CloudSettingsLink />
+        <JoinSlackSettingsLink />
       </nav>
       <AgentCanvasUpdateCard />
       <div className="pt-1">

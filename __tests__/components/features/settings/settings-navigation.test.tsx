@@ -10,6 +10,7 @@ import { SettingsMobileHub } from "#/components/features/settings/settings-mobil
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { SettingsNavRenderedItem } from "#/hooks/use-settings-nav-items";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { OPENHANDS_SLACK_INVITE_URL } from "#/utils/constants";
 
 const llmItem = OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!;
 const condenserItem = OSS_NAV_ITEMS.find(
@@ -113,6 +114,28 @@ describe("SettingsNavigation", () => {
       expect(link).not.toHaveAttribute("aria-disabled");
     }
   });
+
+  it("renders Join Slack in the desktop and mobile settings navigation", () => {
+    renderSettingsNavigation(
+      <SettingsNavigation
+        isMobileMenuOpen={false}
+        onCloseMobileMenu={vi.fn()}
+        navigationItems={baseItems}
+      />,
+    );
+
+    const desktopLink = within(
+      screen.getByTestId("settings-navbar-desktop"),
+    ).getByTestId("settings-join-slack-link");
+    const mobileDrawerLink = within(
+      screen.getByTestId("settings-navbar"),
+    ).getByTestId("settings-join-slack-link");
+
+    expect(desktopLink).toHaveAttribute("href", OPENHANDS_SLACK_INVITE_URL);
+    expect(desktopLink).toHaveAttribute("target", "_blank");
+    expect(desktopLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(mobileDrawerLink).toBeInTheDocument();
+  });
 });
 
 // Focused unit coverage for the two components extracted out of this file.
@@ -156,5 +179,17 @@ describe("SettingsMobileHub", () => {
       expect(link).toHaveAttribute("href", item.to);
       expect(link).not.toHaveAttribute("aria-disabled");
     }
+  });
+
+  it("renders Join Slack in the mobile settings hub", () => {
+    renderSettingsNavigation(
+      <SettingsMobileHub navigationItems={acpAccessibleItems} />,
+    );
+
+    const mobileHub = screen.getByTestId("settings-mobile-hub");
+
+    expect(
+      within(mobileHub).getByTestId("settings-join-slack-link"),
+    ).toBeInTheDocument();
   });
 });
