@@ -135,6 +135,16 @@ describe("normalizeHostInput", () => {
     expect(normalizeHostInput("myserver.local")).toBe("http://myserver.local");
     expect(normalizeHostInput("nas:8000")).toBe("http://nas:8000");
   });
+
+  it("reads a non-http scheme as a single-label hostname", () => {
+    // `ftp://example.com` has no http(s) prefix, so `ftp` is taken as the
+    // hostname (single label, therefore local) and the scheme is prepended in
+    // front of the whole string. Pinned as existing behaviour - tightening it
+    // would change validation rather than relocate it.
+    expect(normalizeHostInput("ftp://example.com")).toBe(
+      "http://ftp://example.com",
+    );
+  });
 });
 
 describe("isValidHostUrl", () => {
@@ -167,6 +177,13 @@ describe("isValidHostUrl", () => {
   it("accepts explicit http and https URLs", () => {
     expect(isValidHostUrl("http://localhost:8000")).toBe(true);
     expect(isValidHostUrl("https://app.all-hands.dev")).toBe(true);
+  });
+
+  it("accepts a non-http scheme, which normalises to a local hostname", () => {
+    // Follows from the normalisation above: `http://ftp://example.com` parses
+    // with hostname `ftp`, so the form accepts it. Pinned as existing
+    // behaviour, not endorsed - see the normalizeHostInput case.
+    expect(isValidHostUrl("ftp://example.com")).toBe(true);
   });
 
   it("accepts bracketed IPv6 but not the unbracketed form", () => {

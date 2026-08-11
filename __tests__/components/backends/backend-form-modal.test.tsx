@@ -286,6 +286,56 @@ describe("BackendFormModal – edit mode (BackendForm entry point)", () => {
     });
   });
 
+  it("renders the agent-server version badge for a local backend", async () => {
+    renderWithProviders(
+      <BackendFormModal
+        mode="edit"
+        backend={{
+          id: "seeded-id",
+          name: "My Server",
+          host: "http://localhost:9000",
+          apiKey: "sk-old",
+          kind: "local",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // The badge only renders once the version probe resolves, so finding it
+    // exercises fetchAgentServerVersion through the status row end to end.
+    expect(
+      await screen.findByTestId("edit-backend-version"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not probe for a version when the backend is cloud", async () => {
+    renderWithProviders(
+      <BackendFormModal
+        mode="edit"
+        backend={{
+          id: "cloud-id",
+          name: "OpenHands Cloud",
+          host: "https://app.all-hands.dev",
+          apiKey: "sk-cloud",
+          kind: "cloud",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-backend-name")).toHaveValue(
+        "OpenHands Cloud",
+      );
+    });
+
+    // The probe is gated on `kind === "local"` at the query, not inside the
+    // service - narrowing the service argument must not have loosened it.
+    expect(
+      screen.queryByTestId("edit-backend-version"),
+    ).not.toBeInTheDocument();
+  });
+
   it("locks add mode to Cloud login when VITE_LOCK_TO_CLOUD is set", () => {
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://cloud.example.com");
 
