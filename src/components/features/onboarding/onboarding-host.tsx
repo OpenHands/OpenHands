@@ -2,6 +2,7 @@ import { useLocation } from "react-router";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { useOnboardingDismissal } from "./use-onboarding-dismissal";
+import { useOnboardingVisibility } from "./use-onboarding-visibility";
 import { OnboardingModal } from "./onboarding-modal";
 import {
   isOnboardingPreviewActive,
@@ -28,10 +29,13 @@ export function OnboardingHost() {
   const { backend } = useActiveBackend();
   const { isConfigured, isLoading } = useLlmConfigured();
   const { isDismissed, markDismissed } = useOnboardingDismissal(backend.id);
+  const shouldShow = useOnboardingVisibility({
+    scopeKey: backend.id,
+    eligible: !isLoading && !isConfigured,
+    dismissed: isDismissed,
+  });
 
-  if (!isPreview) {
-    if (isDismissed || isLoading || isConfigured) return null;
-  }
+  if (!isPreview && !shouldShow) return null;
 
   const handleClose = () => {
     if (isPreview) return;
