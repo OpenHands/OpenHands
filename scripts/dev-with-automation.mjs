@@ -252,6 +252,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (highest precedence)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
@@ -282,12 +283,30 @@ ACCESS POINTS:
  * git branch or commit instead.
  */
 function buildAutomationCommand(env = process.env) {
+  const localPath = env.OH_AUTOMATION_LOCAL_PATH;
   const gitRef = env.OH_AUTOMATION_GIT_REF;
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
   const uvxArgs = [];
   let source = "";
+
+  if (localPath) {
+    // Run straight from a local checkout via `uv run --project`, so
+    // uncommitted working-tree changes are picked up. Highest precedence,
+    // mirroring OH_AGENT_SERVER_LOCAL_PATH for the agent-server SDK.
+    return {
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        localPath,
+        "uvicorn",
+        "openhands.automation.app:app",
+      ],
+      source: `local (${localPath})`,
+    };
+  }
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
