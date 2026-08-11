@@ -85,6 +85,23 @@ for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_
   rm -f "$dir/.write-test"
 done
 
+# ── Preflight: /projects workspace mount must be writable ──────────────────
+# Optional — only probed when the user actually mounted a workspace dir
+# (e.g. -v "$PROJECTS_PATH:/projects"). A uid-mismatched or read-only mount
+# here breaks the agent's file access the same way, so fail fast too. We
+# deliberately don't mkdir: an absent /projects just means no workspace mount.
+if [ -d /projects ]; then
+  if ! touch /projects/.write-test 2>/dev/null; then
+    log_error "Workspace directory is not writable: /projects"
+    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+    log_error "must be writable by that uid. Fix with either:"
+    log_error "  1) chmod -R a+rwX ~/projects   # run ON THE HOST, not in the container"
+    log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
+    exit 1
+  fi
+  rm -f /projects/.write-test
+fi
+
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
 # fails with a 503.  Auto-generate and persist (just like the session API key)
