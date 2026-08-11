@@ -31,7 +31,6 @@ import {
   BACKEND_URL,
   SESSION_API_KEY,
   PUBLIC_MODE_URL,
-  seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
   waitForTestId,
@@ -149,8 +148,11 @@ test.describe("auth mode: non-public key rotation", () => {
           ]),
         );
 
-        // 3. Mark onboarding as done, opt out of analytics
-        window.localStorage.setItem("openhands-onboarded", "1");
+        // 3. Dismiss onboarding for this backend session and opt out of analytics
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
         window.localStorage.setItem("analytics-consent", "false");
         window.localStorage.setItem("openhands-telemetry-consent", "denied");
         window.localStorage.setItem("openhands-telemetry-first-use", "true");
@@ -303,7 +305,10 @@ test.describe("auth mode: public gate", () => {
             },
           ]),
         );
-        window.localStorage.setItem("openhands-onboarded", "1");
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
       },
       { apiKey: SESSION_API_KEY, host: PUBLIC_MODE_URL },
     );
@@ -353,7 +358,10 @@ test.describe("auth mode: public gate", () => {
             },
           ]),
         );
-        window.localStorage.setItem("openhands-onboarded", "1");
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
       },
       { staleKey: STALE_KEY, host: PUBLIC_MODE_URL },
     );

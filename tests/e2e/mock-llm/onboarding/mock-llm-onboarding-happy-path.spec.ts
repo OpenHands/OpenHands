@@ -14,7 +14,7 @@
  *
  * The test also validates:
  *   - The onboarding modal closes after launching.
- *   - `openhands-onboarded` is set in localStorage.
+ *   - Normal onboarding does not write the legacy localStorage marker.
  *   - The settings-saved toast does NOT appear during onboarding.
  *   - No error banners are visible after the conversation loads.
  */
@@ -86,7 +86,7 @@ test.describe("onboarding happy path", () => {
     ]);
     await activateTrajectory(request, "onboarding-hello");
 
-    // Show the onboarding modal (clears openhands-onboarded, seeds backend)
+    // Show the onboarding modal with no completion or dismissal markers.
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
       beforeGoto: () => routeSessionApiKey(page),
@@ -143,9 +143,9 @@ test.describe("onboarding happy path", () => {
       await allToggle.dispatchEvent("click");
 
       // Wait for the advanced form
-      await expect(
-        page.getByTestId("llm-settings-form-advanced"),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("llm-settings-form-advanced")).toBeVisible({
+        timeout: 10_000,
+      });
 
       // Fill in model
       const modelInput = page.getByTestId("llm-custom-model-input");
@@ -212,18 +212,18 @@ test.describe("onboarding happy path", () => {
       ).toHaveCount(0, { timeout: 10_000 });
     });
 
-    // ── Verify: onboarding completion flag is persisted ──────────────
+    // ── Verify: ordinary completion does not use the legacy marker ───
 
-    await test.step("verify openhands-onboarded is set in localStorage", async () => {
+    await test.step("verify the legacy completion marker stays unset", async () => {
       await expect
         .poll(
           () =>
             page.evaluate(() =>
               window.localStorage.getItem("openhands-onboarded"),
             ),
-          { message: "openhands-onboarded should be '1' after completing the flow" },
+          { message: "ordinary onboarding must not write openhands-onboarded" },
         )
-        .toBe("1");
+        .toBeNull();
     });
 
     // ── Verify: agent responds (proves LLM settings were saved) ─────

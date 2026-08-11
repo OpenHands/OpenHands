@@ -64,6 +64,9 @@ export async function showOnboarding(
   await page.addInitScript(
     ({ apiKey: initApiKey }) => {
       window.localStorage.removeItem("openhands-onboarded");
+      window.sessionStorage.removeItem(
+        "openhands-onboarding-dismissed:default-local",
+      );
       window.localStorage.setItem("analytics-consent", "false");
       window.localStorage.setItem("openhands-telemetry-consent", "denied");
       window.localStorage.setItem("openhands-telemetry-first-use", "true");

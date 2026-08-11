@@ -274,7 +274,10 @@ export async function enableLiveE2EFlags(page: Page) {
     window.localStorage.setItem("analytics-consent", "false");
     window.localStorage.setItem("openhands-telemetry-consent", "denied");
     window.localStorage.setItem("openhands-telemetry-first-use", "true");
-    window.localStorage.setItem("openhands-onboarded", "1");
+    window.sessionStorage.setItem(
+      "openhands-onboarding-dismissed:default-local",
+      "1",
+    );
     window.localStorage.setItem("FEATURE_AUTOMATIONS", "true");
   });
 }
