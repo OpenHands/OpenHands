@@ -17,17 +17,18 @@
  * fetch-based HTTP which doesn't require connection cleanup.
  */
 import {
+  AgentServerClient,
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
-import type {
-  ProfileInfo,
-  ProfileListResponse,
-  ProfileDetailResponse,
-  ProfileMutationResponse,
-  ActivateProfileResponse,
-  SaveProfileRequest,
-  ExposeSecretsMode,
+import {
+  type ProfileInfo,
+  type ProfileListResponse,
+  type ProfileDetailResponse,
+  type ProfileMutationResponse,
+  type ActivateProfileResponse,
+  type SaveProfileRequest,
+  type ExposeSecretsMode,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -50,6 +51,18 @@ export type {
   SaveProfileRequest,
   ExposeSecretsMode,
 };
+
+/** Structured error returned when pre-flight validation fails. */
+export interface ValidateProfileError {
+  type: string;
+  message: string;
+}
+
+/** Result of an LLM pre-flight check. */
+export interface ValidateProfileResponse {
+  valid: boolean;
+  error?: ValidateProfileError | null;
+}
 
 function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
@@ -109,6 +122,49 @@ class ProfilesService {
     return new ProfilesClient(getAgentServerClientOptions()).activateProfile(
       name,
     );
+  }
+
+  /**
+   * Pre-flight check: fire a minimal LLM completion to catch misconfigurations
+   * (invalid model names, missing provider prefixes, bad base URLs, invalid
+   * API keys) before a profile is saved.
+   *
+   * Returns `{ valid: true }` when the LLM responds, or
+   * `{ valid: false, error: { type, message } }` on a blocking error.
+   * Transient errors (rate limits, timeouts) are non-blocking.
+   *
+   * Cloud backends do not implement this endpoint; `null` signals
+   * "no verdict" so callers fall through to the normal save path.
+   */
+  static async validateProfile(
+    name: string,
+    request: SaveProfileRequest,
+  ): Promise<ValidateProfileResponse | null> {
+    if (isCloudBackend()) return null;
+    const client = new AgentServerClient({
+      ...getAgentServerClientOptions(),
+      timeout: 30000,
+    });
+    try {
+      return await client.post<ValidateProfileResponse>(
+        `/api/profiles/${encodeURIComponent(name)}/validate`,
+        request,
+        { acceptableStatusCodes: new Set([200]) },
+      );
+    } catch (error) {
+      // Older agent-server versions don't have the endpoint → 404
+      // Treat as "no verdict" rather than blocking the save.
+      if (
+        error instanceof Error &&
+        "status" in error &&
+        (error as { status: number }).status === 404
+      ) {
+        return null;
+      }
+      throw error;
+    } finally {
+      client.close();
+    }
   }
 }
 

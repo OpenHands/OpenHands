@@ -20,6 +20,8 @@ const {
   mockDeleteProfile,
   mockRenameProfile,
   mockActivateProfile,
+  mockValidateProfile,
+  mockClose,
 } = vi.hoisted(() => ({
   mockListProfiles: vi.fn(),
   mockGetProfile: vi.fn(),
@@ -27,6 +29,8 @@ const {
   mockDeleteProfile: vi.fn(),
   mockRenameProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
+  mockValidateProfile: vi.fn(),
+  mockClose: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -39,6 +43,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       renameProfile: mockRenameProfile,
       activateProfile: mockActivateProfile,
     };
+  }),
+  AgentServerClient: vi.fn(function AgentServerClientMock() {
+    return { post: mockValidateProfile, close: mockClose };
   }),
 }));
 
@@ -57,6 +64,8 @@ describe("ProfilesService", () => {
     mockDeleteProfile.mockReset();
     mockRenameProfile.mockReset();
     mockActivateProfile.mockReset();
+    mockValidateProfile.mockReset();
+    mockClose.mockReset();
     vi.mocked(ProfilesClient).mockClear();
   });
 
@@ -226,6 +235,44 @@ describe("ProfilesService", () => {
 
       expect(mockActivateProfile).toHaveBeenCalledWith("active-profile");
       expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe("validateProfile", () => {
+    const request = { llm: { model: "openai/gpt-4o" }, include_secrets: true };
+
+    it("returns a valid verdict via the typed client", async () => {
+      mockValidateProfile.mockResolvedValue({ valid: true });
+
+      const result = await ProfilesService.validateProfile("gpt", request);
+
+      expect(mockValidateProfile).toHaveBeenCalledWith(
+        "/api/profiles/gpt/validate",
+        request,
+        { acceptableStatusCodes: new Set([200]) },
+      );
+      expect(result).toEqual({ valid: true });
+      expect(mockClose).toHaveBeenCalled();
+    });
+
+    it("returns null when the agent-server reports 404", async () => {
+      mockValidateProfile.mockRejectedValue(
+        Object.assign(new Error("HTTP 404"), { status: 404 }),
+      );
+
+      await expect(
+        ProfilesService.validateProfile("gpt", request),
+      ).resolves.toBeNull();
+    });
+
+    it("propagates other errors", async () => {
+      mockValidateProfile.mockRejectedValue(
+        Object.assign(new Error("HTTP 500"), { status: 500 }),
+      );
+
+      await expect(
+        ProfilesService.validateProfile("gpt", request),
+      ).rejects.toThrow("HTTP 500");
     });
   });
 });

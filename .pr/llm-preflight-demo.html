@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Pre-flight Validation Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; margin-bottom: 8px; color: #fff; }
+  .subtitle { font-size: 14px; color: #888; margin-bottom: 30px; }
+  .card {
+    background: #16213e;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 24px;
+    width: 560px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: #999; margin-bottom: 6px; font-weight: 500; }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f0f23;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: #4a6fa5; }
+  .btn-row { display: flex; gap: 12px; margin-top: 20px; }
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: #4a6fa5; color: #fff; }
+  .btn-primary:hover { background: #5a7fb5; }
+  .btn-primary:disabled { background: #2a3a5a; color: #666; cursor: not-allowed; }
+  .btn-secondary { background: #333; color: #ccc; }
+  .toast {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    padding: 14px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  .toast.show { opacity: 1; transform: translateX(0); }
+  .toast.error { background: #c0392b; color: #fff; }
+  .toast.success { background: #27ae60; color: #fff; }
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #666;
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .scenario-label {
+    font-size: 12px;
+    color: #4a6fa5;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+  .field-desc { font-size: 11px; color: #666; margin-top: 4px; }
+  .pass-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #1a3a1a;
+    color: #27ae60;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .fail-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #3a1a1a;
+    color: #e74c3c;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+</style>
+</head>
+<body>
+  <h1>LLM Pre-flight Validation</h1>
+  <p class="subtitle">Catching misconfigured LLMs before they're saved</p>
+
+  <div class="card" id="demo-card">
+    <div class="scenario-label" id="scenario-label">Scenario 1: Valid Configuration</div>
+    <div class="form-group">
+      <label>Model</label>
+      <input type="text" id="model-input" value="" placeholder="e.g. gpt-4o" />
+    </div>
+    <div class="form-group">
+      <label>API Key</label>
+      <input type="password" id="api-key-input" value="" placeholder="sk-..." />
+    </div>
+    <div class="form-group">
+      <label>Base URL <span class="field-desc">(optional)</span></label>
+      <input type="text" id="base-url-input" value="" placeholder="https://api.openai.com/v1" />
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="back-btn">Back</button>
+      <button class="btn btn-primary" id="save-btn">Save</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const modelInput = document.getElementById('model-input');
+const apiKeyInput = document.getElementById('api-key-input');
+const baseUrlInput = document.getElementById('base-url-input');
+const saveBtn = document.getElementById('save-btn');
+const scenarioLabel = document.getElementById('scenario-label');
+const toast = document.getElementById('toast');
+
+function showToast(type, message) {
+  toast.className = 'toast ' + type + ' show';
+  toast.textContent = message;
+  setTimeout(function() { toast.className = 'toast'; }, 3500);
+}
+
+function setSaving(saving) {
+  saveBtn.disabled = saving;
+  if (saving) {
+    saveBtn.innerHTML = '<span class="spinner"></span>Validating...';
+  } else {
+    saveBtn.textContent = 'Save';
+  }
+}
+
+function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+
+function clearFields() {
+  modelInput.value = '';
+  apiKeyInput.value = '';
+  baseUrlInput.value = '';
+}
+
+async function runDemo() {
+  // === Scenario 1: Valid config passes pre-flight ===
+  await sleep(800);
+  scenarioLabel.innerHTML = 'Scenario 1: Valid Configuration <span class="pass-badge">PASSES</span>';
+  modelInput.value = 'gpt-4o';
+  await sleep(400);
+  apiKeyInput.value = 'sk-proj-abc123xyz';
+  await sleep(400);
+  baseUrlInput.value = 'https://api.openai.com/v1';
+  await sleep(600);
+  setSaving(true);
+  await sleep(2000);
+  setSaving(false);
+  showToast('success', 'Profile "gpt-4o" saved successfully');
+  await sleep(3500);
+
+  // === Scenario 2: Invalid model name fails pre-flight ===
+  clearFields();
+  await sleep(500);
+  scenarioLabel.innerHTML = 'Scenario 2: Invalid Model Name <span class="fail-badge">FAILS</span>';
+  modelInput.value = 'deepseek-chat';
+  await sleep(400);
+  apiKeyInput.value = 'sk-test-key-12345';
+  await sleep(400);
+  baseUrlInput.value = 'https://api.deepseek.com/v1';
+  await sleep(600);
+  setSaving(true);
+  await sleep(2000);
+  setSaving(false);
+  showToast('error', 'LLMBadRequestError: The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed deepseek-chat');
+  await sleep(4000);
+
+  // === Scenario 3: Missing provider prefix fails ===
+  clearFields();
+  await sleep(500);
+  scenarioLabel.innerHTML = 'Scenario 3: Missing Provider Prefix <span class="fail-badge">FAILS</span>';
+  modelInput.value = 'Qwen2.5-Coder-7B-Instruct';
+  await sleep(400);
+  apiKeyInput.value = 'hf_test-key-abc';
+  await sleep(400);
+  await sleep(600);
+  setSaving(true);
+  await sleep(2000);
+  setSaving(false);
+  showToast('error', 'LLMBadRequestError: LLM Provider NOT provided. Pass model as e.g. "huggingface/Qwen2.5-Coder-7B-Instruct"');
+  await sleep(4000);
+
+  // === Scenario 4: Invalid API key fails ===
+  clearFields();
+  await sleep(500);
+  scenarioLabel.innerHTML = 'Scenario 4: Invalid API Key <span class="fail-badge">FAILS</span>';
+  modelInput.value = 'claude-sonnet-4-20250514';
+  await sleep(400);
+  apiKeyInput.value = 'sk-ant-invalid-key';
+  await sleep(400);
+  await sleep(600);
+  setSaving(true);
+  await sleep(2000);
+  setSaving(false);
+  showToast('error', 'LLMAuthenticationError: Invalid or missing API credentials');
+  await sleep(4000);
+
+  // Restart
+  clearFields();
+  await sleep(1000);
+  runDemo();
+}
+
+// Start demo after a short delay
+setTimeout(runDemo, 1000);
+</script>
+</body>
+</html>

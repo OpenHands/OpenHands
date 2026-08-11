@@ -113,6 +113,7 @@ export function LlmSettingsLocalView() {
     null,
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     setHideSectionHeader(viewMode !== "list");
@@ -321,7 +322,21 @@ export function LlmSettingsLocalView() {
     });
 
     setIsSaving(true);
+    setIsValidating(true);
     try {
+      // Pre-flight: validate the LLM config before saving.
+      // Returns null when the endpoint is unavailable (cloud or older
+      // agent-server); in that case, proceed with the save as before.
+      const preflight = await ProfilesService.validateProfile(trimmedName, {
+        llm: llmConfig as SaveProfileRequest["llm"],
+        include_secrets: true,
+      });
+      if (preflight && !preflight.valid) {
+        const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
+        displayErrorToast(errorMsg);
+        return;
+      }
+
       // If editing and name changed, rename the profile first
       if (isRename) {
         await ProfilesService.renameProfile(originalName, trimmedName);
@@ -352,6 +367,7 @@ export function LlmSettingsLocalView() {
       console.error("Failed to save profile:", error);
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
     } finally {
+      setIsValidating(false);
       setIsSaving(false);
     }
   }, [
@@ -456,10 +472,12 @@ export function LlmSettingsLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl}
-          aria-busy={isSaving}
+          isDisabled={!isNameValid || isSaving || isValidating || !saveControl}
+          aria-busy={isSaving || isValidating}
         >
-          {isSaving ? t(I18nKey.STATUS$SAVING) : t(I18nKey.BUTTON$SAVE)}
+          {isSaving || isValidating
+            ? t(I18nKey.STATUS$SAVING)
+            : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>
