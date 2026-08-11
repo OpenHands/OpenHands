@@ -8,6 +8,8 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import {
   useCreateProviderConnection,
+  useDeleteProviderConnection,
+  useUpdateProviderConnection,
   useValidateProviderConnection,
 } from "#/hooks/mutation/use-provider-connection-mutations";
 import type { ValidateConnectionResponse } from "#/api/provider-connections-service";
@@ -39,6 +41,8 @@ export function ConnectProviderWizard({
   const { t } = useTranslation("openhands");
   const { data: providers, isLoading: providersLoading } = useSearchProviders();
   const createConnection = useCreateProviderConnection();
+  const updateConnection = useUpdateProviderConnection();
+  const deleteConnection = useDeleteProviderConnection();
   const validateExisting = useValidateProviderConnection();
 
   const [provider, setProvider] = useState<string>(defaultProvider ?? "");
@@ -50,6 +54,10 @@ export function ConnectProviderWizard({
   );
   const [submitting, setSubmitting] = useState(false);
   const keyInputRef = useRef<HTMLInputElement>(null);
+  // Id of the connection created in this wizard session. Retrying rotates this
+  // record's key instead of creating a second one, and closing without a
+  // successful validation deletes it so a rejected key never leaves an orphan.
+  const pendingConnectionId = useRef<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -57,6 +65,7 @@ export function ConnectProviderWizard({
       setKey("");
       setLabel("");
       setValidated(null);
+      pendingConnectionId.current = null;
     }
   }, [isOpen, defaultProvider]);
 
@@ -74,15 +83,32 @@ export function ConnectProviderWizard({
     }
     setSubmitting(true);
     try {
-      const conn = await createConnection.mutateAsync({
-        provider,
-        key: key.trim(),
-        label: label.trim() || undefined,
-      });
+      // Reuse the record from a previous failed attempt (rotate its key)
+      // instead of creating a second connection every time the user retries.
+      let connectionId = pendingConnectionId.current;
+      if (connectionId) {
+        await updateConnection.mutateAsync({
+          id: connectionId,
+          request: {
+            key: key.trim(),
+            label: label.trim() || undefined,
+          },
+        });
+      } else {
+        const conn = await createConnection.mutateAsync({
+          provider,
+          key: key.trim(),
+          label: label.trim() || undefined,
+        });
+        connectionId = conn.id;
+        pendingConnectionId.current = conn.id;
+      }
       // Validate immediately so the user sees the catalog the key grants.
-      const result = await validateExisting.mutateAsync(conn.id);
+      const result = await validateExisting.mutateAsync(connectionId);
       setValidated(result);
       if (result.ok) {
+        // Committed: don't clean it up when the modal closes.
+        pendingConnectionId.current = null;
         displaySuccessToast(
           t(I18nKey.SETTINGS$CONNECTION_CREATED, { provider }),
         );
@@ -103,13 +129,25 @@ export function ConnectProviderWizard({
     }
   };
 
+  // Closing (cancel or dismiss) after creating but before a successful
+  // validation deletes the half-connected record so a rejected key never
+  // leaves an orphaned connection behind.
+  const handleClose = () => {
+    const orphanId = pendingConnectionId.current;
+    if (orphanId) {
+      pendingConnectionId.current = null;
+      deleteConnection.mutate(orphanId);
+    }
+    onClose();
+  };
+
   const footer = (
     <>
       <BrandButton
         testId="connect-provider-cancel"
         type="button"
         variant="secondary"
-        onClick={onClose}
+        onClick={handleClose}
         isDisabled={submitting}
       >
         {t(I18nKey.BUTTON$CANCEL)}
@@ -135,7 +173,7 @@ export function ConnectProviderWizard({
       title={t(I18nKey.SETTINGS$CONNECT_PROVIDER)}
       width="md"
       footer={footer}
-      onClose={onClose}
+      onClose={handleClose}
       initialFocusRef={keyInputRef}
     >
       <div className="flex flex-col gap-4">

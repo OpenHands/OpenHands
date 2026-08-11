@@ -122,11 +122,11 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
         { status: 404 },
       );
     }
-    return new HttpResponse(null, { status: 204 });
+    return HttpResponse.json({ id, affected_profiles: [] });
   }),
 
   // POST /api/llm/connections/:id/validate
-  http.post("*/api/llm/connections/:id/validate", ({ params }) => {
+  http.post("*/api/llm/connections/:id/validate", ({ params, request }) => {
     const id = String(params.id);
     const conn = connections.get(id);
     if (!conn) {
@@ -145,10 +145,13 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
       conn.models = models;
       conn.last_validated_at = Math.floor(Date.now() / 1000);
     }
+    // Only a live probe (?live=true) proves the key; catalog lookups don't.
+    const live = new URL(request.url).searchParams.get("live") === "true";
     return HttpResponse.json({
       id,
       provider: conn.provider,
       ok,
+      verified: ok && live,
       models: ok ? models : [],
       error: ok ? null : "Invalid API key",
       validated_at: conn.last_validated_at,

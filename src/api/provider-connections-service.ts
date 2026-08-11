@@ -54,10 +54,22 @@ export interface ValidateConnectionResponse {
   id: string;
   provider: string;
   ok: boolean;
+  /**
+   * True only when the key was checked against the provider over the network.
+   * When false, `models` is the provider's advertised catalog rather than a
+   * proven grant, so the UI must not claim the key was authenticated.
+   */
+  verified: boolean;
   /** Models the key actually grants, per the provider's catalog. */
   models: string[];
   error: string | null;
   validatedAt: number | null;
+}
+
+export interface DisconnectResponse {
+  id: string;
+  /** LLM profiles that referenced the deleted connection's key. */
+  affectedProfiles: string[];
 }
 
 class ProviderConnectionsNotOnCloudError extends Error {
@@ -170,9 +182,25 @@ function normalizeValidate(raw: unknown): ValidateConnectionResponse {
     id,
     provider,
     ok: readBool(raw, ["ok", "valid", "is_valid"]),
+    verified: readBool(raw, ["verified"]),
     models: readStringArray(raw),
     error: readString(raw, ["error", "message"]),
     validatedAt: readNumber(raw, ["validated_at", "validatedAt"]),
+  };
+}
+
+function normalizeDisconnect(
+  raw: unknown,
+  fallbackId: string,
+): DisconnectResponse {
+  if (!isRecord(raw)) {
+    return { id: fallbackId, affectedProfiles: [] };
+  }
+  return {
+    id: readString(raw, ["id"]) ?? fallbackId,
+    affectedProfiles: readStringArray(
+      raw.affected_profiles ?? raw.affectedProfiles,
+    ),
   };
 }
 
@@ -258,19 +286,28 @@ class ProviderConnectionsService {
     return normalizeConnection(raw);
   }
 
-  static async deleteConnection(id: string): Promise<void> {
-    await requestConnectionEndpoint<unknown>(PROVIDER_CONNECTION_PATH(id), {
-      method: "DELETE",
-    });
+  static async deleteConnection(id: string): Promise<DisconnectResponse> {
+    const raw = await requestConnectionEndpoint<unknown>(
+      PROVIDER_CONNECTION_PATH(id),
+      { method: "DELETE" },
+    );
+    return normalizeDisconnect(raw, id);
   }
 
+  /**
+   * Validate a connection's key. Pass `live` to force a real network probe;
+   * the response's `verified` flag reflects whether that happened.
+   */
   static async validateConnection(
     id: string,
+    options?: { live?: boolean },
   ): Promise<ValidateConnectionResponse> {
-    const raw = await requestConnectionEndpoint<unknown>(
-      PROVIDER_CONNECTION_VALIDATE_PATH(id),
-      { method: "POST" },
-    );
+    const path = options?.live
+      ? `${PROVIDER_CONNECTION_VALIDATE_PATH(id)}?live=true`
+      : PROVIDER_CONNECTION_VALIDATE_PATH(id);
+    const raw = await requestConnectionEndpoint<unknown>(path, {
+      method: "POST",
+    });
     return normalizeValidate(raw);
   }
 }

@@ -52,12 +52,20 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
 
   const handleDelete = async () => {
     try {
-      await deleteConnection.mutateAsync(connection.id);
+      const result = await deleteConnection.mutateAsync(connection.id);
       displaySuccessToast(
         t(I18nKey.SETTINGS$CONNECTION_DELETED, {
           provider: connection.provider,
         }),
       );
+      // Warn if profiles were left pointing at the now-deleted key.
+      if (result.affectedProfiles.length > 0) {
+        displayErrorToast(
+          t(I18nKey.SETTINGS$CONNECTION_DELETE_CONFIRMATION, {
+            provider: connection.provider,
+          }),
+        );
+      }
       setConfirmingDelete(false);
     } catch (error) {
       displayErrorToast(

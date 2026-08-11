@@ -152,17 +152,30 @@ describe("ProviderConnectionsService", () => {
     });
   });
 
-  it("deleteConnection sends DELETE and resolves", async () => {
-    const fetchMock = mockFetch204();
+  it("deleteConnection sends DELETE and returns affected profiles", async () => {
+    const fetchMock = mockFetchResponse(200, {
+      id: "conn-1",
+      affected_profiles: ["work-gpt4o", "work-o3"],
+    });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(
-      ProviderConnectionsService.deleteConnection("conn-1"),
-    ).resolves.toBeUndefined();
+    const result = await ProviderConnectionsService.deleteConnection("conn-1");
+    expect(result).toEqual({
+      id: "conn-1",
+      affectedProfiles: ["work-gpt4o", "work-o3"],
+    });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://localhost:3000/api/llm/connections/conn-1");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("deleteConnection tolerates a legacy empty (204) body", async () => {
+    const fetchMock = mockFetch204();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ProviderConnectionsService.deleteConnection("conn-1");
+    expect(result).toEqual({ id: "conn-1", affectedProfiles: [] });
   });
 
   it("validateConnection POSTs to {id}/validate and normalizes", async () => {
@@ -170,6 +183,7 @@ describe("ProviderConnectionsService", () => {
       id: "conn-1",
       provider: "openai",
       ok: true,
+      verified: false,
       models: ["gpt-4o", "o3-mini"],
       error: null,
       validated_at: 1700000200,
@@ -183,6 +197,7 @@ describe("ProviderConnectionsService", () => {
       id: "conn-1",
       provider: "openai",
       ok: true,
+      verified: false,
       models: ["gpt-4o", "o3-mini"],
       error: null,
       validatedAt: 1700000200,
@@ -192,6 +207,29 @@ describe("ProviderConnectionsService", () => {
       "http://localhost:3000/api/llm/connections/conn-1/validate",
     );
     expect(init.method).toBe("POST");
+  });
+
+  it("validateConnection forwards the live flag as a query param", async () => {
+    const fetchMock = mockFetchResponse(200, {
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o"],
+      error: null,
+      validated_at: 1700000300,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await ProviderConnectionsService.validateConnection(
+      "conn-1",
+      { live: true },
+    );
+    expect(result.verified).toBe(true);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "http://localhost:3000/api/llm/connections/conn-1/validate?live=true",
+    );
   });
 
   it("throws with the server detail on a non-2xx response", async () => {
