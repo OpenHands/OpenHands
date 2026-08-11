@@ -34,15 +34,20 @@ test.describe("onboarding recent regressions", () => {
     await expect
       .poll(
         () =>
-          page.evaluate(() =>
-            window.localStorage.getItem("openhands-onboarded"),
-          ),
+          page.evaluate(() => ({
+            legacyCompletion: window.localStorage.getItem(
+              "openhands-onboarded",
+            ),
+            sessionDismissal: window.sessionStorage.getItem(
+              "openhands-onboarding-dismissed:default-local",
+            ),
+          })),
         {
           message:
-            "onboarding should not be marked complete by outside interactions",
+            "outside interactions should not persist onboarding completion or dismissal",
         },
       )
-      .toBeNull();
+      .toEqual({ legacyCompletion: null, sessionDismissal: null });
 
     await page.getByTestId("onboarding-skip").click();
     await expect(
@@ -53,11 +58,18 @@ test.describe("onboarding recent regressions", () => {
       .poll(
         () =>
           page.evaluate(() =>
-            window.localStorage.getItem("openhands-onboarded"),
+            window.sessionStorage.getItem(
+              "openhands-onboarding-dismissed:default-local",
+            ),
           ),
-        { message: "skip should persist onboarding completion" },
+        { message: "skip should dismiss onboarding for this backend session" },
       )
       .toBe("1");
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.localStorage.getItem("openhands-onboarded")),
+      )
+      .toBeNull();
   });
 
   // Regression coverage for #1077 / PR #1089: first-run LLM setup

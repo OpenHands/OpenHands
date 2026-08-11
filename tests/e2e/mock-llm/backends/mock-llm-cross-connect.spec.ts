@@ -596,6 +596,16 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
       timeout: 15_000,
     });
 
+    // Adding a backend auto-switches to it. Backend B has no LLM yet, so the
+    // readiness gate must re-open onboarding even though Backend A was
+    // dismissed. Explicitly skip for Backend B before continuing this test's
+    // backend-selector coverage.
+    await expect(page.getByTestId("onboarding-step-choose-agent")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByTestId("onboarding-skip").click();
+    await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
+
     // ── 7. Switch to Backend B via the dropdown ───────────────────────
     // The dropdown should now list both backends. Click Backend B.
     await page.getByTestId("backend-selector").click();
