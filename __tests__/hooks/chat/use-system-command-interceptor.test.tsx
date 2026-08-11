@@ -1,34 +1,11 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSystemCommandInterceptor } from "#/hooks/chat/use-system-command-interceptor";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import { useEventStore } from "#/stores/use-event-store";
 
-const {
-  mockDisplayErrorToast,
-  mockRefetchSkills,
-} = vi.hoisted(() => ({
+const { mockDisplayErrorToast } = vi.hoisted(() => ({
   mockDisplayErrorToast: vi.fn(),
-  mockRefetchSkills: vi.fn(),
-}));
-
-const skills = [
-  {
-    name: "code-search",
-    type: "agentskills" as const,
-    source: "project",
-    description: "Search the current workspace",
-    content: "Search the current workspace",
-    triggers: ["/code-search"],
-  },
-];
-
-vi.mock("#/hooks/query/use-conversation-skills", () => ({
-  useConversationSkills: () => ({
-    data: skills,
-    isLoading: false,
-    refetch: mockRefetchSkills,
-  }),
 }));
 
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -56,13 +33,12 @@ const makeUserMessage = (id: string) => ({
 describe("useSystemCommandInterceptor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRefetchSkills.mockResolvedValue({ data: skills, isError: false });
     useEventStore.getState().clearEvents();
     useSlashCommandOutputStore.getState().clearAll();
   });
 
   // @spec SC-002 — Inline help
-  it("renders /help from the same built-in and skill-derived command list", async () => {
+  it("renders only built-in commands in /help", () => {
     useEventStore.getState().addEvent(makeUserMessage("message-1"));
     const onSubmit = vi.fn();
     const { result } = renderHook(() =>
@@ -71,50 +47,24 @@ describe("useSystemCommandInterceptor", () => {
 
     act(() => result.current(" /help "));
 
-    await waitFor(() => {
-      const entry =
-        useSlashCommandOutputStore.getState().entriesByConversation[
-          CONVERSATION_ID
-        ]?.[0];
-      expect(entry).toMatchObject({
-        kind: "help",
-        anchorEventId: "message-1",
-      });
-      if (entry?.kind === "help") {
-        expect(entry.commands.map((command) => command.command)).toEqual(
-          expect.arrayContaining(["/help", "/code-search"]),
-        );
-      }
+    const entry =
+      useSlashCommandOutputStore.getState().entriesByConversation[
+        CONVERSATION_ID
+      ]?.[0];
+    expect(entry).toMatchObject({
+      kind: "help",
+      anchorEventId: "message-1",
     });
+    if (entry?.kind === "help") {
+      expect(entry.commands.map((command) => command.command)).toEqual([
+        "/new",
+        "/btw",
+        "/model",
+        "/goal",
+        "/help",
+      ]);
+    }
     expect(onSubmit).not.toHaveBeenCalled();
-  });
-
-  // @spec SC-002 — Inline help
-  it("still renders built-in help when refreshing skills fails", async () => {
-    mockRefetchSkills.mockResolvedValueOnce({
-      data: undefined,
-      isError: true,
-      error: new Error("skills unavailable"),
-    });
-    const onSubmit = vi.fn();
-    const { result } = renderHook(() =>
-      useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
-    );
-
-    act(() => result.current("/help"));
-
-    await waitFor(() => {
-      const entry =
-        useSlashCommandOutputStore.getState().entriesByConversation[
-          CONVERSATION_ID
-        ]?.[0];
-      expect(entry).toMatchObject({ kind: "help" });
-      if (entry?.kind === "help") {
-        expect(entry.commands.map((command) => command.command)).toContain(
-          "/help",
-        );
-      }
-    });
   });
 
   it("shows an error when /help is used without a conversation", () => {
