@@ -53,7 +53,7 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
   // `window.__AGENT_CANVAS_SESSION_API_KEY__` injected by
   // `scripts/static-server.mjs`; without that fallback the backend
   // registry seeds empty and `MissingAgentServerScreen` traps the user.
-  test("reaches the onboarding modal without pre-seeded localStorage", async ({
+  test("reaches the app without pre-seeded backend storage", async ({
     page,
     request,
   }) => {
@@ -82,9 +82,17 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
 
     // The static-server injected the runtime key into
     // `window.__AGENT_CANVAS_SESSION_API_KEY__`; the React app reads it,
-    // seeds the default-local backend, and lands on the home page where
-    // OnboardingHost mounts the first onboarding step.
-    await waitForTestId(page, "onboarding-step-choose-agent");
+    // seeds the default-local backend, and reaches the app. If that backend
+    // has no usable LLM, onboarding is shown; if an earlier suite scenario
+    // configured it, the home launcher is shown directly.
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId("home-chat-launcher").isVisible()) ||
+          (await page.getByTestId("onboarding-step-choose-agent").isVisible()),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
 
     // The Manage Backends "trap" modal must NOT be the screen the user
     // sees on first launch.
