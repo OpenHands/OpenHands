@@ -60,32 +60,47 @@ if (typeof requestAnimationFrame === "undefined") {
   );
 }
 
-if (typeof ProgressEvent === "undefined") {
-  class MockProgressEvent extends Event {
-    readonly lengthComputable: boolean;
+// MSW's XMLHttpRequest interceptor captures `typeof ProgressEvent !== "undefined"`
+// at module load time (when jsdom is active) and later accesses the bare
+// `ProgressEvent` identifier in async callbacks. When Vitest tears down the
+// jsdom environment between test files, `ProgressEvent` is removed from the
+// global scope, causing `ReferenceError: ProgressEvent is not defined`.
+//
+// The previous guard (`if (typeof ProgressEvent === "undefined")`) never
+// installed the polyfill because jsdom always provides `ProgressEvent` at
+// setup time. We use a getter that delegates to jsdom's `ProgressEvent` when
+// available and falls back to a polyfill after teardown.
+class MockProgressEvent extends Event {
+  readonly lengthComputable: boolean;
 
-    readonly loaded: number;
+  readonly loaded: number;
 
-    readonly total: number;
+  readonly total: number;
 
-    constructor(type: string, eventInitDict: ProgressEventInit = {}) {
-      super(type, eventInitDict);
-      this.lengthComputable = eventInitDict.lengthComputable ?? false;
-      this.loaded = eventInitDict.loaded ?? 0;
-      this.total = eventInitDict.total ?? 0;
-    }
+  constructor(type: string, eventInitDict: ProgressEventInit = {}) {
+    super(type, eventInitDict);
+    this.lengthComputable = eventInitDict.lengthComputable ?? false;
+    this.loaded = eventInitDict.loaded ?? 0;
+    this.total = eventInitDict.total ?? 0;
   }
-
-  // MSW's XMLHttpRequest interceptor may dispatch progress events while
-  // Vitest is tearing down globals between files. Keep this process-level
-  // fallback outside `vi.stubGlobal()` so `vi.unstubAllGlobals()` does not
-  // remove it before late interceptor callbacks settle.
-  Object.defineProperty(globalThis, "ProgressEvent", {
-    configurable: true,
-    writable: true,
-    value: MockProgressEvent,
-  });
 }
+
+// Capture jsdom's native ProgressEvent before we override the global.
+// At setup time, jsdom injects ProgressEvent into globalThis; we save it
+// so our getter can delegate to it while jsdom is alive.
+const _jsdomProgressEvent =
+  typeof globalThis.ProgressEvent !== "undefined"
+    ? globalThis.ProgressEvent
+    : undefined;
+
+Object.defineProperty(globalThis, "ProgressEvent", {
+  configurable: true,
+  get() {
+    // Delegate to jsdom's native ProgressEvent when the jsdom window is
+    // alive; fall back to the polyfill after jsdom teardown.
+    return _jsdomProgressEvent ?? MockProgressEvent;
+  },
+});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
