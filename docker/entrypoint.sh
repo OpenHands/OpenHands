@@ -66,19 +66,24 @@ export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
-# ── Preflight: persistence dir must be writable ────────────────────────────
+# ── Preflight: persistence dirs must be writable ───────────────────────────
 # The image runs as uid 10001 (openhands); a host bind mount that isn't
 # writable by that uid leaves the backend half-dead (frontend serves,
 # APIs 502). Fail fast with an actionable message.
-if ! (mkdir -p "$OPENHANDS_DIR" && touch "$OPENHANDS_DIR/.write-test" 2>/dev/null); then
-  log_error "Persistence directory is not writable: $OPENHANDS_DIR"
-  log_error "The container runs as uid $(id -u); the bind-mounted host dir"
-  log_error "must be writable by that uid. Fix with either:"
-  log_error "  1) chmod -R a+rwX ~/.openhands   # run ON THE HOST, not in the container"
-  log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
-  exit 1
-fi
-rm -f "$OPENHANDS_DIR/.write-test"
+# Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
+# OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
+# and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR"; do
+  if ! (mkdir -p "$dir" && touch "$dir/.write-test" 2>/dev/null); then
+    log_error "Persistence directory is not writable: $dir"
+    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+    log_error "must be writable by that uid. Fix with either:"
+    log_error "  1) chmod -R a+rwX ~/.openhands   # run ON THE HOST, not in the container"
+    log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
+    exit 1
+  fi
+  rm -f "$dir/.write-test"
+done
 
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
