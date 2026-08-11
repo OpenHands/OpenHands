@@ -10,7 +10,7 @@ import {
   type ConversationTab,
 } from "#/stores/conversation-store";
 import { I18nKey } from "#/i18n/declaration";
-import { Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
 import DocumentIcon from "#/icons/document.svg?react";
 import PillIcon from "#/icons/pill.svg?react";
 import PillFillIcon from "#/icons/pill-fill.svg?react";
@@ -102,6 +102,7 @@ export function ConversationTabsContextMenu({
       i18nKey: I18nKey.COMMON$TERMINAL,
     },
     { tab: "browser", icon: Globe, i18nKey: I18nKey.COMMON$BROWSER },
+    { tab: "usage", icon: Gauge, i18nKey: I18nKey.COMMON$USAGE },
   ];
 
   if (hasTaskList) {

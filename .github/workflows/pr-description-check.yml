@@ -11,6 +11,7 @@ on:
 permissions:
     contents: read
     pull-requests: read
+    issues: read
 
 jobs:
     validate-pr-description:
@@ -38,7 +39,7 @@ jobs:
                       --paginate --jq '.[].filename' > pr-files.txt
                   echo "count=$(wc -l < pr-files.txt)" >> "$GITHUB_OUTPUT"
 
-            - name: Validate HUMAN note, PR template, and frontend evidence
+            - name: Validate HUMAN note, PR template, frontend evidence, and linked-issue readiness
               env:
                   GITHUB_TOKEN: ${{ github.token }}
               run: python .github/scripts/check_pr_description.py --files-file pr-files.txt
