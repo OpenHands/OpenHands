@@ -42,10 +42,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       deleteProfile: mockDeleteProfile,
       renameProfile: mockRenameProfile,
       activateProfile: mockActivateProfile,
+      validateProfile: mockValidateProfile,
+      close: mockClose,
     };
-  }),
-  AgentServerClient: vi.fn(function AgentServerClientMock() {
-    return { post: mockValidateProfile, close: mockClose };
   }),
 }));
 
@@ -246,11 +245,7 @@ describe("ProfilesService", () => {
 
       const result = await ProfilesService.validateProfile("gpt", request);
 
-      expect(mockValidateProfile).toHaveBeenCalledWith(
-        "/api/profiles/gpt/validate",
-        request,
-        { acceptableStatusCodes: new Set([200]) },
-      );
+      expect(mockValidateProfile).toHaveBeenCalledWith("gpt", request);
       expect(result).toEqual({ valid: true });
       expect(mockClose).toHaveBeenCalled();
     });

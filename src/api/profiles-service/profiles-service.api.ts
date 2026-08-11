@@ -17,7 +17,6 @@
  * fetch-based HTTP which doesn't require connection cleanup.
  */
 import {
-  AgentServerClient,
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
@@ -29,6 +28,8 @@ import {
   type ActivateProfileResponse,
   type SaveProfileRequest,
   type ExposeSecretsMode,
+  type ValidateProfileError,
+  type ValidateProfileResponse,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -50,19 +51,9 @@ export type {
   ActivateProfileResponse,
   SaveProfileRequest,
   ExposeSecretsMode,
+  ValidateProfileError,
+  ValidateProfileResponse,
 };
-
-/** Structured error returned when pre-flight validation fails. */
-export interface ValidateProfileError {
-  type: string;
-  message: string;
-}
-
-/** Result of an LLM pre-flight check. */
-export interface ValidateProfileResponse {
-  valid: boolean;
-  error?: ValidateProfileError | null;
-}
 
 function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
@@ -141,16 +132,9 @@ class ProfilesService {
     request: SaveProfileRequest,
   ): Promise<ValidateProfileResponse | null> {
     if (isCloudBackend()) return null;
-    const client = new AgentServerClient({
-      ...getAgentServerClientOptions(),
-      timeout: 30000,
-    });
+    const client = new ProfilesClient(getAgentServerClientOptions());
     try {
-      return await client.post<ValidateProfileResponse>(
-        `/api/profiles/${encodeURIComponent(name)}/validate`,
-        request,
-        { acceptableStatusCodes: new Set([200]) },
-      );
+      return await client.validateProfile(name, request);
     } catch (error) {
       // Older agent-server versions don't have the endpoint → 404
       // Treat as "no verdict" rather than blocking the save.
