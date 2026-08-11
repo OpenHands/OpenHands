@@ -71,6 +71,10 @@ import {
   signalProcessTree,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
+import {
+  describeServiceFailure,
+  SERVICE_OUTPUT_BUFFER_LINES,
+} from "./service-failure-hints.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -543,6 +547,15 @@ function ensureDirectories(config) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const processes = new Map();
+
+// Why each service died, for the ones we can explain. Populated on exit and
+// read by callers that need to report the failure after start-up returns.
+const serviceFailures = new Map();
+
+/** The recognised failure for `name`, or null if it exited cleanly/unknown. */
+function getServiceFailure(name) {
+  return serviceFailures.get(name) ?? null;
+}
 const shutdownHooks = createShutdownHookRegistry((err) => {
   logService("cleanup", `Cleanup hook failed: ${err.message}`, c.yellow);
 });
@@ -572,6 +585,15 @@ function registerShutdownHook(hook) {
 }
 
 function spawnService(name, command, args, options = {}) {
+  // Keep a bounded tail of the service's output so that, if it dies, we can
+  // look back at what it printed and explain why rather than only reporting
+  // the exit code.
+  const recentOutput = [];
+  const remember = (line) => {
+    recentOutput.push(line);
+    if (recentOutput.length > SERVICE_OUTPUT_BUFFER_LINES) recentOutput.shift();
+  };
+
   const proc = spawn(
     resolveWindowsCommand(command),
     args,
@@ -592,6 +614,7 @@ function spawnService(name, command, args, options = {}) {
       .filter(Boolean)
       .forEach((line) => {
         const trimmed = line.trim();
+        remember(trimmed);
         const parsed = parseLogLine ? parseLogLine(trimmed) : null;
         logService(
           name,
@@ -609,6 +632,7 @@ function spawnService(name, command, args, options = {}) {
       .filter(Boolean)
       .forEach((line) => {
         const trimmed = line.trim();
+        remember(trimmed);
         const parsed = parseLogLine ? parseLogLine(trimmed) : null;
         logService(
           name,
@@ -628,6 +652,18 @@ function spawnService(name, command, args, options = {}) {
     if (code !== 0 && code !== null && !shuttingDown) {
       logService(name, `Exited with code ${code}`, c.red);
       emitServiceLog(name, `exited with code ${code}`, "error");
+
+      // A recognised failure gets an explanation and the command that fixes
+      // it. Unrecognised ones keep the generic message above - guessing would
+      // be worse than saying nothing.
+      const failure = describeServiceFailure(name, code, recentOutput);
+      if (failure) {
+        serviceFailures.set(name, failure);
+        failure.lines.forEach((hintLine) => {
+          logService(name, hintLine, c.red);
+          emitServiceLog(name, hintLine, "error");
+        });
+      }
     }
     processes.delete(name);
   });
@@ -1503,6 +1539,7 @@ export {
   main,
   registerShutdownHook,
   spawnService,
+  getServiceFailure,
   commandExists,
   logService,
   logStep,
