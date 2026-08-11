@@ -22,6 +22,7 @@
 import { test, expect } from "@playwright/test";
 import {
   SESSION_API_KEY,
+  BACKEND_URL,
   MOCK_LLM_AGENT_URL,
   routeSessionApiKey,
   waitForPath,
@@ -89,6 +90,7 @@ test.describe("onboarding happy path", () => {
     // Show the onboarding modal with no completion or dismissal markers.
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
+      backendUrl: BACKEND_URL,
       beforeGoto: () => routeSessionApiKey(page),
     });
 

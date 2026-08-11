@@ -55,12 +55,13 @@ export async function routeOnboardingLlmCatalog(page: Page) {
 
 type ShowOnboardingOptions = {
   apiKey: string;
+  backendUrl: string;
   beforeGoto?: () => Promise<void>;
 };
 
 export async function showOnboarding(
   page: Page,
-  { apiKey, beforeGoto }: ShowOnboardingOptions,
+  { apiKey, backendUrl, beforeGoto }: ShowOnboardingOptions,
 ) {
   await page.addInitScript(
     ({ apiKey: initApiKey }) => {
@@ -90,6 +91,40 @@ export async function showOnboarding(
     },
     { apiKey },
   );
+
+  const profileName = "onboarding-e2e-unconfigured";
+  const headers = {
+    "X-Session-API-Key": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  await page.request.delete(
+    `${backendUrl}/api/profiles/${encodeURIComponent(profileName)}`,
+    { headers },
+  );
+  const saveResponse = await page.request.post(
+    `${backendUrl}/api/profiles/${encodeURIComponent(profileName)}`,
+    {
+      headers,
+      data: {
+        llm: { model: "openai/gpt-5.5" },
+        include_secrets: true,
+      },
+    },
+  );
+  expect(
+    saveResponse.ok(),
+    `failed to create unconfigured onboarding profile: ${saveResponse.status()}`,
+  ).toBe(true);
+
+  const activateResponse = await page.request.post(
+    `${backendUrl}/api/profiles/${encodeURIComponent(profileName)}/activate`,
+    { headers },
+  );
+  expect(
+    activateResponse.ok(),
+    `failed to activate unconfigured onboarding profile: ${activateResponse.status()}`,
+  ).toBe(true);
 
   await beforeGoto?.();
   await routeOnboardingLlmCatalog(page);
