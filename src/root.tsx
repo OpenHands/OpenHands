@@ -31,7 +31,10 @@ import {
   redirectToMainAppLogin,
   shouldUseMainAppCookieAuth,
 } from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getEffectiveLocalBackend,
+  isNoBackend,
+} from "#/api/backend-registry/active-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
@@ -41,11 +44,17 @@ import {
 import { TOAST_OPTIONS } from "#/utils/custom-toast-handlers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useConfig } from "#/hooks/query/use-config";
+import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useOnboardingDismissal } from "#/components/features/onboarding/use-onboarding-dismissal";
+import {
+  isOnboardingPreviewActive,
+  readOnboardingPreviewStep,
+} from "#/components/features/onboarding/onboarding-preview";
 import { NavigationProvider } from "#/context/navigation-context";
 import {
   applyColorTheme,
@@ -161,6 +170,8 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const routerNavigation = useRouterNavigation();
+  const previewStep = readOnboardingPreviewStep(location.search);
+  const isPreview = isOnboardingPreviewActive(location.search);
   const conversationId =
     location.pathname.match(/^\/conversations\/([^/]+)/)?.[1] ?? null;
   const navigationValue = React.useMemo(
@@ -181,7 +192,7 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   // login, instead of the full onboarding flow with progress bars. This
   // matches the UX expectation for canvas.openhands.dev where Cloud is the
   // only backend option.
-  if (isLockedToCloud) {
+  if (isLockedToCloud && !isPreview) {
     return (
       <main
         data-testid="first-run-onboarding-screen"
@@ -206,7 +217,11 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
     >
       <NavigationProvider value={navigationValue}>
         <React.Suspense fallback={<AgentServerBootstrapLoading />}>
-          <OnboardingModal onClose={onClose} />
+          <OnboardingModal
+            onClose={isPreview ? () => undefined : onClose}
+            initialStep={previewStep ?? 0}
+            isPreview={isPreview}
+          />
         </React.Suspense>
       </NavigationProvider>
     </main>
@@ -262,6 +277,10 @@ export default function App() {
     isSameCloudHost(active.backend.host, lockedCloudHost);
   const { isCompleted: onboardingCompleted, markCompleted } =
     useOnboardingCompletion();
+  const { isConfigured: isLlmConfigured, isLoading: isLlmReadinessLoading } =
+    useLlmConfigured();
+  const { isDismissed: isOnboardingDismissed, markDismissed } =
+    useOnboardingDismissal(active.backend.id);
 
   // In locked-to-Cloud mode the `openhands-onboarded` localStorage flag is
   // not trustworthy: it may have been set during a previous non-locked
@@ -284,7 +303,10 @@ export default function App() {
     ? !shouldCheckMainAppAuth &&
       (!isActiveLockedCloudBackend ||
         (lockedCloudAuthMode !== "cookie" && !onboardingCompleted))
-    : !onboardingCompleted;
+    : !isOnboardingDismissed &&
+      (authMissing ||
+        isNoBackend(active.backend) ||
+        (!isLlmReadinessLoading && !isLlmConfigured));
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,
@@ -339,7 +361,9 @@ export default function App() {
   if (showFirstRunOnboarding) {
     return (
       <>
-        <FirstRunOnboardingScreen onClose={markCompleted} />
+        <FirstRunOnboardingScreen
+          onClose={isLockedToCloud ? markCompleted : markDismissed}
+        />
         <TelemetryConsentBanner />
       </>
     );
@@ -369,6 +393,10 @@ export default function App() {
     isAgentServerUnavailableError(config.error)
   ) {
     return <MissingAgentServerScreen />;
+  }
+
+  if (!isLockedToCloud && isLlmReadinessLoading) {
+    return <AgentServerBootstrapLoading />;
   }
 
   return (

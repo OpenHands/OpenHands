@@ -1,12 +1,24 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OnboardingHost } from "#/components/features/onboarding/onboarding-host";
 import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
+import { ONBOARDING_DISMISSED_SESSION_KEY_PREFIX } from "#/components/features/onboarding/use-onboarding-dismissal";
+import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
 import SettingsService from "#/api/settings-service/settings-service.api";
+import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import OptionService from "#/api/option-service/option-service.api";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
+import { createMockWebClientConfig } from "#/mocks/settings-handlers";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import {
   __resetActiveStoreForTests,
@@ -19,8 +31,13 @@ import { NavigationProvider } from "#/context/navigation-context";
 // We don't need to exercise the modal's internals here; just verify
 // whether OnboardingHost mounts it at all.
 vi.mock("#/components/features/onboarding/onboarding-modal", () => ({
-  OnboardingModal: () => (
-    <div data-testid="onboarding-modal-stub">onboarding modal</div>
+  OnboardingModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="onboarding-modal-stub">
+      onboarding modal
+      <button type="button" data-testid="dismiss-onboarding" onClick={onClose}>
+        dismiss
+      </button>
+    </div>
   ),
 }));
 
@@ -78,14 +95,27 @@ function seedUserAddedLocalBackend() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
-  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.spyOn(OptionService, "getConfig").mockResolvedValue(
+    createMockWebClientConfig(),
+  );
+  vi.spyOn(ProfilesService, "listProfiles").mockResolvedValue({
+    profiles: [],
+    active_profile: null,
+  });
+  vi.spyOn(AgentProfilesService, "listProfiles").mockResolvedValue({
+    profiles: [],
+    active_agent_profile_id: null,
+  });
 });
 
 afterEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   vi.unstubAllEnvs();
   __resetActiveStoreForTests();
 });
@@ -208,7 +238,7 @@ describe("OnboardingHost", () => {
     ).toBeNull();
   });
 
-  it("shows the modal for a user-added Local backend that already has an LLM configured", async () => {
+  it("skips the modal for a user-added Local backend that already has a usable LLM profile", async () => {
     seedUserAddedLocalBackend();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
       ...DEFAULT_SETTINGS,
@@ -218,26 +248,122 @@ describe("OnboardingHost", () => {
         llm: { model: "openai/zai-org/GLM-5.2", api_key: "**********" },
       },
     });
+    const listProfiles = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({
+        profiles: [
+          {
+            name: "default",
+            model: "openai/zai-org/GLM-5.2",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "default",
+      });
 
     renderHost();
 
-    expect(
-      await screen.findByTestId("onboarding-modal-stub"),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listProfiles).toHaveBeenCalledOnce();
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
     expect(
       window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
     ).toBeNull();
   });
 
-  it("still shows the modal for a launcher-seeded default-local backend even when the agent-server reports a configured LLM", async () => {
-    // Regression for the mock-LLM E2E fresh-install / happy-path tests:
-    // the shared agent-server retains a previously-configured LLM across
-    // browser sessions, so keying first-run onboarding off the server's
-    // LLM state would suppress the modal for a genuinely fresh browser
-    // install. The launcher-seeded default-local backend (id
-    // SEEDED_DEFAULT_BACKEND_ID) must not trigger the skip — the
-    // `openhands-onboarded` localStorage flag stays the source of truth
-    // for first-run detection there.
+  it("reevaluates onboarding when the active backend changes", async () => {
+    const configuredBackend = seedUserAddedLocalBackend();
+    const unconfiguredBackend = {
+      ...configuredBackend,
+      id: "unconfigured-local",
+      name: "Unconfigured Agent Server",
+    };
+    setRegisteredBackends([configuredBackend, unconfiguredBackend]);
+    setActiveSelection({ backendId: configuredBackend.id, orgId: null });
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        agent_kind: "openhands",
+      },
+    });
+    vi.mocked(ProfilesService.listProfiles)
+      .mockResolvedValueOnce({
+        profiles: [
+          {
+            name: "default",
+            model: "openai/gpt-5.5",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "default",
+      })
+      .mockResolvedValueOnce({ profiles: [], active_profile: null });
+
+    renderHost();
+
+    await waitFor(() => {
+      expect(ProfilesService.listProfiles).toHaveBeenCalledOnce();
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
+
+    act(() => {
+      setActiveSelection({ backendId: unconfiguredBackend.id, orgId: null });
+    });
+
+    expect(
+      await screen.findByTestId("onboarding-modal-stub"),
+    ).toBeInTheDocument();
+    expect(ProfilesService.listProfiles).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps Skip for now scoped to the active backend and browser session", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      llm_api_key_set: false,
+      agent_settings: {
+        ...DEFAULT_SETTINGS.agent_settings,
+        agent_kind: "openhands",
+      },
+    });
+    const firstRender = renderHost();
+
+    fireEvent.click(await screen.findByTestId("dismiss-onboarding"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      window.sessionStorage.getItem(
+        `${ONBOARDING_DISMISSED_SESSION_KEY_PREFIX}:${SEEDED_DEFAULT_BACKEND_ID}`,
+      ),
+    ).toBe("1");
+    expect(
+      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+    ).toBeNull();
+
+    firstRender.unmount();
+    renderHost();
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("skips the modal for a configured launcher-seeded shared local backend", async () => {
+    // Every browser attached to the npm launcher shares backend readiness,
+    // so a fresh browser profile must not repeat setup for this backend.
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue({
       ...DEFAULT_SETTINGS,
       llm_api_key_is_set: true,
@@ -246,12 +372,28 @@ describe("OnboardingHost", () => {
         llm: { model: "openai/zai-org/GLM-5.2", api_key: "**********" },
       },
     });
+    const listProfiles = vi
+      .spyOn(ProfilesService, "listProfiles")
+      .mockResolvedValue({
+        profiles: [
+          {
+            name: "default",
+            model: "openai/zai-org/GLM-5.2",
+            base_url: null,
+            api_key_set: true,
+          },
+        ],
+        active_profile: "default",
+      });
 
     renderHost();
 
-    expect(
-      await screen.findByTestId("onboarding-modal-stub"),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(listProfiles).toHaveBeenCalledOnce();
+      expect(
+        screen.queryByTestId("onboarding-modal-stub"),
+      ).not.toBeInTheDocument();
+    });
     expect(
       window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
     ).toBeNull();

@@ -36,10 +36,9 @@ export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
  * through to advancing without a save call, so users with already-
  * configured settings aren't blocked.
  *
- * Note: returning Cloud users who already have an LLM configured are
- * intercepted upstream by `OnboardingHost`, so they never reach this
- * step. Users who do reach it are first-time installs (Cloud or Local)
- * who want the OpenAI/GPT-5.5 default pre-filled.
+ * Note: users whose active Local or Cloud backend already has a usable LLM
+ * are intercepted upstream by `OnboardingHost`, so they never reach this
+ * step. Users who do reach it still need an LLM for the active backend.
  */
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");

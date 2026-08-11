@@ -19,4 +19,16 @@ describe("SETTINGS_QUERY_KEYS", () => {
       SETTINGS_QUERY_KEYS.byScope("personal"),
     );
   });
+
+  it("includes backend identity without a strict-read suffix by default", () => {
+    expect(
+      SETTINGS_QUERY_KEYS.byBackend("personal", "local", null, false),
+    ).toEqual(["settings", "personal", "local", null]);
+  });
+
+  it("isolates strict settings reads in the cache", () => {
+    expect(
+      SETTINGS_QUERY_KEYS.byBackend("personal", "cloud", "org-1", true),
+    ).toEqual(["settings", "personal", "cloud", "org-1", "throw-on-error"]);
+  });
 });

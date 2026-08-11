@@ -1,9 +1,9 @@
 import React from "react";
 
 /**
- * localStorage key persisting whether the welcome onboarding flow has
- * been completed (or skipped). Once present, the modal won't auto-show
- * again on subsequent visits.
+ * Legacy localStorage completion key retained for the locked-to-Cloud login
+ * handoff. Ordinary Local/Cloud onboarding visibility derives from active
+ * backend readiness and must not treat this marker as configuration state.
  */
 export const ONBOARDING_COMPLETED_STORAGE_KEY = "openhands-onboarded";
 
@@ -21,10 +21,9 @@ function readCompletedFromStorage(): boolean {
 }
 
 /**
- * Tracks whether the welcome onboarding modal has been completed.
- * The hook returns the current `isCompleted` flag plus an imperative
- * `markCompleted()` callback. State is mirrored to localStorage and
- * synced across tabs via the `storage` event.
+ * Tracks the persistent completion signal used by the locked-to-Cloud
+ * bootstrap. The hook returns `isCompleted` plus `markCompleted()`, mirrors
+ * state to localStorage, and syncs it across tabs via the `storage` event.
  */
 export function useOnboardingCompletion() {
   const [isCompleted, setIsCompleted] = React.useState<boolean>(() =>
