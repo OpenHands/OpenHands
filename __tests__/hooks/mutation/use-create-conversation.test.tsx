@@ -200,7 +200,6 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     await waitFor(() => {
-      // sandboxId is never passed; the active profile id rides as agentProfileId.
       const call = createConversationSpy.mock.lastCall;
       expect(call?.[0]?.sandboxId).toBeUndefined();
       expect(call?.[0]?.agentProfileId).toBe("profile-abc");
@@ -245,15 +244,14 @@ describe("useCreateConversation", () => {
     expect(call?.[0]?.agentProfileId).toBe("profile-late");
   });
 
-  it("falls back to the agent_settings launch when the profiles fetch fails", async () => {
-    listAgentProfilesMock.mockRejectedValue(new Error("not supported"));
-    const createConversationSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        app_conversation_id: "conv-1",
-        agent_server_url: "http://agent-server.local",
-      } as never);
+  it("does not downgrade when the profiles fetch fails", async () => {
+    const profileError = new Error("profile endpoint unavailable");
+    listAgentProfilesMock.mockRejectedValue(profileError);
+    const createConversationSpy = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    createConversationSpy.mockClear();
 
     const { result } = renderHook(() => useCreateConversation(), {
       wrapper: ({ children }) => (
@@ -263,12 +261,10 @@ describe("useCreateConversation", () => {
       ),
     });
 
-    // Resolves without stalling: the launch-path fetch is retry: false.
-    await result.current.mutateAsync({ query: "hello" });
-
-    // No profile tail — the create stays on the legacy agent_settings path.
-    const call = createConversationSpy.mock.lastCall;
-    expect(call?.[0]?.agentProfileId).toBeUndefined();
+    await expect(result.current.mutateAsync({ query: "hello" })).rejects.toBe(
+      profileError,
+    );
+    expect(createConversationSpy).not.toHaveBeenCalled();
   });
 
   it("invalidates the conversation list and start-tasks queries on success", async () => {
