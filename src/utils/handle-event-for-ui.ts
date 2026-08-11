@@ -54,11 +54,12 @@ const reportsAgentLeftRunning = (
 // the deltas either side of them are one bubble. A snapshot that left RUNNING
 // ends the run, keeping an interrupted turn's deltas out of the next turn (#1899).
 //
-// `sender`, when given, scopes the check to one agent's run: the main and
-// planning sockets share this event store, so a status update sourced from the
-// *other* socket says nothing about whether this sender's run ended — it's
-// transparent too (#1656). Omit `sender` for the sender-agnostic turn boundary
-// (`findTrailingStreamStart`), where any run ending closes the boundary.
+// `sender` scopes the check to one agent's run: the main and planning sockets
+// share this event store, so a status update sourced from the *other* socket
+// says nothing about whether this sender's run ended — it's transparent too
+// (#1656). Every caller threads its sender through so an unrelated socket's
+// terminal status update never closes a boundary that belongs to a
+// different, still-streaming sender.
 //
 // KNOWN GAP: this still assumes the closing ConversationStateUpdateEvent
 // always arrives. If a stream is abandoned with no closing event (dropped
@@ -71,13 +72,13 @@ const reportsAgentLeftRunning = (
 // design work, not a mechanical fix here.
 const endsStreamingRun = (
   event: OpenHandsEvent,
-  sender?: OpenHandsEvent & { isFromPlanningAgent?: boolean },
+  sender: OpenHandsEvent & { isFromPlanningAgent?: boolean },
 ): boolean => {
   if (isUserMessage(event)) {
     return false;
   }
   if (isConversationStateUpdateEvent(event)) {
-    if (sender && !isSameStreamingSender(sender, event)) {
+    if (!isSameStreamingSender(sender, event)) {
       return false;
     }
     return reportsAgentLeftRunning(event);
@@ -85,13 +86,16 @@ const endsStreamingRun = (
   return true;
 };
 
-const findTrailingStreamStart = (events: OpenHandsEvent[]): number => {
+const findTrailingStreamStart = (
+  events: OpenHandsEvent[],
+  sender: OpenHandsEvent & { isFromPlanningAgent?: boolean },
+): number => {
   let start = events.length;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (isStreamingDeltaEvent(event)) {
       start = index;
-    } else if (endsStreamingRun(event)) {
+    } else if (endsStreamingRun(event, sender)) {
       break;
     }
   }
@@ -131,9 +135,12 @@ const findTrailingStreamEnd = (
 };
 
 // The current turn's boundary: the last user message not sent mid-stream.
-const findLastUserMessageIndex = (events: OpenHandsEvent[]): number => {
+const findLastUserMessageIndex = (
+  events: OpenHandsEvent[],
+  sender: OpenHandsEvent & { isFromPlanningAgent?: boolean },
+): number => {
   for (
-    let index = findTrailingStreamStart(events) - 1;
+    let index = findTrailingStreamStart(events, sender) - 1;
     index >= 0;
     index -= 1
   ) {
@@ -191,7 +198,7 @@ const getCurrentTurnContentDeltas = (
   uiEvents: OpenHandsEvent[],
   finalEvent: OpenHandsEvent,
 ): { event: StreamingDeltaEvent; index: number }[] => {
-  const lastUserMessageIndex = findLastUserMessageIndex(uiEvents);
+  const lastUserMessageIndex = findLastUserMessageIndex(uiEvents, finalEvent);
   return uiEvents
     .map((event, index) => ({ event, index }))
     .filter(
