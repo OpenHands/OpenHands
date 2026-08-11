@@ -55,6 +55,10 @@ vi.mock("#/hooks/use-websocket", () => ({
       wsCapture.mainOnMessage = options.onMessage;
       wsCapture.mainOptions = options;
     }
+    // The planning socket is the only connection the provider opens with
+    // `resend_all` (the main socket uses `resend_mode`), so its presence in
+    // queryParams is what distinguishes the two captured connections. If the
+    // planning params are ever renamed, update this discriminator too.
     if (
       url &&
       options?.onMessage &&
