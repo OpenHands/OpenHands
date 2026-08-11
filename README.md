@@ -120,11 +120,18 @@ docker run -it --rm \
 > ```sh
 > docker run -it --rm \
 >   --user "$(id -u):$(id -g)" \
+>   -e HOME=/home/openhands \
 >   -p 8000:8000 \
 >   -v "$HOME/.openhands:/home/openhands/.openhands" \
 >   -v "${PROJECTS_PATH}:/projects" \
 >   ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
 > ```
+>
+> The `-e HOME=/home/openhands` is required: the entrypoint derives all
+> persistence paths from `$HOME`, and an arbitrary uid (e.g. your host uid) has
+> no `/etc/passwd` entry inside the container, so `$HOME` would not resolve to
+> `/home/openhands` — without pinning it, state would silently detach from the
+> bind mount.
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 
