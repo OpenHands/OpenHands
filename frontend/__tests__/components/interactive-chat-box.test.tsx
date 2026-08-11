@@ -231,6 +231,49 @@ describe("InteractiveChatBox", () => {
     expect(onSubmitMock).toHaveBeenCalledWith("", [image], []);
   });
 
+  it("should submit attachment-only files (non-image) when the text input is empty", async () => {
+    const user = userEvent.setup();
+    const file = new File(["file-content"], "notes.txt", {
+      type: "text/plain",
+    });
+
+    mockStores(AgentState.AWAITING_USER_INPUT);
+    useConversationStore.setState({ images: [], files: [file] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    const submitButton = screen.getByTestId("submit-button");
+    expect(submitButton).not.toBeDisabled();
+
+    await user.click(submitButton);
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [], [file]);
+  });
+
+  it("should clear attachments from the conversation store after submitting", async () => {
+    const user = userEvent.setup();
+    const image = new File(["image-content"], "diagram.png", {
+      type: "image/png",
+    });
+    const file = new File(["file-content"], "spec.md", { type: "text/plain" });
+
+    mockStores(AgentState.AWAITING_USER_INPUT);
+    useConversationStore.setState({ images: [image], files: [file] });
+
+    renderInteractiveChatBox({
+      onSubmit: onSubmitMock,
+    });
+
+    const submitButton = screen.getByTestId("submit-button");
+    await user.click(submitButton);
+
+    expect(onSubmitMock).toHaveBeenCalledWith("", [image], [file]);
+    expect(useConversationStore.getState().images).toEqual([]);
+    expect(useConversationStore.getState().files).toEqual([]);
+  });
+
   it("should disable the submit button when awaiting user confirmation", async () => {
     const user = userEvent.setup();
     mockStores(AgentState.AWAITING_USER_CONFIRMATION);
