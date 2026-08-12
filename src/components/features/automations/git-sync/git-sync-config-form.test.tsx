@@ -10,6 +10,24 @@ vi.mock("#/hooks/query/use-git-sync", () => ({
   useUpdateGitSyncConfig: () => ({ mutate, isPending: false }),
 }));
 
+const displayErrorToast = vi.fn();
+const displaySuccessToast = vi.fn();
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: (message: string) => displayErrorToast(message),
+  displaySuccessToast: (message: string) => displaySuccessToast(message),
+}));
+
+/** Make the next save resolve down the success or the failure path. */
+const respondWith = (outcome: "success" | { error: unknown }) => {
+  mutate.mockImplementation((_body, options) => {
+    if (outcome === "success") options.onSuccess?.();
+    else options.onError?.(outcome.error);
+    // react-query runs onSettled on both paths.
+    options.onSettled?.();
+  });
+};
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -158,5 +176,128 @@ describe("GitSyncConfigForm", () => {
     fireEvent.click(screen.getByTestId("git-sync-save-button"));
 
     expect(mutate.mock.calls[0][0]).toEqual({ path: null });
+  });
+
+  // Regression: the clear switch remounts the secret input, which emptied the
+  // DOM field but left the typed value in state -- so a change of mind sent
+  // `token: ""`, an override that fails every later push with
+  // `fatal: Authentication failed`.
+  it.each([
+    ["git-sync-token-input", "git-sync-clear-token-switch"],
+    ["git-sync-encryption-key-input", "git-sync-clear-encryption-key-switch"],
+  ])(
+    "forgets a typed %s when its clear switch is toggled on and back off",
+    (inputTestId, switchTestId) => {
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId(inputTestId), {
+        target: { value: "s3cret" },
+      });
+      fireEvent.click(screen.getByTestId(switchTestId));
+      fireEvent.click(screen.getByTestId(switchTestId));
+
+      // Nothing left to save: the field is empty again and no secret is
+      // pending, so an empty override can't be submitted.
+      expect(screen.getByTestId(inputTestId)).toHaveValue("");
+      expect(screen.getByTestId("git-sync-save-button")).toBeDisabled();
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+      expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
+    },
+  );
+
+  it("keeps the edits and the enabled Save button when the save fails", () => {
+    // React resets an uncontrolled `<form action={...}>` as soon as the action
+    // returns, which used to wipe the edits mid-flight; clearing the change
+    // flags on `onSettled` then disabled Save, leaving nothing to retry with.
+    respondWith({ error: { status: 500 } });
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+      target: { value: "develop" },
+    });
+    fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(screen.getByTestId("git-sync-branch-input")).toHaveValue("develop");
+    expect(screen.getByTestId("git-sync-save-button")).not.toBeDisabled();
+    expect(screen.getByTestId("git-sync-clear-token-switch")).toBeChecked();
+  });
+
+  it("goes clean again after a successful save", () => {
+    respondWith("success");
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(screen.getByTestId("git-sync-save-button")).toBeDisabled();
+    expect(screen.getByTestId("git-sync-clear-token-switch")).not.toBeChecked();
+    expect(displaySuccessToast).toHaveBeenCalledWith(
+      I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_SAVED,
+    );
+  });
+
+  // Regression: the author fields were dirty only while non-empty, so emptying
+  // one never posted `author_name: null` and a wrong override was permanent.
+  it.each([
+    ["git-sync-author-name-input", "author_name"],
+    ["git-sync-author-email-input", "author_email"],
+  ])("clearing %s resets the override to the default", (testId, field) => {
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.change(screen.getByTestId(testId), {
+      target: { value: "someone@example.com" },
+    });
+    fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(mutate.mock.calls[0][0]).toEqual({ [field]: null });
+  });
+
+  it("sends the enabled flag when the sync switch is flipped", () => {
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    expect(screen.getByTestId("git-sync-enabled-switch")).toBeChecked();
+
+    fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(mutate.mock.calls[0][0]).toEqual({ enabled: false });
+  });
+
+  it("leaves enabled out of the request when the switch is not touched", () => {
+    render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+    fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+      target: { value: "develop" },
+    });
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
+  });
+
+  it("explains the restart requirement when the backend refuses to enable sync", () => {
+    // The backend answers 409 when it booted without git sync turned on --
+    // the raw detail is a wall of text, and the generic error message would
+    // read as a transient failure worth retrying.
+    respondWith({ error: { status: 409 } });
+    render(
+      <GitSyncConfigForm
+        status={{ ...baseStatus, enabled: false }}
+        canManage
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR,
+    );
   });
 });

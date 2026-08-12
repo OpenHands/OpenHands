@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -11,6 +11,7 @@ import {
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
+import { getErrorStatus } from "#/hooks/query/use-settings";
 import { useUpdateGitSyncConfig } from "#/hooks/query/use-git-sync";
 import type {
   GitSyncConfigUpdateRequest,
@@ -36,6 +37,13 @@ export function GitSyncConfigForm({
   const [authorNameHasChanged, setAuthorNameHasChanged] = useState(false);
   const [authorEmailHasChanged, setAuthorEmailHasChanged] = useState(false);
 
+  // `null` means untouched, so the switch keeps following the server state
+  // (including a status refetch) until the operator actually flips it.
+  const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
+  const enabled = enabledOverride ?? status.enabled;
+  const enabledHasChanged =
+    enabledOverride !== null && enabled !== status.enabled;
+
   const [tokenText, setTokenText] = useState("");
   const [clearToken, setClearToken] = useState(false);
   const [encryptionKeyText, setEncryptionKeyText] = useState("");
@@ -46,6 +54,7 @@ export function GitSyncConfigForm({
     encryptionKeyText.trim().length > 0 || clearEncryptionKey;
 
   const formIsClean =
+    !enabledHasChanged &&
     !intervalHasChanged &&
     !repoUrlHasChanged &&
     !branchHasChanged &&
@@ -56,6 +65,7 @@ export function GitSyncConfigForm({
     !encryptionKeyHasChanged;
 
   const resetChangeFlags = () => {
+    setEnabledOverride(null);
     setIntervalHasChanged(false);
     setRepoUrlHasChanged(false);
     setBranchHasChanged(false);
@@ -68,6 +78,21 @@ export function GitSyncConfigForm({
     setClearEncryptionKey(false);
   };
 
+  // The secret inputs are remounted -- and therefore emptied -- whenever the
+  // matching clear switch flips, so drop the typed value with them. Keeping it
+  // in state would leave the field marked dirty against an empty input and
+  // submit `token: ""`, an override that fails every later push with
+  // `fatal: Authentication failed`.
+  const toggleClearToken = (isToggled: boolean) => {
+    setClearToken(isToggled);
+    setTokenText("");
+  };
+
+  const toggleClearEncryptionKey = (isToggled: boolean) => {
+    setClearEncryptionKey(isToggled);
+    setEncryptionKeyText("");
+  };
+
   // A cleared field posts `null` -- clear the override and fall back to the
   // environment default -- rather than `""`, which the backend stored as a
   // literal empty override. An empty branch or path then made the next git
@@ -76,9 +101,18 @@ export function GitSyncConfigForm({
   const clearedFieldAsNull = (formData: FormData, name: string) =>
     formData.get(name)?.toString().trim() || null;
 
-  const formAction = (formData: FormData) => {
+  // A plain submit handler rather than `<form action={...}>`: React resets an
+  // uncontrolled form as soon as the action returns, which wiped every edit
+  // while the save was still in flight -- so a rejected save left the operator
+  // with the old values and nothing to retry.
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
     const body: GitSyncConfigUpdateRequest = {};
 
+    if (enabledHasChanged) {
+      body.enabled = enabled;
+    }
     if (intervalHasChanged) {
       // Blank reads as manual-only rather than clearing the override, so an
       // emptied field can never be mistaken for "keep syncing on a timer".
@@ -108,28 +142,40 @@ export function GitSyncConfigForm({
         "git-sync-author-email-input",
       );
     }
+    // The secrets come from state rather than FormData: the clear switch
+    // remounts (and empties) their inputs, so the two disagree for a render
+    // and only state knows what the operator actually typed.
+    const token = tokenText.trim();
+    const encryptionKey = encryptionKeyText.trim();
     if (clearToken) {
       body.token = null;
-    } else if (tokenText.trim()) {
-      body.token = formData.get("git-sync-token-input")?.toString().trim();
+    } else if (token) {
+      body.token = token;
     }
     if (clearEncryptionKey) {
       body.encryption_key = null;
-    } else if (encryptionKeyText.trim()) {
-      body.encryption_key = formData
-        .get("git-sync-encryption-key-input")
-        ?.toString()
-        .trim();
+    } else if (encryptionKey) {
+      body.encryption_key = encryptionKey;
     }
 
     updateConfig(body, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_SAVED));
+        // Only on success: clearing the flags after a failure would disable
+        // Save and silently un-toggle the clear switches, leaving no way to
+        // retry the change that was just rejected.
+        resetChangeFlags();
       },
       onError: (error) => {
-        displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+        displayErrorToast(
+          // 409 is the backend refusing to enable sync in a deployment that
+          // booted with it off -- a restart with the env var set, not a
+          // transient failure the operator should retry.
+          getErrorStatus(error) === 409
+            ? t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR)
+            : getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+        );
       },
-      onSettled: resetChangeFlags,
     });
   };
 
@@ -138,7 +184,21 @@ export function GitSyncConfigForm({
       icon={<CogIcon className="size-4" />}
       title={t(I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_TITLE)}
     >
-      <form action={formAction} className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <SettingsSwitch
+            testId="git-sync-enabled-switch"
+            isToggled={enabled}
+            isDisabled={!canManage}
+            onToggle={setEnabledOverride}
+          >
+            {t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_ENABLED)}
+          </SettingsSwitch>
+          <p className="text-xs text-muted">
+            {t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLED_HELP)}
+          </p>
+        </div>
+
         <div className="flex flex-col gap-2">
           <SettingsInput
             testId="git-sync-interval-input"
@@ -196,29 +256,35 @@ export function GitSyncConfigForm({
           onChange={(value) => setPathHasChanged(value.trim() !== status.path)}
         />
 
-        <SettingsInput
-          testId="git-sync-author-name-input"
-          name="git-sync-author-name-input"
-          type="text"
-          label={t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_AUTHOR_NAME)}
-          showOptionalTag
-          defaultValue=""
-          isDisabled={!canManage}
-          onChange={(value) => setAuthorNameHasChanged(value.trim().length > 0)}
-        />
+        <div className="flex flex-col gap-2">
+          <SettingsInput
+            testId="git-sync-author-name-input"
+            name="git-sync-author-name-input"
+            type="text"
+            label={t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_AUTHOR_NAME)}
+            showOptionalTag
+            defaultValue=""
+            isDisabled={!canManage}
+            // Dirty on any edit, not just a non-empty one: gating on the value
+            // meant emptying the field never posted `author_name: null`, so a
+            // wrong override could never be cleared back to the default.
+            onChange={() => setAuthorNameHasChanged(true)}
+          />
 
-        <SettingsInput
-          testId="git-sync-author-email-input"
-          name="git-sync-author-email-input"
-          type="email"
-          label={t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_AUTHOR_EMAIL)}
-          showOptionalTag
-          defaultValue=""
-          isDisabled={!canManage}
-          onChange={(value) =>
-            setAuthorEmailHasChanged(value.trim().length > 0)
-          }
-        />
+          <SettingsInput
+            testId="git-sync-author-email-input"
+            name="git-sync-author-email-input"
+            type="email"
+            label={t(I18nKey.AUTOMATIONS$GIT_SYNC$FIELD_AUTHOR_EMAIL)}
+            showOptionalTag
+            defaultValue=""
+            isDisabled={!canManage}
+            onChange={() => setAuthorEmailHasChanged(true)}
+          />
+          <p className="text-xs text-muted">
+            {t(I18nKey.AUTOMATIONS$GIT_SYNC$AUTHOR_HELP)}
+          </p>
+        </div>
 
         <div className="flex flex-col gap-2">
           <SettingsInput
@@ -238,7 +304,7 @@ export function GitSyncConfigForm({
             testId="git-sync-clear-token-switch"
             isToggled={clearToken}
             isDisabled={!canManage}
-            onToggle={setClearToken}
+            onToggle={toggleClearToken}
           >
             {t(I18nKey.AUTOMATIONS$GIT_SYNC$CLEAR_TOKEN)}
           </SettingsSwitch>
@@ -263,7 +329,7 @@ export function GitSyncConfigForm({
             testId="git-sync-clear-encryption-key-switch"
             isToggled={clearEncryptionKey}
             isDisabled={!canManage}
-            onToggle={setClearEncryptionKey}
+            onToggle={toggleClearEncryptionKey}
           >
             {t(I18nKey.AUTOMATIONS$GIT_SYNC$CLEAR_ENCRYPTION_KEY)}
           </SettingsSwitch>
