@@ -1,7 +1,7 @@
 import { cn } from "#/utils/utils";
 
 /** 36px control height — shared by fields, dropdowns, and buttons. */
-export const formControlHeightClassName = "h-9 min-h-9";
+const formControlHeightClassName = "h-9 min-h-9";
 
 export const formControlRadiusClassName = "rounded-lg";
 
@@ -10,14 +10,14 @@ export const formControlBorderClassName = "border border-[var(--oh-border)]";
 export const formControlSurfaceClassName = "bg-base-secondary";
 
 /** Shared transition duration for form controls and chrome buttons. */
-export const formControlTransitionDurationClassName = "duration-75";
+const formControlTransitionDurationClassName = "duration-75";
 
-export const formControlHeroUiTransitionDurationClassName = "!duration-75";
+const formControlHeroUiTransitionDurationClassName = "!duration-75";
 
-export const formControlMotionReduceClassName = "motion-reduce:transition-none";
+const formControlMotionReduceClassName = "motion-reduce:transition-none";
 
 /** Shell properties that animate on hover/focus; foreground color snaps instantly. */
-export const formControlTransitionPropertiesClassName =
+const formControlTransitionPropertiesClassName =
   "transition-[background-color,border-color,box-shadow,opacity]";
 
 /** Animate shell chrome on hover/focus; foreground color snaps instantly. */
@@ -28,7 +28,7 @@ export const formControlTransitionClassName = cn(
 );
 
 /** HeroUI input wrappers ship `transition-colors`; override so caret/text hover is instant. */
-export const formControlHeroUiWrapperTransitionClassName = cn(
+const formControlHeroUiWrapperTransitionClassName = cn(
   "!transition-[background-color,border-color,box-shadow,opacity]",
   formControlHeroUiTransitionDurationClassName,
   formControlMotionReduceClassName,
@@ -60,10 +60,10 @@ export const chatInputIconButtonClassName = cn(
   formControlMutedHoverClassName,
 );
 
-export const formControlFocusClassName =
+const formControlFocusClassName =
   "focus:border-white/40 focus:ring-1 focus:ring-white/20 focus:outline-none";
 
-export const formControlFocusWithinClassName =
+const formControlFocusWithinClassName =
   "focus-within:border-white/40 focus-within:ring-1 focus-within:ring-white/20";
 
 export const formControlDisabledClassName =
@@ -128,14 +128,6 @@ export const formControlButtonClassName = cn(
 
 /** Helper text under a left-aligned {@link SettingsSwitch} (40px track + gap-2). */
 export const formControlSwitchDescriptionClassName = "pl-12";
-
-/** Filter / enum dropdown triggers beside search toolbars. */
-export const formControlFilterTriggerClassName = cn(
-  formControlButtonClassName,
-  formControlBorderClassName,
-  formControlSurfaceClassName,
-  "shrink-0 text-white",
-);
 
 /** Muted back navigation control with tertiary hover fill (settings sub-pages, detail views). */
 export const formControlBackNavButtonClassName = cn(
