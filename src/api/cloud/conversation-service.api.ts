@@ -1,4 +1,7 @@
-import { getActiveBackend } from "../backend-registry/active-store";
+import {
+  getActiveBackend,
+  getRegisteredBackends,
+} from "../backend-registry/active-store";
 import type { Backend } from "../backend-registry/types";
 import { getStoredConversationMetadata } from "../conversation-metadata-store";
 import type {
@@ -49,6 +52,31 @@ function getActiveCloudBackend(): Backend {
     throw new Error("Cloud conversations call requires a cloud backend.");
   }
   return active;
+}
+
+/**
+ * Resolve the cloud backend a Cloud conversation should be launched against
+ * when the active backend may not be a cloud one. Cloud conversations cannot
+ * register client tools, so the typed launch action always runs from a local
+ * parent and has to reach a registered-but-inactive cloud backend.
+ *
+ * Prefers the active backend when it is already cloud, then the first
+ * registered cloud backend that carries credentials. Returns `null` when the
+ * user has no cloud backend connected, so callers can give the agent
+ * corrective guidance instead of failing opaquely.
+ *
+ * Note: `createCloudClient` only sends `X-Org-Id` for the *active* backend, so
+ * a conversation launched against an inactive backend lands in the API key's
+ * own organization.
+ */
+export function pickCloudBackendForLaunch(): Backend | null {
+  const active = getActiveBackend().backend;
+  if (active.kind === "cloud") return active;
+  return (
+    getRegisteredBackends().find(
+      (backend) => backend.kind === "cloud" && !!backend.apiKey,
+    ) ?? null
+  );
 }
 
 /**
@@ -120,8 +148,11 @@ export async function batchGetCloudConversations(
  */
 export async function createCloudAppConversation(
   request: AppConversationStartRequest,
+  // Defaults to the active backend. The typed launch action passes an explicit
+  // backend because it always runs from a *local* parent conversation.
+  backendOverride?: Backend,
 ): Promise<AppConversationStartTask> {
-  const backend = getActiveCloudBackend();
+  const backend = backendOverride ?? getActiveCloudBackend();
   const data = await callCloudProxy<AppConversationStartTask>({
     backend,
     method: "POST",
@@ -250,8 +281,9 @@ export async function readCloudConversationFile(
  */
 export async function getCloudAppConversationStartTask(
   taskId: string,
+  backendOverride?: Backend,
 ): Promise<AppConversationStartTask | null> {
-  const backend = getActiveCloudBackend();
+  const backend = backendOverride ?? getActiveCloudBackend();
   const params = new URLSearchParams();
   params.set("ids", taskId);
   const data = await callCloudProxy<(AppConversationStartTask | null)[]>({

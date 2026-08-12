@@ -411,13 +411,9 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -446,14 +442,10 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -462,6 +454,36 @@ describe("AgentServerConversationService", () => {
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(true);
+    });
+
+    it("links a local conversation to its parent", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+        parentConversationId: "parent-conversation-id",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      expect(payloadCall[1]).toMatchObject({
+        parent_conversation_id: "parent-conversation-id",
+      });
     });
   });
 
@@ -1053,17 +1075,11 @@ describe("AgentServerConversationService", () => {
       );
 
       // Act
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        null,
-        undefined,
-        undefined,
-        "parent-conv-1",
-        "plan",
-        "sandbox-9",
-      );
+      await AgentServerConversationService.createConversation({
+        parentConversationId: "parent-conv-1",
+        agentType: "plan",
+        sandboxId: "sandbox-9",
+      });
 
       // Assert
       const [url, init] = getFetchCall(fetchMock);
