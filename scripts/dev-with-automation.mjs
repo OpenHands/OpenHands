@@ -1610,8 +1610,6 @@ export {
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
   DEFAULT_AUTOMATION_SDK_VERSION,
-  DEFAULT_BACKEND_PORT,
-  DEFAULT_AUTOMATION_PORT,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
