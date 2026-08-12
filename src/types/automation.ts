@@ -31,7 +31,7 @@ export interface Automation {
   model?: string | null;
   /**
    * Maximum run time in seconds. `null`/omitted uses the server default
-   * (600s, 10 min); the server caps it at 1800s (30 min).
+   * (600s, 10 min); the deployment reports the maximum it accepts.
    */
   timeout?: number | null;
 
@@ -50,9 +50,10 @@ export type AutomationSpec = Omit<
   "id" | "created_at" | "updated_at" | "last_triggered_at"
 >;
 
+/** The envelope constants come from the interface manifest's import/export spec. */
 export interface AutomationExportFile {
-  version: 1;
-  kind: "automation";
+  version: number;
+  kind: string;
   spec: AutomationSpec;
 }
 
@@ -84,6 +85,14 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  /**
+   * Accumulated LLM cost of the run in USD, reported by the SDK in the
+   * completion callback. `null` means unknown — the run predates cost
+   * tracking, or ended without a callback (cancelled, watchdog timeout).
+   * Absent entirely when the automation service is older than the release
+   * that added the field, hence optional.
+   */
+  cost?: number | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -91,4 +100,27 @@ export interface AutomationRun {
 export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+}
+
+export type ActivityLogExportFormat = "json" | "csv";
+
+/** Client-built Activity Log export row (from list runs + automation detail). */
+export interface AutomationRunExportRow {
+  run_id: string;
+  automation_id: string;
+  automation_name: string;
+  trigger: AutomationTrigger | Record<string, unknown>;
+  start_time: string | null;
+  end_time: string | null;
+  duration_seconds: number | null;
+  status: AutomationRunStatus;
+  conversation_id: string | null;
+  conversation_url: string | null;
+  error: string | null;
+  /**
+   * Accumulated LLM cost in USD, or null when unknown. Unlike
+   * `AutomationRun["cost"]` this is always present: the row normalizes a
+   * missing field to null so every exported record has the same shape.
+   */
+  cost: number | null;
 }

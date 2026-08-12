@@ -80,6 +80,19 @@ describe("ExtensionsNavigation", () => {
     expect(skillsItem.tagName).toBe("A");
   });
 
+  it("orders MCP Servers before Skills and Plugins", () => {
+    renderExtensionsNavigation(<ExtensionsNavigation />);
+
+    const nav = screen.getByTestId("extensions-navbar-desktop");
+    const navigationItems = within(nav).getAllByRole("link");
+
+    expect(navigationItems.map((item) => item.textContent)).toEqual([
+      "MCP Servers",
+      "Skills",
+      "Plugins",
+    ]);
+  });
+
   it("renders the Plugins item as a live link without a Coming Soon badge", () => {
     renderExtensionsNavigation(<ExtensionsNavigation />);
 

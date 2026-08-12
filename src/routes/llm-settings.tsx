@@ -1,4 +1,5 @@
 import React from "react";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -32,6 +33,10 @@ import {
   resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
+import {
+  FREE_OPENHANDS_MODEL_NOTE,
+  isFreeOpenHandsModel,
+} from "#/utils/format-model-name";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -100,6 +105,18 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       href="https://app.all-hands.dev/settings/api-keys"
       suffix={` ${t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX)}`}
     />
+  );
+}
+
+function OpenHandsFreeModelsNote() {
+  return (
+    <p
+      data-testid="openhands-free-models-note"
+      className="flex items-start gap-2 text-xs text-warning"
+    >
+      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
+    </p>
   );
 }
 
@@ -400,7 +417,12 @@ export function LlmSettingsScreen({
                   />
 
                   {showOpenHandsApiKeyHelp ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    <>
+                      {isFreeOpenHandsModel(modelValue) ? (
+                        <OpenHandsFreeModelsNote />
+                      ) : null}
+                      <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    </>
                   ) : null}
 
                   <SettingsInput

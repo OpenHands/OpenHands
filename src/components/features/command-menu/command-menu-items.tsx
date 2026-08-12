@@ -14,13 +14,17 @@ import {
   Zap,
 } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
+import {
+  automationListPath,
+  getInterfaceCopy,
+} from "#/manifests/automation-interface";
 
 const ICON_SIZE = 18;
 
 export const COMMAND_MENU_ROUTE = {
   conversations: "/conversations",
   customize: "/customize",
-  automations: "/automations",
+  automations: automationListPath(),
   mcp: "/mcp",
   settings: "/settings",
   agentSettings: "/settings/agents",
@@ -52,6 +56,10 @@ export interface CommandMenuItemDefinition {
   titleKey: I18nKey;
   descriptionKey: I18nKey;
   keywordsKey: I18nKey;
+  /** Literal copy overriding the i18n key, when a manifest owns it. */
+  title?: string;
+  description?: string;
+  keywords?: string;
   icon: React.ReactElement;
   to?: string;
   perform?: () => void;
@@ -98,6 +106,9 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$AUTOMATIONS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$AUTOMATIONS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$AUTOMATIONS_KEYWORDS,
+    title: getInterfaceCopy().commandMenuTitle ?? undefined,
+    description: getInterfaceCopy().commandMenuDescription ?? undefined,
+    keywords: getInterfaceCopy().commandMenuKeywords ?? undefined,
     icon: <Zap size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.automations,
   },

@@ -9,5 +9,5 @@ export default function ExtensionsHub() {
     return <ExtensionsMobileHub />;
   }
 
-  return <Navigate to="/skills" replace />;
+  return <Navigate to="/mcp" replace />;
 }

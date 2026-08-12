@@ -19,10 +19,11 @@ import {
 import {
   findInstalledEntryMatch,
   getMarketplaceEntryById,
-  getMcpMarketplaceCatalog,
+  isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import { automationSetupPath } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
@@ -43,12 +44,17 @@ interface RecommendedAutomationsLauncherProps {
  * The marketplace entries a launch waits on. An integration the automation is
  * willing to start without is deliberately absent, so it never queues an
  * install modal the user has to dismiss.
+ *
+ * A required integration this backend cannot install as MCP (e.g. Jira's
+ * HTTP-only option) is also excluded here — the install queue can't do
+ * anything with it — but it is not silently dropped from the product: the
+ * automation card keeps it visible and labels it as needing external setup.
  */
 function getRequiredEntries(automation: RecommendedAutomation) {
-  const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
   return getRequiredIntegrationIds(automation)
-    .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
-    .filter((entry): entry is MarketplaceEntry => !!entry);
+    .map((id) => getMarketplaceEntryById(id, MCP_MARKETPLACE))
+    .filter((entry): entry is MarketplaceEntry => !!entry)
+    .filter(isMcpInstallableEntry);
 }
 
 export function RecommendedAutomationsLauncher({
@@ -73,14 +79,13 @@ export function RecommendedAutomationsLauncher({
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
 
-  // A disabled server is withheld from the agent, so treating it as installed
-  // would show "Connected" for an automation that then fails at runtime.
   const installedMcpConfig = useMemo(
     () =>
       flattenMcpConfig(
-        parseMcpConfig(settings?.agent_settings?.mcp_config),
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
-    [settings?.agent_settings?.mcp_config],
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(
@@ -98,7 +103,7 @@ export function RecommendedAutomationsLauncher({
       // form, so the answers are collected before anything is created. The rest
       // still hand a slash command to an agent to interpret.
       if (SETUP_REGISTRY.findById(automation.id)) {
-        navigate?.(`/automations/new/${automation.id}`);
+        navigate?.(automationSetupPath(automation.id));
         onLaunched?.();
         return;
       }
