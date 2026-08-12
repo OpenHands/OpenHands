@@ -4,10 +4,197 @@ import type { StartGoalRequest } from "@openhands/typescript-client";
 import { getActiveBackend } from "#/api/backend-registry/active-store";
 import { pauseCloudSandbox } from "#/api/cloud/conversation-service.api";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
+import {
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME,
+  type AgentProfileListResponse,
+} from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type { ProfileListResponse } from "#/api/profiles-service/profiles-service.api";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import type { AgentKind } from "#/types/settings";
 
 type ExecutionStatusValue = AppConversation["execution_status"];
+
+export interface ResolveLaunchProfileOptions {
+  /**
+   * Explicitly requested agent profile id, or the backend's
+   * `active_agent_profile_id` when the home launcher didn't name one (#3727).
+   * Undefined when no agent profile is involved at all (plain agent_settings
+   * launch).
+   */
+  requestedAgentProfileId?: string | null;
+  /** Agent-profile list, as fetched through the shared query cache. */
+  agentProfiles?: AgentProfileListResponse;
+  /**
+   * LLM-profile list; carries the account-wide `active_profile` that the
+   * home-page LLM dropdown activates. Undefined when the list couldn't be
+   * fetched (older backend, or the fetch failed).
+   */
+  llmProfiles?: ProfileListResponse;
+  /**
+   * Cloud backends never carry an `agent_settings` payload to fall back to, so
+   * every profile-path downgrade below is local-only (see #3727 review).
+   */
+  isCloud: boolean;
+}
+
+/**
+ * Why a launch that would have used an AgentProfile id instead fell back to
+ * the agent_settings path. Kept for diagnosable traces; the UI treats all
+ * downgrades as the plain launch path.
+ */
+export type LaunchProfileDowngradeReason =
+  | "default-baseline"
+  | "missing-llm-profile-ref"
+  | "dropdown-llm-profile-selected";
+
+export interface ResolveLaunchProfileResult {
+  /** `agent_profile_id` to send; undefined → launch from agent_settings. */
+  effectiveAgentProfileId?: string;
+  /** Kind of the resolved agent profile, forwarded with the id (#3727). */
+  agentProfileKind?: AgentKind;
+  /**
+   * The LLM profile the conversation will actually run, for the #1082
+   * metadata stamp: the pinned `llm_profile_ref` when a named OpenHands
+   * profile drives the launch, otherwise the account-wide active LLM profile
+   * (the home-dropdown selection). Null when neither is known.
+   */
+  launchLlmProfileRef: string | null;
+  downgradeReason?: LaunchProfileDowngradeReason;
+}
+
+/**
+ * Resolve which AgentProfile (if any) a new conversation launches from, and
+ * which LLM profile it will therefore run.
+ *
+ * The active AgentProfile is the default launch profile for new conversations
+ * (#3727). A named OpenHands profile pins an LLM profile via
+ * `llm_profile_ref`, and launching through it makes the server run that pinned
+ * model. That pin is what the home-page LLM dropdown overrides: the dropdown
+ * activates an account-wide LLM profile (`active_profile` on
+ * `/api/profiles`), so when it differs from the pinned ref the user explicitly
+ * picked a different model and the selection must win (#16539) — launch via
+ * agent_settings instead, which reflects the active LLM profile.
+ *
+ * The seeded OpenHands `default` profile is the enriched baseline, not a
+ * deliberate profile pick — it mirrors global agent_settings, so it always
+ * launches via agent_settings so the canvas-only enrichments the
+ * profile-resolution path drops survive for the common home-launch (the
+ * `<RUNTIME_SERVICES>` system-message suffix and project-skill loading).
+ * Named profiles are deliberate custom configs and still use the profile path
+ * unless the dropdown overrides their model.
+ *
+ * ACP profiles carry no LLM profile at all, so they're never gated here and
+ * always keep the profile path.
+ */
+export function resolveLaunchProfile(
+  options: ResolveLaunchProfileOptions,
+): ResolveLaunchProfileResult {
+  const { requestedAgentProfileId, agentProfiles, llmProfiles, isCloud } =
+    options;
+
+  // No agent profile → the plain agent_settings path, which reflects the
+  // account-wide active LLM profile (the home-dropdown selection).
+  if (!requestedAgentProfileId) {
+    return { launchLlmProfileRef: llmProfiles?.active_profile ?? null };
+  }
+
+  const resolvedAgentProfile = agentProfiles?.profiles?.find(
+    (profile) => profile.id === requestedAgentProfileId,
+  );
+
+  // A requested profile the list doesn't know (stale pointer) still launches
+  // by id; the server resolves or rejects it.
+  if (!resolvedAgentProfile) {
+    return {
+      effectiveAgentProfileId: requestedAgentProfileId,
+      launchLlmProfileRef: llmProfiles?.active_profile ?? null,
+    };
+  }
+
+  const isOpenHands = resolvedAgentProfile.agent_kind === "openhands";
+
+  // The seeded `default` baseline is global agent_settings, not a deliberate
+  // profile pick: launch it via agent_settings so the canvas-only enrichments
+  // survive. Scoped to OpenHands (an ACP `default` must keep the profile
+  // path) and to local (cloud never writes agent_settings, so it always
+  // resolves `default` server-side via agent_profile_id).
+  if (
+    !isCloud &&
+    isOpenHands &&
+    resolvedAgentProfile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+  ) {
+    return {
+      effectiveAgentProfileId: undefined,
+      agentProfileKind: resolvedAgentProfile.agent_kind,
+      launchLlmProfileRef: llmProfiles?.active_profile ?? null,
+      downgradeReason: "default-baseline",
+    };
+  }
+
+  // Named OpenHands profiles pin an LLM profile by ref. Validate the ref
+  // exists: the agent-server seeds a `default` profile whose ref can point at
+  // an LLM profile that doesn't exist (fresh store, or one configured with
+  // named profiles only); launching from it 404s and would brick home-launch.
+  // When the ref is valid it normally drives the launch — unless the user
+  // explicitly selected a different model in the home LLM dropdown, in which
+  // case the account-wide active LLM profile wins over the pinned ref (#16539).
+  if (isOpenHands && resolvedAgentProfile.llm_profile_ref) {
+    const llmProfileExists =
+      llmProfiles?.profiles.some(
+        (profile) => profile.name === resolvedAgentProfile.llm_profile_ref,
+      ) ?? false;
+
+    if (!llmProfileExists) {
+      // Launching from a profile whose ref doesn't resolve 404s ("LLM
+      // profile '<ref>' not found") and would brick home-launch. The
+      // agent-server seeds a `default` profile whose llm_profile_ref can
+      // point at an LLM profile that doesn't exist (fresh store, or one
+      // configured with named profiles only), and any named profile can
+      // dangle the same way. agent_settings reflects the active LLM, so the
+      // fallback degrades cleanly until the seed mirrors it (SDK #3933).
+      return {
+        effectiveAgentProfileId: undefined,
+        agentProfileKind: resolvedAgentProfile.agent_kind,
+        launchLlmProfileRef: llmProfiles?.active_profile ?? null,
+        downgradeReason: "missing-llm-profile-ref",
+      };
+    }
+
+    if (
+      !isCloud &&
+      llmProfiles?.active_profile &&
+      llmProfiles.active_profile !== resolvedAgentProfile.llm_profile_ref
+    ) {
+      // The home LLM dropdown selected a different profile than the one the
+      // active named AgentProfile pins: honor the dropdown by launching from
+      // agent_settings (which reflects the active LLM profile) instead of the
+      // pinned ref, so the next conversation runs the model the user picked.
+      // Local-only: cloud has no agent_settings fallback payload.
+      return {
+        effectiveAgentProfileId: undefined,
+        agentProfileKind: resolvedAgentProfile.agent_kind,
+        launchLlmProfileRef: llmProfiles.active_profile,
+        downgradeReason: "dropdown-llm-profile-selected",
+      };
+    }
+
+    return {
+      effectiveAgentProfileId: requestedAgentProfileId,
+      agentProfileKind: resolvedAgentProfile.agent_kind,
+      launchLlmProfileRef: resolvedAgentProfile.llm_profile_ref,
+    };
+  }
+
+  // An OpenHands profile without a ref (shouldn't occur — the openhands
+  // variant requires llm_profile_ref) or an ACP profile: keep the profile
+  // path; the LLM comes from the active profile.
+  return {
+    effectiveAgentProfileId: requestedAgentProfileId,
+    agentProfileKind: resolvedAgentProfile.agent_kind,
+    launchLlmProfileRef: llmProfiles?.active_profile ?? null,
+  };
+}
 
 const fetchConversationData = async (
   conversationId: string,

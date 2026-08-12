@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  resolveLaunchProfile,
   updateConversationExecutionStatusInCache,
   updateConversationLlmModelInCache,
 } from "./conversation-mutation-utils";
-import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+import type { AgentProfileListResponse } from "#/api/agent-profiles-service/agent-profiles-service.api";
+import type { ProfileListResponse } from "#/api/profiles-service/profiles-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { ExecutionStatus } from "#/types/agent-server/core/base/common";
+
+const agentProfiles = (profile: Record<string, unknown>) =>
+  ({
+    profiles: [profile],
+    active_agent_profile_id: profile.id,
+  }) as unknown as AgentProfileListResponse;
+
+const llmProfiles = (activeProfile: string, ...names: string[]) =>
+  ({
+    active_profile: activeProfile,
+    profiles: names.map((name) => ({ name })),
+  }) as unknown as ProfileListResponse;
 
 const createConversation = (): AppConversation => ({
   id: "conversation-1",
@@ -25,6 +40,64 @@ const createConversation = (): AppConversation => ({
   session_api_key: "session-key",
   sandbox_id: null,
   sub_conversation_ids: [],
+});
+
+describe("resolveLaunchProfile", () => {
+  it("honors a home dropdown selection over a named profile's pinned model", () => {
+    const profile = {
+      id: "agent-profile-1",
+      name: "openhands-luna",
+      agent_kind: "openhands",
+      llm_profile_ref: "pinned-model",
+    };
+
+    expect(
+      resolveLaunchProfile({
+        requestedAgentProfileId: profile.id as string,
+        agentProfiles: agentProfiles(profile),
+        llmProfiles: llmProfiles(
+          "selected-model",
+          "pinned-model",
+          "selected-model",
+        ),
+        isCloud: false,
+      }),
+    ).toMatchObject({
+      effectiveAgentProfileId: undefined,
+      launchLlmProfileRef: "selected-model",
+      downgradeReason: "dropdown-llm-profile-selected",
+    });
+  });
+
+  it("keeps the named profile path when its pinned model is selected", () => {
+    const profile = {
+      id: "agent-profile-1",
+      name: "openhands-luna",
+      agent_kind: "openhands",
+      llm_profile_ref: "pinned-model",
+    };
+
+    expect(
+      resolveLaunchProfile({
+        requestedAgentProfileId: profile.id as string,
+        agentProfiles: agentProfiles(profile),
+        llmProfiles: llmProfiles("pinned-model", "pinned-model"),
+        isCloud: false,
+      }),
+    ).toMatchObject({
+      effectiveAgentProfileId: profile.id,
+      launchLlmProfileRef: "pinned-model",
+    });
+  });
+
+  it("uses the active LLM profile when no agent profile is requested", () => {
+    expect(
+      resolveLaunchProfile({
+        llmProfiles: llmProfiles("selected-model", "selected-model"),
+        isCloud: false,
+      }),
+    ).toEqual({ launchLlmProfileRef: "selected-model" });
+  });
 });
 
 describe("updateConversationExecutionStatusInCache", () => {
