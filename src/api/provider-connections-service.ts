@@ -31,6 +31,9 @@ export interface ProviderConnection {
   id: string;
   provider: string;
   label: string | null;
+  baseUrl: string | null;
+  apiMode: "auto" | "chat" | "responses";
+  customHeaders: Record<string, string>;
   /** Models the catalog granted for this key (may be empty until validated). */
   models: string[];
   createdAt: number | null;
@@ -43,11 +46,17 @@ export interface CreateConnectionRequest {
   provider: string;
   key: string;
   label?: string;
+  baseUrl?: string;
+  apiMode?: "auto" | "chat" | "responses";
+  customHeaders?: Record<string, string>;
 }
 
 export interface UpdateConnectionRequest {
   key?: string;
   label?: string;
+  baseUrl?: string;
+  apiMode?: "auto" | "chat" | "responses";
+  customHeaders?: Record<string, string>;
   models?: string[];
 }
 
@@ -158,6 +167,20 @@ const readStringArray = (value: unknown): string[] => {
   return [];
 };
 
+const readStringRecord = (value: unknown): Record<string, string> => {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+};
+
+const readApiMode = (value: unknown): "auto" | "chat" | "responses" => {
+  if (value === "chat" || value === "responses") return value;
+  return "auto";
+};
+
 function normalizeConnection(raw: unknown): ProviderConnection {
   if (!isRecord(raw)) {
     throw new Error("Provider connection response was not an object");
@@ -171,6 +194,9 @@ function normalizeConnection(raw: unknown): ProviderConnection {
     id,
     provider,
     label: readString(raw, ["label"]),
+    baseUrl: readString(raw, ["base_url", "baseUrl"]),
+    apiMode: readApiMode(raw["api_mode"] ?? raw.apiMode),
+    customHeaders: readStringRecord(raw["custom_headers"] ?? raw.customHeaders),
     models: readStringArray(raw.models ?? raw["models_list"]),
     createdAt: readNumber(raw, ["created_at", "createdAt"]),
     lastValidatedAt: readNumber(raw, [
@@ -291,6 +317,9 @@ class ProviderConnectionsService {
       key: request.key,
     };
     if (request.label) body.label = request.label;
+    if (request.baseUrl) body.base_url = request.baseUrl;
+    if (request.apiMode) body.api_mode = request.apiMode;
+    if (request.customHeaders) body.custom_headers = request.customHeaders;
     const raw = await requestConnectionEndpoint<unknown>(
       PROVIDER_CONNECTIONS_PATH,
       { method: "POST", body: JSON.stringify(body) },
@@ -312,6 +341,11 @@ class ProviderConnectionsService {
     const body: Record<string, unknown> = {};
     if (request.key !== undefined) body.key = request.key;
     if (request.label !== undefined) body.label = request.label;
+    if (request.baseUrl !== undefined) body.base_url = request.baseUrl;
+    if (request.apiMode !== undefined) body.api_mode = request.apiMode;
+    if (request.customHeaders !== undefined) {
+      body.custom_headers = request.customHeaders;
+    }
     if (request.models !== undefined) body.models = request.models;
     const raw = await requestConnectionEndpoint<unknown>(
       PROVIDER_CONNECTION_PATH(id),

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectProviderWizard } from "#/components/features/settings/provider-connections/connect-provider-wizard";
@@ -18,6 +18,9 @@ const createdConnection: ProviderConnection = {
   id: "conn-1",
   provider: "openai",
   label: null,
+  baseUrl: null,
+  apiMode: "auto",
+  customHeaders: {},
   models: [],
   createdAt: 1700000000,
   lastValidatedAt: null,
@@ -140,6 +143,9 @@ describe("ConnectProviderWizard", () => {
         provider: "openai",
         key: "sk-test-key",
         label: undefined,
+        baseUrl: undefined,
+        apiMode: "auto",
+        customHeaders: {},
       });
     });
     expect(validateMock).toHaveBeenCalledWith("conn-1");
@@ -347,7 +353,59 @@ describe("ConnectProviderWizard", () => {
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(updateMock).toHaveBeenCalledWith({
       id: "conn-1",
-      request: { key: "sk-bad-fixed", label: undefined },
+      request: {
+        key: "sk-bad-fixed",
+        label: undefined,
+        baseUrl: undefined,
+        apiMode: "auto",
+        customHeaders: {},
+      },
+    });
+  });
+
+  it("passes custom endpoint settings when creating the connection", async () => {
+    const user = userEvent.setup();
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-label"), "Proxy");
+    await user.type(
+      screen.getByTestId("connection-base-url"),
+      "https://proxy.example/v1",
+    );
+    await user.click(screen.getByTestId("connection-api-mode"));
+    await user.click(screen.getByText("Responses"));
+    fireEvent.change(screen.getByTestId("connection-custom-headers"), {
+      target: { value: '{"X-Org":"eng"}' },
+    });
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith({
+        provider: "openai",
+        key: "sk-test-key",
+        label: "Proxy",
+        baseUrl: "https://proxy.example/v1",
+        apiMode: "responses",
+        customHeaders: { "X-Org": "eng" },
+      });
     });
   });
 

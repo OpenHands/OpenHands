@@ -31,6 +31,31 @@ interface ConnectProviderWizardProps {
 
 type WizardStep = "connect" | "pick" | "done";
 
+const WIRE_API_ITEMS = [
+  { key: "auto", label: "Auto" },
+  { key: "chat", label: "Chat Completions" },
+  { key: "responses", label: "Responses" },
+];
+
+function parseCustomHeaders(value: string): Record<string, string> | null {
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      Object.values(parsed).some((v) => typeof v !== "string")
+    ) {
+      return null;
+    }
+    return parsed as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Connect-a-Provider wizard implementing the issue #15492 wireframe:
  *   Step 1 — vendor + key (+ helper line)
@@ -59,6 +84,9 @@ export function ConnectProviderWizard({
   const [provider, setProvider] = useState<string>(defaultProvider ?? "");
   const [key, setKey] = useState("");
   const [label, setLabel] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiMode, setApiMode] = useState<"auto" | "chat" | "responses">("auto");
+  const [customHeadersJson, setCustomHeadersJson] = useState("");
   const [step, setStep] = useState<WizardStep>("connect");
   const [validated, setValidated] = useState<ValidateConnectionResponse | null>(
     null,
@@ -85,6 +113,9 @@ export function ConnectProviderWizard({
       setProvider(defaultProvider ?? "");
       setKey("");
       setLabel("");
+      setBaseUrl("");
+      setApiMode("auto");
+      setCustomHeadersJson("");
       setStep("connect");
       setValidated(null);
       setSelectedModels(new Set());
@@ -107,6 +138,11 @@ export function ConnectProviderWizard({
       displayErrorToast(t(I18nKey.SETTINGS$CONNECTION_PROVIDER_REQUIRED));
       return;
     }
+    const customHeaders = parseCustomHeaders(customHeadersJson);
+    if (customHeaders === null) {
+      displayErrorToast(t(I18nKey.SETTINGS$CONNECTION_HEADERS_INVALID));
+      return;
+    }
     setSubmitting(true);
     try {
       let connectionId = pendingConnectionId.current;
@@ -116,6 +152,9 @@ export function ConnectProviderWizard({
           request: {
             key: key.trim(),
             label: label.trim() || undefined,
+            baseUrl: baseUrl.trim() || undefined,
+            apiMode,
+            customHeaders,
           },
         });
       } else {
@@ -123,6 +162,9 @@ export function ConnectProviderWizard({
           provider,
           key: key.trim(),
           label: label.trim() || undefined,
+          baseUrl: baseUrl.trim() || undefined,
+          apiMode,
+          customHeaders,
         });
         connectionId = conn.id;
         pendingConnectionId.current = conn.id;
@@ -350,6 +392,44 @@ export function ConnectProviderWizard({
               onChange={setLabel}
               showOptionalTag
             />
+            <SettingsInput
+              testId="connection-base-url"
+              name="connection-base-url"
+              label={t(I18nKey.SETTINGS$BASE_URL)}
+              type="text"
+              value={baseUrl}
+              placeholder={t(I18nKey.SETTINGS$CONNECTION_BASE_URL_PLACEHOLDER)}
+              onChange={setBaseUrl}
+              showOptionalTag
+            />
+            <SettingsDropdownInput
+              testId="connection-api-mode"
+              name="connection-api-mode"
+              label={t(I18nKey.SETTINGS$CONNECTION_WIRE_API_LABEL)}
+              items={WIRE_API_ITEMS}
+              selectedKey={apiMode}
+              onSelectionChange={(k) => {
+                const next = String(k || "auto");
+                setApiMode(
+                  next === "chat" || next === "responses" ? next : "auto",
+                );
+              }}
+            />
+            <SettingsInput
+              testId="connection-custom-headers"
+              name="connection-custom-headers"
+              label={t(I18nKey.SETTINGS$CONNECTION_CUSTOM_HEADERS_LABEL)}
+              type="text"
+              value={customHeadersJson}
+              placeholder={t(
+                I18nKey.SETTINGS$CONNECTION_CUSTOM_HEADERS_PLACEHOLDER,
+              )}
+              onChange={setCustomHeadersJson}
+              showOptionalTag
+            />
+            <p className="text-xs leading-4 text-tertiary-light">
+              {t(I18nKey.SETTINGS$CONNECTION_CUSTOM_HEADERS_HELPER)}
+            </p>
             {busy ? <LoadingSpinner size="small" /> : null}
             {validated && !validated.ok ? (
               <div

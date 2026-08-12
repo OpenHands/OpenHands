@@ -44,6 +44,9 @@ const rawConnection = {
   id: "conn-1",
   provider: "openai",
   label: "Work",
+  base_url: "https://proxy.example/v1",
+  api_mode: "chat",
+  custom_headers: { "X-Org": "eng" },
   models: ["gpt-4o", "gpt-4o-mini"],
   created_at: 1700000000,
   last_validated_at: 1700000100,
@@ -74,6 +77,9 @@ describe("ProviderConnectionsService", () => {
         id: "conn-1",
         provider: "openai",
         label: "Work",
+        baseUrl: "https://proxy.example/v1",
+        apiMode: "chat",
+        customHeaders: { "X-Org": "eng" },
         models: ["gpt-4o", "gpt-4o-mini"],
         createdAt: 1700000000,
         lastValidatedAt: 1700000100,
@@ -102,6 +108,9 @@ describe("ProviderConnectionsService", () => {
       provider: "openai",
       key: "sk-secret",
       label: "Work",
+      baseUrl: "https://proxy.example/v1",
+      apiMode: "responses",
+      customHeaders: { "X-Org": "eng" },
     });
 
     expect(result.apiKeySet).toBe(true);
@@ -112,6 +121,9 @@ describe("ProviderConnectionsService", () => {
       provider: "openai",
       key: "sk-secret",
       label: "Work",
+      base_url: "https://proxy.example/v1",
+      api_mode: "responses",
+      custom_headers: { "X-Org": "eng" },
     });
   });
 

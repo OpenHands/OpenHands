@@ -9,6 +9,9 @@ interface MockConnection {
   id: string;
   provider: string;
   label?: string;
+  base_url?: string;
+  api_mode?: "auto" | "chat" | "responses";
+  custom_headers?: Record<string, string>;
   models: string[];
   created_at: number;
   last_validated_at: number | null;
@@ -24,6 +27,9 @@ const connections = new Map<string, MockConnection>([
       id: "conn-1",
       provider: "openai",
       label: "Work",
+      base_url: "https://api.openai.com/v1",
+      api_mode: "auto",
+      custom_headers: {},
       models: ["gpt-4o", "gpt-4o-mini"],
       created_at: 1700000000,
       last_validated_at: 1700000100,
@@ -53,6 +59,9 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
       provider?: string;
       key?: string;
       label?: string;
+      base_url?: string;
+      api_mode?: "auto" | "chat" | "responses";
+      custom_headers?: Record<string, string>;
     } | null;
     if (!body?.provider || !body?.key) {
       return HttpResponse.json(
@@ -65,6 +74,9 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
       id,
       provider: body.provider,
       label: body.label,
+      base_url: body.base_url,
+      api_mode: body.api_mode ?? "auto",
+      custom_headers: body.custom_headers ?? {},
       models: [],
       created_at: Math.floor(Date.now() / 1000),
       last_validated_at: null,
@@ -101,6 +113,9 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
     const body = (await request.json()) as {
       key?: string;
       label?: string;
+      base_url?: string;
+      api_mode?: "auto" | "chat" | "responses";
+      custom_headers?: Record<string, string>;
       models?: string[];
     } | null;
     if (body?.key) {
@@ -108,6 +123,11 @@ export const PROVIDER_CONNECTIONS_HANDLERS = [
       conn.api_key_set = true;
     }
     if (body?.label !== undefined) conn.label = body.label;
+    if (body?.base_url !== undefined) conn.base_url = body.base_url;
+    if (body?.api_mode !== undefined) conn.api_mode = body.api_mode;
+    if (body?.custom_headers !== undefined) {
+      conn.custom_headers = body.custom_headers;
+    }
     if (body?.models !== undefined) conn.models = body.models;
     return HttpResponse.json(toResponse(conn));
   }),

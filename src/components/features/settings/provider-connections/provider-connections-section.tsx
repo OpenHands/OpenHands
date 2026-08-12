@@ -156,6 +156,20 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
               : t(I18nKey.SETTINGS$CONNECTION_NO_CATALOG)}
             {lastRefreshed ? ` · ${lastRefreshed}` : ""}
           </span>
+          {(connection.baseUrl || connection.apiMode !== "auto") && (
+            <span className="text-xs leading-4 text-tertiary-light">
+              {connection.baseUrl ? `${connection.baseUrl} · ` : ""}
+              {t(I18nKey.SETTINGS$CONNECTION_WIRE_API_LABEL)}:{" "}
+              {connection.apiMode}
+            </span>
+          )}
+          {Object.keys(connection.customHeaders).length > 0 && (
+            <span className="text-xs leading-4 text-tertiary-light">
+              {t(I18nKey.SETTINGS$CONNECTION_CUSTOM_HEADERS_COUNT, {
+                count: Object.keys(connection.customHeaders).length,
+              })}
+            </span>
+          )}
         </div>
         {connection.apiKeySet ? (
           <span
