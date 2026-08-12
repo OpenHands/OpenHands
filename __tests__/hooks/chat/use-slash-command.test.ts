@@ -154,6 +154,12 @@ describe("useSlashCommand", () => {
           base_url: null,
           api_key_set: true,
         },
+        {
+          name: "free",
+          model: "openhands/glm-5.2",
+          base_url: null,
+          api_key_set: true,
+        },
       ],
       active_profile: "haiku",
     };
@@ -169,7 +175,12 @@ describe("useSlashCommand", () => {
     expect(result.current.filteredItems.map((i) => i.command)).toEqual([
       "/model haiku",
       "/model gpt",
+      "/model free",
     ]);
+    expect(
+      result.current.filteredItems.find((i) => i.command === "/model free")
+        ?.skill.content,
+    ).toBe("Switch to OpenHands GLM-5.2 (free)");
   });
 
   it("filters saved LLM profile suggestions by profile name or model", () => {

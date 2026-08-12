@@ -1,0 +1,108 @@
+---
+name: Issue Readiness Check
+
+# Manages the `ready-for-dev` label based on type-specific readiness criteria.
+#
+# Bug reports (label `bug`): the Actual Behavior section must reference a
+# supported run method (`agent-canvas`, `npm run`, or
+# `app.all-hands.dev/canvas`) and embed a screenshot or video, plus an
+# Acceptance Criteria section with at least one checklist item.
+#
+# Enhancements (label `enhancement`): the body must contain Desired Behavior and
+# Acceptance Criteria sections, the latter with at least one checklist item.
+#
+# When criteria are met the label is added (idempotently); when they are not the
+# label is removed. A feedback comment is posted (or updated) in three cases:
+#   1. The issue is first opened or reopened — always comment so the author
+#      knows whether their issue is ready or what is missing.
+#   2. The label is being added (issue became ready) — comment celebrating it.
+#   3. The label is being removed (issue was ready but is no longer) — comment
+#      explaining what changed.
+# Edits that do not change the label state do not produce a new comment. All
+# comments are upserted by a hidden marker so there is at most one per issue.
+
+on:
+    issues:
+        types: [opened, edited, reopened, labeled, unlabeled]
+
+permissions:
+    issues: write
+    contents: read
+
+concurrency:
+    group: issue-readiness-${{ github.event.issue.number }}
+    cancel-in-progress: false
+
+jobs:
+    check:
+        if: github.event.issue.state == 'open' && github.event.issue.pull_request == null
+        runs-on: ubuntu-24.04
+        timeout-minutes: 5
+        steps:
+            - name: Checkout trusted workflow scripts
+              uses: actions/checkout@v7
+
+            - name: Evaluate issue readiness
+              id: readiness
+              env:
+                  GITHUB_EVENT_PATH: ${{ github.event_path }}
+              run: |
+                  set -euo pipefail
+                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json
+                  echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
+                  # Write reasons to a file so the comment step can read them
+                  # without shell-escaping multiline text.
+                  jq -r '.reasons[]?' /tmp/result.json > /tmp/reasons.txt || true
+                  echo "reasons_file=/tmp/reasons.txt" >> "$GITHUB_OUTPUT"
+
+            - name: Add ready-for-dev label
+              if: steps.readiness.outputs.ready == 'true'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  # Capture stderr — tolerate "label already present" (exit 0
+                  # from gh) but surface unexpected errors to the step summary.
+                  if ! gh issue edit "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --add-label "ready-for-dev" 2>/tmp/gh-err.txt; then
+                    echo "::warning::Failed to add ready-for-dev label:" >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Remove ready-for-dev label
+              if: steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev')
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  # Capture stderr — tolerate "label already removed" but
+                  # surface unexpected errors.
+                  if ! gh issue edit "${{ github.event.issue.number }}" \
+                      --repo "${{ github.repository }}" \
+                      --remove-label "ready-for-dev" 2>/tmp/gh-err.txt; then
+                    echo "::warning::Failed to remove ready-for-dev label:" >> "$GITHUB_STEP_SUMMARY"
+                    cat /tmp/gh-err.txt >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Post feedback comment
+              if: >-
+                  github.event.action == 'opened'
+                  || github.event.action == 'reopened'
+                  || (steps.readiness.outputs.ready == 'true' && !contains(github.event.issue.labels.*.name, 'ready-for-dev'))
+                  || (steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev'))
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  if [ "${{ steps.readiness.outputs.ready }}" = "true" ]; then
+                    node .github/scripts/post-readiness-comment.mjs \
+                        --issue-number "${{ github.event.issue.number }}" \
+                        --repo "${{ github.repository }}" \
+                        --ready
+                  else
+                    node .github/scripts/post-readiness-comment.mjs \
+                        --issue-number "${{ github.event.issue.number }}" \
+                        --repo "${{ github.repository }}" \
+                        --reasons-file "${{ steps.readiness.outputs.reasons_file }}"
+                  fi

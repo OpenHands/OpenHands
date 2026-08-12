@@ -4,6 +4,7 @@ import {
   useCallback,
   useRef,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 import { FileUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -50,16 +51,50 @@ import {
 } from "#/utils/automation-export";
 import {
   automationDetailPath,
+  getDashboardSpec,
   getInterfaceCopy,
 } from "#/manifests/automation-interface";
-import { downloadBlob } from "#/utils/utils";
+import {
+  applyDashboardView,
+  computeOverviewTile,
+  matchesAutomationSearch,
+} from "#/manifests/automation-insights";
+import { interpolateValues } from "#/manifests/manifest-template";
+import type {
+  DashboardSortValue,
+  DashboardStatusValue,
+  DashboardTriggerValue,
+} from "#/manifests/types";
+import { useAutomationRunSummaries } from "#/hooks/query/use-automation-run-summaries";
+import { useAutomationSubPageNav } from "#/components/features/automations/dashboard/use-automation-sub-page-nav";
+import { AutomationsDashboardControls } from "#/components/features/automations/dashboard/automations-dashboard-controls";
+import { AutomationsFilteredEmptyState } from "#/components/features/automations/dashboard/automations-filtered-empty-state";
+import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
+import { ManifestOverviewTiles } from "#/components/features/manifest/manifest-overview-tiles";
+import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-subpage-layout";
+import { cn, downloadBlob } from "#/utils/utils";
 
 const PAGE_SIZE = 50;
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
   const interfaceCopy = getInterfaceCopy();
+  // Admission is stable for the session; memo just keeps one identity.
+  const dashboardSpec = useMemo(() => getDashboardSpec(), []);
+  const subPageNav = useAutomationSubPageNav();
+  // The manifest's dashboard surface is all-or-nothing, so either both are
+  // present (dashboard mode) or neither is (today's plain list).
+  const dashboard =
+    dashboardSpec && subPageNav
+      ? { spec: dashboardSpec, nav: subPageNav }
+      : null;
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<DashboardStatusValue>("all");
+  const [triggerFilter, setTriggerFilter] =
+    useState<DashboardTriggerValue>("all");
+  const [sortValue, setSortValue] = useState<DashboardSortValue>(
+    dashboardSpec?.sort.default ?? "last-run",
+  );
   const [viewMode, setViewMode] = useState<AutomationViewMode>(() =>
     readStoredAutomationViewMode(),
   );
@@ -92,6 +127,10 @@ export default function AutomationsList() {
     offset: 0,
     enabled: isBackendHealthy,
   });
+  // One runs query per listed automation — dashboard mode only.
+  const runSummaries = useAutomationRunSummaries(data?.automations ?? [], {
+    enabled: isBackendHealthy && dashboard !== null,
+  });
   const { trackPrebuiltAutomationEnabled, trackAutomationExported } =
     useTracking();
   const toggleMutation = useToggleAutomation();
@@ -99,27 +138,38 @@ export default function AutomationsList() {
   const dispatchMutation = useDispatchAutomation();
   const importMutation = useImportAutomation();
 
-  const filtered = useMemo(() => {
+  const visible = useMemo(() => {
     if (!data?.automations) return [];
-    const q = searchQuery.toLowerCase();
-    if (!q) return data.automations;
-    return data.automations.filter(
-      (a) =>
-        a.name.toLowerCase().includes(q) ||
-        (a.prompt ?? "").toLowerCase().includes(q) ||
-        a.repository?.toLowerCase().includes(q) ||
-        a.model?.toLowerCase().includes(q),
+    if (!dashboardSpec) {
+      return data.automations.filter((a) =>
+        matchesAutomationSearch(a, searchQuery),
+      );
+    }
+    return applyDashboardView(
+      data.automations,
+      {
+        search: searchQuery,
+        status: statusFilter,
+        trigger: triggerFilter,
+        sort: sortValue,
+      },
+      runSummaries,
     );
-  }, [data?.automations, searchQuery]);
+  }, [
+    data?.automations,
+    dashboardSpec,
+    searchQuery,
+    statusFilter,
+    triggerFilter,
+    sortValue,
+    runSummaries,
+  ]);
 
   const activeAutomations = useMemo(
-    () => filtered.filter((a) => a.enabled),
-    [filtered],
+    () => visible.filter((a) => a.enabled),
+    [visible],
   );
-  const inactive = useMemo(
-    () => filtered.filter((a) => !a.enabled),
-    [filtered],
-  );
+  const inactive = useMemo(() => visible.filter((a) => !a.enabled), [visible]);
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
@@ -226,117 +276,187 @@ export default function AutomationsList() {
     writeStoredAutomationViewMode(view);
   }, []);
 
+  // Resets what filters to nothing: search and the dropdowns, never the sort.
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTriggerFilter("all");
+  };
+
+  const overviewTiles = useMemo(() => {
+    if (!dashboardSpec) return [];
+    const automations = data?.automations ?? [];
+    return dashboardSpec.overview.tiles.map((tile) => {
+      const value = computeOverviewTile(tile.metric, automations, runSummaries);
+      const template =
+        value.isZero && tile.zeroDetail ? tile.zeroDetail : tile.detail;
+      return {
+        key: tile.metric,
+        label: tile.label,
+        value: value.display,
+        detail: interpolateValues(template, value.placeholderValues),
+        Icon: MANIFEST_ICON_BY_SLUG[tile.icon],
+      };
+    });
+  }, [dashboardSpec, data?.automations, runSummaries]);
+
+  const groupInsights = dashboard
+    ? { spec: dashboard.spec.insights, byId: runSummaries }
+    : undefined;
+
+  // Dashboard mode wraps the page in the manifest's sub-page shell; without a
+  // manifest the wrapper — like everything else — is exactly today's.
+  const renderShell = (content: ReactNode) =>
+    dashboard ? (
+      <ManifestSubpageLayout
+        heading={dashboard.nav.heading}
+        navTestIdBase="automations-navbar"
+        items={dashboard.nav.items}
+      >
+        {content}
+      </ManifestSubpageLayout>
+    ) : (
+      <div className="min-h-full">
+        <div className="p-6 max-w-4xl mx-auto">{content}</div>
+      </div>
+    );
+
   const hasMore = data ? data.total > data.automations.length : false;
   const hasNoAutomations =
     !isLoading && !isError && data?.automations.length === 0;
 
   // Show loading state while checking health
   if (isHealthLoading) {
-    return (
-      <div className="min-h-full">
-        <div className="p-6 max-w-4xl mx-auto">
-          <h1 className="text-xl font-medium text-content">
-            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
-            ))}
-          </div>
+    return renderShell(
+      <div>
+        <h1 className="text-xl font-medium text-content">
+          {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
+        </h1>
+        <p className="mt-1 text-sm text-muted">
+          {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
+        </p>
+        <div className="mt-6 flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
+          ))}
         </div>
-      </div>
+      </div>,
     );
   }
 
   // Show backend not configured state if health check failed
   if (!isBackendHealthy) {
-    return (
-      <div className="min-h-full">
-        <div className="p-6 max-w-4xl mx-auto">
-          <h1 className="text-xl font-medium text-content">
+    return renderShell(
+      <div>
+        <h1 className="text-xl font-medium text-content">
+          {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
+        </h1>
+        <p className="mt-1 text-sm text-muted">
+          {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
+        </p>
+        <BackendNotConfigured onRetry={refetchHealth} />
+      </div>,
+    );
+  }
+
+  return renderShell(
+    <>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-content">
             {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
           </h1>
           <p className="mt-1 text-sm text-muted">
             {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
           </p>
-          <BackendNotConfigured onRetry={refetchHealth} />
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automations-import-automation"
+            className="whitespace-nowrap"
+            onClick={() => importInputRef.current?.click()}
+            startContent={<FileUp className="size-4" aria-hidden />}
+          >
+            {t(I18nKey.AUTOMATIONS$IMPORT)}
+          </BrandButton>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            data-testid="automations-import-file"
+            onChange={handleImportFile}
+          />
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="automations-add-automation"
+            className="whitespace-nowrap"
+            onClick={() => setIsAddAutomationOpen(true)}
+          >
+            {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
+          </BrandButton>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-full">
-      <div className="p-6 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold text-content">
-              {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
-            </h1>
-            <p className="mt-1 text-sm text-muted">
-              {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <BrandButton
-              type="button"
-              variant="secondary"
-              testId="automations-import-automation"
-              className="whitespace-nowrap"
-              onClick={() => importInputRef.current?.click()}
-              startContent={<FileUp className="size-4" aria-hidden />}
-            >
-              {t(I18nKey.AUTOMATIONS$IMPORT)}
-            </BrandButton>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              data-testid="automations-import-file"
-              onChange={handleImportFile}
-            />
-            <BrandButton
-              type="button"
-              variant="secondary"
-              testId="automations-add-automation"
-              className="whitespace-nowrap"
-              onClick={() => setIsAddAutomationOpen(true)}
-            >
-              {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-            </BrandButton>
-          </div>
-        </div>
+      {/* Overview tiles — dashboard mode only */}
+      {dashboard && (
+        <ManifestOverviewTiles
+          label={dashboard.spec.overview.label}
+          tiles={overviewTiles}
+        />
+      )}
 
-        {/* Search */}
-        <div className="mt-6 flex items-stretch gap-2">
-          <SearchInput value={searchQuery} onChange={setSearchQuery} />
-          <AutomationViewToggle
-            view={viewMode}
-            onChange={handleViewModeChange}
-            disabled={hasNoAutomations}
+      {/* Search */}
+      <div
+        className={cn(
+          "flex items-stretch gap-2",
+          dashboard ? "flex-wrap" : "mt-6",
+        )}
+      >
+        <SearchInput value={searchQuery} onChange={setSearchQuery} />
+        {dashboard && (
+          <AutomationsDashboardControls
+            spec={dashboard.spec}
+            status={statusFilter}
+            trigger={triggerFilter}
+            sort={sortValue}
+            onStatusChange={setStatusFilter}
+            onTriggerChange={setTriggerFilter}
+            onSortChange={setSortValue}
           />
-        </div>
+        )}
+        <AutomationViewToggle
+          view={viewMode}
+          onChange={handleViewModeChange}
+          disabled={hasNoAutomations}
+        />
+      </div>
 
-        {/* Content */}
-        <div className="mt-6 flex flex-col gap-6">
-          {isLoading && (
-            <div className="flex flex-col gap-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
-              ))}
-            </div>
-          )}
+      {/* Content */}
+      <div className={cn("flex flex-col gap-6", !dashboard && "mt-6")}>
+        {isLoading && (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
+            ))}
+          </div>
+        )}
 
-          {isError && !isLoading && <ErrorState onRetry={refetch} />}
+        {isError && !isLoading && <ErrorState onRetry={refetch} />}
 
-          {hasNoAutomations && <EmptyState />}
+        {hasNoAutomations && <EmptyState />}
 
-          {!isLoading && !isError && data && data.automations.length > 0 && (
+        {!isLoading &&
+          !isError &&
+          data &&
+          data.automations.length > 0 &&
+          (dashboard && visible.length === 0 ? (
+            <AutomationsFilteredEmptyState onClear={handleClearFilters} />
+          ) : (
             <>
               <AutomationGroup
                 title={t(I18nKey.AUTOMATIONS$ACTIVE)}
@@ -353,6 +473,7 @@ export default function AutomationsList() {
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
                 onEdit={canEdit ? handleEditRequest : undefined}
+                insights={groupInsights}
               />
               <AutomationGroup
                 title={t(I18nKey.AUTOMATIONS$INACTIVE)}
@@ -369,6 +490,7 @@ export default function AutomationsList() {
                 onDelete={handleDeleteRequest}
                 onExport={handleExport}
                 onEdit={canEdit ? handleEditRequest : undefined}
+                insights={groupInsights}
               />
 
               {hasMore && (
@@ -381,43 +503,45 @@ export default function AutomationsList() {
                 </button>
               )}
             </>
-          )}
-        </div>
+          ))}
+      </div>
 
+      {/* The launcher lives on the templates sub-page in dashboard mode */}
+      {!dashboard && (
         <div className="mt-6">
           <RecommendedAutomationsLauncher query={searchQuery} />
         </div>
+      )}
 
-        {/* Delete confirmation modal */}
-        <DeleteConfirmationModal
-          automationName={deleteTarget?.name ?? ""}
-          isOpen={deleteTarget !== null}
-          onConfirm={handleDeleteConfirm}
-          onCancel={() => setDeleteTarget(null)}
+      {/* Delete confirmation modal */}
+      <DeleteConfirmationModal
+        automationName={deleteTarget?.name ?? ""}
+        isOpen={deleteTarget !== null}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Edit modal — local backends only */}
+      {editTarget && (
+        <EditAutomationModal
+          automation={editTarget}
+          isOpen={editTarget !== null}
+          onClose={() => setEditTarget(null)}
         />
+      )}
 
-        {/* Edit modal — local backends only */}
-        {editTarget && (
-          <EditAutomationModal
-            automation={editTarget}
-            isOpen={editTarget !== null}
-            onClose={() => setEditTarget(null)}
-          />
-        )}
+      <AddAutomationModal
+        isOpen={isAddAutomationOpen}
+        onClose={() => setIsAddAutomationOpen(false)}
+      />
 
-        <AddAutomationModal
-          isOpen={isAddAutomationOpen}
-          onClose={() => setIsAddAutomationOpen(false)}
-        />
-
-        <ImportAutomationModal
-          isOpen={importSpec !== null}
-          spec={importSpec}
-          isImporting={importMutation.isPending}
-          onClose={() => setImportSpec(null)}
-          onImport={handleImportConfirm}
-        />
-      </div>
-    </div>
+      <ImportAutomationModal
+        isOpen={importSpec !== null}
+        spec={importSpec}
+        isImporting={importMutation.isPending}
+        onClose={() => setImportSpec(null)}
+        onImport={handleImportConfirm}
+      />
+    </>,
   );
 }

@@ -15,6 +15,7 @@ import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
@@ -427,9 +428,10 @@ export function LlmSettingsLocalView() {
           viewMode === "edit" && editingProfile?.initialValues
             ? // Edit mode: use the existing profile values
               editingProfile.initialValues
-            : // Create mode: start with empty fields for a fresh profile
+            : // Create mode: prefill the model with Canvas' free default,
+              // while keeping secret/base URL fields blank for a fresh profile.
               {
-                "llm.model": "",
+                "llm.model": DEFAULT_SETTINGS.llm_model,
                 "llm.api_key": "",
                 "llm.base_url": "",
                 [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
