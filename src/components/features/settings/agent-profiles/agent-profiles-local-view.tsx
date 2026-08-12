@@ -272,18 +272,6 @@ export function AgentProfilesLocalView() {
       ? t(I18nKey.SETTINGS$PROFILE_LOADED, { name: editingProfile.name })
       : t(I18nKey.SETTINGS$PROFILE_SAVE_HINT);
   const isOpenHands = saveControl?.agentType !== "acp";
-  const nameDirty = viewMode === "edit" && profileName !== editingProfile?.name;
-  const loadedLlmRef =
-    editingProfile?.agent_kind === "openhands"
-      ? editingProfile.llm_profile_ref
-      : "";
-  const llmRefDirty =
-    viewMode === "edit" && isOpenHands && llmProfileRef !== loadedLlmRef;
-  const hasUnsavedChanges =
-    viewMode === "create" ||
-    Boolean(saveControl?.isDirty) ||
-    nameDirty ||
-    llmRefDirty;
 
   return (
     <div className="flex flex-col gap-6">
@@ -357,12 +345,7 @@ export function AgentProfilesLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={
-            !isNameValid ||
-            isSaving ||
-            !saveControl?.isValid ||
-            !hasUnsavedChanges
-          }
+          isDisabled={!isNameValid || isSaving || !saveControl?.isValid}
           aria-busy={isSaving}
         >
           {isSaving ? t(I18nKey.SETTINGS$SAVING) : t(I18nKey.BUTTON$SAVE)}

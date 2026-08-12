@@ -158,28 +158,7 @@ export function normalizeFieldValue(
   return String(resolvedValue);
 }
 
-function stableJsonStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map(stableJsonStringify).join(",")}]`;
-  }
-
-  const sortedEntries = Object.entries(value as Record<string, unknown>).sort(
-    ([leftKey], [rightKey]) => leftKey.localeCompare(rightKey),
-  );
-
-  return `{${sortedEntries
-    .map(
-      ([key, entryValue]) =>
-        `${JSON.stringify(key)}:${stableJsonStringify(entryValue)}`,
-    )
-    .join(",")}}`;
-}
-
-export function normalizeComparableValue(
+function normalizeComparableValue(
   field: SettingsFieldSchema,
   rawValue: unknown,
 ): boolean | number | string | null {
@@ -246,13 +225,13 @@ export function normalizeComparableValue(
         ) {
           return null;
         }
-        return stableJsonStringify(parsed);
+        return JSON.stringify(parsed);
       } catch {
         return trimmedValue;
       }
     }
 
-    return stableJsonStringify(rawValue);
+    return JSON.stringify(rawValue);
   }
 
   if (rawValue === null) {

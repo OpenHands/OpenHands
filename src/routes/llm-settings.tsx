@@ -124,7 +124,6 @@ export function LlmSettingsScreen({
   scope = "personal",
   onSaveSuccess,
   initialValueOverrides,
-  markInitialOverridesDirty,
   embedded,
   hideSaveButton,
   suppressSuccessToast,
@@ -135,8 +134,6 @@ export function LlmSettingsScreen({
   onSaveSuccess?: () => void;
   /** Forwarded to {@link SdkSectionPage}. */
   initialValueOverrides?: SettingsFormValues;
-  /** Forwarded to {@link SdkSectionPage}. */
-  markInitialOverridesDirty?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   embedded?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
@@ -521,7 +518,6 @@ export function LlmSettingsScreen({
       allowAllView
       onSaveSuccess={onSaveSuccess}
       initialValueOverrides={initialValueOverrides}
-      markInitialOverridesDirty={markInitialOverridesDirty}
       embedded={embedded}
       hideSaveButton={hideSaveButton}
       suppressSuccessToast={suppressSuccessToast}

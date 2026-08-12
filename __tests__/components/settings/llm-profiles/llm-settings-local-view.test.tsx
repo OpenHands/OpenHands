@@ -48,9 +48,6 @@ vi.mock("#/routes/llm-settings", async () => {
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
-      const isDirty =
-        model !== String(initialValuesRef.current["llm.model"] ?? "") ||
-        temperature !== "0.2";
       React.useEffect(() => {
         const values = {
           ...(initialValueOverridesRef.current ?? {}),
@@ -61,7 +58,7 @@ vi.mock("#/routes/llm-settings", async () => {
         onSaveControlChange?.({
           save: vi.fn(),
           isSaving: false,
-          isDirty,
+          isDirty: true,
           view,
           values,
           getDirtyPayload: () => {
@@ -77,15 +74,7 @@ vi.mock("#/routes/llm-settings", async () => {
             };
           },
         });
-      }, [
-        apiKey,
-        baseUrl,
-        isDirty,
-        model,
-        onSaveControlChange,
-        temperature,
-        view,
-      ]);
+      }, [apiKey, baseUrl, model, onSaveControlChange, temperature, view]);
 
       return (
         <div data-testid="mock-llm-settings-screen">
@@ -482,39 +471,6 @@ describe("LlmSettingsLocalView", () => {
       // Verify we're in edit mode (back button and save button visible)
       expect(screen.getByTestId("back-to-profiles")).toBeInTheDocument();
       expect(screen.getByTestId("save-profile-btn")).toBeInTheDocument();
-      // Seeded profile values must not count as dirty — Save stays off.
-      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
-    });
-
-    it("enables Save after an edit-mode form field changes", async () => {
-      const user = userEvent.setup();
-      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
-        name: "gpt-4-profile",
-        api_key_set: true,
-        config: {
-          model: "openai/gpt-4",
-          api_key: "encrypted-key-123",
-          base_url: "https://api.openai.com/v1",
-        },
-      });
-
-      renderWithProviders(<LlmSettingsLocalView />);
-
-      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
-      await user.click(screen.getByTestId("profile-edit"));
-      await waitFor(() => {
-        expect(screen.getByTestId("profile-name-input")).toHaveValue(
-          "gpt-4-profile",
-        );
-      });
-      expect(screen.getByTestId("save-profile-btn")).toBeDisabled();
-
-      const modelInput = await screen.findByTestId("mock-basic-model-input");
-      await user.clear(modelInput);
-      await user.type(modelInput, "openai/gpt-4o");
-      await waitFor(() => {
-        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
-      });
     });
   });
 
@@ -685,14 +641,6 @@ describe("LlmSettingsLocalView", () => {
         );
       });
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
-      // Touch a non-model field so Save enables without changing the model.
-      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
-      const temperatureInput = await screen.findByTestId(
-        "sdk-settings-llm.temperature",
-      );
-      await user.clear(temperatureInput);
-      await user.type(temperatureInput, "0.3");
-      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
       });
@@ -731,13 +679,6 @@ describe("LlmSettingsLocalView", () => {
           "gpt-4-profile",
         );
       });
-      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
-      await user.click(await screen.findByTestId("sdk-section-all-toggle"));
-      const temperatureInput = await screen.findByTestId(
-        "sdk-settings-llm.temperature",
-      );
-      await user.clear(temperatureInput);
-      await user.type(temperatureInput, "0.3");
       await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
       await waitFor(() => {
         expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
