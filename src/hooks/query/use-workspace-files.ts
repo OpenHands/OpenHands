@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
@@ -10,7 +10,6 @@ import {
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
-import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
 import { getGitPath } from "#/utils/get-git-path";
 
 // Cap the number of files we render so a giant repo doesn't freeze the UI.
@@ -115,21 +114,16 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
 }
 
 /**
- * Cloud-backend listing: the union of two sources, so we add the full tree
- * without ever regressing the changed-files view.
+ * Cloud-backend listing: enumerate the full workspace tree via the cloud API's
+ * first-class `GET /api/v1/app-conversations/{id}/files` endpoint, which
+ * resolves the conversation's runtime and runs the same bounded `find`
+ * server-side (see enterprise `list_conversation_files`). This is the same
+ * server-side runtime-hop transport the git-changes/diff and single-file read
+ * already use, so it works without CORS or the removed `/api/cloud-proxy` hop.
  *
- *  1. Git changes (`useUnifiedGetGitChanges`) — the pre-existing source. Always
- *     surfaces files the agent created/modified, even on runtimes/repos where
- *     the full-tree endpoint returns nothing useful.
- *  2. The cloud API's first-class `GET /api/v1/app-conversations/{id}/files`
- *     endpoint, which resolves the conversation's runtime and runs the same
- *     bounded `find` server-side (see enterprise `list_conversation_files`),
- *     enumerating unchanged tracked files too. Same server-side runtime-hop
- *     transport the git-changes/diff and single-file read use, so no CORS or
- *     removed `/api/cloud-proxy` hop is involved.
- *
- * Unioning means a `/files` failure or empty response degrades gracefully to
- * exactly the old changed-files behavior rather than an empty tab. Paths are
+ * Unlike the previous git-changes-based approach, this returns unchanged
+ * tracked files too, so a conversation attached to a large existing repo shows
+ * the whole tree — matching the local-backend experience. Paths come back
  * relative to the working dir (e.g. `src/index.html`).
  */
 function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
@@ -150,16 +144,15 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const gitPath = getGitPath(selectedRepository, workingDir);
   const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
 
-  const gitChanges = useUnifiedGetGitChanges();
-
-  const fullTree = useQuery<string[]>({
+  const query = useQuery<string[]>({
     queryKey: ["workspace-files-cloud", conversationId, absolutePath],
     queryFn: async () => {
       const files = await listCloudConversationFiles(
         conversationId!,
         absolutePath,
       );
-      return files.map(normalizePath).filter(Boolean);
+      const normalized = files.map(normalizePath).filter(Boolean);
+      return Array.from(new Set(normalized)).slice(0, MAX_FILES);
     },
     enabled: enabled && runtimeIsReady && !!conversationId,
     retry: false,
@@ -168,23 +161,7 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
     meta: { disableToast: true },
   });
 
-  const data = useMemo(() => {
-    if (!enabled) return undefined;
-    const changed = (gitChanges.data ?? [])
-      .filter((change) => change.status !== "D")
-      .map((change) => normalizePath(change.path));
-    const tree = fullTree.data ?? [];
-    const merged = Array.from(new Set([...changed, ...tree])).filter(Boolean);
-    merged.sort((a, b) => a.localeCompare(b));
-    return merged.slice(0, MAX_FILES);
-  }, [enabled, gitChanges.data, fullTree.data]);
-
-  return {
-    data: enabled ? data : undefined,
-    // Only block on the changed-files source; the full-tree query is additive
-    // and must never keep the tab spinning if it's slow or unavailable.
-    isLoading: enabled ? gitChanges.isLoading : false,
-  };
+  return { data: query.data, isLoading: query.isLoading };
 }
 
 /**

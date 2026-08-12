@@ -58,11 +58,6 @@ vi.mock("#/hooks/use-conversation-id", () => ({
   useOptionalConversationId: () => useOptionalConversationIdMock(),
 }));
 
-const useUnifiedGetGitChangesMock = vi.fn();
-vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
-  useUnifiedGetGitChanges: () => useUnifiedGetGitChangesMock(),
-}));
-
 vi.mock("#/api/cloud/conversation-service.api", () => ({
   listCloudConversationFiles: vi.fn(),
 }));
@@ -92,20 +87,11 @@ const conversation = {
   workspace: { working_dir: "/workspace/project" },
 };
 
-function gitChangesResult(
-  data: { status: string; path: string }[],
-  isLoading = false,
-) {
-  return { data, isLoading };
-}
-
 beforeEach(() => {
   storeBackendKind = "local";
   useActiveConversationMock.mockReset();
   useRuntimeIsReadyMock.mockReset();
   useOptionalConversationIdMock.mockReset();
-  useUnifiedGetGitChangesMock.mockReset();
-  useUnifiedGetGitChangesMock.mockReturnValue(gitChangesResult([]));
   executeCommandSpy.mockReset();
   listCloudFilesMock.mockReset();
 
@@ -147,13 +133,7 @@ describe("useWorkspaceFiles — cloud backend", () => {
     storeBackendKind = "cloud";
   });
 
-  it("unions the full tree with git changes and never runs bash", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "M", path: "src/index.ts" },
-      ]),
-    );
+  it("lists the full tree via the cloud files endpoint without running bash", async () => {
     listCloudFilesMock.mockResolvedValue([
       "hello.txt",
       "src/index.ts",
@@ -164,7 +144,6 @@ describe("useWorkspaceFiles — cloud backend", () => {
       wrapper: makeWrapper(),
     });
 
-    // Full tree (from /files) unioned with the changed files, de-duped/sorted.
     await waitFor(() =>
       expect(result.current.data).toEqual([
         "hello.txt",
@@ -182,29 +161,7 @@ describe("useWorkspaceFiles — cloud backend", () => {
     expect(executeCommandSpy).not.toHaveBeenCalled();
   });
 
-  it("degrades to the changed-files view when the full-tree endpoint is empty", async () => {
-    // Regression guard: even if /files returns nothing (or fails), the agent's
-    // created/modified files must still show — the previous behavior.
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "D", path: "gone.txt" },
-      ]),
-    );
-    listCloudFilesMock.mockResolvedValue([]);
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    // Deleted files are dropped (can't be opened); the added file remains.
-    await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
-  });
-
-  it("normalizes leading ./ and de-dupes across both sources", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([{ status: "M", path: "hello.txt" }]),
-    );
+  it("normalizes leading ./ and de-dupes the returned paths", async () => {
     listCloudFilesMock.mockResolvedValue([
       "./hello.txt",
       "hello.txt",
