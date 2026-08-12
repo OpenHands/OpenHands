@@ -46,4 +46,64 @@ describe("SlashCommandOutputMessages", () => {
       screen.queryByTestId("slash-command-output-messages"),
     ).not.toBeInTheDocument();
   });
+
+  it("renders skills, hooks, and MCP servers in separate sections", () => {
+    useSlashCommandOutputStore.getState().showSkills(CONVERSATION_ID, null, {
+      skills: [
+        {
+          name: "code-search",
+          type: "agentskills",
+          source: "project",
+          description: "Search this workspace",
+        },
+      ],
+      hooks: [
+        {
+          event_type: "pre_tool_use",
+          matchers: [
+            {
+              matcher: "terminal",
+              hooks: [{ type: "command", command: "npm test", timeout: 30 }],
+            },
+          ],
+        },
+      ],
+      mcpServers: [
+        {
+          id: "stdio-0",
+          type: "stdio",
+          name: "filesystem",
+          command: "npx",
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <SlashCommandOutputMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId={null}
+      />,
+    );
+
+    expect(screen.getByText("code-search")).toBeInTheDocument();
+    expect(screen.getByText("pre_tool_use")).toBeInTheDocument();
+    expect(screen.getByText("filesystem")).toBeInTheDocument();
+  });
+
+  it("renders an explicit empty state when no extensions are loaded", () => {
+    useSlashCommandOutputStore.getState().showSkills(CONVERSATION_ID, null, {
+      skills: [],
+      hooks: [],
+      mcpServers: [],
+    });
+
+    renderWithProviders(
+      <SlashCommandOutputMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId={null}
+      />,
+    );
+
+    expect(screen.getByText("SLASH_COMMAND$NO_SKILLS")).toBeInTheDocument();
+  });
 });

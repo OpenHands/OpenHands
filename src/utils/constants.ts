@@ -47,6 +47,8 @@ export const GOAL_COMMAND = "/goal";
 
 export const HELP_COMMAND = "/help";
 
+export const SKILLS_COMMAND = "/skills";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -100,6 +102,16 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     },
     command: HELP_COMMAND,
     descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "skills",
+      type: "agentskills",
+      content: "List skills available in the current workspace",
+      triggers: [SKILLS_COMMAND],
+    },
+    command: SKILLS_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$SKILLS_DESCRIPTION,
   },
 ];
 
