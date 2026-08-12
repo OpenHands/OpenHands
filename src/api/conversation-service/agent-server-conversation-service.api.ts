@@ -35,14 +35,16 @@ import {
   updateCloudConversationPublicFlag,
 } from "../cloud/conversation-service.api";
 import {
-  DirectConversationInfo,
   assertSubscriptionAuthReady,
   buildStartConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
+} from "../agent-server-adapter";
+import {
   getDefaultConversationTitle,
   toAppConversation,
   toConversationPage,
-} from "../agent-server-adapter";
+} from "./conversation-serializer";
+import type { DirectConversationInfo } from "./conversation-serializer";
 import { GetVSCodeUrlResponse } from "../open-hands.types";
 import {
   getAgentServerClientOptions,
