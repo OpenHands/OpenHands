@@ -60,6 +60,23 @@ export function useUpdateGitSyncConfig() {
   });
 }
 
+/**
+ * Test a configuration against its remote before saving it.
+ *
+ * Deliberately not retried and never surfaced as a toast: the form treats a
+ * check it cannot complete -- an older automation backend answering 404,
+ * a network failure -- as "no opinion" and saves anyway, so a check that is
+ * itself broken can never become the thing that blocks a save.
+ */
+export function useCheckGitSyncConfig() {
+  return useMutation({
+    mutationFn: (body: GitSyncConfigUpdateRequest) =>
+      AutomationService.checkGitSyncConfig(body),
+    retry: false,
+    meta: { disableToast: true },
+  });
+}
+
 export function useTriggerGitSync() {
   const queryClient = useQueryClient();
   const active = useActiveBackend();

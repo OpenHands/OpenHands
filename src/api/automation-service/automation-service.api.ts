@@ -15,6 +15,7 @@ import type {
   AutomationRunsResponse,
 } from "#/types/automation";
 import type {
+  GitSyncCheckResponse,
   GitSyncConfigUpdateRequest,
   GitSyncStatus,
   GitSyncTriggerResponse,
@@ -642,6 +643,33 @@ class AutomationService {
     }
 
     const { data } = await localAutomationAxios.put<GitSyncStatus>(path, body);
+    return data;
+  }
+
+  /**
+   * Ask whether a configuration can reach its repo, without saving it. Takes
+   * the same body as `updateGitSyncConfig` and answers for the settings that
+   * body would leave in place.
+   */
+  static async checkGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncCheckResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/check`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncCheckResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as Record<string, unknown>,
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<GitSyncCheckResponse>(
+      path,
+      body,
+    );
     return data;
   }
 

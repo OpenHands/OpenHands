@@ -36,3 +36,19 @@ export interface GitSyncConfigUpdateRequest {
 export interface GitSyncTriggerResponse {
   triggered: boolean;
 }
+
+/**
+ * Whether a configuration can reach its repo, from `POST /v1/git-sync/check`.
+ *
+ * `ok` is about reachability only -- the backend runs a single `git ls-remote`
+ * rather than a sync, so a token without write scope passes here and still
+ * fails at push time, and the encryption key is never exercised.
+ * `branch_exists: false` alongside `ok: true` is normal for a repo that has
+ * never been synced: the first cycle creates the branch.
+ */
+export interface GitSyncCheckResponse {
+  ok: boolean;
+  branch_exists: boolean;
+  /** git's own failure output, with credentials in the URL redacted. */
+  detail: string | null;
+}

@@ -12,7 +12,10 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getErrorStatus } from "#/hooks/query/use-settings";
-import { useUpdateGitSyncConfig } from "#/hooks/query/use-git-sync";
+import {
+  useCheckGitSyncConfig,
+  useUpdateGitSyncConfig,
+} from "#/hooks/query/use-git-sync";
 import type {
   GitSyncConfigUpdateRequest,
   GitSyncStatus,
@@ -29,6 +32,17 @@ export function GitSyncConfigForm({
 }: GitSyncConfigFormProps) {
   const { t } = useTranslation("openhands");
   const { mutate: updateConfig, isPending } = useUpdateGitSyncConfig();
+  const { mutateAsync: checkConfig, isPending: isChecking } =
+    useCheckGitSyncConfig();
+
+  // The settings that failed their reachability check, so the same submit
+  // pressed a second time saves them anyway. Keyed by the values that were
+  // checked rather than a plain flag: editing any of them changes the key,
+  // which re-arms the check without the field handlers having to clear it.
+  const [failedCheck, setFailedCheck] = useState<{
+    key: string;
+    detail: string;
+  } | null>(null);
 
   const [intervalHasChanged, setIntervalHasChanged] = useState(false);
   const [repoUrlHasChanged, setRepoUrlHasChanged] = useState(false);
@@ -76,6 +90,7 @@ export function GitSyncConfigForm({
     setClearToken(false);
     setEncryptionKeyText("");
     setClearEncryptionKey(false);
+    setFailedCheck(null);
   };
 
   // The secret inputs are remounted -- and therefore emptied -- whenever the
@@ -101,11 +116,57 @@ export function GitSyncConfigForm({
   const clearedFieldAsNull = (formData: FormData, name: string) =>
     formData.get(name)?.toString().trim() || null;
 
+  const save = (body: GitSyncConfigUpdateRequest) => {
+    updateConfig(body, {
+      onSuccess: () => {
+        displaySuccessToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_SAVED));
+        // Only on success: clearing the flags after a failure would disable
+        // Save and silently un-toggle the clear switches, leaving no way to
+        // retry the change that was just rejected.
+        resetChangeFlags();
+      },
+      onError: (error) => {
+        displayErrorToast(
+          // 409 is the backend refusing to enable sync in a deployment that
+          // booted with it off -- a restart with the env var set, not a
+          // transient failure the operator should retry.
+          getErrorStatus(error) === 409
+            ? t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR)
+            : getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
+        );
+      },
+    });
+  };
+
+  // What the reachability check actually depends on. A save that touches only
+  // the interval or the author has nothing for the remote to reject, so it
+  // shouldn't cost a round trip to the repo.
+  const remoteFieldsOf = (body: GitSyncConfigUpdateRequest) =>
+    (["repo_url", "branch", "token"] as const)
+      .filter((field) => field in body)
+      .map((field) => `${field}=${body[field]}`)
+      .join("&");
+
+  /** The reason these settings can't reach their repo, or null to go ahead. */
+  const reachabilityFailure = async (body: GitSyncConfigUpdateRequest) => {
+    try {
+      const result = await checkConfig(body);
+      return result.ok
+        ? null
+        : (result.detail ?? t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_TITLE));
+    } catch {
+      // A check that couldn't run says nothing about the configuration --
+      // an automation backend that predates the endpoint answers 404 -- and
+      // must never be what stands between an operator and saving.
+      return null;
+    }
+  };
+
   // A plain submit handler rather than `<form action={...}>`: React resets an
   // uncontrolled form as soon as the action returns, which wiped every edit
   // while the save was still in flight -- so a rejected save left the operator
   // with the old values and nothing to retry.
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const body: GitSyncConfigUpdateRequest = {};
@@ -158,25 +219,22 @@ export function GitSyncConfigForm({
       body.encryption_key = encryptionKey;
     }
 
-    updateConfig(body, {
-      onSuccess: () => {
-        displaySuccessToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_SAVED));
-        // Only on success: clearing the flags after a failure would disable
-        // Save and silently un-toggle the clear switches, leaving no way to
-        // retry the change that was just rejected.
-        resetChangeFlags();
-      },
-      onError: (error) => {
-        displayErrorToast(
-          // 409 is the backend refusing to enable sync in a deployment that
-          // booted with it off -- a restart with the env var set, not a
-          // transient failure the operator should retry.
-          getErrorStatus(error) === 409
-            ? t(I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR)
-            : getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)),
-        );
-      },
-    });
+    // Test the settings before storing them, so a mistyped repo URL or a
+    // rejected token is caught here instead of by the next sync cycle. The
+    // same values submitted twice save anyway: an operator who disagrees with
+    // the check -- or whose remote refuses `ls-remote` but accepts a push --
+    // must not be locked out of their own configuration.
+    const remoteFields = remoteFieldsOf(body);
+    if (remoteFields && failedCheck?.key !== remoteFields) {
+      const detail = await reachabilityFailure(body);
+      if (detail) {
+        setFailedCheck({ key: remoteFields, detail });
+        return;
+      }
+    }
+    setFailedCheck(null);
+
+    save(body);
   };
 
   return (
@@ -335,14 +393,31 @@ export function GitSyncConfigForm({
           </SettingsSwitch>
         </div>
 
+        {failedCheck && (
+          <div
+            role="alert"
+            data-testid="git-sync-check-failure"
+            className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300 whitespace-pre-wrap break-words"
+          >
+            <p className="font-medium">
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_TITLE)}
+            </p>
+            <p className="mt-1">{failedCheck.detail}</p>
+            <p className="mt-1 text-xs text-red-300/70">
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECK_FAILED_HINT)}
+            </p>
+          </div>
+        )}
+
         <div className="flex justify-start">
           <BrandButton
             testId="git-sync-save-button"
             variant="primary"
             type="submit"
-            isDisabled={!canManage || isPending || formIsClean}
+            isDisabled={!canManage || isPending || isChecking || formIsClean}
           >
-            {!isPending && t(I18nKey.SETTINGS$SAVE_CHANGES)}
+            {!isPending && !isChecking && t(I18nKey.SETTINGS$SAVE_CHANGES)}
+            {isChecking && t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECKING)}
             {isPending && t(I18nKey.SETTINGS$SAVING)}
           </BrandButton>
         </div>

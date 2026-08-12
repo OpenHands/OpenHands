@@ -1,14 +1,36 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nKey } from "#/i18n/declaration";
 import type { GitSyncStatus } from "#/types/git-sync";
 import { GitSyncConfigForm } from "./git-sync-config-form";
 
 const mutate = vi.fn();
+const checkConfig = vi.fn();
 
 vi.mock("#/hooks/query/use-git-sync", () => ({
   useUpdateGitSyncConfig: () => ({ mutate, isPending: false }),
+  useCheckGitSyncConfig: () => ({
+    mutateAsync: checkConfig,
+    isPending: false,
+  }),
 }));
+
+/** Submitting is async now: it awaits the reachability check before saving. */
+const clickSave = async () => {
+  await act(async () => {
+    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+  });
+};
+
+beforeEach(() => {
+  // Reachable unless a test says otherwise, so the save path stays the
+  // default one under test.
+  checkConfig.mockResolvedValue({
+    ok: true,
+    branch_exists: true,
+    detail: null,
+  });
+});
 
 const displayErrorToast = vi.fn();
 const displaySuccessToast = vi.fn();
@@ -47,14 +69,14 @@ const baseStatus: GitSyncStatus = {
 };
 
 describe("GitSyncConfigForm", () => {
-  it("always renders the token and encryption key fields empty", () => {
+  it("always renders the token and encryption key fields empty", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     expect(screen.getByTestId("git-sync-token-input")).toHaveValue("");
     expect(screen.getByTestId("git-sync-encryption-key-input")).toHaveValue("");
   });
 
-  it("shows the encryption key placeholder based on encryption_enabled", () => {
+  it("shows the encryption key placeholder based on encryption_enabled", async () => {
     const { rerender } = render(
       <GitSyncConfigForm status={baseStatus} canManage />,
     );
@@ -75,7 +97,7 @@ describe("GitSyncConfigForm", () => {
     );
   });
 
-  it("enables submit once a field changes and sends only the changed field", () => {
+  it("enables submit once a field changes and sends only the changed field", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     expect(screen.getByTestId("git-sync-save-button")).toBeDisabled();
@@ -85,24 +107,24 @@ describe("GitSyncConfigForm", () => {
     });
     expect(screen.getByTestId("git-sync-save-button")).not.toBeDisabled();
 
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
   });
 
-  it("sends a typed token as a plain string, omitting unrelated fields", () => {
+  it("sends a typed token as a plain string, omitting unrelated fields", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.change(screen.getByTestId("git-sync-token-input"), {
       target: { value: "ghp_new_token" },
     });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ token: "ghp_new_token" });
   });
 
-  it("shows the configured interval and sends a changed one", () => {
+  it("shows the configured interval and sends a changed one", async () => {
     render(
       <GitSyncConfigForm
         status={{ ...baseStatus, interval_seconds: 300 }}
@@ -115,12 +137,12 @@ describe("GitSyncConfigForm", () => {
     fireEvent.change(screen.getByTestId("git-sync-interval-input"), {
       target: { value: "60" },
     });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ interval_seconds: 60 });
   });
 
-  it("treats a blank interval as manual-only rather than no change", () => {
+  it("treats a blank interval as manual-only rather than no change", async () => {
     // Clearing the field must mean 0 (manual), never "leave the timer on".
     render(
       <GitSyncConfigForm
@@ -132,12 +154,12 @@ describe("GitSyncConfigForm", () => {
     fireEvent.change(screen.getByTestId("git-sync-interval-input"), {
       target: { value: "" },
     });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ interval_seconds: 0 });
   });
 
-  it("clearing the token disables the text field and sends null", () => {
+  it("clearing the token disables the text field and sends null", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
@@ -145,7 +167,7 @@ describe("GitSyncConfigForm", () => {
     expect(screen.getByTestId("git-sync-token-input")).toBeDisabled();
     expect(screen.getByTestId("git-sync-save-button")).not.toBeDisabled();
 
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ token: null });
   });
@@ -158,22 +180,22 @@ describe("GitSyncConfigForm", () => {
     ["git-sync-branch-input", "branch"],
     ["git-sync-path-input", "path"],
     ["git-sync-repo-url-input", "repo_url"],
-  ])("clearing %s sends null, not an empty string", (testId, field) => {
+  ])("clearing %s sends null, not an empty string", async (testId, field) => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ [field]: null });
   });
 
-  it("sends a whitespace-only field as null", () => {
+  it("sends a whitespace-only field as null", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.change(screen.getByTestId("git-sync-path-input"), {
       target: { value: "   " },
     });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ path: null });
   });
@@ -187,7 +209,7 @@ describe("GitSyncConfigForm", () => {
     ["git-sync-encryption-key-input", "git-sync-clear-encryption-key-switch"],
   ])(
     "forgets a typed %s when its clear switch is toggled on and back off",
-    (inputTestId, switchTestId) => {
+    async (inputTestId, switchTestId) => {
       render(<GitSyncConfigForm status={baseStatus} canManage />);
 
       fireEvent.change(screen.getByTestId(inputTestId), {
@@ -204,13 +226,13 @@ describe("GitSyncConfigForm", () => {
       fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
         target: { value: "develop" },
       });
-      fireEvent.click(screen.getByTestId("git-sync-save-button"));
+      await clickSave();
 
       expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
     },
   );
 
-  it("keeps the edits and the enabled Save button when the save fails", () => {
+  it("keeps the edits and the enabled Save button when the save fails", async () => {
     // React resets an uncontrolled `<form action={...}>` as soon as the action
     // returns, which used to wipe the edits mid-flight; clearing the change
     // flags on `onSettled` then disabled Save, leaving nothing to retry with.
@@ -221,19 +243,19 @@ describe("GitSyncConfigForm", () => {
       target: { value: "develop" },
     });
     fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(screen.getByTestId("git-sync-branch-input")).toHaveValue("develop");
     expect(screen.getByTestId("git-sync-save-button")).not.toBeDisabled();
     expect(screen.getByTestId("git-sync-clear-token-switch")).toBeChecked();
   });
 
-  it("goes clean again after a successful save", () => {
+  it("goes clean again after a successful save", async () => {
     respondWith("success");
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(screen.getByTestId("git-sync-save-button")).toBeDisabled();
     expect(screen.getByTestId("git-sync-clear-token-switch")).not.toBeChecked();
@@ -247,41 +269,44 @@ describe("GitSyncConfigForm", () => {
   it.each([
     ["git-sync-author-name-input", "author_name"],
     ["git-sync-author-email-input", "author_email"],
-  ])("clearing %s resets the override to the default", (testId, field) => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+  ])(
+    "clearing %s resets the override to the default",
+    async (testId, field) => {
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
 
-    fireEvent.change(screen.getByTestId(testId), {
-      target: { value: "someone@example.com" },
-    });
-    fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+      fireEvent.change(screen.getByTestId(testId), {
+        target: { value: "someone@example.com" },
+      });
+      fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
+      await clickSave();
 
-    expect(mutate.mock.calls[0][0]).toEqual({ [field]: null });
-  });
+      expect(mutate.mock.calls[0][0]).toEqual({ [field]: null });
+    },
+  );
 
-  it("sends the enabled flag when the sync switch is flipped", () => {
+  it("sends the enabled flag when the sync switch is flipped", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     expect(screen.getByTestId("git-sync-enabled-switch")).toBeChecked();
 
     fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ enabled: false });
   });
 
-  it("leaves enabled out of the request when the switch is not touched", () => {
+  it("leaves enabled out of the request when the switch is not touched", async () => {
     render(<GitSyncConfigForm status={baseStatus} canManage />);
 
     fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
       target: { value: "develop" },
     });
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
   });
 
-  it("explains the restart requirement when the backend refuses to enable sync", () => {
+  it("explains the restart requirement when the backend refuses to enable sync", async () => {
     // The backend answers 409 when it booted without git sync turned on --
     // the raw detail is a wall of text, and the generic error message would
     // read as a transient failure worth retrying.
@@ -294,10 +319,125 @@ describe("GitSyncConfigForm", () => {
     );
 
     fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
-    fireEvent.click(screen.getByTestId("git-sync-save-button"));
+    await clickSave();
 
     expect(displayErrorToast).toHaveBeenCalledWith(
       I18nKey.AUTOMATIONS$GIT_SYNC$ENABLE_BLOCKED_ERROR,
     );
+  });
+
+  describe("reachability check", () => {
+    const unreachable = () =>
+      checkConfig.mockResolvedValue({
+        ok: false,
+        branch_exists: false,
+        detail: "fatal: repository not found",
+      });
+
+    it("tests the settings against the remote before saving them", async () => {
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/org/other.git" },
+      });
+      await clickSave();
+
+      // The same body that is about to be saved, so the check answers for
+      // the configuration that would actually take effect.
+      expect(checkConfig).toHaveBeenCalledWith({
+        repo_url: "https://example.com/org/other.git",
+      });
+      expect(mutate).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not save a configuration that cannot reach its repo", async () => {
+      unreachable();
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/typo.git" },
+      });
+      await clickSave();
+
+      expect(mutate).not.toHaveBeenCalled();
+      expect(screen.getByTestId("git-sync-check-failure")).toHaveTextContent(
+        "fatal: repository not found",
+      );
+      // Still dirty, so the operator can fix the field and try again.
+      expect(screen.getByTestId("git-sync-save-button")).not.toBeDisabled();
+    });
+
+    it("saves the same values anyway when Save is pressed a second time", async () => {
+      // A check is evidence, not an authority: a remote that refuses
+      // `ls-remote` but accepts a push must not lock its operator out.
+      unreachable();
+      respondWith("success");
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/typo.git" },
+      });
+      await clickSave();
+      await clickSave();
+
+      expect(checkConfig).toHaveBeenCalledTimes(1);
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(mutate.mock.calls[0][0]).toEqual({
+        repo_url: "https://example.com/typo.git",
+      });
+    });
+
+    it("re-checks once the settings are edited after a failure", async () => {
+      unreachable();
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/typo.git" },
+      });
+      await clickSave();
+
+      checkConfig.mockResolvedValue({
+        ok: true,
+        branch_exists: false,
+        detail: null,
+      });
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/fixed.git" },
+      });
+      await clickSave();
+
+      expect(checkConfig).toHaveBeenCalledTimes(2);
+      expect(mutate.mock.calls[0][0]).toEqual({
+        repo_url: "https://example.com/fixed.git",
+      });
+      expect(screen.queryByTestId("git-sync-check-failure")).toBeNull();
+    });
+
+    it("skips the check when nothing the remote could reject changed", async () => {
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-interval-input"), {
+        target: { value: "60" },
+      });
+      await clickSave();
+
+      expect(checkConfig).not.toHaveBeenCalled();
+      expect(mutate).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves anyway when the check itself cannot run", async () => {
+      // An automation backend that predates the endpoint answers 404. A check
+      // that says nothing must never be what blocks a save.
+      checkConfig.mockRejectedValue({ status: 404 });
+      render(<GitSyncConfigForm status={baseStatus} canManage />);
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      await clickSave();
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("git-sync-check-failure")).toBeNull();
+    });
   });
 });
