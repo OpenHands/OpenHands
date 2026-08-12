@@ -11,6 +11,14 @@ export interface GitSyncStatus {
   last_error: string | null;
   last_error_at: string | null;
   dirty_count: number;
+  /**
+   * Whether a sync cycle is running right now, including one the backend's own
+   * interval started. A cycle reports its outcome only once it ends, so
+   * without this the page cannot tell a sync in flight from one that never
+   * started. Absent on automation backends that predate the field.
+   */
+  sync_in_progress?: boolean;
+  sync_started_at?: string | null;
 }
 
 export interface GitSyncConfigUpdateRequest {

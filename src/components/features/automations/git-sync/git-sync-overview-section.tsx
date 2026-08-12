@@ -12,11 +12,17 @@ import { SectionCard } from "#/components/features/automations/detail/section-ca
 import { ConfigField } from "#/components/features/automations/detail/config-field";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { GitSyncStatusPill } from "./git-sync-status-pill";
+import {
+  GitSyncActivityRow,
+  type GitSyncActivityState,
+} from "./git-sync-activity-row";
 
 interface GitSyncOverviewSectionProps {
   status: GitSyncStatus;
   onSyncNow: () => void;
   isSyncing: boolean;
+  syncActivity: GitSyncActivityState;
+  syncStartedAt: string | null;
   canManage: boolean;
 }
 
@@ -24,6 +30,8 @@ export function GitSyncOverviewSection({
   status,
   onSyncNow,
   isSyncing,
+  syncActivity,
+  syncStartedAt,
   canManage,
 }: GitSyncOverviewSectionProps) {
   const { t } = useTranslation("openhands");
@@ -74,6 +82,12 @@ export function GitSyncOverviewSection({
           )}
         </BrandButton>
       </div>
+
+      <GitSyncActivityRow
+        state={syncActivity}
+        startedAt={syncStartedAt}
+        pendingCount={status.dirty_count}
+      />
 
       <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5">
         <ConfigField

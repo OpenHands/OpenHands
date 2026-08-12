@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import {
-  displaySuccessToast,
-  displayErrorToast,
-} from "#/utils/custom-toast-handlers";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { getErrorStatus } from "#/hooks/query/use-settings";
 import {
@@ -23,29 +20,42 @@ import { GitSyncUnsupportedState } from "#/components/features/automations/git-s
 import { GitSyncErrorBanner } from "#/components/features/automations/git-sync/git-sync-error-banner";
 import { GitSyncOverviewSection } from "#/components/features/automations/git-sync/git-sync-overview-section";
 import { GitSyncConfigForm } from "#/components/features/automations/git-sync/git-sync-config-form";
+import type { GitSyncStatus } from "#/types/git-sync";
 
-// How long to keep polling the status endpoint after a manual trigger so
-// the fire-and-forget backend cycle's eventual result (new commit, dirty
-// count, or error) shows up without a page refresh.
-const POLL_WINDOW_MS = 30_000;
+// While a cycle is running the status is followed closely, so its result
+// (new commit, dirty count, or error) lands without a page refresh; the idle
+// cadence exists to notice a cycle the backend's own interval started.
 const POLL_INTERVAL_MS = 3_000;
+const IDLE_POLL_INTERVAL_MS = 15_000;
+// How long to keep following a cycle we triggered but have never seen the
+// backend report as running -- the fallback for an automation backend that
+// predates `sync_in_progress`.
+const POLL_WINDOW_MS = 30_000;
+
+type SyncActivity =
+  | { state: "idle" | "succeeded" | "failed" }
+  | {
+      state: "running";
+      startedAt: string;
+      // What the last outcome was when this cycle began: the cycle has landed
+      // once the backend reports a newer success or failure than these.
+      lastSyncedAt: string | null;
+      lastErrorAt: string | null;
+    };
+
+const runningSince = (status: GitSyncStatus): SyncActivity => ({
+  state: "running",
+  startedAt: status.sync_started_at ?? new Date().toISOString(),
+  lastSyncedAt: status.last_synced_at,
+  lastErrorAt: status.last_error_at,
+});
 
 export default function AutomationGitSync() {
   const { t } = useTranslation("openhands");
   const active = useActiveBackend();
   const canManage = useHasPermission("manage_automations");
-  const [isPolling, setIsPolling] = useState(false);
-  // Identifies the current window so each trigger gets a full one of its own.
-  // `setIsPolling(true)` is a no-op while already polling, so without this the
-  // effect would keep the previous window's timer and a sync triggered inside
-  // it would stop being polled early.
-  const [pollWindowId, setPollWindowId] = useState(0);
-
-  useEffect(() => {
-    if (!isPolling) return undefined;
-    const timer = setTimeout(() => setIsPolling(false), POLL_WINDOW_MS);
-    return () => clearTimeout(timer);
-  }, [isPolling, pollWindowId]);
+  const [activity, setActivity] = useState<SyncActivity>({ state: "idle" });
+  const isRunning = activity.state === "running";
 
   const {
     data: healthData,
@@ -63,8 +73,44 @@ export default function AutomationGitSync() {
     refetch,
   } = useGitSyncStatus({
     enabled: isBackendHealthy && isLocalBackend,
-    refetchInterval: isPolling ? POLL_INTERVAL_MS : false,
+    refetchInterval: isRunning ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS,
   });
+
+  // Follow a cycle this page did not trigger -- the periodic loop's, or
+  // another operator's -- so it shows up here too.
+  useEffect(() => {
+    if (!status?.sync_in_progress) return;
+    setActivity((current) =>
+      current.state === "running" ? current : runningSince(status),
+    );
+  }, [status]);
+
+  // A cycle is done once the backend reports an outcome newer than the one it
+  // started from. That releases the page as soon as the sync really ends,
+  // rather than at the end of a fixed window.
+  useEffect(() => {
+    if (activity.state !== "running" || !status) return;
+    if (status.last_error_at && status.last_error_at !== activity.lastErrorAt) {
+      setActivity({ state: "failed" });
+    } else if (
+      status.last_synced_at &&
+      status.last_synced_at !== activity.lastSyncedAt
+    ) {
+      setActivity({ state: "succeeded" });
+    }
+  }, [status, activity]);
+
+  // Give up on a cycle we never saw the backend confirm. A backend that does
+  // report `sync_in_progress` immediately re-enters the running state above,
+  // so this only bounds the blind case.
+  useEffect(() => {
+    if (!isRunning) return undefined;
+    const timer = setTimeout(
+      () => setActivity({ state: "idle" }),
+      POLL_WINDOW_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [isRunning, activity]);
 
   const triggerMutation = useTriggerGitSync();
 
@@ -128,17 +174,12 @@ export default function AutomationGitSync() {
 
   const handleSyncNow = () => {
     triggerMutation.mutate(undefined, {
-      onSuccess: (data) => {
-        // A 200 can still report that no cycle started; polling for a result
-        // that was never scheduled would just show the previous sync's.
-        if (!data.triggered) {
-          displayErrorToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_NOT_TRIGGERED));
-          return;
-        }
-        displaySuccessToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_TRIGGERED));
-        setIsPolling(true);
-        setPollWindowId((id) => id + 1);
-      },
+      // No success toast: the trigger only means the cycle was scheduled, and
+      // a toast that fires and disappears can't report how it ends. The
+      // activity row in the card follows it through to its outcome instead --
+      // including when `triggered` is false, which means a cycle was already
+      // running and is the one to follow.
+      onSuccess: () => setActivity(runningSince(status)),
       onError: (error) => {
         const errorStatus = getErrorStatus(error);
         displayErrorToast(
@@ -173,8 +214,10 @@ export default function AutomationGitSync() {
             status={status}
             onSyncNow={handleSyncNow}
             // The POST returns as soon as the cycle is scheduled, so the
-            // poll window is what tracks the sync actually running.
-            isSyncing={triggerMutation.isPending || isPolling}
+            // activity state is what tracks the sync actually running.
+            isSyncing={triggerMutation.isPending || isRunning}
+            syncActivity={activity.state}
+            syncStartedAt={isRunning ? activity.startedAt : null}
             canManage={canManage}
           />
           <GitSyncConfigForm status={status} canManage={canManage} />

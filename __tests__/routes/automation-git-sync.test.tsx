@@ -149,59 +149,130 @@ describe("AutomationGitSync — failed background refetch", () => {
   });
 });
 
-describe("AutomationGitSync — Sync now", () => {
-  it("reports a response that started no sync cycle as a failure", async () => {
-    vi.mocked(AutomationService.triggerGitSync).mockResolvedValue({
-      triggered: false,
-    });
-    renderGitSync();
-    const syncNow = await screen.findByTestId("git-sync-now-button");
-
-    fireEvent.click(syncNow);
-
-    await waitFor(() => {
-      expect(displayErrorToast).toHaveBeenCalledWith(
-        I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_NOT_TRIGGERED,
-      );
-    });
-    expect(displaySuccessToast).not.toHaveBeenCalled();
-    // No cycle was scheduled, so there is nothing to poll for.
-    expect(syncNow).toHaveTextContent(I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_NOW);
-  });
-
-  it("stays in the syncing state for the whole poll window", async () => {
-    // The POST returns as soon as the cycle is scheduled -- roughly instantly
-    // -- while the clone/commit/push behind it runs for seconds. Tracking only
-    // `isPending` re-armed the button immediately and invited a second,
-    // redundant cycle.
+describe("AutomationGitSync — sync progress", () => {
+  /** Load the page with fake timers already running. */
+  async function loadPage() {
     vi.useFakeTimers();
     renderGitSync();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    const syncNow = screen.getByTestId("git-sync-now-button");
+    return screen.getByTestId("git-sync-now-button");
+  }
+
+  const activityRow = () => screen.queryByTestId("git-sync-activity-row");
+
+  it("reports the running cycle in the page rather than with a toast", async () => {
+    // The trigger returns as soon as the cycle is scheduled, so a toast can
+    // only ever say "started" and never how it ended.
+    const syncNow = await loadPage();
 
     await act(async () => {
       fireEvent.click(syncNow);
       await vi.advanceTimersByTimeAsync(0);
     });
+
+    expect(activityRow()).toHaveAttribute("data-state", "running");
+    expect(displaySuccessToast).not.toHaveBeenCalled();
     expect(syncNow).toHaveTextContent(I18nKey.AUTOMATIONS$GIT_SYNC$SYNCING);
     expect(syncNow).toBeDisabled();
+  });
 
-    // Well past the trigger's own resolution, still inside the 30s window.
+  it("resolves as soon as the cycle lands, without waiting out the window", async () => {
+    const syncNow = await loadPage();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(25_000);
+      fireEvent.click(syncNow);
+      await vi.advanceTimersByTimeAsync(0);
     });
-    expect(syncNow).toHaveTextContent(I18nKey.AUTOMATIONS$GIT_SYNC$SYNCING);
-    const pollCalls = vi.mocked(AutomationService.getGitSyncStatus).mock.calls
-      .length;
-    expect(pollCalls).toBeGreaterThan(1);
 
-    // ...and released once the window closes.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+    // The backend finishes the cycle: a newer success than the one the page
+    // started from.
+    vi.mocked(AutomationService.getGitSyncStatus).mockResolvedValue({
+      ...status,
+      last_synced_at: "2026-08-11T00:00:00Z",
+      last_synced_commit: "def5678",
     });
-    expect(syncNow).toHaveTextContent(I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_NOW);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    expect(activityRow()).toHaveAttribute("data-state", "succeeded");
+    // Released well inside the 30s window the page used to sit out.
     expect(syncNow).not.toBeDisabled();
+  });
+
+  it("reports a cycle that failed", async () => {
+    const syncNow = await loadPage();
+    await act(async () => {
+      fireEvent.click(syncNow);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    vi.mocked(AutomationService.getGitSyncStatus).mockResolvedValue({
+      ...status,
+      last_error: "fatal: Authentication failed",
+      last_error_at: "2026-08-11T00:00:00Z",
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    expect(activityRow()).toHaveAttribute("data-state", "failed");
+    expect(screen.getByTestId("git-sync-error-banner")).toHaveTextContent(
+      "fatal: Authentication failed",
+    );
+  });
+
+  it("follows a cycle the backend started on its own", async () => {
+    // An interval-driven sync, or one triggered from another tab: the page
+    // never asked for it, so only `sync_in_progress` reveals it.
+    vi.mocked(AutomationService.getGitSyncStatus).mockResolvedValue({
+      ...status,
+      sync_in_progress: true,
+      sync_started_at: "2026-08-10T00:00:05Z",
+    });
+
+    const syncNow = await loadPage();
+
+    expect(activityRow()).toHaveAttribute("data-state", "running");
+    expect(syncNow).toBeDisabled();
+    expect(AutomationService.triggerGitSync).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a backend that never reports the cycle", async () => {
+    // Fallback for an automation backend without `sync_in_progress`: the page
+    // can only wait a bounded time for an outcome that may never come.
+    const syncNow = await loadPage();
+    await act(async () => {
+      fireEvent.click(syncNow);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(activityRow()).toHaveAttribute("data-state", "running");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+
+    expect(activityRow()).not.toBeInTheDocument();
+    expect(syncNow).not.toBeDisabled();
+  });
+
+  it("keeps reporting the trigger's own failure with a toast", async () => {
+    // A rejected request never becomes a cycle, so there is no progress to
+    // show for it -- 503 means sync is switched off.
+    vi.mocked(AutomationService.triggerGitSync).mockRejectedValue({
+      status: 503,
+    });
+    const syncNow = await loadPage();
+
+    await act(async () => {
+      fireEvent.click(syncNow);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      I18nKey.AUTOMATIONS$GIT_SYNC$SYNC_DISABLED_ERROR,
+    );
+    expect(activityRow()).not.toBeInTheDocument();
   });
 });
