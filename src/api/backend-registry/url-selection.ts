@@ -28,12 +28,19 @@ export function withBackendSelectionParams(
   const { backend, orgId } = active;
   if (!backend.id) return path;
 
-  const [pathname, existingSearch = ""] = path.split("?");
+  const hashIndex = path.indexOf("#");
+  const pathAndSearch = hashIndex === -1 ? path : path.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : path.slice(hashIndex);
+  const queryIndex = pathAndSearch.indexOf("?");
+  const pathname =
+    queryIndex === -1 ? pathAndSearch : pathAndSearch.slice(0, queryIndex);
+  const existingSearch =
+    queryIndex === -1 ? "" : pathAndSearch.slice(queryIndex + 1);
   const params = new URLSearchParams(existingSearch);
   params.set(BACKEND_QUERY_PARAM, backend.id);
   if (orgId) params.set(ORG_QUERY_PARAM, orgId);
 
-  return `${pathname}?${params.toString()}`;
+  return `${pathname}?${params.toString()}${hash}`;
 }
 
 /**

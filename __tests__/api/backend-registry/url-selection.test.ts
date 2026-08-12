@@ -65,6 +65,31 @@ describe("withBackendSelectionParams", () => {
       `/conversations/abc?tab=files&${BACKEND_QUERY_PARAM}=local-1`,
     );
   });
+
+  it("preserves a fragment after existing query parameters", () => {
+    const path = withBackendSelectionParams(
+      "/conversations/abc?tab=files#details",
+      {
+        backend: localBackend,
+        orgId: null,
+      },
+    );
+
+    expect(path).toBe(
+      `/conversations/abc?tab=files&${BACKEND_QUERY_PARAM}=local-1#details`,
+    );
+  });
+
+  it("preserves a fragment when the path has no query parameters", () => {
+    const path = withBackendSelectionParams("/conversations/abc#details", {
+      backend: localBackend,
+      orgId: null,
+    });
+
+    expect(path).toBe(
+      `/conversations/abc?${BACKEND_QUERY_PARAM}=local-1#details`,
+    );
+  });
 });
 
 describe("readBackendSelectionFromUrl", () => {
