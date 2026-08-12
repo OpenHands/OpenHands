@@ -58,8 +58,11 @@ export function useDeleteProviderConnection() {
 export function useValidateProviderConnection() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Both the wizard "Test connection" and the row "Refresh" are explicit,
+    // user-triggered checks, so probe the key live to get an honest `verified`
+    // flag rather than a catalog-only lookup.
     mutationFn: (id: string) =>
-      ProviderConnectionsService.validateConnection(id),
+      ProviderConnectionsService.validateConnection(id, { live: true }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: PROVIDER_CONNECTIONS_QUERY_KEYS.all,

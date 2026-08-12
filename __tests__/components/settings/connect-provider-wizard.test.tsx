@@ -185,6 +185,46 @@ describe("ConnectProviderWizard", () => {
     expect(screen.getByTestId("connection-more-toggle")).toBeTruthy();
   });
 
+  it("keeps the selection cleared after the Clear bulk action", async () => {
+    const user = userEvent.setup();
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked(),
+    );
+
+    // Clearing must stick: the default-selection effect must not re-check the
+    // recommended models when the selection becomes empty.
+    await user.click(screen.getByTestId("connection-clear"));
+
+    expect(screen.getByTestId("connection-model-gpt-4o")).not.toBeChecked();
+    expect(
+      screen.getByTestId("connection-model-gpt-4o-mini"),
+    ).not.toBeChecked();
+    // With nothing selected, save is disabled and the summary is hidden.
+    expect(screen.getByTestId("connect-provider-save")).toBeDisabled();
+    expect(screen.queryByTestId("connection-save-summary")).not.toBeTruthy();
+  });
+
   it("creates one profile per selected model on save", async () => {
     const user = userEvent.setup();
     createMock.mockResolvedValue(createdConnection);

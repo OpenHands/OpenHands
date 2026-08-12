@@ -174,13 +174,20 @@ export function ConnectProviderWizard({
     [catalogModels],
   );
 
-  // Default selection: all recommended models pre-checked, entered once when
-  // the catalog first loads in the pick step.
+  // Default selection: all recommended models pre-checked. Applied exactly once
+  // per pick-step entry (tracked by a ref) so bulk "Clear" isn't immediately
+  // undone -- keying off selectedModels.size would re-select on every clear.
+  const didInitSelection = useRef(false);
   useEffect(() => {
-    if (step === "pick" && catalogModels && selectedModels.size === 0) {
+    if (step !== "pick") {
+      didInitSelection.current = false;
+      return;
+    }
+    if (catalogModels && !didInitSelection.current) {
+      didInitSelection.current = true;
       setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
     }
-  }, [step, catalogModels, verifiedModels, selectedModels.size]);
+  }, [step, catalogModels, verifiedModels]);
 
   const selectAllVerified = () =>
     setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
