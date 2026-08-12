@@ -66,7 +66,10 @@ export const loadCompleteTranscriptEvents = async (
         if (event.id) fetchedEventIds.add(event.id);
         addedEvent = true;
       }
-      if (!pageOldestTimestamp || (event.timestamp ?? "") < pageOldestTimestamp) {
+      if (
+        !pageOldestTimestamp ||
+        (event.timestamp ?? "") < pageOldestTimestamp
+      ) {
         pageOldestTimestamp = event.timestamp ?? "";
       }
     });
@@ -117,10 +120,12 @@ export const loadCompleteTranscriptEvents = async (
     .slice()
     .reverse()
     .forEach((event) => {
-      if (!eventsById.has(event.id ?? "")) if (event.id) eventsById.set(event.id, event);
+      if (!eventsById.has(event.id ?? ""))
+        if (event.id) eventsById.set(event.id, event);
     });
   loadedEvents.forEach((event) => {
-    if (!eventsById.has(event.id ?? "")) if (event.id) eventsById.set(event.id, event);
+    if (!eventsById.has(event.id ?? ""))
+      if (event.id) eventsById.set(event.id, event);
   });
   // Array.prototype.sort is stable, so equal-timestamp events keep the causal
   // order returned by the server/store rather than being reordered by id.
