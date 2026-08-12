@@ -340,8 +340,12 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
   test("frontend-only connects to a separate backend-only instance", async ({
     page,
   }) => {
-    // Backend-only needs uvx → agent-server: 3+ minutes
-    test.setTimeout(300_000);
+    // Spawns one backend-only instance via uvx. Measured at 15-25s across
+    // recent CI runs — the uv cache is warm by this point because the
+    // Playwright webServer spawns the full stack first. The ceiling is
+    // headroom for a slow runner, not an expected duration; the readiness
+    // poll below trips first, and with a readable message.
+    test.setTimeout(90_000);
 
     // These tests spawn bin/agent-canvas.mjs locally, which needs a
     // pre-built frontend. Skip when running in Docker-only CI (no local build).
@@ -378,7 +382,7 @@ test.describe("cross-connect: frontend-only → backend-only", () => {
 
     const [feStatus, beStatus] = await Promise.all([
       pollUrl(`${feUrl}/`, 60_000),
-      pollUrl(`${beUrl}/server_info`, 180_000),
+      pollUrl(`${beUrl}/server_info`, 60_000),
     ]);
 
     expect(
@@ -463,8 +467,9 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
   test("connects to two separate backends and switches between them", async ({
     page,
   }) => {
-    // Two backend-only instances via uvx — very slow
-    test.setTimeout(360_000);
+    // Two backend-only instances plus a frontend, all via uvx. Measured at
+    // 28-32s across recent CI runs. See the note above on the ceiling.
+    test.setTimeout(120_000);
 
     test.skip(
       !existsSync(join(PROJECT_ROOT, "build/index.html")),
@@ -506,8 +511,8 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
 
     const [feStatus, beStatusA, beStatusB] = await Promise.all([
       pollUrl(`${feUrl}/`, 60_000),
-      pollUrl(`${beUrlA}/server_info`, 180_000),
-      pollUrl(`${beUrlB}/server_info`, 180_000),
+      pollUrl(`${beUrlA}/server_info`, 60_000),
+      pollUrl(`${beUrlB}/server_info`, 60_000),
     ]);
 
     expect(
@@ -666,8 +671,9 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     page,
     context,
   }) => {
-    // Two backend-only instances via uvx — very slow
-    test.setTimeout(360_000);
+    // Two backend-only instances plus a frontend, all via uvx. Measured at
+    // 19-25s across recent CI runs. See the note above on the ceiling.
+    test.setTimeout(120_000);
 
     test.skip(
       !existsSync(join(PROJECT_ROOT, "build/index.html")),
@@ -708,8 +714,8 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
 
     const [feStatus, beStatusA, beStatusB] = await Promise.all([
       pollUrl(`${feUrl}/`, 60_000),
-      pollUrl(`${beUrlA}/server_info`, 180_000),
-      pollUrl(`${beUrlB}/server_info`, 180_000),
+      pollUrl(`${beUrlA}/server_info`, 60_000),
+      pollUrl(`${beUrlB}/server_info`, 60_000),
     ]);
 
     expect(

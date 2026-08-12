@@ -199,8 +199,10 @@ test.describe("partial stack: --frontend-only", () => {
       (child = spawnAgentCanvas(["--frontend-only"], isolated.env)),
     );
 
-    // Wait for the ingress to start serving
-    const rootStatus = await pollUrl(`${FRONTEND_ONLY_URL}/`, 60_000);
+    // Wait for the ingress to start serving. Frontend-only needs no uvx, so
+    // this resolves in seconds; keep it under the test ceiling so a genuine
+    // failure surfaces the assertion below rather than an opaque timeout.
+    const rootStatus = await pollUrl(`${FRONTEND_ONLY_URL}/`, 30_000);
     expect(
       rootStatus,
       `Frontend-only ingress never became ready.\nOutput: ${output.get().slice(-500)}`,
