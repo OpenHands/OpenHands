@@ -30,8 +30,6 @@ import {
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
-  DEFAULT_BACKEND_PORT,
-  DEFAULT_AUTOMATION_PORT,
 } from "../../scripts/dev-with-automation.mjs";
 import { resetPersistedSessionApiKeyCache } from "../../scripts/dev-safe.mjs";
 
@@ -39,6 +37,25 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+
+async function reserveAvailablePort(): Promise<{
+  server: net.Server;
+  port: number;
+}> {
+  const server = net.createServer();
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Expected TCP server address"));
+        return;
+      }
+      resolve(address.port);
+    });
+  });
+  return { server, port };
+}
 
 describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
@@ -339,22 +356,12 @@ describe("buildConfig", () => {
   });
 
   it("throws when ingress port is busy", async () => {
-    const busyPort = 8100;
+    const { server, port: busyPort } = await reserveAvailablePort();
+    servers.push(server);
 
-    // Block port 8100
-    const server = net.createServer();
-    await new Promise<void>((resolve, reject) => {
-      server.listen(busyPort, "127.0.0.1", () => {
-        servers.push(server);
-        resolve();
-      });
-      server.on("error", reject);
-    });
-
-    // Should throw instead of falling back to a different port
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
-    ).rejects.toThrow(/ingress.*port 8100/i);
+    ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
   it("allocates valid ports for all services", async () => {
@@ -458,7 +465,10 @@ describe("buildConfig", () => {
   it("reads sessionApiKey from LOCAL_BACKEND_API_KEY", async () => {
     const config = await buildConfig(
       {},
-      { ...envWithIsolatedKeyPath(), LOCAL_BACKEND_API_KEY: "my-api-key" },
+      {
+        ...envWithIsolatedKeyPath(),
+        LOCAL_BACKEND_API_KEY: "my-api-key",
+      },
     );
 
     expect(config.sessionApiKey).toBe("my-api-key");
@@ -649,26 +659,6 @@ describe("stack mode routing", () => {
         envWithIsolatedKeyPath(),
       ),
     ).rejects.toThrow(/cannot be used together/);
-  });
-});
-
-describe("default constants", () => {
-  it("has expected default automation repo", () => {
-    expect(DEFAULT_AUTOMATION_REPO).toBe(
-      "https://github.com/OpenHands/automation",
-    );
-  });
-
-  it("has expected default automation package", () => {
-    expect(DEFAULT_AUTOMATION_PACKAGE).toBe("openhands-automation");
-  });
-
-  it("has expected default backend port", () => {
-    expect(DEFAULT_BACKEND_PORT).toBe(18000);
-  });
-
-  it("has expected default automation port", () => {
-    expect(DEFAULT_AUTOMATION_PORT).toBe(18001);
   });
 });
 

@@ -271,6 +271,7 @@ Before writing any test:
 
 - Avoid duplicating test cases or logic
 - Do not assert the same condition more than once
+- Do not test exported constants, fixture text, translation source, or class strings merely by restating their current values; test the observable contract that consumes them instead
 - Do not mock the hook. Instead, mock the underlying service that the hook depends on
 - Prefer adding to or extending existing test files whenever possible. Create new test files only if no suitable ones exist
 - Avoid brittle visual-presentation assertions. Functional CSS contracts such as style scoping and selector transformation may be tested directly
