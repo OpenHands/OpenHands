@@ -54,6 +54,8 @@ export const CODE_COMMAND = "/code";
 /** The /help slash command — displays the built-in command reference. */
 export const HELP_COMMAND = "/help";
 
+export const SKILLS_COMMAND = "/skills";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -134,6 +136,17 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [CODE_COMMAND],
     },
     command: CODE_COMMAND,
+  },
+  {
+    skill: {
+      name: "skills",
+      type: "agentskills",
+      source: null,
+      content: "List skills available in the current workspace",
+      triggers: [SKILLS_COMMAND],
+    },
+    command: SKILLS_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$SKILLS_DESCRIPTION,
   },
 ];
 
