@@ -21,16 +21,16 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
     (item) => !isSettingsPageHidden(item.to, featureFlags),
   ).map((item) => {
     const renamedItem =
-      item.to === "/settings"
+      item.to === "/settings/llm"
         ? {
             ...item,
             text:
               backend.kind === "local"
-                ? I18nKey.SETTINGS$LLM_PROFILES
+                ? I18nKey.SETTINGS$PROVIDER_CONNECTIONS
                 : item.text,
             subtitle:
               backend.kind === "local"
-                ? I18nKey.SETTINGS$PAGE_LLM_PROFILES_SUBLINE
+                ? I18nKey.SETTINGS$PROVIDER_CONNECTIONS_HINT
                 : item.subtitle,
           }
         : item;

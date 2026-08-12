@@ -63,7 +63,7 @@ describe("useSettingsNavItems", () => {
     useActiveAgentProfileMock.mockReturnValue({ activeProfile: null });
   });
 
-  it("returns the LLM settings item unchanged on local backends", () => {
+  it("renames the local LLM settings item to Model providers", () => {
     useConfigMock.mockReturnValue({ data: createConfig() });
 
     const { result } = renderHook(() => useSettingsNavItems());
@@ -71,10 +71,13 @@ describe("useSettingsNavItems", () => {
       (item) => item.type === "item" && item.item.to === "/settings/llm",
     );
 
-    const baseLlm = OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!;
     expect(llmItem).toEqual({
       type: "item",
-      item: baseLlm,
+      item: {
+        ...OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!,
+        text: "SETTINGS$PROVIDER_CONNECTIONS",
+        subtitle: "SETTINGS$PROVIDER_CONNECTIONS_HINT",
+      },
     });
   });
 
@@ -88,8 +91,8 @@ describe("useSettingsNavItems", () => {
     const { result } = renderHook(() => useSettingsNavItems());
 
     // Agent profiles are available on cloud too (OpenHands #15060), so every
-    // OSS item is present; only the `/settings` LLM-Profiles rename stays
-    // local-only, so on cloud every item is passed through unchanged.
+    // OSS item is present; only the `/settings/llm` Model providers rename
+    // stays local-only, so on cloud every item is passed through unchanged.
     expect(result.current).toEqual(
       OSS_NAV_ITEMS.map((item) => ({ type: "item", item })),
     );
@@ -164,16 +167,20 @@ describe("useSettingsNavItems", () => {
         ),
     );
 
-    for (const path of [
-      "/settings/llm",
-      "/settings/condenser",
-      "/settings/verification",
-    ]) {
+    for (const path of ["/settings/condenser", "/settings/verification"]) {
       const renderedItem = byPath.get(path);
       expect(renderedItem).toEqual({
         type: "item",
         item: OSS_NAV_ITEMS.find((item) => item.to === path),
       });
     }
+    expect(byPath.get("/settings/llm")).toEqual({
+      type: "item",
+      item: {
+        ...OSS_NAV_ITEMS.find((item) => item.to === "/settings/llm")!,
+        text: "SETTINGS$PROVIDER_CONNECTIONS",
+        subtitle: "SETTINGS$PROVIDER_CONNECTIONS_HINT",
+      },
+    });
   });
 });

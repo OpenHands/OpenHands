@@ -23,6 +23,34 @@ import { formatRelativeTime } from "#/utils/format-relative-time";
 import { I18nKey } from "#/i18n/declaration";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
 
+function ManagedProviderRow() {
+  const { t } = useTranslation("openhands");
+
+  return (
+    <li
+      data-testid="managed-provider-github-copilot"
+      className="flex flex-col gap-3 rounded-md border border-tertiary-light/30 bg-base-secondary p-4"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-white">
+            {t(I18nKey.SETTINGS$GITHUB_COPILOT_PROVIDER)}
+          </span>
+          <span className="text-xs leading-4 text-tertiary-light">
+            {t(I18nKey.SETTINGS$GITHUB_COPILOT_PROVIDER_HINT)}
+          </span>
+        </div>
+        <span className="rounded-full bg-success/20 px-2 py-0.5 text-xs text-success">
+          {t(I18nKey.SETTINGS$CONNECTION_API_KEY_SET)}
+        </span>
+      </div>
+      <p className="text-xs leading-4 text-tertiary-light">
+        {t(I18nKey.SETTINGS$GITHUB_COPILOT_PROVIDER_DESCRIPTION)}
+      </p>
+    </li>
+  );
+}
+
 function ConnectionRow({ connection }: { connection: ProviderConnection }) {
   const { t, i18n } = useTranslation("openhands");
   const deleteConnection = useDeleteProviderConnection();
@@ -112,23 +140,27 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
   return (
     <li
       data-testid={`connection-row-${connection.id}`}
-      className="flex flex-col gap-1 rounded-md border border-tertiary-light/30 p-3"
+      className="flex flex-col gap-3 rounded-md border border-tertiary-light/30 bg-base-secondary p-4"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-white">
-          {connection.provider}
-          {connection.label ? ` · ${connection.label}` : ""}
-          {connection.models.length > 0
-            ? ` · ${t(I18nKey.SETTINGS$CONNECTION_MODELS_COUNT, {
-                count: connection.models.length,
-              })}`
-            : ""}
-          {lastRefreshed ? ` · ${lastRefreshed}` : ""}
-        </span>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-white">
+            {connection.provider}
+          </span>
+          <span className="text-xs leading-4 text-tertiary-light">
+            {connection.label ? `${connection.label} · ` : ""}
+            {connection.models.length > 0
+              ? t(I18nKey.SETTINGS$CONNECTION_MODELS_COUNT, {
+                  count: connection.models.length,
+                })
+              : t(I18nKey.SETTINGS$CONNECTION_NO_CATALOG)}
+            {lastRefreshed ? ` · ${lastRefreshed}` : ""}
+          </span>
+        </div>
         {connection.apiKeySet ? (
           <span
             data-testid={`connection-key-set-${connection.id}`}
-            className="text-xs text-tertiary-light"
+            className="rounded-full bg-success/20 px-2 py-0.5 text-xs text-success"
           >
             {t(I18nKey.SETTINGS$CONNECTION_API_KEY_SET)}
           </span>
@@ -221,7 +253,7 @@ function ConnectionRow({ connection }: { connection: ProviderConnection }) {
 
 /**
  * Lists connected providers with Refresh / Rotate key / Disconnect actions and
- * a "Connect a Provider" button that opens the wizard. Rendered above the
+ * an "Add provider" button that opens the wizard. Rendered above the
  * per-model LLM profile list so a single connection can back many profiles.
  *
  * Local-only in this release. On cloud the section hides itself (the cloud
@@ -295,13 +327,12 @@ export function ProviderConnectionsSection() {
           {t(I18nKey.SETTINGS$CONNECTION_EMPTY)}
         </p>
       ) : null}
-      {(data ?? []).length > 0 ? (
-        <ul className="flex flex-col gap-2">
-          {data!.map((c) => (
-            <ConnectionRow key={c.id} connection={c} />
-          ))}
-        </ul>
-      ) : null}
+      <ul className="flex flex-col gap-2">
+        <ManagedProviderRow />
+        {(data ?? []).length > 0
+          ? data!.map((c) => <ConnectionRow key={c.id} connection={c} />)
+          : null}
+      </ul>
 
       <ConnectProviderWizard
         isOpen={wizardOpen}

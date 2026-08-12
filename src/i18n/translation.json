@@ -38131,7 +38131,7 @@
     "ca": "S'ha sol·licitat una conversa filla"
   },
   "SETTINGS$CONNECT_PROVIDER": {
-    "en": "Connect a Provider",
+    "en": "Add provider",
     "ja": "プロバイダーを接続",
     "zh-CN": "连接提供商",
     "zh-TW": "連接供應商",
@@ -38148,7 +38148,7 @@
     "ca": "Connecta un proveïdor"
   },
   "SETTINGS$PROVIDER_CONNECTIONS": {
-    "en": "Provider Connections",
+    "en": "Model providers",
     "ja": "プロバイダー接続",
     "zh-CN": "提供商连接",
     "zh-TW": "供應商連接",
@@ -38165,7 +38165,7 @@
     "ca": "Connexions de proveïdor"
   },
   "SETTINGS$PROVIDER_CONNECTIONS_HINT": {
-    "en": "Connect a vendor once, then pick from every model that key grants.",
+    "en": "Access models from providers with your own API keys. Keys stay private and go straight to the provider.",
     "ja": "ベンダーを一度接続し、そのキーが許可するすべてのモデルから選択できます。",
     "zh-CN": "只需连接一次供应商，即可从该密钥授权的所有模型中进行选择。",
     "zh-TW": "只需連接一次供應商，即可從該金鑰授權的所有模型中選擇。",
@@ -38471,7 +38471,7 @@
     "ca": "Encara no hi ha proveïdors connectats."
   },
   "SETTINGS$CONNECTION_API_KEY_SET": {
-    "en": "Key set",
+    "en": "Configured",
     "ja": "キー設定済み",
     "zh-CN": "密钥已设置",
     "zh-TW": "金鑰已設定",
@@ -38522,7 +38522,7 @@
     "ca": "Eliminar la connexió a {{provider}}? Els perfils que l'utilitzen necessitaran una clau nova."
   },
   "SETTINGS$CONNECTIONS_UNAVAILABLE_CLOUD": {
-    "en": "Provider Connections are available on local agent-server in this release.",
+    "en": "Model providers are available on local agent-server in this release.",
     "ja": "このリリースでは、プロバイダー接続はローカルエージェントサーバーで利用できます。",
     "zh-CN": "在本版本中，提供商连接可在本地代理服务器上使用。",
     "zh-TW": "在本版本中，供應商連接可在本地代理伺服器上使用。",
@@ -38539,7 +38539,7 @@
     "ca": "Les connexions de proveïdor estan disponibles a l'agent-server local en aquesta versió."
   },
   "SETTINGS$CONNECTION_KEY_HELPER": {
-    "en": "We'll save this once and reuse it for every model from this provider. Rotate it later in Provider Connections.",
+    "en": "We'll save this once and reuse it for every model from this provider. Rotate it later in Model providers.",
     "ja": "このキーは一度保存し、このプロバイダーのすべてのモデルで再利用します。後でプロバイダー接続から更新できます。",
     "zh-CN": "我们会保存一次，并在该提供商的每个模型中重复使用。稍后可在提供商连接中轮换密钥。",
     "zh-TW": "我們會儲存一次，並在該提供商的每個模型中重複使用。稍後可在提供商連線中輪換金鑰。",
@@ -38911,5 +38911,56 @@
     "de": "Wähle mindestens ein Modell, um fortzufahren",
     "uk": "Оберіть принаймні одну модель, щоб продовжити",
     "ca": "Selecciona almenys un model per continuar"
+  },
+  "SETTINGS$GITHUB_COPILOT_PROVIDER": {
+    "en": "GitHub Copilot",
+    "ja": "GitHub Copilot",
+    "zh-CN": "GitHub Copilot",
+    "zh-TW": "GitHub Copilot",
+    "ko-KR": "GitHub Copilot",
+    "no": "GitHub Copilot",
+    "it": "GitHub Copilot",
+    "pt": "GitHub Copilot",
+    "es": "GitHub Copilot",
+    "ar": "GitHub Copilot",
+    "fr": "GitHub Copilot",
+    "tr": "GitHub Copilot",
+    "de": "GitHub Copilot",
+    "uk": "GitHub Copilot",
+    "ca": "GitHub Copilot"
+  },
+  "SETTINGS$GITHUB_COPILOT_PROVIDER_HINT": {
+    "en": "From your GitHub Copilot subscription.",
+    "ja": "GitHub Copilot サブスクリプションから。",
+    "zh-CN": "来自你的 GitHub Copilot 订阅。",
+    "zh-TW": "來自你的 GitHub Copilot 訂閱。",
+    "ko-KR": "GitHub Copilot 구독에서 제공됩니다.",
+    "no": "Fra GitHub Copilot-abonnementet ditt.",
+    "it": "Dal tuo abbonamento GitHub Copilot.",
+    "pt": "Da sua assinatura do GitHub Copilot.",
+    "es": "De tu suscripción de GitHub Copilot.",
+    "ar": "من اشتراكك في GitHub Copilot.",
+    "fr": "Depuis votre abonnement GitHub Copilot.",
+    "tr": "GitHub Copilot aboneliğinizden.",
+    "de": "Aus deinem GitHub Copilot-Abonnement.",
+    "uk": "З вашої підписки GitHub Copilot.",
+    "ca": "De la teva subscripció de GitHub Copilot."
+  },
+  "SETTINGS$GITHUB_COPILOT_PROVIDER_DESCRIPTION": {
+    "en": "Provided by your GitHub account. Models follow your Copilot subscription — no API key or configuration needed.",
+    "ja": "GitHub アカウントによって提供されます。モデルは Copilot サブスクリプションに従います — API キーや設定は不要です。",
+    "zh-CN": "由你的 GitHub 帐户提供。模型遵循你的 Copilot 订阅 — 无需 API 密钥或配置。",
+    "zh-TW": "由你的 GitHub 帳戶提供。模型會依照你的 Copilot 訂閱提供 — 不需要 API 金鑰或設定。",
+    "ko-KR": "GitHub 계정에서 제공됩니다. 모델은 Copilot 구독을 따르며 API 키나 설정이 필요하지 않습니다.",
+    "no": "Leveres av GitHub-kontoen din. Modellene følger Copilot-abonnementet ditt — ingen API-nøkkel eller konfigurasjon trengs.",
+    "it": "Fornito dal tuo account GitHub. I modelli seguono il tuo abbonamento Copilot — non serve alcuna chiave API o configurazione.",
+    "pt": "Fornecido pela sua conta GitHub. Os modelos seguem sua assinatura do Copilot — nenhuma chave de API ou configuração é necessária.",
+    "es": "Proporcionado por tu cuenta de GitHub. Los modelos siguen tu suscripción de Copilot — no se necesita clave de API ni configuración.",
+    "ar": "يتم توفيره من خلال حسابك على GitHub. تتبع النماذج اشتراكك في Copilot — لا حاجة إلى مفتاح API أو إعداد.",
+    "fr": "Fourni par votre compte GitHub. Les modèles suivent votre abonnement Copilot — aucune clé API ni configuration n'est nécessaire.",
+    "tr": "GitHub hesabınız tarafından sağlanır. Modeller Copilot aboneliğinizi izler — API anahtarı veya yapılandırma gerekmez.",
+    "de": "Wird von deinem GitHub-Konto bereitgestellt. Modelle folgen deinem Copilot-Abonnement — kein API-Schlüssel und keine Konfiguration erforderlich.",
+    "uk": "Надається вашим обліковим записом GitHub. Моделі відповідають вашій підписці Copilot — API-ключ або налаштування не потрібні.",
+    "ca": "Proporcionat pel teu compte de GitHub. Els models segueixen la teva subscripció de Copilot — no cal cap clau d'API ni configuració."
   }
 }
