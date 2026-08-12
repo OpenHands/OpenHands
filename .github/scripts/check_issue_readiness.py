@@ -41,6 +41,11 @@ ENHANCEMENT_LABEL = "enhancement"
 # h1/h2 are not produced by issue forms.
 HEADING_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
 
+# Opening/closing marker of a fenced code block: three or more backticks or
+# tildes, indented by at most three spaces (CommonMark). An info string may
+# follow the opening marker.
+FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
 
@@ -100,17 +105,62 @@ def visible_text(text: str) -> str:
     return cleaned
 
 
+def mask_fenced_code(body: str) -> str:
+    """Return `body` with fenced code blocks blanked out, preserving offsets.
+
+    A `###` line inside a fence is not a heading: reporters quote the issue
+    template and paste logs, and GitHub renders neither as a section. Every
+    blanked character is replaced by a space and newlines are kept, so offsets
+    into the returned string are valid offsets into `body` — callers match
+    headings against the mask and slice content out of the original.
+
+    An unterminated fence runs to the end of the body, which is what CommonMark
+    (and GitHub's own renderer) does.
+    """
+    masked: list[str] = []
+    fence: str | None = None
+
+    # Split on "\n" only. `str.splitlines()` also breaks on form feeds and other
+    # Unicode separators that CommonMark does not treat as line endings, so a
+    # fence marker following one — common in pasted terminal output — would
+    # falsely open a block and mask the rest of the body.
+    for line in body.split("\n"):
+        probe = line[:-1] if line.endswith("\r") else line
+        match = FENCE_RE.match(probe)
+        marker = match.group(1) if match else None
+
+        if fence is None:
+            if marker is None:
+                masked.append(line)
+                continue
+            fence = marker
+        elif marker and marker[0] == fence[0] and len(marker) >= len(fence):
+            # Closing fence: same character, at least as long as the opener.
+            fence = None
+
+        masked.append(" " * len(line))
+
+    return "\n".join(masked)
+
+
 def extract_sections(body: str) -> dict[str, str]:
     """Split the body into a {heading: text} map using `### <heading>` boundaries.
 
     Issue forms render every field this way. Free-form issues (not created via a
     form) may still use `###` headings; if they don't, the map is empty and the
     caller falls back to whole-body checks.
+
+    Headings inside fenced code blocks are ignored — see `mask_fenced_code`.
     """
-    matches = list(HEADING_RE.finditer(body))
+    matches = list(HEADING_RE.finditer(mask_fenced_code(body)))
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
-        start = match.end()
+        # Start at the line after the heading rather than at `match.end()`.
+        # `HEADING_RE` ends in `\s*$`, which is greedy across newlines, so on
+        # the mask it would swallow a fenced block that opens the section and
+        # drop it from the returned text.
+        newline = body.find("\n", match.start())
+        start = len(body) if newline == -1 else newline + 1
         end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
         sections[match.group(1).strip().lower()] = body[start:end]
     return sections

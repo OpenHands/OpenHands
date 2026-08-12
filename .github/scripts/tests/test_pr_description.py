@@ -10,12 +10,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_pr_description import (
     extract_linked_issue_numbers,
     extract_pr_type,
+    extract_sections,
+    mask_fenced_code,
     validate_linked_issue_ready,
     validate_bug_fix_evidence,
+    validate_pr_body,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
     READY_FOR_DEV_LABEL,
 )
+
+# Built at runtime so these fixtures stay readable and quotable.
+FENCE = "`" * 3
 
 # ---------------------------------------------------------------------------
 # extract_linked_issue_numbers
@@ -222,3 +228,94 @@ https://youtube.com/watch?v=abc123
 """
     errors = validate_bug_fix_evidence(body)
     assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# Fenced code blocks are not section boundaries
+# ---------------------------------------------------------------------------
+
+def test_fenced_heading_is_not_a_section():
+    """A template quoted inside a fence must not manufacture a section."""
+    body = f"## Why\n\nreal reason\n\n{FENCE}\n## How to Test\n1. npm ci\n{FENCE}\n"
+    assert "How to Test" not in extract_sections(body)
+
+
+def test_quoted_required_section_does_not_satisfy_template_check():
+    """Before the fix, a fenced `## How to Test` satisfied the required-field check."""
+    body = (
+        "HUMAN:\n\nI tested this locally on Node 24.\n\nAGENT:\n\n"
+        "## Why\n\nreal reason\n\n"
+        "## Summary\n\nExample of the template we follow:\n\n"
+        f"{FENCE}\n## How to Test\n1. npm ci\n{FENCE}\n\n"
+        "## Issue Number\n\nFixes #123\n"
+    )
+    errors = validate_pr_body(body, [])
+    assert any("How to Test" in e for e in errors)
+
+
+def test_fenced_heading_does_not_truncate_enclosing_section():
+    """Command output containing `## ` must not cut its section short."""
+    body = (
+        "## How to Test\n\n1. npm ci\n\n"
+        f"{FENCE}\n## Output\nall green\n{FENCE}\n\n"
+        "2. npm run build\n\n## Type\n\n- [x] Refactor\n"
+    )
+    sections = extract_sections(body)
+    assert "Output" not in sections
+    assert "npm run build" in sections["How to Test"]
+
+
+def test_real_sections_still_parsed_around_fences():
+    body = (
+        "## Why\n\nbecause\n\n"
+        f"{FENCE}\nsome log\n{FENCE}\n\n"
+        "## Summary\n\nchanged things\n\n## How to Test\n\nrun it\n"
+    )
+    assert set(extract_sections(body)) == {"Why", "Summary", "How to Test"}
+
+
+def test_mask_fenced_code_preserves_offsets():
+    body = f"## A\ntext\n{FENCE}\n## B\n{FENCE}\n## C\ntail\n"
+    masked = mask_fenced_code(body)
+    assert len(masked) == len(body)
+    assert masked.count("\n") == body.count("\n")
+
+
+def test_mask_fenced_code_leaves_unfenced_text_untouched():
+    body = "## A\nplain text\n## B\nmore text\n"
+    assert mask_fenced_code(body) == body
+
+
+def test_fence_directly_after_heading_is_kept_in_the_section():
+    """`HEADING_RE` ends in `\\s*$`; a masked fence must not be swallowed by it."""
+    body = f"## How to Test\n{FENCE}\nnpm ci && npm test\n{FENCE}\n\n## Type\n\n- [x] Refactor\n"
+    section = extract_sections(body)["How to Test"]
+    assert "npm ci && npm test" in section
+
+
+def test_how_to_test_with_only_a_fenced_command_is_not_empty():
+    """A section whose entire content is a fenced block must still count as filled."""
+    body = (
+        "HUMAN:\n\nI ran this locally on Node 24.\n\nAGENT:\n\n"
+        "## Why\n\nreason\n\n## Summary\n\nchanges\n\n"
+        f"## How to Test\n{FENCE}\nnpm ci && npm test\n{FENCE}\n\n"
+        "## Issue Number\n\nFixes #123\n"
+    )
+    errors = validate_pr_body(body, [])
+    assert not any("How to Test" in e for e in errors), errors
+
+
+def test_form_feed_does_not_open_a_fence():
+    body = f"## Why\nreason\x0c{FENCE}\n\n## Summary\nchanges\n"
+    assert "Summary" in extract_sections(body)
+
+
+def test_crlf_body_sections_are_found():
+    body = (
+        "## Why\r\nreason\r\n\r\n"
+        f"{FENCE}\r\n## Quoted\r\n{FENCE}\r\n\r\n"
+        "## Summary\r\nchanges\r\n"
+    )
+    sections = extract_sections(body)
+    assert "Quoted" not in sections
+    assert set(sections) == {"Why", "Summary"}

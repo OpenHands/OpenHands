@@ -10,12 +10,17 @@ from check_issue_readiness import (
     evaluate_readiness,
     extract_sections,
     has_screenshot_or_video,
+    mask_fenced_code,
     references_run_method,
     has_checklist_item,
     visible_text,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
 )
+
+# Built at runtime so these fixtures stay readable and quotable.
+FENCE = "`" * 3
+TILDE_FENCE = "~" * 3
 
 # ---------------------------------------------------------------------------
 # Helper builders
@@ -227,3 +232,177 @@ def test_extract_sections():
     assert "title two" in sections
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
+
+
+# ---------------------------------------------------------------------------
+# Fenced code blocks are not section boundaries
+# ---------------------------------------------------------------------------
+
+def test_fenced_heading_is_not_a_section():
+    """A heading quoted inside a fence must not become a section."""
+    body = (
+        "### Desired Behavior\n\nMake it work.\n\n"
+        f"{FENCE}markdown\n### Acceptance Criteria\n- [ ] quoted, not real\n{FENCE}\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)
+
+
+def test_enhancement_not_ready_when_acceptance_only_quoted():
+    """Quoting the template must not satisfy the acceptance-criteria rule."""
+    body = (
+        "### Desired Behavior\n\nMake it work.\n\n"
+        f"{FENCE}\n### Acceptance Criteria\n- [ ] quoted, not real\n{FENCE}\n"
+    )
+    result = evaluate_readiness(body, [ENHANCEMENT_LABEL])
+    assert not result.ready
+    assert any("Acceptance Criteria" in r for r in result.reasons)
+
+
+def test_fenced_heading_does_not_truncate_enclosing_section():
+    """A pasted log containing `### ` must not cut its section short."""
+    body = (
+        "### Actual Behavior\n\nI ran `npm run dev` and the server said:\n\n"
+        f"{FENCE}\n### Error detail\nboom\n{FENCE}\n\n"
+        "![screenshot](https://github.com/user-attachments/assets/abc123)\n\n"
+        "### Acceptance Criteria\n- [ ] fixed\n"
+    )
+    sections = extract_sections(body)
+    assert "error detail" not in sections
+    assert "user-attachments" in sections["actual behavior"]
+
+
+def test_bug_ready_with_fenced_log_before_screenshot():
+    """End-to-end: the report above is ready; before the fix it was rejected."""
+    body = (
+        "### Actual Behavior\n\nI ran `npm run dev` and the server said:\n\n"
+        f"{FENCE}\n### Error detail\nboom\n{FENCE}\n\n"
+        "![screenshot](https://github.com/user-attachments/assets/abc123)\n\n"
+        "### Acceptance Criteria\n- [ ] fixed\n"
+    )
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_tilde_fence_is_masked():
+    body = (
+        "### Desired Behavior\n\nMake it work.\n\n"
+        f"{TILDE_FENCE}\n### Acceptance Criteria\n- [ ] quoted\n{TILDE_FENCE}\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)
+
+
+def test_backticks_do_not_close_a_tilde_fence():
+    """Fences only close on their own marker character."""
+    body = (
+        "### Desired Behavior\n\ntext\n\n"
+        f"{TILDE_FENCE}\n{FENCE}\n### Acceptance Criteria\n- [ ] still inside\n"
+        f"{TILDE_FENCE}\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)
+
+
+def test_indented_fence_is_masked():
+    """CommonMark allows a fence indented up to three spaces."""
+    body = (
+        "### Desired Behavior\n\ntext\n\n"
+        f"   {FENCE}\n   ### Acceptance Criteria\n   - [ ] quoted\n   {FENCE}\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)
+
+
+def test_unterminated_fence_masks_to_end_of_body():
+    """An unclosed fence runs to the end, matching CommonMark and GitHub."""
+    body = f"### Desired Behavior\n\ntext\n\n{FENCE}\n### Acceptance Criteria\n- [ ] x\n"
+    sections = extract_sections(body)
+    assert "desired behavior" in sections
+    assert "acceptance criteria" not in sections
+
+
+def test_longer_marker_closes_shorter_fence():
+    body = (
+        "### Desired Behavior\n\ntext\n\n"
+        f"{FENCE}\n### Quoted\n{FENCE}`\n\n### Acceptance Criteria\n- [ ] real\n"
+    )
+    sections = extract_sections(body)
+    assert "quoted" not in sections
+    assert "acceptance criteria" in sections
+
+
+def test_sections_after_a_fence_are_still_found():
+    """Regression: masking must not swallow real headings that follow."""
+    body = (
+        "### Actual Behavior\n\nran `npm run dev`\n\n"
+        f"{FENCE}\nsome log\n{FENCE}\n\n"
+        "![shot](https://example.com/a.png)\n\n"
+        "### Acceptance Criteria\n\n- [ ] fixed\n"
+    )
+    sections = extract_sections(body)
+    assert set(sections) == {"actual behavior", "acceptance criteria"}
+
+
+def test_mask_fenced_code_preserves_offsets():
+    """Section slicing reads from the original body, so length must not shift."""
+    body = f"### A\ntext\n{FENCE}\n### B\n{FENCE}\n### C\ntail\n"
+    masked = mask_fenced_code(body)
+    assert len(masked) == len(body)
+    assert masked.count("\n") == body.count("\n")
+
+
+def test_mask_fenced_code_leaves_unfenced_text_untouched():
+    body = "### A\nplain text\n### B\nmore text\n"
+    assert mask_fenced_code(body) == body
+
+
+def test_fence_directly_after_heading_is_kept_in_the_section():
+    """`HEADING_RE` ends in `\\s*$`; a masked fence must not be swallowed by it."""
+    body = f"### Actual Behavior\n{FENCE}\n$ npm run dev\nboom\n{FENCE}\n\ntail\n"
+    section = extract_sections(body)["actual behavior"]
+    assert "npm run dev" in section
+    assert "boom" in section
+
+
+def test_bug_ready_when_section_opens_with_a_fenced_log():
+    """The run method lives only in a fence that opens the section."""
+    body = (
+        f"### Actual Behavior\n{FENCE}\n$ npm run dev\nboom\n{FENCE}\n\n"
+        "![shot](https://github.com/user-attachments/assets/abc123)\n\n"
+        "### Acceptance Criteria\n- [ ] fixed\n"
+    )
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_blank_lines_after_heading_do_not_eat_the_section():
+    body = "### Actual Behavior\n\n\n\nran `npm run dev`\n\n### Expected Behavior\nx\n"
+    assert "npm run dev" in extract_sections(body)["actual behavior"]
+
+
+def test_form_feed_does_not_open_a_fence():
+    """`str.splitlines()` breaks on \\x0c; CommonMark does not."""
+    body = (
+        f"### Actual Behavior\npage one\x0c{FENCE}\n\n"
+        "### Acceptance Criteria\n- [ ] x\n"
+    )
+    assert "acceptance criteria" in extract_sections(body)
+
+
+def test_crlf_body_sections_are_found():
+    body = (
+        "### Actual Behavior\r\nran `npm run dev`\r\n\r\n"
+        f"{FENCE}\r\n### Quoted\r\n{FENCE}\r\n\r\n"
+        "![shot](https://example.com/a.png)\r\n\r\n"
+        "### Acceptance Criteria\r\n- [ ] fixed\r\n"
+    )
+    sections = extract_sections(body)
+    assert "quoted" not in sections
+    assert set(sections) == {"actual behavior", "acceptance criteria"}
+
+
+def test_crlf_body_is_ready():
+    body = (
+        "### Actual Behavior\r\nran `npm run dev`\r\n\r\n"
+        "![shot](https://example.com/a.png)\r\n\r\n"
+        "### Acceptance Criteria\r\n- [ ] fixed\r\n"
+    )
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
