@@ -1,3 +1,4 @@
+import { AgentServerClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   LLM_BALANCE_PATH,
@@ -67,36 +68,45 @@ class LLMBalanceService {
    * absent endpoint would hide the card for the rest of the conversation.
    */
   static async getBalance(): Promise<LLMBalance | null> {
-    // Raw fetch is deliberate: /api/llm/balance has no typed client in
-    // @openhands/typescript-client yet. The file is listed in
-    // ALLOWED_AD_HOC_HTTP_FILES (no-direct-agent-server-calls.test.ts) with
-    // this justification.
     const { host, apiKey } = getAgentServerClientOptions();
-    const headers = new Headers({ Accept: "application/json" });
-    if (apiKey) {
-      headers.set("X-Session-API-Key", apiKey);
-    }
-
-    let response: Response;
+    const client = new AgentServerClient({
+      host,
+      apiKey,
+      timeout: LLM_BALANCE_TIMEOUT_MS,
+    });
     try {
-      response = await fetch(`${host}${LLM_BALANCE_PATH}`, {
-        headers,
-        signal: AbortSignal.timeout(LLM_BALANCE_TIMEOUT_MS),
+      const data = await client.get<unknown>(LLM_BALANCE_PATH, {
+        acceptableStatusCodes: new Set([200]),
+        responseType: "json",
+        timeoutSeconds: Math.floor(LLM_BALANCE_TIMEOUT_MS / 1000),
       });
+      return normalizeBalance(data);
     } catch (error) {
+      // Older servers without balance support answer 404 — hide the UI.
+      if (
+        error instanceof Error &&
+        "status" in error &&
+        (error as { status: number }).status === 404
+      ) {
+        return null;
+      }
       if (isAbortLike(error)) {
         throw new Error(
           `Balance request timed out after ${LLM_BALANCE_TIMEOUT_MS}ms`,
         );
       }
-      throw error;
+      const status =
+        error instanceof Error &&
+        "status" in error &&
+        (error as { status: number }).status;
+      throw new Error(
+        status
+          ? `Balance request failed with ${status}`
+          : `Balance request failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      client.close();
     }
-
-    if (response.status === 404) return null;
-    if (!response.ok) {
-      throw new Error(`Balance request failed with ${response.status}`);
-    }
-    return normalizeBalance(await response.json());
   }
 }
 

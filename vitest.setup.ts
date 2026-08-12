@@ -60,32 +60,52 @@ if (typeof requestAnimationFrame === "undefined") {
   );
 }
 
-if (typeof ProgressEvent === "undefined") {
-  class MockProgressEvent extends Event {
-    readonly lengthComputable: boolean;
+// MSW's XMLHttpRequest interceptor references the bare `ProgressEvent`
+// global from inside async `respondWith` callbacks (via `createEvent`).
+// Vitest's jsdom environment installs `ProgressEvent` as an own accessor on
+// `globalThis` while the environment is alive and *deletes* it during
+// per-file teardown (it is part of vitest's `LIVING_KEYS`). If an in-flight
+// intercepted XHR (e.g. PostHog analytics) resolves its mocked response
+// after teardown, the late callback evaluates `ProgressEvent` against a
+// torn-down global and throws `ReferenceError: ProgressEvent is not defined`,
+// which Vitest reports as an unhandled rejection and fails the whole run.
+//
+// The robust fix is to drain those pending async response callbacks in
+// `afterAll` (which runs *before* jsdom teardown) so they settle while
+// `ProgressEvent` is still defined. See `afterAll` below. The getter below
+// stashes the live class as a light defense-in-depth for any callback that
+// fires before teardown completes; it cannot help after teardown (the
+// accessor is deleted there), which is exactly why the `afterAll` drain is
+// the real fix.
+class MockProgressEvent extends Event {
+  readonly lengthComputable: boolean;
 
-    readonly loaded: number;
+  readonly loaded: number;
 
-    readonly total: number;
+  readonly total: number;
 
-    constructor(type: string, eventInitDict: ProgressEventInit = {}) {
-      super(type, eventInitDict);
-      this.lengthComputable = eventInitDict.lengthComputable ?? false;
-      this.loaded = eventInitDict.loaded ?? 0;
-      this.total = eventInitDict.total ?? 0;
-    }
+  constructor(type: string, eventInitDict: ProgressEventInit = {}) {
+    super(type, eventInitDict);
+    this.lengthComputable = eventInitDict.lengthComputable ?? false;
+    this.loaded = eventInitDict.loaded ?? 0;
+    this.total = eventInitDict.total ?? 0;
   }
-
-  // MSW's XMLHttpRequest interceptor may dispatch progress events while
-  // Vitest is tearing down globals between files. Keep this process-level
-  // fallback outside `vi.stubGlobal()` so `vi.unstubAllGlobals()` does not
-  // remove it before late interceptor callbacks settle.
-  Object.defineProperty(globalThis, "ProgressEvent", {
-    configurable: true,
-    writable: true,
-    value: MockProgressEvent,
-  });
 }
+
+// `afterAll` runs while jsdom is still active, so `globalThis.ProgressEvent`
+// is jsdom's constructor here. Stash it so the post-teardown getter can
+// keep returning the real class even after the accessor is removed.
+const _liveProgressEvent =
+  typeof globalThis.ProgressEvent !== "undefined"
+    ? globalThis.ProgressEvent
+    : MockProgressEvent;
+
+Object.defineProperty(globalThis, "ProgressEvent", {
+  configurable: true,
+  get() {
+    return _liveProgressEvent;
+  },
+});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
@@ -152,7 +172,20 @@ afterEach(async () => {
   await Promise.resolve();
   await Promise.resolve();
 });
-afterAll(() => {
+afterAll(async () => {
+  // Drain pending MSW `respondWith` callbacks (and any other queued
+  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
+  // responses asynchronously; if a late callback (e.g. PostHog analytics
+  // flushed during the last test) settles after teardown, its `createEvent`
+  // call evaluates the bare `ProgressEvent` global against a torn-down
+  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
+  // a few real-timer ticks here lets those callbacks complete while
+  // `ProgressEvent` is still defined. We restore real timers first so a test
+  // that left fake timers active can't stall the drain.
+  vi.useRealTimers();
+  for (let i = 0; i < 10; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
   server.close();
   vi.unstubAllGlobals();
 });

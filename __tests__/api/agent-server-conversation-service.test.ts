@@ -411,13 +411,9 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -446,14 +442,10 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -482,15 +474,11 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-        "parent-conversation-id",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+        parentConversationId: "parent-conversation-id",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       expect(payloadCall[1]).toMatchObject({
@@ -1087,17 +1075,11 @@ describe("AgentServerConversationService", () => {
       );
 
       // Act
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        null,
-        undefined,
-        undefined,
-        "parent-conv-1",
-        "plan",
-        "sandbox-9",
-      );
+      await AgentServerConversationService.createConversation({
+        parentConversationId: "parent-conv-1",
+        agentType: "plan",
+        sandboxId: "sandbox-9",
+      });
 
       // Assert
       const [url, init] = getFetchCall(fetchMock);
