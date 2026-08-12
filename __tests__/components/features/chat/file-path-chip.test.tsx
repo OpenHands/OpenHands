@@ -18,12 +18,23 @@ describe("FilePathChip", () => {
     openWorkspaceFile.mockClear();
   });
 
-  it("opens the workspace file when clicked", async () => {
+  it("opens the workspace file when clicked without a custom handler", async () => {
     const user = userEvent.setup();
     render(<FilePathChip path="test.md" />);
 
     await user.click(screen.getByTestId("file-path-chip"));
 
     expect(openWorkspaceFile).toHaveBeenCalledWith("test.md", "conv-1");
+  });
+
+  it("prefers a custom onClick over the default open handler", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(<FilePathChip path="test.md" onClick={onClick} />);
+
+    await user.click(screen.getByTestId("file-path-chip"));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(openWorkspaceFile).not.toHaveBeenCalled();
   });
 });

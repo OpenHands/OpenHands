@@ -70,7 +70,10 @@ function PathComponent(props: { children?: ReactNode }) {
       const filename = extractFilename(decodedPath);
       if (!interactive) {
         return (
-          <span className="font-mono" title={decodedPath}>
+          <span
+            className="font-mono font-normal tracking-tight"
+            title={decodedPath}
+          >
             {filename}
           </span>
         );
@@ -79,7 +82,7 @@ function PathComponent(props: { children?: ReactNode }) {
         <button
           type="button"
           data-testid="path-component-link"
-          className="cursor-pointer font-mono hover:underline"
+          className="cursor-pointer font-mono font-normal tracking-tight hover:underline"
           title={decodedPath}
           onClick={(event) => {
             event.stopPropagation();
@@ -91,7 +94,9 @@ function PathComponent(props: { children?: ReactNode }) {
       );
     } catch (e) {
       EventLogger.error(String(e));
-      return <span className="font-mono">{path}</span>;
+      return (
+        <span className="font-mono font-normal tracking-tight">{path}</span>
+      );
     }
   };
 
@@ -104,14 +109,22 @@ function PathComponent(props: { children?: ReactNode }) {
       ),
     );
 
-    return <strong className="font-mono">{processedChildren}</strong>;
+    return (
+      <span className="font-normal tracking-tight">{processedChildren}</span>
+    );
   }
 
   if (typeof children === "string") {
-    return <strong>{processPath(children)}</strong>;
+    return (
+      <span className="font-normal tracking-tight">
+        {processPath(children)}
+      </span>
+    );
   }
 
-  return <strong className="font-mono">{children}</strong>;
+  return (
+    <span className="font-mono font-normal tracking-tight">{children}</span>
+  );
 }
 
 export { PathComponent, isLikelyDirectory };

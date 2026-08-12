@@ -66,32 +66,9 @@ describe("toFilesTabPath", () => {
     expect(toFilesTabPath("/Users/me/ws/a.ts", "/Users/me/ws")).toBe("a.ts");
   });
 
-  it("strips a nested working dir before the generic /workspace/<name>/ fallback", () => {
-    // Nested roots must stay relative to working_dir, not the two-segment
-    // /workspace/<name>/ heuristic used by Files drawer selection.
-    const workingDir = "/workspace/project/packages/app";
-    expect(
-      toFilesTabPath(
-        "/workspace/project/packages/app/src/index.ts",
-        workingDir,
-      ),
-    ).toBe("src/index.ts");
-    expect(
-      toFilesTabPath(
-        "/workspace/project/packages/app/src/index.ts:12",
-        workingDir,
-      ),
-    ).toBe("src/index.ts");
-    expect(toFilesTabPath(workingDir, workingDir)).toBe("");
-  });
-
-  it("strips editor line suffixes from POSIX and Windows paths", () => {
-    expect(toFilesTabPath("src/a.ts:12")).toBe("src/a.ts");
-    expect(toFilesTabPath("src/a.ts:12-40")).toBe("src/a.ts");
-    expect(toFilesTabPath("C:\\repo\\src\\a.ts:12", "C:\\repo")).toBe(
-      "src/a.ts",
-    );
-    expect(toFilesTabPath("C:\\repo\\src\\a.ts:12-40", "C:\\repo")).toBe(
+  it("aliases toWorkspaceRelativePath for Files-drawer callers", () => {
+    expect(toFilesTabPath("/workspace/project/a.ts")).toBe("a.ts");
+    expect(toFilesTabPath("src/a.ts:12-40", "/workspace/project")).toBe(
       "src/a.ts",
     );
   });

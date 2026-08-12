@@ -1,4 +1,5 @@
 import React from "react";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -32,6 +33,10 @@ import {
   resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
+import {
+  FREE_OPENHANDS_MODEL_NOTE,
+  isFreeOpenHandsModel,
+} from "#/utils/format-model-name";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -103,10 +108,23 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
   );
 }
 
+function OpenHandsFreeModelsNote() {
+  return (
+    <p
+      data-testid="openhands-free-models-note"
+      className="flex items-start gap-2 text-xs text-warning"
+    >
+      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
+    </p>
+  );
+}
+
 export function LlmSettingsScreen({
   scope = "personal",
   onSaveSuccess,
   initialValueOverrides,
+  markInitialOverridesDirty,
   embedded,
   hideSaveButton,
   suppressSuccessToast,
@@ -117,6 +135,8 @@ export function LlmSettingsScreen({
   onSaveSuccess?: () => void;
   /** Forwarded to {@link SdkSectionPage}. */
   initialValueOverrides?: SettingsFormValues;
+  /** Forwarded to {@link SdkSectionPage}. */
+  markInitialOverridesDirty?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   embedded?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
@@ -388,7 +408,12 @@ export function LlmSettingsScreen({
                   />
 
                   {showOpenHandsApiKeyHelp ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    <>
+                      {isFreeOpenHandsModel(modelValue) ? (
+                        <OpenHandsFreeModelsNote />
+                      ) : null}
+                      <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    </>
                   ) : null}
 
                   <SettingsInput
@@ -496,6 +521,7 @@ export function LlmSettingsScreen({
       allowAllView
       onSaveSuccess={onSaveSuccess}
       initialValueOverrides={initialValueOverrides}
+      markInitialOverridesDirty={markInitialOverridesDirty}
       embedded={embedded}
       hideSaveButton={hideSaveButton}
       suppressSuccessToast={suppressSuccessToast}

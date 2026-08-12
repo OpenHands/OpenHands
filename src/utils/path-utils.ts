@@ -1,6 +1,7 @@
 /**
  * Path manipulation utilities
  */
+import { DEFAULT_WORKING_DIR } from "#/api/agent-server-config";
 
 /**
  * Strip workspace prefix from file paths
@@ -19,15 +20,24 @@ export const stripWorkspacePrefix = (path: string): string => {
   return workspaceMatch ? workspaceMatch[1] : path;
 };
 
+function normalizeWorkspaceRoot(root: string): string {
+  const trimmed = root.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!trimmed) return "";
+  // Keep Windows drive roots (`C:` / `C:/repo`) and POSIX absolutes as-is.
+  if (trimmed.startsWith("/") || /^[A-Za-z]:(\/|$)/.test(trimmed)) {
+    return trimmed;
+  }
+  return `/${trimmed}`;
+}
+
 /**
- * Normalize a tool/chat path for the Files tab: strip the conversation
- * working dir when known, otherwise the generic `/workspace/<name>/`
- * prefix, plus optional `:line` suffixes.
+ * Convert an agent/chat file path into a workspace-relative path for the Files
+ * drawer / workspace file APIs.
  *
- * Working dir must be removed first. Nested roots such as
- * `/workspace/project/packages/app` would otherwise be partially stripped
- * by the two-segment `/workspace/<name>/` heuristic and leave a path that
- * does not match `useWorkspaceFiles` entries.
+ * Strips editor `:line` / `:start-end` suffixes, then removes the conversation
+ * working directory (or `DEFAULT_WORKING_DIR`) when present as a prefix.
+ * Nested roots must match `workingDir` first — the generic `/workspace/<name>/`
+ * heuristic is only a fallback when no root matches.
  */
 export const toFilesTabPath = (
   path: string,
@@ -40,16 +50,26 @@ export const toFilesTabPath = (
   // the drive colon is at the start (`C:`), never at the end.
   result = result.replace(/:(\d+)(-\d+)?$/, "");
 
-  const wd = workingDir?.trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (wd && result.startsWith(`${wd}/`)) {
-    result = result.slice(wd.length + 1);
-  } else if (wd && result === wd) {
-    return "";
-  } else {
-    result = stripWorkspacePrefix(result);
+  const roots = [workingDir, DEFAULT_WORKING_DIR].filter(
+    (value): value is string => Boolean(value?.trim()),
+  );
+
+  for (const root of roots) {
+    const normalizedRoot = normalizeWorkspaceRoot(root);
+    if (!normalizedRoot) continue;
+    if (result === normalizedRoot) {
+      return "";
+    }
+    if (result.startsWith(`${normalizedRoot}/`)) {
+      return result.slice(normalizedRoot.length + 1);
+    }
   }
 
-  return result.replace(/^\.\//, "");
+  if (!result.startsWith("/")) {
+    return result.replace(/^\.\//, "");
+  }
+
+  return stripWorkspacePrefix(result).replace(/^\.\//, "");
 };
 
 const WORKSPACE_FILE_EXTENSION =

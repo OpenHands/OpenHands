@@ -180,7 +180,11 @@ test.describe("preset automation → slash command conversation", () => {
     });
 
     await routeSessionApiKey(page);
-    await page.goto("/automations", { waitUntil: "domcontentloaded" });
+    // The catalog launcher lives on the Templates sub-page, which is where
+    // the interface manifest places it.
+    await page.goto("/automations/templates", {
+      waitUntil: "domcontentloaded",
+    });
     await dismissAnalyticsModal(page);
 
     // Click the Slack standup digest automation card

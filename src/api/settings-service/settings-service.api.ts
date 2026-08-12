@@ -1,11 +1,12 @@
 import { SettingsClient } from "@openhands/typescript-client/clients";
+import type {
+  MCPConfigPatch,
+  MCPServer,
+  MCPServerPatch,
+} from "@openhands/typescript-client";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { Settings, SettingsSchema, SettingsValue } from "#/types/settings";
-import {
-  getSdkMcpServerMap,
-  hasRedactedMcpSecretLeaf,
-  stringRecord,
-} from "#/utils/mcp-config";
+import { stringRecord } from "#/utils/mcp-config";
 import { getActiveBackend } from "../backend-registry/active-store";
 import {
   fetchCloudConversationSettingsSchema,
@@ -228,7 +229,17 @@ const headersFromMcpAuth = (
   }
 };
 
-const cloudCompatibleMcpConfig = (value: unknown): unknown => {
+/**
+ * Convert SDK `auth` credentials to the cloud's header-only storage shape.
+ *
+ * The cloud settings endpoint applies `mcp_config` as a merge patch, so a
+ * credential change must also tombstone the headers the previous credential
+ * produced — otherwise stale secrets survive a strategy switch (e.g. an
+ * api_key's custom header after moving to bearer). Stored headers that the
+ * new credential still produces (via the patch's carried `headers` or the
+ * converted auth) are left untouched; any other stored header is cleared.
+ */
+const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
   if (!isRecord(value)) return value;
 
   const hasWrapper = isRecord(value.mcpServers);
@@ -236,16 +247,61 @@ const cloudCompatibleMcpConfig = (value: unknown): unknown => {
     ? (value.mcpServers as Record<string, unknown>)
     : value;
 
+  const needsStoredCredential =
+    Object.values(serverMap).some(
+      (server) =>
+        isRecord(server) && isRecord(server.auth) && server.auth !== null,
+    ) && getActiveBackend().backend.kind === "cloud";
+
+  const storedHeadersByServer = new Map<string, Record<string, string>>();
+  if (needsStoredCredential) {
+    try {
+      const stored = await fetchCloudSettings();
+      const storedMcp = isRecord(stored.mcp_config) ? stored.mcp_config : {};
+      for (const [name, server] of Object.entries(storedMcp)) {
+        if (isRecord(server)) {
+          const headers = stringRecord(
+            (server as Record<string, unknown>).headers,
+          );
+          if (headers) storedHeadersByServer.set(name, headers);
+        }
+      }
+    } catch {
+      // Fall back to the patch-only conversion; a transient fetch failure
+      // must not block saving the user's explicit edits.
+    }
+  }
+
   const converted = Object.fromEntries(
     Object.entries(serverMap).map(([name, server]) => {
-      if (!isRecord(server) || !isRecord(server.auth)) return [name, server];
+      if (!isRecord(server)) return [name, server];
+      if (server.auth === null) {
+        const nextServer: Record<string, unknown> = {
+          ...server,
+          headers: null,
+        };
+        delete nextServer.auth;
+        return [name, nextServer];
+      }
+      if (!isRecord(server.auth)) return [name, server];
 
       const authHeaders = headersFromMcpAuth(server.auth);
       if (authHeaders === null) return [name, server];
 
       const nextServer = { ...server };
       const existingHeaders = stringRecord(server.headers) ?? {};
-      const mergedHeaders = { ...existingHeaders, ...authHeaders };
+      const mergedHeaders: Record<string, string | null> = {
+        ...existingHeaders,
+        ...authHeaders,
+      };
+
+      const storedHeaders = storedHeadersByServer.get(name);
+      if (storedHeaders) {
+        for (const key of Object.keys(storedHeaders)) {
+          if (!(key in mergedHeaders)) mergedHeaders[key] = null;
+        }
+      }
+
       delete nextServer.auth;
       if (Object.keys(mergedHeaders).length > 0) {
         nextServer.headers = mergedHeaders;
@@ -257,53 +313,6 @@ const cloudCompatibleMcpConfig = (value: unknown): unknown => {
   );
 
   return hasWrapper ? { ...value, mcpServers: converted } : converted;
-};
-
-/**
- * Spell out every server's `enabled` flag.
- *
- * `toSdkMcpConfig` omits the flag while a server is enabled and relies on the
- * pre-clear below to drop a previously persisted `enabled: false`. The one
- * write that skips the pre-clear — a cloud update carrying redacted secrets —
- * lands as an RFC 7386 merge instead, and a merge cannot clear a key by
- * omitting it. Without this, re-enabling a server on cloud would silently do
- * nothing.
- */
-const withExplicitMcpEnabled = (value: unknown): unknown => {
-  if (!isRecord(value)) return value;
-
-  const hasWrapper = isRecord(value.mcpServers);
-  const serverMap: Record<string, unknown> = hasWrapper
-    ? (value.mcpServers as Record<string, unknown>)
-    : value;
-
-  const converted = Object.fromEntries(
-    Object.entries(serverMap).map(([name, server]) =>
-      isRecord(server)
-        ? [name, { ...server, enabled: server.enabled !== false }]
-        : [name, server],
-    ),
-  );
-
-  return hasWrapper ? { ...value, mcpServers: converted } : converted;
-};
-
-const hasRedactedMcpSecrets = (mcpConfig: unknown): boolean => {
-  const servers = getSdkMcpServerMap(mcpConfig);
-  if (!servers) return false;
-  return Object.values(servers).some(
-    (server) =>
-      hasRedactedMcpSecretLeaf(isRecord(server) ? server.auth : undefined) ||
-      hasRedactedMcpSecretLeaf(isRecord(server) ? server.headers : undefined) ||
-      hasRedactedMcpSecretLeaf(isRecord(server) ? server.env : undefined),
-  );
-};
-
-const removesMcpServer = (previous: unknown, next: unknown): boolean => {
-  const previousServers = getSdkMcpServerMap(previous);
-  const nextServers = getSdkMcpServerMap(next);
-  if (!previousServers || !nextServers) return false;
-  return Object.keys(previousServers).some((name) => !(name in nextServers));
 };
 
 /**
@@ -521,6 +530,77 @@ class SettingsService {
   }
 
   /**
+   * Apply one name-keyed MCP merge patch in exactly one request. The server
+   * owns the stored catalog and secret preservation; Canvas never rebuilds
+   * the catalog from redacted display settings.
+   */
+  static async patchMcpConfig(patch: MCPConfigPatch): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      const mcpConfig = await cloudCompatibleMcpConfig(patch);
+      await withRetry(() =>
+        saveCloudSettings({
+          agent_settings_diff: { mcp_config: mcpConfig as SettingsValue },
+        }),
+      );
+    } else {
+      await withRetry(() =>
+        new SettingsClient(getAgentServerClientOptions()).updateSettings({
+          agent_settings_diff: { mcp_config: patch },
+        }),
+      );
+    }
+    clearCache();
+    return true;
+  }
+
+  static async patchMcpServer(
+    settingsKey: string,
+    patch: MCPServerPatch,
+  ): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: patch });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).patchMcpServer(
+        settingsKey,
+        patch,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  static async createMcpServer(
+    settingsKey: string,
+    server: MCPServer,
+  ): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: server });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).createMcpServer(
+        settingsKey,
+        server,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  static async deleteMcpServer(settingsKey: string): Promise<boolean> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return SettingsService.patchMcpConfig({ [settingsKey]: null });
+    }
+    await withRetry(() =>
+      new SettingsClient(getAgentServerClientOptions()).deleteMcpServer(
+        settingsKey,
+      ),
+    );
+    clearCache();
+    return true;
+  }
+
+  /**
    * Save settings to the agent server API.
    * Uses PATCH for incremental updates.
    */
@@ -564,77 +644,6 @@ class SettingsService {
     }
 
     const isCloud = getActiveBackend().backend.kind === "cloud";
-
-    // The backend applies ``agent_settings_diff`` by deep-merging it into the
-    // existing ``agent_settings`` dict (see SDK
-    // ``openhands.agent_server.persistence.models._deep_merge``). That works
-    // for scalar fields but is wrong for ``mcp_config``, which is
-    // a name-keyed map: a diff that omits a server cannot remove it (stale
-    // key stays), and a diff whose key indices shift (e.g. after deleting
-    // index 0, the second server is renumbered) leaves the original keys
-    // behind as duplicates pointing to the wrong server config.
-    //
-    // The only way to make ``mcp_config`` behave like a replace through this
-    // API is to first null it out — ``null`` is not a dict, so deep-merge
-    // takes the else branch and sets the field to ``None`` outright — and
-    // then send the new value in a follow-up call. We do this for every
-    // ``mcp_config`` write, including adds (the wasted round-trip is
-    // negligible for this user action and avoids divergent code paths).
-    const agentDiff = payload.agent_settings_diff;
-    // Send a pre-clear PATCH when the diff sets ``mcp_config`` to a non-null
-    // value. A second PATCH below then writes the new value. Skipping the
-    // pre-clear when the caller is already clearing (``mcp_config: null``)
-    // avoids a pointless duplicate request.
-    const needsMcpPreClear =
-      !!agentDiff && "mcp_config" in agentDiff && agentDiff.mcp_config !== null;
-
-    // The pre-clear is destructive: if the follow-up write fails after the
-    // clear succeeds, the user's MCP config is left empty. Snapshot the
-    // previous value (in raw SDK-native shape, NOT the GUI's parsed MCPConfig)
-    // before pre-clearing so we can attempt a best-effort rollback. The
-    // original write error is always re-thrown to the caller regardless
-    // of rollback success — the GUI's react-query mutations surface that
-    // as an error toast so the user knows to retry.
-    //
-    // Snapshot must be the SDK-native server map because that is what the
-    // backend expects on the rollback PATCH.
-    // ``SettingsService.getSettings`` returns a GUI Settings object whose
-    // ``mcp_config`` is typed as the parsed frontend MCPConfig and
-    // defaults to empty arrays when nothing is installed, so it is not
-    // suitable for round-tripping back to the backend.
-    let mcpConfigSnapshot: unknown = undefined;
-    if (needsMcpPreClear) {
-      try {
-        if (isCloud) {
-          const raw = (await fetchCloudSettings()) as {
-            agent_settings?: { mcp_config?: unknown };
-          };
-          mcpConfigSnapshot = raw?.agent_settings?.mcp_config;
-        } else {
-          const raw = (await SettingsService.fetchSettingsFromApi()) as {
-            agent_settings?: { mcp_config?: unknown };
-          };
-          mcpConfigSnapshot = raw?.agent_settings?.mcp_config;
-        }
-      } catch {
-        // Snapshot failed (network blip, etc.). Continue without rollback
-        // ability — the original write error will still surface.
-      }
-    }
-
-    // Cloud settings may redact MCP env/header/auth secrets without an
-    // encrypted exposure mode. A pre-clear before a non-delete update can
-    // permanently erase unchanged secrets; for updates that keep all existing
-    // server keys, rely on the backend deep-merge to preserve redacted leaves
-    // while applying edited fields and newly typed credentials.
-    const shouldUseCloudMergePatchForRedactedMcpSecrets =
-      isCloud &&
-      needsMcpPreClear &&
-      hasRedactedMcpSecrets(mcpConfigSnapshot) &&
-      !removesMcpServer(mcpConfigSnapshot, agentDiff?.mcp_config);
-    const shouldPreClearMcpConfig =
-      needsMcpPreClear && !shouldUseCloudMergePatchForRedactedMcpSecrets;
-
     if (isCloud) {
       const hasCloudWork =
         !!payload.agent_settings_diff ||
@@ -643,13 +652,6 @@ class SettingsService {
       if (!hasCloudWork) {
         return true;
       }
-      if (shouldPreClearMcpConfig) {
-        await withRetry(() =>
-          saveCloudSettings({
-            agent_settings_diff: { mcp_config: null },
-          }),
-        );
-      }
       // Build the cloud payload from the same diffs, but as a separate
       // object so undefined keys don't appear in the call (saveCloudSettings
       // is called from tests with an exact-shape assertion).
@@ -657,14 +659,10 @@ class SettingsService {
       if (payload.agent_settings_diff) {
         cloudPayload.agent_settings_diff = { ...payload.agent_settings_diff };
         if ("mcp_config" in cloudPayload.agent_settings_diff) {
-          const mcpConfig = cloudCompatibleMcpConfig(
-            cloudPayload.agent_settings_diff.mcp_config,
-          );
-          cloudPayload.agent_settings_diff.mcp_config = (
-            shouldUseCloudMergePatchForRedactedMcpSecrets
-              ? withExplicitMcpEnabled(mcpConfig)
-              : mcpConfig
-          ) as SettingsValue;
+          cloudPayload.agent_settings_diff.mcp_config =
+            (await cloudCompatibleMcpConfig(
+              cloudPayload.agent_settings_diff.mcp_config,
+            )) as SettingsValue;
         }
       }
       if (payload.conversation_settings_diff) {
@@ -677,26 +675,7 @@ class SettingsService {
         // `saveCloudSettings` re-flattens them onto the request body.
         cloudPayload.app_preferences = appPreferences;
       }
-      try {
-        await withRetry(() => saveCloudSettings(cloudPayload));
-      } catch (err) {
-        if (shouldPreClearMcpConfig && mcpConfigSnapshot) {
-          // Best-effort rollback. We deliberately do not wrap in withRetry:
-          // the user's session is already in a degraded state and we want
-          // to surface the original error promptly. Swallowing the restore
-          // error preserves the original failure context for the caller.
-          try {
-            await saveCloudSettings({
-              agent_settings_diff: {
-                mcp_config: mcpConfigSnapshot as SettingsValue,
-              },
-            });
-          } catch {
-            // Rollback failed; the original error takes precedence.
-          }
-        }
-        throw err;
-      }
+      await withRetry(() => saveCloudSettings(cloudPayload));
     } else {
       // The local agent-server PATCH /api/settings requires at least one of
       // the three diff fields. Skip the request entirely if nothing changed.
@@ -707,36 +686,11 @@ class SettingsService {
       if (!hasLocalDiffs) {
         return true;
       }
-      if (shouldPreClearMcpConfig) {
-        await withRetry(() =>
-          new SettingsClient(getAgentServerClientOptions()).updateSettings({
-            agent_settings_diff: { mcp_config: null },
-          }),
-        );
-      }
-      try {
-        await withRetry(() =>
-          new SettingsClient(getAgentServerClientOptions()).updateSettings(
-            payload,
-          ),
-        );
-      } catch (err) {
-        if (shouldPreClearMcpConfig && mcpConfigSnapshot) {
-          // See cloud branch above for rationale.
-          try {
-            await new SettingsClient(
-              getAgentServerClientOptions(),
-            ).updateSettings({
-              agent_settings_diff: {
-                mcp_config: mcpConfigSnapshot as SettingsValue,
-              },
-            });
-          } catch {
-            // Rollback failed; the original error takes precedence.
-          }
-        }
-        throw err;
-      }
+      await withRetry(() =>
+        new SettingsClient(getAgentServerClientOptions()).updateSettings(
+          payload,
+        ),
+      );
     }
 
     // Invalidate cache after successful save

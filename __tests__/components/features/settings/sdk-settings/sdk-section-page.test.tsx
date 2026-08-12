@@ -984,4 +984,119 @@ describe("SdkSectionPage", () => {
       });
     });
   });
+
+  it("disables Save after a boolean field is changed and then reverted", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings_schema: {
+          model_name: "ConversationSettings",
+          sections: [
+            {
+              key: "verification",
+              label: "Verification",
+              fields: [
+                {
+                  key: "confirmation_mode",
+                  label: "Confirmation mode",
+                  section: "verification",
+                  section_label: "Verification",
+                  value_type: "boolean",
+                  default: false,
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: false,
+                },
+              ],
+            },
+          ],
+        },
+        conversation_settings: {
+          confirmation_mode: false,
+        },
+      }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        {
+          settingsSource: "conversation_settings",
+          sectionKeys: ["verification"],
+        },
+      ],
+    });
+
+    const confirmationInput = await screen.findByTestId(
+      "sdk-settings-confirmation_mode",
+    );
+    const saveButton = screen.getByTestId("save-button") as HTMLButtonElement;
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.click(confirmationInput.closest("label")!);
+    expect(saveButton).not.toBeDisabled();
+
+    await userEvent.click(confirmationInput.closest("label")!);
+    expect(saveButton).toBeDisabled();
+  });
+
+  it("disables Save after a string field is edited back to the loaded value", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+    });
+
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
+    const saveButton = screen.getByTestId("save-button") as HTMLButtonElement;
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://changed.example.com");
+    expect(saveButton).not.toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://api.example.com");
+    await waitFor(() => {
+      expect(saveButton).toBeDisabled();
+    });
+  });
+
+  it("does not force-dirty override fields when markInitialOverridesDirty is false", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      initialValueOverrides: {
+        "llm.endpoint": "https://seeded.example.com",
+      },
+      markInitialOverridesDirty: false,
+    });
+
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
+    expect(endpointInput).toHaveValue("https://seeded.example.com");
+    expect(screen.getByTestId("save-button")).toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://changed.example.com");
+    expect(screen.getByTestId("save-button")).not.toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://seeded.example.com");
+    await waitFor(() => {
+      expect(screen.getByTestId("save-button")).toBeDisabled();
+    });
+  });
 });

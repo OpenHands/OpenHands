@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
+import { CHILD_CONVERSATION_RESULT_PREFIX } from "#/constants/child-conversation";
 import {
   createPlanningFileEditorActionEvent,
   createOtherActionEvent,
@@ -276,5 +277,15 @@ describe("shouldRenderEvent - /goal loop re-prompts", () => {
       shouldRenderEvent(makeUserMessage("create roman.py with to_roman(n)")),
     ).toBe(true);
     expect(shouldRenderEvent(makeUserMessage("hello"))).toBe(true);
+  });
+
+  it("hides the child-conversation launch result the frontend posts back", () => {
+    expect(
+      shouldRenderEvent(
+        makeUserMessage(
+          `${CHILD_CONVERSATION_RESULT_PREFIX}{"status":"launched","target":"local"}`,
+        ),
+      ),
+    ).toBe(false);
   });
 });

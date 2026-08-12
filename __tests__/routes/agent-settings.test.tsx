@@ -631,13 +631,11 @@ describe("AgentSettingsScreen", () => {
       "npx -y @agentclientprotocol/claude-agent-acp@0.44.0 --extra-arg",
     );
 
-    // Touch the form to mark it dirty (Save is disabled until isDirty),
-    // then submit. The data the form sends has to carry the registry-
-    // default prefix the user can now SEE in the textarea, not the bare
-    // ``--extra-arg`` that was stored.
+    // Make a real edit so Save enables, then submit. The payload must
+    // carry the registry-default prefix the user can SEE in the textarea,
+    // not the bare ``--extra-arg`` that was stored.
     await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    await user.keyboard("{End} --saved");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
@@ -652,10 +650,42 @@ describe("AgentSettingsScreen", () => {
       "-y",
       "@agentclientprotocol/claude-agent-acp@0.44.0",
       "--extra-arg",
+      "--saved",
     ]);
     // ``acp_args: []`` resets the API-set args so they don't double up
     // at spawn time.
     expect(call.agent_settings_diff?.acp_args).toEqual([]);
+  });
+
+  it("disables Save after reverting an agent-type dropdown change", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-type-selector");
+    const save = screen.getByTestId("agent-save-button") as HTMLButtonElement;
+    expect(save).toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+    expect(save).not.toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_TYPE_OPENHANDS",
+      }),
+    );
+    expect(save).toBeDisabled();
   });
 
   it("preserves an unknown loaded acp_server when the user saves without editing", async () => {
@@ -691,12 +721,10 @@ describe("AgentSettingsScreen", () => {
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe("npx -y @some-future/amp-acp");
 
-    // Touch + revert the textarea to flip isDirty without changing
-    // the persisted command text — matches "user opens settings and
-    // hits Save without intending to change anything."
-    await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    // Change only the model so Save enables while the command stays
+    // identical to what was loaded — preserves the unknown acp_server path.
+    const modelInput = await screen.findByTestId("agent-model-input");
+    await user.type(modelInput, "future-model");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
