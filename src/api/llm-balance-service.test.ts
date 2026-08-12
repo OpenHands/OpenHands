@@ -4,7 +4,20 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import {
+  LLM_BALANCE_PATH,
+  LLM_BALANCE_TIMEOUT_MS,
+} from "#/constants/llm-balance";
 import LLMBalanceService from "./llm-balance-service";
+import { AgentServerClient } from "@openhands/typescript-client/clients";
+
+const getMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@openhands/typescript-client/clients", () => ({
+  AgentServerClient: vi.fn(function AgentServerClientMock() {
+    return { get: getMock, close: vi.fn() };
+  }),
+}));
 
 const localBackend: Backend = {
   id: "local-test",
@@ -25,16 +38,19 @@ const balancePayload = {
   is_free_tier: false,
 };
 
-function mockFetchResponse(status: number, body?: unknown) {
-  return vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  });
+function httpError(status: number): Error & { status: number } {
+  return Object.assign(new Error(`HTTP ${status}`), { status });
+}
+
+function mockedClient(): AgentServerClient {
+  return vi.mocked(AgentServerClient).mock.results[0]
+    ?.value as AgentServerClient;
 }
 
 describe("LLMBalanceService.getBalance", () => {
   beforeEach(() => {
+    getMock.mockReset();
+    vi.mocked(AgentServerClient).mockClear();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
   });
@@ -42,13 +58,10 @@ describe("LLMBalanceService.getBalance", () => {
   afterEach(() => {
     setActiveSelection(null);
     setRegisteredBackends([]);
-    vi.unstubAllGlobals();
-    vi.clearAllMocks();
   });
 
-  it("normalizes a successful balance response", async () => {
-    const fetchMock = mockFetchResponse(200, balancePayload);
-    vi.stubGlobal("fetch", fetchMock);
+  it("normalizes a successful balance response via the typed client", async () => {
+    getMock.mockResolvedValue(balancePayload);
 
     const balance = await LLMBalanceService.getBalance();
 
@@ -63,22 +76,25 @@ describe("LLMBalanceService.getBalance", () => {
       isFreeTier: false,
     });
 
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("http://localhost:3000/api/llm/balance");
-    expect((init.headers as Headers).get("X-Session-API-Key")).toBe(
-      "test-session-key",
-    );
+    expect(vi.mocked(AgentServerClient)).toHaveBeenCalledWith({
+      host: "http://localhost:3000",
+      apiKey: "test-session-key",
+      timeout: LLM_BALANCE_TIMEOUT_MS,
+    });
+    expect(getMock).toHaveBeenCalledWith(LLM_BALANCE_PATH, {
+      acceptableStatusCodes: new Set([200]),
+      responseType: "json",
+      timeoutSeconds: Math.floor(LLM_BALANCE_TIMEOUT_MS / 1000),
+    });
+    expect(mockedClient().close).toHaveBeenCalled();
   });
 
   it("treats null caps as an uncapped key", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFetchResponse(200, {
-        ...balancePayload,
-        limit: null,
-        limit_remaining: null,
-      }),
-    );
+    getMock.mockResolvedValue({
+      ...balancePayload,
+      limit: null,
+      limit_remaining: null,
+    });
 
     const balance = await LLMBalanceService.getBalance();
 
@@ -88,45 +104,28 @@ describe("LLMBalanceService.getBalance", () => {
   });
 
   it("returns null when the endpoint is missing (404)", async () => {
-    vi.stubGlobal("fetch", mockFetchResponse(404));
+    getMock.mockRejectedValue(httpError(404));
 
     await expect(LLMBalanceService.getBalance()).resolves.toBeNull();
   });
 
   it("returns null for a malformed response body", async () => {
-    vi.stubGlobal("fetch", mockFetchResponse(200, { unexpected: true }));
+    getMock.mockResolvedValue({ unexpected: true });
 
     await expect(LLMBalanceService.getBalance()).resolves.toBeNull();
   });
 
   it("throws on non-404 HTTP failures", async () => {
-    vi.stubGlobal("fetch", mockFetchResponse(500));
+    getMock.mockRejectedValue(httpError(500));
 
     await expect(LLMBalanceService.getBalance()).rejects.toThrow(
       "Balance request failed with 500",
     );
   });
 
-  it("bounds the request with an abort signal", async () => {
-    const fetchMock = mockFetchResponse(200, balancePayload);
-    vi.stubGlobal("fetch", fetchMock);
-
-    await LLMBalanceService.getBalance();
-
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.signal).toBeInstanceOf(AbortSignal);
-  });
-
   it("throws a named error when the request times out", async () => {
-    // A server that accepts the connection and never answers: fetch rejects
-    // with the signal's TimeoutError rather than resolving.
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockRejectedValue(
-          new DOMException("The operation was aborted.", "TimeoutError"),
-        ),
+    getMock.mockRejectedValue(
+      new DOMException("The operation was aborted.", "TimeoutError"),
     );
 
     await expect(LLMBalanceService.getBalance()).rejects.toThrow(
