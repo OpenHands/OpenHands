@@ -38622,5 +38622,22 @@
     "tr": "Başlarken kontrol listesini göster",
     "uk": "Показувати контрольний список «Початок роботи»",
     "ca": "Mostra la llista Per començar"
+  },
+  "ONBOARDING$SKIP_GETTING_STARTED_CHECKLIST": {
+    "en": "Skip Getting Started checklist",
+    "ja": "Getting Started チェックリストをスキップ",
+    "zh-CN": "跳过入门清单",
+    "zh-TW": "略過入門清單",
+    "ko-KR": "시작하기 체크리스트 건너뛰기",
+    "de": "Getting-Started-Checkliste überspringen",
+    "no": "Hopp over Kom i gang-sjekklisten",
+    "it": "Salta la checklist Per iniziare",
+    "pt": "Pular checklist Primeiros passos",
+    "es": "Omitir lista Primeros pasos",
+    "ar": "تخطي قائمة البدء",
+    "fr": "Ignorer la checklist Premiers pas",
+    "tr": "Başlarken kontrol listesini atla",
+    "uk": "Пропустити контрольний список «Початок роботи»",
+    "ca": "Omet la llista Per començar"
   }
 }
