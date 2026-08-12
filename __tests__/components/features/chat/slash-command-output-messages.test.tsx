@@ -53,8 +53,10 @@ describe("SlashCommandOutputMessages", () => {
         {
           name: "code-search",
           type: "agentskills",
-          source: "project",
-          description: "Search this workspace",
+          source: "/workspace/.agents/skills/code-search/SKILL.md",
+          content:
+            "---\ndescription: Search this workspace without dumping the full skill body\n---\n# Code Search\n\nLong implementation instructions that should stay hidden.",
+          triggers: ["/code-search"],
         },
       ],
       hooks: [
@@ -86,6 +88,17 @@ describe("SlashCommandOutputMessages", () => {
     );
 
     expect(screen.getByText("code-search")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("slash-skill-description-code-search"),
+    ).toHaveTextContent(
+      "Search this workspace without dumping the full skill body",
+    );
+    expect(
+      screen.queryByText("Long implementation instructions that should stay hidden."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("skill-type-badge-agentskills"),
+    ).toBeInTheDocument();
     expect(screen.getByText("pre_tool_use")).toBeInTheDocument();
     expect(screen.getByText("filesystem")).toBeInTheDocument();
   });

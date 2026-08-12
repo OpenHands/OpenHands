@@ -5,6 +5,11 @@ import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store"
 import { getSkillDescription } from "#/utils/slash-command-description";
 import { getInstalledServerTitle } from "#/utils/mcp-installed-server-display";
 import { SKILLS_COMMAND } from "#/utils/constants";
+import { SkillIconBadge } from "#/components/features/skills/skill-icon-badge";
+import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
+import { buildSkillPills } from "#/components/features/skills/build-skill-pills";
+import { getSkillCardDescription } from "#/components/features/skills/get-skill-card-description";
+import { extensionModuleCardSurfaceClassName } from "#/utils/extension-module-card-classes";
 
 interface SlashCommandOutputMessagesProps {
   conversationId: string | null | undefined;
@@ -95,18 +100,37 @@ export function SlashCommandOutputMessages({
                       })}
                     </h4>
                     {entry.skills.map((skill) => {
-                      const description =
-                        skill.description ??
-                        getSkillDescription(skill.content ?? "");
+                      const description = getSkillCardDescription(skill);
+                      const pills = buildSkillPills(skill, t, {
+                        testIdPrefix: "slash-skill-pill",
+                      });
                       return (
                         <div
                           key={`${skill.source ?? "unknown"}-${skill.name}`}
-                          className="rounded-md border border-neutral-700 px-2 py-1.5"
+                          data-testid={`slash-skill-card-${skill.name}`}
+                          className={`flex min-w-0 items-start gap-3 p-3 ${extensionModuleCardSurfaceClassName}`}
                         >
-                          <div className="font-medium text-neutral-100">
-                            {skill.name}
+                          <SkillIconBadge
+                            skillName={skill.name}
+                            className="h-8 w-8 rounded-md [&>svg]:h-4 [&>svg]:w-4"
+                          />
+                          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                            <div className="truncate font-medium text-neutral-100">
+                              {skill.name}
+                            </div>
+                            {description && (
+                              <p
+                                data-testid={`slash-skill-description-${skill.name}`}
+                                className="line-clamp-2 break-words text-xs leading-relaxed text-tertiary-light"
+                              >
+                                {description}
+                              </p>
+                            )}
+                            <SkillCardPillRow
+                              pills={pills}
+                              testId={`slash-skill-pills-${skill.name}`}
+                            />
                           </div>
-                          {description && <div>{description}</div>}
                         </div>
                       );
                     })}

@@ -20,3 +20,4 @@
 - [x] Disabled MCP servers shall not be presented as loaded.
 - [x] The output shall remain anchored to the event that preceded the command.
 - [x] A failed hooks or settings refresh shall not hide extension data that is still available from other sources.
+- [x] Skill entries shall use concise descriptions and metadata pills instead of rendering full skill instructions.
