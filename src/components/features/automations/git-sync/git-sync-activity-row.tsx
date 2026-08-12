@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Check, TriangleAlert } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
@@ -15,6 +16,23 @@ interface GitSyncActivityRowProps {
 }
 
 /**
+ * Re-render every second while a cycle runs. The elapsed hint is derived from
+ * the clock, not from props, and the status poll returns identical JSON for as
+ * long as the cycle is in flight -- react-query's structural sharing then
+ * hands back the same object, nothing re-renders, and the hint would sit at
+ * whatever it read when the cycle started.
+ */
+function useSecondsTick(active: boolean) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const timer = setInterval(() => setTick((count) => count + 1), 1_000);
+    return () => clearInterval(timer);
+  }, [active]);
+}
+
+/**
  * The page's own account of the sync cycle, in place of the fire-and-forget
  * success toast: the trigger returns as soon as the cycle is scheduled, so a
  * toast said "started" and then never came back with an outcome.
@@ -25,10 +43,12 @@ export function GitSyncActivityRow({
   pendingCount,
 }: GitSyncActivityRowProps) {
   const { t } = useTranslation("openhands");
+  const isRunning = state === "running";
+
+  useSecondsTick(isRunning && startedAt !== null);
 
   if (state === "idle") return null;
 
-  const isRunning = state === "running";
   const isFailed = state === "failed";
 
   return (
