@@ -237,6 +237,9 @@ export const useCreateConversation = () => {
             ? {
                 agentProfileId: effectiveAgentProfileId,
                 agentProfileKind: resolvedAgentProfile?.agent_kind,
+                agentProfileAcpServer:
+                  (resolvedAgentProfile as unknown as Record<string, unknown>)
+                    ?.acp_server as string | undefined,
               }
             : {}),
         });

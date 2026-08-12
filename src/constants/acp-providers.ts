@@ -516,11 +516,19 @@ export function buildAcpAgentSettingsDiff(
   // payload from a textarea that already shows the merged command
   // (Settings → Agent) round-trip correctly — the merged tokens land in
   // ``acp_command`` here, so no args are lost.
-  return {
+  const diff: Record<string, unknown> = {
     agent_kind: "acp",
     acp_server: providerKey,
     acp_command: options.command ?? [],
     acp_args: [],
     acp_model: model ?? null,
   };
+
+  // Seed dontAsk session mode for Claude Code so it persists in saved
+  // settings and the agent-server adapter enforces it at start time.
+  if (providerKey === "claude-code") {
+    diff.acp_session_mode = "dontAsk";
+  }
+
+  return diff;
 }

@@ -881,6 +881,12 @@ function buildConfiguredAcpAgentSettings(
     payload.acp_model = effectiveModel;
   }
 
+  // Force dontAsk session mode for Claude Code — prevents the provider's
+  // default (bypassPermissions) from silently stripping policy controls.
+  if (serverKey === "claude-code") {
+    payload.acp_session_mode = "dontAsk";
+  }
+
   return payload;
 }
 
@@ -1047,6 +1053,7 @@ export interface StartConversationOptions {
   // server-side) instead of an inline ``agent_settings`` dump (#3727).
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentProfileAcpServer?: string;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
 }
@@ -1146,6 +1153,17 @@ export function buildStartConversationRequest(
     };
   } else {
     payload.tags = { [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE };
+  }
+
+  // Force dontAsk session mode for Claude Code on BOTH launch paths.
+  // Profile-resolved settings may not include it (pre-existing profiles),
+  // and the provider default is bypassPermissions which Claude Code rejects
+  // when its config disables that mode.
+  const isClaudeCode =
+    options.agentProfileAcpServer === "claude-code" ||
+    (!options.agentProfileId && acpServerTag === "claude-code");
+  if (isClaudeCode) {
+    payload.acp_session_mode = "dontAsk";
   }
 
   // ``secrets_encrypted`` makes the agent-server decrypt request secrets at
@@ -1266,6 +1284,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentProfileAcpServer?: string;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");

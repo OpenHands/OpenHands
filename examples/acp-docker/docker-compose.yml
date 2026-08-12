@@ -29,6 +29,7 @@ services:
     ports:
       # host:container — Canvas points VITE_BACKEND_BASE_URL at http://localhost:8010.
       - "8010:8000"
+    command: ["--host", "0.0.0.0", "--port", "8000"]
     environment:
       # New conversations define canvas_ui_control through client_tools. Keep the
       # old Python module importable so conversations persisted before that migration
