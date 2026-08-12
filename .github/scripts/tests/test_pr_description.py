@@ -12,6 +12,8 @@ from check_pr_description import (
     extract_pr_type,
     validate_linked_issue_ready,
     validate_bug_fix_evidence,
+    validate_pr_body,
+    extract_sections,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
     READY_FOR_DEV_LABEL,
@@ -221,4 +223,74 @@ def test_bug_fix_with_video_link_no_errors():
 https://youtube.com/watch?v=abc123
 """
     errors = validate_bug_fix_evidence(body)
+    assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# Fenced code block handling
+# ---------------------------------------------------------------------------
+
+def test_extract_sections_ignores_fenced_headings():
+    sections = extract_sections("## Why\nText\n```\n## Summary\n```\n## How to Test\n")
+    assert "Why" in sections
+    assert "Summary" not in sections
+    assert "How to Test" in sections
+    assert "## Summary" in sections["Why"]
+
+
+def test_extract_linked_issue_numbers_ignores_fenced_heading():
+    # The fenced "## Issue Number" should not be treated as the real section,
+    # so a bare issue number inside the fence is not extracted.
+    body = """## Why
+
+Fix a thing.
+
+```
+## Issue Number
+#999
+```
+
+## Issue Number
+
+Fixes #123
+"""
+    assert extract_linked_issue_numbers(body) == [123]
+
+
+PR_BODY_FENCED_HOW_TO_TEST = """HUMAN:
+
+A human note for the PR.
+
+AGENT:
+
+## Why
+
+Fix a bug.
+
+## Summary
+
+One line.
+
+```
+## How to Test
+Run nothing.
+```
+
+## How to Test
+
+Run `python -m pytest .github/scripts/tests`.
+
+## Issue Number
+
+Fixes #123
+
+## Type
+
+- [ ] Bug fix
+- [ ] Feature
+"""
+
+
+def test_pr_description_valid_with_fenced_template_heading():
+    errors = validate_pr_body(PR_BODY_FENCED_HOW_TO_TEST)
     assert errors == []

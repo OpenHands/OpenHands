@@ -33,6 +33,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from markdown_utils import find_fenced_regions, is_inside_fenced_region
+
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
@@ -106,8 +108,16 @@ def extract_sections(body: str) -> dict[str, str]:
     Issue forms render every field this way. Free-form issues (not created via a
     form) may still use `###` headings; if they don't, the map is empty and the
     caller falls back to whole-body checks.
+
+    Headings inside fenced code blocks (`` ``` `` or `~~~`) are ignored, so
+    pasted logs or quoted templates cannot spoof or truncate a real section.
     """
-    matches = list(HEADING_RE.finditer(body))
+    regions = find_fenced_regions(body)
+    matches = [
+        m
+        for m in HEADING_RE.finditer(body)
+        if not is_inside_fenced_region(m.start(), regions)
+    ]
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()

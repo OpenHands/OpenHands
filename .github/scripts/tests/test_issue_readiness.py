@@ -227,3 +227,55 @@ def test_extract_sections():
     assert "title two" in sections
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
+
+
+BUG_BODY_FENCED_HEADING_IN_ACTUAL = """### Actual Behavior
+
+Run method: `npm run dev`
+
+The server returned:
+
+```
+### Error detail
+something went wrong
+```
+
+<img width="800" alt="Image" src="https://github.com/user-attachments/assets/abc123" />
+
+### Acceptance Criteria
+
+- [ ] the bug is fixed
+"""
+
+ENHANCEMENT_BODY_FENCED_ACCEPTANCE = """### Desired Behavior
+
+Make the thing work.
+
+### Notes
+
+The template asks for:
+
+```markdown
+### Acceptance Criteria
+- [ ] checklist items go here
+```
+"""
+
+
+def test_extract_sections_ignores_fenced_headings():
+    sections = extract_sections("### One\n```\n### Two\n```\n### Three\n")
+    assert "one" in sections
+    assert "two" not in sections
+    assert "three" in sections
+    assert "### Two" in sections["one"]
+
+
+def test_bug_ready_with_fenced_heading_in_actual():
+    result = evaluate_readiness(BUG_BODY_FENCED_HEADING_IN_ACTUAL, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_enhancement_not_ready_with_only_fenced_acceptance():
+    result = evaluate_readiness(ENHANCEMENT_BODY_FENCED_ACCEPTANCE, [ENHANCEMENT_LABEL])
+    assert not result.ready
+    assert any("Acceptance Criteria" in r for r in result.reasons)
