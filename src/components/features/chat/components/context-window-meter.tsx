@@ -11,12 +11,16 @@ import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
 import { Divider } from "#/ui/divider";
 import { cn } from "#/utils/utils";
+import { chatInputIconButtonClassName } from "#/utils/form-control-classes";
 import {
   formatCompactTokenCount,
   getContextWindowUsagePercentage,
 } from "#/utils/format-token-count";
 import { getContextFillTone } from "#/components/features/conversation/usage-panel/context-meter";
-import { ContextWindowRing } from "./context-window-ring";
+import {
+  ContextWindowRing,
+  CONTEXT_WINDOW_TRACK_COLOR,
+} from "./context-window-ring";
 
 const TONE_BAR_CLASS = {
   neutral: "bg-foreground",
@@ -72,7 +76,7 @@ export function ContextWindowMeter() {
         <button
           ref={triggerRef}
           type="button"
-          className="flex size-8 items-center justify-center rounded-full hover:bg-[var(--oh-interactive-hover)] transition-colors"
+          className={cn(chatInputIconButtonClassName, "size-8")}
           aria-label={`${t(I18nKey.CHAT_INTERFACE$CONTEXT_WINDOW_METER_LABEL)}: ${usagePercentLabel}`}
           aria-expanded={isPopoverOpen}
           aria-haspopup="dialog"
@@ -109,7 +113,8 @@ export function ContextWindowMeter() {
             <button
               type="button"
               data-testid="context-window-meter-bar-button"
-              className="relative h-1.5 w-full rounded-full bg-[var(--oh-border)] cursor-pointer"
+              className="relative h-1.5 w-full rounded-full cursor-pointer"
+              style={{ backgroundColor: CONTEXT_WINDOW_TRACK_COLOR }}
               aria-label={t(I18nKey.COMMON$USAGE)}
               onClick={(event) => {
                 event.preventDefault();
