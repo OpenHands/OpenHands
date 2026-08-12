@@ -434,6 +434,16 @@ type ConversationSettingsPayload = SettingsRecord & {
 
 export const ACP_SERVER_TAG_KEY = "acpserver";
 export const CLIENT_SOURCE_TAG_KEY = "clientsource";
+
+/**
+ * Raw `clientsource` tag value stamped on Canvas-created conversations. This
+ * is the string the server / backend telemetry pipeline reads to attribute a
+ * conversation to the "canvas" source. It deliberately differs from
+ * `AGENT_CANVAS_CLIENT_SOURCE` ("agent_canvas") in `#/api/client-source`,
+ * which is the value sent in the `X-OpenHands-Client` header and PostHog
+ * event properties — the two must not be "fixed" to match, or backend
+ * telemetry attribution for the tag will silently change.
+ */
 export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";

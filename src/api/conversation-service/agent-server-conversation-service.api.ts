@@ -407,6 +407,11 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        // Cloud conversations are attributed to Canvas telemetry via the
+        // `AGENT_CANVAS_CLIENT_HEADERS` (`X-OpenHands-Client`) that
+        // `createCloudAppConversation` sends, so the local `clientsource`
+        // conversation tag is intentionally NOT stamped here; `trigger: "gui"`
+        // marks the GUI-launch origin instead.
         trigger: "gui",
       };
       return createCloudAppConversation(request);
