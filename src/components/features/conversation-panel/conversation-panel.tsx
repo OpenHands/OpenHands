@@ -348,14 +348,25 @@ export function ConversationPanel({
   const allWorkspacesForGrouping = React.useMemo<
     readonly LocalWorkspace[]
   >(() => {
-    if (activeBackend.kind !== "local") {
-      return knownWorkspaces;
+    if (
+      compact ||
+      organizeMode !== "grouped" ||
+      activeBackend.kind !== "local"
+    ) {
+      return [];
     }
-    const byPath = new Map<string, LocalWorkspace>(
-      knownWorkspaces.map((ws) => [ws.path, ws]),
-    );
+    const normalize = (p: string) => p.trim().replace(/\/+$/, "");
+    const byPath = new Map<string, LocalWorkspace>();
+    for (const ws of knownWorkspaces) {
+      const key = normalize(ws.path);
+      if (key) {
+        byPath.set(key, ws);
+      }
+    }
     for (const c of conversations) {
-      const normalized = c.selected_workspace?.trim().replace(/\/+$/, "");
+      const normalized = c.selected_workspace
+        ? normalize(c.selected_workspace)
+        : "";
       if (normalized && !byPath.has(normalized)) {
         const label = normalized.split("/").filter(Boolean).pop() ?? normalized;
         byPath.set(normalized, {
@@ -366,7 +377,13 @@ export function ConversationPanel({
       }
     }
     return Array.from(byPath.values());
-  }, [activeBackend.kind, conversations, knownWorkspaces]);
+  }, [
+    activeBackend.kind,
+    compact,
+    conversations,
+    knownWorkspaces,
+    organizeMode,
+  ]);
 
   const automationFilteredConversations = React.useMemo(
     () =>
