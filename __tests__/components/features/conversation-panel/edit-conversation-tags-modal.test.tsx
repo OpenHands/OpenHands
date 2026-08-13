@@ -168,6 +168,8 @@ describe("EditConversationTagsModal", () => {
     await user.type(screen.getByTestId("new-tag-key-input"), "owner");
     await user.type(screen.getByTestId("new-tag-value-input"), "alice{Enter}");
     expect(screen.getByTestId("edit-tag-row-owner")).toBeInTheDocument();
+    // Focus returns to the key box for the next tag, not the value box.
+    expect(screen.getByTestId("new-tag-key-input")).toHaveFocus();
 
     // Enter in the key input (bare tag).
     await user.type(screen.getByTestId("new-tag-key-input"), "work{Enter}");

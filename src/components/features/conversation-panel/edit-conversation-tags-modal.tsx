@@ -69,6 +69,7 @@ export function EditConversationTagsModal({
   const [newKey, setNewKey] = React.useState("");
   const [newValue, setNewValue] = React.useState("");
   const [errorKey, setErrorKey] = React.useState<I18nKey | null>(null);
+  const keyInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAdd = () => {
     const key = newKey.trim();
@@ -95,6 +96,8 @@ export function EditConversationTagsModal({
     setNewKey("");
     setNewValue("");
     setErrorKey(null);
+    // Ready for the next tag: focus returns to the key box, not the value box.
+    keyInputRef.current?.focus();
   };
 
   const handleInputKeyDown = (event: React.KeyboardEvent) => {
@@ -169,6 +172,7 @@ export function EditConversationTagsModal({
               placeholder={t(I18nKey.CONVERSATION$TAG_KEY_PLACEHOLDER)}
               aria-label={t(I18nKey.CONVERSATION$TAG_KEY_PLACEHOLDER)}
               data-testid="new-tag-key-input"
+              ref={keyInputRef}
               onChange={(event) => setNewKey(event.target.value)}
               onKeyDown={handleInputKeyDown}
               className="w-28 shrink-0 rounded-md border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-[var(--oh-muted)]"
