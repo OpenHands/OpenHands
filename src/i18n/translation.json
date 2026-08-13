@@ -38351,6 +38351,23 @@
     "tr": "Şifrelenmemiş",
     "uk": "Не зашифровано"
   },
+  "AUTOMATIONS$GIT_SYNC$SAVE_AND_SYNC": {
+    "en": "Save and sync now",
+    "ja": "保存して今すぐ同期",
+    "zh-CN": "保存并立即同步",
+    "zh-TW": "儲存並立即同步",
+    "ko-KR": "저장 후 지금 동기화",
+    "no": "Lagre og synkroniser nå",
+    "ar": "الحفظ والمزامنة الآن",
+    "de": "Speichern und jetzt synchronisieren",
+    "fr": "Enregistrer et synchroniser maintenant",
+    "it": "Salva e sincronizza ora",
+    "pt": "Salvar e sincronizar agora",
+    "es": "Guardar y sincronizar ahora",
+    "ca": "Desa i sincronitza ara",
+    "tr": "Kaydet ve şimdi senkronize et",
+    "uk": "Зберегти й синхронізувати зараз"
+  },
   "AUTOMATIONS$GIT_SYNC$SYNC_NOW": {
     "en": "Sync now",
     "ja": "今すぐ同期",

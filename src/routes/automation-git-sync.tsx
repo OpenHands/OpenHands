@@ -220,7 +220,11 @@ export default function AutomationGitSync() {
             syncStartedAt={isRunning ? activity.startedAt : null}
             canManage={canManage}
           />
-          <GitSyncConfigForm status={status} canManage={canManage} />
+          <GitSyncConfigForm
+            status={status}
+            canManage={canManage}
+            onSyncNow={handleSyncNow}
+          />
         </div>
       </div>
     </div>

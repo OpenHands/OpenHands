@@ -6,6 +6,7 @@ import { GitSyncConfigForm } from "./git-sync-config-form";
 
 const mutate = vi.fn();
 const checkConfig = vi.fn();
+const syncNow = vi.fn();
 
 vi.mock("#/hooks/query/use-git-sync", () => ({
   useUpdateGitSyncConfig: () => ({ mutate, isPending: false }),
@@ -70,7 +71,9 @@ const baseStatus: GitSyncStatus = {
 
 describe("GitSyncConfigForm", () => {
   it("always renders the token and encryption key fields empty", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     expect(screen.getByTestId("git-sync-token-input")).toHaveValue("");
     expect(screen.getByTestId("git-sync-encryption-key-input")).toHaveValue("");
@@ -78,7 +81,7 @@ describe("GitSyncConfigForm", () => {
 
   it("shows the encryption key placeholder based on encryption_enabled", async () => {
     const { rerender } = render(
-      <GitSyncConfigForm status={baseStatus} canManage />,
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
     );
     expect(screen.getByTestId("git-sync-encryption-key-input")).toHaveAttribute(
       "placeholder",
@@ -89,6 +92,7 @@ describe("GitSyncConfigForm", () => {
       <GitSyncConfigForm
         status={{ ...baseStatus, encryption_enabled: true }}
         canManage
+        onSyncNow={syncNow}
       />,
     );
     expect(screen.getByTestId("git-sync-encryption-key-input")).toHaveAttribute(
@@ -98,7 +102,9 @@ describe("GitSyncConfigForm", () => {
   });
 
   it("enables submit once a field changes and sends only the changed field", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     expect(screen.getByTestId("git-sync-save-button")).toBeDisabled();
 
@@ -114,7 +120,9 @@ describe("GitSyncConfigForm", () => {
   });
 
   it("sends a typed token as a plain string, omitting unrelated fields", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.change(screen.getByTestId("git-sync-token-input"), {
       target: { value: "ghp_new_token" },
@@ -129,6 +137,7 @@ describe("GitSyncConfigForm", () => {
       <GitSyncConfigForm
         status={{ ...baseStatus, interval_seconds: 300 }}
         canManage
+        onSyncNow={syncNow}
       />,
     );
 
@@ -148,6 +157,7 @@ describe("GitSyncConfigForm", () => {
       <GitSyncConfigForm
         status={{ ...baseStatus, interval_seconds: 300 }}
         canManage
+        onSyncNow={syncNow}
       />,
     );
 
@@ -160,7 +170,9 @@ describe("GitSyncConfigForm", () => {
   });
 
   it("clearing the token disables the text field and sends null", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
 
@@ -181,7 +193,9 @@ describe("GitSyncConfigForm", () => {
     ["git-sync-path-input", "path"],
     ["git-sync-repo-url-input", "repo_url"],
   ])("clearing %s sends null, not an empty string", async (testId, field) => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.change(screen.getByTestId(testId), { target: { value: "" } });
     await clickSave();
@@ -190,7 +204,9 @@ describe("GitSyncConfigForm", () => {
   });
 
   it("sends a whitespace-only field as null", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.change(screen.getByTestId("git-sync-path-input"), {
       target: { value: "   " },
@@ -210,7 +226,9 @@ describe("GitSyncConfigForm", () => {
   ])(
     "forgets a typed %s when its clear switch is toggled on and back off",
     async (inputTestId, switchTestId) => {
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId(inputTestId), {
         target: { value: "s3cret" },
@@ -237,7 +255,9 @@ describe("GitSyncConfigForm", () => {
     // returns, which used to wipe the edits mid-flight; clearing the change
     // flags on `onSettled` then disabled Save, leaving nothing to retry with.
     respondWith({ error: { status: 500 } });
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
       target: { value: "develop" },
@@ -252,7 +272,9 @@ describe("GitSyncConfigForm", () => {
 
   it("goes clean again after a successful save", async () => {
     respondWith("success");
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.click(screen.getByTestId("git-sync-clear-token-switch"));
     await clickSave();
@@ -272,7 +294,9 @@ describe("GitSyncConfigForm", () => {
   ])(
     "clearing %s resets the override to the default",
     async (testId, field) => {
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId(testId), {
         target: { value: "someone@example.com" },
@@ -285,7 +309,9 @@ describe("GitSyncConfigForm", () => {
   );
 
   it("sends the enabled flag when the sync switch is flipped", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     expect(screen.getByTestId("git-sync-enabled-switch")).toBeChecked();
 
@@ -296,7 +322,9 @@ describe("GitSyncConfigForm", () => {
   });
 
   it("leaves enabled out of the request when the switch is not touched", async () => {
-    render(<GitSyncConfigForm status={baseStatus} canManage />);
+    render(
+      <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+    );
 
     fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
       target: { value: "develop" },
@@ -315,6 +343,7 @@ describe("GitSyncConfigForm", () => {
       <GitSyncConfigForm
         status={{ ...baseStatus, enabled: false }}
         canManage
+        onSyncNow={syncNow}
       />,
     );
 
@@ -335,7 +364,9 @@ describe("GitSyncConfigForm", () => {
       });
 
     it("tests the settings against the remote before saving them", async () => {
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
         target: { value: "https://example.com/org/other.git" },
@@ -352,7 +383,9 @@ describe("GitSyncConfigForm", () => {
 
     it("does not save a configuration that cannot reach its repo", async () => {
       unreachable();
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
         target: { value: "https://example.com/typo.git" },
@@ -372,7 +405,9 @@ describe("GitSyncConfigForm", () => {
       // `ls-remote` but accepts a push must not lock its operator out.
       unreachable();
       respondWith("success");
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
         target: { value: "https://example.com/typo.git" },
@@ -389,7 +424,9 @@ describe("GitSyncConfigForm", () => {
 
     it("re-checks once the settings are edited after a failure", async () => {
       unreachable();
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
         target: { value: "https://example.com/typo.git" },
@@ -414,7 +451,9 @@ describe("GitSyncConfigForm", () => {
     });
 
     it("skips the check when nothing the remote could reject changed", async () => {
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-interval-input"), {
         target: { value: "60" },
@@ -429,7 +468,9 @@ describe("GitSyncConfigForm", () => {
       // An automation backend that predates the endpoint answers 404. A check
       // that says nothing must never be what blocks a save.
       checkConfig.mockRejectedValue({ status: 404 });
-      render(<GitSyncConfigForm status={baseStatus} canManage />);
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
 
       fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
         target: { value: "develop" },
@@ -438,6 +479,105 @@ describe("GitSyncConfigForm", () => {
 
       expect(mutate).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId("git-sync-check-failure")).toBeNull();
+    });
+  });
+
+  describe("save and sync", () => {
+    const clickSaveAndSync = async () => {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("git-sync-save-and-sync-button"));
+      });
+    };
+
+    it("runs a cycle once the settings are stored", async () => {
+      respondWith("success");
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      await clickSaveAndSync();
+
+      expect(mutate.mock.calls[0][0]).toEqual({ branch: "develop" });
+      expect(syncNow).toHaveBeenCalledTimes(1);
+    });
+
+    // The cycle runs off the stored configuration, so syncing a rejected save
+    // would push the settings the operator was trying to replace.
+    it("does not sync when the save is rejected", async () => {
+      respondWith({ error: { status: 500 } });
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      await clickSaveAndSync();
+
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    it("does not sync when the settings fail their check", async () => {
+      checkConfig.mockResolvedValue({
+        ok: false,
+        branch_exists: false,
+        detail: "repository not found",
+      });
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
+
+      fireEvent.change(screen.getByTestId("git-sync-repo-url-input"), {
+        target: { value: "https://example.com/typo.git" },
+      });
+      await clickSaveAndSync();
+
+      expect(mutate).not.toHaveBeenCalled();
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    // Disarming matters: the ref survives the rejected submit, so a plain
+    // Save pressed afterwards must not inherit the sync.
+    it("does not sync a later plain save", async () => {
+      respondWith("success");
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      await clickSave();
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    // A trigger against disabled sync is a 503, so there is nothing to offer
+    // until the same save turns it on.
+    it("stays disabled while sync is off and arms when it is switched on", async () => {
+      render(
+        <GitSyncConfigForm
+          status={{ ...baseStatus, enabled: false }}
+          canManage
+          onSyncNow={syncNow}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
+        target: { value: "develop" },
+      });
+      expect(
+        screen.getByTestId("git-sync-save-and-sync-button"),
+      ).toBeDisabled();
+      expect(screen.getByTestId("git-sync-save-button")).toBeEnabled();
+
+      fireEvent.click(screen.getByTestId("git-sync-enabled-switch"));
+
+      expect(screen.getByTestId("git-sync-save-and-sync-button")).toBeEnabled();
     });
   });
 });

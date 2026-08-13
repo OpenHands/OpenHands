@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -24,16 +24,28 @@ import type {
 interface GitSyncConfigFormProps {
   status: GitSyncStatus;
   canManage: boolean;
+  /**
+   * Runs a sync cycle. The same handler the overview's Sync now button uses,
+   * so a save-and-sync is followed by the one activity row rather than
+   * starting a cycle nothing on the page is watching.
+   */
+  onSyncNow: () => void;
 }
 
 export function GitSyncConfigForm({
   status,
   canManage,
+  onSyncNow,
 }: GitSyncConfigFormProps) {
   const { t } = useTranslation("openhands");
   const { mutate: updateConfig, isPending } = useUpdateGitSyncConfig();
   const { mutateAsync: checkConfig, isPending: isChecking } =
     useCheckGitSyncConfig();
+
+  // Which button submitted the form. A ref rather than state: the click and
+  // the submit it triggers are one event dispatch, so a state update would
+  // not have been applied by the time the submit handler reads it.
+  const syncAfterSave = useRef(false);
 
   // The settings that failed their reachability check, so the same submit
   // pressed a second time saves them anyway. Keyed by the values that were
@@ -116,7 +128,7 @@ export function GitSyncConfigForm({
   const clearedFieldAsNull = (formData: FormData, name: string) =>
     formData.get(name)?.toString().trim() || null;
 
-  const save = (body: GitSyncConfigUpdateRequest) => {
+  const save = (body: GitSyncConfigUpdateRequest, thenSync: boolean) => {
     updateConfig(body, {
       onSuccess: () => {
         displaySuccessToast(t(I18nKey.AUTOMATIONS$GIT_SYNC$CONFIG_SAVED));
@@ -124,6 +136,10 @@ export function GitSyncConfigForm({
         // Save and silently un-toggle the clear switches, leaving no way to
         // retry the change that was just rejected.
         resetChangeFlags();
+        // A cycle runs off the stored configuration, so it can only be
+        // triggered once the save has landed -- and a rejected save leaves
+        // nothing new to sync.
+        if (thenSync) onSyncNow();
       },
       onError: (error) => {
         displayErrorToast(
@@ -168,6 +184,10 @@ export function GitSyncConfigForm({
   // with the old values and nothing to retry.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Read once and disarm, so a submit that never reaches the save -- a
+    // failed check -- doesn't leave the next plain Save syncing too.
+    const thenSync = syncAfterSave.current;
+    syncAfterSave.current = false;
     const formData = new FormData(event.currentTarget);
     const body: GitSyncConfigUpdateRequest = {};
 
@@ -234,7 +254,7 @@ export function GitSyncConfigForm({
     }
     setFailedCheck(null);
 
-    save(body);
+    save(body, thenSync);
   };
 
   return (
@@ -412,7 +432,7 @@ export function GitSyncConfigForm({
           </div>
         )}
 
-        <div className="flex justify-start">
+        <div className="flex justify-start gap-3">
           <BrandButton
             testId="git-sync-save-button"
             variant="primary"
@@ -422,6 +442,21 @@ export function GitSyncConfigForm({
             {!isPending && !isChecking && t(I18nKey.SETTINGS$SAVE_CHANGES)}
             {isChecking && t(I18nKey.AUTOMATIONS$GIT_SYNC$CHECKING)}
             {isPending && t(I18nKey.SETTINGS$SAVING)}
+          </BrandButton>
+          <BrandButton
+            testId="git-sync-save-and-sync-button"
+            variant="secondary"
+            type="submit"
+            // Sync left off is a 503 from the trigger, so there is nothing to
+            // offer -- but a save that turns it on can sync straight after.
+            isDisabled={
+              !canManage || isPending || isChecking || formIsClean || !enabled
+            }
+            onClick={() => {
+              syncAfterSave.current = true;
+            }}
+          >
+            {t(I18nKey.AUTOMATIONS$GIT_SYNC$SAVE_AND_SYNC)}
           </BrandButton>
         </div>
       </form>
