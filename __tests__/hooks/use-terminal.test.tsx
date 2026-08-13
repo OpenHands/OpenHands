@@ -1,3 +1,4 @@
+import { act } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import { useTerminal } from "#/hooks/use-terminal";
 import { Command, useCommandStore } from "#/stores/command-store";
@@ -21,6 +22,15 @@ vi.mock("#/contexts/conversation-websocket-context", () => ({
 function TestTerminalComponent() {
   const ref = useTerminal();
   return <div ref={ref} />;
+}
+
+function TestTerminalPair() {
+  return (
+    <>
+      <TestTerminalComponent />
+      <TestTerminalComponent />
+    </>
+  );
 }
 
 describe("useTerminal", () => {
@@ -97,6 +107,20 @@ describe("useTerminal", () => {
 
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "hello");
+  });
+
+  it("should render new commands in every terminal instance", () => {
+    renderWithProviders(<TestTerminalPair />);
+
+    act(() => {
+      useCommandStore.setState({
+        commands: [{ content: "echo hello", type: "input" }],
+      });
+    });
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(2);
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(1, "echo hello");
+    expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "echo hello");
   });
 
   it("should not call fit() when terminal.element is null", () => {
