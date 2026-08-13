@@ -413,6 +413,58 @@ describe("ConversationPanel", () => {
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
   });
 
+  it("filters from the persistent filter bar and couples automation chips to the mode", async () => {
+    // Arrange: one tagged manual conversation, one untagged, one automation
+    // run (recognized by its automation tags).
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Manual 1",
+          tags: { project: "vault" },
+        }),
+        createMockConversation({ id: "2", title: "Manual 2" }),
+        createMockConversation({
+          id: "3",
+          title: "Nightly Run",
+          tags: { automationname: "Nightly Audit", automationtrigger: "cron" },
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // The bar renders above the list with both facet groups.
+    const bar = await screen.findByTestId("conversation-filter-bar");
+
+    // Selecting a tag chip narrows the list via the same store the popup used.
+    await user.click(within(bar).getByTestId("filter-chip-tag-project=vault"));
+    expect(await screen.findByText("Manual 1")).toBeInTheDocument();
+    expect(screen.queryByText("Manual 2")).not.toBeInTheDocument();
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedTagFacets,
+    ).toEqual(["project=vault"]);
+
+    // Clear all restores the full list.
+    await user.click(within(bar).getByTestId("clear-filters-button"));
+    expect(await screen.findByText("Manual 2")).toBeInTheDocument();
+
+    // Selecting an automation chip couples the mode to only-automations.
+    await user.click(
+      within(bar).getByTestId("filter-chip-automation-Nightly Audit"),
+    );
+    expect(
+      useConversationPanelPreferencesStore.getState().automationFilterMode,
+    ).toBe("only-automations");
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+    expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
+  });
+
   it("keeps load more reachable with the filtered empty message when the automation filter hides every loaded conversation", async () => {
     // Arrange: page 1 holds only an automation run (hidden by the active
     // filter); a manual conversation sits on page 2.

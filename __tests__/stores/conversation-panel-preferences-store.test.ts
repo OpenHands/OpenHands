@@ -144,6 +144,34 @@ describe("conversation-panel-preferences store", () => {
     });
   });
 
+  it("couples name selection and mode so the bar and popup cannot disagree", () => {
+    const store = useConversationPanelPreferencesStore.getState();
+
+    // Selecting a name via the bar toggle implies only-automations mode.
+    store.toggleAutomationNameAndMode("Nightly Audit");
+    let next = useConversationPanelPreferencesStore.getState();
+    expect(next.automationFilterMode).toBe("only-automations");
+    expect(next.selectedAutomationNames).toEqual(["Nightly Audit"]);
+
+    // Removing the last selected name returns the mode to all.
+    store.toggleAutomationNameAndMode("Nightly Audit");
+    next = useConversationPanelPreferencesStore.getState();
+    expect(next.automationFilterMode).toBe("all");
+    expect(next.selectedAutomationNames).toEqual([]);
+
+    // Leaving only-automations mode clears the selection (self-healing).
+    store.toggleAutomationNameAndMode("PR Review Bot");
+    store.setAutomationFilterMode("hide-automations");
+    next = useConversationPanelPreferencesStore.getState();
+    expect(next.selectedAutomationNames).toEqual([]);
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+      selectedAutomationNames: [],
+    });
+  });
+
   it("toggles selected tag facets and persists them to localStorage", () => {
     const store = useConversationPanelPreferencesStore.getState();
     store.toggleTagFacet("origin=slack");

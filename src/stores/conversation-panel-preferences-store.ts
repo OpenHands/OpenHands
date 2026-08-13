@@ -54,6 +54,15 @@ interface ConversationPanelPreferencesActions {
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
   toggleAutomationName: (name: string) => void;
+  /**
+   * Bar-facing toggle: selecting a name implies `only-automations` mode;
+   * removing the last selected name returns the mode to `all`. The popup's
+   * mode rows use `setAutomationFilterMode`, which clears the selection when
+   * the mode leaves `only-automations` — the two surfaces cannot disagree.
+   */
+  toggleAutomationNameAndMode: (name: string) => void;
+  /** Clears both filter selections and returns automation mode to `all`. */
+  clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
@@ -129,7 +138,14 @@ export const useConversationPanelPreferencesStore =
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
         setAutomationFilterMode: (value) =>
-          set(() => ({ automationFilterMode: value })),
+          set((state) => ({
+            automationFilterMode: value,
+            // Name selections only make sense in only-automations mode;
+            // leaving the mode clears them (self-healing — a stale selection
+            // must never silently narrow an unfiltered-looking list).
+            selectedAutomationNames:
+              value === "only-automations" ? state.selectedAutomationNames : [],
+          })),
         toggleAutomationName: (name) =>
           set((state) => ({
             selectedAutomationNames: state.selectedAutomationNames.includes(
@@ -139,6 +155,26 @@ export const useConversationPanelPreferencesStore =
                   (existing) => existing !== name,
                 )
               : [...state.selectedAutomationNames, name],
+          })),
+        toggleAutomationNameAndMode: (name) =>
+          set((state) => {
+            const selectedAutomationNames =
+              state.selectedAutomationNames.includes(name)
+                ? state.selectedAutomationNames.filter(
+                    (existing) => existing !== name,
+                  )
+                : [...state.selectedAutomationNames, name];
+            return {
+              selectedAutomationNames,
+              automationFilterMode:
+                selectedAutomationNames.length > 0 ? "only-automations" : "all",
+            };
+          }),
+        clearFilterSelections: () =>
+          set(() => ({
+            selectedTagFacets: [],
+            selectedAutomationNames: [],
+            automationFilterMode: "all",
           })),
         toggleTagFacet: (facet) =>
           set((state) => ({

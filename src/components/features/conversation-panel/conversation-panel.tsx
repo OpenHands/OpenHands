@@ -36,6 +36,7 @@ import { CompactConversationRow } from "./compact-conversation-row";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { cn } from "#/utils/utils";
 import { ConversationPanelFilterMenu } from "./conversation-panel-filter-menu";
+import { ConversationFilterBar } from "./conversation-filter-bar";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
@@ -186,6 +187,12 @@ export function ConversationPanel({
   );
   const toggleAutomationName = useConversationPanelPreferencesStore(
     (state) => state.toggleAutomationName,
+  );
+  const toggleAutomationNameAndMode = useConversationPanelPreferencesStore(
+    (state) => state.toggleAutomationNameAndMode,
+  );
+  const clearFilterSelections = useConversationPanelPreferencesStore(
+    (state) => state.clearFilterSelections,
   );
   const selectedTagFacets = useConversationPanelPreferencesStore(
     (state) => state.selectedTagFacets,
@@ -1155,6 +1162,21 @@ export function ConversationPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {showConversationHeader && (
+        // Facets live on a persistent bar, not in the hamburger: filtering is
+        // state you should be able to see. The right-side slot is reserved for
+        // the future bulk-select affordance.
+        <ConversationFilterBar
+          tagFacets={tagFacets}
+          selectedTagFacets={selectedTagFacets}
+          onToggleTagFacet={toggleTagFacet}
+          automationFacets={automationNameFacets}
+          selectedAutomationNames={selectedAutomationNames}
+          onToggleAutomationName={toggleAutomationNameAndMode}
+          onClearAll={clearFilterSelections}
+        />
       )}
 
       <div
