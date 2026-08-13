@@ -406,3 +406,46 @@ def test_crlf_body_is_ready():
     )
     result = evaluate_readiness(body, [BUG_LABEL])
     assert result.ready, result.reasons
+
+
+def test_closing_marker_with_trailing_text_does_not_close():
+    """CommonMark: a closing fence is followed only by spaces or tabs."""
+    body = (
+        "### Desired Behavior\n\nMake it work.\n\n"
+        f"{FENCE}\n{FENCE}not a close\n### Acceptance Criteria\n- [ ] quoted\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)
+    assert not evaluate_readiness(body, [ENHANCEMENT_LABEL]).ready
+
+
+def test_tab_indented_marker_is_not_a_fence():
+    """A leading tab expands to indented code, so it opens nothing."""
+    body = (
+        "### Actual Behavior\n\nran `npm run dev`\n"
+        f"\t{FENCE}\n\n"
+        "![shot](https://example.com/a.png)\n\n"
+        "### Acceptance Criteria\n- [ ] fixed\n"
+    )
+    assert "acceptance criteria" in extract_sections(body)
+    assert evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_backtick_in_backtick_fence_info_string_is_not_an_opener():
+    """A backtick fence's info string may not contain a backtick."""
+    body = (
+        "### Actual Behavior\n\nran `npm run dev`\n"
+        f"{FENCE}lang`bad\n\n"
+        "![shot](https://example.com/a.png)\n\n"
+        "### Acceptance Criteria\n- [ ] fixed\n"
+    )
+    assert "acceptance criteria" in extract_sections(body)
+    assert evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_tilde_fence_info_string_may_contain_backticks():
+    """Only backtick fences restrict the info string."""
+    body = (
+        "### Desired Behavior\n\nx\n\n"
+        f"{TILDE_FENCE}lang`ok\n### Acceptance Criteria\n- [ ] quoted\n{TILDE_FENCE}\n"
+    )
+    assert "acceptance criteria" not in extract_sections(body)

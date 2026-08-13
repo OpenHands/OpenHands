@@ -319,3 +319,19 @@ def test_crlf_body_sections_are_found():
     sections = extract_sections(body)
     assert "Quoted" not in sections
     assert set(sections) == {"Why", "Summary"}
+
+
+def test_closing_marker_with_trailing_text_does_not_close():
+    """CommonMark: a closing fence is followed only by spaces or tabs."""
+    body = f"## Why\n\nreason\n\n{FENCE}\n{FENCE}not a close\n## How to Test\n1. npm ci\n"
+    assert "How to Test" not in extract_sections(body)
+
+
+def test_tab_indented_marker_is_not_a_fence():
+    body = f"## Why\n\nreason\n\t{FENCE}\n\n## How to Test\n\nrun it\n"
+    assert "How to Test" in extract_sections(body)
+
+
+def test_backtick_in_backtick_fence_info_string_is_not_an_opener():
+    body = f"## Why\n\nreason\n{FENCE}lang`bad\n\n## How to Test\n\nrun it\n"
+    assert "How to Test" in extract_sections(body)

@@ -41,10 +41,15 @@ ENHANCEMENT_LABEL = "enhancement"
 # h1/h2 are not produced by issue forms.
 HEADING_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
 
-# Opening/closing marker of a fenced code block: three or more backticks or
-# tildes, indented by at most three spaces (CommonMark). An info string may
-# follow the opening marker.
-FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+# CommonMark fenced code blocks. An opening fence is three or more backticks
+# or tildes indented by at most three *spaces* — a leading tab expands to
+# indented code, which is not a fence. Text after the marker is the info
+# string, and a backtick fence's info string may not contain a backtick.
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+# A closing fence repeats the opener's character at least as many times and
+# is followed by nothing but spaces or tabs; a marker with trailing text is
+# still code content.
+FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
@@ -126,17 +131,27 @@ def mask_fenced_code(body: str) -> str:
     # falsely open a block and mask the rest of the body.
     for line in body.split("\n"):
         probe = line[:-1] if line.endswith("\r") else line
-        match = FENCE_RE.match(probe)
-        marker = match.group(1) if match else None
 
         if fence is None:
-            if marker is None:
+            opener = FENCE_OPEN_RE.match(probe)
+            if opener is None:
+                masked.append(line)
+                continue
+            marker, info = opener.group(1), opener.group(2)
+            if marker[0] == "`" and "`" in info:
+                # A backtick fence's info string may not contain a backtick, so
+                # this is ordinary text rather than the start of a block.
                 masked.append(line)
                 continue
             fence = marker
-        elif marker and marker[0] == fence[0] and len(marker) >= len(fence):
-            # Closing fence: same character, at least as long as the opener.
-            fence = None
+        else:
+            closer = FENCE_CLOSE_RE.match(probe)
+            if (
+                closer
+                and closer.group(1)[0] == fence[0]
+                and len(closer.group(1)) >= len(fence)
+            ):
+                fence = None
 
         masked.append(" " * len(line))
 
