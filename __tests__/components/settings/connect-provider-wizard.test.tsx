@@ -244,7 +244,7 @@ describe("ConnectProviderWizard", () => {
     const user = userEvent.setup();
     llmProfilesMock.mockReturnValue({
       data: {
-        profiles: Array.from({ length: 49 }, (_, i) => ({
+        profiles: Array.from({ length: 499 }, (_, i) => ({
           name: `existing-${i}`,
           model: `provider/existing-${i}`,
         })),
@@ -289,7 +289,7 @@ describe("ConnectProviderWizard", () => {
     const user = userEvent.setup();
     llmProfilesMock.mockReturnValue({
       data: {
-        profiles: Array.from({ length: 49 }, (_, i) => ({
+        profiles: Array.from({ length: 499 }, (_, i) => ({
           name: `existing-${i}`,
           model: `provider/existing-${i}`,
         })),

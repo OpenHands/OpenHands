@@ -38,7 +38,7 @@ const WIRE_API_ITEMS = [
   { key: "responses", label: "Responses" },
 ];
 
-const MAX_LLM_PROFILES = 50;
+const MAX_LLM_PROFILES = 500;
 
 function parseCustomHeaders(value: string): Record<string, string> | null {
   const trimmed = value.trim();
