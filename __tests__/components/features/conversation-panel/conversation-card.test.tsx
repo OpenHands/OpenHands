@@ -852,6 +852,98 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("shows a compact tag indicator instead of chips when showTags is off", () => {
+      // The compact state keeps tags discoverable without the chip row's
+      // vertical cost: an icon + count next to the pin that expands just this
+      // card on click.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      const indicator = screen.getByTestId("conversation-tags-indicator");
+      expect(indicator).toHaveTextContent("2");
+      expect(indicator).toHaveAttribute("aria-pressed", "false");
+      expect(indicator).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION_PANEL$SHOW_TAGS",
+      );
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("expands and collapses this card's chips via the indicator", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      await user.click(screen.getByTestId("conversation-tags-indicator"));
+
+      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
+        2,
+      );
+      const expandedIndicator = screen.getByTestId(
+        "conversation-tags-indicator",
+      );
+      expect(expandedIndicator).toHaveAttribute("aria-pressed", "true");
+      expect(expandedIndicator).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION_PANEL$HIDE_TAGS",
+      );
+
+      await user.click(expandedIndicator);
+
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("conversation-tags-indicator"),
+      ).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("renders no indicator when showTags is on", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ origin: "slack" }}
+        />,
+      );
+
+      expect(screen.getByTestId("conversation-card-tag-chip"));
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("renders no indicator when every tag is reserved", () => {
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ acpserver: "claude-code" }}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+    });
+
     it("keeps chips on a single nowrap row", () => {
       renderWithProviders(
         <ConversationCard

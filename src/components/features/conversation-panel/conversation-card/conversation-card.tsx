@@ -1,5 +1,5 @@
 import React from "react";
-import { Pin } from "lucide-react";
+import { Pin, Tag } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
@@ -103,7 +103,16 @@ export function ConversationCard({
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
+  const [tagsExpanded, setTagsExpanded] = React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+
+  const displayTags = getDisplayConversationTags(tags);
+  // Compact state for the panel's "Tags" toggle off: a tagged card still
+  // advertises its tags as a small icon + count next to the pin, and clicking
+  // it expands just this card's chip row (per-card local state). With the
+  // toggle on, chips are always visible and the indicator disappears.
+  const showTagIndicator = !showTags && displayTags.length > 0;
+  const showTagChipRow = showTags || (tagsExpanded && displayTags.length > 0);
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -198,6 +207,44 @@ export function ConversationCard({
     onTogglePin?.();
   };
 
+  const handleToggleTagsExpanded = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setTagsExpanded((value) => !value);
+  };
+
+  const renderTagIndicator = () => (
+    <button
+      type="button"
+      data-testid={
+        conversationId
+          ? `conversation-tags-indicator-${conversationId}`
+          : "conversation-tags-indicator"
+      }
+      aria-pressed={tagsExpanded}
+      aria-label={
+        tagsExpanded
+          ? t(I18nKey.CONVERSATION_PANEL$HIDE_TAGS)
+          : t(I18nKey.CONVERSATION_PANEL$SHOW_TAGS, {
+              count: displayTags.length,
+            })
+      }
+      onClick={handleToggleTagsExpanded}
+      className={cn(
+        "flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1 py-0.5",
+        "text-[10px] leading-4",
+        tagsExpanded
+          ? "text-[var(--oh-accent)]"
+          : "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+      )}
+    >
+      <Tag className="h-3.5 w-3.5" aria-hidden />
+      <span>{displayTags.length}</span>
+    </button>
+  );
+
   const renderPinButton = () => (
     <button
       type="button"
@@ -239,7 +286,7 @@ export function ConversationCard({
     showRepositoryMetadata ||
     isArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTags && getDisplayConversationTags(tags).length > 0);
+    (showTagChipRow && displayTags.length > 0);
 
   return (
     <div
@@ -279,6 +326,7 @@ export function ConversationCard({
               : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
+          {showTagIndicator ? renderTagIndicator() : null}
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
@@ -368,7 +416,7 @@ export function ConversationCard({
           agentKind={agentKind}
           acpServer={acpServer}
           tags={tags}
-          showTags={showTags}
+          showTags={showTagChipRow}
           isArchived={isArchived}
         />
       )}
