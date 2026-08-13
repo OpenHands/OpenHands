@@ -30327,6 +30327,30 @@
     "uk": "Виконано дій: {{completed}}/{{total}}",
     "ca": "{{completed}}/{{total}} accions completades"
   },
+  "EVENT_GROUP$READ_COUNT_one": {
+    "en": "{{count}} read"
+  },
+  "EVENT_GROUP$READ_COUNT_other": {
+    "en": "{{count}} reads"
+  },
+  "EVENT_GROUP$EDIT_COUNT_one": {
+    "en": "{{count}} edit"
+  },
+  "EVENT_GROUP$EDIT_COUNT_other": {
+    "en": "{{count}} edits"
+  },
+  "EVENT_GROUP$COMMAND_COUNT_one": {
+    "en": "{{count}} command"
+  },
+  "EVENT_GROUP$COMMAND_COUNT_other": {
+    "en": "{{count}} commands"
+  },
+  "EVENT_GROUP$OTHER_COUNT_one": {
+    "en": "{{count}} other action"
+  },
+  "EVENT_GROUP$OTHER_COUNT_other": {
+    "en": "{{count}} other actions"
+  },
   "EVENT_GROUP$EXPAND": {
     "en": "Expand actions",
     "ja": "アクションを展開",
