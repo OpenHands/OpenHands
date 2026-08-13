@@ -7,8 +7,16 @@ import {
 } from "#/settings/registry";
 
 const Noop = () => null;
-const LOCAL: SettingsContext = { backendKind: "local" };
-const CLOUD: SettingsContext = { backendKind: "cloud" };
+const LOCAL: SettingsContext = {
+  backendKind: "local",
+  orgId: null,
+  featureFlags: undefined,
+};
+const CLOUD: SettingsContext = {
+  backendKind: "cloud",
+  orgId: "org-123",
+  featureFlags: undefined,
+};
 
 describe("settings registry", () => {
   afterEach(() => {

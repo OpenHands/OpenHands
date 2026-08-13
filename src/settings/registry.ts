@@ -1,18 +1,27 @@
 import type { ComponentType } from "react";
+import type { WebClientFeatureFlags } from "#/api/option-service/option.types";
 
 /**
- * Facts a settings section may gate its visibility on. Deliberately small and
- * host-owned: these are things the app already derives for its built-ins
- * (backend kind today; capabilities, feature flags, and role/permission facts
- * are the obvious next additions). Evaluating a section's `when` never runs
- * section code — it only reads these host facts.
+ * Facts a contributed settings surface (a section or a nav/page entry) may gate
+ * its visibility on. Deliberately small and host-owned: these are things the
+ * app already derives for its built-ins. Evaluating a `when` predicate never
+ * runs contributor code — it only reads these host facts.
  *
  * Kept intentionally close in spirit to the experimental extension host
  * UI-context (`src/extensions/ui-context.tsx` in the closed PR #1659) so a
  * later declarative `when`-clause producer can read the same fact set.
+ *
+ * The fact set grows here (and only here); every consumer sees a single,
+ * consistent source of truth via {@link useSettingsContext}. Role/permission
+ * facts are the obvious next addition.
  */
 export interface SettingsContext {
+  /** Active backend kind. */
   backendKind: "local" | "cloud";
+  /** Active Cloud organization id, or `null` for local / no org selected. */
+  orgId: string | null;
+  /** Web-client feature flags, or `undefined` before config resolves. */
+  featureFlags: WebClientFeatureFlags | undefined;
 }
 
 /**
