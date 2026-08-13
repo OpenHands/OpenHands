@@ -3,6 +3,7 @@ import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { useAutomationDisableFeedback } from "#/contexts/automation-disable-feedback-context";
+import { isTelemetryEnabled } from "#/services/telemetry";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   AUTOMATION_DETAIL_QUERY_KEY,
@@ -51,12 +52,13 @@ export function useToggleAutomation() {
         templateId?: string;
       };
     }) => AutomationService.toggleAutomation(id, enabled),
-    onSuccess: (_data, variables) => {
+    onMutate: () => ({ backendKind: active.backend.kind }),
+    onSuccess: (_data, variables, mutationContext) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
       if (!variables.enabled) {
         const feedbackContext = {
-          backendKind: active.backend.kind,
+          backendKind: mutationContext.backendKind,
           automationId: variables.id,
           automationType: variables.context?.triggerType ?? "unknown",
           automationSource: variables.context?.triggerSource,
@@ -64,7 +66,9 @@ export function useToggleAutomation() {
           disablementId: crypto.randomUUID(),
         };
         trackAutomationDisableButton(feedbackContext);
-        requestAutomationDisableFeedback(feedbackContext);
+        if (isTelemetryEnabled()) {
+          requestAutomationDisableFeedback(feedbackContext);
+        }
       }
     },
   });

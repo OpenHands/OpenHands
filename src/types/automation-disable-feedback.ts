@@ -1,3 +1,5 @@
+import type { BackendKind } from "#/api/backend-registry/types";
+
 export type AutomationDisableReason =
   | "no_longer_needed"
   | "unreliable"
@@ -20,4 +22,3 @@ export interface AutomationDisableAnalyticsContext {
   automationTemplateId?: string;
   disablementId: string;
 }
-import type { BackendKind } from "#/api/backend-registry/types";

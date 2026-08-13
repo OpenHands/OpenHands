@@ -46,6 +46,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 }));
 
 let captureMock: ReturnType<typeof vi.spyOn>;
+let telemetryEnabledMock: ReturnType<typeof vi.spyOn>;
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
@@ -113,6 +114,9 @@ function makeWrapper() {
 
 beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
+  telemetryEnabledMock = vi
+    .spyOn(telemetry, "isTelemetryEnabled")
+    .mockReturnValue(true);
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.getAutomations).mockReset();
@@ -137,6 +141,7 @@ beforeEach(() => {
 
 afterEach(() => {
   captureMock.mockRestore();
+  telemetryEnabledMock.mockRestore();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -209,53 +214,49 @@ describe("useAutomationRuns — polling", () => {
     completed_at: "2026-01-02T00:00:30Z",
   };
 
-  it(
-    "re-fetches while a run is non-terminal, and stops once all runs are terminal",
-    async () => {
-      // Arrange: first fetch returns a PENDING run (polling should engage);
-      // subsequent fetches return a COMPLETED run (polling should then stop).
-      const pendingResponse: AutomationRunsResponse = {
-        runs: [pendingRun],
-        total: 1,
-      };
-      const completedResponse: AutomationRunsResponse = {
-        runs: [completedRun],
-        total: 1,
-      };
-      vi.mocked(AutomationService.getAutomationRuns)
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValue(completedResponse);
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
 
-      // Act
-      renderHook(
-        () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
-        { wrapper: makeWrapper() },
-      );
+    // Act
+    renderHook(
+      () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
+      { wrapper: makeWrapper() },
+    );
 
-      // Assert: the initial fetch fires once.
-      await waitFor(() => {
-        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
-      });
+    // Assert: the initial fetch fires once.
+    await waitFor(() => {
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+    });
 
-      // The cached data still contains a PENDING run, so refetchInterval
-      // engages and a second fetch arrives within the poll window.
-      await waitFor(
-        () => {
-          expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-        },
-        { timeout: 5000 },
-      );
+    // The cached data still contains a PENDING run, so refetchInterval
+    // engages and a second fetch arrives within the poll window.
+    await waitFor(
+      () => {
+        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 5000 },
+    );
 
-      // The second fetch returned a COMPLETED run, so polling should stop.
-      // Give the would-be next poll window plenty of slack and assert no
-      // further calls happen.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 4000);
-      });
-      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-    },
-    15000,
-  );
+    // The second fetch returned a COMPLETED run, so polling should stop.
+    // Give the would-be next poll window plenty of slack and assert no
+    // further calls happen.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 4000);
+    });
+    expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+  }, 15000);
 });
 
 describe("automation mutation hooks — analytics tracking", () => {
@@ -392,5 +393,60 @@ describe("automation mutation hooks — analytics tracking", () => {
       "automation_disable_button",
       expect.anything(),
     );
+  });
+
+  it("does not ask for feedback when telemetry cannot capture it", async () => {
+    telemetryEnabledMock.mockReturnValue(false);
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "auto-1",
+        enabled: false,
+        context: { triggerType: "schedule" },
+      });
+    });
+
+    expect(
+      screen.queryByTestId("automation-disable-feedback-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps disable analytics tied to the backend where the mutation started", async () => {
+    let resolveToggle: ((value: Automation) => void) | undefined;
+    vi.mocked(AutomationService.toggleAutomation).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveToggle = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    act(() => {
+      result.current.mutate({
+        id: "auto-1",
+        enabled: false,
+        context: { triggerType: "schedule" },
+      });
+    });
+    await waitFor(() => {
+      expect(AutomationService.toggleAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    setActiveSelection({ backendId: cloudBackend.id });
+    await act(async () => {
+      resolveToggle?.(automation);
+    });
+
+    await waitFor(() => {
+      expect(captureMock).toHaveBeenCalledWith(
+        "automation_disable_button",
+        expect.objectContaining({ backend_kind: "local" }),
+      );
+    });
   });
 });
