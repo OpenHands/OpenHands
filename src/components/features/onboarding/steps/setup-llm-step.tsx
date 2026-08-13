@@ -9,6 +9,7 @@ import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
+import ProviderConnectionsService from "#/api/provider-connections-service";
 
 interface SetupLlmStepProps {
   onBack: () => void;
@@ -23,6 +24,20 @@ interface SetupLlmStepProps {
  * the Next button persists the suggested default immediately.
  */
 export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
+
+function splitProviderModel(model: string): {
+  provider: string | null;
+  modelName: string;
+} {
+  const index = model.indexOf("/");
+  if (index <= 0 || index === model.length - 1) {
+    return { provider: null, modelName: model };
+  }
+  return {
+    provider: model.slice(0, index),
+    modelName: model.slice(index + 1),
+  };
+}
 
 /**
  * Step 2: embed the LLM settings form. The screen runs in `embedded`
@@ -72,6 +87,36 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
       typeof values["llm.base_url"] === "string" ? values["llm.base_url"] : "";
 
     const name = deriveProfileNameFromModel(model);
+    const { provider, modelName } = splitProviderModel(model);
+    if (apiKey && provider) {
+      try {
+        const connection = await ProviderConnectionsService.createConnection({
+          provider,
+          key: apiKey,
+          label: name,
+          baseUrl: baseUrl || undefined,
+          models: [modelName],
+        });
+        await ProviderConnectionsService.createProfileFromConnection(
+          connection.id,
+          {
+            profileName: name,
+            model: modelName,
+          },
+        );
+        await activateProfile.mutateAsync(name);
+        return name;
+      } catch (error) {
+        // Fall back to the legacy raw-key profile save below. The backend also
+        // backfills raw-key profiles into provider connections on the providers
+        // page, so onboarding should not block on the new connection path.
+        console.error(
+          "Failed to persist onboarding provider connection:",
+          error,
+        );
+      }
+    }
+
     const llmConfig: { model: string; api_key?: string; base_url?: string } = {
       model,
     };

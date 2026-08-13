@@ -49,6 +49,7 @@ export interface CreateConnectionRequest {
   baseUrl?: string;
   apiMode?: "auto" | "chat" | "responses";
   customHeaders?: Record<string, string>;
+  models?: string[];
 }
 
 export interface UpdateConnectionRequest {
@@ -320,6 +321,7 @@ class ProviderConnectionsService {
     if (request.baseUrl) body.base_url = request.baseUrl;
     if (request.apiMode) body.api_mode = request.apiMode;
     if (request.customHeaders) body.custom_headers = request.customHeaders;
+    if (request.models) body.models = request.models;
     const raw = await requestConnectionEndpoint<unknown>(
       PROVIDER_CONNECTIONS_PATH,
       { method: "POST", body: JSON.stringify(body) },
