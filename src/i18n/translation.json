@@ -38844,6 +38844,23 @@
     "tr": "Şifreleme anahtarı ayarlanmamış",
     "uk": "Ключ шифрування не встановлено"
   },
+  "AUTOMATIONS$GIT_SYNC$ENCRYPTION_KEY_HELP": {
+    "en": "Optional. Encrypts automation files before they are committed, so the repository stores ciphertext instead of readable YAML. Keep a copy of the key — without it the repository cannot be read or restored.",
+    "ja": "任意。コミット前に自動化ファイルを暗号化するため、リポジトリには読み取り可能な YAML ではなく暗号文が保存されます。キーのコピーを保管してください。キーがないとリポジトリを読み取ることも復元することもできません。",
+    "zh-CN": "可选。提交前会加密自动化文件，因此仓库中保存的是密文而非可读的 YAML。请妥善保存密钥副本；没有它将无法读取或恢复该仓库。",
+    "zh-TW": "選填。提交前會加密自動化檔案，因此儲存庫中保存的是密文而非可讀的 YAML。請妥善保存金鑰副本；沒有它將無法讀取或還原該儲存庫。",
+    "ko-KR": "선택 사항입니다. 커밋하기 전에 자동화 파일을 암호화하므로 저장소에는 읽을 수 있는 YAML 대신 암호문이 저장됩니다. 키 사본을 보관하세요. 키가 없으면 저장소를 읽거나 복원할 수 없습니다.",
+    "no": "Valgfritt. Krypterer automasjonsfilene før de blir commitet, slik at repositoriet lagrer chiffertekst i stedet for lesbar YAML. Ta vare på en kopi av nøkkelen – uten den kan ikke repositoriet leses eller gjenopprettes.",
+    "ar": "اختياري. يشفّر ملفات الأتمتة قبل تثبيتها، فيخزّن المستودع نصًا مشفّرًا بدلاً من YAML قابل للقراءة. احتفظ بنسخة من المفتاح؛ فبدونه لا يمكن قراءة المستودع أو استعادته.",
+    "de": "Optional. Verschlüsselt die Automatisierungsdateien vor dem Commit, sodass das Repository Chiffretext statt lesbarem YAML enthält. Eine Kopie des Schlüssels aufbewahren – ohne ihn lässt sich das Repository weder lesen noch wiederherstellen.",
+    "fr": "Facultatif. Chiffre les fichiers d'automatisation avant leur commit : le dépôt contient alors du texte chiffré au lieu de YAML lisible. Conservez une copie de la clé — sans elle, le dépôt ne peut être ni lu ni restauré.",
+    "it": "Facoltativo. Cifra i file delle automazioni prima del commit, così il repository contiene testo cifrato invece di YAML leggibile. Conserva una copia della chiave: senza di essa il repository non può essere letto né ripristinato.",
+    "pt": "Opcional. Criptografa os arquivos de automação antes do commit, de modo que o repositório armazena texto cifrado em vez de YAML legível. Guarde uma cópia da chave — sem ela, o repositório não pode ser lido nem restaurado.",
+    "es": "Opcional. Cifra los archivos de automatización antes de confirmarlos, de modo que el repositorio almacena texto cifrado en lugar de YAML legible. Guarda una copia de la clave: sin ella, el repositorio no se puede leer ni restaurar.",
+    "ca": "Opcional. Xifra els fitxers d'automatització abans de confirmar-los, de manera que el repositori emmagatzema text xifrat en lloc de YAML llegible. Desa una còpia de la clau: sense ella, el repositori no es pot llegir ni restaurar.",
+    "tr": "İsteğe bağlı. Otomasyon dosyalarını commit edilmeden önce şifreler; böylece depo okunabilir YAML yerine şifreli metin saklar. Anahtarın bir kopyasını saklayın; anahtar olmadan depo okunamaz veya geri yüklenemez.",
+    "uk": "Необов'язково. Шифрує файли автоматизацій перед комітом, тож репозиторій зберігає шифротекст замість читабельного YAML. Збережіть копію ключа — без нього репозиторій неможливо прочитати чи відновити."
+  },
   "AUTOMATIONS$GIT_SYNC$CLEAR_TOKEN": {
     "en": "Clear existing token",
     "ja": "既存のトークンを削除",

@@ -383,6 +383,9 @@ export function GitSyncConfigForm({
             isDisabled={!canManage || clearEncryptionKey}
             onChange={setEncryptionKeyText}
           />
+          <p className="text-xs text-muted">
+            {t(I18nKey.AUTOMATIONS$GIT_SYNC$ENCRYPTION_KEY_HELP)}
+          </p>
           <SettingsSwitch
             testId="git-sync-clear-encryption-key-switch"
             isToggled={clearEncryptionKey}
