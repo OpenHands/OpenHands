@@ -17764,6 +17764,23 @@
     "tr": "Etiketleri gizle",
     "uk": "Сховати теги"
   },
+  "CONVERSATION_PANEL$TAG_CHIPS": {
+    "en": "Tag chips",
+    "ja": "タグチップ",
+    "zh-CN": "标签贴片",
+    "zh-TW": "標籤貼片",
+    "ko-KR": "태그 칩",
+    "no": "Tagg-chips",
+    "ar": "شرائح الوسوم",
+    "de": "Tag-Chips",
+    "fr": "Chips d'étiquettes",
+    "it": "Chip tag",
+    "pt": "Chips de etiquetas",
+    "es": "Chips de etiquetas",
+    "ca": "Xips d'etiquetes",
+    "tr": "Etiket çipleri",
+    "uk": "Чипи тегів"
+  },
   "CONVERSATION_PANEL$AUTOMATIONS": {
     "en": "Automations",
     "ja": "オートメーション",

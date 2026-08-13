@@ -7,7 +7,6 @@ import {
   ConversationPanelFilterMenu,
   type ConversationPanelFilterMenuProps,
 } from "#/components/features/conversation-panel/conversation-panel-filter-menu";
-import { UNNAMED_AUTOMATION_FACET } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 
 // ConversationPanelFilterMenu composes the extracted MenuHeading / MenuRow /
 // MenuSeparator components. Rendering it open exercises all three through
@@ -29,12 +28,6 @@ function renderFilterMenu(
     setThreadScope: vi.fn(),
     automationFilterMode: "all",
     setAutomationFilterMode: vi.fn(),
-    selectedAutomationNames: [],
-    onToggleAutomationName: vi.fn(),
-    automationNameFacets: [],
-    selectedTagFacets: [],
-    onToggleTagFacet: vi.fn(),
-    tagFacets: [],
     showOlderConversations: false,
     toggleShowOlderConversations: vi.fn(),
     showArchivedConversations: false,
@@ -123,74 +116,5 @@ describe("ConversationPanelFilterMenu", () => {
       "hide-automations",
     );
     expect(props.setFilterMenuOpen).toHaveBeenCalledWith(false);
-  });
-
-  it("hides the automation-name rows outside only-automations mode", () => {
-    // Arrange + Act
-    renderFilterMenu({
-      automationFilterMode: "hide-automations",
-      automationNameFacets: ["Nightly Audit"],
-    });
-
-    // Assert
-    expect(
-      screen.queryByTestId("automation-name-filter-Nightly Audit"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("toggles automation names without closing the menu in only-automations mode", async () => {
-    // Arrange: only-automations mode also lights the trigger's active dot;
-    // the unnamed bucket renders with its translated label.
-    const user = userEvent.setup();
-    const props = renderFilterMenu({
-      automationFilterMode: "only-automations",
-      automationNameFacets: ["Nightly Audit", UNNAMED_AUTOMATION_FACET],
-      selectedAutomationNames: ["Nightly Audit"],
-    });
-    expect(
-      screen.getByTestId("automation-filter-active-indicator"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("CONVERSATION_PANEL$AUTOMATION_UNNAMED"),
-    ).toBeInTheDocument();
-
-    // Act
-    await user.click(
-      screen.getByTestId(`automation-name-filter-${UNNAMED_AUTOMATION_FACET}`),
-    );
-
-    // Assert: the name toggles while the menu stays open for multi-select.
-    expect(props.onToggleAutomationName).toHaveBeenCalledWith(
-      UNNAMED_AUTOMATION_FACET,
-    );
-    expect(props.setFilterMenuOpen).not.toHaveBeenCalled();
-  });
-
-  it("toggles tag facets without closing the menu and lights the active indicator", async () => {
-    // Arrange: a tag selection lights the trigger's active dot even when the
-    // automation filter is in its default "all" mode.
-    const user = userEvent.setup();
-    const props = renderFilterMenu({
-      tagFacets: ["origin=slack", "owner=alice"],
-      selectedTagFacets: ["origin=slack"],
-    });
-    expect(
-      screen.getByTestId("tag-filter-active-indicator"),
-    ).toBeInTheDocument();
-
-    // Act
-    await user.click(screen.getByTestId("tag-filter-owner=alice"));
-
-    // Assert: the facet toggles while the menu stays open for multi-select.
-    expect(props.onToggleTagFacet).toHaveBeenCalledWith("owner=alice");
-    expect(props.setFilterMenuOpen).not.toHaveBeenCalled();
-  });
-
-  it("omits the tags section when no tag facets are available", () => {
-    // Arrange + Act
-    renderFilterMenu({ tagFacets: [] });
-
-    // Assert
-    expect(screen.queryByTestId(/^tag-filter-/)).not.toBeInTheDocument();
   });
 });

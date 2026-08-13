@@ -185,9 +185,6 @@ export function ConversationPanel({
   const selectedAutomationNames = useConversationPanelPreferencesStore(
     (state) => state.selectedAutomationNames,
   );
-  const toggleAutomationName = useConversationPanelPreferencesStore(
-    (state) => state.toggleAutomationName,
-  );
   const toggleAutomationNameAndMode = useConversationPanelPreferencesStore(
     (state) => state.toggleAutomationNameAndMode,
   );
@@ -1136,12 +1133,6 @@ export function ConversationPanel({
                 setThreadScope={setThreadScope}
                 automationFilterMode={automationFilterMode}
                 setAutomationFilterMode={setAutomationFilterMode}
-                selectedAutomationNames={selectedAutomationNames}
-                onToggleAutomationName={toggleAutomationName}
-                automationNameFacets={automationNameFacets}
-                selectedTagFacets={selectedTagFacets}
-                onToggleTagFacet={toggleTagFacet}
-                tagFacets={tagFacets}
                 showOlderConversations={showOlderConversations}
                 showArchivedConversations={showArchivedConversations}
                 toggleShowArchivedConversations={
