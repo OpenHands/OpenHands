@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -21,6 +21,15 @@ import type {
   GitSyncStatus,
 } from "#/types/git-sync";
 
+/**
+ * Identifies the save-and-sync button in the submit event. Read from the
+ * event's `submitter` rather than tracked on click: native field validation
+ * (the author email, the interval) can swallow a submit after the click has
+ * already happened, and a flag set there would still be armed when Save is
+ * pressed next -- syncing off a button that never asked for it.
+ */
+const SAVE_AND_SYNC = "git-sync-save-and-sync";
+
 interface GitSyncConfigFormProps {
   status: GitSyncStatus;
   canManage: boolean;
@@ -41,11 +50,6 @@ export function GitSyncConfigForm({
   const { mutate: updateConfig, isPending } = useUpdateGitSyncConfig();
   const { mutateAsync: checkConfig, isPending: isChecking } =
     useCheckGitSyncConfig();
-
-  // Which button submitted the form. A ref rather than state: the click and
-  // the submit it triggers are one event dispatch, so a state update would
-  // not have been applied by the time the submit handler reads it.
-  const syncAfterSave = useRef(false);
 
   // The settings that failed their reachability check, so the same submit
   // pressed a second time saves them anyway. Keyed by the values that were
@@ -184,10 +188,9 @@ export function GitSyncConfigForm({
   // with the old values and nothing to retry.
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Read once and disarm, so a submit that never reaches the save -- a
-    // failed check -- doesn't leave the next plain Save syncing too.
-    const thenSync = syncAfterSave.current;
-    syncAfterSave.current = false;
+    const thenSync =
+      (event.nativeEvent as SubmitEvent).submitter?.getAttribute("name") ===
+      SAVE_AND_SYNC;
     const formData = new FormData(event.currentTarget);
     const body: GitSyncConfigUpdateRequest = {};
 
@@ -445,6 +448,7 @@ export function GitSyncConfigForm({
           </BrandButton>
           <BrandButton
             testId="git-sync-save-and-sync-button"
+            name={SAVE_AND_SYNC}
             variant="secondary"
             type="submit"
             // Sync left off is a 503 from the trigger, so there is nothing to
@@ -452,9 +456,6 @@ export function GitSyncConfigForm({
             isDisabled={
               !canManage || isPending || isChecking || formIsClean || !enabled
             }
-            onClick={() => {
-              syncAfterSave.current = true;
-            }}
           >
             {t(I18nKey.AUTOMATIONS$GIT_SYNC$SAVE_AND_SYNC)}
           </BrandButton>

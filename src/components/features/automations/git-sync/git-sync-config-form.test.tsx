@@ -539,9 +539,7 @@ describe("GitSyncConfigForm", () => {
       expect(syncNow).not.toHaveBeenCalled();
     });
 
-    // Disarming matters: the ref survives the rejected submit, so a plain
-    // Save pressed afterwards must not inherit the sync.
-    it("does not sync a later plain save", async () => {
+    it("does not sync a plain save", async () => {
       respondWith("success");
       render(
         <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
@@ -549,6 +547,33 @@ describe("GitSyncConfigForm", () => {
 
       fireEvent.change(screen.getByTestId("git-sync-branch-input"), {
         target: { value: "develop" },
+      });
+      await clickSave();
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(syncNow).not.toHaveBeenCalled();
+    });
+
+    // Regression: the button used to arm a flag on click, and native
+    // validation swallows the submit that click was meant to start -- so the
+    // flag was still set when Save was pressed next, syncing off a button
+    // that never asked for it.
+    it("does not carry a swallowed submit over to the next save", async () => {
+      respondWith("success");
+      render(
+        <GitSyncConfigForm status={baseStatus} canManage onSyncNow={syncNow} />,
+      );
+
+      // An invalid email fails the input's own constraint, so the click never
+      // reaches a submit.
+      fireEvent.change(screen.getByTestId("git-sync-author-email-input"), {
+        target: { value: "not-an-email" },
+      });
+      await clickSaveAndSync();
+      expect(mutate).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByTestId("git-sync-author-email-input"), {
+        target: { value: "ops@example.com" },
       });
       await clickSave();
 
