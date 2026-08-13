@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectProviderWizard } from "#/components/features/settings/provider-connections/connect-provider-wizard";
 import type { ProviderConnection } from "#/api/provider-connections-service";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const mockProviders = [{ name: "openai", verified: true }];
 
@@ -32,6 +33,7 @@ const updateMock = vi.hoisted(() => vi.fn());
 const deleteMock = vi.hoisted(() => vi.fn());
 const validateMock = vi.hoisted(() => vi.fn());
 const createProfileMock = vi.hoisted(() => vi.fn());
+const llmProfilesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("#/hooks/query/use-search-providers", () => ({
   useSearchProviders: () => ({ data: mockProviders, isLoading: false }),
@@ -39,6 +41,10 @@ vi.mock("#/hooks/query/use-search-providers", () => ({
 
 vi.mock("#/hooks/query/use-provider-models", () => ({
   useProviderModels: () => ({ data: mockCatalog, isLoading: false }),
+}));
+
+vi.mock("#/hooks/query/use-llm-profiles", () => ({
+  useLlmProfiles: () => llmProfilesMock(),
 }));
 
 vi.mock("#/hooks/mutation/use-provider-connection-mutations", () => ({
@@ -52,7 +58,6 @@ vi.mock("#/hooks/mutation/use-provider-connection-mutations", () => ({
   }),
   useDeleteProviderConnection: () => ({
     mutateAsync: deleteMock,
-    mutate: deleteMock,
     isPending: false,
   }),
   useValidateProviderConnection: () => ({
@@ -101,6 +106,11 @@ describe("ConnectProviderWizard", () => {
     deleteMock.mockReset();
     validateMock.mockReset();
     createProfileMock.mockReset();
+    llmProfilesMock.mockReset();
+    deleteMock.mockResolvedValue(undefined);
+    llmProfilesMock.mockReturnValue({
+      data: { profiles: [], active_profile: null },
+    });
     createProfileMock.mockResolvedValue({
       profileName: "x",
       model: "x",
@@ -229,6 +239,96 @@ describe("ConnectProviderWizard", () => {
     // With nothing selected, save is disabled and the summary is hidden.
     expect(screen.getByTestId("connect-provider-save")).toBeDisabled();
     expect(screen.queryByTestId("connection-save-summary")).not.toBeTruthy();
+  });
+
+  it("caps the default recommended selection to remaining profile slots", async () => {
+    const user = userEvent.setup();
+    llmProfilesMock.mockReturnValue({
+      data: {
+        profiles: Array.from({ length: 49 }, (_, i) => ({
+          name: `existing-${i}`,
+          model: `provider/existing-${i}`,
+        })),
+        active_profile: null,
+      },
+    });
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked(),
+    );
+
+    expect(
+      screen.getByTestId("connection-model-gpt-4o-mini"),
+    ).not.toBeChecked();
+    expect(
+      screen.getByTestId("connection-profile-limit-summary"),
+    ).toHaveTextContent("SETTINGS$CONNECTION_PROFILE_LIMIT_SUMMARY");
+  });
+
+  it("prevents selecting more new models than remaining profile slots", async () => {
+    const user = userEvent.setup();
+    llmProfilesMock.mockReturnValue({
+      data: {
+        profiles: Array.from({ length: 49 }, (_, i) => ({
+          name: `existing-${i}`,
+          model: `provider/existing-${i}`,
+        })),
+        active_profile: null,
+      },
+    });
+    createMock.mockResolvedValue(createdConnection);
+    validateMock.mockResolvedValue({
+      id: "conn-1",
+      provider: "openai",
+      ok: true,
+      verified: true,
+      models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+      error: null,
+      validatedAt: 1700000100,
+    });
+
+    renderWithQuery(
+      <ConnectProviderWizard
+        isOpen
+        onClose={vi.fn()}
+        defaultProvider="openai"
+      />,
+    );
+
+    await user.type(screen.getByTestId("connection-api-key"), "sk-test-key");
+    await user.click(screen.getByTestId("connect-provider-test"));
+    await waitFor(() =>
+      expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked(),
+    );
+
+    await user.click(screen.getByTestId("connection-model-gpt-4o-mini"));
+
+    expect(
+      screen.getByTestId("connection-model-gpt-4o-mini"),
+    ).not.toBeChecked();
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      "SETTINGS$CONNECTION_PROFILE_LIMIT_REACHED",
+    );
   });
 
   it("creates one profile per selected model on save", async () => {

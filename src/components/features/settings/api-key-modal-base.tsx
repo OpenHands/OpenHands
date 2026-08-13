@@ -87,14 +87,18 @@ export function ApiKeyModalBase({
         aria-modal="true"
         aria-labelledby="modal-title"
         className={cn(
-          "bg-base-secondary p-6 rounded-xl flex flex-col gap-4 border border-[var(--oh-border)]",
+          "bg-base-secondary p-6 rounded-xl flex max-h-[calc(100vh-2rem)] flex-col gap-4 border border-[var(--oh-border)]",
           modalWidthClassName(width),
           MODAL_MAX_WIDTH_VIEWPORT,
         )}
       >
         <BaseModalTitle id="modal-title" title={title} />
-        {children}
-        <div className="w-full flex justify-end gap-2 mt-2">{footer}</div>
+        <div className="min-h-0 overflow-y-auto pr-1 custom-scrollbar-always">
+          {children}
+        </div>
+        <div className="w-full flex shrink-0 justify-end gap-2 mt-2">
+          {footer}
+        </div>
       </div>
     </ModalBackdrop>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -7,6 +7,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
+import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import {
   useCreateProviderConnection,
   useCreateProfileFromConnection,
@@ -36,6 +37,8 @@ const WIRE_API_ITEMS = [
   { key: "chat", label: "Chat Completions" },
   { key: "responses", label: "Responses" },
 ];
+
+const MAX_LLM_PROFILES = 50;
 
 function parseCustomHeaders(value: string): Record<string, string> | null {
   const trimmed = value.trim();
@@ -75,6 +78,7 @@ export function ConnectProviderWizard({
 }: ConnectProviderWizardProps) {
   const { t } = useTranslation("openhands");
   const { data: providers, isLoading: providersLoading } = useSearchProviders();
+  const { data: profilesData } = useLlmProfiles();
   const createConnection = useCreateProviderConnection();
   const updateConnection = useUpdateProviderConnection();
   const deleteConnection = useDeleteProviderConnection();
@@ -201,8 +205,28 @@ export function ConnectProviderWizard({
   const toggleModel = (name: string) => {
     setSelectedModels((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        const wouldCreateNewProfile = !existingProfileNames.has(name);
+        const selectedNewProfiles = [...next].filter(
+          (model) => !existingProfileNames.has(model),
+        ).length;
+
+        if (
+          wouldCreateNewProfile &&
+          selectedNewProfiles >= profileSlotsRemaining
+        ) {
+          displayErrorToast(
+            t(I18nKey.SETTINGS$CONNECTION_PROFILE_LIMIT_REACHED, {
+              limit: MAX_LLM_PROFILES,
+            }),
+          );
+          return prev;
+        }
+
+        next.add(name);
+      }
       return next;
     });
   };
@@ -214,6 +238,42 @@ export function ConnectProviderWizard({
   const otherModels = useMemo(
     () => (catalogModels ?? []).filter((m) => !m.verified),
     [catalogModels],
+  );
+  const existingProfileNames = useMemo(
+    () => new Set((profilesData?.profiles ?? []).map((p) => p.name)),
+    [profilesData],
+  );
+  const profileSlotsRemaining = Math.max(
+    0,
+    MAX_LLM_PROFILES - existingProfileNames.size,
+  );
+  const selectedNewProfileCount = useMemo(
+    () =>
+      [...selectedModels].filter((model) => !existingProfileNames.has(model))
+        .length,
+    [existingProfileNames, selectedModels],
+  );
+  const selectionExceedsProfileLimit =
+    selectedNewProfileCount > profileSlotsRemaining;
+  const hasNoNewProfileSlots = profileSlotsRemaining === 0;
+  const canSaveSelection =
+    selectedModels.size > 0 && !selectionExceedsProfileLimit;
+
+  const capSelectionToProfileLimit = useCallback(
+    (models: string[]) => {
+      const next = new Set<string>();
+      let newProfiles = 0;
+
+      for (const model of models) {
+        if (existingProfileNames.has(model)) continue;
+        if (newProfiles >= profileSlotsRemaining) continue;
+        next.add(model);
+        newProfiles += 1;
+      }
+
+      return next;
+    },
+    [existingProfileNames, profileSlotsRemaining],
   );
 
   // Default selection: all recommended models pre-checked. Applied exactly once
@@ -227,14 +287,20 @@ export function ConnectProviderWizard({
     }
     if (catalogModels && !didInitSelection.current) {
       didInitSelection.current = true;
-      setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
+      setSelectedModels(
+        capSelectionToProfileLimit(verifiedModels.map((m) => m.name)),
+      );
     }
-  }, [step, catalogModels, verifiedModels]);
+  }, [step, catalogModels, verifiedModels, capSelectionToProfileLimit]);
 
   const selectAllVerified = () =>
-    setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
+    setSelectedModels(
+      capSelectionToProfileLimit(verifiedModels.map((m) => m.name)),
+    );
   const selectAll = () =>
-    setSelectedModels(new Set((catalogModels ?? []).map((m) => m.name)));
+    setSelectedModels(
+      capSelectionToProfileLimit((catalogModels ?? []).map((m) => m.name)),
+    );
   const clearAll = () => setSelectedModels(new Set());
 
   const handleSave = async () => {
@@ -242,6 +308,14 @@ export function ConnectProviderWizard({
     if (!connectionId) return;
     if (selectedModels.size === 0) {
       displayErrorToast(t(I18nKey.SETTINGS$CONNECTION_PICK_REQUIRED));
+      return;
+    }
+    if (selectionExceedsProfileLimit) {
+      displayErrorToast(
+        t(I18nKey.SETTINGS$CONNECTION_PROFILE_LIMIT_REACHED, {
+          limit: MAX_LLM_PROFILES,
+        }),
+      );
       return;
     }
     setSubmitting(true);
@@ -276,11 +350,16 @@ export function ConnectProviderWizard({
 
   // Closing (cancel or dismiss) before a successful save deletes the
   // half-connected record so a rejected key never leaves an orphan.
-  const handleClose = () => {
+  const handleClose = async () => {
     const orphanId = pendingConnectionId.current;
     if (orphanId) {
       pendingConnectionId.current = null;
-      deleteConnection.mutate(orphanId);
+      setSubmitting(true);
+      try {
+        await deleteConnection.mutateAsync(orphanId);
+      } finally {
+        setSubmitting(false);
+      }
     }
     onClose();
   };
@@ -319,7 +398,7 @@ export function ConnectProviderWizard({
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={busy || selectedModels.size === 0}
+          isDisabled={busy || !canSaveSelection}
           aria-busy={busy}
         >
           {busy
@@ -489,6 +568,19 @@ export function ConnectProviderWizard({
               <p className="text-xs leading-4 text-tertiary-light">
                 {t(I18nKey.SETTINGS$CONNECTION_PICK_MODELS_HINT, { provider })}
               </p>
+              <p
+                data-testid="connection-profile-limit-summary"
+                className={
+                  hasNoNewProfileSlots || selectionExceedsProfileLimit
+                    ? "text-xs leading-4 text-danger"
+                    : "text-xs leading-4 text-tertiary-light"
+                }
+              >
+                {t(I18nKey.SETTINGS$CONNECTION_PROFILE_LIMIT_SUMMARY, {
+                  remaining: profileSlotsRemaining,
+                  limit: MAX_LLM_PROFILES,
+                })}
+              </p>
             </div>
             {catalogLoading ? <LoadingSpinner size="small" /> : null}
             {(catalogModels ?? []).length === 0 && !catalogLoading ? (
@@ -526,50 +618,52 @@ export function ConnectProviderWizard({
                 {t(I18nKey.SETTINGS$CONNECTION_CLEAR)}
               </BrandButton>
             </div>
-            {/* Recommended models */}
-            <ul
-              data-testid="connection-model-list-verified"
-              className="flex flex-col gap-1"
-            >
-              {verifiedModels.map((m) => (
-                <ModelRow
-                  key={m.name}
-                  model={m}
-                  checked={selectedModels.has(m.name)}
-                  onToggle={toggleModel}
-                />
-              ))}
-            </ul>
-            {/* More from {vendor} — non-recommended, collapsible */}
-            {otherModels.length > 0 ? (
-              <div className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  data-testid="connection-more-toggle"
-                  className="text-left text-xs font-medium text-tertiary-light hover:text-white"
-                  onClick={() => setShowMore((v) => !v)}
-                >
-                  {t(I18nKey.SETTINGS$CONNECTION_MORE_FROM, { provider })}
-                  {/* eslint-disable-next-line i18next/no-literal-string -- arrow glyphs, not translatable */}
-                  {showMore ? " ▾" : " ▸"}
-                </button>
-                {showMore ? (
-                  <ul
-                    data-testid="connection-model-list-more"
-                    className="flex flex-col gap-1"
+            <div className="max-h-[min(22rem,45vh)] overflow-y-auto pr-1 custom-scrollbar-always">
+              {/* Recommended models */}
+              <ul
+                data-testid="connection-model-list-verified"
+                className="flex flex-col gap-1"
+              >
+                {verifiedModels.map((m) => (
+                  <ModelRow
+                    key={m.name}
+                    model={m}
+                    checked={selectedModels.has(m.name)}
+                    onToggle={toggleModel}
+                  />
+                ))}
+              </ul>
+              {/* More from {vendor} — non-recommended, collapsible */}
+              {otherModels.length > 0 ? (
+                <div className="mt-1 flex flex-col gap-1">
+                  <button
+                    type="button"
+                    data-testid="connection-more-toggle"
+                    className="text-left text-xs font-medium text-tertiary-light hover:text-white"
+                    onClick={() => setShowMore((v) => !v)}
                   >
-                    {otherModels.map((m) => (
-                      <ModelRow
-                        key={m.name}
-                        model={m}
-                        checked={selectedModels.has(m.name)}
-                        onToggle={toggleModel}
-                      />
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : null}
+                    {t(I18nKey.SETTINGS$CONNECTION_MORE_FROM, { provider })}
+                    {/* eslint-disable-next-line i18next/no-literal-string -- arrow glyphs, not translatable */}
+                    {showMore ? " ▾" : " ▸"}
+                  </button>
+                  {showMore ? (
+                    <ul
+                      data-testid="connection-model-list-more"
+                      className="flex flex-col gap-1"
+                    >
+                      {otherModels.map((m) => (
+                        <ModelRow
+                          key={m.name}
+                          model={m}
+                          checked={selectedModels.has(m.name)}
+                          onToggle={toggleModel}
+                        />
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             {/* Save summary */}
             {selectedModels.size > 0 ? (
               <p
