@@ -1719,10 +1719,11 @@ describe("ConversationPanel", () => {
       expect(hideRow.querySelector("svg")).toBeInTheDocument();
       expect(hideRow).toHaveClass("group");
 
+      // Delete all is destructive: danger styling, never the plain row color.
       const deleteAllRow = screen.getByTestId("delete-all-conversations");
       expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
-      expect(deleteAllRow).toHaveClass("text-[var(--oh-foreground)]");
-      expect(deleteAllRow).not.toHaveClass("text-danger");
+      expect(deleteAllRow).toHaveClass("text-danger");
+      expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
     });
 
     it("toggles older conversations visibility via the filter dropdown", async () => {

@@ -334,7 +334,7 @@ export function ConversationPanelFilterMenu({
           />
           <MenuRow
             icon={Tag}
-            label={t(I18nKey.CONVERSATION_PANEL$TAGS)}
+            label={t(I18nKey.CONVERSATION_PANEL$TAG_CHIPS)}
             selected={showTagsMetadata}
             testId="toggle-tags-metadata"
             onClick={() => {
@@ -383,6 +383,7 @@ export function ConversationPanelFilterMenu({
             icon={Trash2}
             label={capitalizeLabel(t(I18nKey.CONVERSATION$DELETE_ALL))}
             disabled={totalConversationsCount === 0}
+            destructive
             onClick={() => {
               if (totalConversationsCount === 0) return;
               onRequestDeleteAll();

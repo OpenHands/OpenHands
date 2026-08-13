@@ -13,6 +13,7 @@ export function MenuRow({
   onClick,
   testId,
   disabled,
+  destructive,
 }: {
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   label: string;
@@ -20,6 +21,8 @@ export function MenuRow({
   onClick: () => void;
   testId?: string;
   disabled?: boolean;
+  /** Destructive action rows (delete/reset) render in the danger color. */
+  destructive?: boolean;
 }) {
   // Rows that show a selection checkmark are toggleable preferences, so
   // they get `role="menuitemradio"` when they're part of a selectable
@@ -39,11 +42,16 @@ export function MenuRow({
       className={cn(
         "group",
         dropdownMenuRowClassName,
-        "text-[var(--oh-foreground)] disabled:opacity-50",
+        "disabled:opacity-50",
+        destructive ? "text-danger" : "text-[var(--oh-foreground)]",
       )}
     >
       <Icon
-        className={cn("h-3.5 w-3.5", dropdownMenuRowIconClassName)}
+        className={cn(
+          "h-3.5 w-3.5",
+          dropdownMenuRowIconClassName,
+          destructive && "text-danger",
+        )}
         aria-hidden
       />
       <span className="min-w-0 flex-1 truncate">{label}</span>
