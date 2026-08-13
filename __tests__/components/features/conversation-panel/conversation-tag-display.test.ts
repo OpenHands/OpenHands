@@ -127,7 +127,7 @@ describe("getDisplayConversationTags", () => {
     expect(getDisplayConversationTags(undefined)).toEqual([]);
   });
 
-  it("drops blank and whitespace-only tag values", () => {
+  it("keeps bare tags (empty value) but drops whitespace-only values", () => {
     expect(
       getDisplayConversationTags({
         appmode: "work",
@@ -138,6 +138,7 @@ describe("getDisplayConversationTags", () => {
     ).toEqual([
       ["appmode", "work"],
       ["owner", "alice"],
+      ["worktools", ""],
     ]);
   });
 });

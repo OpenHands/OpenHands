@@ -154,6 +154,27 @@ describe("EditConversationTagsModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({ work: "" });
   });
 
+  it("lets a bare tag be removed (merge must not resurrect it)", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{ work: "", acpserver: "claude-code" }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // The bare tag is listed alongside valued tags…
+    expect(screen.getByTestId("edit-tag-row-work")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("remove-tag-work"));
+    await user.click(screen.getByTestId("confirm-button"));
+
+    // …and its removal sticks — only the reserved tag is preserved.
+    expect(onConfirm).toHaveBeenCalledWith({ acpserver: "claude-code" });
+  });
+
   it("adds the tag when Enter is pressed in either input", async () => {
     const user = userEvent.setup();
     renderWithProviders(

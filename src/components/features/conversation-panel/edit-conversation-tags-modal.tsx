@@ -26,8 +26,10 @@ interface TagRow {
 
 /**
  * Merges the user's edited display tags with every entry the display helper
- * drops from the current map (reserved/internal keys, empty or non-string
- * values), so the replace-all PATCH never silently discards internal tags.
+ * drops from the current map (reserved/internal keys, whitespace-only or
+ * non-string values), so the replace-all PATCH never silently discards
+ * internal tags. Bare tags (empty-string values) are user-manageable and
+ * come through `editedUserTags` like any valued tag.
  */
 export function mergeConversationTagEdits(
   currentTags: Record<string, string> | null | undefined,
@@ -35,10 +37,14 @@ export function mergeConversationTagEdits(
 ): Record<string, string> {
   const merged: Record<string, string> = {};
   for (const [key, value] of Object.entries(currentTags ?? {})) {
+    // Preserve what the editor does not surface: reserved keys, non-string
+    // values, and whitespace-only values (raw-write junk the display drops).
+    // Empty-string values are bare tags — the editor manages them, so they
+    // must NOT be preserved here or a removed bare tag would resurrect.
     if (
       RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) ||
       typeof value !== "string" ||
-      value.trim().length === 0
+      (value !== "" && value.trim().length === 0)
     ) {
       merged[key] = value;
     }

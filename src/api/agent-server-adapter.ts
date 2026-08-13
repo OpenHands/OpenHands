@@ -517,7 +517,9 @@ export function getDisplayConversationTags(
       ([key, value]) =>
         !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
         typeof value === "string" &&
-        value.trim().length > 0,
+        // Bare tags (empty value) are displayable — chips/tooltips render
+        // the key. Whitespace-only values stay dropped (raw-write junk).
+        (value === "" || value.trim().length > 0),
     )
     .sort(([a], [b]) => {
       const aRank = priorityRank(a);
