@@ -201,4 +201,78 @@ describe("AppSettingsScreen", () => {
       );
     });
   });
+
+  it("hides the cloud-only advanced section on local backends", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+
+    renderAppSettingsScreen();
+
+    // The general section renders, proving the page loaded...
+    await screen.findByTestId("app-settings-general-submit");
+    // ...but the cloud-gated advanced section does not.
+    expect(
+      screen.queryByTestId("app-settings-advanced-section"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the advanced section on cloud backends", async () => {
+    activeBackendState.kind = "cloud";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        max_budget_per_task: 25,
+        enable_solvability_analysis: true,
+        enable_proactive_conversation_starters: false,
+      }),
+    );
+
+    renderAppSettingsScreen();
+
+    expect(
+      await screen.findByTestId("app-settings-advanced-section"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("max-budget-per-task-input")).toHaveValue(25);
+    expect(
+      screen.getByTestId("enable-solvability-analysis-switch"),
+    ).toBeChecked();
+    expect(
+      screen.getByTestId("enable-proactive-conversation-starters-switch"),
+    ).not.toBeChecked();
+  });
+
+  it("saves only the advanced fields it owns (section-owned save)", async () => {
+    activeBackendState.kind = "cloud";
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        max_budget_per_task: null,
+        enable_solvability_analysis: false,
+        enable_proactive_conversation_starters: false,
+      }),
+    );
+
+    renderAppSettingsScreen();
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByTestId("enable-solvability-analysis-switch"),
+    );
+    await user.click(screen.getByTestId("app-settings-advanced-submit"));
+
+    await waitFor(() => {
+      expect(saveSettingsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enable_solvability_analysis: true,
+          enable_proactive_conversation_starters: false,
+          max_budget_per_task: null,
+        }),
+      );
+    });
+    // Section-owned save: it must not touch fields other sections own.
+    const payload = saveSettingsSpy.mock.calls[0][0];
+    expect(payload).not.toHaveProperty("git_user_name");
+    expect(payload).not.toHaveProperty("title_llm_profile");
+    expect(payload).not.toHaveProperty("language");
+  });
 });
