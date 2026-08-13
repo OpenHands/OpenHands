@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectProviderWizard } from "#/components/features/settings/provider-connections/connect-provider-wizard";
 import type { ProviderConnection } from "#/api/provider-connections-service";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const mockProviders = [{ name: "openai", verified: true }];
 
@@ -241,7 +240,7 @@ describe("ConnectProviderWizard", () => {
     expect(screen.queryByTestId("connection-save-summary")).not.toBeTruthy();
   });
 
-  it("caps the default recommended selection to remaining profile slots", async () => {
+  it("pre-checks all recommended models even when the selection exceeds profile slots", async () => {
     const user = userEvent.setup();
     llmProfilesMock.mockReturnValue({
       data: {
@@ -279,13 +278,14 @@ describe("ConnectProviderWizard", () => {
 
     expect(
       screen.getByTestId("connection-model-gpt-4o-mini"),
-    ).not.toBeChecked();
+    ).toBeChecked();
     expect(
       screen.getByTestId("connection-profile-limit-summary"),
     ).toHaveTextContent("SETTINGS$CONNECTION_PROFILE_LIMIT_SUMMARY");
+    expect(screen.getByTestId("connect-provider-save")).toBeDisabled();
   });
 
-  it("prevents selecting more new models than remaining profile slots", async () => {
+  it("selects every catalog model with Select all even when Save is blocked by profile slots", async () => {
     const user = userEvent.setup();
     llmProfilesMock.mockReturnValue({
       data: {
@@ -321,14 +321,16 @@ describe("ConnectProviderWizard", () => {
       expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked(),
     );
 
-    await user.click(screen.getByTestId("connection-model-gpt-4o-mini"));
+    await user.click(screen.getByTestId("connection-clear"));
+    await user.click(screen.getByTestId("connection-select-all"));
+    await user.click(screen.getByTestId("connection-more-toggle"));
 
+    expect(screen.getByTestId("connection-model-gpt-4o")).toBeChecked();
     expect(
       screen.getByTestId("connection-model-gpt-4o-mini"),
-    ).not.toBeChecked();
-    expect(displayErrorToast).toHaveBeenCalledWith(
-      "SETTINGS$CONNECTION_PROFILE_LIMIT_REACHED",
-    );
+    ).toBeChecked();
+    expect(screen.getByTestId("connection-model-o3-mini")).toBeChecked();
+    expect(screen.getByTestId("connect-provider-save")).toBeDisabled();
   });
 
   it("creates one profile per selected model on save", async () => {

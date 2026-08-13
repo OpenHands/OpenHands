@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -208,23 +208,6 @@ export function ConnectProviderWizard({
       if (next.has(name)) {
         next.delete(name);
       } else {
-        const wouldCreateNewProfile = !existingProfileNames.has(name);
-        const selectedNewProfiles = [...next].filter(
-          (model) => !existingProfileNames.has(model),
-        ).length;
-
-        if (
-          wouldCreateNewProfile &&
-          selectedNewProfiles >= profileSlotsRemaining
-        ) {
-          displayErrorToast(
-            t(I18nKey.SETTINGS$CONNECTION_PROFILE_LIMIT_REACHED, {
-              limit: MAX_LLM_PROFILES,
-            }),
-          );
-          return prev;
-        }
-
         next.add(name);
       }
       return next;
@@ -259,23 +242,6 @@ export function ConnectProviderWizard({
   const canSaveSelection =
     selectedModels.size > 0 && !selectionExceedsProfileLimit;
 
-  const capSelectionToProfileLimit = useCallback(
-    (models: string[]) => {
-      const next = new Set<string>();
-      let newProfiles = 0;
-
-      for (const model of models) {
-        if (existingProfileNames.has(model)) continue;
-        if (newProfiles >= profileSlotsRemaining) continue;
-        next.add(model);
-        newProfiles += 1;
-      }
-
-      return next;
-    },
-    [existingProfileNames, profileSlotsRemaining],
-  );
-
   // Default selection: all recommended models pre-checked. Applied exactly once
   // per pick-step entry (tracked by a ref) so bulk "Clear" isn't immediately
   // undone -- keying off selectedModels.size would re-select on every clear.
@@ -287,20 +253,14 @@ export function ConnectProviderWizard({
     }
     if (catalogModels && !didInitSelection.current) {
       didInitSelection.current = true;
-      setSelectedModels(
-        capSelectionToProfileLimit(verifiedModels.map((m) => m.name)),
-      );
+      setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
     }
-  }, [step, catalogModels, verifiedModels, capSelectionToProfileLimit]);
+  }, [step, catalogModels, verifiedModels]);
 
   const selectAllVerified = () =>
-    setSelectedModels(
-      capSelectionToProfileLimit(verifiedModels.map((m) => m.name)),
-    );
+    setSelectedModels(new Set(verifiedModels.map((m) => m.name)));
   const selectAll = () =>
-    setSelectedModels(
-      capSelectionToProfileLimit((catalogModels ?? []).map((m) => m.name)),
-    );
+    setSelectedModels(new Set((catalogModels ?? []).map((m) => m.name)));
   const clearAll = () => setSelectedModels(new Set());
 
   const handleSave = async () => {
