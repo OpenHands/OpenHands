@@ -1,10 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { MemoryRouter } from "react-router";
 import { FeaturedAutomationsDemo } from "./featured-automations-demo";
 
 describe("FeaturedAutomationsDemo", () => {
   it("adds a selected automation to the featured dashboard", () => {
-    render(<FeaturedAutomationsDemo />);
+    render(
+      <MemoryRouter>
+        <FeaturedAutomationsDemo />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "PR reviewer" }));
 
@@ -26,7 +31,11 @@ describe("FeaturedAutomationsDemo", () => {
   });
 
   it("removes an automation from the featured dashboard on a second click", () => {
-    render(<FeaturedAutomationsDemo />);
+    render(
+      <MemoryRouter>
+        <FeaturedAutomationsDemo />
+      </MemoryRouter>,
+    );
 
     const button = screen.getByRole("button", { name: "PR reviewer" });
     fireEvent.click(button);
@@ -51,7 +60,11 @@ describe("FeaturedAutomationsDemo", () => {
   });
 
   it("shows the latest error when a failed automation is featured", () => {
-    render(<FeaturedAutomationsDemo />);
+    render(
+      <MemoryRouter>
+        <FeaturedAutomationsDemo />
+      </MemoryRouter>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Issue triage" }));
 
@@ -63,7 +76,11 @@ describe("FeaturedAutomationsDemo", () => {
   });
 
   it("links the final add control to Automations", () => {
-    render(<FeaturedAutomationsDemo />);
+    render(
+      <MemoryRouter>
+        <FeaturedAutomationsDemo />
+      </MemoryRouter>,
+    );
 
     expect(
       screen.getByRole("link", { name: "Add or manage automations" }),

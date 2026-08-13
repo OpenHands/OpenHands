@@ -1,5 +1,6 @@
-import { Plus, Sparkles } from "lucide-react";
+import { ChevronRight, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { cn } from "#/utils/utils";
 
@@ -109,7 +110,7 @@ function AutomationStatus({ health }: { health: AutomationHealth }) {
         "h-1.5 w-1.5 rounded-full",
         health === "failed"
           ? "bg-[var(--oh-status-error)]"
-          : "animate-pulse bg-[var(--oh-status-success)]",
+          : "animate-pulse bg-[var(--oh-status-running)]",
       )}
     />
   );
@@ -196,13 +197,13 @@ export function FeaturedAutomationsDemo() {
           placement="bottom"
           tooltipClassName="!border !border-[var(--oh-border-subtle)] !bg-[var(--oh-surface)]"
         >
-          <a
-            href="/automations"
+          <Link
+            to="/automations"
             aria-label={DEMO_COPY.manageAutomations}
             className="inline-flex items-center justify-center rounded-md border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] px-3 py-2 text-[var(--oh-foreground)] transition-colors hover:bg-[var(--oh-interactive-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
           >
             <Plus size={16} aria-hidden="true" />
-          </a>
+          </Link>
         </StyledTooltip>
       </div>
 
@@ -240,13 +241,13 @@ export function FeaturedAutomationsDemo() {
                     <span>
                       {automation.lastRun} · {automation.nextRun}
                     </span>
-                    <a
-                      href={`/conversations/${automation.conversationId}`}
+                    <Link
+                      to={`/conversations/${automation.conversationId}`}
                       aria-label={DEMO_COPY.recentConversation}
-                      className="text-[var(--oh-foreground)] underline underline-offset-4 hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+                      className="flex items-center text-[var(--oh-foreground)] underline underline-offset-4 hover:text-[var(--oh-text-secondary)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
                     >
-                      &gt;&gt;
-                    </a>
+                      <ChevronRight size={14} aria-hidden="true" />
+                    </Link>
                   </div>
                   <div className="mt-3 max-h-24 space-y-2 overflow-y-auto rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] p-3 text-sm">
                     <p className="text-[var(--oh-text-secondary)]">

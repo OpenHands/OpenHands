@@ -116,6 +116,7 @@
   --oh-focus: #ffffff;
   --oh-status-success: #1FBD53;
   --oh-status-error: #FF684E;
+  --oh-status-running: #60A5FA;
   --oh-link: var(--cool-grey-100);
   --oh-radius: 8px;
   --oh-field-radius: 8px;
