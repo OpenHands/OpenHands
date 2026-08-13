@@ -333,14 +333,6 @@ export function ProviderConnectionsSection() {
           {t(I18nKey.ERROR$GENERIC)}
         </p>
       ) : null}
-      {!isLoading && (data ?? []).length === 0 ? (
-        <p
-          data-testid="provider-connections-empty"
-          className="text-sm leading-5 text-tertiary-light"
-        >
-          {t(I18nKey.SETTINGS$CONNECTION_EMPTY)}
-        </p>
-      ) : null}
       <ul className="flex flex-col gap-2">
         <ManagedProviderRow />
         {(data ?? []).length > 0
