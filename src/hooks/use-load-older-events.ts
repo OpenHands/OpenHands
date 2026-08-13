@@ -54,6 +54,11 @@ export const useLoadOlderEvents = (
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
+  // Mirrors the latest conversationId so in-flight async callbacks (which
+  // capture conversationId in their useCallback closure) can detect that the
+  // user navigated to another conversation while an `await` was pending.
+  const conversationIdRef = React.useRef(conversationId);
+  conversationIdRef.current = conversationId;
 
   React.useEffect(() => {
     isLoadingRef.current = false;
@@ -133,6 +138,13 @@ export const useLoadOlderEvents = (
         },
       );
 
+      // Stale — the user navigated to another conversation while this
+      // search was in flight. Drop the result; the reset effect in the
+      // new conversation already restored its loading/hasMore state.
+      if (conversationId !== conversationIdRef.current) {
+        return;
+      }
+
       if (!Array.isArray(page.items)) {
         throw new Error(
           "Invalid older-events response: expected page.items to be an array.",
@@ -160,8 +172,11 @@ export const useLoadOlderEvents = (
         setHasMore(false);
       }
     } finally {
-      isLoadingRef.current = false;
-      setIsLoading(false);
+      // Only reset isLoading if we're still the active conversation
+      if (conversationId === conversationIdRef.current) {
+        isLoadingRef.current = false;
+        setIsLoading(false);
+      }
     }
   }, [
     conversationId,
