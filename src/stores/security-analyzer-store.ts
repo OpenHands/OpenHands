@@ -63,8 +63,20 @@ export const useSecurityAnalyzerStore = create<SecurityAnalyzerStore>(
 
         if (existingLog) {
           if (existingLog.confirmation_state !== log.confirmation_state) {
-            existingLog.confirmation_state = log.confirmation_state;
-            existingLog.confirmed_changed = true;
+            // Create a new log object instead of mutating the existing one in place.
+            // Zustand relies on immutable state updates to trigger re-renders;
+            // mutating the stored object directly can cause stale UI and subtle
+            // bugs when other subscribers hold references to the old object.
+            const updatedLog = {
+              ...existingLog,
+              confirmation_state: log.confirmation_state,
+              confirmed_changed: true,
+            };
+            return {
+              logs: state.logs.map((stateLog) =>
+                stateLog === existingLog ? updatedLog : stateLog,
+              ),
+            };
           }
           return { logs: [...state.logs] }; // Return new array to trigger re-render
         }
