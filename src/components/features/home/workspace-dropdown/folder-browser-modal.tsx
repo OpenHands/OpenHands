@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { HttpClient } from "@openhands/typescript-client";
+import { getAgentServerHttpClientOptions } from "#/api/agent-server-client-options";
 import { BaseModalTitle } from "#/components/shared/modals/confirmation-modals/base-modal";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -124,6 +127,9 @@ export function FolderBrowserModal({
 }: FolderBrowserModalProps) {
   const { t } = useTranslation("openhands");
   const [currentPath, setCurrentPath] = useState<string | null>(null);
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const queryClient = useQueryClient();
   const active = useActiveBackend();
 
   const { data: homeData } = useHomeDirectory();
@@ -222,6 +228,30 @@ export function FolderBrowserModal({
       },
     ]);
     onClose();
+  };
+
+  const handleCreateDirectory = async () => {
+    const folderName = newFolderName.trim();
+    if (!currentPath || !folderName) return;
+
+    const separator = currentPath.includes("\\") ? "\\" : "/";
+    const basePath = currentPath.replace(/[\\/]+$/, "");
+    const newPath = `${basePath}${separator}${folderName}`;
+
+    try {
+      const client = new HttpClient(getAgentServerHttpClientOptions());
+      await client.post("/api/file/create_directory", null, {
+        params: { path: newPath },
+      });
+      setNewFolderName("");
+      setShowNewFolderInput(false);
+      // Refresh the listing for the current directory so the new folder appears.
+      queryClient.invalidateQueries({
+        queryKey: ["file", "search_subdirs", currentPath],
+      });
+    } catch (err) {
+      console.error("Failed to create directory:", err);
+    }
   };
 
   return (
@@ -347,11 +377,55 @@ export function FolderBrowserModal({
                 </li>
               ))}
             </ul>
+
+            {/* New Folder inline input */}
+            {showNewFolderInput && (
+              <div className="flex items-center gap-2 px-4 py-2 border-t border-[var(--oh-border-input)]">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateDirectory();
+                    if (e.key === "Escape") {
+                      setShowNewFolderInput(false);
+                      setNewFolderName("");
+                    }
+                  }}
+                  placeholder="Folder name"
+                  aria-label="New folder name"
+                  className="flex-1 px-2 py-1.5 text-sm border border-[var(--oh-border-input)] rounded bg-[var(--oh-surface-raised)] text-white outline-none focus:border-[var(--oh-accent)]"
+                  autoFocus
+                  data-testid="folder-browser-new-folder-input"
+                />
+                <BrandButton
+                  type="button"
+                  variant="primary"
+                  onClick={handleCreateDirectory}
+                  isDisabled={!newFolderName.trim()}
+                  testId="folder-browser-create-folder"
+                >
+                  {t("HOME$CREATE_FOLDER" as any)}
+                </BrandButton>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--oh-border-input)]">
+          <BrandButton
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setShowNewFolderInput(true);
+              setNewFolderName("");
+            }}
+            isDisabled={!currentPath || isLoading || showNewFolderInput}
+            testId="folder-browser-new-folder"
+          >
+            {t("HOME$NEW_FOLDER" as any)}
+          </BrandButton>
           <BrandButton
             type="button"
             variant="secondary"
