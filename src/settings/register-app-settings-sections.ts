@@ -2,6 +2,7 @@ import { registerSettingsSection } from "./registry";
 import { GeneralSection } from "#/components/features/settings/app-settings/sections/general-section";
 import { ConversationTitlesSection } from "#/components/features/settings/app-settings/sections/conversation-titles-section";
 import { GitSection } from "#/components/features/settings/app-settings/sections/git-section";
+import { AdvancedApplicationSection } from "#/components/features/settings/app-settings/sections/advanced-application-section";
 
 const APP_SETTINGS_PAGE = "/settings/app";
 
@@ -34,6 +35,17 @@ export function registerAppSettingsSections(): void {
     page: APP_SETTINGS_PAGE,
     order: 30,
     Component: GitSection,
+  });
+
+  // Backend-specific: only cloud/enterprise backends support these fields. It
+  // appears by registration + a `when` predicate instead of an inline
+  // `if (isCloud)` block in the page host (issue #16596).
+  registerSettingsSection({
+    id: "app.advanced",
+    page: APP_SETTINGS_PAGE,
+    order: 40,
+    when: (context) => context.backendKind === "cloud",
+    Component: AdvancedApplicationSection,
   });
 }
 
