@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -10,6 +11,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { AutomationDisableFeedbackProvider } from "#/components/providers/automation-disable-feedback-provider";
 import {
   useAutomations,
   useDispatchAutomation,
@@ -99,7 +101,11 @@ function makeWrapper() {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        <ActiveBackendProvider>
+          <AutomationDisableFeedbackProvider>
+            {children}
+          </AutomationDisableFeedbackProvider>
+        </ActiveBackendProvider>
       </QueryClientProvider>
     );
   };
@@ -307,19 +313,68 @@ describe("automation mutation hooks — analytics tracking", () => {
     });
   });
 
-  it("captures automation_disable_button when an automation is disabled", async () => {
+  it("captures linked disable and optional feedback events without automation content", async () => {
+    const user = userEvent.setup();
     const { result } = renderHook(() => useToggleAutomation(), {
       wrapper: makeWrapper(),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ id: "auto-1", enabled: false });
+      await result.current.mutateAsync({
+        id: "auto-1",
+        enabled: false,
+        context: {
+          triggerType: automation.trigger.type,
+          triggerSource: automation.trigger.source,
+          templateId: "daily-summary",
+        },
+      });
     });
+
+    const disableCall = captureMock.mock.calls.find(
+      (call: [string, Record<string, unknown>]) =>
+        call[0] === "automation_disable_button",
+    );
+    expect(disableCall).toBeDefined();
+    const disableProperties = disableCall?.[1] as Record<string, unknown>;
+    expect(disableProperties).toEqual(
+      expect.objectContaining({
+        backend_kind: "local",
+        automation_id: "auto-1",
+        automation_type: "schedule",
+        automation_template_id: "daily-summary",
+        disablement_id: expect.any(String),
+      }),
+    );
+    expect(disableProperties).not.toHaveProperty("automation_name");
+    expect(disableProperties).not.toHaveProperty("prompt");
+
+    expect(
+      await screen.findByTestId("automation-disable-feedback-modal"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("radio", {
+        name: "AUTOMATIONS$DISABLE_REASON_UNRELIABLE",
+      }),
+    );
+    await user.type(
+      screen.getByLabelText("AUTOMATIONS$DISABLE_FEEDBACK_DETAILS_LABEL"),
+      "It failed twice this week.",
+    );
+    await user.click(screen.getByTestId("submit-automation-disable-feedback"));
 
     await waitFor(() => {
       expect(captureMock).toHaveBeenCalledWith(
-        "automation_disable_button",
-        expect.objectContaining({ backend_kind: "local" }),
+        "automation_disable_feedback",
+        expect.objectContaining({
+          backend_kind: "local",
+          automation_id: "auto-1",
+          automation_type: "schedule",
+          automation_template_id: "daily-summary",
+          disablement_id: disableProperties.disablement_id,
+          reason: "unreliable",
+          details: "It failed twice this week.",
+        }),
       );
     });
   });

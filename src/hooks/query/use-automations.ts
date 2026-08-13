@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
+import { useAutomationDisableFeedback } from "#/contexts/automation-disable-feedback-context";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
   AUTOMATION_DETAIL_QUERY_KEY,
@@ -36,14 +37,34 @@ export function useToggleAutomation() {
   const queryClient = useQueryClient();
   const active = useActiveBackend();
   const { trackAutomationDisableButton } = useTracking();
+  const { requestAutomationDisableFeedback } = useAutomationDisableFeedback();
   return useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      AutomationService.toggleAutomation(id, enabled),
+    mutationFn: ({
+      id,
+      enabled,
+    }: {
+      id: string;
+      enabled: boolean;
+      context?: {
+        triggerType: string;
+        triggerSource?: string;
+        templateId?: string;
+      };
+    }) => AutomationService.toggleAutomation(id, enabled),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: AUTOMATIONS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: AUTOMATION_DETAIL_QUERY_KEY });
       if (!variables.enabled) {
-        trackAutomationDisableButton({ backendKind: active.backend.kind });
+        const feedbackContext = {
+          backendKind: active.backend.kind,
+          automationId: variables.id,
+          automationType: variables.context?.triggerType ?? "unknown",
+          automationSource: variables.context?.triggerSource,
+          automationTemplateId: variables.context?.templateId,
+          disablementId: crypto.randomUUID(),
+        };
+        trackAutomationDisableButton(feedbackContext);
+        requestAutomationDisableFeedback(feedbackContext);
       }
     },
   });

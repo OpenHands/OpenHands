@@ -139,7 +139,14 @@ export default function AutomationDetail() {
 
   const handleToggle = () => {
     const willEnable = !automation.enabled;
-    toggleMutation.mutate({ id: automation.id, enabled: willEnable });
+    toggleMutation.mutate({
+      id: automation.id,
+      enabled: willEnable,
+      context: {
+        triggerType: automation.trigger.type,
+        triggerSource: automation.trigger.source,
+      },
+    });
     if (willEnable) {
       trackPrebuiltAutomationEnabled({
         automationId: automation.id,

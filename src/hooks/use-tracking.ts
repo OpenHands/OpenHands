@@ -11,6 +11,10 @@ import {
   getBackendTelemetryProperties,
 } from "#/services/telemetry-context";
 import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
+import type {
+  AutomationDisableAnalyticsContext,
+  AutomationDisableFeedback,
+} from "#/types/automation-disable-feedback";
 
 /**
  * Hook that provides tracking functions with automatic data collection
@@ -279,10 +283,42 @@ export const useTracking = () => {
 
   const trackAutomationDisableButton = ({
     backendKind,
-  }: {
-    backendKind: BackendKind;
-  }) => {
-    track("automation_disable_button", { backend_kind: backendKind });
+    automationId,
+    automationType,
+    automationSource,
+    automationTemplateId,
+    disablementId,
+  }: AutomationDisableAnalyticsContext) => {
+    track("automation_disable_button", {
+      backend_kind: backendKind,
+      automation_id: automationId,
+      automation_type: automationType,
+      automation_source: automationSource,
+      automation_template_id: automationTemplateId,
+      disablement_id: disablementId,
+    });
+  };
+
+  const trackAutomationDisableFeedback = ({
+    backendKind,
+    automationId,
+    automationType,
+    automationSource,
+    automationTemplateId,
+    disablementId,
+    reason,
+    details,
+  }: AutomationDisableAnalyticsContext & AutomationDisableFeedback) => {
+    track("automation_disable_feedback", {
+      backend_kind: backendKind,
+      automation_id: automationId,
+      automation_type: automationType,
+      automation_source: automationSource,
+      automation_template_id: automationTemplateId,
+      disablement_id: disablementId,
+      reason,
+      details,
+    });
   };
 
   const trackAutomationEdited = ({
@@ -418,6 +454,7 @@ export const useTracking = () => {
     trackAutomationExecuted,
     trackAutomationDeleted,
     trackAutomationDisableButton,
+    trackAutomationDisableFeedback,
     trackAutomationEdited,
     trackAutomationExported,
     trackAutomationActivityLogExported,

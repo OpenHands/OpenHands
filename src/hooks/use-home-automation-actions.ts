@@ -96,7 +96,14 @@ export function useHomeAutomationActions(
     setTurnOffConfirmOpen(false);
     if (isDemo) return;
     toggleMutation.mutate(
-      { id: automation.id, enabled: false },
+      {
+        id: automation.id,
+        enabled: false,
+        context: {
+          triggerType: automation.trigger.type,
+          triggerSource: automation.trigger.source,
+        },
+      },
       {
         onError: (error) => {
           displayErrorToast(

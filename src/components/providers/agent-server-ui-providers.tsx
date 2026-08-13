@@ -16,6 +16,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { TelemetryConfig } from "#/services/telemetry";
 import { TelemetryProvider } from "./telemetry-provider";
+import { AutomationDisableFeedbackProvider } from "./automation-disable-feedback-provider";
 import {
   AgentServerUIRoot,
   type AgentServerUIRootProps,
@@ -96,7 +97,11 @@ export function AgentServerUIProviders({
         }
       : false;
   const content = (
-    <TelemetryProvider config={posthogConfig}>{children}</TelemetryProvider>
+    <TelemetryProvider config={posthogConfig}>
+      <AutomationDisableFeedbackProvider>
+        {children}
+      </AutomationDisableFeedbackProvider>
+    </TelemetryProvider>
   );
 
   const wrappedContent = withStyleRoot ? (
