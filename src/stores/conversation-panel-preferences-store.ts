@@ -33,6 +33,12 @@ interface ConversationPanelPreferencesState {
   automationFilterMode: AutomationFilterMode;
   selectedAutomationNames: string[];
   selectedTagFacets: string[];
+  /**
+   * Whole-bar collapse for the filter bar (distinct from the bar's own
+   * ephemeral two-row clip). Persisted so narrow-screen users who tuck the
+   * bar away keep the real estate across reloads.
+   */
+  filterBarCollapsed: boolean;
   groupFolderOrder: string[];
 }
 
@@ -64,6 +70,8 @@ interface ConversationPanelPreferencesActions {
   /** Clears both filter selections and returns automation mode to `all`. */
   clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
+  setFilterBarCollapsed: (value: boolean) => void;
+  toggleFilterBarCollapsed: () => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -83,6 +91,7 @@ const initialState: ConversationPanelPreferencesState = {
   automationFilterMode: "all",
   selectedAutomationNames: [],
   selectedTagFacets: [],
+  filterBarCollapsed: false,
   groupFolderOrder: [],
 };
 
@@ -184,6 +193,11 @@ export const useConversationPanelPreferencesStore =
           })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
+
+        setFilterBarCollapsed: (value) =>
+          set(() => ({ filterBarCollapsed: value })),
+        toggleFilterBarCollapsed: () =>
+          set((state) => ({ filterBarCollapsed: !state.filterBarCollapsed })),
       }),
       {
         name: "conversation-panel-preferences",
@@ -202,6 +216,7 @@ export const useConversationPanelPreferencesStore =
           automationFilterMode: state.automationFilterMode,
           selectedAutomationNames: state.selectedAutomationNames,
           selectedTagFacets: state.selectedTagFacets,
+          filterBarCollapsed: state.filterBarCollapsed,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

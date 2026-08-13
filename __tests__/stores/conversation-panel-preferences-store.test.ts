@@ -76,6 +76,7 @@ describe("conversation-panel-preferences store", () => {
     expect(Object.keys(persisted.state).sort()).toEqual([
       "automationFilterMode",
       "conversationSort",
+      "filterBarCollapsed",
       "groupFolderOrder",
       "organizeMode",
       "selectedAutomationNames",
@@ -88,6 +89,22 @@ describe("conversation-panel-preferences store", () => {
       "showTagsMetadata",
       "threadScope",
     ]);
+  });
+
+  it("toggles the filter-bar collapse and persists it to localStorage", () => {
+    useConversationPanelPreferencesStore.getState().toggleFilterBarCollapsed();
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
+    );
+    expect(persisted.state.filterBarCollapsed).toBe(true);
+
+    useConversationPanelPreferencesStore
+      .getState()
+      .setFilterBarCollapsed(false);
+    expect(
+      useConversationPanelPreferencesStore.getState().filterBarCollapsed,
+    ).toBe(false);
   });
 
   it("exposes setters and a toggler for the LLM-profiles preference", () => {

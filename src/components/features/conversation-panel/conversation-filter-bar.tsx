@@ -1,6 +1,14 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Bot, ChevronDown, ChevronUp, Tag, X } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUp,
+  ChevronUp,
+  Tag,
+  X,
+} from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import {
@@ -18,6 +26,13 @@ export interface ConversationFilterBarProps {
   selectedAutomationNames: string[];
   onToggleAutomationName: (name: string) => void;
   onClearAll: () => void;
+  /**
+   * Persisted whole-bar collapse (panel-preferences store). Distinct from the
+   * ephemeral two-row clip above: collapsed renders a one-line summary so
+   * narrow-screen users can reclaim the vertical space across reloads.
+   */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 /**
@@ -41,6 +56,8 @@ export function ConversationFilterBar(
     selectedAutomationNames,
     onToggleAutomationName,
     onClearAll,
+    collapsed,
+    onToggleCollapsed,
   } = props;
 
   const { t } = useTranslation("openhands");
@@ -76,13 +93,56 @@ export function ConversationFilterBar(
 
   // The bar carries no useful state when there is nothing to show and nothing
   // selected — keep the DOM empty so it doesn't take up vertical space above
-  // the conversation list.
+  // the conversation list. This check comes before the collapsed branch: a
+  // collapsed "Filters" summary that expands into an empty bar would be pure
+  // noise.
   if (
     tagFacets.length === 0 &&
     automationFacets.length === 0 &&
     !hasSelection
   ) {
     return null;
+  }
+
+  // Collapsed: one-line summary. Kept after the measure effect above so the
+  // hook count never changes when the bar tucks away. The summary still
+  // surfaces an active-selection count — a hidden filter must never silently
+  // narrow the list.
+  if (collapsed) {
+    const activeCount =
+      selectedTagFacets.length + selectedAutomationNames.length;
+    return (
+      <div
+        data-testid="conversation-filter-bar"
+        className="flex w-full min-w-0 items-center px-1 py-1"
+      >
+        <button
+          type="button"
+          data-testid="expand-filter-bar"
+          aria-expanded={false}
+          aria-label={t(I18nKey.CONVERSATION_PANEL$SHOW_FILTER_BAR)}
+          onClick={onToggleCollapsed}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md border px-1.5 py-px",
+            "text-[10px] leading-4 transition-colors",
+            "border-[var(--oh-border-subtle)] text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-[var(--oh-foreground)]",
+          )}
+        >
+          <ChevronRight aria-hidden className="h-3 w-3 shrink-0" />
+          <span>{t(I18nKey.CONVERSATION_PANEL$FILTERS_TITLE)}</span>
+          {hasSelection ? (
+            <span
+              data-testid="filter-bar-active-count"
+              className="text-[var(--oh-accent)]"
+            >
+              {t(I18nKey.CONVERSATION_PANEL$ACTIVE_FILTERS, {
+                count: activeCount,
+              })}
+            </span>
+          ) : null}
+        </button>
+      </div>
+    );
   }
 
   // Render every chip every render; CSS clips the visible row when collapsed.
@@ -204,6 +264,20 @@ export function ConversationFilterBar(
             )}
           </button>
         ) : null}
+        <button
+          type="button"
+          data-testid="collapse-filter-bar"
+          aria-label={t(I18nKey.CONVERSATION_PANEL$HIDE_FILTER_BAR)}
+          title={t(I18nKey.CONVERSATION_PANEL$HIDE_FILTER_BAR)}
+          onClick={onToggleCollapsed}
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded-md border px-1.5 py-px",
+            "text-[10px] leading-4 transition-colors",
+            "border-[var(--oh-border-subtle)] text-[var(--oh-muted)] hover:bg-[var(--oh-surface-raised)] hover:text-[var(--oh-foreground)]",
+          )}
+        >
+          <ChevronsUp aria-hidden className="h-3 w-3 shrink-0" />
+        </button>
       </div>
     </div>
   );

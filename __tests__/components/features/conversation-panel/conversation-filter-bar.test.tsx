@@ -14,6 +14,8 @@ function renderBar(overrides: Partial<ConversationFilterBarProps> = {}) {
     selectedAutomationNames: [],
     onToggleAutomationName: vi.fn(),
     onClearAll: vi.fn(),
+    collapsed: false,
+    onToggleCollapsed: vi.fn(),
     ...overrides,
   };
   render(<ConversationFilterBar {...props} />);
@@ -139,11 +141,81 @@ describe("ConversationFilterBar", () => {
       selectedAutomationNames: [],
       onToggleAutomationName: vi.fn(),
       onClearAll: vi.fn(),
+      collapsed: false,
+      onToggleCollapsed: vi.fn(),
     };
     const { rerender } = render(<ConversationFilterBar {...props} />);
     expect(screen.queryByTestId("conversation-filter-bar")).toBeNull();
 
     rerender(<ConversationFilterBar {...props} tagFacets={["work="]} />);
     expect(screen.getByTestId("conversation-filter-bar")).toBeInTheDocument();
+  });
+
+  describe("persisted whole-bar collapse", () => {
+    // The persisted collapse tucks the whole bar behind a one-line summary
+    // (narrow-screen real estate). Distinct from the ephemeral two-row clip:
+    // the summary still surfaces an active-selection count so a hidden filter
+    // never silently narrows the list.
+    it("collapsed renders a one-line summary instead of chips", () => {
+      renderBar({
+        tagFacets: ["work=", "owner=alice"],
+        automationFacets: ["Nightly Audit"],
+        collapsed: true,
+      });
+
+      expect(screen.getByTestId("expand-filter-bar")).toBeInTheDocument();
+      expect(screen.getByTestId("expand-filter-bar")).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+      expect(screen.queryByTestId("filter-chip-tag-work=")).toBeNull();
+      // Nothing selected -> no active-count badge.
+      expect(screen.queryByTestId("filter-bar-active-count")).toBeNull();
+    });
+
+    it("collapsed summary shows the active-selection count", () => {
+      renderBar({
+        tagFacets: ["work=", "owner=alice"],
+        selectedTagFacets: ["owner=alice"],
+        automationFacets: ["Nightly Audit"],
+        selectedAutomationNames: ["Nightly Audit"],
+        collapsed: true,
+      });
+
+      // 1 tag + 1 automation = 2 active; the mocked t drops interpolation,
+      // so the assertion is on the badge's presence and key text.
+      expect(screen.getByTestId("filter-bar-active-count")).toHaveTextContent(
+        "CONVERSATION_PANEL$ACTIVE_FILTERS",
+      );
+    });
+
+    it("collapsed with no facets and no selection still renders null", () => {
+      renderBar({ collapsed: true });
+
+      expect(screen.queryByTestId("conversation-filter-bar")).toBeNull();
+    });
+
+    it("clicking the summary calls onToggleCollapsed", async () => {
+      const user = userEvent.setup();
+      const props = renderBar({ tagFacets: ["work="], collapsed: true });
+
+      await user.click(screen.getByTestId("expand-filter-bar"));
+
+      expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+    });
+
+    it("expanded bar offers a collapse button that calls onToggleCollapsed", async () => {
+      const user = userEvent.setup();
+      const props = renderBar({ tagFacets: ["work="] });
+
+      const collapse = screen.getByTestId("collapse-filter-bar");
+      expect(collapse).toHaveAttribute(
+        "aria-label",
+        "CONVERSATION_PANEL$HIDE_FILTER_BAR",
+      );
+      await user.click(collapse);
+
+      expect(props.onToggleCollapsed).toHaveBeenCalledTimes(1);
+    });
   });
 });

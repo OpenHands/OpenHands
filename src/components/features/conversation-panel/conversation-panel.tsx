@@ -152,6 +152,12 @@ export function ConversationPanel({
   const toggleShowTagsMetadata = useConversationPanelPreferencesStore(
     (state) => state.toggleShowTagsMetadata,
   );
+  const filterBarCollapsed = useConversationPanelPreferencesStore(
+    (state) => state.filterBarCollapsed,
+  );
+  const toggleFilterBarCollapsed = useConversationPanelPreferencesStore(
+    (state) => state.toggleFilterBarCollapsed,
+  );
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
@@ -1167,6 +1173,8 @@ export function ConversationPanel({
           selectedAutomationNames={selectedAutomationNames}
           onToggleAutomationName={toggleAutomationNameAndMode}
           onClearAll={clearFilterSelections}
+          collapsed={filterBarCollapsed}
+          onToggleCollapsed={toggleFilterBarCollapsed}
         />
       )}
 
