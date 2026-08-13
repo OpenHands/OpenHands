@@ -227,3 +227,34 @@ def test_extract_sections():
     assert "title two" in sections
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
+
+def test_extract_sections_ignores_heading_inside_fence():
+    body = """### Notes
+The template says:
+
+```markdown
+### Acceptance Criteria
+- [ ] Add criteria here
+```
+"""
+    sections = extract_sections(body)
+    assert set(sections) == {"notes"}
+
+def test_fenced_heading_does_not_truncate_actual_behavior():
+    body = """### Actual Behavior
+I ran `npm run dev` and saw:
+
+~~~text
+### Error detail
+something went wrong
+~~~
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] The bug is fixed
+"""
+    sections = extract_sections(body)
+    assert "error detail" not in sections
+    assert "user-attachments" in sections["actual behavior"]
+    assert evaluate_readiness(body, [BUG_LABEL]).ready

@@ -33,6 +33,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from markdown_sections import find_headings
+
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
@@ -107,7 +109,7 @@ def extract_sections(body: str) -> dict[str, str]:
     form) may still use `###` headings; if they don't, the map is empty and the
     caller falls back to whole-body checks.
     """
-    matches = list(HEADING_RE.finditer(body))
+    matches = find_headings(body, HEADING_RE)
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()

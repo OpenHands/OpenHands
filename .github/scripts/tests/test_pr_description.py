@@ -8,6 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from check_pr_description import (
+    extract_sections,
     is_frontend_file,
     touches_frontend,
     extract_linked_issue_numbers,
@@ -18,6 +19,37 @@ from check_pr_description import (
     ENHANCEMENT_LABEL,
     READY_FOR_DEV_LABEL,
 )
+
+
+def test_extract_sections_ignores_heading_inside_fence():
+    body = """## Summary
+The template says:
+
+```markdown
+## How to Test
+Describe testing here
+```
+"""
+    assert set(extract_sections(body)) == {"Summary"}
+
+
+def test_fenced_heading_does_not_truncate_how_to_test():
+    body = """## How to Test
+Run the focused checker tests.
+
+~~~text
+## Example output
+all tests passed
+~~~
+
+Then run the reproduction script.
+
+## Issue Number
+Fixes #16553
+"""
+    sections = extract_sections(body)
+    assert "Example output" not in sections
+    assert "Then run the reproduction script." in sections["How to Test"]
 
 # ---------------------------------------------------------------------------
 # extract_linked_issue_numbers
