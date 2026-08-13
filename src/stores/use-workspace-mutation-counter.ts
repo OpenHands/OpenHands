@@ -4,21 +4,20 @@ import { create } from "zustand";
  * Monotonic counter that ticks every time the agent commits a file-editor
  * mutation in the workspace. Serves two purposes:
  *
- *   1. It's part of the {@link useWorkspaceFileContent} query key, so the
- *      hook refetches the selected file's body (used for text decoding /
- *      binary classification) after each edit even when the selected path
- *      hasn't moved.
- *   2. It's appended as a `?v=<count>` cache-buster to the static
+ *   1. It drives the `?v=<count>` cache-buster appended to the static
  *      workspace fileserver URLs used by `<iframe src>` / `<img src>` for
  *      the rich preview, so the browser re-requests a fresh copy after
- *      each edit — important because the rendered HTML may reference
+ *      each edit. This matters because the rendered HTML may reference
  *      sibling assets (CSS, images) that the user can't see directly but
- *      expects to reflect the latest version of the workspace.
+ *      expects to reflect the latest workspace state.
+ *   2. It is still bumped by {@link useAutoRefreshFilesOnEdit}, which
+ *      invalidates the `workspace-file-content` query to refresh the decoded
+ *      file body. Keeping the counter out of the query key means a rapid
+ *      series of edits doesn't repeatedly reset the selected file's query
+ *      (and its `isLoading` state) while a fetch is still in flight.
  *
  * Consumers:
  *   - {@link useAutoRefreshFilesOnEdit} bumps this on each mutation event.
- *   - {@link useWorkspaceFileContent} reads the count via its query key so
- *     the hook refetches after each edit.
  *   - `FileContentViewer` / files-tab "open in new tab" link append the
  *     count to the static URL via {@link withWorkspaceCacheBuster}.
  */

@@ -50,7 +50,7 @@ vi.mock("#/api/cloud/conversation-service.api", () => ({
 
 const fetchMock = vi.fn();
 
-function makeWrapper() {
+function makeClientAndWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -63,6 +63,11 @@ function makeWrapper() {
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
   };
+  return { client, Wrapper };
+}
+
+function makeWrapper() {
+  const { Wrapper } = makeClientAndWrapper();
   return Wrapper;
 }
 
@@ -193,7 +198,7 @@ describe("useWorkspaceFileContent", () => {
     });
   });
 
-  it("refetches text content after a workspace mutation tick", async () => {
+  it("refetches text content when the workspace-file-content query is invalidated", async () => {
     fetchMock
       .mockResolvedValueOnce({
         ok: true,
@@ -206,19 +211,45 @@ describe("useWorkspaceFileContent", () => {
         arrayBuffer: () => Promise.resolve(arrayBufferFromString("second")),
       });
 
+    const { client, Wrapper } = makeClientAndWrapper();
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("docs/readme.md"),
+      {
+        wrapper: Wrapper,
+      },
+    );
+
+    await waitFor(() => expect(result.current.data?.text).toBe("first"));
+
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["workspace-file-content"] });
+    });
+
+    await waitFor(() => expect(result.current.data?.text).toBe("second"));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reset the selected file query when the workspace mutation counter bumps", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      arrayBuffer: () => Promise.resolve(arrayBufferFromString("# Hello")),
+    });
+
     const { result } = renderHook(
       () => useWorkspaceFileContent("docs/readme.md"),
       { wrapper: makeWrapper() },
     );
 
-    await waitFor(() => expect(result.current.data?.text).toBe("first"));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     act(() => {
       useWorkspaceMutationCounter.getState().bump();
     });
 
-    await waitFor(() => expect(result.current.data?.text).toBe("second"));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.data?.text).toBe("# Hello");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not start a file request before a path is selected", async () => {

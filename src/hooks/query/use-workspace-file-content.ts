@@ -8,7 +8,6 @@ import {
   joinWorkspaceUrl,
   useWorkspaceSession,
 } from "#/hooks/query/use-workspace-session";
-import { useWorkspaceMutationCounter } from "#/stores/use-workspace-mutation-counter";
 
 // Magic-number sniff for common binary formats we can render via iframe.
 const IMAGE_EXTENSIONS = new Set([
@@ -141,15 +140,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export function useWorkspaceFileContent(relativePath: string | null) {
   const { data: conversation } = useActiveConversation();
   const { data: workspaceSession } = useWorkspaceSession();
-  // Bump on every agent-side file mutation so the query refetches the
-  // currently-selected file's body even when the *path* hasn't changed.
-  // The iframe / <img> cache-busting for the rich preview is handled at
-  // the consumer (FileContentViewer / files-tab) by appending the same
-  // counter to the staticUrl, so a single tick refreshes both the
-  // decoded text and the iframe-rendered HTML's sibling assets.
-  const workspaceMutationCount = useWorkspaceMutationCounter(
-    (state) => state.count,
-  );
 
   const conversationId = conversation?.id;
   const conversationUrl = conversation?.conversation_url;
@@ -179,7 +169,6 @@ export function useWorkspaceFileContent(relativePath: string | null) {
       isCloud ? "cloud" : baseUrl,
       relativePath,
       absoluteFilePath,
-      workspaceMutationCount,
     ],
     queryFn: async () => {
       if (!relativePath) throw new Error("No path");
