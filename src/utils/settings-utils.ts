@@ -1,6 +1,14 @@
 import { WebClientFeatureFlags } from "#/api/option-service/option.types";
 import { Settings, SettingsValue } from "#/types/settings";
 import { getProviderId } from "#/utils/map-provider";
+import type { SettingsContext } from "#/settings/registry";
+import {
+  getSettingsNavEntries,
+  getRegisteredSettingsNavPaths,
+} from "#/settings/nav-registry";
+// Ensure the built-in OSS pages are registered before these helpers read the
+// nav registry (they can run outside any React tree, e.g. in route loaders).
+import "#/settings/register-settings-nav";
 
 const extractBasicFormData = (formData: FormData) => {
   const providerDisplay = formData.get("llm-provider-input")?.toString();
@@ -49,30 +57,41 @@ export const extractSettings = (
   };
 };
 
+// These route helpers run outside React (route loaders, redirects), so they
+// take feature flags directly rather than reading the React
+// `useSettingsContext`. They build the same fact set the hook does, defaulting
+// the facts a loader cannot know (backend kind / org) — no built-in page gates
+// on those, so the defaults never change the result.
+const featureFlagsToContext = (
+  featureFlags: WebClientFeatureFlags | undefined,
+): SettingsContext => ({
+  backendKind: "local",
+  orgId: null,
+  featureFlags,
+});
+
 export function isSettingsPageHidden(
   path: string,
   featureFlags: WebClientFeatureFlags | undefined,
 ): boolean {
-  if (featureFlags?.hide_llm_settings && path === "/settings/llm") return true;
-  return false;
+  const context = featureFlagsToContext(featureFlags);
+  const visible = new Set(
+    getSettingsNavEntries(context).map((entry) => entry.to),
+  );
+  const registered = new Set(getRegisteredSettingsNavPaths());
+  // Only registered pages can be hidden; an unknown path is never "hidden".
+  return registered.has(path) && !visible.has(path);
 }
 
 export function getFirstAvailablePath(
   featureFlags: WebClientFeatureFlags | undefined,
 ): string | null {
-  // ``/settings/agents`` (the Agent Profile library — the "Agent" page) always
-  // wins: it is where the agent is defined (OpenHands / ACP, via the active
-  // profile) and is always available regardless of feature flags. Landing here
-  // keeps routing simple — every user lands where the agent is chosen, and
-  // the LLM page is one nav-click away.
-  const fallbackOrder = [
-    { path: "/settings/agents", hidden: false },
-    { path: "/settings/llm", hidden: !!featureFlags?.hide_llm_settings },
-    { path: "/settings", hidden: !!featureFlags?.hide_llm_settings },
-    { path: "/settings/app", hidden: false },
-    { path: "/settings/secrets", hidden: false },
-  ];
-
-  const firstAvailable = fallbackOrder.find((item) => !item.hidden);
-  return firstAvailable?.path ?? null;
+  // The first visible page in registry order. ``/settings/agents`` (the Agent
+  // Profile library) is the lowest-ordered built-in and is always visible, so
+  // it wins by default — every user lands where the agent is chosen, and the
+  // LLM page is one nav-click away.
+  const [firstVisible] = getSettingsNavEntries(
+    featureFlagsToContext(featureFlags),
+  );
+  return firstVisible?.to ?? null;
 }
