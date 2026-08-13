@@ -32,6 +32,8 @@ import re
 import sys
 from pathlib import Path
 
+from _markdown import strip_code_fences
+
 
 # Reject placeholders while allowing a concise human-written sentence.
 MIN_HUMAN_NOTE_CHARS = 20
@@ -173,7 +175,12 @@ def touches_frontend(files: list[str]) -> bool:
 
 
 def has_screenshot_or_video(body: str) -> bool:
-    """Return True if the PR body embeds a screenshot or video."""
+    """Return True if the PR body embeds a screenshot or video.
+
+    Fenced blocks are stripped first: a template example showing what an embed
+    looks like is not evidence that the change was tested.
+    """
+    body = strip_code_fences(body)
     if MARKDOWN_IMAGE_RE.search(body):
         return True
     if HTML_IMG_RE.search(body):

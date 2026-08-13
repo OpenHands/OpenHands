@@ -227,3 +227,112 @@ def test_extract_sections():
     assert "title two" in sections
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
+
+# ---------------------------------------------------------------------------
+# Fenced code blocks are examples, not content
+# ---------------------------------------------------------------------------
+
+FENCED_RUN_METHOD = """Not sure what to write. The template says:
+
+```markdown
+I ran npm run dev and it crashed.
+```
+"""
+
+FENCED_SCREENSHOT = """Here is what an embed looks like:
+
+```markdown
+![screenshot](https://github.com/user-attachments/assets/abc123)
+```
+"""
+
+FENCED_CHECKLIST = """Example criteria:
+
+```markdown
+- [ ] the bug no longer happens
+```
+"""
+
+BUG_BODY_FENCED_ONLY = """### Actual Behavior
+
+I could not figure out what to put here, so here is the example:
+
+```markdown
+Ran npm run dev and saw the crash:
+![screenshot](https://github.com/user-attachments/assets/abc123)
+```
+
+### Acceptance Criteria
+
+The template shows this format:
+
+```markdown
+- [ ] the bug no longer happens
+```
+"""
+
+BUG_BODY_FENCE_PLUS_REAL = """### Actual Behavior
+I ran `npm run dev` and saw this:
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+The template example, for reference:
+
+```markdown
+![screenshot](https://example.com/example.png)
+```
+
+### Acceptance Criteria
+- [ ] Button is centered
+"""
+
+def test_fenced_run_method_does_not_count():
+    assert not references_run_method(FENCED_RUN_METHOD)
+
+def test_fenced_screenshot_does_not_count():
+    assert not has_screenshot_or_video(FENCED_SCREENSHOT)
+
+def test_fenced_checklist_does_not_count():
+    assert not has_checklist_item(FENCED_CHECKLIST)
+
+def test_tilde_fence_does_not_count():
+    assert not references_run_method("~~~\nI ran npm run dev\n~~~\n")
+
+def test_unclosed_fence_runs_to_end_of_text():
+    assert not references_run_method("Example:\n\n```\nI ran npm run dev\n")
+
+def test_long_fence_is_not_closed_by_shorter_inner_fence():
+    body = "~~~~\nshowing a fence:\n```\nI ran npm run dev\n```\n~~~~\n"
+    assert not references_run_method(body)
+
+def test_inline_code_span_still_counts():
+    # A backticked command is a real reproduction step, not a quoted example.
+    assert references_run_method("I ran `npm run dev` and it crashed")
+
+def test_real_content_outside_fence_still_counts():
+    assert references_run_method("I ran npm run dev.\n\n```\nunrelated\n```\n")
+    assert has_screenshot_or_video(
+        "![shot](https://github.com/user-attachments/assets/abc123)\n"
+        "\n```\nunrelated\n```\n"
+    )
+    assert has_checklist_item("- [ ] Real item\n\n```\nunrelated\n```\n")
+
+def test_checklist_after_fence_is_not_swallowed():
+    assert has_checklist_item("```\nexample\n```\n- [ ] Real item\n")
+
+def test_bug_fenced_only_is_not_ready():
+    result = evaluate_readiness(BUG_BODY_FENCED_ONLY, [BUG_LABEL])
+    assert not result.ready
+    assert len(result.reasons) == 3
+
+def test_bug_fence_plus_real_content_is_ready():
+    result = evaluate_readiness(BUG_BODY_FENCE_PLUS_REAL, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+def test_enhancement_fenced_checklist_is_not_ready():
+    body = (
+        "### Desired Behavior\nI want the button centered.\n\n"
+        "### Acceptance Criteria\nLike this:\n\n```markdown\n- [ ] centered\n```\n"
+    )
+    result = evaluate_readiness(body, [ENHANCEMENT_LABEL])
+    assert not result.ready
