@@ -85,10 +85,9 @@ export function EditConversationTagsModal({
       setErrorKey(I18nKey.CONVERSATION$TAG_KEY_DUPLICATE);
       return;
     }
-    if (
-      value.length === 0 ||
-      value.length > CONVERSATION_TAG_VALUE_MAX_LENGTH
-    ) {
+    // The value is optional: an empty value is a bare tag — stored as "" (the
+    // backend validator allows it) and rendered as just the key.
+    if (value.length > CONVERSATION_TAG_VALUE_MAX_LENGTH) {
       setErrorKey(I18nKey.CONVERSATION$TAG_VALUE_INVALID);
       return;
     }
@@ -96,6 +95,13 @@ export function EditConversationTagsModal({
     setNewKey("");
     setNewValue("");
     setErrorKey(null);
+  };
+
+  const handleInputKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleAdd();
+    }
   };
 
   const handleRemove = (key: string) => {
@@ -140,7 +146,7 @@ export function EditConversationTagsModal({
                   data-testid={`edit-tag-row-${row.key}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-xs text-white">
-                    {row.key}={row.value}
+                    {row.value ? `${row.key}=${row.value}` : row.key}
                   </span>
                   <button
                     type="button"
@@ -164,6 +170,7 @@ export function EditConversationTagsModal({
               aria-label={t(I18nKey.CONVERSATION$TAG_KEY_PLACEHOLDER)}
               data-testid="new-tag-key-input"
               onChange={(event) => setNewKey(event.target.value)}
+              onKeyDown={handleInputKeyDown}
               className="w-28 shrink-0 rounded-md border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-[var(--oh-muted)]"
             />
             <input
@@ -173,6 +180,7 @@ export function EditConversationTagsModal({
               aria-label={t(I18nKey.CONVERSATION$TAG_VALUE_PLACEHOLDER)}
               data-testid="new-tag-value-input"
               onChange={(event) => setNewValue(event.target.value)}
+              onKeyDown={handleInputKeyDown}
               className="min-w-0 flex-1 rounded-md border border-[var(--oh-border)] bg-base-secondary px-2 py-1 text-xs text-white placeholder:text-[var(--oh-muted)]"
             />
             <BrandButton

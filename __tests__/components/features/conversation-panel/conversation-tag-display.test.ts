@@ -203,6 +203,10 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("owner", t)).toBe("Owner");
   });
 
+  it("shows the label alone for bare tags (empty value)", () => {
+    expect(formatConversationTagTooltip("work", "", t)).toBe("Work");
+  });
+
   it("labels origin and source by their own names, not Git", () => {
     expect(getConversationTagLabel("origin", t)).toBe("Origin");
     expect(getConversationTagLabel("source", t)).toBe("Source");

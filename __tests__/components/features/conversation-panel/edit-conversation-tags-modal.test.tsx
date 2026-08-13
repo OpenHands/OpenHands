@@ -99,7 +99,7 @@ describe("EditConversationTagsModal", () => {
     expect(onConfirm).toHaveBeenCalledWith({});
   });
 
-  it("blocks reserved keys and out-of-range values", async () => {
+  it("blocks reserved keys and over-long values", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <EditConversationTagsModal
@@ -117,16 +117,9 @@ describe("EditConversationTagsModal", () => {
       "CONVERSATION$TAG_KEY_RESERVED",
     );
 
-    // Empty value after trimming.
+    // Value over the 256-char backend cap.
     await user.clear(screen.getByTestId("new-tag-key-input"));
     await user.type(screen.getByTestId("new-tag-key-input"), "owner");
-    await user.clear(screen.getByTestId("new-tag-value-input"));
-    await user.click(screen.getByTestId("add-tag-button"));
-    expect(screen.getByTestId("edit-tags-error")).toHaveTextContent(
-      "CONVERSATION$TAG_VALUE_INVALID",
-    );
-
-    // Value over the 256-char backend cap.
     await user.type(
       screen.getByTestId("new-tag-value-input"),
       "v".repeat(257),
@@ -137,5 +130,47 @@ describe("EditConversationTagsModal", () => {
     );
 
     expect(screen.queryByTestId("edit-tags-rows")).not.toBeInTheDocument();
+  });
+
+  it("treats an empty value as a bare tag and renders just the key", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("new-tag-key-input"), "work");
+    await user.click(screen.getByTestId("add-tag-button"));
+
+    const row = screen.getByTestId("edit-tag-row-work");
+    expect(row).toHaveTextContent("work");
+    expect(row).not.toHaveTextContent("=");
+
+    await user.click(screen.getByTestId("confirm-button"));
+    expect(onConfirm).toHaveBeenCalledWith({ work: "" });
+  });
+
+  it("adds the tag when Enter is pressed in either input", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // Enter in the value input.
+    await user.type(screen.getByTestId("new-tag-key-input"), "owner");
+    await user.type(screen.getByTestId("new-tag-value-input"), "alice{Enter}");
+    expect(screen.getByTestId("edit-tag-row-owner")).toBeInTheDocument();
+
+    // Enter in the key input (bare tag).
+    await user.type(screen.getByTestId("new-tag-key-input"), "work{Enter}");
+    expect(screen.getByTestId("edit-tag-row-work")).toBeInTheDocument();
   });
 });

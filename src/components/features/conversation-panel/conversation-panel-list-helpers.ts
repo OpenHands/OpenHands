@@ -255,6 +255,15 @@ export function collectTagFacets(
 }
 
 /**
+ * Display form of a stored facet: a bare tag (empty value, stored as `key=`)
+ * renders as just the key. Matching keeps the raw `key=value` form — this is
+ * label-only.
+ */
+export function formatTagFacetLabel(facet: string): string {
+  return facet.endsWith("=") ? facet.slice(0, -1) : facet;
+}
+
+/**
  * Union semantics: a conversation matches when it carries ANY selected
  * facet, mirroring the automation multi-select. An empty selection — or one
  * that no longer intersects the available facets (tags edited away, stale

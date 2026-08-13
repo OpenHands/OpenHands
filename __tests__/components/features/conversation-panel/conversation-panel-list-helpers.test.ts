@@ -5,6 +5,7 @@ import {
   applyTagConversationFilter,
   collectAutomationNameFacets,
   collectTagFacets,
+  formatTagFacetLabel,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
   groupConversations,
@@ -747,6 +748,11 @@ describe("conversation-panel-list-helpers", () => {
       "owner=alice",
       "project=fracture",
     ]);
+  });
+
+  it("formats bare-tag facets (empty value) as just the key", () => {
+    expect(formatTagFacetLabel("work=")).toBe("work");
+    expect(formatTagFacetLabel("project=fracture")).toBe("project=fracture");
   });
 
   const tagFilterFixtures: AppConversation[] = [

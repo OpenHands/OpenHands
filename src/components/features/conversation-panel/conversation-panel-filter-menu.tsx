@@ -28,6 +28,7 @@ import {
 } from "#/utils/dropdown-classes";
 import {
   UNNAMED_AUTOMATION_FACET,
+  formatTagFacetLabel,
   type AutomationFilterMode,
   type ConversationSortField,
   type OrganizeMode,
@@ -357,7 +358,7 @@ export function ConversationPanelFilterMenu({
                 <MenuRow
                   key={facet}
                   icon={Tag}
-                  label={facet}
+                  label={formatTagFacetLabel(facet)}
                   selected={selectedTagFacets.includes(facet)}
                   testId={`tag-filter-${facet}`}
                   // Multi-select facet rows keep the menu open so several
