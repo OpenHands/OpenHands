@@ -21,11 +21,14 @@ export function useGitSyncStatus(options: UseGitSyncStatusOptions = {}) {
     staleTime: 10 * 1000, // 10 seconds
     enabled,
     refetchInterval,
-    // An automation backend without the git-sync API answers 404 forever --
-    // retrying only delays the "unsupported backend" state the page renders
-    // for it.
+    // Only a request that never got an answer is worth repeating. A 404 means
+    // the backend has no git-sync API and will answer the same forever, and an
+    // answered failure has already cost the service's own timeout: a saturated
+    // automation service replies 500 after a 30s connection-pool timeout, so
+    // three retries plus backoff sat the page in its skeleton for about two
+    // minutes before showing the error panel it could have shown at once.
     retry: (failureCount, error) =>
-      getErrorStatus(error) !== 404 && failureCount < 3,
+      getErrorStatus(error) === undefined && failureCount < 2,
     // The page turns every failure into a state of its own (unsupported
     // backend, or the error panel with Retry), so the global query toast
     // would only add raw axios text on top of it.

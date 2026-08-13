@@ -50,7 +50,10 @@ const baseStatus: GitSyncStatus = {
 
 function createHarness() {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    // `retry` is the default for queries that don't set their own; the hooks
+    // under test do, so `retryDelay` is what matters here -- without it the
+    // real exponential backoff would make a retry test wait a second.
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   });
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -149,5 +152,36 @@ describe("useGitSyncStatus", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(AutomationService.getGitSyncStatus).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression: this retried anything that wasn't a 404. The automation
+  // service answers 500 only after its own 30s connection-pool timeout, so
+  // three retries plus backoff held the page's skeleton for about two minutes
+  // instead of showing the error panel with its Retry button straight away.
+  it("does not retry an answered failure", async () => {
+    vi.mocked(AutomationService.getGitSyncStatus).mockRejectedValue({
+      status: 500,
+    });
+    const { wrapper } = createHarness();
+
+    const { result } = renderHook(() => useGitSyncStatus(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(AutomationService.getGitSyncStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a request that never got an answer", async () => {
+    // No status: the request never reached the service, so repeating it is
+    // cheap and can actually succeed.
+    vi.mocked(AutomationService.getGitSyncStatus)
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValue(baseStatus);
+    const { wrapper } = createHarness();
+
+    const { result } = renderHook(() => useGitSyncStatus(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(AutomationService.getGitSyncStatus).toHaveBeenCalledTimes(2);
+    expect(result.current.data).toEqual(baseStatus);
   });
 });
