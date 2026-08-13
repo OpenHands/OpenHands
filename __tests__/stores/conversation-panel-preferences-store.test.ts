@@ -19,6 +19,7 @@ describe("conversation-panel-preferences store", () => {
     expect(state.threadScope).toBe("all");
     expect(state.automationFilterMode).toBe("all");
     expect(state.selectedAutomationNames).toEqual([]);
+    expect(state.selectedTagFacets).toEqual([]);
   });
 
   it("toggles showOlderConversations and persists the new value to localStorage", () => {
@@ -78,6 +79,7 @@ describe("conversation-panel-preferences store", () => {
       "groupFolderOrder",
       "organizeMode",
       "selectedAutomationNames",
+      "selectedTagFacets",
       "showArchivedConversations",
       "showHoverMetadata",
       "showLlmProfiles",
@@ -139,6 +141,27 @@ describe("conversation-panel-preferences store", () => {
     useConversationPanelPreferencesStore.setState({
       automationFilterMode: "all",
       selectedAutomationNames: [],
+    });
+  });
+
+  it("toggles selected tag facets and persists them to localStorage", () => {
+    const store = useConversationPanelPreferencesStore.getState();
+    store.toggleTagFacet("origin=slack");
+    store.toggleTagFacet("owner=alice");
+    store.toggleTagFacet("origin=slack");
+
+    const next = useConversationPanelPreferencesStore.getState();
+    // Toggling twice removes the facet again; the other selection stays.
+    expect(next.selectedTagFacets).toEqual(["owner=alice"]);
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
+    );
+    expect(persisted.state.selectedTagFacets).toEqual(["owner=alice"]);
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      selectedTagFacets: [],
     });
   });
 

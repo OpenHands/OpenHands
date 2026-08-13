@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  applyTagConversationFilter,
   collectAutomationNameFacets,
+  collectTagFacets,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
   groupConversations,
@@ -713,5 +715,98 @@ describe("conversation-panel-list-helpers", () => {
       knownWorkspaces,
     );
     expect(groups).toHaveLength(0);
+  });
+
+  it("collects distinct user-facing key=value tag facets, sorted A–Z, excluding reserved keys", () => {
+    const conversations: AppConversation[] = [
+      {
+        ...base,
+        id: "t1",
+        title: "t1",
+        tags: {
+          origin: "slack",
+          owner: "alice",
+          // Reserved/internal keys must not surface as facets.
+          acpserver: "claude-code",
+          title: "internal title stamp",
+        },
+      },
+      {
+        ...base,
+        id: "t2",
+        title: "t2",
+        // Duplicate facet (origin=slack again) collapses into one entry.
+        tags: { origin: "slack", project: "fracture" },
+      },
+      // No user tags at all: contributes nothing (no unnamed bucket).
+      { ...base, id: "t3", title: "t3" },
+      { ...base, id: "t4", title: "t4", tags: null },
+    ];
+    expect(collectTagFacets(conversations)).toEqual([
+      "origin=slack",
+      "owner=alice",
+      "project=fracture",
+    ]);
+  });
+
+  const tagFilterFixtures: AppConversation[] = [
+    { ...base, id: "untagged", title: "untagged" },
+    {
+      ...base,
+      id: "slack",
+      title: "slack",
+      tags: { origin: "slack" },
+    },
+    {
+      ...base,
+      id: "alice",
+      title: "alice",
+      tags: { owner: "alice" },
+    },
+    {
+      ...base,
+      id: "both",
+      title: "both",
+      tags: { origin: "slack", owner: "alice" },
+    },
+  ];
+  const tagFilterFacets = ["origin=slack", "owner=alice"];
+
+  it("applies the tag filter with union semantics: any selected facet matches", () => {
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack", "owner=alice"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=slack"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["slack", "both"]);
+  });
+
+  it("leaves the list unfiltered for empty or stale tag selections", () => {
+    // An empty selection is "no tag filter", and a selection that no longer
+    // intersects the available facets (tags edited away, selections persisted
+    // from another backend) self-heals the same way instead of yielding an
+    // unfillable empty list — mirroring the automation filter.
+    expect(
+      applyTagConversationFilter(tagFilterFixtures, [], tagFilterFacets).map(
+        (c) => c.id,
+      ),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
+
+    expect(
+      applyTagConversationFilter(
+        tagFilterFixtures,
+        ["origin=irc"],
+        tagFilterFacets,
+      ).map((c) => c.id),
+    ).toEqual(["untagged", "slack", "alice", "both"]);
   });
 });

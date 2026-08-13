@@ -19,6 +19,8 @@ import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
 import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
+import { useUpdateConversationTags } from "#/hooks/mutation/use-update-conversation-tags";
+import { EditConversationTagsModal } from "./edit-conversation-tags-modal";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -40,7 +42,9 @@ import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-sect
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  applyTagConversationFilter,
   collectAutomationNameFacets,
+  collectTagFacets,
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
   groupConversations,
@@ -108,6 +112,7 @@ export function ConversationPanel({
     React.useState(false);
   const [confirmArchiveModalVisible, setConfirmArchiveModalVisible] =
     React.useState(false);
+  const [editTagsModalVisible, setEditTagsModalVisible] = React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
   const [
@@ -181,6 +186,12 @@ export function ConversationPanel({
   );
   const toggleAutomationName = useConversationPanelPreferencesStore(
     (state) => state.toggleAutomationName,
+  );
+  const selectedTagFacets = useConversationPanelPreferencesStore(
+    (state) => state.selectedTagFacets,
+  );
+  const toggleTagFacet = useConversationPanelPreferencesStore(
+    (state) => state.toggleTagFacet,
   );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
@@ -401,6 +412,25 @@ export function ConversationPanel({
     ],
   );
 
+  // Tag facets likewise derive from the unfiltered list so the tag rows in
+  // the filter menu don't vanish while a narrowing selection is active.
+  const tagFacets = React.useMemo(
+    () => collectTagFacets(conversations),
+    [conversations],
+  );
+
+  // The tag filter applies after the automation filter so a conversation
+  // must pass both.
+  const tagFilteredConversations = React.useMemo(
+    () =>
+      applyTagConversationFilter(
+        automationFilteredConversations,
+        selectedTagFacets,
+        tagFacets,
+      ),
+    [automationFilteredConversations, selectedTagFacets, tagFacets],
+  );
+
   const pinnedConversations = React.useMemo(
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
@@ -426,14 +456,15 @@ export function ConversationPanel({
   }, [pinnedIds.length]);
 
   const scopedConversations = React.useMemo(() => {
-    // The pinned section intentionally bypasses the automation filter (same
-    // exemption the thread scope has): a pin is an explicit user override.
+    // The pinned section intentionally bypasses the automation and tag
+    // filters (same exemption the thread scope has): a pin is an explicit
+    // user override.
     const scopeFiltered =
       threadScope === "relevant"
-        ? automationFilteredConversations.filter((c) =>
+        ? tagFilteredConversations.filter((c) =>
             isExecutionActive(c.execution_status),
           )
-        : automationFilteredConversations;
+        : tagFilteredConversations;
 
     // In the expanded panel, pinned conversations should only appear inside
     // the dedicated pinned section (not duplicated in grouped/flat lists).
@@ -442,7 +473,7 @@ export function ConversationPanel({
     }
 
     return filterOutPinnedConversations(scopeFiltered, pinnedIds);
-  }, [automationFilteredConversations, compact, pinnedIds, threadScope]);
+  }, [tagFilteredConversations, compact, pinnedIds, threadScope]);
 
   const { recent: recentScoped, older: olderScoped } = React.useMemo(
     () => partitionByCutoff(scopedConversations),
@@ -566,6 +597,14 @@ export function ConversationPanel({
     conversations.length > 0 &&
     automationFilteredConversations.length === 0;
 
+  // Same attribution for the tag filter: it produced zero rows out of what
+  // the automation filter left behind.
+  const emptyDueToTagFilter =
+    listIsEffectivelyEmpty &&
+    selectedTagFacets.length > 0 &&
+    automationFilteredConversations.length > 0 &&
+    tagFilteredConversations.length === 0;
+
   // Grouped pagination prefers discovering another folder; chronological
   // pagination succeeds when another row appears. Pages that only deepen
   // already-visible folders are not success for the grouped control — the
@@ -674,6 +713,7 @@ export function ConversationPanel({
     useDeleteConversation();
   const { mutate: pauseConversation } = useUnifiedPauseConversation();
   const { mutate: updateConversation } = useUpdateConversation();
+  const { mutate: updateConversationTags } = useUpdateConversationTags();
 
   // The next page of conversations is loaded only via the explicit "Load
   // more" link rendered at the end of the list — there is no scroll-driven
@@ -728,6 +768,31 @@ export function ConversationPanel({
       setSelectedConversationTitle(title);
     },
     [],
+  );
+
+  // Editing tags is a local agent-server affordance: Cloud conversations
+  // don't carry server-side tags (`tags` stays null), so the card leaves
+  // `onEditTags` undefined on Cloud and the menu item never appears there.
+  const handleEditTags = React.useCallback((conversationId: string) => {
+    setEditTagsModalVisible(true);
+    setSelectedConversationId(conversationId);
+  }, []);
+
+  const handleConfirmEditTags = React.useCallback(
+    (mergedTags: Record<string, string>) => {
+      if (!selectedConversationId) {
+        return;
+      }
+      updateConversationTags(
+        { conversationId: selectedConversationId, tags: mergedTags },
+        {
+          onSuccess: () => {
+            displaySuccessToast(t(I18nKey.CONVERSATION$TAGS_UPDATED));
+          },
+        },
+      );
+    },
+    [selectedConversationId, t, updateConversationTags],
   );
 
   // Unarchiving needs no confirmation: it restores a row the user can archive
@@ -932,6 +997,11 @@ export function ConversationPanel({
                   : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
+              onEditTags={
+                activeBackend.kind === "local"
+                  ? () => handleEditTags(conversation.id)
+                  : undefined
+              }
               onChangeTitle={(title) =>
                 handleConversationTitleChange(conversation.id, title)
               }
@@ -973,12 +1043,14 @@ export function ConversationPanel({
     },
     [
       activeBackend.id,
+      activeBackend.kind,
       archivedIdSet,
       compact,
       currentConversationId,
       handleArchiveProject,
       handleConversationTitleChange,
       handleDeleteProject,
+      handleEditTags,
       handleStopConversation,
       handleUnarchiveProject,
       onClose,
@@ -1060,6 +1132,9 @@ export function ConversationPanel({
                 selectedAutomationNames={selectedAutomationNames}
                 onToggleAutomationName={toggleAutomationName}
                 automationNameFacets={automationNameFacets}
+                selectedTagFacets={selectedTagFacets}
+                onToggleTagFacet={toggleTagFacet}
+                tagFacets={tagFacets}
                 showOlderConversations={showOlderConversations}
                 showArchivedConversations={showArchivedConversations}
                 toggleShowArchivedConversations={
@@ -1104,7 +1179,9 @@ export function ConversationPanel({
               {t(
                 emptyDueToAutomationFilter
                   ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
-                  : I18nKey.CONVERSATION$NO_CONVERSATIONS,
+                  : emptyDueToTagFilter
+                    ? I18nKey.CONVERSATION_PANEL$NO_TAG_MATCHES
+                    : I18nKey.CONVERSATION$NO_CONVERSATIONS,
               )}
             </p>
           </div>
@@ -1229,6 +1306,24 @@ export function ConversationPanel({
             setSelectedConversationTitle(null);
           }}
           conversationTitle={selectedConversationTitle ?? undefined}
+        />
+      )}
+
+      {editTagsModalVisible && (
+        <EditConversationTagsModal
+          // Read the complete map (including reserved/internal keys) so the
+          // modal can merge user edits without dropping them; look it up in
+          // the unfiltered loaded set so archived rows still resolve.
+          tags={
+            allLoadedConversations.find(
+              (conversation) => conversation.id === selectedConversationId,
+            )?.tags
+          }
+          onConfirm={(mergedTags) => {
+            handleConfirmEditTags(mergedTags);
+            setEditTagsModalVisible(false);
+          }}
+          onCancel={() => setEditTagsModalVisible(false)}
         />
       )}
 

@@ -56,6 +56,9 @@ export interface ConversationPanelFilterMenuProps {
   selectedAutomationNames: string[];
   onToggleAutomationName: (name: string) => void;
   automationNameFacets: string[];
+  selectedTagFacets: string[];
+  onToggleTagFacet: (facet: string) => void;
+  tagFacets: string[];
   showOlderConversations: boolean;
   showArchivedConversations: boolean;
   toggleShowArchivedConversations: () => void;
@@ -88,6 +91,9 @@ export function ConversationPanelFilterMenu({
   selectedAutomationNames,
   onToggleAutomationName,
   automationNameFacets,
+  selectedTagFacets,
+  onToggleTagFacet,
+  tagFacets,
   showOlderConversations,
   showArchivedConversations,
   toggleShowArchivedConversations,
@@ -187,6 +193,13 @@ export function ConversationPanelFilterMenu({
           <span
             aria-hidden
             data-testid="automation-filter-active-indicator"
+            className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--oh-accent)]"
+          />
+        ) : null}
+        {automationFilterMode === "all" && selectedTagFacets.length > 0 ? (
+          <span
+            aria-hidden
+            data-testid="tag-filter-active-indicator"
             className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-[var(--oh-accent)]"
           />
         ) : null}
@@ -335,6 +348,26 @@ export function ConversationPanelFilterMenu({
                 />
               ))
             : null}
+
+          {tagFacets.length > 0 ? (
+            <>
+              <MenuSeparator />
+              <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$TAGS)}</MenuHeading>
+              {tagFacets.map((facet) => (
+                <MenuRow
+                  key={facet}
+                  icon={Tag}
+                  label={facet}
+                  selected={selectedTagFacets.includes(facet)}
+                  testId={`tag-filter-${facet}`}
+                  // Multi-select facet rows keep the menu open so several
+                  // facets can be toggled in one visit (same behavior as the
+                  // automation name rows above).
+                  onClick={() => onToggleTagFacet(facet)}
+                />
+              ))}
+            </>
+          ) : null}
 
           <MenuSeparator />
           <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$METADATA)}</MenuHeading>

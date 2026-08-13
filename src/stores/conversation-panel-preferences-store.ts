@@ -32,6 +32,7 @@ interface ConversationPanelPreferencesState {
   threadScope: ThreadScope;
   automationFilterMode: AutomationFilterMode;
   selectedAutomationNames: string[];
+  selectedTagFacets: string[];
   groupFolderOrder: string[];
 }
 
@@ -53,6 +54,7 @@ interface ConversationPanelPreferencesActions {
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
   toggleAutomationName: (name: string) => void;
+  toggleTagFacet: (facet: string) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -71,6 +73,7 @@ const initialState: ConversationPanelPreferencesState = {
   threadScope: "all",
   automationFilterMode: "all",
   selectedAutomationNames: [],
+  selectedTagFacets: [],
   groupFolderOrder: [],
 };
 
@@ -137,6 +140,12 @@ export const useConversationPanelPreferencesStore =
                 )
               : [...state.selectedAutomationNames, name],
           })),
+        toggleTagFacet: (facet) =>
+          set((state) => ({
+            selectedTagFacets: state.selectedTagFacets.includes(facet)
+              ? state.selectedTagFacets.filter((existing) => existing !== facet)
+              : [...state.selectedTagFacets, facet],
+          })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
       }),
@@ -156,6 +165,7 @@ export const useConversationPanelPreferencesStore =
           threadScope: state.threadScope,
           automationFilterMode: state.automationFilterMode,
           selectedAutomationNames: state.selectedAutomationNames,
+          selectedTagFacets: state.selectedTagFacets,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

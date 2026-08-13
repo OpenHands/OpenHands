@@ -32,6 +32,9 @@ function renderFilterMenu(
     selectedAutomationNames: [],
     onToggleAutomationName: vi.fn(),
     automationNameFacets: [],
+    selectedTagFacets: [],
+    onToggleTagFacet: vi.fn(),
+    tagFacets: [],
     showOlderConversations: false,
     toggleShowOlderConversations: vi.fn(),
     showArchivedConversations: false,
@@ -161,5 +164,33 @@ describe("ConversationPanelFilterMenu", () => {
       UNNAMED_AUTOMATION_FACET,
     );
     expect(props.setFilterMenuOpen).not.toHaveBeenCalled();
+  });
+
+  it("toggles tag facets without closing the menu and lights the active indicator", async () => {
+    // Arrange: a tag selection lights the trigger's active dot even when the
+    // automation filter is in its default "all" mode.
+    const user = userEvent.setup();
+    const props = renderFilterMenu({
+      tagFacets: ["origin=slack", "owner=alice"],
+      selectedTagFacets: ["origin=slack"],
+    });
+    expect(
+      screen.getByTestId("tag-filter-active-indicator"),
+    ).toBeInTheDocument();
+
+    // Act
+    await user.click(screen.getByTestId("tag-filter-owner=alice"));
+
+    // Assert: the facet toggles while the menu stays open for multi-select.
+    expect(props.onToggleTagFacet).toHaveBeenCalledWith("owner=alice");
+    expect(props.setFilterMenuOpen).not.toHaveBeenCalled();
+  });
+
+  it("omits the tags section when no tag facets are available", () => {
+    // Arrange + Act
+    renderFilterMenu({ tagFacets: [] });
+
+    // Assert
+    expect(screen.queryByTestId(/^tag-filter-/)).not.toBeInTheDocument();
   });
 });

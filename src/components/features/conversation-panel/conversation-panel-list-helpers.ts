@@ -5,6 +5,7 @@ import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
+  getDisplayConversationTags,
 } from "#/api/agent-server-adapter";
 
 export type ConversationSortField = "created" | "updated";
@@ -233,6 +234,49 @@ export function applyAutomationConversationFilter(
       narrowing === null || narrowing.has(getAutomationNameFacet(conversation))
     );
   });
+}
+
+/**
+ * Distinct user-facing `key=value` facets among the given conversations,
+ * sorted A–Z for stable menu order. Reserved/internal tag keys are excluded
+ * via `getDisplayConversationTags`; unlike the automation filter there is no
+ * unnamed bucket — a conversation with no user tags simply yields no facet.
+ */
+export function collectTagFacets(
+  conversations: readonly AppConversation[],
+): string[] {
+  const facets = new Set<string>();
+  for (const conversation of conversations) {
+    for (const [key, value] of getDisplayConversationTags(conversation.tags)) {
+      facets.add(`${key}=${value}`);
+    }
+  }
+  return [...facets].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Union semantics: a conversation matches when it carries ANY selected
+ * facet, mirroring the automation multi-select. An empty selection — or one
+ * that no longer intersects the available facets (tags edited away, stale
+ * selections persisted from another backend) — leaves the list unfiltered
+ * instead of yielding an unfillable empty list.
+ */
+export function applyTagConversationFilter(
+  conversations: readonly AppConversation[],
+  selectedFacets: readonly string[],
+  availableFacets: readonly string[],
+): AppConversation[] {
+  const facetSet = new Set(availableFacets);
+  const effectiveFacets = selectedFacets.filter((facet) => facetSet.has(facet));
+  if (effectiveFacets.length === 0) {
+    return [...conversations];
+  }
+  const narrowing = new Set(effectiveFacets);
+  return conversations.filter((conversation) =>
+    getDisplayConversationTags(conversation.tags).some(([key, value]) =>
+      narrowing.has(`${key}=${value}`),
+    ),
+  );
 }
 
 /** Subset of `useCreateConversation` variables for launching from a group row */

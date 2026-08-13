@@ -35,6 +35,12 @@ interface ConversationCardProps {
   onUnarchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
+  /**
+   * Opens the tag editor for this conversation. Local agent-server backends
+   * only — Cloud conversations don't carry server-side tags, so the panel
+   * leaves this undefined there and the menu item disappears.
+   */
+  onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
   selectedRepository: RepositorySelection | null;
@@ -69,6 +75,7 @@ export function ConversationCard({
   onUnarchive,
   onStop,
   onChangeTitle,
+  onEditTags,
   showOptions,
   title,
   selectedRepository,
@@ -137,6 +144,13 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     setTitleMode("edit");
+    onContextMenuToggle?.(false);
+  };
+
+  const handleEditTags = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onEditTags?.();
     onContextMenuToggle?.(false);
   };
 
@@ -216,6 +230,7 @@ export function ConversationCard({
     onArchive ||
     onUnarchive ||
     onChangeTitle ||
+    onEditTags ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
@@ -298,6 +313,7 @@ export function ConversationCard({
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
+                      onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
@@ -325,6 +341,7 @@ export function ConversationCard({
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
+                  onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
