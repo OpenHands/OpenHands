@@ -1136,7 +1136,7 @@ export function buildStartConversationRequest(
   // Stamp the raw client source tag; the backend maps "agentcanvas" to the
   // "canvas" conversation source in telemetry.
   // A profile launch resolves the ACP server server-side, so don't stamp the
-  // tag from current settings (it may not match the launched profile).
+  // ACP server tag from current settings (it may not match the launched profile).
   if (!options.agentProfileId && acpServerTag) {
     payload.tags = {
       [ACP_SERVER_TAG_KEY]: acpServerTag,
