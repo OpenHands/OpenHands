@@ -8,6 +8,7 @@ import {
   type AutomationRunsResponse,
 } from "#/types/automation";
 import { AUTOMATION_RUNS_QUERY_KEY } from "./use-automation-detail";
+import { automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 
 /**
  * Poll interval while a run is non-terminal. Deliberately slower than the 3s
@@ -52,10 +53,12 @@ export function useLatestAutomationRuns(
         active.orgId,
       ],
       queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          AUTOMATION_RUN_ACTIVITY_LIMIT,
-          0,
+        automationRunRequestsLimiter.run(() =>
+          AutomationService.getAutomationRuns(
+            automation.id,
+            AUTOMATION_RUN_ACTIVITY_LIMIT,
+            0,
+          ),
         ),
       staleTime: 60 * 1000,
       // No retries: the home section settles into its degraded "unknown"
