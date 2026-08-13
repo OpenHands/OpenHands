@@ -937,7 +937,7 @@ export function ConversationPanel({
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
             tags={conversation.tags}
-            showTags={showTagsMetadata}
+            showTags={showTagsMetadata && !filterBarCollapsed}
           />
         );
       }
@@ -1041,7 +1041,11 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               tags={conversation.tags}
-              showTags={showTagsMetadata}
+              // Master collapse: a collapsed filter bar also tucks card tag
+              // chips away to their compact indicator, so one button reclaims
+              // all tag real estate (narrow screens). Per-card expansion via
+              // the indicator still works on top.
+              showTags={showTagsMetadata && !filterBarCollapsed}
               isArchived={isArchived}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
@@ -1070,6 +1074,7 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
+      filterBarCollapsed,
       togglePin,
     ],
   );

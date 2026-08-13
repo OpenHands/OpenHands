@@ -141,6 +141,9 @@ describe("ConversationPanel", () => {
       showArchivedConversations: false,
       automationFilterMode: "all",
       selectedAutomationNames: [],
+      selectedTagFacets: [],
+      showTagsMetadata: false,
+      filterBarCollapsed: false,
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -463,6 +466,54 @@ describe("ConversationPanel", () => {
     ).toBe("only-automations");
     expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
+  });
+
+  it("collapses card tag chips to the compact indicator while the filter bar is collapsed", async () => {
+    // The bar's persisted collapse is the panel-wide tag tuck-away: with the
+    // Tag chips preference on, collapsing the bar drops cards to their compact
+    // indicator; expanding the bar restores the chips.
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Tagged 1",
+          tags: { project: "vault" },
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({
+      showTagsMetadata: true,
+      filterBarCollapsed: true,
+    });
+
+    renderConversationPanel();
+
+    // The bar renders its one-line summary...
+    expect(await screen.findByTestId("expand-filter-bar")).toBeInTheDocument();
+    // ...and the card shows the compact indicator instead of the chip row.
+    expect(
+      await screen.findByTestId("conversation-tags-indicator-1"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-card-tag-chip"),
+    ).not.toBeInTheDocument();
+
+    // Expanding the bar restores the chips (Tag chips preference still on).
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        filterBarCollapsed: false,
+      });
+    });
+    expect(
+      await screen.findByTestId("conversation-card-tag-chip"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-tags-indicator-1"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps load more reachable with the filtered empty message when the automation filter hides every loaded conversation", async () => {
