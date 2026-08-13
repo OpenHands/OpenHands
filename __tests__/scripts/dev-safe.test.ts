@@ -461,20 +461,20 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.40.1",
+      "openhands-agent-server==1.42.1",
       "--with",
-      "openhands-sdk==1.40.1",
+      "openhands-sdk==1.42.1",
       "--with",
-      "openhands-tools==1.40.1",
+      "openhands-tools==1.42.1",
       "--with",
-      "openhands-workspace==1.40.1",
+      "openhands-workspace==1.42.1",
       "--with",
       "agent-client-protocol<0.11",
       "--with",
       "posthog>=6,<7",
       "agent-server",
     ]);
-    expect(cmd.source).toBe("PyPI (1.40.1, default)");
+    expect(cmd.source).toBe("PyPI (1.42.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
