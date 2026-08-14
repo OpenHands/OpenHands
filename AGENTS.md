@@ -19,6 +19,28 @@
 - Primary verification commands: `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 - GitHub automation now includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm/github-actions updates gated by a 7-day cooldown.
 
+## Repository Map — what belongs where
+
+This repo (`OpenHands/OpenHands`) is **only the agent-canvas frontend**. It is one
+piece of a multi-repo system. Before adding code here, check the change belongs in
+*this* repo — several kinds of work belong in a sibling repo instead. When in doubt,
+add a pointer, not a duplicate implementation.
+
+| Repo | Owns | Add code here when… |
+|------|------|---------------------|
+| **`OpenHands/OpenHands`** (this repo) | The React/TypeScript **frontend** (agent-canvas): UI, routes, frontend services in `src/api/` that *consume* backend APIs. | You are changing UI, frontend state, or how the frontend *calls* an existing backend endpoint. |
+| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server**: agents, tools, conversations, events, and the REST/WebSocket **API surface** (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`). | You are adding or changing a backend endpoint, agent/tool behaviour, or server-side logic. New API **endpoints** live here, not in the frontend. |
+| **`OpenHands/typescript-client`** (`@openhands/typescript-client`) | The generated/maintained **TypeScript client** that mirrors the agent-server API. The frontend's *only* sanctioned way to reach the agent-server (see "API Access Rules"). | You are adding client-side **access to an agent-server endpoint** (typed client method, request/response types). API-access code belongs here, **not** re-implemented in this repo. |
+| **`OpenHands/extensions`** (`@openhands/extensions`) | Public **skills, automations, and integrations** (loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, automation, or MCP integration. |
+
+Common mis-placements to avoid:
+
+- **API endpoint access** → belongs in `typescript-client`, then consumed here. Do **not**
+  add raw `axios`/`fetch` endpoint code to the frontend (CI guard:
+  `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
+- **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
+- **Skills / automations / integrations** → belong in `extensions`.
+
 ## PR Description Human Check
 
 The `HUMAN:` section in PR descriptions is reserved for human contributors only.
