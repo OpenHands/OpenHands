@@ -1461,6 +1461,18 @@ function startStaticFrontend(config, staticDir) {
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
+      ...(process.env.OH_MAX_ATTACHMENT_FILE_SIZE_MB
+        ? [
+            "--max-attachment-file-size-mb",
+            process.env.OH_MAX_ATTACHMENT_FILE_SIZE_MB,
+          ]
+        : []),
+      ...(process.env.OH_MAX_ATTACHMENT_TOTAL_SIZE_MB
+        ? [
+            "--max-attachment-total-size-mb",
+            process.env.OH_MAX_ATTACHMENT_TOTAL_SIZE_MB,
+          ]
+        : []),
       // In local mode, inject the API key so the pre-built frontend can
       // authenticate transparently. In public mode, pass --auth-required
       // so the frontend shows the API key entry screen instead.
