@@ -4,6 +4,28 @@ import { getContextFillTone } from "#/components/features/conversation/usage-pan
 const CONTEXT_WINDOW_RING_SIZE = 16;
 const CONTEXT_WINDOW_RING_STROKE = 2;
 
+/**
+ * Opacity of the ring's unfilled track, as a fraction of `--oh-foreground`.
+ *
+ * The track is derived from the foreground rather than pinned to a scale stop.
+ * It carries information (the arc's proportion is only readable against it), so
+ * it is a foreground element, and every stop in the surface family sits close
+ * to the surfaces it delimits. Drawing it with `--oh-border` put it in that
+ * family: it was 1.57:1 against the composer at rest, and the trigger's hover
+ * fill resolves to the same stop, taking it to 1.00:1. No stop in that family
+ * fixes it, and no fixed stop holds across the three palettes in
+ * `color-themes.ts`, whose scales differ.
+ *
+ * Compositing the foreground over whatever the active theme paints keeps the
+ * track between surface and arc by construction rather than by coincidence.
+ * 42% is the value that maximises the worst case across the shipped palettes;
+ * `context-window-ring.test.tsx` asserts it per theme.
+ */
+export const CONTEXT_WINDOW_RING_TRACK_ALPHA = 0.42;
+
+/** Shared by the ring's track and the popover's usage bar, which had the same defect. */
+export const CONTEXT_WINDOW_TRACK_COLOR = `color-mix(in srgb, var(--oh-foreground) ${CONTEXT_WINDOW_RING_TRACK_ALPHA * 100}%, transparent)`;
+
 const TONE_STROKE = {
   neutral: "var(--oh-foreground)",
   warning: "#f59e0b", // amber-500
@@ -38,8 +60,9 @@ export function ContextWindowRing({
         cy={CONTEXT_WINDOW_RING_SIZE / 2}
         r={radius}
         fill="none"
-        stroke="var(--oh-border)"
+        style={{ stroke: CONTEXT_WINDOW_TRACK_COLOR }}
         strokeWidth={CONTEXT_WINDOW_RING_STROKE}
+        data-testid="context-window-ring-track"
       />
       <circle
         cx={CONTEXT_WINDOW_RING_SIZE / 2}
@@ -53,6 +76,7 @@ export function ContextWindowRing({
         strokeDashoffset={dashOffset}
         transform={`rotate(-90 ${CONTEXT_WINDOW_RING_SIZE / 2} ${CONTEXT_WINDOW_RING_SIZE / 2})`}
         className="transition-[stroke-dashoffset,stroke] duration-300"
+        data-testid="context-window-ring-arc"
       />
     </svg>
   );

@@ -42,7 +42,9 @@ export function ConversationConfirmationButtons() {
       }
 
       // Mark event as submitted to prevent duplicate submissions
-      addSubmittedEventId(awaitingAction.id);
+      if (awaitingAction.id) {
+        addSubmittedEventId(awaitingAction.id);
+      }
 
       // Call the agent-server API endpoint
       respondToConfirmation({
@@ -91,7 +93,7 @@ export function ConversationConfirmationButtons() {
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
     !awaitingAction ||
-    submittedEventIds.includes(awaitingAction.id)
+    submittedEventIds.includes(awaitingAction.id ?? "")
   ) {
     return null;
   }
