@@ -451,7 +451,6 @@ describe("stack mode routing", () => {
 
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: "127.0.0.1:8000",
-      VITE_BACKEND_BASE_URL: "http://127.0.0.1:8000",
     });
   });
 
@@ -460,7 +459,6 @@ describe("stack mode routing", () => {
 
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
-      VITE_BACKEND_BASE_URL: `http://127.0.0.1:${config.ingressPort}`,
     });
   });
 
@@ -476,7 +474,6 @@ describe("stack mode routing", () => {
       }),
     ).toEqual({
       VITE_BACKEND_HOST: "backend.example.test",
-      VITE_BACKEND_BASE_URL: "https://backend.example.test",
     });
   });
 
