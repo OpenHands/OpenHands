@@ -101,6 +101,16 @@ describe("ConversationPanel", () => {
     options?: Parameters<typeof renderWithProviders>[1],
   ) => renderWithProviders(<RouterStub />, options);
 
+  const openAdvancedConversationOptions = async (
+    user: ReturnType<typeof userEvent.setup>,
+  ) => {
+    await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+    await user.click(await screen.findByTestId("conversation-layout-advanced"));
+    expect(
+      await screen.findByTestId("conversation-advanced-options"),
+    ).toBeInTheDocument();
+  };
+
   beforeAll(() => {
     vi.mock("react-router", async (importOriginal) => ({
       ...(await importOriginal<typeof import("react-router")>()),
@@ -849,8 +859,8 @@ describe("ConversationPanel", () => {
     renderConversationPanel();
     await screen.findByText("Old Touched");
 
-    // Act: open the filter menu and switch sort to Created.
-    await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+    // Act: open advanced options and switch sort to Created.
+    await openAdvancedConversationOptions(user);
     await user.click(
       screen.getByRole("menuitemradio", {
         name: /CONVERSATION_PANEL\$SORT_CREATED/,
@@ -1541,11 +1551,11 @@ describe("ConversationPanel", () => {
       ).toBeInTheDocument();
     });
 
-    it("shows icons on hide and delete-all filter menu actions", async () => {
+    it("shows icons on hide and delete-all advanced options", async () => {
       const user = userEvent.setup();
       renderConversationPanel();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
 
       const hideRow = await screen.findByTestId("toggle-older-conversations");
       expect(hideRow.querySelector("svg")).toBeInTheDocument();
@@ -1583,7 +1593,7 @@ describe("ConversationPanel", () => {
       let cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       let toggle = await screen.findByTestId("toggle-older-conversations");
       expect(toggle).toHaveTextContent("CONVERSATION$HIDE");
       await user.click(toggle);
@@ -1591,7 +1601,7 @@ describe("ConversationPanel", () => {
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(1);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       toggle = await screen.findByTestId("toggle-older-conversations");
       expect(toggle).toHaveTextContent("CONVERSATION$SHOW_ALL");
       await user.click(toggle);
@@ -1633,7 +1643,7 @@ describe("ConversationPanel", () => {
         screen.queryByTestId("conversation-card-selected-branch"),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       await user.click(screen.getByTestId("toggle-repo-branch-metadata"));
 
       expect(
@@ -1674,7 +1684,7 @@ describe("ConversationPanel", () => {
       renderConversationPanel();
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -1739,7 +1749,7 @@ describe("ConversationPanel", () => {
       expect(screen.getByText("Visible 1")).toBeInTheDocument();
       expect(screen.queryByText("Archived 1")).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -1801,7 +1811,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -1856,7 +1866,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -1966,9 +1976,9 @@ describe("ConversationPanel", () => {
       // Older conversations are visible by default, so load-more is visible.
       expect(screen.getByTestId("load-more-conversations")).toBeInTheDocument();
 
-      // Hide older conversations via the filter dropdown.
+      // Hide older conversations via advanced options.
       const user = userEvent.setup();
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
 
       // Older conversations are hidden → no load-more.
@@ -1977,7 +1987,7 @@ describe("ConversationPanel", () => {
       ).not.toBeInTheDocument();
 
       // After showing older conversations again, the link reappears.
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedConversationOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
       expect(
         await screen.findByTestId("load-more-conversations"),
