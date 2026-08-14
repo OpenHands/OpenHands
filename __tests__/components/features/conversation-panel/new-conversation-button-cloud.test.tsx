@@ -147,20 +147,13 @@ describe("NewConversationButton (cloud)", () => {
     await user.click(items[1]); // octo/dog, main_branch = "trunk"
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-        {
+      expect(createSpy).toHaveBeenCalledWith({
+        metadata: {
           selected_repository: "octo/dog",
           selected_branch: "trunk",
           git_provider: "github",
         },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
+      });
     });
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-xyz");
@@ -190,20 +183,13 @@ describe("NewConversationButton (cloud)", () => {
     await user.click(screen.getByTestId("launch-repository"));
 
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-        {
+      expect(createSpy).toHaveBeenCalledWith({
+        metadata: {
           selected_repository: "octo/no-main",
           selected_branch: "main",
           git_provider: "github",
         },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
+      });
     });
   });
 

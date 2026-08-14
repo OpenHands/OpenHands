@@ -1,3 +1,4 @@
+import { AgentServerClient } from "@openhands/typescript-client/clients";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
   OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
@@ -70,25 +71,27 @@ const readBoolean = (
   return false;
 };
 
+interface SubscriptionRequestOptions {
+  method?: "GET" | "POST";
+  jsonBody?: unknown;
+}
+
 async function requestSubscriptionEndpoint(
   path: string,
-  init: RequestInit = {},
+  options: SubscriptionRequestOptions = {},
 ): Promise<unknown> {
   const { host, apiKey } = getAgentServerClientOptions();
-  const headers = new Headers(init.headers);
-  headers.set("Accept", "application/json");
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  const client = new AgentServerClient({ host, apiKey });
+  try {
+    return await client.request<unknown>({
+      method: options.method ?? "GET",
+      path,
+      body: options.jsonBody,
+      responseType: "json",
+    });
+  } finally {
+    client.close();
   }
-  if (apiKey) {
-    headers.set("X-Session-API-Key", apiKey);
-  }
-
-  const response = await fetch(`${host}${path}`, { ...init, headers });
-  if (!response.ok) {
-    throw new Error(`Subscription request failed with ${response.status}`);
-  }
-  return response.json();
 }
 
 function normalizeModels(raw: unknown): string[] {
@@ -181,7 +184,7 @@ class LLMSubscriptionService {
       OPENAI_SUBSCRIPTION_DEVICE_POLL_PATH,
       {
         method: "POST",
-        body: JSON.stringify({ device_code: deviceCode }),
+        jsonBody: { device_code: deviceCode },
       },
     );
     return normalizeStatus(response as RawSubscriptionStatus);

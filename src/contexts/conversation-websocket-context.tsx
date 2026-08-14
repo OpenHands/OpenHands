@@ -520,7 +520,7 @@ export function ConversationWebSocketProvider({
           // them for replayed events (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
@@ -736,7 +736,7 @@ export function ConversationWebSocketProvider({
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,
