@@ -307,6 +307,15 @@ describe("buildConfig", () => {
     expect(config.ingressPort).toBe(19502);
   });
 
+  it("args.frontendPort takes precedence over OH_CANVAS_SAFE_VITE_PORT", async () => {
+    const config = await buildConfig(
+      { frontendPort: 19503 },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: "19598" }),
+    );
+
+    expect(config.vitePort).toBe(19503);
+  });
+
   it("applies automationGitRef from args to env", async () => {
     const env = envWithIsolatedKeyPath();
     await buildConfig({ automationGitRef: "my-branch" }, env);

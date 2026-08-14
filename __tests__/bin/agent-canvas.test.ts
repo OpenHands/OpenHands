@@ -43,6 +43,8 @@ describe("agent-canvas CLI", () => {
     expect(stdout).toContain("USAGE:");
     expect(stdout).toContain("--frontend-only");
     expect(stdout).toContain("--backend-only");
+    expect(stdout).toContain("--frontend-port");
+    expect(stdout).toContain("OH_CANVAS_SAFE_VITE_PORT");
     expect(stdout).toContain("--help");
   });
 

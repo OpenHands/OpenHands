@@ -74,13 +74,14 @@ AUTH MODES:
               frontend. Users must paste it when the UI loads.
 
 OPTIONS:
-  -p, --port <port>     Ingress port (default: 8000)
-  --public              Enable public mode (see above)
-  --frontend-only       Start only the static frontend behind ingress
-  --backend-only        Start only agent-server + automation behind ingress
-  -v, --version         Show version number
-  --info                Show version and default stack configuration
-  -h, --help            Show this help message
+  -p, --port <port>          Ingress port (default: 8000)
+  --frontend-port <port>     Frontend service port (default: 3001)
+  --public                   Enable public mode (see above)
+  --frontend-only            Start only the static frontend behind ingress
+  --backend-only             Start only agent-server + automation behind ingress
+  -v, --version              Show version number
+  --info                     Show version and default stack configuration
+  -h, --help                 Show this help message
 
 ENVIRONMENT VARIABLES:
   LOCAL_BACKEND_API_KEY        API key for the server. Required in --public
@@ -90,6 +91,7 @@ ENVIRONMENT VARIABLES:
   OH_AGENT_SERVER_GIT_REF      Git ref for agent-server
   OH_AGENT_SERVER_LOCAL_PATH   Path to local SDK checkout (for development)
   OH_AGENT_SERVER_VERSION      Specific PyPI version for agent-server
+  OH_CANVAS_SAFE_VITE_PORT     Frontend service port (default: 3001)
 
 Note: LLM settings are configured through the web UI settings page,
 not environment variables.
@@ -106,6 +108,9 @@ EXAMPLES:
 
   # Use a specific port
   npx @openhands/agent-canvas --port 3000
+
+  # Use a specific frontend service port when 3001 is busy
+  npx @openhands/agent-canvas --frontend-port 3002
 
   # Start only the static frontend behind ingress
   npx @openhands/agent-canvas --frontend-only
