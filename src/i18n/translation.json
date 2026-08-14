@@ -31128,9 +31128,9 @@
   },
   "ONBOARDING$LLM_SUBTITLE": {
     "en": "Pick a provider and model. We've pre-selected OpenHands GLM-5.2.",
-    "ja": "プロバイダーとモデルを選択してください。OpenAI GPT-5.5 を事前に選択しています。",
-    "zh-CN": "选择提供商和模型。我们已为你预先选择 OpenAI GPT-5.5。",
-    "zh-TW": "選擇供應商與模型。我們已預先選好 OpenAI GPT-5.5。",
+    "ja": "プロバイダーとモデルを選択してください。OpenHands GLM-5.2 を事前に選択しています。",
+    "zh-CN": "选择提供商和模型。我们已为你预先选择 OpenHands GLM-5.2。",
+    "zh-TW": "選擇供應商與模型。我們已預先選好 OpenHands GLM-5.2。",
     "ko-KR": "공급자와 모델을 선택하세요. 기본값으로 OpenAI GPT-5.5가 선택되어 있습니다.",
     "no": "Velg en leverandør og modell. Vi har forhåndsvalgt OpenAI GPT-5.5.",
     "ar": "اختر مزوّدًا ونموذجًا. لقد اخترنا مسبقًا OpenAI GPT-5.5.",
