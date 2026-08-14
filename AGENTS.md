@@ -23,8 +23,7 @@
 
 This repo (`OpenHands/OpenHands`) is **only the agent-canvas frontend**. It is one
 piece of a multi-repo system. Before adding code here, check the change belongs in
-*this* repo — several kinds of work belong in a sibling repo instead. When in doubt,
-add a pointer, not a duplicate implementation.
+*this* repo — several kinds of work belong in a sibling repo instead.
 
 | Repo | Owns | Add code here when… |
 |------|------|---------------------|
