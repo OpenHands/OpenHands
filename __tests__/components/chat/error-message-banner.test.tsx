@@ -88,6 +88,23 @@ describe("ErrorMessageBanner", () => {
     });
   });
 
+  it("uses the error icon for unknown (diagnostic) outcomes", () => {
+    render(
+      <ErrorMessageBanner
+        message="Something went wrong"
+        classification={{
+          kind: "unknown",
+          retryable: false,
+          user_action: "none",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("error-message-banner-icon")).toHaveStyle({
+      color: "var(--oh-status-error)",
+    });
+  });
+
   it("uses greyscale theme tokens instead of red error styling", () => {
     render(<ErrorMessageBanner message="Something went wrong" />);
 

@@ -335,6 +335,147 @@ describe("recommended automations", () => {
     }
   });
 
+  it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
+    // SkillCardPillRow folds pills behind "+N more" when it measures zero
+    // widths in jsdom; give it room so every pill renders.
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetWidth",
+    );
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 2000;
+      },
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      // jira-issue-to-pr declares jira (HTTP-only catalog entry) and github
+      // (MCP). Both belong on the card; jira is labeled as external setup.
+      const pillRow = screen.getByTestId(
+        "recommended-automation-pills-jira-issue-to-pr",
+      );
+      expect(pillRow).toHaveTextContent("Jira");
+      expect(pillRow).toHaveTextContent("GitHub");
+      expect(
+        within(pillRow).getByTestId("automation-integration-external-jira"),
+      ).toHaveTextContent("RECOMMENDED_AUTOMATIONS$EXTERNAL_SETUP");
+      expect(
+        within(pillRow).queryByTestId("automation-integration-external-github"),
+      ).not.toBeInTheDocument();
+
+      // The connect-before-launch count only covers what the install flow can
+      // actually connect, so jira does not inflate it.
+      expect(pillRow).toHaveTextContent(
+        "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1",
+      );
+    } finally {
+      if (offsetWidthDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "offsetWidth",
+          offsetWidthDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+      }
+      Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("finds an automation by searching for its non-MCP-installable integration", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        query="jira"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not silently hide an unknown required integration ID", () => {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "jira-issue-to-pr",
+    )!;
+    const mutableAutomation = automation as RecommendedAutomation & {
+      requires: {
+        integrations: Record<
+          string,
+          { required?: false; setupRequired?: boolean }
+        >;
+      };
+    };
+    const originalIntegrations = mutableAutomation.requires.integrations;
+    mutableAutomation.requires.integrations = {
+      ...originalIntegrations,
+      "unknown-integration": {},
+    };
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      // The current implementation drops unknown IDs while resolving the
+      // catalog, so this assertion intentionally fails until they are surfaced.
+      expect(
+        screen.getByTestId(
+          "recommended-automation-integration-unknown-integration",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      mutableAutomation.requires.integrations = originalIntegrations;
+    }
+  });
+
+  it("queues installs only for MCP-installable required integrations", async () => {
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+    );
+
+    // jira cannot go through the local MCP install flow, so the queue starts
+    // directly at github rather than failing or skipping the automation.
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "github");
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
   it("shows a decorative plus badge on each card without toggle behavior", () => {
     render(
       <RecommendedAutomationsSection

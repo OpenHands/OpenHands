@@ -37,12 +37,14 @@ export function ConversationConfirmationButtons() {
 
   const handleConfirmation = useCallback(
     (accept: boolean) => {
-      if (!awaitingAction || !conversation || awaitingAction.id === undefined) {
+      if (!awaitingAction || !conversation) {
         return;
       }
 
       // Mark event as submitted to prevent duplicate submissions
-      addSubmittedEventId(awaitingAction.id);
+      if (awaitingAction.id) {
+        addSubmittedEventId(awaitingAction.id);
+      }
 
       // Call the agent-server API endpoint
       respondToConfirmation({
@@ -90,8 +92,9 @@ export function ConversationConfirmationButtons() {
   // Only show if agent is waiting for confirmation and we haven't already submitted
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
-    awaitingAction?.id === undefined ||
-    submittedEventIds.includes(awaitingAction.id)
+    !awaitingAction ||
+    (awaitingAction.id !== undefined &&
+      submittedEventIds.includes(awaitingAction.id))
   ) {
     return null;
   }

@@ -319,6 +319,27 @@ function requireAppConversation(
   return conversation;
 }
 
+/**
+ * Options for {@link AgentServerConversationService.createConversation}.
+ */
+export interface CreateConversationOptions {
+  initialUserMsg?: string;
+  conversationInstructions?: string;
+  plugins?: PluginSpec[];
+  metadata?: ConversationMetadata | null;
+  workingDirOverride?: string;
+  workspaceMode?: WorkspaceMode;
+  parentConversationId?: string;
+  agentType?: "default" | "plan";
+  sandboxId?: string;
+  // Launch from a saved AgentProfile (resolved server-side) instead of the
+  // current encrypted agent_settings (#3727). Supported on both local and the
+  // cloud app-server (OpenHands #15060): local threads it through the
+  // encrypted-settings builder; cloud sends it as a flat request field.
+  agentProfileId?: string;
+  agentProfileKind?: AgentKind;
+}
+
 class AgentServerConversationService {
   static async sendMessage(
     conversationId: string,
@@ -367,22 +388,22 @@ class AgentServerConversationService {
   }
 
   static async createConversation(
-    initialUserMsg?: string,
-    conversationInstructions?: string,
-    plugins?: PluginSpec[],
-    metadata?: ConversationMetadata | null,
-    workingDirOverride?: string,
-    workspaceMode?: WorkspaceMode,
-    parentConversationId?: string,
-    agentType?: "default" | "plan",
-    sandboxId?: string,
-    // Launch from a saved AgentProfile (resolved server-side) instead of the
-    // current encrypted agent_settings (#3727). Supported on both local and the
-    // cloud app-server (OpenHands #15060): local threads it through the
-    // encrypted-settings builder; cloud sends it as a flat request field.
-    agentProfileId?: string,
-    agentProfileKind?: AgentKind,
+    options: CreateConversationOptions = {},
   ): Promise<AppConversationStartTask> {
+    const {
+      initialUserMsg,
+      conversationInstructions,
+      plugins,
+      metadata,
+      workingDirOverride,
+      workspaceMode,
+      parentConversationId,
+      agentType,
+      sandboxId,
+      agentProfileId,
+      agentProfileKind,
+    } = options;
+
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
       // AppConversationStartRequest, POST /api/v1/app-conversations

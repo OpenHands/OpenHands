@@ -100,7 +100,9 @@ export function ErrorMessageBanner({
       )}
       data-testid="error-message-banner"
     >
-      {classification != null && classification.kind !== "internal" ? (
+      {classification != null &&
+      classification.kind !== "internal" &&
+      classification.kind !== "unknown" ? (
         <CircleAlert
           aria-hidden
           className="h-4 w-4 shrink-0 text-[var(--oh-warning)]"

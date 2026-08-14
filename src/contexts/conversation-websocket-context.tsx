@@ -518,9 +518,9 @@ export function ConversationWebSocketProvider({
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
-          const isDuplicateEvent =
-            event.id !== undefined &&
-            useEventStore.getState().eventIds.has(event.id);
+          const isDuplicateEvent = useEventStore
+            .getState()
+            .eventIds.has(event.id ?? "");
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
@@ -741,9 +741,9 @@ export function ConversationWebSocketProvider({
         if (isAgentServerEvent(event)) {
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
-          const isDuplicateEvent =
-            event.id !== undefined &&
-            useEventStore.getState().eventIds.has(event.id);
+          const isDuplicateEvent = useEventStore
+            .getState()
+            .eventIds.has(event.id ?? "");
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,

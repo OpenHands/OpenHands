@@ -55,17 +55,16 @@ describe("AgentServerConversationService cloud branch", () => {
       }),
     );
 
-    const result = await AgentServerConversationService.createConversation(
-      "fix the bug",
-      "Optional title",
-      undefined,
-      {
+    const result = await AgentServerConversationService.createConversation({
+      initialUserMsg: "fix the bug",
+      conversationInstructions: "Optional title",
+      metadata: {
         selected_repository: "user/repo",
         selected_branch: "main",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         git_provider: "github" as any,
       },
-    );
+    });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = getFetchCall(fetchMock);
