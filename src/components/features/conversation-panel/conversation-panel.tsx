@@ -35,8 +35,7 @@ import { ConversationCardSkeleton } from "./conversation-card/conversation-card-
 import { CompactConversationRow } from "./compact-conversation-row";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { cn } from "#/utils/utils";
-import { ConversationPanelFilterMenu } from "./conversation-panel-filter-menu";
-import { ConversationFilterBar } from "./conversation-filter-bar";
+import { ConversationLayoutsMenu } from "./conversation-layouts-menu";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
@@ -128,80 +127,35 @@ export function ConversationPanel({
   const showArchivedConversations = useConversationPanelPreferencesStore(
     (state) => state.showArchivedConversations,
   );
-  const toggleShowArchivedConversations = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowArchivedConversations,
-  );
-  const toggleShowOlderConversations = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowOlderConversations,
-  );
   const showRepoBranchMetadata = useConversationPanelPreferencesStore(
     (state) => state.showRepoBranchMetadata,
-  );
-  const toggleShowRepoBranchMetadata = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowRepoBranchMetadata,
   );
   const showLlmProfiles = useConversationPanelPreferencesStore(
     (state) => state.showLlmProfiles,
   );
-  const toggleShowLlmProfiles = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowLlmProfiles,
-  );
   const showTagsMetadata = useConversationPanelPreferencesStore(
     (state) => state.showTagsMetadata,
-  );
-  const toggleShowTagsMetadata = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowTagsMetadata,
-  );
-  const filterBarCollapsed = useConversationPanelPreferencesStore(
-    (state) => state.filterBarCollapsed,
-  );
-  const toggleFilterBarCollapsed = useConversationPanelPreferencesStore(
-    (state) => state.toggleFilterBarCollapsed,
   );
   const showHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.showHoverMetadata,
   );
-  const toggleShowHoverMetadata = useConversationPanelPreferencesStore(
-    (state) => state.toggleShowHoverMetadata,
-  );
   const organizeMode = useConversationPanelPreferencesStore(
     (state) => state.organizeMode,
-  );
-  const setOrganizeMode = useConversationPanelPreferencesStore(
-    (state) => state.setOrganizeMode,
   );
   const conversationSort = useConversationPanelPreferencesStore(
     (state) => state.conversationSort,
   );
-  const setConversationSort = useConversationPanelPreferencesStore(
-    (state) => state.setConversationSort,
-  );
   const threadScope = useConversationPanelPreferencesStore(
     (state) => state.threadScope,
-  );
-  const setThreadScope = useConversationPanelPreferencesStore(
-    (state) => state.setThreadScope,
   );
   const automationFilterMode = useConversationPanelPreferencesStore(
     (state) => state.automationFilterMode,
   );
-  const setAutomationFilterMode = useConversationPanelPreferencesStore(
-    (state) => state.setAutomationFilterMode,
-  );
   const selectedAutomationNames = useConversationPanelPreferencesStore(
     (state) => state.selectedAutomationNames,
   );
-  const toggleAutomationNameAndMode = useConversationPanelPreferencesStore(
-    (state) => state.toggleAutomationNameAndMode,
-  );
-  const clearFilterSelections = useConversationPanelPreferencesStore(
-    (state) => state.clearFilterSelections,
-  );
   const selectedTagFacets = useConversationPanelPreferencesStore(
     (state) => state.selectedTagFacets,
-  );
-  const toggleTagFacet = useConversationPanelPreferencesStore(
-    (state) => state.toggleTagFacet,
   );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
@@ -937,7 +891,7 @@ export function ConversationPanel({
             agentKind={conversation.agent_kind}
             acpServer={conversation.acp_server}
             tags={conversation.tags}
-            showTags={showTagsMetadata && !filterBarCollapsed}
+            showTags={showTagsMetadata}
           />
         );
       }
@@ -1041,11 +995,7 @@ export function ConversationPanel({
               agentKind={conversation.agent_kind}
               acpServer={conversation.acp_server}
               tags={conversation.tags}
-              // Master collapse: a collapsed filter bar also tucks card tag
-              // chips away to their compact indicator, so one button reclaims
-              // all tag real estate (narrow screens). Per-card expansion via
-              // the indicator still works on top.
-              showTags={showTagsMetadata && !filterBarCollapsed}
+              showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
@@ -1074,7 +1024,6 @@ export function ConversationPanel({
       showLlmProfiles,
       showTagsMetadata,
       showHoverMetadata,
-      filterBarCollapsed,
       togglePin,
     ],
   );
@@ -1131,56 +1080,18 @@ export function ConversationPanel({
               <ConversationPanelNewThreadPicker
                 backendKind={activeBackend.kind}
               />
-              <ConversationPanelFilterMenu
-                filterMenuOpen={filterMenuOpen}
-                setFilterMenuOpen={setFilterMenuOpen}
+              <ConversationLayoutsMenu
+                menuOpen={filterMenuOpen}
+                setMenuOpen={setFilterMenuOpen}
                 menuRef={filterMenuRef}
                 backendKind={activeBackend.kind}
-                organizeMode={organizeMode}
-                setOrganizeMode={setOrganizeMode}
-                conversationSort={conversationSort}
-                setConversationSort={setConversationSort}
-                threadScope={threadScope}
-                setThreadScope={setThreadScope}
-                automationFilterMode={automationFilterMode}
-                setAutomationFilterMode={setAutomationFilterMode}
-                showOlderConversations={showOlderConversations}
-                showArchivedConversations={showArchivedConversations}
-                toggleShowArchivedConversations={
-                  toggleShowArchivedConversations
-                }
-                toggleShowOlderConversations={toggleShowOlderConversations}
-                showRepoBranchMetadata={showRepoBranchMetadata}
-                toggleShowRepoBranchMetadata={toggleShowRepoBranchMetadata}
-                showLlmProfiles={showLlmProfiles}
-                toggleShowLlmProfiles={toggleShowLlmProfiles}
-                showTagsMetadata={showTagsMetadata}
-                toggleShowTagsMetadata={toggleShowTagsMetadata}
-                showHoverMetadata={showHoverMetadata}
-                toggleShowHoverMetadata={toggleShowHoverMetadata}
+                tagFacets={tagFacets}
                 totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
               />
             </div>
           </div>
         </div>
-      )}
-
-      {showConversationHeader && (
-        // Facets live on a persistent bar, not in the hamburger: filtering is
-        // state you should be able to see. The right-side slot is reserved for
-        // the future bulk-select affordance.
-        <ConversationFilterBar
-          tagFacets={tagFacets}
-          selectedTagFacets={selectedTagFacets}
-          onToggleTagFacet={toggleTagFacet}
-          automationFacets={automationNameFacets}
-          selectedAutomationNames={selectedAutomationNames}
-          onToggleAutomationName={toggleAutomationNameAndMode}
-          onClearAll={clearFilterSelections}
-          collapsed={filterBarCollapsed}
-          onToggleCollapsed={toggleFilterBarCollapsed}
-        />
       )}
 
       <div

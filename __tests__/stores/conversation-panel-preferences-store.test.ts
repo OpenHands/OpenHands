@@ -76,7 +76,6 @@ describe("conversation-panel-preferences store", () => {
     expect(Object.keys(persisted.state).sort()).toEqual([
       "automationFilterMode",
       "conversationSort",
-      "filterBarCollapsed",
       "groupFolderOrder",
       "organizeMode",
       "selectedAutomationNames",
@@ -87,24 +86,39 @@ describe("conversation-panel-preferences store", () => {
       "showOlderConversations",
       "showRepoBranchMetadata",
       "showTagsMetadata",
+      "tagFiltersEnabled",
       "threadScope",
     ]);
   });
 
-  it("toggles the filter-bar collapse and persists it to localStorage", () => {
-    useConversationPanelPreferencesStore.getState().toggleFilterBarCollapsed();
+  it("toggles the Tag Filters gate and persists it to localStorage", () => {
+    useConversationPanelPreferencesStore.getState().toggleTagFiltersEnabled();
 
     const persisted = JSON.parse(
       window.localStorage.getItem(STORAGE_KEY) ?? "{}",
     );
-    expect(persisted.state.filterBarCollapsed).toBe(true);
+    expect(persisted.state.tagFiltersEnabled).toBe(true);
 
     useConversationPanelPreferencesStore
       .getState()
-      .setFilterBarCollapsed(false);
+      .setTagFiltersEnabled(false);
     expect(
-      useConversationPanelPreferencesStore.getState().filterBarCollapsed,
+      useConversationPanelPreferencesStore.getState().tagFiltersEnabled,
     ).toBe(false);
+  });
+
+  it("applies a layout preset's partial bundle in one action", () => {
+    useConversationPanelPreferencesStore.getState().applyLayoutSettings({
+      organizeMode: "grouped",
+      showOlderConversations: false,
+    });
+
+    const state = useConversationPanelPreferencesStore.getState();
+    expect(state.organizeMode).toBe("grouped");
+    expect(state.showOlderConversations).toBe(false);
+    // Fields the preset does not name stay untouched.
+    expect(state.conversationSort).toBe("updated");
+    expect(state.threadScope).toBe("all");
   });
 
   it("exposes setters and a toggler for the LLM-profiles preference", () => {

@@ -34,13 +34,30 @@ interface ConversationPanelPreferencesState {
   selectedAutomationNames: string[];
   selectedTagFacets: string[];
   /**
-   * Whole-bar collapse for the filter bar (distinct from the bar's own
-   * ephemeral two-row clip). Persisted so narrow-screen users who tuck the
-   * bar away keep the real estate across reloads.
+   * Whether the layouts menu exposes the Tag Filters section. Off by
+   * default: tag filtering is opt-in surface area, matching the Advanced
+   * options "Tag Filters" toggle that gates it.
    */
-  filterBarCollapsed: boolean;
+  tagFiltersEnabled: boolean;
   groupFolderOrder: string[];
 }
+
+/**
+ * The preference subset a conversation-layouts preset may set. Presets are
+ * partial bundles over these fields; any manual deviation in the Advanced
+ * options modal drops the active preset to "Custom".
+ */
+export type LayoutSettingsSlice = Pick<
+  ConversationPanelPreferencesState,
+  | "organizeMode"
+  | "conversationSort"
+  | "threadScope"
+  | "showOlderConversations"
+  | "showRepoBranchMetadata"
+  | "showLlmProfiles"
+  | "showTagsMetadata"
+  | "showHoverMetadata"
+>;
 
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
@@ -70,8 +87,10 @@ interface ConversationPanelPreferencesActions {
   /** Clears both filter selections and returns automation mode to `all`. */
   clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
-  setFilterBarCollapsed: (value: boolean) => void;
-  toggleFilterBarCollapsed: () => void;
+  setTagFiltersEnabled: (value: boolean) => void;
+  toggleTagFiltersEnabled: () => void;
+  /** Applies a layout preset's partial bundle in one set(). */
+  applyLayoutSettings: (settings: Partial<LayoutSettingsSlice>) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -91,7 +110,7 @@ const initialState: ConversationPanelPreferencesState = {
   automationFilterMode: "all",
   selectedAutomationNames: [],
   selectedTagFacets: [],
-  filterBarCollapsed: false,
+  tagFiltersEnabled: false,
   groupFolderOrder: [],
 };
 
@@ -194,10 +213,11 @@ export const useConversationPanelPreferencesStore =
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
 
-        setFilterBarCollapsed: (value) =>
-          set(() => ({ filterBarCollapsed: value })),
-        toggleFilterBarCollapsed: () =>
-          set((state) => ({ filterBarCollapsed: !state.filterBarCollapsed })),
+        setTagFiltersEnabled: (value) =>
+          set(() => ({ tagFiltersEnabled: value })),
+        toggleTagFiltersEnabled: () =>
+          set((state) => ({ tagFiltersEnabled: !state.tagFiltersEnabled })),
+        applyLayoutSettings: (settings) => set(() => ({ ...settings })),
       }),
       {
         name: "conversation-panel-preferences",
@@ -216,7 +236,7 @@ export const useConversationPanelPreferencesStore =
           automationFilterMode: state.automationFilterMode,
           selectedAutomationNames: state.selectedAutomationNames,
           selectedTagFacets: state.selectedTagFacets,
-          filterBarCollapsed: state.filterBarCollapsed,
+          tagFiltersEnabled: state.tagFiltersEnabled,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

@@ -107,6 +107,17 @@ describe("ConversationPanel", () => {
     options?: Parameters<typeof renderWithProviders>[1],
   ) => renderWithProviders(<RouterStub />, options);
 
+  // The old single-click filter menu is now the layouts menu, with the
+  // display toggles one level deeper in the Advanced options modal. The
+  // modal stays open across row clicks, so a second call is a no-op.
+  const openAdvancedOptions = async (
+    user: ReturnType<typeof userEvent.setup>,
+  ) => {
+    if (screen.queryByTestId("advanced-conversation-options-modal")) return;
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("advanced-options-row"));
+  };
+
   beforeAll(() => {
     vi.mock("react-router", async (importOriginal) => ({
       ...(await importOriginal<typeof import("react-router")>()),
@@ -143,7 +154,7 @@ describe("ConversationPanel", () => {
       selectedAutomationNames: [],
       selectedTagFacets: [],
       showTagsMetadata: false,
-      filterBarCollapsed: false,
+      tagFiltersEnabled: false,
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -440,27 +451,28 @@ describe("ConversationPanel", () => {
       next_page_id: null,
     });
 
+    useConversationPanelPreferencesStore.setState({ tagFiltersEnabled: true });
+
     renderConversationPanel();
 
-    // The bar renders above the list with both facet groups.
-    const bar = await screen.findByTestId("conversation-filter-bar");
-
-    // Selecting a tag chip narrows the list via the same store the popup used.
-    await user.click(within(bar).getByTestId("filter-chip-tag-project=vault"));
+    // The layouts menu exposes the Tag Filters section once enabled; selecting
+    // a facet narrows the list via the same store the bar used.
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("tag-filters-section"));
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
     expect(await screen.findByText("Manual 1")).toBeInTheDocument();
     expect(screen.queryByText("Manual 2")).not.toBeInTheDocument();
     expect(
       useConversationPanelPreferencesStore.getState().selectedTagFacets,
     ).toEqual(["project=vault"]);
 
-    // Clear all restores the full list.
-    await user.click(within(bar).getByTestId("clear-filters-button"));
+    // Deselecting the facet restores the full list.
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
     expect(await screen.findByText("Manual 2")).toBeInTheDocument();
 
-    // Selecting an automation chip couples the mode to only-automations.
-    await user.click(
-      within(bar).getByTestId("filter-chip-automation-Nightly Audit"),
-    );
+    // The automation scope lives in the Advanced options modal.
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await user.click(screen.getByTestId("automation-filter-only"));
     expect(
       useConversationPanelPreferencesStore.getState().automationFilterMode,
     ).toBe("only-automations");
@@ -468,10 +480,7 @@ describe("ConversationPanel", () => {
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
   });
 
-  it("collapses card tag chips to the compact indicator while the filter bar is collapsed", async () => {
-    // The bar's persisted collapse is the panel-wide tag tuck-away: with the
-    // Tag chips preference on, collapsing the bar drops cards to their compact
-    // indicator; expanding the bar restores the chips.
+  it("tucks card tag chips to the compact indicator when the Tag chips preference is off", async () => {
     vi.spyOn(
       AgentServerConversationService,
       "searchConversations",
@@ -485,34 +494,24 @@ describe("ConversationPanel", () => {
       ],
       next_page_id: null,
     });
-    useConversationPanelPreferencesStore.setState({
-      showTagsMetadata: true,
-      filterBarCollapsed: true,
-    });
+    useConversationPanelPreferencesStore.setState({ showTagsMetadata: true });
 
     renderConversationPanel();
 
-    // The bar renders its one-line summary...
-    expect(await screen.findByTestId("expand-filter-bar")).toBeInTheDocument();
-    // ...and the card shows the compact indicator instead of the chip row.
+    expect(
+      await screen.findByTestId("conversation-card-tag-chip"),
+    ).toBeInTheDocument();
+
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showTagsMetadata: false,
+      });
+    });
     expect(
       await screen.findByTestId("conversation-tags-indicator-1"),
     ).toBeInTheDocument();
     expect(
       screen.queryByTestId("conversation-card-tag-chip"),
-    ).not.toBeInTheDocument();
-
-    // Expanding the bar restores the chips (Tag chips preference still on).
-    act(() => {
-      useConversationPanelPreferencesStore.setState({
-        filterBarCollapsed: false,
-      });
-    });
-    expect(
-      await screen.findByTestId("conversation-card-tag-chip"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("conversation-tags-indicator-1"),
     ).not.toBeInTheDocument();
   });
 
@@ -1069,7 +1068,7 @@ describe("ConversationPanel", () => {
     await screen.findByText("Old Touched");
 
     // Act: open the filter menu and switch sort to Created.
-    await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+    await openAdvancedOptions(user);
     await user.click(
       screen.getByRole("menuitemradio", {
         name: /CONVERSATION_PANEL\$SORT_CREATED/,
@@ -1726,7 +1725,7 @@ describe("ConversationPanel", () => {
       const summary = screen.getByTestId("older-conversations-summary");
       expect(summary).toHaveTextContent("SIDEBAR$CONVERSATIONS");
       expect(
-        within(summary).getByTestId("older-conversations-filter-toggle"),
+        within(summary).getByTestId("conversation-layouts-toggle"),
       ).toBeInTheDocument();
     });
 
@@ -1756,7 +1755,7 @@ describe("ConversationPanel", () => {
       const summary = screen.getByTestId("older-conversations-summary");
       expect(summary).toBeInTheDocument();
       expect(
-        within(summary).getByTestId("older-conversations-filter-toggle"),
+        within(summary).getByTestId("conversation-layouts-toggle"),
       ).toBeInTheDocument();
     });
 
@@ -1764,17 +1763,18 @@ describe("ConversationPanel", () => {
       const user = userEvent.setup();
       renderConversationPanel();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
-
-      const hideRow = await screen.findByTestId("toggle-older-conversations");
-      expect(hideRow.querySelector("svg")).toBeInTheDocument();
-      expect(hideRow).toHaveClass("group");
-
-      // Delete all is destructive: danger styling, never the plain row color.
+      // Delete all lives in the layouts menu itself.
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       const deleteAllRow = screen.getByTestId("delete-all-conversations");
       expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
       expect(deleteAllRow).toHaveClass("text-danger");
       expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
+
+      // The older-conversations toggle lives in the Advanced options modal.
+      await user.click(screen.getByTestId("advanced-options-row"));
+      const hideRow = await screen.findByTestId("toggle-older-conversations");
+      expect(hideRow.querySelector("svg")).toBeInTheDocument();
+      expect(hideRow).toHaveClass("group");
     });
 
     it("toggles older conversations visibility via the filter dropdown", async () => {
@@ -1803,17 +1803,16 @@ describe("ConversationPanel", () => {
       let cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       let toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveTextContent("CONVERSATION$HIDE");
+      expect(toggle).toHaveAttribute("aria-checked", "true");
       await user.click(toggle);
 
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(1);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
       toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveTextContent("CONVERSATION$SHOW_ALL");
+      expect(toggle).toHaveAttribute("aria-checked", "false");
       await user.click(toggle);
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);
@@ -1853,7 +1852,7 @@ describe("ConversationPanel", () => {
         screen.queryByTestId("conversation-card-selected-branch"),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-repo-branch-metadata"));
 
       expect(
@@ -1894,7 +1893,7 @@ describe("ConversationPanel", () => {
       renderConversationPanel();
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -1959,7 +1958,7 @@ describe("ConversationPanel", () => {
       expect(screen.getByText("Visible 1")).toBeInTheDocument();
       expect(screen.queryByText("Archived 1")).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -2021,7 +2020,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -2076,7 +2075,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -2188,7 +2187,7 @@ describe("ConversationPanel", () => {
 
       // Hide older conversations via the filter dropdown.
       const user = userEvent.setup();
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
 
       // Older conversations are hidden → no load-more.
@@ -2197,7 +2196,7 @@ describe("ConversationPanel", () => {
       ).not.toBeInTheDocument();
 
       // After showing older conversations again, the link reappears.
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
       expect(
         await screen.findByTestId("load-more-conversations"),
