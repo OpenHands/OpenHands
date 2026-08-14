@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
-import { ProviderConnectionsSection } from "../provider-connections";
+import { ModelProvidersSection } from "../model-providers";
 import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { LlmSettingsScreen } from "#/routes/llm-settings";
@@ -372,7 +372,7 @@ export function LlmSettingsLocalView() {
   if (viewMode === "list") {
     return (
       <div className="flex flex-col gap-6">
-        <ProviderConnectionsSection />
+        <ModelProvidersSection />
         <LlmProfilesManager
           onAddProfile={handleAddProfile}
           onEditProfile={handleEditProfile}
