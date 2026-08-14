@@ -2,9 +2,9 @@
 
 ## General
 
-- This repository is a near-direct port of the OpenHands frontend. Local backends talk straight to `software-agent-sdk` / `agent_server`; optional Cloud backends use the service layer under `src/api/cloud/` and the local cloud proxy.
+- This repository is the OpenHands frontend.
 - Frontend API adaptation lives mainly in `src/api/`:
-  - `option-service` fabricates an OSS web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
+  - `option-service` fabricates a web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
   - `settings-service` uses `@openhands/typescript-client` settings APIs for persistence; reads schemas from `/api/settings/agent-schema` and `/api/settings/conversation-schema`, fetches settings with optional `X-Expose-Secrets: encrypted` header for conversation start payloads, and saves settings via PATCH with diffs.
   - `agent-server-conversation-service`, `event-service`, `agent-server-git-service`, and `skills-service` route local agent-server access through `@openhands/typescript-client` rather than direct HTTP calls.
 - Supported env vars for deployment:
