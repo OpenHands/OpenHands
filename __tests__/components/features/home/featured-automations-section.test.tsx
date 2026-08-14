@@ -9,7 +9,7 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PinnedAutomationsDashboard } from "#/components/features/home/featured-automations/pinned-automations-dashboard";
 import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
-import { NavigationProvider } from "#/context/navigation-context";
+import { NavigationProvider } from "#/contexts/navigation-context";
 import { HOME_PINNED_AUTOMATIONS_KEY } from "#/hooks/use-home-pinned-automations";
 import {
   AutomationRunStatus,

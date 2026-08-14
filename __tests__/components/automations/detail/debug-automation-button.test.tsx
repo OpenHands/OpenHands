@@ -9,7 +9,7 @@ import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,

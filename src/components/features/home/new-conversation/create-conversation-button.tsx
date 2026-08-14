@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "../../settings/brand-button";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
 import { I18nKey } from "#/i18n/declaration";

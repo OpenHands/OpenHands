@@ -4,7 +4,7 @@ import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { KebabMenu } from "./kebab-menu";
 import { useHasPermission } from "#/hooks/use-has-permission";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
 import { Zap } from "lucide-react";

@@ -1,7 +1,7 @@
 import React from "react";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { cn } from "#/utils/utils";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import {
