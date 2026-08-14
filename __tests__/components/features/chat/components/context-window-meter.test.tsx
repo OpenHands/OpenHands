@@ -96,6 +96,32 @@ describe("ContextWindowMeter", () => {
     );
   });
 
+  // The trigger must share the actions-row icon-button hover fill. Its own
+  // `--oh-interactive-hover` fill was both wrong for this surface (that token
+  // is for 800 backgrounds; the composer is `--oh-surface`) and identical in
+  // value to `--oh-border`, which the ring track used, so hovering erased the
+  // track. `context-window-ring.test.tsx` asserts the resulting contrast.
+  it("uses the shared chat-input icon button styling for its hover fill", () => {
+    useMetricsStore.setState({
+      cost: null,
+      max_budget_per_task: null,
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        cache_read_tokens: 0,
+        cache_write_tokens: 0,
+        context_window: 1_000_000,
+        per_turn_token: 198_500,
+      },
+    });
+
+    renderWithProviders(<ContextWindowMeter />);
+
+    const trigger = screen.getByTestId("context-window-meter");
+    expect(trigger).toHaveClass("hover:bg-white/10");
+    expect(trigger.className).not.toContain("--oh-interactive-hover");
+  });
+
   it("opens a popover with compact usage details", () => {
     useMetricsStore.setState({
       cost: null,
