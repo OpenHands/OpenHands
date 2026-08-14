@@ -32404,7 +32404,19 @@
   "STATUS$VALIDATING": {
     "en": "Validating...",
     "ja": "検証中...",
-    "zh-CN": "验证中..."
+    "zh-CN": "验证中...",
+    "zh-TW": "驗證中...",
+    "ko-KR": "검증 중...",
+    "no": "Validerer...",
+    "ar": "جارٍ التحقق...",
+    "de": "Wird validiert...",
+    "fr": "Validation...",
+    "it": "Validazione...",
+    "pt": "Validando...",
+    "es": "Validando...",
+    "ca": "Validant...",
+    "tr": "Doğrulanıyor...",
+    "uk": "Перевірка..."
   },
   "STATUS$SAVING": {
     "en": "Saving...",
