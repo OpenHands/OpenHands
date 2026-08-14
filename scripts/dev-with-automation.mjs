@@ -744,9 +744,20 @@ function buildViteBackendEnv(config, env = process.env) {
       env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
       "127.0.0.1:8000");
 
-  return {
-    VITE_BACKEND_HOST: backendHost,
-  };
+  const env_out = { VITE_BACKEND_HOST: backendHost };
+
+  // If the user supplied VITE_BACKEND_BASE_URL with an https:// scheme and
+  // did not explicitly set VITE_USE_TLS, propagate the HTTPS intent so the
+  // Vite proxy forwards over TLS instead of plain HTTP.
+  if (
+    !config.launchAgentServer &&
+    env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
+    env.VITE_USE_TLS === undefined
+  ) {
+    env_out.VITE_USE_TLS = "true";
+  }
+
+  return env_out;
 }
 
 function buildAgentServerAutomationEnv(config) {

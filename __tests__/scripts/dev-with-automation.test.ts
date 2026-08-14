@@ -474,6 +474,38 @@ describe("stack mode routing", () => {
       }),
     ).toEqual({
       VITE_BACKEND_HOST: "backend.example.test",
+      VITE_USE_TLS: "true",
+    });
+  });
+
+  it("respects an explicit VITE_USE_TLS override with VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "https://backend.example.test",
+        VITE_USE_TLS: "false",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
+    });
+  });
+
+  it("does not set VITE_USE_TLS for http:// VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "http://backend.example.test",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
     });
   });
 
