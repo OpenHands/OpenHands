@@ -31127,7 +31127,7 @@
     "uk": "Налаштуйте свій LLM"
   },
   "ONBOARDING$LLM_SUBTITLE": {
-    "en": "Pick a provider and model. We've pre-selected OpenAI GPT-5.5.",
+    "en": "Pick a provider and model. We've pre-selected OpenHands GLM-5.2.",
     "ja": "プロバイダーとモデルを選択してください。OpenAI GPT-5.5 を事前に選択しています。",
     "zh-CN": "选择提供商和模型。我们已为你预先选择 OpenAI GPT-5.5。",
     "zh-TW": "選擇供應商與模型。我們已預先選好 OpenAI GPT-5.5。",
