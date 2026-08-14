@@ -806,11 +806,12 @@ describe("ConversationCard", () => {
       expect(chips[0].getAttribute("title")).not.toContain("origin");
     });
 
-    it("keeps the automation name/trigger chips but hides the automation id chips", () => {
-      // The automation id/run-id tags are raw UUIDs consumed by the panel's
-      // automation filter — chip noise — while the human-meaningful name and
-      // trigger stay visible. Like every tag chip they render value-only,
-      // with the humanized ``key: value`` pair in the tooltip.
+    it("hides every automation provenance chip", () => {
+      // The whole automation family is reserved: the SDK stamps it at
+      // creation and the panel's automation filter is its first-class UI
+      // source. Rendering it as tag chips would double-book the user-facing
+      // tag surface — and let user-authored tags spoof automation
+      // classification.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -826,15 +827,9 @@ describe("ConversationCard", () => {
         />,
       );
 
-      const chips = screen.getAllByTestId("conversation-card-tag-chip");
-      expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("Nightly Audit");
-      expect(chips[0]).toHaveAttribute(
-        "title",
-        "Automationname: Nightly Audit",
-      );
-      expect(chips[1]).toHaveTextContent("cron");
-      expect(chips[1]).toHaveAttribute("title", "Automationtrigger: cron");
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
     });
 
     it("hides the chips when showTags is omitted", () => {

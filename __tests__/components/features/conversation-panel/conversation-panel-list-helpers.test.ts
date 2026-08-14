@@ -727,9 +727,13 @@ describe("conversation-panel-list-helpers", () => {
         tags: {
           origin: "slack",
           owner: "alice",
-          // Reserved/internal keys must not surface as facets.
+          // Reserved/internal keys must not surface as facets — including
+          // the automation provenance family, which the automation filter
+          // owns exclusively.
           acpserver: "claude-code",
           title: "internal title stamp",
+          automationname: "Nightly Audit",
+          automationtrigger: "cron",
         },
       },
       {

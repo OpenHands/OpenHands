@@ -12,6 +12,7 @@ describe("EditConversationTagsModal", () => {
           origin: "slack",
           owner: "alice",
           acpserver: "claude-code",
+          automationname: "Nightly Audit",
         }}
         onConfirm={vi.fn()}
         onCancel={vi.fn()}
@@ -20,9 +21,13 @@ describe("EditConversationTagsModal", () => {
 
     expect(screen.getByTestId("edit-tag-row-origin")).toBeInTheDocument();
     expect(screen.getByTestId("edit-tag-row-owner")).toBeInTheDocument();
-    // Reserved/internal keys are untouchable — no row for them.
+    // Reserved/internal keys are untouchable — no row for them. Automation
+    // provenance stays out too, so a user can't edit (or spoof) it.
     expect(
       screen.queryByTestId("edit-tag-row-acpserver"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("edit-tag-row-automationname"),
     ).not.toBeInTheDocument();
   });
 
@@ -111,6 +116,17 @@ describe("EditConversationTagsModal", () => {
 
     // Reserved key: allowed by the regex but untouchable by the user.
     await user.type(screen.getByTestId("new-tag-key-input"), "acpserver");
+    await user.type(screen.getByTestId("new-tag-value-input"), "x");
+    await user.click(screen.getByTestId("add-tag-button"));
+    expect(screen.getByTestId("edit-tags-error")).toHaveTextContent(
+      "CONVERSATION$TAG_KEY_RESERVED",
+    );
+
+    // Automation provenance keys are reserved too: a user-added
+    // ``automationname`` would flip ``isAutomationConversation``.
+    await user.clear(screen.getByTestId("new-tag-key-input"));
+    await user.clear(screen.getByTestId("new-tag-value-input"));
+    await user.type(screen.getByTestId("new-tag-key-input"), "automationname");
     await user.type(screen.getByTestId("new-tag-value-input"), "x");
     await user.click(screen.getByTestId("add-tag-button"));
     expect(screen.getByTestId("edit-tags-error")).toHaveTextContent(
