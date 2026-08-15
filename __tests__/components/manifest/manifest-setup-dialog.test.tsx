@@ -159,6 +159,115 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
   });
 
+  it("blocks review and highlights every field rejected by preflight", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: "repos[0].url",
+          code: "repository_denied",
+          message: "You do not have access to this repository.",
+        },
+        {
+          field: "trigger.schedule",
+          code: "interval_too_short",
+          message: "Choose a schedule of at least five minutes.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-field-repository-error"),
+    ).toHaveTextContent("You do not have access to this repository.");
+    expect(screen.getByTestId("setup-field-schedule-error")).toHaveTextContent(
+      "Choose a schedule of at least five minutes.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("returns prerequisite failures to the step where they can be fixed", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: null,
+          step: "prerequisites",
+          code: "integration_unavailable",
+          message: "Reconnect GitHub before continuing.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(await screen.findByTestId("setup-prerequisites")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-prerequisite-error")).toHaveTextContent(
+      "Reconnect GitHub before continuing.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+  });
+
+  it("blocks a real service outage without exposing provider details", async () => {
+    // Arrange
+    const secretSentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error(secretSentinel), {
+        name: "HttpError",
+        status: 503,
+        response: { detail: secretSentinel },
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(
+      secretSentinel,
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("treats a missing legacy endpoint as advisory on review", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error("Not implemented"), {
+        name: "HttpError",
+        status: 501,
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toHaveTextContent("SETUP$PREFLIGHT_UNSUPPORTED");
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument();
+  });
+
   it("creates from the derived payload and opens what was created", async () => {
     // Arrange
     mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
@@ -169,6 +278,9 @@ describe("SetupDialog", () => {
     await user.click(screen.getByTestId("setup-continue-button"));
     await waitFor(() =>
       expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-preflight-passed")).toHaveTextContent(
+      "SETUP$PREFLIGHT_PASSED",
     );
     await user.click(screen.getByTestId("setup-continue-button"));
 

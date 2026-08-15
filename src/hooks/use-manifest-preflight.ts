@@ -17,8 +17,6 @@ import type {
   SetupRequestBody,
 } from "#/manifests/types";
 
-const NO_ERRORS: MappedManifestErrors = { fieldErrors: {}, formErrors: [] };
-
 /** What a deployment that does not serve the validate endpoint answers with. */
 const NOT_IMPLEMENTED_STATUSES = [404, 501];
 
@@ -43,21 +41,35 @@ function isPreflightUnimplemented(error: unknown): boolean {
  * be sent. Errors come back addressed by payload path and are translated back to
  * fields through the map derived from that same builder.
  *
- * Resolves to null when there is no verdict — the entry has no draft to check,
- * the deployment does not implement preflight, a newer run has already
- * superseded this one, or the request failed. A missing preflight is not a
- * failure: local checks and the create response still stand between the user
- * and a bad configuration. Only a deployment without the endpoint is an
- * expected failure though, so any other one is reported.
+ * Resolves to null only when the entry has no service draft to check. A 404 or
+ * 501 is the explicit legacy-deployment advisory path; malformed responses,
+ * transport errors, and service failures return an unavailable outcome that
+ * blocks creation. Superseded requests return stale so an older response can
+ * never overwrite the latest verdict.
  */
+export type SetupPreflightOutcome =
+  | { status: "passed" }
+  | { status: "failed"; errors: MappedManifestErrors }
+  | { status: "unsupported" }
+  | { status: "unavailable" }
+  | { status: "stale" };
+
+function hasMappedErrors(errors: MappedManifestErrors): boolean {
+  return (
+    errors.formErrors.length > 0 ||
+    Object.keys(errors.fieldErrors).length > 0 ||
+    Object.values(errors.stepErrors).some((messages) => messages?.length)
+  );
+}
+
 export function useSetupPreflight(entry: SetupEntry) {
   const latestRequestRef = useRef(0);
   const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
-  return useCallback(
+  const runPreflight = useCallback(
     async (
       formValues: SetupFormValues,
-    ): Promise<MappedManifestErrors | null> => {
+    ): Promise<SetupPreflightOutcome | null> => {
       const body = buildPreflightBody(entry, formValues);
       if (!body) return null;
 
@@ -66,23 +78,32 @@ export function useSetupPreflight(entry: SetupEntry) {
 
       try {
         const result = await AutomationService.validateDraft(body);
-        if (requestId !== latestRequestRef.current) return null;
-        if (result?.valid) return NO_ERRORS;
+        if (requestId !== latestRequestRef.current) return { status: "stale" };
+        if (result?.valid === true && result.errors?.length === 0) {
+          return { status: "passed" };
+        }
 
-        return mapServiceErrors(
+        const errors = mapServiceErrors(
           normalizeServiceErrors(result, body.draft as SetupRequestBody),
           errorMap,
         );
-      } catch (error) {
-        // A broken validator and an unimplemented one degrade to the same
-        // advisory "no verdict", so the only thing that separates them is this
-        // line. Without it a service returning 500 on every draft is invisible.
-        if (!isPreflightUnimplemented(error)) {
-          console.warn("Automation setup preflight failed:", error);
+        if (result?.valid === false && hasMappedErrors(errors)) {
+          return { status: "failed", errors };
         }
-        return null;
+        return { status: "unavailable" };
+      } catch (error) {
+        if (requestId !== latestRequestRef.current) return { status: "stale" };
+        return isPreflightUnimplemented(error)
+          ? { status: "unsupported" }
+          : { status: "unavailable" };
       }
     },
     [entry, errorMap],
   );
+
+  const invalidatePreflight = useCallback(() => {
+    latestRequestRef.current += 1;
+  }, []);
+
+  return { runPreflight, invalidatePreflight };
 }

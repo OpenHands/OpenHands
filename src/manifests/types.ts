@@ -126,6 +126,37 @@ export interface SetupRequestBody {
 /** Form values are collected as strings; the payload mapping shapes them. */
 export type SetupFormValues = Record<string, string>;
 
+/** The setup screen that can resolve a service-reported validation problem. */
+export type SetupValidationStep = "prerequisites" | "form";
+
+export type PreflightIntegrationTransport = "stdio" | "shttp" | "sse";
+
+export type PreflightIntegrationAuthStrategy =
+  | "none"
+  | "api_key"
+  | "bearer"
+  | "basic"
+  | "oauth2";
+
+/** One acceptable way to satisfy an automation's integration requirement. */
+export type PreflightIntegrationAlternative = {
+  transport: PreflightIntegrationTransport;
+  /** A remote URL or the stable catalog server name for stdio. */
+  locator: string;
+  authStrategy?: PreflightIntegrationAuthStrategy;
+  /** Names only. Secret values never cross the preflight request boundary. */
+  secretNames?: string[];
+};
+
+export type PreflightIntegrationRequirement = {
+  id: string;
+  alternatives: PreflightIntegrationAlternative[];
+};
+
+export type SetupPreflightRequirements = {
+  integrations: PreflightIntegrationRequirement[];
+};
+
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
   ready: boolean;
@@ -147,6 +178,8 @@ export interface DraftValidationError {
   field: string | null;
   code: string;
   message: string;
+  /** Where a non-field problem can be fixed. */
+  step?: SetupValidationStep;
 }
 
 /** `POST /v1/validate` — an invalid draft is still a 200. */

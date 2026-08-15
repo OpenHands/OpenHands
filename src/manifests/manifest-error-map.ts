@@ -8,12 +8,13 @@
  * built from several fields.
  */
 
-import type { SetupRequestBody } from "./types";
+import type { SetupRequestBody, SetupValidationStep } from "./types";
 
 /** An error the service reported, addressed by payload path where it gave one. */
 export interface ManifestServiceError {
   path: string;
   message: string;
+  step?: SetupValidationStep;
 }
 
 export interface MappedManifestErrors {
@@ -21,15 +22,22 @@ export interface MappedManifestErrors {
   fieldErrors: Record<string, string>;
   /** Errors with no field to attach to; shown against the form as a whole. */
   formErrors: string[];
+  /** Non-field errors shown on the setup step that can resolve them. */
+  stepErrors: Partial<Record<SetupValidationStep, string[]>>;
 }
 
 const EMPTY_MAPPED_ERRORS: MappedManifestErrors = {
   fieldErrors: {},
   formErrors: [],
+  stepErrors: {},
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSetupValidationStep(value: unknown): value is SetupValidationStep {
+  return value === "prerequisites" || value === "form";
 }
 
 /**
@@ -85,6 +93,7 @@ export function normalizeServiceErrors(
         {
           path: typeof entry.field === "string" ? entry.field : "",
           message: entry.message,
+          step: isSetupValidationStep(entry.step) ? entry.step : undefined,
         },
       ];
     });
@@ -92,7 +101,7 @@ export function normalizeServiceErrors(
 
   const { detail } = body;
   if (typeof detail === "string") {
-    return [{ path: "", message: detail }];
+    return [{ path: "", message: detail, step: undefined }];
   }
   if (Array.isArray(detail)) {
     return detail.flatMap((entry) => {
@@ -100,7 +109,13 @@ export function normalizeServiceErrors(
       const loc = Array.isArray(entry.loc)
         ? (entry.loc as (string | number)[])
         : [];
-      return [{ path: locToPayloadPath(loc, payload), message: entry.msg }];
+      return [
+        {
+          path: locToPayloadPath(loc, payload),
+          message: entry.msg,
+          step: undefined,
+        },
+      ];
     });
   }
 
@@ -116,11 +131,16 @@ export function mapServiceErrors(
 
   const fieldErrors: Record<string, string> = {};
   const formErrors: string[] = [];
+  const stepErrors: Partial<Record<SetupValidationStep, string[]>> = {};
 
-  errors.forEach(({ path, message }) => {
+  errors.forEach(({ path, message, step }) => {
     const fields = path ? errorMap[path] : undefined;
     if (!fields?.length) {
-      formErrors.push(message);
+      if (step) {
+        stepErrors[step] = [...(stepErrors[step] ?? []), message];
+      } else {
+        formErrors.push(message);
+      }
       return;
     }
     fields.forEach((field) => {
@@ -130,5 +150,5 @@ export function mapServiceErrors(
     });
   });
 
-  return { fieldErrors, formErrors };
+  return { fieldErrors, formErrors, stepErrors };
 }
