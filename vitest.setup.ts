@@ -101,7 +101,7 @@ const _liveProgressEvent =
     : MockProgressEvent;
 
 Object.defineProperty(globalThis, "ProgressEvent", {
-  configurable: true,
+  configurable: false,
   get() {
     return _liveProgressEvent;
   },
