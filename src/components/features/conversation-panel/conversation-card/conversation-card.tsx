@@ -312,7 +312,17 @@ export function ConversationCard({
           {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
         </div>
 
+        {/* Outside the trailing slot on purpose. That slot is the offset
+            parent of the `absolute right-0` action overlay, which is wider
+            than the timestamp it covers — anything rendered inside the slot
+            is unclickable once the row is hovered (and permanently so on
+            coarse pointers, where the overlay never hides). The indicator is
+            always-on affordance, not hover chrome, so it lives in front of
+            the slot and the slot's reserve keeps a stable gap for it. */}
+        {showTagIndicator ? renderTagIndicator() : null}
+
         <div
+          data-testid="conversation-card-trailing-slot"
           className={cn(
             "relative ml-auto pl-2 flex items-center justify-end shrink-0",
             // The hover action overlay (pin + ellipsis) is absolutely
@@ -323,10 +333,15 @@ export function ConversationCard({
             // clickable without a hover pass.
             showPersistentPinIcon
               ? "min-w-[3.75rem]"
-              : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
+              : hasHoverActions &&
+                  // Force the reserve whenever the indicator is present: without
+                  // it the slot grows from timestamp-width to 3.75rem on hover
+                  // and shoves the indicator sideways under the cursor.
+                  hoverRevealReserveClassName(
+                    contextMenuOpen || showTagIndicator,
+                  ),
           )}
         >
-          {showTagIndicator ? renderTagIndicator() : null}
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (
             <p
               className={cn(
@@ -340,6 +355,7 @@ export function ConversationCard({
 
           {hasHoverActions ? (
             <div
+              data-testid="conversation-card-hover-actions"
               className={cn(
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon

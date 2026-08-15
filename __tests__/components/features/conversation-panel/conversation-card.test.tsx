@@ -198,8 +198,12 @@ describe("ConversationCard", () => {
     const model = screen.getByTestId("conversation-card-agent-chip");
     const tags = screen.getByTestId("conversation-card-tag-chips");
 
-    expect(repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders the workspace folder name when no repository is selected", () => {
@@ -872,6 +876,39 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("keeps the indicator outside the slot the hover overlay covers", () => {
+      // Regression: the indicator used to sit inside the trailing slot, which
+      // is the offset parent of the `absolute right-0` pin/ellipsis overlay.
+      // On hover that overlay covered 28 of the indicator's 29 pixels, so a
+      // real mouse click landed on the pin — the indicator's own
+      // stopPropagation never ran because the button never got the event.
+      // jsdom has no layout, so the geometry can't be asserted directly; what
+      // it can assert is the structural cause. Anything inside the trailing
+      // slot is reachable by the overlay; anything outside it is not.
+      renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+          onTogglePin={vi.fn()}
+          onDelete={vi.fn()}
+          onContextMenuToggle={vi.fn()}
+        />,
+      );
+
+      const indicator = screen.getByTestId("conversation-tags-indicator");
+      const trailingSlot = screen.getByTestId(
+        "conversation-card-trailing-slot",
+      );
+      const hoverActions = screen.getByTestId(
+        "conversation-card-hover-actions",
+      );
+
+      expect(trailingSlot).toContainElement(hoverActions);
+      expect(trailingSlot).not.toContainElement(indicator);
+    });
+
     it("expands and collapses this card's chips via the indicator", async () => {
       const user = userEvent.setup();
       renderWithProviders(
@@ -902,9 +939,10 @@ describe("ConversationCard", () => {
       expect(
         screen.queryByTestId("conversation-card-tag-chip"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("conversation-tags-indicator"),
-      ).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByTestId("conversation-tags-indicator")).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
     });
 
     it("renders no indicator when showTags is on", () => {
@@ -1072,10 +1110,7 @@ describe("ConversationCard", () => {
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
-      expect(chip).toHaveAttribute(
-        "title",
-        "Claude Code · Claude Opus (1M)",
-      );
+      expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {
