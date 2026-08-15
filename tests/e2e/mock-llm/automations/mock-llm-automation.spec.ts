@@ -484,16 +484,27 @@ test.describe("mock-LLM automation lifecycle", () => {
     await test.step("automation card visible on list page", async () => {
       await waitForTestId(page, "automations-add-automation", 15_000);
 
-      // Wait for the automation name to appear on the page (the list
-      // may take a moment to load from the automation backend).
-      await expect(page.getByText(AUTOMATION_NAME)).toBeVisible({
-        timeout: 15_000,
-      });
+      // Scope to the automation card (data-testid `automation-card-<id>`) so
+      // the locator only matches the list entry, not the global sidebar's
+      // conversation cards. The automation run creates a conversation named
+      // ``<AUTOMATION_NAME> — <timestamp>`` that the sidebar conversation list
+      // surfaces, so an unscoped ``getByText(AUTOMATION_NAME)`` resolves to
+      // multiple elements (the card + every run conversation) and trips
+      // Playwright strict mode.
+      const automationCard = page
+        .locator('[data-testid^="automation-card-"]')
+        .filter({ hasText: AUTOMATION_NAME });
+
+      await expect(automationCard).toBeVisible({ timeout: 15_000 });
     });
 
     await test.step("click through to automation detail page", async () => {
-      // The automation name is a link — clicking it navigates to /automations/:id
-      await page.getByText(AUTOMATION_NAME).click();
+      // The automation card is a link — clicking it navigates to /automations/:id.
+      const automationCard = page
+        .locator('[data-testid^="automation-card-"]')
+        .filter({ hasText: AUTOMATION_NAME });
+
+      await automationCard.click();
       await waitForPath(page, /\/automations\/.+/, 10_000);
     });
 
