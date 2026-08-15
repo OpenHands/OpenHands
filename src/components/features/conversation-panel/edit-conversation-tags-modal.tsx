@@ -77,28 +77,38 @@ export function EditConversationTagsModal({
   const [errorKey, setErrorKey] = React.useState<I18nKey | null>(null);
   const keyInputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleAdd = () => {
+  /**
+   * Validates whatever is sitting in the key/value inputs against the backend's
+   * tag rules and the rows already staged. Shared by Add and Save so both
+   * doors apply the same checks.
+   */
+  const buildPendingRow = (): { row: TagRow } | { errorKey: I18nKey } => {
     const key = newKey.trim();
     const value = newValue.trim();
     if (!CONVERSATION_TAG_KEY_PATTERN.test(key)) {
-      setErrorKey(I18nKey.CONVERSATION$TAG_KEY_INVALID);
-      return;
+      return { errorKey: I18nKey.CONVERSATION$TAG_KEY_INVALID };
     }
     if (RESERVED_CONVERSATION_TAG_KEYS.has(key)) {
-      setErrorKey(I18nKey.CONVERSATION$TAG_KEY_RESERVED);
-      return;
+      return { errorKey: I18nKey.CONVERSATION$TAG_KEY_RESERVED };
     }
     if (rows.some((row) => row.key === key)) {
-      setErrorKey(I18nKey.CONVERSATION$TAG_KEY_DUPLICATE);
-      return;
+      return { errorKey: I18nKey.CONVERSATION$TAG_KEY_DUPLICATE };
     }
     // The value is optional: an empty value is a bare tag — stored as "" (the
     // backend validator allows it) and rendered as just the key.
     if (value.length > CONVERSATION_TAG_VALUE_MAX_LENGTH) {
-      setErrorKey(I18nKey.CONVERSATION$TAG_VALUE_INVALID);
+      return { errorKey: I18nKey.CONVERSATION$TAG_VALUE_INVALID };
+    }
+    return { row: { key, value } };
+  };
+
+  const handleAdd = () => {
+    const result = buildPendingRow();
+    if ("errorKey" in result) {
+      setErrorKey(result.errorKey);
       return;
     }
-    setRows((prev) => [...prev, { key, value }]);
+    setRows((prev) => [...prev, result.row]);
     setNewKey("");
     setNewValue("");
     setErrorKey(null);
@@ -118,10 +128,25 @@ export function EditConversationTagsModal({
   };
 
   const handleConfirm = () => {
+    // Add is an affordance for entering several tags, not a toll on entering
+    // one: a tag typed into the inputs and never Added is still a tag the user
+    // asked for, so Save commits it. If it doesn't validate, surface the error
+    // and keep the modal open — never drop the typing on the floor.
+    const hasPendingInput = newKey.trim() !== "" || newValue.trim() !== "";
+    let committedRows = rows;
+    if (hasPendingInput) {
+      const result = buildPendingRow();
+      if ("errorKey" in result) {
+        setErrorKey(result.errorKey);
+        return;
+      }
+      committedRows = [...rows, result.row];
+    }
+
     onConfirm(
       mergeConversationTagEdits(
         tags,
-        rows.map((row) => [row.key, row.value] as const),
+        committedRows.map((row) => [row.key, row.value] as const),
       ),
     );
   };

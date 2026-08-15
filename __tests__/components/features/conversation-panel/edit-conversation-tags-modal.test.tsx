@@ -71,9 +71,7 @@ describe("EditConversationTagsModal", () => {
 
     await user.click(screen.getByTestId("remove-tag-owner"));
 
-    expect(
-      screen.queryByTestId("edit-tag-row-owner"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edit-tag-row-owner")).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("confirm-button"));
 
@@ -100,6 +98,16 @@ describe("EditConversationTagsModal", () => {
     );
     expect(screen.queryByTestId("edit-tags-rows")).not.toBeInTheDocument();
 
+    // Save does not paper over the rejected input by discarding it — the
+    // error stands and the modal stays open until the key is fixed or cleared.
+    await user.click(screen.getByTestId("confirm-button"));
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByTestId("edit-tags-error")).toHaveTextContent(
+      "CONVERSATION$TAG_KEY_INVALID",
+    );
+
+    await user.clear(screen.getByTestId("new-tag-key-input"));
+    await user.clear(screen.getByTestId("new-tag-value-input"));
     await user.click(screen.getByTestId("confirm-button"));
     expect(onConfirm).toHaveBeenCalledWith({});
   });
@@ -136,10 +144,7 @@ describe("EditConversationTagsModal", () => {
     // Value over the 256-char backend cap.
     await user.clear(screen.getByTestId("new-tag-key-input"));
     await user.type(screen.getByTestId("new-tag-key-input"), "owner");
-    await user.type(
-      screen.getByTestId("new-tag-value-input"),
-      "v".repeat(257),
-    );
+    await user.type(screen.getByTestId("new-tag-value-input"), "v".repeat(257));
     await user.click(screen.getByTestId("add-tag-button"));
     expect(screen.getByTestId("edit-tags-error")).toHaveTextContent(
       "CONVERSATION$TAG_VALUE_INVALID",
@@ -211,5 +216,100 @@ describe("EditConversationTagsModal", () => {
     // Enter in the key input (bare tag).
     await user.type(screen.getByTestId("new-tag-key-input"), "work{Enter}");
     expect(screen.getByTestId("edit-tag-row-work")).toBeInTheDocument();
+  });
+
+  it("commits a typed-but-unadded tag when Save is pressed", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{ acpserver: "claude-code" }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    // Typing a tag and going straight for Save is the natural flow — Add is an
+    // affordance for entering several, not a toll on entering one. Dropping
+    // the pending row here loses work with no warning.
+    await user.type(screen.getByTestId("new-tag-key-input"), "owner");
+    await user.type(screen.getByTestId("new-tag-value-input"), "alice");
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      acpserver: "claude-code",
+      owner: "alice",
+    });
+  });
+
+  it("commits a typed-but-unadded bare tag when Save is pressed", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("new-tag-key-input"), "work");
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(onConfirm).toHaveBeenCalledWith({ work: "" });
+  });
+
+  it("blocks Save on an invalid pending tag instead of dropping it", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("new-tag-key-input"), "My Project");
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(screen.getByTestId("edit-tags-error")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+    // The typed text survives so it can be corrected.
+    expect(screen.getByTestId("new-tag-key-input")).toHaveValue("My Project");
+  });
+
+  it("blocks Save when a value was typed without a key", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{}}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("new-tag-value-input"), "alice");
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(screen.getByTestId("edit-tags-error")).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("saves normally when both inputs are empty", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    renderWithProviders(
+      <EditConversationTagsModal
+        tags={{ origin: "slack" }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("confirm-button"));
+
+    expect(onConfirm).toHaveBeenCalledWith({ origin: "slack" });
   });
 });
