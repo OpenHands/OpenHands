@@ -88,6 +88,29 @@ async function listAutomations(
 }
 
 /**
+ * Wait for a newly-created automation to become visible through the list API.
+ * Creation and listing are separate backend operations, so the list can lag
+ * briefly after the create request succeeds.
+ */
+async function waitForAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  name: string,
+  timeoutMs = 30_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const data = await listAutomations(request, 1);
+    const automations = data.automations ?? data.items ?? [];
+    const automation = automations.find(
+      (candidate: { name: string }) => candidate.name === name,
+    );
+    if (automation) return automation;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`Automation "${name}" was not visible after ${timeoutMs}ms`);
+}
+
+/**
  * List runs for a specific automation via the real automation backend.
  */
 async function listAutomationRuns(
@@ -375,17 +398,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: automation was created in the real automation backend ──
 
     await test.step("verify automation was created", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      expect(
-        automations.length,
-        `Expected at least 1 automation, got: ${JSON.stringify(data).slice(0, 500)}`,
-      ).toBeGreaterThanOrEqual(1);
-
-      const created = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
-      );
-      expect(created, `Automation "${AUTOMATION_NAME}" not found`).toBeTruthy();
+      const created = await waitForAutomation(request, AUTOMATION_NAME);
       automationIds.add(created.id);
       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
       expect(created.enabled).toBe(true);
@@ -394,12 +407,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: run completed successfully with a conversation link ──
 
     await test.step("verify run completed with conversation link", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      const automation = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
-      );
-      expect(automation, "Automation should exist for run check").toBeTruthy();
+      const automation = await waitForAutomation(request, AUTOMATION_NAME);
       automationIds.add(automation.id);
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
@@ -450,7 +458,7 @@ test.describe("mock-LLM automation lifecycle", () => {
                 : Array.isArray(msg.content)
                   ? (msg.content as Array<{ type?: string; text?: string }>)
                       .filter((c) => c.type === "text" || typeof c === "string")
-                      .map((c) => (typeof c === "string" ? c : c.text ?? ""))
+                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
                       .join("")
                   : "";
             if (text.includes("<RUNTIME_SERVICES>")) return text;
@@ -523,7 +531,9 @@ test.describe("mock-LLM automation lifecycle", () => {
     // The ConfigurationSection renders schedule_human (e.g. "Every day at 9:00 AM")
     // or falls back to the raw cron expression.
     await test.step("verify cron schedule displayed on detail page", async () => {
-      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({
+        timeout: 10_000,
+      });
     });
 
     await test.step("verify run shows COMPLETED with conversation link", async () => {
@@ -564,5 +574,4 @@ test.describe("mock-LLM automation lifecycle", () => {
       }
     });
   });
-
 });
