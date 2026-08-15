@@ -324,9 +324,6 @@ export function LlmSettingsLocalView() {
     setIsSaving(true);
     setIsValidating(true);
     try {
-      // Pre-flight: validate the LLM config before saving.
-      // Returns null when the endpoint is unavailable (cloud or older
-      // agent-server); in that case, proceed with the save as before.
       const preflight = await ProfilesService.validateProfile(trimmedName, {
         llm: llmConfig as SaveProfileRequest["llm"],
         include_secrets: true,
@@ -336,6 +333,8 @@ export function LlmSettingsLocalView() {
         displayErrorToast(errorMsg);
         return;
       }
+
+      setIsValidating(false);
 
       // If editing and name changed, rename the profile first
       if (isRename) {
