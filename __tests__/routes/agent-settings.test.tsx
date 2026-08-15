@@ -266,7 +266,7 @@ describe("AgentSettingsScreen", () => {
 
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus 4.8 (1M)",
+      "Claude Opus (1M)",
     );
   });
 
@@ -288,7 +288,7 @@ describe("AgentSettingsScreen", () => {
     renderAgentSettingsScreen();
     await screen.findByTestId("agent-command-input");
     await user.click(screen.getByLabelText("SETTINGS$AGENT_MODEL"));
-    await user.click(await screen.findByText("Claude Haiku 4.5"));
+    await user.click(await screen.findByText("Claude Haiku"));
     await user.click(screen.getByTestId("agent-save-button"));
 
     await waitFor(() => {
@@ -324,7 +324,7 @@ describe("AgentSettingsScreen", () => {
     await screen.findByTestId("agent-command-input");
     // Form loads with the Claude Code default visible.
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus 4.8 (1M)",
+      "Claude Opus (1M)",
     );
 
     // Switch to the Custom preset, then enter a different command — the
@@ -380,7 +380,7 @@ describe("AgentSettingsScreen", () => {
     renderAgentSettingsScreen();
     await screen.findByTestId("agent-command-input");
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus 4.8 (1M)",
+      "Claude Opus (1M)",
     );
 
     const commandInput = screen.getByTestId(
@@ -389,7 +389,7 @@ describe("AgentSettingsScreen", () => {
     await user.clear(commandInput);
     await user.type(
       commandInput,
-      "npx -y @agentclientprotocol/codex-acp@1.1.2",
+      "npx -y @agentclientprotocol/codex-acp@1.1.7",
     );
 
     // The model field now reflects the Codex default, not the stale Claude one.
@@ -435,10 +435,10 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(commandInput.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.44.0",
+      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0",
     );
     expect(screen.getByLabelText("SETTINGS$AGENT_MODEL")).toHaveValue(
-      "Claude Opus 4.8 (1M)",
+      "Claude Opus (1M)",
     );
 
     await user.click(screen.getByTestId("agent-save-button"));
@@ -628,7 +628,7 @@ describe("AgentSettingsScreen", () => {
       "agent-command-input",
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe(
-      "npx -y @agentclientprotocol/claude-agent-acp@0.44.0 --extra-arg",
+      "npx -y @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
     );
 
     // Touch the form to mark it dirty (Save is disabled until isDirty),
@@ -650,7 +650,7 @@ describe("AgentSettingsScreen", () => {
     expect(call.agent_settings_diff?.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
       "--extra-arg",
     ]);
     // ``acp_args: []`` resets the API-set args so they don't double up
