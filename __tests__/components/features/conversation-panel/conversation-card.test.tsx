@@ -962,6 +962,59 @@ describe("ConversationCard", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("collapses a manually expanded card when the Tags preference flips", async () => {
+      // The preference is the master switch for all tag UI. A card expanded by
+      // its own indicator is a transient override, so a flip has to clear it —
+      // otherwise turning chips off leaves every previously-expanded card
+      // showing chips and the preference looks like it did nothing.
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+
+      await user.click(screen.getByTestId("conversation-tags-indicator"));
+      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
+        2,
+      );
+
+      // Preference on: chips everywhere, no indicator.
+      rerender(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          showTags
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
+
+      // Preference back off: the card returns to compact, not to the state it
+      // happened to be left in before.
+      rerender(
+        <ConversationCard
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          tags={{ origin: "slack", owner: "alice" }}
+        />,
+      );
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("conversation-tags-indicator")).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    });
+
     it("renders no indicator when every tag is reserved", () => {
       renderWithProviders(
         <ConversationCard

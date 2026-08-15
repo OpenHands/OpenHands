@@ -114,6 +114,14 @@ export function ConversationCard({
   const showTagIndicator = !showTags && displayTags.length > 0;
   const showTagChipRow = showTags || (tagsExpanded && displayTags.length > 0);
 
+  // The panel's Tags preference is the master switch for all tag UI, so a flip
+  // clears the per-card override. Without this, turning chips off leaves every
+  // card the user had expanded still showing its chips, and the preference
+  // reads as broken.
+  React.useEffect(() => {
+    setTagsExpanded(false);
+  }, [showTags]);
+
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
       onChangeTitle?.(newTitle);
