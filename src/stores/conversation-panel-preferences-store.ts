@@ -87,6 +87,12 @@ interface ConversationPanelPreferencesActions {
   /** Clears both filter selections and returns automation mode to `all`. */
   clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
+  /**
+   * Clears the tag selection only. Distinct from `clearFilterSelections`,
+   * which also resets the automation filter — the active-tag-filter strip
+   * must not silently switch a surface it doesn't show.
+   */
+  clearTagFacets: () => void;
   setTagFiltersEnabled: (value: boolean) => void;
   toggleTagFiltersEnabled: () => void;
   /** Applies a layout preset's partial bundle in one set(). */
@@ -210,6 +216,7 @@ export const useConversationPanelPreferencesStore =
               ? state.selectedTagFacets.filter((existing) => existing !== facet)
               : [...state.selectedTagFacets, facet],
           })),
+        clearTagFacets: () => set(() => ({ selectedTagFacets: [] })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
 

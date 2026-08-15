@@ -480,6 +480,52 @@ describe("ConversationPanel", () => {
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
   });
 
+  it("keeps an active tag filter visible outside the layouts menu", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Manual 1",
+          tags: { project: "vault" },
+        }),
+        createMockConversation({ id: "2", title: "Manual 2" }),
+      ],
+      next_page_id: null,
+    });
+
+    useConversationPanelPreferencesStore.setState({ tagFiltersEnabled: true });
+
+    renderConversationPanel();
+
+    // Nothing to announce until something is actually filtering.
+    expect(
+      screen.queryByTestId("conversation-active-tag-filters"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("tag-filters-section"));
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+
+    // With the menu closed, the strip is the only thing on screen that says
+    // where Manual 2 went — the facet checkmark is two levels inside a menu.
+    expect(
+      await screen.findByTestId("active-tag-filter-project=vault"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Manual 2")).not.toBeInTheDocument();
+
+    // And the way back out is on the strip too, not buried with the facets.
+    await user.click(screen.getByTestId("clear-tag-filters"));
+    expect(await screen.findByText("Manual 2")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-active-tag-filters"),
+    ).not.toBeInTheDocument();
+  });
+
   it("tucks card tag chips to the compact indicator when the Tag chips preference is off", async () => {
     vi.spyOn(
       AgentServerConversationService,
