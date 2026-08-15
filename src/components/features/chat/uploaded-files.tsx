@@ -1,14 +1,19 @@
+import { useTranslation } from "react-i18next";
 import { UploadedFile } from "./uploaded-file";
 import { UploadedImage } from "./uploaded-image";
 import { useConversationStore } from "#/stores/conversation-store";
+import { LoaderCircle } from "lucide-react";
+import { I18nKey } from "#/i18n/declaration";
 
 export function UploadedFiles() {
+  const { t } = useTranslation("openhands");
   const {
     images,
     files,
     loadingFiles,
     loadingImages,
     imagesMarkedUploadAsFile,
+    isUploading,
     removeFile,
     removeImage,
     toggleImageUploadAsFile,
@@ -41,7 +46,7 @@ export function UploadedFiles() {
             key={`file-${index}-${file.name}`}
             file={file}
             onRemove={() => handleRemoveFile(index)}
-            isLoading={loadingFiles.includes(file.name)}
+            isLoading={loadingFiles.includes(file.name) || isUploading}
           />
         ))}
 
@@ -65,7 +70,7 @@ export function UploadedFiles() {
             key={`image-${index}-${image.name}`}
             image={image}
             onRemove={() => handleRemoveImage(index)}
-            isLoading={loadingImages.includes(image.name)}
+            isLoading={loadingImages.includes(image.name) || isUploading}
             showUploadAsFileToggle
             uploadAsFileActive={imagesMarkedUploadAsFile.includes(image.name)}
             onToggleUploadAsFile={() => toggleImageUploadAsFile(image.name)}
@@ -89,6 +94,12 @@ export function UploadedFiles() {
           );
         })}
       </div>
+      {isUploading && (
+        <div className="flex items-center gap-2 text-xs text-[var(--oh-muted)]">
+          <LoaderCircle className="animate-spin w-3 h-3" />
+          <span>{t(I18nKey.CHAT_INTERFACE$UPLOADING_FILES)}</span>
+        </div>
+      )}
     </div>
   );
 }

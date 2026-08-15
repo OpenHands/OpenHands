@@ -31,6 +31,7 @@ interface ConversationState {
   pastedImageNames: string[];
   loadingFiles: string[]; // File names currently being processed
   loadingImages: string[]; // Image names currently being processed
+  isUploading: boolean; // Whether files are being uploaded to the server
   messageToSend: IMessageToSend | null;
   /** One-shot restore request consumed by the chat input when empty. */
   messageRestoreIfEmpty: IMessageToSend | null;
@@ -72,6 +73,7 @@ interface ConversationActions {
   setConversationMode: (conversationMode: ConversationMode) => void;
   setSubConversationTaskId: (taskId: string | null) => void;
   setPlanContent: (planContent: string | null) => void;
+  setIsUploading: (isUploading: boolean) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -121,6 +123,7 @@ export const useConversationStore = create<ConversationStore>()(
       pastedImageNames: [],
       loadingFiles: [],
       loadingImages: [],
+      isUploading: false,
       messageToSend: null,
       messageRestoreIfEmpty: null,
       shouldShownAgentLoading: false,
@@ -350,6 +353,9 @@ export const useConversationStore = create<ConversationStore>()(
 
       setPlanContent: (planContent) =>
         set({ planContent }, false, "setPlanContent"),
+
+      setIsUploading: (isUploading) =>
+        set({ isUploading }, false, "setIsUploading"),
     }),
     {
       name: "conversation-store",

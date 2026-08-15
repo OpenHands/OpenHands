@@ -3,6 +3,7 @@ import {
   isContentEmpty,
   clearEmptyContent,
   getTextContent,
+  clearTextContent,
 } from "#/components/features/chat/utils/chat-input.utils";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -22,10 +23,22 @@ export const useChatInputLogic = () => {
     messageToSend: rawMessageToSend,
     messageRestoreIfEmpty,
     hasRightPanelToggled,
+    isUploading,
     setMessageToSend,
     clearMessageRestoreIfEmpty,
     setIsRightPanelShown,
   } = useConversationStore();
+
+  // Clear the input after file upload completes. The prompt text is kept
+  // visible during upload (useChatSubmission defers the clear), and we
+  // remove it here once isUploading flips back to false.
+  const prevIsUploading = useRef(isUploading);
+  useEffect(() => {
+    if (prevIsUploading.current && !isUploading) {
+      clearTextContent(chatInputRef.current);
+    }
+    prevIsUploading.current = isUploading;
+  }, [isUploading, chatInputRef]);
 
   // Draft persistence - saves to localStorage/sessionStorage, restores on mount
   const { saveDraft, clearDraft } = useDraftPersistence(
