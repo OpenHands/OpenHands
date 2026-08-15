@@ -2,22 +2,43 @@
 
 ## General
 
-- This repository is a near-direct port of the OpenHands frontend. Local backends talk straight to `software-agent-sdk` / `agent_server`; optional Cloud backends use the service layer under `src/api/cloud/` and the local cloud proxy.
+- This repository is the OpenHands frontend.
 - Frontend API adaptation lives mainly in `src/api/`:
-  - `option-service` fabricates an OSS web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
+  - `option-service` fabricates a web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
   - `settings-service` uses `@openhands/typescript-client` settings APIs for persistence; reads schemas from `/api/settings/agent-schema` and `/api/settings/conversation-schema`, fetches settings with optional `X-Expose-Secrets: encrypted` header for conversation start payloads, and saves settings via PATCH with diffs.
   - `agent-server-conversation-service`, `event-service`, `agent-server-git-service`, and `skills-service` route local agent-server access through `@openhands/typescript-client` rather than direct HTTP calls.
 - Supported env vars for deployment:
   - `VITE_BACKEND_BASE_URL` for the agent server base URL.
   - `VITE_SESSION_API_KEY` for optional session auth.
   - `VITE_WORKING_DIR` for the default workspace path sent when starting conversations.
-  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit `BrowserToolSet` from new conversation payloads.
+  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit the `browser_tool_set` tool from new conversation payloads.
   - `VITE_BASE_PATH` for serving the SPA under a subpath such as `/canvas`; pair it with `scripts/static-server.mjs --base-path` at runtime.
 - Public skills are loaded from the `@openhands/extensions` npm package at build time via `SKILLS_CATALOG` (exported from `@openhands/extensions/skills`). The frontend's `SkillsService` maps catalog entries to `SkillInfo` objects and merges them with user/project skills fetched from the agent-server (with `load_public: false`). The agent-server no longer clones the extensions repo or uses `EXTENSIONS_REF` for public skills.
 - Default working-dir fallback is now the relative path `workspace/project` (exported as `DEFAULT_WORKING_DIR` from `src/api/agent-server-config.ts`); git-path heuristics and the default PLAN preview path should reuse that constant instead of hardcoding `/workspace/project`.
 - Current Cloud behavior is implemented explicitly through the backend registry, Cloud service layer, and device authorization flow.
 - Primary verification commands: `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 - GitHub automation now includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm/github-actions updates gated by a 7-day cooldown.
+
+## Repository Map — what belongs where
+
+This repo (`OpenHands/OpenHands`) is **only the agent-canvas frontend**. It is one
+piece of a multi-repo system. Before adding code here, check the change belongs in
+*this* repo — several kinds of work belong in a sibling repo instead.
+
+| Repo | Owns | Add code here when… |
+|------|------|---------------------|
+| **`OpenHands/OpenHands`** (this repo) | The React/TypeScript **frontend** (agent-canvas): UI, routes, frontend services in `src/api/` that *consume* backend APIs. | You are changing UI, frontend state, or how the frontend *calls* an existing backend endpoint. |
+| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server**: agents, tools, conversations, events, and the REST/WebSocket **API surface** (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`). | You are adding or changing a backend endpoint, agent/tool behaviour, or server-side logic. New API **endpoints** live here, not in the frontend. |
+| **`OpenHands/typescript-client`** (`@openhands/typescript-client`) | The generated/maintained **TypeScript client** that mirrors the agent-server API. The frontend's *only* sanctioned way to reach the agent-server (see "API Access Rules"). | You are adding client-side **access to an agent-server endpoint** (typed client method, request/response types). API-access code belongs here, **not** re-implemented in this repo. |
+| **`OpenHands/extensions`** (`@openhands/extensions`) | Public **skills, automations, and integrations** (loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, automation, or MCP integration. |
+
+Common mis-placements to avoid:
+
+- **API endpoint access** → belongs in `typescript-client`, then consumed here. Do **not**
+  add raw `axios`/`fetch` endpoint code to the frontend (CI guard:
+  `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
+- **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
+- **Skills / automations / integrations** → belong in `extensions`.
 
 ## PR Description Human Check
 

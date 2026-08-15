@@ -230,7 +230,12 @@ test.describe("mock-LLM automation lifecycle", () => {
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
+      // --retry: the automation backend can still be settling right after
+      // startup in the uvx/bin dev paths; transient connect/reset/5xx
+      // failures should not abort the create (observed flake → assert then
+      // sees 0 automations).
       `curl -s -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      `--retry 3 --retry-connrefused --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
