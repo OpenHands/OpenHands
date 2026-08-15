@@ -2,7 +2,7 @@ import type { BackendKind } from "#/api/backend-registry/types";
 
 export const UNKNOWN_TELEMETRY_VERSION = "unknown";
 
-export type BackendConnectionMethod = "manual" | "cloud_login";
+export type BackendConnectionMethod = "manual" | "cloud_login" | "cloud_cookie";
 
 export interface CloudTelemetryContextInput {
   userId?: string | null;

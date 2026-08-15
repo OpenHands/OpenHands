@@ -13,6 +13,8 @@
  *   INGRESS_PORT          - Port to listen on (default: 8000)
  *   INGRESS_ROUTES        - JSON object of path prefix -> backend URL
  *   INGRESS_DEFAULT       - Default backend for unmatched routes
+ *   INGRESS_RUNTIME_SERVICES_INFO - Runtime services JSON appended to
+ *                                   /server_info
  *
  * Route matching:
  *   - Routes are matched by longest prefix first
@@ -27,6 +29,8 @@ import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
+  isServerInfoRequest,
+  proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,6 +43,7 @@ function parseArgs() {
     port: 8000,
     routes: {},
     defaultBackend: null,
+    runtimeServicesInfo: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -56,6 +61,9 @@ function parseArgs() {
       case "-d":
       case "--default":
         config.defaultBackend = args[++i];
+        break;
+      case "--runtime-services-info":
+        config.runtimeServicesInfo = args[++i] || null;
         break;
       case "-h":
       case "--help":
@@ -80,12 +88,15 @@ OPTIONS:
   -p, --port <port>           Port to listen on (default: 8000)
   -r, --route <path=url>      Add a route (can be repeated)
   -d, --default <url>         Default backend for unmatched routes
+  --runtime-services-info     Runtime services JSON for /server_info
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
   INGRESS_PORT                Port to listen on
   INGRESS_ROUTES              JSON object: {"path": "url", ...}
   INGRESS_DEFAULT             Default backend URL
+  INGRESS_RUNTIME_SERVICES_INFO
+                              Runtime services JSON for /server_info
 
 EXAMPLES:
   # Basic setup with agent server and automation
@@ -125,6 +136,8 @@ function buildConfig(args, env = process.env) {
     port: args.port || parseInt(env.INGRESS_PORT, 10) || 8000,
     routes,
     defaultBackend: args.defaultBackend || env.INGRESS_DEFAULT || null,
+    runtimeServicesInfo:
+      args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
   };
 }
 
@@ -143,6 +156,15 @@ export function startIngress(config) {
     if (!backend) {
       res.writeHead(503);
       res.end("No backend configured for this route");
+      return;
+    }
+
+    if (
+      config.runtimeServicesInfo &&
+      isServerInfoRequest(req) &&
+      (req.method === "GET" || req.method === "HEAD")
+    ) {
+      proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
       return;
     }
 

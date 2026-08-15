@@ -16,11 +16,19 @@ import { HooksModal } from "#/components/features/conversation-panel/hooks-modal
 export interface ChatAddFileButtonProps {
   handleFileIconClick: () => void;
   disabled?: boolean;
+  /**
+   * Offer the "Switch agent profile" submenu. Computed by ChatInputActions:
+   * only while starting a new conversation (home or a blank conversation) and
+   * only when the backend has agent profiles (OSS-5735 — once a conversation
+   * starts, the agent profile is locked).
+   */
+  showAgentProfileSwitch?: boolean;
 }
 
 export function ChatAddFileButton({
   handleFileIconClick,
   disabled = false,
+  showAgentProfileSwitch = false,
 }: ChatAddFileButtonProps) {
   const { t } = useTranslation("openhands");
   const { conversationId } = useOptionalConversationId();
@@ -85,6 +93,7 @@ export function ChatAddFileButton({
       {menuOpen && (
         <ToolsContextMenu
           onClose={() => setMenuOpen(false)}
+          showAgentProfileSwitch={showAgentProfileSwitch}
           onShowSkills={handleShowSkills}
           onShowPlugins={handleShowPlugins}
           onShowHooks={handleShowHooks}

@@ -17,11 +17,12 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import type { Backend } from "#/api/backend-registry/types";
 import {
-  RecommendedAutomationsLauncher,
-  buildAutomationPrompt,
-} from "#/components/features/automations/recommended-automations-launcher";
+  NavigationProvider,
+  type NavigationContextValue,
+} from "#/context/navigation-context";
+import type { Backend } from "#/api/backend-registry/types";
+import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
   RecommendedAutomationsSection,
   getAutomationsByPopularity,
@@ -75,12 +76,25 @@ const cloudBackend: Backend = {
   kind: "cloud",
 };
 
+const mockNavigate = vi.fn();
+
+const navigationValue: NavigationContextValue = {
+  currentPath: "/automations",
+  conversationId: null,
+  isNavigating: false,
+  navigate: mockNavigate,
+};
+
 function renderLauncher({ withBackendProvider = false } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  const launcher = <RecommendedAutomationsLauncher />;
+  const launcher = (
+    <NavigationProvider value={navigationValue}>
+      <RecommendedAutomationsLauncher />
+    </NavigationProvider>
+  );
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -157,6 +171,7 @@ describe("recommended automations", () => {
       "linear-triage-assistant",
       "jira-issue-to-pr",
       "research-brief-writer",
+      "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
   });
@@ -181,7 +196,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("5")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -320,6 +335,147 @@ describe("recommended automations", () => {
     }
   });
 
+  it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
+    // SkillCardPillRow folds pills behind "+N more" when it measures zero
+    // widths in jsdom; give it room so every pill renders.
+    const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "offsetWidth",
+    );
+    Object.defineProperty(HTMLElement.prototype, "offsetWidth", {
+      configurable: true,
+      get() {
+        return 120;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return 2000;
+      },
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      // jira-issue-to-pr declares jira (HTTP-only catalog entry) and github
+      // (MCP). Both belong on the card; jira is labeled as external setup.
+      const pillRow = screen.getByTestId(
+        "recommended-automation-pills-jira-issue-to-pr",
+      );
+      expect(pillRow).toHaveTextContent("Jira");
+      expect(pillRow).toHaveTextContent("GitHub");
+      expect(
+        within(pillRow).getByTestId("automation-integration-external-jira"),
+      ).toHaveTextContent("RECOMMENDED_AUTOMATIONS$EXTERNAL_SETUP");
+      expect(
+        within(pillRow).queryByTestId("automation-integration-external-github"),
+      ).not.toBeInTheDocument();
+
+      // The connect-before-launch count only covers what the install flow can
+      // actually connect, so jira does not inflate it.
+      expect(pillRow).toHaveTextContent(
+        "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1",
+      );
+    } finally {
+      if (offsetWidthDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "offsetWidth",
+          offsetWidthDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
+      }
+      Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("finds an automation by searching for its non-MCP-installable integration", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        query="jira"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not silently hide an unknown required integration ID", () => {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "jira-issue-to-pr",
+    )!;
+    const mutableAutomation = automation as RecommendedAutomation & {
+      requires: {
+        integrations: Record<
+          string,
+          { required?: false; setupRequired?: boolean }
+        >;
+      };
+    };
+    const originalIntegrations = mutableAutomation.requires.integrations;
+    mutableAutomation.requires.integrations = {
+      ...originalIntegrations,
+      "unknown-integration": {},
+    };
+
+    try {
+      render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      // The current implementation drops unknown IDs while resolving the
+      // catalog, so this assertion intentionally fails until they are surfaced.
+      expect(
+        screen.getByTestId(
+          "recommended-automation-integration-unknown-integration",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      mutableAutomation.requires.integrations = originalIntegrations;
+    }
+  });
+
+  it("queues installs only for MCP-installable required integrations", async () => {
+    renderLauncher();
+
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+    );
+
+    // jira cannot go through the local MCP install flow, so the queue starts
+    // directly at github rather than failing or skipping the automation.
+    const modal = await screen.findByTestId("mcp-install-modal");
+    expect(modal).toHaveAttribute("data-marketplace-id", "github");
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
   it("shows a decorative plus badge on each card without toggle behavior", () => {
     render(
       <RecommendedAutomationsSection
@@ -383,9 +539,86 @@ describe("recommended automations", () => {
     expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
-  it("launches directly with the catalog prompt when the required MCP is already installed", () => {
+  it("opens the setup form for an automation that ships one, creating nothing", () => {
+    // Arrange
     mockUseSettings.mockReturnValue({
       data: settingsWithGithubMcp(),
+    });
+
+    renderLauncher();
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
+    );
+    fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
+
+    // Assert — nothing exists until the user confirms in the setup form.
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/automations/new/github-pr-reviewer",
+    );
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+  });
+
+  it("launches an automation that ships no setup form with its slash command", () => {
+    // Arrange
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    renderLauncher();
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
+    );
+
+    // Assert
+    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
+    const [, options] = mockCreateConversationMutate.mock.calls[0];
+    options.onSuccess({ conversation_id: "conversation-1" });
+
+    const draft = getConversationState("conversation-1").draftMessage;
+    expect(draft).toBe("/linear-triage:setup");
+  });
+
+  it("launches without waiting for an integration the automation can start without", () => {
+    // Arrange — Slack and Linear are connected; Notion, which the entry marks
+    // as connectable later, is not.
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        slack: { url: "https://mcp.slack.com/mcp" },
+        linear: { url: "https://mcp.linear.app/mcp" },
+      }),
+    });
+
+    renderLauncher();
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId(
+        "recommended-automation-card-incident-retrospective-drafter",
+      ),
+    );
+
+    // Assert — nothing stands between the click and the launch.
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("prompts to install when the required MCP server is disabled", async () => {
+    // A disabled server is withheld from the agent, so treating it as
+    // installed would launch an automation that then fails at runtime.
+    mockUseSettings.mockReturnValue({
+      data: settingsWithMcpConfig({
+        github: {
+          url: GITHUB_HOSTED_MCP_URL,
+          auth: { strategy: "bearer", value: "github-token" },
+          enabled: false,
+        },
+      }),
     });
 
     renderLauncher();
@@ -395,14 +628,8 @@ describe("recommended automations", () => {
     );
     fireEvent.click(screen.getByTestId("responder-deployment-continue-local"));
 
-    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
-
-    const [, options] = mockCreateConversationMutate.mock.calls[0];
-    options.onSuccess({ conversation_id: "conversation-1" });
-
-    const draft = getConversationState("conversation-1").draftMessage;
-    expect(draft).toBeTruthy();
+    await screen.findByTestId("mcp-install-modal");
+    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
   });
 
   it("ignores repeated launches once a responder deployment choice is in flight", () => {
@@ -421,7 +648,7 @@ describe("recommended automations", () => {
       screen.getByTestId("recommended-automation-card-github-pr-reviewer"),
     );
 
-    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
   it("hides the recommended automations section on cloud backends", () => {
@@ -436,8 +663,8 @@ describe("recommended automations", () => {
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const createSpy = vi
+      .spyOn(SettingsService, "createMcpServer")
       .mockResolvedValue(true);
 
     renderLauncher();
@@ -453,9 +680,11 @@ describe("recommended automations", () => {
     });
     fireEvent.click(screen.getByTestId("mcp-install-submit"));
 
-    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1),
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/automations/new/github-pr-reviewer",
+      ),
     );
   });
 
@@ -491,16 +720,5 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("responder-deployment-modal"),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("buildAutomationPrompt", () => {
-  it("passes the prompt through verbatim", () => {
-    expect(buildAutomationPrompt("Do something useful")).toBe(
-      "Do something useful",
-    );
-    expect(buildAutomationPrompt("/slack-monitor:poll")).toBe(
-      "/slack-monitor:poll",
-    );
   });
 });

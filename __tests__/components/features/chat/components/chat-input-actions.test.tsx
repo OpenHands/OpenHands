@@ -1,6 +1,6 @@
 import React from "react";
-import { screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import {
@@ -33,9 +33,6 @@ vi.mock("#/components/features/chat/change-agent-button", () => ({
 vi.mock(
   "#/components/features/chat/components/chat-input-profile-picker",
   () => ({
-    ChatInputProfilePicker: () => (
-      <div data-testid="agent-profile-picker-stub" />
-    ),
     ChatInputProfileMenuContent: () => (
       <div data-testid="agent-profile-menu-stub" />
     ),
@@ -56,6 +53,19 @@ vi.mock(
 
 vi.mock("#/hooks/query/use-active-conversation", () => ({
   useActiveConversation: () => useActiveConversationMock(),
+}));
+
+// Service-level mock (not the hook): drives the Switch-agent-profile gate,
+// which reads the real useAgentProfiles query.
+const listAgentProfilesMock = vi.fn();
+vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
+  default: {
+    listProfiles: (...args: unknown[]) => listAgentProfilesMock(...args),
+    getProfile: vi.fn(),
+    saveProfile: vi.fn(),
+    activateProfile: vi.fn(),
+  },
+  WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 
 vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
@@ -85,24 +95,40 @@ describe("ChatInputActions", () => {
     useActiveConversationMock.mockReturnValue({ data: undefined });
   });
 
-  it("renders the AgentProfile picker on the home page (local)", () => {
+  it("renders the LLM-profile picker on the home page (local)", () => {
     useActiveConversationMock.mockReturnValue({ data: undefined });
 
     renderWithProviders(<ChatInputActions disabled={false} />, {
       navigation: { conversationId: null },
     });
 
-    // Home keeps the start-new/activate AgentProfile picker (#3727).
-    expect(screen.getByTestId("agent-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("llm-profile-picker-stub"),
-    ).not.toBeInTheDocument();
+    // The pill is always an LLM selector (OSS-5735) — agent-profile switching
+    // lives in the "+" tools menu instead.
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
     expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
   });
 
-  it("renders the AgentProfile picker inside a blank local OpenHands conversation", () => {
+  it("renders the LLM-profile picker on the home page (cloud)", () => {
+    // Cloud used to fall back to a read-only model chip before a conversation
+    // started, surfacing the raw model path instead of the profile name (#1932
+    // review). The pill names the profile on every backend now.
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chat-input-llm-model"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the LLM-profile picker inside a blank local OpenHands conversation", () => {
     useActiveConversationMock.mockReturnValue({
       data: { conversation_id: "test-conversation-id", llm_model: null },
     });
@@ -114,10 +140,7 @@ describe("ChatInputActions", () => {
       },
     );
 
-    expect(screen.getByTestId("agent-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("llm-profile-picker-stub"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
     expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
@@ -135,11 +158,8 @@ describe("ChatInputActions", () => {
       },
     );
 
-    // In a conversation the user live-switches the LLM profile, not start-new.
+    // In a conversation the user live-switches the LLM profile.
     expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-profile-picker-stub"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
@@ -163,9 +183,6 @@ describe("ChatInputActions", () => {
 
     // ACP in a conversation live-switches the running model via ChatInputModel.
     expect(screen.getByTestId("chat-input-llm-model")).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("agent-profile-picker-stub"),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("llm-profile-picker-stub"),
     ).not.toBeInTheDocument();
@@ -191,9 +208,6 @@ describe("ChatInputActions", () => {
     expect(screen.getByTestId("chat-input-llm-model")).toHaveTextContent(
       "gpt-4o",
     );
-    expect(
-      screen.queryByTestId("agent-profile-picker-stub"),
-    ).not.toBeInTheDocument();
   });
 
   it("omits the model label on cloud when the active ACP conversation has no llm_model", () => {
@@ -236,9 +250,6 @@ describe("ChatInputActions", () => {
 
     expect(screen.getByTestId("llm-profile-picker-stub")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("agent-profile-picker-stub"),
-    ).not.toBeInTheDocument();
-    expect(
       screen.queryByTestId("chat-input-llm-model"),
     ).not.toBeInTheDocument();
   });
@@ -276,5 +287,105 @@ describe("ChatInputActions", () => {
     );
 
     expect(screen.getByTestId("change-agent-button-stub")).toBeInTheDocument();
+  });
+});
+
+describe("ChatInputActions — Switch agent profile gate (OSS-5735)", () => {
+  beforeEach(() => {
+    useActiveConversationMock.mockReset();
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    listAgentProfilesMock.mockReset();
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [{ id: "p1", name: "default", agent_kind: "openhands" }],
+      active_agent_profile_id: "p1",
+    });
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    __resetActiveStoreForTests();
+  });
+
+  const openPlusMenu = () => {
+    fireEvent.click(screen.getByTestId("chat-plus-button"));
+  };
+
+  it("offers Switch agent profile in the + menu on the home page when profiles exist", async () => {
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    openPlusMenu();
+
+    expect(
+      await screen.findByTestId("switch-agent-profile-button"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Switch agent profile in a blank (unstarted) conversation", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { conversation_id: "conv-blank", llm_model: null },
+    });
+
+    renderWithProviders(
+      <ChatInputActions disabled={false} hasStartedConversation={false} />,
+      { navigation: { conversationId: "conv-blank" } },
+    );
+
+    openPlusMenu();
+
+    expect(
+      await screen.findByTestId("switch-agent-profile-button"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer Switch agent profile once the conversation has started", async () => {
+    useActiveConversationMock.mockReturnValue({
+      data: { conversation_id: "conv-started", llm_model: "gpt-4o" },
+    });
+
+    renderWithProviders(
+      <ChatInputActions disabled={false} hasStartedConversation />,
+      { navigation: { conversationId: "conv-started" } },
+    );
+
+    openPlusMenu();
+
+    expect(await screen.findByTestId("tools-context-menu")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Switch agent profile when the backend has no profiles", async () => {
+    listAgentProfilesMock.mockResolvedValue({
+      profiles: [],
+      active_agent_profile_id: null,
+    });
+
+    renderWithProviders(<ChatInputActions disabled={false} />, {
+      navigation: { conversationId: null },
+    });
+
+    openPlusMenu();
+
+    await waitFor(() => expect(listAgentProfilesMock).toHaveBeenCalled());
+    expect(
+      screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Switch agent profile while a cloud start task is provisioning", async () => {
+    renderWithProviders(
+      <ChatInputActions disabled={false} hasStartedConversation={false} />,
+      { navigation: { conversationId: "task-start-1" } },
+    );
+
+    openPlusMenu();
+
+    await waitFor(() => expect(listAgentProfilesMock).toHaveBeenCalled());
+    expect(
+      screen.queryByTestId("switch-agent-profile-button"),
+    ).not.toBeInTheDocument();
   });
 });

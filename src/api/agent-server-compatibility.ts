@@ -25,9 +25,11 @@ export const AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE =
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   usable_tools?: string[] | null;
+  runtime_services?: unknown;
 }
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
+let cachedAgentServerInfoHost: string | null = null;
 
 const getAdvertisedTools = (serverInfo: AgentServerInfo | null) => {
   if (Array.isArray(serverInfo?.usable_tools)) {
@@ -63,7 +65,9 @@ export const isAgentServerUnavailableError = (
   (typeof error === "object" &&
     error !== null &&
     "name" in error &&
-    error.name === "AgentServerUnavailableError");
+    (error.name === "AgentServerUnavailableError" ||
+      error.name === "AgentServerUnsupportedVersionError" ||
+      error.name === "AgentServerUnknownVersionError"));
 
 export class AgentServerUnsupportedVersionError extends AgentServerUnavailableError {
   readonly code = AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE;
@@ -130,6 +134,16 @@ export const isAgentServerAuthError = (error: unknown): boolean =>
 
 export function clearCachedAgentServerInfo() {
   cachedAgentServerInfo = null;
+  cachedAgentServerInfoHost = null;
+}
+
+export function getCachedAgentServerInfo(options?: {
+  host?: string | null;
+}): AgentServerInfo | null {
+  if (options?.host && options.host !== cachedAgentServerInfoHost) {
+    return null;
+  }
+  return cachedAgentServerInfo;
 }
 
 export function isAgentServerToolAvailable(toolName: string) {
@@ -381,5 +395,6 @@ export async function loadAgentServerInfo() {
   }
 
   cachedAgentServerInfo = serverInfo;
+  cachedAgentServerInfoHost = clientOptions.host;
   return serverInfo;
 }

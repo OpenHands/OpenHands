@@ -7,8 +7,10 @@ node_modules/
 build/
 logs/
 /.tmp/live-e2e-state/
-/.tmp/mock-llm-state/
-/.tmp/mock-llm-skill-repos/
+# Scratch space for local E2E runs. Ignore the whole directory: besides the
+# mock-llm state dirs, the suite also drops an automation DB and an unignored
+# `secrets.json` here, which should never be committable.
+/.tmp/
 dist/
 __pycache__
 
@@ -24,6 +26,8 @@ __pycache__
 /playwright-report-mock-llm-docker/
 /blob-report/
 /playwright/.cache/
+/.stryker-tmp/
+/reports/
 .react-router/
 ralph/
 .vercel
