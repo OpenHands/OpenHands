@@ -38163,5 +38163,39 @@
     "tr": "Alt sohbet istendi",
     "uk": "Запитано дочірню розмову",
     "ca": "S'ha sol·licitat una conversa filla"
+  },
+  "SETTINGS$NAV_GENERAL": {
+    "en": "General",
+    "ja": "一般",
+    "zh-CN": "常规",
+    "zh-TW": "一般",
+    "ko-KR": "일반",
+    "no": "Generelt",
+    "it": "Generale",
+    "pt": "Geral",
+    "es": "General",
+    "fr": "Général",
+    "de": "Allgemein",
+    "tr": "Genel",
+    "uk": "Загальні",
+    "ar": "عام",
+    "ca": "General"
+  },
+  "SETTINGS$PAGE_GENERAL_SUBLINE": {
+    "en": "Maximum agent steps and other run limits.",
+    "ja": "エージェントの最大ステップ数などの実行制限。",
+    "zh-CN": "代理的最大步数和其他运行限制。",
+    "zh-TW": "代理的最大步數和其他運行限制。",
+    "ko-KR": "에이전트의 최대 단계 수 및 기타 실행 제한.",
+    "no": "Maksimale agentsteg og andre kjøringsbegrensninger.",
+    "it": "Numero massimo di passi dell'agente e altri limiti di esecuzione.",
+    "pt": "Número máximo de passos do agente e outros limites de execução.",
+    "es": "Número máximo de pasos del agente y otros límites de ejecución.",
+    "fr": "Nombre maximal d'étapes de l'agent et autres limites d'exécution.",
+    "de": "Maximale Agentenschritte und andere Ausführungslimits.",
+    "tr": "Maksimum ajan adımı ve diğer çalıştırma limitleri.",
+    "uk": "Максимальна кількість кроків агента та інші обмеження виконання.",
+    "ar": "الحد الأقصى لخطوات الوكيل وحدود التشغيل الأخرى.",
+    "ca": "Nombre màxim de passos de l'agent i altres límits d'execució."
   }
 }
