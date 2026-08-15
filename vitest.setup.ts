@@ -183,7 +183,10 @@ afterAll(async () => {
   // `ProgressEvent` is still defined. We restore real timers first so a test
   // that left fake timers active can't stall the drain.
   vi.useRealTimers();
-  for (let i = 0; i < 10; i += 1) {
+  // Reset handlers first so no new intercepted requests start processing
+  // during the drain window.
+  server.resetHandlers();
+  for (let i = 0; i < 30; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   server.close();
