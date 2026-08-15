@@ -12,6 +12,7 @@ import {
 import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
+import { ContextWindowMeter } from "./context-window-meter";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
@@ -497,6 +498,7 @@ export function ChatInputActions({
             isPausing={isPausing}
           />
         )}
+        <ContextWindowMeter />
         {showButton && (
           <ChatSendButton
             buttonClassName={buttonClassName}
