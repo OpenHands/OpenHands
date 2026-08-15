@@ -19,7 +19,8 @@ export const ORG_QUERY_PARAM = "org";
 
 /**
  * Append the active backend identity to an in-app path so opening it in a new
- * browsing context resolves against the same backend.
+ * browsing context resolves against the same backend. Any fragment on the
+ * path is preserved verbatim and kept after the query string.
  */
 export function withBackendSelectionParams(
   path: string,
@@ -28,12 +29,16 @@ export function withBackendSelectionParams(
   const { backend, orgId } = active;
   if (!backend.id) return path;
 
-  const [pathname, existingSearch = ""] = path.split("?");
+  const hashIndex = path.indexOf("#");
+  const fragment = hashIndex === -1 ? "" : path.slice(hashIndex);
+  const withoutFragment = hashIndex === -1 ? path : path.slice(0, hashIndex);
+
+  const [pathname, existingSearch = ""] = withoutFragment.split("?");
   const params = new URLSearchParams(existingSearch);
   params.set(BACKEND_QUERY_PARAM, backend.id);
   if (orgId) params.set(ORG_QUERY_PARAM, orgId);
 
-  return `${pathname}?${params.toString()}`;
+  return `${pathname}?${params.toString()}${fragment}`;
 }
 
 /**

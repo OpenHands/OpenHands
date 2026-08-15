@@ -65,6 +65,51 @@ describe("withBackendSelectionParams", () => {
       `/conversations/abc?tab=files&${BACKEND_QUERY_PARAM}=local-1`,
     );
   });
+
+  it("keeps a fragment after existing query parameters intact and after the query", () => {
+    const path = withBackendSelectionParams(
+      "/conversations/abc?tab=files#detail",
+      {
+        backend: localBackend,
+        orgId: null,
+      },
+    );
+
+    expect(path).toBe(
+      `/conversations/abc?tab=files&${BACKEND_QUERY_PARAM}=local-1#detail`,
+    );
+  });
+
+  it("keeps a fragment on a path without query parameters after the query", () => {
+    const path = withBackendSelectionParams("/conversations/abc#detail", {
+      backend: localBackend,
+      orgId: null,
+    });
+
+    expect(path).toBe(
+      `/conversations/abc?${BACKEND_QUERY_PARAM}=local-1#detail`,
+    );
+  });
+
+  it("does not treat a ? inside the fragment as a query separator", () => {
+    const path = withBackendSelectionParams("/conversations/abc#detail?x=1", {
+      backend: localBackend,
+      orgId: null,
+    });
+
+    expect(path).toBe(
+      `/conversations/abc?${BACKEND_QUERY_PARAM}=local-1#detail?x=1`,
+    );
+  });
+
+  it("round-trips an empty fragment verbatim", () => {
+    const path = withBackendSelectionParams("/conversations/abc#", {
+      backend: localBackend,
+      orgId: null,
+    });
+
+    expect(path).toBe(`/conversations/abc?${BACKEND_QUERY_PARAM}=local-1#`);
+  });
 });
 
 describe("readBackendSelectionFromUrl", () => {
