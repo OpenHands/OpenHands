@@ -103,23 +103,25 @@ export function ConversationCard({
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
-  const [tagsExpanded, setTagsExpanded] = React.useState(false);
+  const [tagsCollapsed, setTagsCollapsed] = React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const displayTags = getDisplayConversationTags(tags);
-  // Compact state for the panel's "Tags" toggle off: a tagged card still
-  // advertises its tags as a small icon + count next to the pin, and clicking
-  // it expands just this card's chip row (per-card local state). With the
-  // toggle on, chips are always visible and the indicator disappears.
-  const showTagIndicator = !showTags && displayTags.length > 0;
-  const showTagChipRow = showTags || (tagsExpanded && displayTags.length > 0);
+  // The two tag controls own different things, and that is what keeps them
+  // from ever contradicting each other. The panel's Tags preference owns
+  // PRESENCE: off means no tag UI on the card at all, not even the indicator.
+  // The indicator owns DENSITY within the on state: expanded shows the chip
+  // row, collapsed tucks it to an icon + count. Every state the indicator can
+  // reach still shows tags, so it can never leave the preference reading "off"
+  // while a card shows tags.
+  const hasDisplayTags = displayTags.length > 0;
+  const showTagIndicator = showTags && hasDisplayTags;
+  const showTagChipRow = showTags && hasDisplayTags && !tagsCollapsed;
 
-  // The panel's Tags preference is the master switch for all tag UI, so a flip
-  // clears the per-card override. Without this, turning chips off leaves every
-  // card the user had expanded still showing its chips, and the preference
-  // reads as broken.
+  // Turning the preference on means "show me tags", so cards come back
+  // expanded rather than in whatever density they were left at.
   React.useEffect(() => {
-    setTagsExpanded(false);
+    setTagsCollapsed(false);
   }, [showTags]);
 
   const onTitleSave = (newTitle: string) => {
@@ -215,12 +217,12 @@ export function ConversationCard({
     onTogglePin?.();
   };
 
-  const handleToggleTagsExpanded = (
+  const handleToggleTagsCollapsed = (
     event: React.MouseEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    setTagsExpanded((value) => !value);
+    setTagsCollapsed((value) => !value);
   };
 
   const renderTagIndicator = () => (
@@ -231,21 +233,21 @@ export function ConversationCard({
           ? `conversation-tags-indicator-${conversationId}`
           : "conversation-tags-indicator"
       }
-      aria-pressed={tagsExpanded}
+      aria-pressed={!tagsCollapsed}
       aria-label={
-        tagsExpanded
-          ? t(I18nKey.CONVERSATION_PANEL$HIDE_TAGS)
-          : t(I18nKey.CONVERSATION_PANEL$SHOW_TAGS, {
+        tagsCollapsed
+          ? t(I18nKey.CONVERSATION_PANEL$SHOW_TAGS, {
               count: displayTags.length,
             })
+          : t(I18nKey.CONVERSATION_PANEL$HIDE_TAGS)
       }
-      onClick={handleToggleTagsExpanded}
+      onClick={handleToggleTagsCollapsed}
       className={cn(
         "flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1 py-0.5",
         "text-[10px] leading-4",
-        tagsExpanded
-          ? "text-[var(--oh-accent)]"
-          : "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white",
+        tagsCollapsed
+          ? "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
+          : "text-[var(--oh-accent)]",
       )}
     >
       <Tag className="h-3.5 w-3.5" aria-hidden />
