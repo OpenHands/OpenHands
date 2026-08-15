@@ -98,6 +98,7 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(AutomationService.validateDraft).mockReset();
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
@@ -213,7 +214,9 @@ describe("SetupDialog", () => {
     await user.click(screen.getByTestId("setup-continue-button"));
 
     // Assert
-    expect(await screen.findByTestId("setup-prerequisites")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("setup-prerequisites"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("setup-prerequisite-error")).toHaveTextContent(
       "Reconnect GitHub before continuing.",
     );
@@ -242,6 +245,32 @@ describe("SetupDialog", () => {
     );
     expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(
       secretSentinel,
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("does not admit a verdict for values edited during preflight", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act - the fields stay editable while the explicit service check runs.
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await user.type(screen.getByTestId("setup-field-widgetName"), " changed");
+    resolve({ valid: true, errors: [] });
+
+    // Assert - editing invalidated that request, so its later success cannot
+    // unlock review or the create action.
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-continue-button")).not.toBeDisabled(),
     );
     expect(screen.queryByTestId("setup-review")).toBeNull();
     expect(mocks.runAction).not.toHaveBeenCalled();
@@ -299,6 +328,33 @@ describe("SetupDialog", () => {
     });
   });
 
+  it("revalidates on confirm and blocks creation when readiness changed", async () => {
+    const sentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft)
+      .mockResolvedValueOnce({ valid: true, errors: [] })
+      .mockRejectedValueOnce(
+        Object.assign(new Error(sentinel), {
+          name: "HttpError",
+          status: 503,
+        }),
+      );
+    const { user } = renderDialog();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(sentinel);
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {
     // Arrange — capabilities answered and came up short, and the entry ships
     // a fallback-conversation seed.
@@ -323,7 +379,11 @@ describe("SetupDialog", () => {
         replace: true,
       }),
     );
-    expect(mocks.runAction).toHaveBeenCalledWith(entry, expect.anything(), null);
+    expect(mocks.runAction).toHaveBeenCalledWith(
+      entry,
+      expect.anything(),
+      null,
+    );
   });
 
   it("keeps the unsupported screen close-only when there is nothing to fall back to", () => {

@@ -38,5 +38,8 @@ export default function AutomationSetupRoute() {
     else navigate(-1);
   };
 
-  return <SetupDialog entry={entry} onClose={handleClose} />;
+  // React Router can reuse this route component when only the parameter
+  // changes. Remount setup state so values and a completed verdict from one
+  // catalog entry never carry into another.
+  return <SetupDialog key={entry.id} entry={entry} onClose={handleClose} />;
 }

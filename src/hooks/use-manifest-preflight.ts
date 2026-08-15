@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   mapServiceErrors,
   normalizeServiceErrors,
@@ -63,7 +64,24 @@ function hasMappedErrors(errors: MappedManifestErrors): boolean {
 }
 
 export function useSetupPreflight(entry: SetupEntry) {
+  const { backend, orgId } = useActiveBackend();
   const latestRequestRef = useRef(0);
+  useEffect(
+    () => () => {
+      latestRequestRef.current += 1;
+    },
+    [],
+  );
+  const currentEntryIdRef = useRef(entry.id);
+  currentEntryIdRef.current = entry.id;
+  const targetKey = JSON.stringify([
+    backend.id,
+    backend.kind,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ]);
+  const currentTargetKeyRef = useRef(targetKey);
+  currentTargetKeyRef.current = targetKey;
   const errorMap = useMemo(() => deriveErrorMap(entry), [entry]);
 
   const runPreflight = useCallback(
@@ -75,11 +93,22 @@ export function useSetupPreflight(entry: SetupEntry) {
 
       latestRequestRef.current += 1;
       const requestId = latestRequestRef.current;
+      const entryId = entry.id;
+      const requestTargetKey = targetKey;
+
+      const isStale = () =>
+        requestId !== latestRequestRef.current ||
+        entryId !== currentEntryIdRef.current ||
+        requestTargetKey !== currentTargetKeyRef.current;
 
       try {
         const result = await AutomationService.validateDraft(body);
-        if (requestId !== latestRequestRef.current) return { status: "stale" };
-        if (result?.valid === true && result.errors?.length === 0) {
+        if (isStale()) return { status: "stale" };
+        if (
+          result?.valid === true &&
+          Array.isArray(result.errors) &&
+          result.errors.length === 0
+        ) {
           return { status: "passed" };
         }
 
@@ -92,13 +121,13 @@ export function useSetupPreflight(entry: SetupEntry) {
         }
         return { status: "unavailable" };
       } catch (error) {
-        if (requestId !== latestRequestRef.current) return { status: "stale" };
+        if (isStale()) return { status: "stale" };
         return isPreflightUnimplemented(error)
           ? { status: "unsupported" }
           : { status: "unavailable" };
       }
     },
-    [entry, errorMap],
+    [entry, errorMap, targetKey],
   );
 
   const invalidatePreflight = useCallback(() => {

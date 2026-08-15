@@ -193,6 +193,53 @@ describe("AutomationService.syncTelemetryConsent", () => {
   });
 });
 
+describe("AutomationService.validateDraft", () => {
+  const body = {
+    endpoint: "/v1/preset/prompt",
+    draft: { name: "Review", prompt: "Review it." },
+  };
+
+  beforeEach(() => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    localAxios.post.mockResolvedValue({ data: { valid: true, errors: [] } });
+    callCloudProxy.mockResolvedValue({ valid: true, errors: [] });
+  });
+
+  afterEach(() => {
+    setActiveSelection(null);
+    setRegisteredBackends([]);
+    vi.clearAllMocks();
+  });
+
+  it("bounds a local preflight request", async () => {
+    await AutomationService.validateDraft(body);
+
+    expect(localAxios.post).toHaveBeenCalledWith(
+      "/api/automation/v1/validate",
+      body,
+      { timeout: 90_000 },
+    );
+  });
+
+  it("gives a cloud preflight the same bounded request budget", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-1" });
+
+    await AutomationService.validateDraft(body);
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/automation/v1/validate",
+        body,
+        timeoutSeconds: 90,
+      }),
+    );
+  });
+});
+
 describe("AutomationService.createAutomation", () => {
   beforeEach(() => {
     setRegisteredBackends([localBackend]);

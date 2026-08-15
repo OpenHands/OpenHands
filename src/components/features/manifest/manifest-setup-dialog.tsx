@@ -193,11 +193,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       case "failed":
         setServiceErrors(outcome.errors);
         setPreflightStatus(null);
-        if (
-          routeToErroredStep &&
-          (outcome.errors.stepErrors.prerequisites?.length ?? 0) > 0
-        ) {
-          setStep("prerequisites");
+        if (routeToErroredStep) {
+          setStep(
+            (outcome.errors.stepErrors.prerequisites?.length ?? 0) > 0
+              ? "prerequisites"
+              : "form",
+          );
         }
         return false;
       case "unavailable":
@@ -207,6 +208,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           stepErrors: {},
         });
         setPreflightStatus(null);
+        if (routeToErroredStep) setStep("form");
         return false;
       case "stale":
         return false;
@@ -302,7 +304,16 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
   };
 
-  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+  const handleConfirm = async () => {
+    setIsPreflighting(true);
+    try {
+      const outcome = await runPreflight(values);
+      if (!applyPreflightOutcome(outcome, true)) return;
+      await submitAction(payload, entry.setup.mode);
+    } finally {
+      setIsPreflighting(false);
+    }
+  };
 
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed

@@ -1,11 +1,30 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { type ResolvedActiveBackend } from "#/api/backend-registry/types";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
 import { createSetupEntry } from "../manifests/manifest-test-data";
 
+const activeBackendState = vi.hoisted((): { value: ResolvedActiveBackend } => ({
+  value: {
+    backend: {
+      id: "local-test",
+      name: "Local test",
+      host: "http://localhost:3000",
+      apiKey: "session-key",
+      kind: "local",
+      connectionRevision: 0,
+    },
+    orgId: null,
+  },
+}));
+
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: { validateDraft: vi.fn() },
+}));
+
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => activeBackendState.value,
 }));
 
 /** A local call's failure, which arrives as an `AxiosError`. */
@@ -37,6 +56,17 @@ let warn: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  activeBackendState.value = {
+    backend: {
+      id: "local-test",
+      name: "Local test",
+      host: "http://localhost:3000",
+      apiKey: "session-key",
+      kind: "local",
+      connectionRevision: 0,
+    },
+    orgId: null,
+  };
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
@@ -110,6 +140,26 @@ describe("useSetupPreflight", () => {
     });
   });
 
+  it.each([
+    [
+      "valid with errors",
+      { valid: true, errors: [{ message: "contradiction" }] },
+    ],
+    ["invalid without errors", { valid: false, errors: [] }],
+    ["wrong valid type", { valid: "yes", errors: [] }],
+    ["non-array errors", { valid: true, errors: "" }],
+    ["null response", null],
+  ])("fails closed for a malformed %s response", async (_case, response) => {
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue(
+      response as never,
+    );
+    const { result } = renderHook(() => useSetupPreflight(ENTRY));
+
+    await expect(result.current.runPreflight(VALUES)).resolves.toEqual({
+      status: "unavailable",
+    });
+  });
+
   it("does not let an older response overwrite a newer verdict", async () => {
     // Arrange
     let resolveFirst!: (value: { valid: false; errors: never[] }) => void;
@@ -131,7 +181,10 @@ describe("useSetupPreflight", () => {
 
     // Act — the second request completes before the first.
     const first = result.current.runPreflight(VALUES);
-    const second = result.current.runPreflight({ ...VALUES, widgetName: "New" });
+    const second = result.current.runPreflight({
+      ...VALUES,
+      widgetName: "New",
+    });
     resolveSecond({ valid: true, errors: [] });
     await expect(second).resolves.toEqual({ status: "passed" });
     resolveFirst({ valid: false, errors: [] });
@@ -157,6 +210,113 @@ describe("useSetupPreflight", () => {
     resolve({ valid: true, errors: [] });
 
     // Assert
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("marks an in-flight response stale when the setup entry changes", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, rerender } = renderHook(
+      ({ entry }) => useSetupPreflight(entry),
+      { initialProps: { entry: ENTRY } },
+    );
+    const pending = result.current.runPreflight(VALUES);
+
+    // Act - React Router can reuse the mounted setup route for another id.
+    rerender({ entry: createSetupEntry({ id: "different-automation" }) });
+    resolve({ valid: true, errors: [] });
+
+    // Assert - the previous automation's verdict cannot validate the new one.
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("marks an in-flight response stale when the target backend changes", async () => {
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, rerender } = renderHook(() => useSetupPreflight(ENTRY));
+    const pending = result.current.runPreflight(VALUES);
+
+    activeBackendState.value = {
+      backend: {
+        id: "cloud-test",
+        name: "Cloud test",
+        host: "https://app.example.test",
+        apiKey: "cloud-key",
+        kind: "cloud",
+        connectionRevision: 0,
+      },
+      orgId: "org-2",
+    };
+    rerender();
+    resolve({ valid: true, errors: [] });
+
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("keeps distinct backend targets separate when their text contains delimiters", async () => {
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    activeBackendState.value = {
+      backend: {
+        id: "a",
+        name: "First target",
+        host: "http://localhost:3000",
+        apiKey: "first-key",
+        kind: "local",
+        connectionRevision: 0,
+      },
+      orgId: "b:cloud:0:c",
+    };
+    const { result, rerender } = renderHook(() => useSetupPreflight(ENTRY));
+    const pending = result.current.runPreflight(VALUES);
+
+    activeBackendState.value = {
+      backend: {
+        id: "a:local:0:b",
+        name: "Second target",
+        host: "https://app.example.test",
+        apiKey: "second-key",
+        kind: "cloud",
+        connectionRevision: 0,
+      },
+      orgId: "c",
+    };
+    rerender();
+    resolve({ valid: true, errors: [] });
+
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("marks an in-flight response stale after the setup unmounts", async () => {
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, unmount } = renderHook(() => useSetupPreflight(ENTRY));
+    const pending = result.current.runPreflight(VALUES);
+
+    unmount();
+    resolve({ valid: true, errors: [] });
+
     await expect(pending).resolves.toEqual({ status: "stale" });
   });
 });
