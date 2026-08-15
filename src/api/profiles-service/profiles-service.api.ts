@@ -17,7 +17,6 @@
  * fetch-based HTTP which doesn't require connection cleanup.
  */
 import {
-  AgentServerClient,
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
@@ -29,6 +28,7 @@ import {
   type ActivateProfileResponse,
   type SaveProfileRequest,
   type ExposeSecretsMode,
+  type ValidateProfileResponse,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -41,18 +41,6 @@ import {
   saveCloudProfile,
 } from "../cloud/profiles-service.api";
 
-/** Structured error returned when pre-flight validation fails. */
-export interface ValidateProfileError {
-  type: string;
-  message: string;
-}
-
-/** Result of an LLM pre-flight check. */
-export interface ValidateProfileResponse {
-  valid: boolean;
-  error?: ValidateProfileError | null;
-}
-
 // Re-export SDK types for consumers
 export type {
   ProfileInfo,
@@ -62,6 +50,7 @@ export type {
   ActivateProfileResponse,
   SaveProfileRequest,
   ExposeSecretsMode,
+  ValidateProfileResponse,
 };
 
 function isCloudBackend(): boolean {
@@ -69,9 +58,15 @@ function isCloudBackend(): boolean {
 }
 
 function isAbortLike(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? error.name : undefined;
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  const cause = "cause" in error ? error.cause : undefined;
   return (
-    error instanceof Error &&
-    (error.name === "AbortError" || error.name === "TimeoutError")
+    !!cause &&
+    typeof cause === "object" &&
+    "name" in cause &&
+    (cause.name === "AbortError" || cause.name === "TimeoutError")
   );
 }
 
@@ -148,16 +143,12 @@ class ProfilesService {
     request: SaveProfileRequest,
   ): Promise<ValidateProfileResponse | null> {
     if (isCloudBackend()) return null;
-    const client = new AgentServerClient({
+    const client = new ProfilesClient({
       ...getAgentServerClientOptions(),
       timeout: 30000,
     });
     try {
-      return await client.post<ValidateProfileResponse>(
-        `/api/profiles/${encodeURIComponent(name)}/validate`,
-        request,
-        { acceptableStatusCodes: new Set([200]) },
-      );
+      return await client.validateProfile(name, request);
     } catch (error) {
       // Older agent-server versions don't have the endpoint → 404
       // Treat as "no verdict" rather than blocking the save.
