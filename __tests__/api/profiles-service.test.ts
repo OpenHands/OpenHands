@@ -20,7 +20,6 @@ const {
   mockDeleteProfile,
   mockRenameProfile,
   mockActivateProfile,
-  mockValidateProfile,
   mockPost,
   mockClose,
 } = vi.hoisted(() => ({
@@ -30,7 +29,6 @@ const {
   mockDeleteProfile: vi.fn(),
   mockRenameProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
-  mockValidateProfile: vi.fn(),
   mockPost: vi.fn(),
   mockClose: vi.fn(),
 }));
@@ -47,7 +45,6 @@ vi.mock("@openhands/typescript-client/clients", () => ({
       deleteProfile: mockDeleteProfile,
       renameProfile: mockRenameProfile,
       activateProfile: mockActivateProfile,
-      validateProfile: mockValidateProfile,
       close: mockClose,
     };
   }),
@@ -68,7 +65,6 @@ describe("ProfilesService", () => {
     mockDeleteProfile.mockReset();
     mockRenameProfile.mockReset();
     mockActivateProfile.mockReset();
-    mockValidateProfile.mockReset();
     mockPost.mockReset();
     mockClose.mockReset();
     vi.mocked(ProfilesClient).mockClear();
