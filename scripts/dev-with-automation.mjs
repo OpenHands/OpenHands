@@ -730,17 +730,34 @@ function getFrontendBackend(config) {
 }
 
 function buildViteBackendEnv(config, env = process.env) {
-  const backendBaseUrl = config.launchAgentServer
-    ? `http://127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_BASE_URL ?? "http://127.0.0.1:8000");
+  // VITE_BACKEND_HOST tells the Vite dev-server proxy (vite.config.ts) where
+  // to forward /api, /sockets, etc.  It is NOT read by the frontend at
+  // runtime, so it is safe to keep as an absolute address.
+  //
+  // VITE_BACKEND_BASE_URL is intentionally left unset so the frontend falls
+  // back to window.location.origin (same-origin) at runtime — matching the
+  // behaviour of dev:static / agent-canvas and keeping the dev server
+  // portable across localhost, LAN hosts, SSH tunnels, and ngrok.
   const backendHost = config.launchAgentServer
     ? `127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_HOST ?? new URL(backendBaseUrl).host);
+    : (env.VITE_BACKEND_HOST ??
+      env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
+      "127.0.0.1:8000");
 
-  return {
-    VITE_BACKEND_HOST: backendHost,
-    VITE_BACKEND_BASE_URL: backendBaseUrl,
-  };
+  const env_out = { VITE_BACKEND_HOST: backendHost };
+
+  // If the user supplied VITE_BACKEND_BASE_URL with an https:// scheme and
+  // did not explicitly set VITE_USE_TLS, propagate the HTTPS intent so the
+  // Vite proxy forwards over TLS instead of plain HTTP.
+  if (
+    !config.launchAgentServer &&
+    env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
+    env.VITE_USE_TLS === undefined
+  ) {
+    env_out.VITE_USE_TLS = "true";
+  }
+
+  return env_out;
 }
 
 function buildAgentServerAutomationEnv(config) {
