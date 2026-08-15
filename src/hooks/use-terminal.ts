@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
@@ -70,6 +71,11 @@ const canFitTerminal = (
   return true;
 };
 
+// Keep the rendered cursor across terminal unmounts while isolating different
+// conversations. The cursor itself remains instance-local so two terminals
+// showing the same conversation can both render new commands.
+const lastCommandIndexByConversation = new Map<string, number>();
+
 function resolveTerminalForeground(host: HTMLElement): string {
   const probe = host.ownerDocument.createElement("span");
   probe.style.color = "var(--oh-surface-foreground)";
@@ -86,6 +92,8 @@ function resolveTerminalForeground(host: HTMLElement): string {
 }
 
 export const useTerminal = () => {
+  const { data: activeConversation } = useActiveConversation();
+  const conversationId = activeConversation?.id;
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
@@ -146,7 +154,10 @@ export const useTerminal = () => {
       initializeTerminal();
       // Render all commands in array
       // This happens when we just switch to Terminal from other tabs
-      if (commands.length > 0) {
+      lastCommandIndex.current = conversationId
+        ? (lastCommandIndexByConversation.get(conversationId) ?? 0)
+        : 0;
+      if (commands.length > 0 && lastCommandIndex.current === 0) {
         for (let i = 0; i < commands.length; i += 1) {
           if (commands[i].type === "input") {
             terminal.current.write("$ ");
@@ -156,6 +167,9 @@ export const useTerminal = () => {
           renderCommand(commands[i], terminal.current, false);
         }
         lastCommandIndex.current = commands.length;
+        if (conversationId) {
+          lastCommandIndexByConversation.set(conversationId, commands.length);
+        }
       }
       // Don't show prompt in read-only terminal
     }
@@ -163,9 +177,8 @@ export const useTerminal = () => {
     return () => {
       isDisposed.current = true;
       terminal.current?.dispose();
-      lastCommandIndex.current = 0;
     };
-  }, []);
+  }, [conversationId]);
 
   React.useEffect(() => {
     if (
@@ -182,8 +195,17 @@ export const useTerminal = () => {
         renderCommand(commands[i], terminal.current, false);
       }
       lastCommandIndex.current = commands.length;
+      if (conversationId) {
+        lastCommandIndexByConversation.set(conversationId, commands.length);
+      }
     }
-  }, [commands]);
+    if (commands.length === 0) {
+      lastCommandIndex.current = 0;
+      if (conversationId) {
+        lastCommandIndexByConversation.delete(conversationId);
+      }
+    }
+  }, [commands, conversationId]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;
