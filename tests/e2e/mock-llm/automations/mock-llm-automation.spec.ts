@@ -178,6 +178,20 @@ async function deleteAutomation(
   );
 }
 
+/** Remove stale automations with the test's fixed name before a retry. */
+async function deleteAutomationsByName(
+  request: import("@playwright/test").APIRequestContext,
+  name: string,
+) {
+  const data = await listAutomations(request);
+  const automations = data.automations ?? data.items ?? [];
+  for (const automation of automations.filter(
+    (candidate: { name: string }) => candidate.name === name,
+  )) {
+    await deleteAutomation(request, automation.id);
+  }
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("mock-LLM automation lifecycle", () => {
@@ -234,6 +248,10 @@ test.describe("mock-LLM automation lifecycle", () => {
     page,
     request,
   }) => {
+    // Retries reuse the same Docker backend, so remove any automation left by
+    // an earlier attempt before creating the fixed-name test resource.
+    await deleteAutomationsByName(request, AUTOMATION_NAME);
+
     // Ensure the mock LLM profile is configured via the Settings UI
     await ensureMockLLMProfile(page);
 
@@ -257,7 +275,7 @@ test.describe("mock-LLM automation lifecycle", () => {
       // startup in the uvx/bin dev paths; transient connect/reset/5xx
       // failures should not abort the create (observed flake → assert then
       // sees 0 automations).
-      `curl -s -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
       `--retry 3 --retry-connrefused --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
@@ -274,7 +292,7 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     const dispatchCmd = [
       `AID=$(python3 -c "import json; print(json.load(open('/tmp/auto_result.json'))['id'])")`,
-      `&& curl -s -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
+      `&& curl --fail-with-body -sS -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
       authHeader,
       `-H 'Content-Type: application/json'`,
       `-w '\\nHTTP_CODE:%{http_code}\\n'`,
