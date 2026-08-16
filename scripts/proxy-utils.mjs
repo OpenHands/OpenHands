@@ -4,12 +4,72 @@ import { createProxyServer } from "httpxy";
 
 const DEFAULT_PROXY_TIMEOUT_MS = 120_000;
 const SERVER_INFO_PATH = "/server_info";
+const WORKSPACE_SESSION_COOKIE_NAME = "oh_workspace_session_key";
 const BENIGN_SOCKET_ERRORS = new Set([
   "ECONNRESET",
   "EPIPE",
   "ECONNABORTED",
   "ERR_STREAM_PREMATURE_CLOSE",
 ]);
+
+/**
+ * Rewrite a single `Set-Cookie` value for the workspace-session cookie so a
+ * browser will store it when the GUI is served over plain `http://` on a
+ * non-loopback host (LAN / VM / container IP).
+ *
+ * The agent-server mints `oh_workspace_session_key` with `Secure`,
+ * `SameSite=None` and `Partitioned`; browsers reject that combination over
+ * plain HTTP. We drop `Secure` and `Partitioned` (the latter requires
+ * `Secure`) and downgrade `SameSite=None` to `SameSite=Lax`.  Any other
+ * cookie is returned unchanged.
+ */
+export function downgradeWorkspaceSessionCookie(setCookieValue) {
+  const parts = setCookieValue.split(";").map((part) => part.trim());
+  const name = parts[0].split("=")[0].trim();
+  if (name !== WORKSPACE_SESSION_COOKIE_NAME) return setCookieValue;
+
+  let changed = false;
+  const rewritten = parts
+    .filter((part, index) => {
+      if (index === 0) return true;
+      const attrName = part.split("=")[0].trim().toLowerCase();
+      if (attrName === "secure" || attrName === "partitioned") {
+        changed = true;
+        return false;
+      }
+      return true;
+    })
+    .map((part, index) => {
+      if (index === 0) return part;
+      const [attrName, ...rest] = part.split("=");
+      const lowerName = attrName.trim().toLowerCase();
+      if (lowerName === "samesite") {
+        const value = rest.join("=").trim().toLowerCase();
+        if (value === "none") {
+          changed = true;
+          return "SameSite=Lax";
+        }
+      }
+      return part;
+    });
+
+  return changed ? rewritten.join("; ") : setCookieValue;
+}
+
+/**
+ * Rewrite the workspace-session cookie(s) in a proxied response's
+ * `Set-Cookie` header(s) so they can be stored by a browser over plain HTTP.
+ * Only invoked when the caller opts in via `stripSecureCookie`.
+ */
+export function rewriteWorkspaceSessionCookies(proxyRes) {
+  const raw = proxyRes.headers["set-cookie"];
+  if (raw === undefined) return;
+  if (Array.isArray(raw)) {
+    proxyRes.headers["set-cookie"] = raw.map(downgradeWorkspaceSessionCookie);
+  } else {
+    proxyRes.headers["set-cookie"] = downgradeWorkspaceSessionCookie(raw);
+  }
+}
 
 export function matchesPathPrefix(url, prefix) {
   return (
@@ -207,6 +267,7 @@ export function createProxyHandlers({
   label = "proxy",
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
+  stripSecureCookie = false,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
@@ -215,6 +276,17 @@ export function createProxyHandlers({
     timeout,
     proxyTimeout,
   });
+
+  // When the operator opts in with `--disable-secure` (a trusted plain-HTTP
+  // deployment such as a LAN / VM / container IP), rewrite the
+  // workspace-session cookie so the browser will store it over plain HTTP.
+  // This fixes workspace file-preview 401s in those setups.
+  if (stripSecureCookie) {
+    proxy.on("proxyRes", (proxyRes) => {
+      rewriteWorkspaceSessionCookies(proxyRes);
+    });
+  }
+
   const metrics = {
     activeHttpRequests: 0,
     activeWebSockets: 0,

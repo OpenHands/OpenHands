@@ -44,6 +44,7 @@ function parseArgs() {
     routes: {},
     defaultBackend: null,
     runtimeServicesInfo: null,
+    disableSecure: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -64,6 +65,9 @@ function parseArgs() {
         break;
       case "--runtime-services-info":
         config.runtimeServicesInfo = args[++i] || null;
+        break;
+      case "--disable-secure":
+        config.disableSecure = true;
         break;
       case "-h":
       case "--help":
@@ -89,6 +93,12 @@ OPTIONS:
   -r, --route <path=url>      Add a route (can be repeated)
   -d, --default <url>         Default backend for unmatched routes
   --runtime-services-info     Runtime services JSON for /server_info
+  --disable-secure            Strip the Secure attribute from the workspace-
+                              session cookie (and downgrade SameSite=None to
+                              Lax) forwarded from backends. Use when serving
+                              over plain http:// to a non-loopback host
+                              (e.g. a LAN/VM IP) so browsers will send the
+                              session cookie back.
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
@@ -138,6 +148,7 @@ function buildConfig(args, env = process.env) {
     defaultBackend: args.defaultBackend || env.INGRESS_DEFAULT || null,
     runtimeServicesInfo:
       args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
+    disableSecure: args.disableSecure || false,
   };
 }
 
@@ -147,7 +158,10 @@ function buildConfig(args, env = process.env) {
 
 export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
-  const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
+  const proxy = createProxyHandlers({
+    label: `ingress:${config.port}`,
+    stripSecureCookie: config.disableSecure === true,
+  });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
