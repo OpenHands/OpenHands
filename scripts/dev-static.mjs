@@ -40,6 +40,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { mkdirSync, existsSync, rmSync } from "node:fs";
 import process from "node:process";
 
 import { buildFrontend } from "./static-build.mjs";
@@ -234,7 +235,13 @@ function spawnService(name, command, args, options = {}) {
       .toString()
       .split("\n")
       .filter(Boolean)
-      .forEach((line) => logService(name, line.trim(), color));
+      .forEach((line) => {
+        const trimmed = line.trim();
+        logService(name, trimmed, color);
+        if (options.onStdout) {
+          options.onStdout(trimmed);
+        }
+      });
   });
 
   proc.stderr.on("data", (data) => {
@@ -242,7 +249,13 @@ function spawnService(name, command, args, options = {}) {
       .toString()
       .split("\n")
       .filter(Boolean)
-      .forEach((line) => logService(name, line.trim(), c.yellow));
+      .forEach((line) => {
+        const trimmed = line.trim();
+        logService(name, trimmed, c.yellow);
+        if (options.onStderr) {
+          options.onStderr(trimmed);
+        }
+      });
   });
 
   proc.on("error", (error) => {
@@ -254,6 +267,9 @@ function spawnService(name, command, args, options = {}) {
       logService(name, `Exited with code ${code}`, c.red);
     }
     processes.delete(name);
+    if (options.onExit) {
+      options.onExit(code);
+    }
   });
 
   processes.set(name, proc);
@@ -342,15 +358,30 @@ function buildAutomationBackendEnv(config, env = process.env) {
   };
 }
 
-function startAutomationBackend(config) {
+function startAutomationBackend(config, isRetry = false) {
   logService(
     "automation",
-    `Starting on port ${config.autoBackendPort}...`,
+    isRetry
+      ? "Restarting automation backend..."
+      : `Starting on port ${config.autoBackendPort}...`,
     c.green,
   );
 
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
+
+  const dbPath = join(config.stateDir, "automations.db");
+  let hasMigrationError = false;
+
+  const checkError = (line) => {
+    if (
+      line.includes("Can't locate revision identified by") ||
+      line.includes("Failed to apply SQLite migrations") ||
+      line.includes("alembic.util.exc.CommandError")
+    ) {
+      hasMigrationError = true;
+    }
+  };
 
   spawnService(
     "automation",
@@ -366,6 +397,35 @@ function startAutomationBackend(config) {
       cwd: config.stateDir,
       env: buildAutomationBackendEnv(config),
       color: c.green,
+      onStdout: checkError,
+      onStderr: checkError,
+      onExit: (code) => {
+        if (shuttingDown) return;
+        if (hasMigrationError && !isRetry) {
+          logError("Automation backend crashed due to database migration error.");
+          logService(
+            "automation",
+            `Removing stale SQLite database at ${dbPath} and retrying...`,
+            c.yellow,
+          );
+          try {
+            if (existsSync(dbPath)) {
+              rmSync(dbPath, { force: true });
+              logSuccess("Stale SQLite database removed successfully.");
+            }
+            const walPath = `${dbPath}-wal`;
+            const shmPath = `${dbPath}-shm`;
+            const journalPath = `${dbPath}-journal`;
+            if (existsSync(walPath)) rmSync(walPath, { force: true });
+            if (existsSync(shmPath)) rmSync(shmPath, { force: true });
+            if (existsSync(journalPath)) rmSync(journalPath, { force: true });
+
+            startAutomationBackend(config, true);
+          } catch (err) {
+            logError(`Failed to remove database file: ${err.message}`);
+          }
+        }
+      },
     },
   );
 }
