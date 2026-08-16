@@ -57,8 +57,15 @@ export const useLoadOlderEvents = (
 
   // Mirror the initial REST page: if the tail fetch already returned
   // everything, don't auto-trigger an older-events request on short chats.
+  // Task-conversation placeholders have no REST history to query, so they
+  // are permanently exhausted.
   React.useEffect(() => {
-    if (isTaskConversation || !isInitialHistoryFetched || !initialHistory) {
+    if (isTaskConversation) {
+      hasMoreRef.current = false;
+      setHasMore(false);
+      return;
+    }
+    if (!isInitialHistoryFetched || !initialHistory) {
       return;
     }
     if (!initialHistory.hasMore) {
