@@ -305,6 +305,7 @@ def test_main_json_not_ready(tmp_path, capsys, monkeypatch):
 
 def test_main_json_ready(tmp_path, capsys, monkeypatch):
     import json
+
     body_file = tmp_path / "issue.md"
     body_file.write_text(BUG_BODY_READY)
     monkeypatch.setattr(
@@ -324,4 +325,74 @@ def test_main_json_ready(tmp_path, capsys, monkeypatch):
     data = json.loads(captured.out)
     assert data["ready"] is True
     assert len(data["reasons"]) == 0
+
+
+def test_main_text_ready(tmp_path, capsys, monkeypatch):
+    body_file = tmp_path / "issue.md"
+    body_file.write_text(BUG_BODY_READY)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_issue_readiness.py",
+            "--body-file",
+            str(body_file),
+            "--labels",
+            "bug",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Issue meets ready-for-dev criteria." in captured.out
+
+
+def test_main_text_not_ready(tmp_path, capsys, monkeypatch):
+    body_file = tmp_path / "issue.md"
+    body_file.write_text(BUG_BODY_NO_SCREENSHOT)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_issue_readiness.py",
+            "--body-file",
+            str(body_file),
+            "--labels",
+            "bug",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "Issue does not meet ready-for-dev criteria:" in captured.out
+
+
+def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
+    import json
+
+    event_file = tmp_path / "event.json"
+    event_file.write_text(
+        json.dumps(
+            {
+                "issue": {
+                    "body": BUG_BODY_READY,
+                    "labels": [{"name": "bug"}],
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "check_issue_readiness.py",
+            "--event-path",
+            str(event_file),
+            "--json",
+        ],
+    )
+    exit_code = main()
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert data["ready"] is True
+    assert len(data["reasons"]) == 0
+
 
