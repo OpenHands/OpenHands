@@ -23,10 +23,16 @@ import {
   loadCompleteTranscriptEvents,
   loadBoundedTranscriptEvents,
   MAX_TRANSCRIPT_EXPORT_EVENTS,
+  TRANSCRIPT_HEAD_EVENTS,
+  TRANSCRIPT_TAIL_EVENTS,
 } from "#/utils/transcript-export/load-complete-events";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 
 const TRANSCRIPT_FORMAT_RADIO_NAME = "transcript-export-format";
+const TRANSCRIPT_SCOPE_RADIO_NAME = "transcript-export-scope";
+
+/** Which slice of a very large conversation the user chose to download. */
+type TranscriptExportScope = "partial" | "whole";
 
 interface TranscriptExportModalProps {
   conversationId: string;
@@ -51,7 +57,15 @@ export function TranscriptExportModal({
     React.useState<TranscriptExportFormat>("markdown");
   const [includeToolDetails, setIncludeToolDetails] = React.useState(true);
   const [includeTimestamps, setIncludeTimestamps] = React.useState(true);
+  const [scope, setScope] = React.useState<TranscriptExportScope>("partial");
+  const [expectedEventCount, setExpectedEventCount] = React.useState<
+    number | undefined
+  >(undefined);
+  const [isCheckingSize, setIsCheckingSize] = React.useState(true);
   const [isExporting, setIsExporting] = React.useState(false);
+  const expectedEventCountRef = React.useRef<Promise<
+    number | undefined
+  > | null>(null);
   const isExportingRef = React.useRef(false);
   const isCancelledRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
@@ -63,6 +77,35 @@ export function TranscriptExportModal({
       isCancelledRef.current = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    // The count is used twice: it decides whether this conversation is large
+    // enough to need the partial/whole choice, and the loaders use it to reject
+    // silently truncated pagination. Archived cloud runtimes may no longer
+    // expose this endpoint, while their persisted App API history remains
+    // exportable, so treat the check as best-effort.
+    const pendingEventCount = EventService.getEventCount(
+      conversationId,
+      conversationUrl ?? "",
+      sessionApiKey,
+    ).catch(() => undefined);
+    expectedEventCountRef.current = pendingEventCount;
+
+    let isCurrentRequest = true;
+    pendingEventCount.then((count) => {
+      if (!isCurrentRequest) return;
+      setExpectedEventCount(count);
+      setIsCheckingSize(false);
+    });
+
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [conversationId, conversationUrl, sessionApiKey]);
+
+  const isLargeConversation =
+    expectedEventCount !== undefined &&
+    expectedEventCount > MAX_TRANSCRIPT_EXPORT_EVENTS;
 
   const handleClose = () => {
     if (isExportingRef.current) isCancelledRef.current = true;
@@ -76,14 +119,8 @@ export function TranscriptExportModal({
     isExportingRef.current = true;
     setIsExporting(true);
     try {
-      // The count lets us reject silently truncated pagination. Archived cloud
-      // runtimes may no longer expose this endpoint, while their persisted
-      // App API history remains exportable, so treat the check as best-effort.
-      const expectedEventCount = await EventService.getEventCount(
-        conversationId,
-        conversationUrl ?? "",
-        sessionApiKey,
-      ).catch(() => undefined);
+      const eventCount = await (expectedEventCountRef.current ??
+        Promise.resolve(undefined));
       if (isCancelledRef.current) return;
 
       const eventStore = useEventStore.getState();
@@ -101,19 +138,21 @@ export function TranscriptExportModal({
           searchOptions,
         );
 
-      // For very large conversations, load a bounded head+tail window rather
-      // than the entire history, so a 60k-event export never materializes in
-      // memory. Smaller conversations keep loading in full.
+      // For very large conversations the default is a bounded head+tail
+      // window, so a 60k-event export never materializes in memory. Users who
+      // need the omitted middle can opt into the whole history instead.
+      // Smaller conversations always load in full.
       let events;
       let truncation: TranscriptTruncation | undefined;
       if (
-        expectedEventCount !== undefined &&
-        expectedEventCount > MAX_TRANSCRIPT_EXPORT_EVENTS
+        eventCount !== undefined &&
+        eventCount > MAX_TRANSCRIPT_EXPORT_EVENTS &&
+        scope === "partial"
       ) {
         const bounded = await loadBoundedTranscriptEvents(
           loadedEvents,
           searchTranscriptEvents,
-          expectedEventCount,
+          eventCount,
         );
         events = bounded.events;
         truncation = bounded.truncation;
@@ -121,7 +160,7 @@ export function TranscriptExportModal({
         events = await loadCompleteTranscriptEvents(
           loadedEvents,
           searchTranscriptEvents,
-          expectedEventCount,
+          eventCount,
         );
       }
       if (isCancelledRef.current) return;
@@ -207,6 +246,63 @@ export function TranscriptExportModal({
           </label>
         </fieldset>
 
+        {isLargeConversation && (
+          <fieldset
+            className="flex w-full flex-col gap-2"
+            data-testid="transcript-export-scope"
+          >
+            <legend className="mb-2 text-sm font-medium text-white">
+              {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE)}
+            </legend>
+            <p className="mb-1 text-xs text-modal-muted">
+              {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE_LARGE_NOTICE, {
+                count: expectedEventCount,
+              })}
+            </p>
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+              <input
+                type="radio"
+                className="mt-1"
+                name={TRANSCRIPT_SCOPE_RADIO_NAME}
+                value="partial"
+                data-testid="transcript-export-scope-partial"
+                disabled={isExporting}
+                checked={scope === "partial"}
+                onChange={() => setScope("partial")}
+              />
+              <span className="flex flex-col gap-1">
+                {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE_PARTIAL)}
+                <span className="text-xs text-modal-muted">
+                  {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE_PARTIAL_HINT, {
+                    head: TRANSCRIPT_HEAD_EVENTS,
+                    tail: TRANSCRIPT_TAIL_EVENTS,
+                  })}
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-[var(--oh-border)] px-3 py-2 text-sm text-white">
+              <input
+                type="radio"
+                className="mt-1"
+                name={TRANSCRIPT_SCOPE_RADIO_NAME}
+                value="whole"
+                data-testid="transcript-export-scope-whole"
+                disabled={isExporting}
+                checked={scope === "whole"}
+                onChange={() => setScope("whole")}
+              />
+              <span className="flex flex-col gap-1">
+                {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE_WHOLE)}
+                <span className="text-xs text-warning">
+                  {t(I18nKey.TRANSCRIPT_EXPORT$SCOPE_WHOLE_WARNING, {
+                    count: expectedEventCount,
+                  })}
+                </span>
+              </span>
+            </label>
+          </fieldset>
+        )}
+
         <div className="flex w-full flex-col gap-3 text-sm text-white">
           <label className="flex cursor-pointer items-center gap-3">
             <input
@@ -242,8 +338,8 @@ export function TranscriptExportModal({
             variant="primary"
             onClick={handleExport}
             testId="confirm-transcript-export"
-            isDisabled={isExporting}
-            aria-busy={isExporting}
+            isDisabled={isExporting || isCheckingSize}
+            aria-busy={isExporting || isCheckingSize}
           >
             {t(I18nKey.BUTTON$EXPORT_CONVERSATION)}
           </BrandButton>
