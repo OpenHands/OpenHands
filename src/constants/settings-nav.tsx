@@ -1,4 +1,4 @@
-import { AppWindow, Brain, Shield } from "lucide-react";
+import { AppWindow, Brain, Gauge, Shield } from "lucide-react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
 import CircuitIcon from "#/icons/u-circuit.svg?react";
@@ -52,6 +52,16 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/verification",
     text: "SETTINGS$NAV_VERIFICATION",
     subtitle: "SETTINGS$PAGE_VERIFICATION_SUBLINE",
+  },
+  {
+    // "General" renders the general conversation-settings section, which the
+    // SDK schema exposes — today only `max_iterations`, the session-wide
+    // execution budget. Kept separate from Agent profiles because it lives on
+    // the ConversationSettings record, not the AgentSettings record.
+    icon: <Gauge className="size-4" strokeWidth={2} aria-hidden />,
+    to: "/settings/general",
+    text: "SETTINGS$NAV_GENERAL",
+    subtitle: "SETTINGS$PAGE_GENERAL_SUBLINE",
   },
   {
     icon: <AppWindow className="size-4" strokeWidth={2} aria-hidden />,
