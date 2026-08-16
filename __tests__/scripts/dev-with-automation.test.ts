@@ -902,4 +902,33 @@ describe("dev-with-automation CLI", () => {
     expect(exitResult.code).toBe(1);
     expect(output).toContain("uvx");
   });
+
+  it("triggers onStdout, onStderr, and onExit callbacks when provided", async () => {
+    const stdoutLogs: string[] = [];
+    const stderrLogs: string[] = [];
+    let exitCode: number | null = null;
+
+    const proc = spawnService(
+      "callbacks-test",
+      process.execPath,
+      [
+        "-e",
+        'process.stdout.write("out\\n"); process.stderr.write("err\\n"); process.exit(42);',
+      ],
+      {
+        onStdout: (line: string) => stdoutLogs.push(line),
+        onStderr: (line: string) => stderrLogs.push(line),
+        onExit: (code: number | null) => {
+          exitCode = code;
+        },
+      },
+    );
+
+    await once(proc, "exit");
+    await delay(50);
+
+    expect(stdoutLogs).toContain("out");
+    expect(stderrLogs).toContain("err");
+    expect(exitCode).toBe(42);
+  });
 });
