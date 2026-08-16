@@ -705,7 +705,7 @@ function buildRouteArgs(routes) {
 
 /**
  * Build --reject-prefix args for the static server.
- * In frontend-only mode, API paths that have no backend should return 503
+ * In frontend-only mode, API paths that have no backend should return 404
  * instead of being SPA-fallbacked to index.html.
  */
 function getRejectPrefixes(config) {
@@ -1493,7 +1493,7 @@ function startStaticFrontend(config, staticDir) {
         : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
-      // Reject known API prefixes that have no backend — returns 503
+      // Reject known API prefixes that have no backend — returns 404
       // instead of SPA-fallbacking to index.html.
       ...buildRejectPrefixArgs(getRejectPrefixes(config)),
     ],
