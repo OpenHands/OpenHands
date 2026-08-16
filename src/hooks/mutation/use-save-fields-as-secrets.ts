@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import type { MarketplaceField } from "@openhands/extensions/integrations";
 import { SecretsService } from "#/api/secrets-service";
+import { syncSecretToActiveConversation } from "#/api/conversation-service/conversation-secret-sync";
 import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
@@ -57,6 +58,12 @@ export function useSaveFieldsAsSecrets() {
           .map((f) => f.key);
 
         if (saved.length > 0) {
+          fieldsToSave
+            .filter((_, i) => results[i].status === "fulfilled")
+            .forEach((field) => {
+              syncSecretToActiveConversation(field.key, field.label);
+            });
+
           // Refresh any cached secrets lists so a newly-saved secret shows up
           // in Settings → Secrets immediately. Without this, the 5-minute
           // staleTime on the secrets query (use-get-secrets.ts) can keep a
