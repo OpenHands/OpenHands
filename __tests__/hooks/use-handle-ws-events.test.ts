@@ -36,16 +36,17 @@ describe("useHandleWSEvents", () => {
   });
 
   it("should call send with PAUSED state change when Agent reached maximum error arrives", () => {
-    const { result } = renderHook(() => useHandleWSEvents());
-    // Force first render by pushing an initial event
+    // Two distinct setState calls ensure events.length changes each time,
+    // so the effect fires after the error event is added.
     act(() => {
-      useEventStore.setState({
-        events: [{ type: "info" as never }],
-      });
+      useEventStore.setState({ events: [{ type: "info" as never }] });
     });
     act(() => {
       useEventStore.setState({
-        events: [{ type: "error", message: "Agent reached maximum" }],
+        events: [
+          { type: "info" as never },
+          { type: "error", message: "Agent reached maximum" },
+        ],
       });
     });
     expect(mockSend).toHaveBeenCalledWith(
@@ -57,16 +58,20 @@ describe("useHandleWSEvents", () => {
     // Simulate two different send functions from two different re-renders
     const sendV1 = vi.fn();
     const sendV2 = vi.fn();
-    const setMock = (fn: (val: { send: ReturnType<typeof vi.fn> }) => void) => {
-      fn({ send: sendV2 });
-    };
+    const setMock = vi.fn((fn) => {
+      if (typeof fn === "function") {
+        fn({ send: sendV2 });
+      }
+    });
     (useSendMessageImpl as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       setMock,
     );
 
     const { rerender } = renderHook(() => useHandleWSEvents());
     act(() => {
-      useEventStore.setState({ events: [{ type: "info" as never }] });
+      useEventStore.setState({
+        events: [{ type: "info" as never }],
+      });
     });
 
     // Simulate reconnect causing a new useSendMessage call
@@ -74,7 +79,10 @@ describe("useHandleWSEvents", () => {
 
     act(() => {
       useEventStore.setState({
-        events: [{ type: "error", message: "Agent reached maximum" }],
+        events: [
+          { type: "info" as never },
+          { type: "error", message: "Agent reached maximum" },
+        ],
       });
     });
     // Should call the latest send, not the stale one
