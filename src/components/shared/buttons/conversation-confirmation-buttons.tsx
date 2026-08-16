@@ -93,7 +93,8 @@ export function ConversationConfirmationButtons() {
   if (
     curAgentState !== AgentState.AWAITING_USER_CONFIRMATION ||
     !awaitingAction ||
-    submittedEventIds.includes(awaitingAction.id ?? "")
+    (awaitingAction.id !== undefined &&
+      submittedEventIds.includes(awaitingAction.id))
   ) {
     return null;
   }
