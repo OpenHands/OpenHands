@@ -13191,6 +13191,23 @@
     "uk": "Очистити фільтри",
     "ca": "Esborra els filtres"
   },
+  "AUTOMATIONS$FILTERS": {
+    "en": "Filters",
+    "ja": "フィルター",
+    "zh-CN": "筛选",
+    "zh-TW": "篩選",
+    "ko-KR": "필터",
+    "no": "Filtre",
+    "it": "Filtri",
+    "pt": "Filtros",
+    "es": "Filtros",
+    "ar": "عوامل التصفية",
+    "fr": "Filtres",
+    "tr": "Filtreler",
+    "de": "Filter",
+    "uk": "Фільтри",
+    "ca": "Filtres"
+  },
   "AUTOMATIONS$VIEW_MODE": {
     "en": "View mode",
     "ja": "表示モード",

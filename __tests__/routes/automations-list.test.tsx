@@ -161,7 +161,7 @@ describe("AutomationsList — Edit from the row kebab is local-only", () => {
 });
 
 describe("AutomationsList — view mode toggle", () => {
-  it("switches saved automations from cards to table rows", async () => {
+  it("switches saved automations from cards to list rows", async () => {
     const user = userEvent.setup();
     renderList();
     await waitFor(() => {

@@ -15,8 +15,9 @@ export function writeStoredAutomationViewMode(view: AutomationViewMode): void {
   window.localStorage.setItem(AUTOMATIONS_VIEW_MODE_STORAGE_KEY, view);
 }
 
-export {
-  tableContainerClassName as automationListTableClassName,
-  tableRowInteractiveClassName as automationListRowClassName,
-  tableCellClassName as automationListCellClassName,
-} from "#/utils/table-row-classes";
+/** Shared chrome for the dashboard list and the home activity list. */
+export const automationActivityListClassName =
+  "divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]";
+
+export const automationActivityRowClassName =
+  "group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]";

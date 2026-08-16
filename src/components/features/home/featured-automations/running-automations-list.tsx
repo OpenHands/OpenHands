@@ -33,6 +33,10 @@ import {
   getTriggerSource,
 } from "./automation-run-health";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
+} from "#/components/features/automations/automation-view-mode";
+import {
   buildHomeAutomationActivityItems,
   hrefForActivityItem,
   type HomeAutomationActivityItem,
@@ -93,7 +97,7 @@ function RunningAutomationRow({
   return (
     <li
       data-testid={`running-automation-row-${item.id}`}
-      className="group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]"
+      className={automationActivityRowClassName}
     >
       <Tooltip
         content={
@@ -291,7 +295,7 @@ export function RunningAutomationsList() {
       ) : (
         <ul
           aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
-          className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
+          className={automationActivityListClassName}
         >
           {visibleItems.map((item) => {
             const automation = automationById.get(item.id);

@@ -157,6 +157,8 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     // the catalog launcher has moved off this page.
     const nav = screen.getByTestId("automations-navbar-desktop");
     const automationsTile = screen.getByTestId("overview-tile-automations");
+    const filters = screen.getByTestId("automations-filters");
+    await userEvent.click(within(filters).getByTestId("dropdown-trigger"));
     expect({
       navLabels: [
         within(nav).getByText("Widget dashboard"),
@@ -188,12 +190,52 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     ]);
   });
 
+  it("nests status, trigger, and sort dropdowns inside one Filters control", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+
+    // Assert — the three filters stay inside the combined menu until opened.
+    expect(screen.queryByTestId("automations-filter-status")).toBeNull();
+    expect(screen.queryByTestId("automations-filter-trigger")).toBeNull();
+    expect(screen.queryByTestId("automations-sort")).toBeNull();
+
+    // Act
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+
+    // Assert
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-filter-status",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-filter-trigger",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByTestId(
+        "automations-sort",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("narrows to latest-run failures through the status filter", async () => {
     // Arrange
     const user = userEvent.setup();
     await renderDashboardWithSettledInsights();
 
-    // Act — pick the manifest's "failing" option.
+    // Act — open Filters, then pick the manifest's "failing" option.
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
     await user.click(
       within(screen.getByTestId("automations-filter-status")).getByTestId(
         "dropdown-trigger",
