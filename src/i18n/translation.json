@@ -38180,5 +38180,21 @@
     "tr": "Alt sohbet istendi",
     "uk": "Запитано дочірню розмову",
     "ca": "S'ha sol·licitat una conversa filla"
+  },
+  "HOME$NEW_FOLDER": {
+    "en": "New Folder",
+    "ja": "新しいフォルダ",
+    "zh-CN": "新建文件夹",
+    "zh-TW": "新增資料夾",
+    "de": "Neuer Ordner",
+    "fr": "Nouveau dossier",
+    "ko-KR": "새 폴더"
+  },
+  "HOME$CREATE_FOLDER": {
+    "en": "Create",
+    "zh-CN": "创建",
+    "zh-TW": "建立",
+    "ja": "作成",
+    "ko-KR": "만들기"
   }
 }
