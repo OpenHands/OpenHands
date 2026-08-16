@@ -36,6 +36,7 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-surface-deep": "var(--cool-grey-975)",
   "--oh-overlay": "var(--cool-grey-925)",
   "--oh-overlay-foreground": "var(--cool-grey-100)",
+  "--oh-modal-title-foreground": "#ffffff",
   "--oh-muted": "var(--cool-grey-400)",
   "--oh-text-secondary": "var(--cool-grey-300)",
   "--oh-text-tertiary": "var(--cool-grey-200)",
@@ -45,6 +46,8 @@ export const AGENT_SERVER_UI_DEFAULT_CSS_VARIABLES = {
   "--oh-interactive-hover-low": "var(--cool-grey-900)",
   "--oh-interactive-active": "var(--cool-grey-800)",
   "--oh-interactive-selected": "var(--cool-grey-600)",
+  "--oh-context-window-foreground": "var(--oh-foreground)",
+  "--oh-context-window-track-weight": "42%",
   "--oh-scrollbar": "color-mix(in srgb, var(--cool-grey-400) 30%, transparent)",
   "--oh-scrollbar-hover":
     "color-mix(in srgb, var(--cool-grey-400) 50%, transparent)",

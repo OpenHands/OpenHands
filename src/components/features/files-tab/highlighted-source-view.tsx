@@ -1,6 +1,6 @@
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-
 import { SyntaxHighlighter } from "#/components/features/markdown/syntax-highlighter";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { getPrismLanguageForFile } from "#/utils/file-language";
 
 interface HighlightedSourceViewProps {
@@ -28,6 +28,7 @@ export function HighlightedSourceView({
   text,
   mimeType,
 }: HighlightedSourceViewProps) {
+  const colorTheme = useColorTheme();
   const language = getPrismLanguageForFile(path, mimeType);
 
   if (!language) {
@@ -49,7 +50,7 @@ export function HighlightedSourceView({
     >
       <SyntaxHighlighter
         language={language}
-        style={vscDarkPlus}
+        style={getSyntaxHighlighterTheme(colorTheme)}
         showLineNumbers
         wrapLongLines={false}
         // Override the theme's hard-coded background so the highlighter

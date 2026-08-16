@@ -18,11 +18,9 @@ const MIN_RATIO = 3;
  * ships the deepsea scale but `DEFAULT_COLOR_THEME` overrides it at runtime, so
  * a stylesheet-derived assertion validates a palette no default install renders.
  */
-const SURFACE_STOP = "--cool-grey-925"; // --oh-surface, the composer background
-const FOREGROUND_STOP = "--cool-grey-100"; // --oh-foreground, the neutral arc
+const SURFACE_STOP = "--cool-grey-925"; // dark-theme --oh-surface fallback
+const FOREGROUND_STOP = "--cool-grey-100"; // dark-theme --oh-foreground fallback
 
-/** `chatInputIconButtonClassName` fills the trigger with `hover:bg-white/10`. */
-const HOVER_OVERLAY = "#FFFFFF";
 const HOVER_ALPHA = 0.1;
 
 function channels(hex: string): [number, number, number] {
@@ -76,9 +74,9 @@ describe("ContextWindowRing", () => {
     render(<ContextWindowRing percentage={5} />);
 
     // A stop-pinned track cannot hold across palettes; see the constant's docs.
-    expect(screen.getByTestId("context-window-ring-track").style.stroke).toEqual(
-      expect.stringContaining("var(--oh-foreground)"),
-    );
+    expect(
+      screen.getByTestId("context-window-ring-track").style.stroke,
+    ).toEqual(expect.stringContaining("var(--oh-context-window-foreground)"));
   });
 
   /**
@@ -86,35 +84,42 @@ describe("ContextWindowRing", () => {
    * contrast cases below describe the shipped track rather than a constant that
    * could drift away from it.
    */
-  function renderedTrackAlpha(): number {
+  function renderedTrackColor(): string {
     render(<ContextWindowRing percentage={5} />);
-    const { stroke } = screen.getByTestId("context-window-ring-track").style;
-    const percent = stroke.match(/var\(--oh-foreground\)\s+([\d.]+)%/);
-    if (!percent) {
-      throw new Error(`track is not a foreground mix: ${stroke}`);
-    }
-    return Number(percent[1]) / 100;
+    return screen.getByTestId("context-window-ring-track").style.stroke;
   }
 
   it("renders the alpha it documents", () => {
-    expect(renderedTrackAlpha()).toBeCloseTo(CONTEXT_WINDOW_RING_TRACK_ALPHA, 5);
+    expect(renderedTrackColor()).toContain(
+      "var(--oh-context-window-track-weight)",
+    );
+    expect(CONTEXT_WINDOW_RING_TRACK_ALPHA).toBe(0.42);
   });
 
   describe.each(Object.entries(COLOR_THEMES))(
     "contrast under the %s palette",
     (_key, theme) => {
-      const surface = theme.scale[SURFACE_STOP];
-      const arc = theme.scale[FOREGROUND_STOP];
-      const hoverFill = composite(HOVER_OVERLAY, surface, HOVER_ALPHA);
+      const surface =
+        theme.tokens?.["--oh-surface"] ?? theme.scale[SURFACE_STOP];
+      const arc =
+        theme.tokens?.["--oh-context-window-foreground"] ??
+        theme.scale[FOREGROUND_STOP];
+      const alpha =
+        Number.parseFloat(
+          theme.tokens?.["--oh-context-window-track-weight"] ??
+            `${CONTEXT_WINDOW_RING_TRACK_ALPHA * 100}%`,
+        ) / 100;
+      const hoverOverlay = theme.appearance === "light" ? "#000000" : "#FFFFFF";
+      const hoverFill = composite(hoverOverlay, surface, HOVER_ALPHA);
 
       it("keeps the track legible against the composer surface", () => {
-        const track = composite(arc, surface, renderedTrackAlpha());
+        const track = composite(arc, surface, alpha);
 
         expect(contrastRatio(track, surface)).toBeGreaterThanOrEqual(MIN_RATIO);
       });
 
       it("keeps the track legible under the trigger's hover fill", () => {
-        const track = composite(arc, hoverFill, renderedTrackAlpha());
+        const track = composite(arc, hoverFill, alpha);
 
         expect(contrastRatio(track, hoverFill)).toBeGreaterThanOrEqual(
           MIN_RATIO,
@@ -122,8 +127,6 @@ describe("ContextWindowRing", () => {
       });
 
       it("keeps a neutral arc distinguishable from the track in both states", () => {
-        const alpha = renderedTrackAlpha();
-
         expect(
           contrastRatio(arc, composite(arc, surface, alpha)),
         ).toBeGreaterThanOrEqual(MIN_RATIO);

@@ -93,6 +93,8 @@
   --oh-interactive-hover-low: var(--cool-grey-900);  /* hover on dark base (950 bg) */
   --oh-interactive-active: var(--cool-grey-800);     /* selected/active on dark base */
   --oh-interactive-selected: var(--cool-grey-600);   /* selected within a panel (on 800/925 bg) */
+  --oh-context-window-foreground: var(--oh-foreground);
+  --oh-context-window-track-weight: 42%;
   --oh-scrollbar: color-mix(in srgb, var(--cool-grey-400) 30%, transparent);
   --oh-scrollbar-hover: color-mix(in srgb, var(--cool-grey-400) 50%, transparent);
   --oh-default: var(--cool-grey-800);
@@ -179,7 +181,7 @@ button.extension-module-card-interactive {
 }
 
 .extension-module-card-interactive:hover {
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
 }
 
 .extension-module-card-interactive:focus {
@@ -193,7 +195,71 @@ button.extension-module-card-interactive {
 
 .extension-module-card-interactive:focus-visible {
   outline: none;
-  border-color: rgb(255 255 255 / 0.4);
+  border-color: color-mix(in srgb, var(--oh-foreground) 40%, transparent);
+}
+
+/*
+ * Legacy utility compatibility for the two light themes. Much of the UI was
+ * originally authored against a dark-only canvas and used white as its
+ * primary text/interaction color. Keep those utilities readable while the
+ * semantic-token migration continues, without changing solid action buttons.
+ */
+:host[data-color-scheme="light"] .text-white:not(.text-on-solid),
+:host[data-color-scheme="light"] .hover\:text-white:not(.text-on-solid):hover,
+:host[data-color-scheme="light"] .focus\:text-white:not(.text-on-solid):focus,
+:host[data-color-scheme="light"]
+  .focus-within\:text-white:not(.text-on-solid):focus-within,
+:host[data-color-scheme="light"]
+  .focus-visible\:text-white:not(.text-on-solid):focus-visible,
+:host[data-color-scheme="light"]
+  .group:hover
+  .group-hover\:text-white:not(.text-on-solid),
+:host[data-color-scheme="light"]
+  .group:focus-visible
+  .group-focus-visible\:text-white:not(.text-on-solid) {
+  color: var(--oh-foreground);
+}
+
+:host[data-color-scheme="light"] .text-on-solid,
+:host[data-color-scheme="light"] .text-on-solid .text-white {
+  color: #ffffff;
+}
+
+:host[data-color-scheme="light"] [class~="bg-white/5"],
+:host[data-color-scheme="light"] [class~="bg-white/10"],
+:host[data-color-scheme="light"] [class~="bg-white/15"],
+:host[data-color-scheme="light"] [class~="bg-white/[0.03]"],
+:host[data-color-scheme="light"] [class~="bg-white/[0.04]"],
+:host[data-color-scheme="light"] [class~="bg-white/[0.05]"],
+:host[data-color-scheme="light"] [class~="bg-white/[0.08]"],
+:host[data-color-scheme="light"] [class~="bg-white/[0.09]"] {
+  background-color: color-mix(in srgb, var(--oh-foreground) 9%, transparent);
+}
+
+:host[data-color-scheme="light"] [class~="hover:bg-white/5"]:hover,
+:host[data-color-scheme="light"] [class~="hover:bg-white/10"]:hover {
+  background-color: color-mix(in srgb, var(--oh-foreground) 9%, transparent);
+}
+
+:host[data-color-scheme="light"] .border-white {
+  border-color: var(--oh-foreground);
+}
+
+:host[data-color-scheme="light"] [class~="border-white/10"],
+:host[data-color-scheme="light"] [class~="border-white/20"],
+:host[data-color-scheme="light"] [class~="border-white/30"],
+:host[data-color-scheme="light"] [class~="border-white/40"],
+:host[data-color-scheme="light"] [class~="border-white/45"],
+:host[data-color-scheme="light"] [class~="border-white/60"] {
+  border-color: color-mix(in srgb, var(--oh-foreground) 32%, transparent);
+}
+
+:host[data-color-scheme="light"] [class~="focus:ring-white/20"]:focus,
+:host[data-color-scheme="light"]
+  [class~="focus-visible:ring-white/20"]:focus-visible,
+:host[data-color-scheme="light"]
+  [class~="focus-within:ring-white/20"]:focus-within {
+  --tw-ring-color: color-mix(in srgb, var(--oh-focus) 28%, transparent);
 }
 
 .button-base {

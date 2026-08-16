@@ -17,7 +17,9 @@ import { getLanguageFromPath } from "#/utils/get-language-from-path";
 import { cn } from "#/utils/utils";
 import ChevronUp from "#/icons/chveron-up.svg?react";
 import { useUnifiedGitDiff } from "#/hooks/query/use-unified-git-diff";
+import { useColorTheme } from "#/hooks/use-color-theme";
 import { MarkdownRenderer } from "#/components/features/markdown/markdown-renderer";
+import { COLOR_THEMES, type ColorThemeKey } from "#/themes/color-themes";
 import { Typography } from "#/ui/typography";
 import { LoadingSpinner } from "./loading-spinner";
 import { EditorContainer } from "./editor-container";
@@ -47,8 +49,16 @@ const STATUS_MAP: Record<GitChangeStatus, string | IconType> = {
   U: "Untracked",
 };
 
+const MONACO_THEME_NAMES: Record<ColorThemeKey, string> = {
+  "openhands-deepsea": "openhands-diff-dark",
+  "openhands-neutral": "openhands-diff-dark",
+  "openhands-neo": "openhands-diff-dark",
+  "light-plus": "openhands-diff-light-plus",
+  "solarized-light": "openhands-diff-solarized-light",
+};
+
 const beforeMount = (monaco: Monaco) => {
-  monaco.editor.defineTheme("custom-diff-theme", {
+  monaco.editor.defineTheme("openhands-diff-dark", {
     base: "vs-dark",
     inherit: true,
     rules: [
@@ -67,6 +77,50 @@ const beforeMount = (monaco: Monaco) => {
       "editorUnnecessaryCode.opacity": "rgba(0, 0, 0, 0.467)",
     },
   });
+
+  monaco.editor.defineTheme("openhands-diff-light-plus", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "008000" },
+      { token: "keyword", foreground: "0000FF" },
+      { token: "string", foreground: "A31515" },
+      { token: "number", foreground: "098658" },
+    ],
+    colors: {
+      "editor.background": "#FFFFFF",
+      "editor.foreground": "#1F1F1F",
+      "diffEditor.insertedTextBackground": "#9BB95566",
+      "diffEditor.removedTextBackground": "#FF818266",
+      "diffEditor.insertedLineBackground": "#E9F5DD",
+      "diffEditor.removedLineBackground": "#FFEBE9",
+      "diffEditor.border": "#D4D4D4",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(31, 31, 31, 0.45)",
+    },
+  });
+
+  monaco.editor.defineTheme("openhands-diff-solarized-light", {
+    base: "vs",
+    inherit: true,
+    rules: [
+      { token: "comment", foreground: "93A1A1" },
+      { token: "keyword", foreground: "859900" },
+      { token: "string", foreground: "2AA198" },
+      { token: "number", foreground: "D33682" },
+    ],
+    colors: {
+      "editor.background": "#FDF6E3",
+      "editor.foreground": "#657B83",
+      "diffEditor.insertedTextBackground": "#85990044",
+      "diffEditor.removedTextBackground": "#DC322F3D",
+      "diffEditor.insertedLineBackground": "#E7E8C9",
+      "diffEditor.removedLineBackground": "#F5D5C8",
+      "diffEditor.border": "#D7D0BC",
+      "editorUnnecessaryCode.border": "#00000000",
+      "editorUnnecessaryCode.opacity": "rgba(88, 110, 117, 0.5)",
+    },
+  });
 };
 
 export interface FileDiffViewerProps {
@@ -82,6 +136,9 @@ export interface FileDiffViewerProps {
 
 export function FileDiffViewer({ path, type, commit }: FileDiffViewerProps) {
   const { t } = useTranslation("openhands");
+  const colorTheme = useColorTheme();
+  const monacoTheme = MONACO_THEME_NAMES[colorTheme];
+  const isLightTheme = COLOR_THEMES[colorTheme].appearance === "light";
   const [isCollapsed, setIsCollapsed] = React.useState(true);
   const [editorHeight, setEditorHeight] = React.useState(400);
   const [viewMode, setViewMode] = React.useState<ViewMode>("diff");
@@ -168,7 +225,7 @@ export function FileDiffViewer({ path, type, commit }: FileDiffViewerProps) {
             language={language}
             original={isAdded ? "" : (diff?.original ?? "")}
             modified={isDeleted ? "" : (diff?.modified ?? "")}
-            theme="custom-diff-theme"
+            theme={monacoTheme}
             onMount={handleDiffEditorMount}
             beforeMount={beforeMount}
             options={{
@@ -184,7 +241,10 @@ export function FileDiffViewer({ path, type, commit }: FileDiffViewerProps) {
     if (isMarkdownFile) {
       return (
         <div
-          className="w-full border-b border-[var(--oh-border)] overflow-auto p-4 bg-base prose prose-invert max-w-none"
+          className={cn(
+            "w-full border-b border-[var(--oh-border)] overflow-auto p-4 bg-base prose max-w-none",
+            !isLightTheme && "prose-invert",
+          )}
           data-testid="markdown-preview"
         >
           <MarkdownRenderer
@@ -203,7 +263,7 @@ export function FileDiffViewer({ path, type, commit }: FileDiffViewerProps) {
           className="w-full h-full"
           language={language}
           value={singleViewContent}
-          theme="custom-diff-theme"
+          theme={monacoTheme}
           beforeMount={beforeMount}
           onMount={handleSingleEditorMount}
           options={SHARED_EDITOR_OPTIONS}

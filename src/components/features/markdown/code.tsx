@@ -1,7 +1,8 @@
 import React from "react";
 import { ExtraProps } from "react-markdown";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
+import { useColorTheme } from "#/hooks/use-color-theme";
+import { getSyntaxHighlighterTheme } from "#/themes/syntax-highlighter-themes";
 import { cn } from "#/utils/utils";
 import { SyntaxHighlighter } from "./syntax-highlighter";
 
@@ -10,12 +11,13 @@ import { SyntaxHighlighter } from "./syntax-highlighter";
 /**
  * Component to render code blocks in markdown.
  */
-export function code({
+export function Code({
   children,
   className,
 }: React.ClassAttributes<HTMLElement> &
   React.HTMLAttributes<HTMLElement> &
   ExtraProps) {
+  const colorTheme = useColorTheme();
   const match = /language-(\w+)/.exec(className || ""); // get the language
   const codeString = String(children).replace(/\n$/, "");
 
@@ -48,7 +50,7 @@ export function code({
     <CopyableContentWrapper text={codeString}>
       <SyntaxHighlighter
         className="rounded-lg"
-        style={vscDarkPlus}
+        style={getSyntaxHighlighterTheme(colorTheme)}
         language={match?.[1]}
         PreTag="div"
       >
@@ -57,3 +59,5 @@ export function code({
     </CopyableContentWrapper>
   );
 }
+
+export { Code as code };
