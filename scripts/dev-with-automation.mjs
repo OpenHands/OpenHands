@@ -286,34 +286,46 @@ function buildAutomationCommand(env = process.env) {
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
-  const uvxArgs = [];
+  const uvArgs = [];
   let source = "";
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
     const gitUrl = `git+${repoUrl}@${gitRef}`;
-    uvxArgs.push(
+    uvArgs.push(
+      "run",
+      "--no-project",
       "--refresh",
-      "--from",
+      "--with",
       gitUrl,
+      "python",
+      "-m",
       "uvicorn",
       "openhands.automation.app:app",
     );
     source = `git (${gitRef})`;
   } else if (version) {
     // Use specific PyPI version
-    uvxArgs.push(
-      "--from",
+    uvArgs.push(
+      "run",
+      "--no-project",
+      "--with",
       `${DEFAULT_AUTOMATION_PACKAGE}==${version}`,
+      "python",
+      "-m",
       "uvicorn",
       "openhands.automation.app:app",
     );
     source = `PyPI (${version})`;
   } else {
     // Default to released PyPI version
-    uvxArgs.push(
-      "--from",
+    uvArgs.push(
+      "run",
+      "--no-project",
+      "--with",
       `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
+      "python",
+      "-m",
       "uvicorn",
       "openhands.automation.app:app",
     );
@@ -321,8 +333,8 @@ function buildAutomationCommand(env = process.env) {
   }
 
   return {
-    command: "uvx",
-    args: uvxArgs,
+    command: "uv",
+    args: uvArgs,
     source,
   };
 }
