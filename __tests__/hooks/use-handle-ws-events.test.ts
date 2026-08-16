@@ -20,32 +20,49 @@ import { useSendMessage as useSendMessageImpl } from "#/hooks/use-send-message";
 
 describe("useHandleWSEvents", () => {
   const mockSend = vi.fn();
-  const mockGenerateEvent = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockSend.mockReset();
-    useEventStore.setState({ events: [] });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
     (useSendMessageImpl as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       send: mockSend,
     });
   });
 
   afterEach(() => {
-    useEventStore.setState({ events: [] });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
   });
 
   it("should call send with PAUSED state change when Agent reached maximum error arrives", () => {
+    renderHook(() => useHandleWSEvents());
     // Two distinct setState calls ensure events.length changes each time,
     // so the effect fires after the error event is added.
     act(() => {
-      useEventStore.setState({ events: [{ type: "info" as never }] });
+      useEventStore.setState({
+        events: [
+          {
+            id: "init",
+            timestamp: "2026-08-16T00:00:00Z",
+            source: "agent",
+            kind: "MessageEvent",
+          } as never,
+        ],
+      });
     });
     act(() => {
       useEventStore.setState({
         events: [
-          { type: "info" as never },
-          { type: "error", message: "Agent reached maximum" },
+          {
+            id: "init",
+            timestamp: "2026-08-16T00:00:00Z",
+            source: "agent",
+            kind: "MessageEvent",
+          } as never,
+          {
+            type: "error",
+            message: "Agent reached maximum",
+          } as never,
         ],
       });
     });
@@ -58,11 +75,7 @@ describe("useHandleWSEvents", () => {
     // Simulate two different send functions from two different re-renders
     const sendV1 = vi.fn();
     const sendV2 = vi.fn();
-    const setMock = vi.fn((fn) => {
-      if (typeof fn === "function") {
-        fn({ send: sendV2 });
-      }
-    });
+    const setMock = vi.fn().mockReturnValue({ send: sendV1 });
     (useSendMessageImpl as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       setMock,
     );
@@ -70,18 +83,34 @@ describe("useHandleWSEvents", () => {
     const { rerender } = renderHook(() => useHandleWSEvents());
     act(() => {
       useEventStore.setState({
-        events: [{ type: "info" as never }],
+        events: [
+          {
+            id: "init",
+            timestamp: "2026-08-16T00:00:00Z",
+            source: "agent",
+            kind: "MessageEvent",
+          } as never,
+        ],
       });
     });
 
-    // Simulate reconnect causing a new useSendMessage call
+    // Simulate reconnect causing a new useSendMessage call returning sendV2
+    setMock.mockReturnValue({ send: sendV2 });
     rerender();
 
     act(() => {
       useEventStore.setState({
         events: [
-          { type: "info" as never },
-          { type: "error", message: "Agent reached maximum" },
+          {
+            id: "init",
+            timestamp: "2026-08-16T00:00:00Z",
+            source: "agent",
+            kind: "MessageEvent",
+          } as never,
+          {
+            type: "error",
+            message: "Agent reached maximum",
+          } as never,
         ],
       });
     });
