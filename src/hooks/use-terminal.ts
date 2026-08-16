@@ -90,7 +90,7 @@ export const useTerminal = () => {
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = React.useRef({ current: 0 });
+  const lastCommandIndex = React.useRef(0);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
