@@ -45,7 +45,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -599,6 +599,9 @@ function spawnService(name, command, args, options = {}) {
           parsed ? parsed.color : color,
         );
         emitServiceLog(name, trimmed, "stdout");
+        if (options.onStdout) {
+          options.onStdout(trimmed);
+        }
       });
   });
 
@@ -616,6 +619,9 @@ function spawnService(name, command, args, options = {}) {
           parsed ? parsed.color : c.yellow,
         );
         emitServiceLog(name, trimmed, "stderr");
+        if (options.onStderr) {
+          options.onStderr(trimmed);
+        }
       });
   });
 
@@ -630,6 +636,9 @@ function spawnService(name, command, args, options = {}) {
       emitServiceLog(name, `exited with code ${code}`, "error");
     }
     processes.delete(name);
+    if (options.onExit) {
+      options.onExit(code);
+    }
   });
 
   processes.set(name, proc);
@@ -842,15 +851,30 @@ function startAgentServer(config) {
   );
 }
 
-function startAutomationBackend(config) {
+function startAutomationBackend(config, isRetry = false) {
   logService(
     "automation",
-    `Starting on port ${config.autoBackendPort}...`,
+    isRetry
+      ? "Restarting automation backend..."
+      : `Starting on port ${config.autoBackendPort}...`,
     c.green,
   );
 
   const automationCmd = buildAutomationCommand(process.env);
   logService("automation", `Using ${automationCmd.source}`, c.dim);
+
+  const dbPath = join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb);
+  let hasMigrationError = false;
+
+  const checkError = (line) => {
+    if (
+      line.includes("Can't locate revision identified by") ||
+      line.includes("Failed to apply SQLite migrations") ||
+      line.includes("alembic.util.exc.CommandError")
+    ) {
+      hasMigrationError = true;
+    }
+  };
 
   spawnService(
     "automation",
@@ -897,7 +921,7 @@ function startAutomationBackend(config) {
           : {}),
         AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
         // ~/.openhands/automation/automations.db — matches docker/entrypoint.sh.
-        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(dirname(config.stateDir), SHARED_DEFAULTS.paths.automationDb)}`,
+        AUTOMATION_DB_URL: `sqlite+aiosqlite:///${dbPath}`,
         // The automation backend uses this as its publicly-reachable base
         // URL: it's appended to callback URLs and injected into each
         // sandbox as `AUTOMATION_API_URL` (consumed by setup.sh for
@@ -939,6 +963,35 @@ function startAutomationBackend(config) {
         OPENHANDS_SUPPRESS_BANNER: "1",
       },
       color: c.green,
+      onStdout: checkError,
+      onStderr: checkError,
+      onExit: (code) => {
+        if (shuttingDown) return;
+        if (hasMigrationError && !isRetry) {
+          logError("Automation backend crashed due to database migration error.");
+          logService(
+            "automation",
+            `Removing stale SQLite database at ${dbPath} and retrying...`,
+            c.yellow,
+          );
+          try {
+            if (existsSync(dbPath)) {
+              rmSync(dbPath, { force: true });
+              logSuccess("Stale SQLite database removed successfully.");
+            }
+            const walPath = `${dbPath}-wal`;
+            const shmPath = `${dbPath}-shm`;
+            const journalPath = `${dbPath}-journal`;
+            if (existsSync(walPath)) rmSync(walPath, { force: true });
+            if (existsSync(shmPath)) rmSync(shmPath, { force: true });
+            if (existsSync(journalPath)) rmSync(journalPath, { force: true });
+
+            startAutomationBackend(config, true);
+          } catch (err) {
+            logError(`Failed to remove database file: ${err.message}`);
+          }
+        }
+      },
     },
   );
 }
