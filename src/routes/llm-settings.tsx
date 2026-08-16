@@ -37,6 +37,7 @@ import {
   FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
+import { getLlmConfigValidationErrors } from "#/utils/llm-config-validation";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -228,6 +229,7 @@ export function LlmSettingsScreen({
       const apiKeyIsSet = embedded
         ? apiKeyValue.length > 0
         : Boolean(settings?.llm_api_key_set);
+      const llmConfigValidationErrors = getLlmConfigValidationErrors(values);
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => (
         <>
@@ -241,6 +243,7 @@ export function LlmSettingsScreen({
             placeholder={apiKeyIsSet ? "<hidden>" : ""}
             onChange={(value) => onChange("llm.api_key", value)}
             isDisabled={isDisabled}
+            error={llmConfigValidationErrors.apiKey}
             startContent={
               apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
             }
@@ -423,6 +426,7 @@ export function LlmSettingsScreen({
                     placeholder="https://api.openai.com"
                     onChange={(value) => onChange("llm.base_url", value)}
                     isDisabled={isDisabled}
+                    error={llmConfigValidationErrors.baseUrl}
                   />
 
                   {renderApiKeyInput(
@@ -465,6 +469,13 @@ export function LlmSettingsScreen({
       );
       const llm = (agentSettings.llm ?? {}) as Record<string, unknown>;
       const authType = resolveLlmAuthType(context.values[LLM_AUTH_TYPE_KEY]);
+
+      if (authType !== LLM_AUTH_TYPE_SUBSCRIPTION) {
+        const validationError = getLlmConfigValidationErrors(context.values);
+        if (validationError.baseUrl || validationError.apiKey) {
+          throw new Error(validationError.baseUrl ?? validationError.apiKey);
+        }
+      }
 
       if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
         llm.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;

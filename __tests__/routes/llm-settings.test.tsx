@@ -205,6 +205,31 @@ describe("LlmSettingsScreen", () => {
     expect(screen.queryByTestId("set-indicator")).not.toBeInTheDocument();
   });
 
+  it("shows validation errors and does not save an invalid base URL", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openai/gpt-4o" }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    fireEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    fireEvent.change(screen.getByTestId("base-url-input"), {
+      target: { value: "not-a-url" },
+    });
+
+    expect(screen.getByTestId("base-url-input-error")).toHaveTextContent(
+      "Base URL must be a valid HTTP(S) URL.",
+    );
+
+    fireEvent.click(screen.getByTestId("save-button"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+  });
+
   it("renders ChatGPT subscription settings without API key fields", async () => {
     vi.spyOn(LLMSubscriptionService, "getOpenAIStatus").mockResolvedValue({
       vendor: "openai",
