@@ -6,6 +6,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useRuntimeIsReady } from "#/hooks/use-runtime-is-ready";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import { WORKSPACE_QUERY_KEYS } from "#/hooks/query/query-keys";
 
 // Cap the number of files we render so a giant repo doesn't freeze the UI.
 const MAX_FILES = 2000;
@@ -66,13 +67,12 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const workingDir = conversation?.workspace?.working_dir?.trim();
 
   const query = useQuery<string[]>({
-    queryKey: [
-      "workspace-files",
+    queryKey: WORKSPACE_QUERY_KEYS.files(
       conversationId,
       conversationUrl,
       sessionApiKey,
       workingDir,
-    ],
+    ),
     queryFn: async () => {
       const result = await AgentServerRuntimeService.executeCommand(
         conversationUrl,

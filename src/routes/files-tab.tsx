@@ -11,6 +11,7 @@ import { useHasAttachedSource } from "#/hooks/use-has-attached-source";
 import { useHasGitCommits } from "#/hooks/query/use-has-git-commits";
 import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 import { useUnifiedGetGitChanges } from "#/hooks/query/use-unified-get-git-changes";
+import { WORKSPACE_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useConversationLocalStorageState } from "#/utils/conversation-local-storage";
 import {
@@ -137,7 +138,7 @@ function FilesTab() {
     useUnifiedGetGitChanges();
   const refreshFiles = () => {
     refetchGitChanges();
-    queryClient.invalidateQueries({ queryKey: ["workspace-files"] });
+    queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.allFiles });
     queryClient.invalidateQueries({ queryKey: ["workspace-file-content"] });
     queryClient.invalidateQueries({ queryKey: ["git_commits"] });
   };

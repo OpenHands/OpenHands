@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { ActionEvent } from "#/types/agent-server/core/events/action-event";
 import { useModelStore } from "#/stores/model-store";
+import { WORKSPACE_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { stripWorkspacePrefix } from "./path-utils";
 
 /**
@@ -30,7 +31,8 @@ export const handleActionEventCacheInvalidation = (
   ) {
     queryClient.invalidateQueries(
       {
-        queryKey: ["file_changes", conversationId],
+        queryKey:
+          WORKSPACE_QUERY_KEYS.fileChangesForConversation(conversationId),
       },
       { cancelRefetch: false },
     );

@@ -60,6 +60,41 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+export const WORKSPACE_QUERY_KEYS = {
+  allFileChanges: ["file_changes"] as const,
+  fileChanges: (
+    conversationId: string | null | undefined,
+    conversationUrl: string | null | undefined,
+    sessionApiKey: string | null | undefined,
+    gitPath: string,
+  ) =>
+    [
+      "file_changes",
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+      gitPath,
+    ] as const,
+  fileChangesForConversation: (conversationId: string | null | undefined) =>
+    ["file_changes", conversationId] as const,
+  allFiles: ["workspace-files"] as const,
+  files: (
+    conversationId: string | null | undefined,
+    conversationUrl: string | null | undefined,
+    sessionApiKey: string | null | undefined,
+    workingDir: string | null | undefined,
+  ) =>
+    [
+      "workspace-files",
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+      workingDir,
+    ] as const,
+  filesForConversation: (conversationId: string | null | undefined) =>
+    ["workspace-files", conversationId] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

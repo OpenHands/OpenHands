@@ -6,7 +6,6 @@ import type { AppConversation } from "#/api/conversation-service/agent-server-co
 import type { FileUploadSuccessResponse } from "#/api/open-hands.types";
 import {
   buildWorkspaceUploadPath,
-  getSafeUploadFileName,
   resolveConversationUploadWorkingDir,
 } from "#/api/workspace-upload-path";
 
@@ -131,7 +130,6 @@ async function uploadFilesToRuntime(options: {
 
   const uploadFile = async (file: File) => {
     try {
-      const safeName = getSafeUploadFileName(file.name);
       // @spec WUP-001 — Build an absolute upload path that's anchored against
       // the agent-server's home dir (when `workingDir` is relative) instead
       // of the filesystem root. Without this, default conversations whose
@@ -143,7 +141,7 @@ async function uploadFilesToRuntime(options: {
         sessionApiKey,
       });
       await workspace.fileUpload(file, uploadPath);
-      return { uploadedFile: safeName, skippedFile: null };
+      return { uploadedFile: uploadPath, skippedFile: null };
     } catch (error) {
       return {
         uploadedFile: null,
