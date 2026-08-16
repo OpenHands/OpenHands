@@ -252,6 +252,7 @@ export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 export const INTERFACE_ICON_SLUGS = [
   "layout-dashboard",
   "sparkles",
+  "library",
   "bot",
   "circle-alert",
   "activity",
