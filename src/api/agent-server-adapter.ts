@@ -328,10 +328,14 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    selected_repository: metadata?.selected_repository ?? null,
-    selected_branch: metadata?.selected_branch ?? null,
-    git_provider: metadata?.git_provider ?? null,
-    selected_workspace: metadata?.selected_workspace ?? null,
+    selected_repository:
+      metadata?.selected_repository ?? info.tags?.repository ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? info.tags?.selected_branch ?? null,
+    git_provider:
+      metadata?.git_provider ?? (info.tags?.git_provider as AppConversation["git_provider"]) ?? null,
+    selected_workspace:
+      metadata?.selected_workspace ?? info.tags?.workspace ?? null,
     active_profile: metadata?.active_profile ?? null,
     title: info.title?.trim()
       ? info.title

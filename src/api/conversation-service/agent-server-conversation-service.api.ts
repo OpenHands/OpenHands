@@ -472,6 +472,21 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
+    // Stamp workspace/repo metadata as server-side tags so that other
+    // clients pointed at the same backend can hydrate conversation grouping
+    // without needing this client's localStorage (OpenHands#15598).
+    const metadataTags: Record<string, string> = {};
+    if (metadata?.selected_repository)
+      metadataTags.repository = metadata.selected_repository;
+    if (metadata?.selected_branch)
+      metadataTags.selected_branch = metadata.selected_branch;
+    if (metadata?.git_provider)
+      metadataTags.git_provider = metadata.git_provider;
+    if (workingDirOverride) metadataTags.workspace = workingDirOverride;
+    if (Object.keys(metadataTags).length > 0) {
+      payload.tags = { ...(payload.tags as Record<string, string>), ...metadataTags };
+    }
+
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
     ).createConversation<DirectConversationInfo>(payload);
