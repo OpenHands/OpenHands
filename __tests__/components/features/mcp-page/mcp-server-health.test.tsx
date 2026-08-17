@@ -16,7 +16,7 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import type { ExtendedMCPTestResponse, MCPServerConfig } from "#/types/mcp-server";
 
 const CUSTOM_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "custom",
   type: "shttp",
   name: "custom",
   url: "https://mcp.example.com/mcp",
@@ -24,7 +24,7 @@ const CUSTOM_SERVER: MCPServerConfig = {
 
 /** Matches the catalog `github` entry (probe spec + docsUrl). */
 const GITHUB_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "github",
   type: "shttp",
   name: "github",
   url: "https://api.githubcopilot.com/mcp/",
@@ -32,7 +32,7 @@ const GITHUB_SERVER: MCPServerConfig = {
 };
 
 const OAUTH_SERVER: MCPServerConfig = {
-  id: "shttp-0",
+  id: "my-oauth",
   type: "shttp",
   name: "my-oauth",
   url: "https://mcp.oauth.example/mcp",
@@ -41,10 +41,14 @@ const OAUTH_SERVER: MCPServerConfig = {
 
 function renderCard(
   server: MCPServerConfig,
-  { onEdit = vi.fn(), onDelete = vi.fn() } = {},
+  { onEdit = vi.fn(), onToggleEnabled = vi.fn() } = {},
 ) {
   render(
-    <InstalledServerCard server={server} onEdit={onEdit} onDelete={onDelete} />,
+    <InstalledServerCard
+      server={server}
+      onEdit={onEdit}
+      onToggleEnabled={onToggleEnabled}
+    />,
     {
       wrapper: ({ children }) => (
         <QueryClientProvider
@@ -57,7 +61,7 @@ function renderCard(
       ),
     },
   );
-  return { onEdit, onDelete };
+  return { onEdit, onToggleEnabled };
 }
 
 const healthDot = () => screen.getByTestId("mcp-health-dot");
@@ -167,6 +171,19 @@ describe("InstalledServerCard connection health", () => {
   });
 
   it("re-authorizes a failed OAuth server and persists the refreshed state", async () => {
+    vi.mocked(SettingsService.getSettings).mockResolvedValue({
+      ...MOCK_DEFAULT_USER_SETTINGS,
+      agent_settings: {
+        ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+        mcp_config: {
+          "my-oauth": {
+            transport: "http",
+            url: OAUTH_SERVER.url!,
+            auth: { strategy: "oauth2" },
+          },
+        },
+      },
+    });
     vi.spyOn(McpService, "testServer").mockResolvedValue({
       ok: false,
       error: "token expired",
@@ -177,8 +194,8 @@ describe("InstalledServerCard connection health", () => {
       tools: [],
       oauth_state: { tokens: { access_token: "fresh-access-token" } },
     });
-    const saveSpy = vi
-      .spyOn(SettingsService, "saveSettings")
+    const patchSpy = vi
+      .spyOn(SettingsService, "patchMcpServer")
       .mockResolvedValue(true);
     renderCard(OAUTH_SERVER);
 
@@ -196,8 +213,12 @@ describe("InstalledServerCard connection health", () => {
     );
     expect(McpService.authorizeOAuth).toHaveBeenCalledTimes(1);
     // The refreshed oauth_state is persisted, not dropped on the floor.
-    expect(saveSpy).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(saveSpy.mock.calls[0][0])).toContain(
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledTimes(1));
+    expect(patchSpy).toHaveBeenCalledWith(
+      OAUTH_SERVER.id,
+      expect.objectContaining({ auth: expect.any(Object) }),
+    );
+    expect(JSON.stringify(patchSpy.mock.calls[0][1])).toContain(
       "fresh-access-token",
     );
   });

@@ -127,6 +127,9 @@ export async function configureLiveAgentServer(
         confirmation_mode: false,
         max_iterations: 6,
       },
+      misc_settings_diff: {
+        app_preferences: { user_consents_to_analytics: false },
+      },
     },
   });
   expect(

@@ -21,7 +21,7 @@ import { McpServerHealthSection } from "./mcp-server-health";
 interface InstalledServerCardProps {
   server: MCPServerConfig;
   onEdit: () => void;
-  onDelete: () => void;
+  onToggleEnabled: (enabled: boolean) => void;
 }
 
 function getServerTransportLabel(type: MCPServerConfig["type"]) {
@@ -49,7 +49,7 @@ function getServerDetailLine(server: MCPServerConfig): string {
 export function InstalledServerCard({
   server,
   onEdit,
-  onDelete,
+  onToggleEnabled,
 }: InstalledServerCardProps) {
   const { t } = useTranslation("openhands");
   const catalog = findCatalogEntryForServer(
@@ -97,16 +97,17 @@ export function InstalledServerCard({
               </h3>
               <p className="mt-0.5 text-xs text-tertiary-alt">{transport}</p>
             </div>
+            {/* Enable/disable, not remove: a disabled server keeps its full
+                configuration (secrets included) and is simply withheld from
+                the agent. Removing lives in the editor, reached by clicking
+                the card. */}
             <CirclePlusCheckToggle
               testId={`mcp-installed-toggle-${server.id}`}
-              isSelected
-              onToggle={(selected) => {
-                if (!selected) {
-                  onDelete();
-                }
-              }}
-              enableLabelKey={I18nKey.MCP$TOGGLE_ADD_SERVER}
-              disableLabelKey={I18nKey.MCP$TOGGLE_REMOVE_SERVER}
+              isSelected={server.enabled !== false}
+              onToggle={onToggleEnabled}
+              enableLabelKey={I18nKey.MCP$TOGGLE_ENABLE_SERVER}
+              disableLabelKey={I18nKey.MCP$TOGGLE_DISABLE_SERVER}
+              disableTooltipKey={I18nKey.COMMON$DISABLE}
             />
           </header>
 

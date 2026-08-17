@@ -1,5 +1,4 @@
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
-import { TASK_SUGGESTIONS_HANDLERS } from "./task-suggestions-handlers";
 import { SECRETS_HANDLERS } from "./secrets-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "./git-repository-handlers";
 import {
@@ -23,7 +22,6 @@ import {
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
-  ...TASK_SUGGESTIONS_HANDLERS,
   ...SECRETS_HANDLERS,
   ...GIT_REPOSITORY_HANDLERS,
   ...SETTINGS_HANDLERS,

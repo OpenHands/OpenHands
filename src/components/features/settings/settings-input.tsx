@@ -36,6 +36,12 @@ interface SettingsInputProps {
   error?: string;
   /** Renders a red asterisk next to the label to mark the field as required. */
   showRequiredTag?: boolean;
+  /**
+   * Short guidance rendered next to the label, above the input. It sits inside
+   * the `<label>`, so it is announced as part of the field's accessible name —
+   * keep it to a phrase that reads well after the label text.
+   */
+  hint?: string;
   onBlur?: () => void;
   /** Extra classes merged onto the `<input>` element. */
   inputClassName?: string;
@@ -68,6 +74,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
       ariaInvalid,
       error,
       showRequiredTag,
+      hint,
       onBlur,
       inputClassName,
     },
@@ -85,6 +92,14 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
             </span>
           )}
           {showOptionalTag && <OptionalTag />}
+          {hint && (
+            <span
+              data-testid={testId ? `${testId}-hint` : undefined}
+              className="min-w-0 text-xs text-[var(--oh-muted)]"
+            >
+              {hint}
+            </span>
+          )}
         </div>
         <input
           ref={ref}

@@ -147,6 +147,10 @@ jobs:
           kill $SERVER_PID
 
       - name: Build frontend (for agent-canvas binary)
+        env:
+          # VITE_ENABLE_BROWSER_TOOLS is evaluated at Vite build time;
+          # setting it only when the static stack starts is too late.
+          VITE_ENABLE_BROWSER_TOOLS: "false"
         run: npm run build:app
 
       - name: Resolve affected test directories

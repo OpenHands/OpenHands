@@ -175,10 +175,9 @@ describe("SkillInstallRestartBanner", () => {
 
     await waitFor(() => {
       const call = createConversationSpy.mock.lastCall;
-      // Positional contract of createConversation: workingDir is #5 and
-      // workspaceMode #6 — the parsed install root, reused directly.
-      expect(call?.[4]).toBe("/tmp/demo-ws");
-      expect(call?.[5]).toBe("local_repo");
+      // The parsed install root is reused directly as the launch workspace.
+      expect(call?.[0]?.workingDirOverride).toBe("/tmp/demo-ws");
+      expect(call?.[0]?.workspaceMode).toBe("local_repo");
       expect(navigate).toHaveBeenCalledWith("/conversations/new-conv-1");
     });
   });

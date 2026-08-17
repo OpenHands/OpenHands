@@ -35,7 +35,11 @@ export function useCloudCurrentUserId(): Record<
   const active = useActiveBackend();
   const cloudOrgs = useAllCloudOrganizations();
 
-  const targets: { backendId: string; orgIdForMe: string }[] = [];
+  const targets: {
+    backendId: string;
+    connectionRevision: number;
+    orgIdForMe: string;
+  }[] = [];
   for (const backend of backends) {
     if (backend.kind === "cloud") {
       const entry = cloudOrgs[backend.id];
@@ -47,19 +51,28 @@ export function useCloudCurrentUserId(): Record<
           ? active.orgId
           : (entry?.orgs[0]?.id ?? null);
       if (preferredOrgId) {
-        targets.push({ backendId: backend.id, orgIdForMe: preferredOrgId });
+        targets.push({
+          backendId: backend.id,
+          connectionRevision: backend.connectionRevision ?? 0,
+          orgIdForMe: preferredOrgId,
+        });
       }
     }
   }
 
   const results = useQueries({
-    queries: targets.map(({ backendId, orgIdForMe }) => {
+    queries: targets.map(({ backendId, connectionRevision, orgIdForMe }) => {
       const backend = backends.find((b) => b.id === backendId);
       return {
         // `orgIdForMe` is included in the query key so re-resolving the
         // active org also re-keys this query → React Query refetches
         // automatically without relying on explicit invalidation.
-        queryKey: ["cloud-current-user", backendId, orgIdForMe] as const,
+        queryKey: [
+          "cloud-current-user",
+          backendId,
+          orgIdForMe,
+          connectionRevision,
+        ] as const,
         queryFn: async () => {
           if (!backend) return { orgId: orgIdForMe, userId: "" };
           return getCloudOrganizationMe(orgIdForMe, backend);
