@@ -1,0 +1,98 @@
+name: Desktop (Linux)
+
+# Builds the Agent Canvas Linux packages (AppImage + deb) via
+# `npm run build:desktop` on an Ubuntu runner. The electron-builder Linux
+# targets already exist in electron-builder.config.mjs; this workflow is the
+# CI half that macOS (desktop-macos.yml) and Windows (desktop-windows.yml)
+# already have.
+#   pull_request:      paths-filtered smoke build — the uploaded artifacts are
+#                      what a tester downloads to verify a PR on Linux.
+#   release published: rebuilds from the release tag and attaches the packages
+#                      to the GitHub Release created by release-please.
+#   workflow_dispatch: manual escape hatch for any ref.
+# The packages are not signed (no signing certs exist for any platform);
+# no distro store review is involved, so AppImage/deb install without a
+# Gatekeeper/SmartScreen-style warning. AppImage runs on any modern distro
+# (FUSE required; FUSE 3 distros need the `--appimage-extract-and-run`
+# fallback or libfuse2 installed). The deb targets Debian/Ubuntu; Fedora and
+# other rpm distros use the AppImage.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/desktop-linux.yml
+      - electron/**
+      - electron-builder.config.mjs
+      - scripts/download-uv.mjs
+      - scripts/download-node.mjs
+  release:
+    types: [published]
+
+concurrency:
+  group: desktop-linux-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# `gh release upload` needs contents: write on release events. Fork PR runs
+# are downgraded to a read-only token by GitHub automatically.
+permissions:
+  contents: write
+
+jobs:
+  build-packages:
+    name: Build Linux packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Linux packages
+        env:
+          # Production analytics key only for release builds (same split as
+          # docker.yml); PR/manual runs get the staging key. Both are public
+          # client-side keys stored as repo vars — empty on fork PRs, which
+          # simply disables analytics in the built app.
+          VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
+          # Authenticates download-uv.mjs's GitHub API version lookup so it
+          # doesn't hit the unauthenticated per-IP rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run build:desktop
+
+      - name: Verify package output
+        run: |
+          ls -la dist-electron
+          appimage_count=$(find dist-electron -maxdepth 1 -name '*.AppImage' | wc -l | tr -d ' ')
+          deb_count=$(find dist-electron -maxdepth 1 -name '*.deb' | wc -l | tr -d ' ')
+          if [ "$appimage_count" -ne 1 ] || [ "$deb_count" -ne 1 ]; then
+            echo "::error::Expected exactly one AppImage and one deb in dist-electron/, found $appimage_count AppImage(s) and $deb_count deb(s)"
+            exit 1
+          fi
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-canvas-linux-packages
+          path: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+          if-no-files-found: error
+          # The packages are large (~175 MB each); keep PR artifacts long
+          # enough for manual QA without hoarding storage.
+          retention-days: 14
+
+      - name: Attach packages to GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist-electron/*.AppImage dist-electron/*.deb --clobber
