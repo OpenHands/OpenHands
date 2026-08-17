@@ -260,7 +260,7 @@ export function RunningAutomationsList() {
     <section
       aria-labelledby="running-automations-heading"
       data-testid="running-automations-list"
-      className="mt-8 w-full"
+      className="w-full"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2

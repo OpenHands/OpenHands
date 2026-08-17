@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -204,6 +204,22 @@ describe("AutomationsList — view mode toggle", () => {
     expect(
       screen.queryByTestId("automations-view-toggle-list"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the recommended rail inside the empty state instead of above it", async () => {
+    vi.mocked(AutomationService.getAutomations).mockResolvedValue({
+      automations: [],
+      total: 0,
+    });
+    renderList();
+
+    const empty = await screen.findByTestId("automations-empty");
+    expect(
+      await within(empty).findByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("recommended-automations-rail")).toHaveLength(
+      1,
+    );
   });
 });
 

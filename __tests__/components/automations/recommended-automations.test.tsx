@@ -22,6 +22,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
   RecommendedAutomationsSection,
@@ -85,14 +86,20 @@ const navigationValue: NavigationContextValue = {
   navigate: mockNavigate,
 };
 
-function renderLauncher({ withBackendProvider = false } = {}) {
+function renderLauncher({
+  withBackendProvider = false,
+  variant = "catalog",
+}: {
+  withBackendProvider?: boolean;
+  variant?: "catalog" | "rail";
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   const launcher = (
     <NavigationProvider value={navigationValue}>
-      <RecommendedAutomationsLauncher />
+      <RecommendedAutomationsLauncher variant={variant} />
     </NavigationProvider>
   );
 
@@ -660,6 +667,40 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automations-section"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the compact rail instead of the catalog section", async () => {
+    vi.spyOn(AutomationService, "getAutomations").mockResolvedValue({
+      automations: [
+        {
+          id: "installed-1",
+          name: "GitHub Code Review Agent",
+          trigger: { type: "cron", schedule: "0 9 * * *" },
+          enabled: true,
+          prompt: "Review PRs",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+
+    renderLauncher({ variant: "rail" });
+
+    expect(
+      await screen.findByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automation-rail-card-github-pr-reviewer"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {

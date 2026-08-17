@@ -30,6 +30,8 @@ import {
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomations } from "#/hooks/query/use-automations";
+import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
 
@@ -38,6 +40,12 @@ interface RecommendedAutomationsLauncherProps {
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
+  /**
+   * Compact discovery rail for New Chat and the automations dashboard.
+   * The templates page keeps the full catalog section.
+   */
+  variant?: "catalog" | "rail";
+  className?: string;
 }
 
 /**
@@ -61,6 +69,8 @@ export function RecommendedAutomationsLauncher({
   query,
   onLaunched,
   scrollableGrid = false,
+  variant = "catalog",
+  className,
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
@@ -78,6 +88,11 @@ export function RecommendedAutomationsLauncher({
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
+  const isRail = variant === "rail";
+  const { data: automationsData, isLoading: isAutomationsLoading } =
+    useAutomations({
+      enabled: isRail && activeBackend.backend.kind === "local",
+    });
 
   const installedMcpConfig = useMemo(
     () =>
@@ -239,15 +254,25 @@ export function RecommendedAutomationsLauncher({
   // automations are managed elsewhere.
   if (activeBackend.backend.kind === "cloud") return null;
 
+  if (isRail && isAutomationsLoading) return null;
+
   return (
     <>
-      <RecommendedAutomationsSection
-        backendKind={activeBackend.backend.kind}
-        installedServers={installedMcpConfig}
-        query={query}
-        onSelect={handleSelectAutomation}
-        scrollableGrid={scrollableGrid}
-      />
+      {isRail ? (
+        <RecommendedAutomationsRail
+          className={className}
+          installedAutomations={automationsData?.automations ?? []}
+          onSelect={handleSelectAutomation}
+        />
+      ) : (
+        <RecommendedAutomationsSection
+          backendKind={activeBackend.backend.kind}
+          installedServers={installedMcpConfig}
+          query={query}
+          onSelect={handleSelectAutomation}
+          scrollableGrid={scrollableGrid}
+        />
+      )}
 
       {installEntry && (
         <InstallServerModal

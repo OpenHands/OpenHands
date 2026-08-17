@@ -27,6 +27,7 @@ import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
 } from "#/utils/automation-catalog";
+import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
 import { cn } from "#/utils/utils";
 import {
   extensionModuleCardInteractiveClassName,
@@ -46,18 +47,7 @@ interface RecommendedAutomationsSectionProps {
   scrollableGrid?: boolean;
 }
 
-export function getAutomationsByPopularity(
-  catalog: RecommendedAutomation[],
-): RecommendedAutomation[] {
-  return catalog
-    .map((automation, index) => ({ automation, index }))
-    .sort((a, b) => {
-      const byPopularity =
-        (b.automation.popularityRank ?? 0) - (a.automation.popularityRank ?? 0);
-      return byPopularity || a.index - b.index;
-    })
-    .map(({ automation }) => automation);
-}
+export { getAutomationsByPopularity };
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 

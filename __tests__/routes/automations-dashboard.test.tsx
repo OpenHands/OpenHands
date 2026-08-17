@@ -153,7 +153,7 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     await renderDashboardWithSettledInsights();
 
     // Assert — navigation, tiles, and controls all carry manifest captions;
-    // the catalog launcher has moved off this page.
+    // the full catalog stays on Templates, and the compact rail is empty-state only.
     const nav = screen.getByTestId("automations-navbar-desktop");
     const automationsTile = screen.getByTestId("overview-tile-automations");
     const filters = screen.getByTestId("automations-filters");
@@ -170,11 +170,13 @@ describe("AutomationsList — manifest-declared dashboard", () => {
       statsCaptions: screen.getAllByText("Widget wins").length,
       activity: screen.getAllByTestId(/^automation-activity-/).length,
       launcher: screen.queryByTestId("recommended-automations-section"),
+      rail: screen.queryByTestId("recommended-automations-rail"),
     }).toMatchObject({
       navLabels: 2,
       statsCaptions: 2,
       activity: 2,
       launcher: null,
+      rail: null,
     });
   });
 
