@@ -333,7 +333,9 @@ export function toAppConversation(
     selected_branch:
       metadata?.selected_branch ?? info.tags?.selected_branch ?? null,
     git_provider:
-      metadata?.git_provider ?? (info.tags?.git_provider as AppConversation["git_provider"]) ?? null,
+      metadata?.git_provider ??
+      (info.tags?.git_provider as AppConversation["git_provider"]) ??
+      null,
     selected_workspace:
       metadata?.selected_workspace ?? info.tags?.workspace ?? null,
     active_profile: metadata?.active_profile ?? null,

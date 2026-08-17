@@ -485,7 +485,10 @@ class AgentServerConversationService {
       metadataTags.git_provider = metadata.git_provider;
     if (workingDirOverride) metadataTags.workspace = workingDirOverride;
     if (Object.keys(metadataTags).length > 0) {
-      payload.tags = { ...(payload.tags as Record<string, string>), ...metadataTags };
+      payload.tags = {
+        ...(payload.tags as Record<string, string>),
+        ...metadataTags,
+      };
     }
 
     const data = await new ConversationClient(
