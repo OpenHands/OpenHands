@@ -36,7 +36,7 @@ interface SidebarNavLinkProps {
   /**
    * When true, forces the active style regardless of the current path.
    * Useful for links that should appear active for multiple related routes
-   * (e.g. the Extensions link being active on /mcp and /plugins too).
+   * (e.g. the Extensions link being active on /mcp, /sub-agents and /plugins too).
    */
   forceActive?: boolean;
 }

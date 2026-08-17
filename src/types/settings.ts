@@ -92,6 +92,35 @@ export type SkillInfo = {
   content?: string;
 };
 
+/**
+ * Scope where a sub-agent was discovered by the agent-server, mirroring the
+ * server's `AgentDefinitionLevel`. `builtin`/`project`/`user` come from disk
+ * discovery; `plugin`/`programmatic` come from the conversation registry.
+ */
+export type AgentDefinitionLevel =
+  | "builtin"
+  | "project"
+  | "user"
+  | "plugin"
+  | "programmatic";
+
+/**
+ * A file-based or built-in sub-agent as listed by the agent-server's read-only
+ * `POST /api/sub-agents` catalog (the sub-agents analogue of `SkillInfo`).
+ * Every field except `name` is optional because the discovery endpoint may
+ * omit any frontmatter value.
+ */
+export type AgentInfo = {
+  name: string;
+  level?: AgentDefinitionLevel | null;
+  source?: string | null;
+  description?: string | null;
+  system_prompt?: string;
+  model?: string;
+  tools?: string[];
+  when_to_use_examples?: string[];
+};
+
 export type SettingsScope = "personal";
 
 /**
@@ -140,6 +169,7 @@ export type Settings = {
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
   disabled_skills?: string[];
+  disabled_agents?: string[];
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;
