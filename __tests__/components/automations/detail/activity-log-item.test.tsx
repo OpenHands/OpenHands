@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router";
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
 import {
   AutomationRunStatus,
+  type Automation,
   type AutomationRun,
 } from "#/types/automation";
 import {
@@ -21,6 +22,26 @@ import { I18nKey } from "#/i18n/declaration";
 // aria-label resolves to the raw key string. Match it explicitly.
 const LOGS_BUTTON_NAME = (name: string) =>
   name.includes(I18nKey.AUTOMATIONS$DETAIL$LOGS_VIEW);
+const CANCEL_BUTTON_NAME = (name: string) =>
+  name.includes(I18nKey.AUTOMATIONS$CANCEL_RUN);
+
+// The cancel mutation is exercised at the hook boundary rather than through
+// a real network call — same reasoning as mocking RunLogsModal below: these
+// tests are about ActivityLogItem's wiring (does it call mutate with the
+// right ids, does it disable while pending), not react-query's own
+// behaviour, which has its own test coverage.
+const cancelMutationState = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  variables: undefined as { automationId: string; runId: string } | undefined,
+}));
+vi.mock("#/hooks/query/use-automations", () => ({
+  useCancelAutomationRun: () => ({
+    mutate: cancelMutationState.mutate,
+    isPending: cancelMutationState.isPending,
+    variables: cancelMutationState.variables,
+  }),
+}));
 
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
@@ -68,7 +89,20 @@ function makeRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
   };
 }
 
-function renderItem(run: AutomationRun) {
+function makeAutomation(overrides: Partial<Automation> = {}): Automation {
+  return {
+    id: "automation-1",
+    name: "Test Automation",
+    trigger: { type: "schedule" },
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    prompt: "do the thing",
+    ...overrides,
+  };
+}
+
+function renderItem(run: AutomationRun, automation?: Automation) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -76,7 +110,7 @@ function renderItem(run: AutomationRun) {
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
         <MemoryRouter>
-          <ActivityLogItem run={run} />
+          <ActivityLogItem run={run} automation={automation} />
         </MemoryRouter>
       </ActiveBackendProvider>
     </QueryClientProvider>,
@@ -286,5 +320,140 @@ describe("ActivityLogItem — run cost", () => {
     expect(
       screen.queryByText((content) => content.startsWith("$")),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — cancel button", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    cancelMutationState.mutate.mockClear();
+    cancelMutationState.isPending = false;
+    cancelMutationState.variables = undefined;
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it.each([AutomationRunStatus.PENDING, AutomationRunStatus.RUNNING])(
+    "renders a cancel button for a %s run when the automation is known",
+    (status) => {
+      // Arrange
+      const run = makeRun({
+        status,
+        conversation_id: null,
+        bash_command_id: null,
+      });
+
+      // Act
+      renderItem(run, makeAutomation());
+
+      // Assert
+      expect(
+        screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    AutomationRunStatus.COMPLETED,
+    AutomationRunStatus.FAILED,
+    AutomationRunStatus.CANCELLED,
+    AutomationRunStatus.SKIPPED,
+  ])("does not render a cancel button for a terminal %s run", (status) => {
+    // Arrange
+    const run = makeRun({ status });
+
+    // Act
+    renderItem(run, makeAutomation());
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: CANCEL_BUTTON_NAME }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not render a cancel button for an in-flight run when the automation is not known", () => {
+    // Arrange: activity-log-item's `automation` prop is optional, and the
+    // mutation needs the automation id — without it there is nothing to
+    // wire a click to, so the button must not render.
+    const run = makeRun({ status: AutomationRunStatus.RUNNING });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(
+      screen.queryByRole("button", { name: CANCEL_BUTTON_NAME }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls the cancel mutation with the automation id and run id when clicked", () => {
+    // Arrange
+    const run = makeRun({
+      id: "run-42",
+      status: AutomationRunStatus.RUNNING,
+      conversation_id: null,
+      bash_command_id: null,
+    });
+    const automation = makeAutomation({ id: "automation-99" });
+
+    // Act
+    renderItem(run, automation);
+    fireEvent.click(screen.getByRole("button", { name: CANCEL_BUTTON_NAME }));
+
+    // Assert
+    expect(cancelMutationState.mutate).toHaveBeenCalledWith(
+      { automationId: "automation-99", runId: "run-42" },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("disables the cancel button while cancellation for this run is pending", () => {
+    // Arrange
+    const run = makeRun({ id: "run-7", status: AutomationRunStatus.PENDING });
+    cancelMutationState.isPending = true;
+    cancelMutationState.variables = {
+      automationId: "automation-1",
+      runId: "run-7",
+    };
+
+    // Act
+    renderItem(run, makeAutomation());
+
+    // Assert
+    expect(
+      screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
+    ).toBeDisabled();
+  });
+
+  it("does not render the cancel button inside the parent link's click target when the run also has a conversation", () => {
+    // Arrange: a RUNNING run can already have a conversation_id once the
+    // sandbox spins up, so both the row link and the cancel button coexist —
+    // the click handler's stopPropagation/preventDefault (same contract as
+    // the logs button) is what keeps a cancel click from navigating away.
+    const run = makeRun({
+      id: "run-8",
+      status: AutomationRunStatus.RUNNING,
+      conversation_id: "conv-live",
+      bash_command_id: "cmd-live",
+    });
+
+    // Act
+    renderItem(run, makeAutomation());
+    const link = screen.getByRole("link") as HTMLAnchorElement;
+    const cancelButton = screen.getByRole("button", {
+      name: CANCEL_BUTTON_NAME,
+    });
+
+    // Assert
+    expect(link.contains(cancelButton)).toBe(true);
+    fireEvent.click(cancelButton);
+    expect(cancelMutationState.mutate).toHaveBeenCalled();
   });
 });
