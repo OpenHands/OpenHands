@@ -699,7 +699,8 @@ export async function deleteProfileIfExists(page: Page, profileName: string) {
     const confirmBtn = page.getByTestId("delete-profile-confirm");
     await confirmBtn.waitFor({ state: "visible", timeout: 5_000 });
     await confirmBtn.click();
-    await waitForTestId(page, "add-llm-profile");
+    await expect(confirmBtn).toBeHidden({ timeout: 30_000 });
+    await expect(row).toBeHidden({ timeout: 30_000 });
   } else {
     await page.keyboard.press("Escape");
   }

@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { FileUp } from "lucide-react";
+import { FileUp, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -24,6 +24,7 @@ import {
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
@@ -109,6 +110,7 @@ export default function AutomationsList() {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const active = useActiveBackend();
+  const { navigate } = useNavigation();
   // Edit is a local-backend-only feature in MVP — cloud automations
   // are managed elsewhere and we don't yet surface them here.
   const canEdit = active.backend.kind === "local";
@@ -372,6 +374,18 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {canEdit && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-git-sync"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/git-sync")}
+              startContent={<RefreshCw className="size-4" aria-hidden />}
+            >
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
+            </BrandButton>
+          )}
           <BrandButton
             type="button"
             variant="secondary"

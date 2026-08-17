@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string -- test mocks intentionally use literal labels */
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
 import { AxiosError } from "axios";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
@@ -318,7 +319,7 @@ describe("LlmSettingsLocalView", () => {
   });
 
   describe("create mode form initialization", () => {
-    it("passes empty initial values when creating a new profile", async () => {
+    it("prefills the free OpenHands default when creating a new profile", async () => {
       const user = userEvent.setup();
       renderWithProviders(<LlmSettingsLocalView />);
 
@@ -328,14 +329,13 @@ describe("LlmSettingsLocalView", () => {
       // Should be in create view
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // The profile name input should be empty
+      // The profile name is auto-derived from the prefilled free default model.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("");
+      expect(nameInput).toHaveValue("glm-5.2");
 
-      // The embedded LlmSettingsScreen receives initialValueOverrides with
-      // empty values for create mode. We verify this by checking the
-      // component's behavior - the profile name should start empty and
-      // the form should be ready for fresh input.
+      expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+        "openhands/glm-5.2",
+      );
     });
 
     it("uses unique key for create mode to ensure form remounts", async () => {
@@ -346,10 +346,9 @@ describe("LlmSettingsLocalView", () => {
       await user.click(screen.getByTestId("add-llm-profile"));
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // Fill in some data
+      // The profile name starts from the free-model derived default.
       const nameInput = screen.getByTestId("profile-name-input");
-      await user.type(nameInput, "test-profile");
-      expect(nameInput).toHaveValue("test-profile");
+      expect(nameInput).toHaveValue("glm-5.2");
 
       // Go back to list
       await user.click(screen.getByTestId("back-to-profiles"));
@@ -358,9 +357,10 @@ describe("LlmSettingsLocalView", () => {
       // Navigate to create view again
       await user.click(screen.getByTestId("add-llm-profile"));
 
-      // The profile name should be empty again (fresh form)
+      // The profile name should return to the free-model derived default
+      // again (fresh form).
       const freshNameInput = screen.getByTestId("profile-name-input");
-      expect(freshNameInput).toHaveValue("");
+      expect(freshNameInput).toHaveValue("glm-5.2");
     });
 
     it("does not carry over values from edit mode to create mode", async () => {
@@ -373,9 +373,9 @@ describe("LlmSettingsLocalView", () => {
       // Navigate directly to create view (not edit)
       await user.click(screen.getByTestId("add-llm-profile"));
 
-      // Should be in create view with empty profile name
+      // Should be in create view with the free-model derived profile name.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("");
+      expect(nameInput).toHaveValue("glm-5.2");
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
@@ -612,6 +612,48 @@ describe("LlmSettingsLocalView", () => {
       // The rename API mock would fail if unexpectedly called since it's not set up.
       expect(true).toBe(true);
     });
+  });
+
+  describe("Pre-flight validation", () => {
+    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        ),
+      );
+    }
+
+    it("blocks saving when validation returns an invalid verdict", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+        valid: false,
+        error: { type: "authentication", message: "Invalid API key" },
+      });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(ProfilesService.validateProfile).toHaveBeenCalled(),
+      );
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { valid: true }])(
+      "saves when validation returns %j",
+      async (verdict) => {
+        const user = userEvent.setup();
+        vi.mocked(ProfilesService.validateProfile).mockResolvedValue(verdict);
+        mockSaveMutateAsync.mockResolvedValue({ success: true });
+        renderWithProviders(<LlmSettingsLocalView />);
+        await openEditView(user);
+        await user.click(screen.getByTestId("save-profile-btn"));
+
+        await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      },
+    );
   });
 
   describe("Basic tab save", () => {

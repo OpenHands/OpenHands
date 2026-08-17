@@ -88,6 +88,29 @@ async function listAutomations(
 }
 
 /**
+ * Wait for a newly-created automation to become visible through the list API.
+ * Creation and listing are separate backend operations, so the list can lag
+ * briefly after the create request succeeds.
+ */
+async function waitForAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  name: string,
+  timeoutMs = 30_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const data = await listAutomations(request, 1);
+    const automations = data.automations ?? data.items ?? [];
+    const automation = automations.find(
+      (candidate: { name: string }) => candidate.name === name,
+    );
+    if (automation) return automation;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`Automation "${name}" was not visible after ${timeoutMs}ms`);
+}
+
+/**
  * List runs for a specific automation via the real automation backend.
  */
 async function listAutomationRuns(
@@ -155,6 +178,20 @@ async function deleteAutomation(
   );
 }
 
+/** Remove stale automations with the test's fixed name before a retry. */
+async function deleteAutomationsByName(
+  request: import("@playwright/test").APIRequestContext,
+  name: string,
+) {
+  const data = await listAutomations(request);
+  const automations = data.automations ?? data.items ?? [];
+  for (const automation of automations.filter(
+    (candidate: { name: string }) => candidate.name === name,
+  )) {
+    await deleteAutomation(request, automation.id);
+  }
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("mock-LLM automation lifecycle", () => {
@@ -211,6 +248,10 @@ test.describe("mock-LLM automation lifecycle", () => {
     page,
     request,
   }) => {
+    // Retries reuse the same Docker backend, so remove any automation left by
+    // an earlier attempt before creating the fixed-name test resource.
+    await deleteAutomationsByName(request, AUTOMATION_NAME);
+
     // Ensure the mock LLM profile is configured via the Settings UI
     await ensureMockLLMProfile(page);
 
@@ -230,7 +271,12 @@ test.describe("mock-LLM automation lifecycle", () => {
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
-      `curl -s -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      // --retry: the automation backend can still be settling right after
+      // startup in the uvx/bin dev paths; transient connect/reset/5xx
+      // failures should not abort the create (observed flake → assert then
+      // sees 0 automations).
+      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      `--retry 3 --retry-connrefused --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
@@ -246,7 +292,7 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     const dispatchCmd = [
       `AID=$(python3 -c "import json; print(json.load(open('/tmp/auto_result.json'))['id'])")`,
-      `&& curl -s -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
+      `&& curl --fail-with-body -sS -X POST "${AUTOMATION_API_BASE}/$AID/dispatch"`,
       authHeader,
       `-H 'Content-Type: application/json'`,
       `-w '\\nHTTP_CODE:%{http_code}\\n'`,
@@ -370,17 +416,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: automation was created in the real automation backend ──
 
     await test.step("verify automation was created", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      expect(
-        automations.length,
-        `Expected at least 1 automation, got: ${JSON.stringify(data).slice(0, 500)}`,
-      ).toBeGreaterThanOrEqual(1);
-
-      const created = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
-      );
-      expect(created, `Automation "${AUTOMATION_NAME}" not found`).toBeTruthy();
+      const created = await waitForAutomation(request, AUTOMATION_NAME);
       automationIds.add(created.id);
       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
       expect(created.enabled).toBe(true);
@@ -389,12 +425,7 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: run completed successfully with a conversation link ──
 
     await test.step("verify run completed with conversation link", async () => {
-      const data = await listAutomations(request);
-      const automations = data.automations ?? data.items ?? [];
-      const automation = automations.find(
-        (a: { name: string }) => a.name === AUTOMATION_NAME,
-      );
-      expect(automation, "Automation should exist for run check").toBeTruthy();
+      const automation = await waitForAutomation(request, AUTOMATION_NAME);
       automationIds.add(automation.id);
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
@@ -445,7 +476,7 @@ test.describe("mock-LLM automation lifecycle", () => {
                 : Array.isArray(msg.content)
                   ? (msg.content as Array<{ type?: string; text?: string }>)
                       .filter((c) => c.type === "text" || typeof c === "string")
-                      .map((c) => (typeof c === "string" ? c : c.text ?? ""))
+                      .map((c) => (typeof c === "string" ? c : (c.text ?? "")))
                       .join("")
                   : "";
             if (text.includes("<RUNTIME_SERVICES>")) return text;
@@ -484,16 +515,27 @@ test.describe("mock-LLM automation lifecycle", () => {
     await test.step("automation card visible on list page", async () => {
       await waitForTestId(page, "automations-add-automation", 15_000);
 
-      // Wait for the automation name to appear on the page (the list
-      // may take a moment to load from the automation backend).
-      await expect(page.getByText(AUTOMATION_NAME)).toBeVisible({
-        timeout: 15_000,
-      });
+      // Scope to the automation card (data-testid `automation-card-<id>`) so
+      // the locator only matches the list entry, not the global sidebar's
+      // conversation cards. The automation run creates a conversation named
+      // ``<AUTOMATION_NAME> — <timestamp>`` that the sidebar conversation list
+      // surfaces, so an unscoped ``getByText(AUTOMATION_NAME)`` resolves to
+      // multiple elements (the card + every run conversation) and trips
+      // Playwright strict mode.
+      const automationCard = page
+        .locator('[data-testid^="automation-card-"]')
+        .filter({ hasText: AUTOMATION_NAME });
+
+      await expect(automationCard).toBeVisible({ timeout: 15_000 });
     });
 
     await test.step("click through to automation detail page", async () => {
-      // The automation name is a link — clicking it navigates to /automations/:id
-      await page.getByText(AUTOMATION_NAME).click();
+      // The automation card is a link — clicking it navigates to /automations/:id.
+      const automationCard = page
+        .locator('[data-testid^="automation-card-"]')
+        .filter({ hasText: AUTOMATION_NAME });
+
+      await automationCard.click();
       await waitForPath(page, /\/automations\/.+/, 10_000);
     });
 
@@ -507,7 +549,9 @@ test.describe("mock-LLM automation lifecycle", () => {
     // The ConfigurationSection renders schedule_human (e.g. "Every day at 9:00 AM")
     // or falls back to the raw cron expression.
     await test.step("verify cron schedule displayed on detail page", async () => {
-      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(CRON_SCHEDULE)).toBeVisible({
+        timeout: 10_000,
+      });
     });
 
     await test.step("verify run shows COMPLETED with conversation link", async () => {
@@ -548,5 +592,4 @@ test.describe("mock-LLM automation lifecycle", () => {
       }
     });
   });
-
 });

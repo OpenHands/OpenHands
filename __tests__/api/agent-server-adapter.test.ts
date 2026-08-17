@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
 import {
   ACP_SERVER_TAG_KEY,
@@ -677,13 +678,12 @@ describe("buildStartConversationRequest", () => {
     });
   });
 
-  describe("canvas_ui client tool injection", () => {
+  describe("client tool injection", () => {
     it("sends canvas_ui as a client-defined JSON tool", () => {
       const payload = buildStartConversationRequest({
         settings: DEFAULT_SETTINGS,
       });
 
-      expect(payload.client_tools).toHaveLength(1);
       expect(payload.client_tools[0]).toMatchObject({
         name: CANVAS_UI_CLIENT_TOOL_NAME,
         parameters: {
@@ -761,6 +761,7 @@ describe("buildStartConversationRequest", () => {
 
       expect(payload.client_tools.map((tool) => tool.name)).toEqual([
         CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
       ]);
     });
 
@@ -773,6 +774,7 @@ describe("buildStartConversationRequest", () => {
       expect(payload.conversation_id).toBe("legacy-conversation-id");
       expect(payload.client_tools.map((tool) => tool.name)).toEqual([
         CANVAS_UI_CLIENT_TOOL_NAME,
+        LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
       ]);
     });
 
@@ -1010,7 +1012,7 @@ describe("toAppConversation", () => {
     const result = toAppConversation({
       ...baseInfo,
       current_model_id: "claude-sonnet-4-6",
-      current_model_name: "Claude Sonnet 4.6",
+      current_model_name: "Claude Sonnet",
       agent: {
         kind: "ACPAgent",
         acp_model: "claude-opus-4-7",
@@ -1018,7 +1020,7 @@ describe("toAppConversation", () => {
       },
     });
     expect(result.agent_kind).toBe("acp");
-    expect(result.llm_model).toBe("Claude Sonnet 4.6");
+    expect(result.llm_model).toBe("Claude Sonnet");
   });
 
   it("surfaces the runtime ACP default model over a configured acp_model", () => {
@@ -1352,7 +1354,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1499,7 +1501,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
   });
 
@@ -1521,7 +1523,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/codex-acp@1.1.2",
+      "@agentclientprotocol/codex-acp@1.1.7",
     ]);
   });
 
@@ -1668,7 +1670,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved

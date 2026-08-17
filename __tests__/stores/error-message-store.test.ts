@@ -9,6 +9,7 @@ describe("error message store", () => {
       errorMessage: null,
       errorType: null,
       errorCode: null,
+      errorClassification: null,
     });
   });
 
@@ -56,6 +57,25 @@ describe("error message store", () => {
 
     getState().setErrorMessage("auth failed", "conversation", "ACPAuthRequired");
     expect(getState().errorCode).toBe("ACPAuthRequired");
+  });
+
+  it("stores and clears structured error classifications", () => {
+    const classification = {
+      kind: "auth" as const,
+      retryable: false,
+      user_action: "settings" as const,
+    };
+
+    getState().setErrorMessage(
+      "auth failed",
+      "conversation",
+      null,
+      classification,
+    );
+    expect(getState().errorClassification).toEqual(classification);
+
+    getState().removeErrorMessage();
+    expect(getState().errorClassification).toBeNull();
   });
 
   it("removeErrorMessage clears the error code too", () => {
