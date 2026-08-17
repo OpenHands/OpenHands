@@ -6,7 +6,7 @@ name: PR Description Check
 
 on:
     pull_request_target:
-        types: [opened, edited, reopened, ready_for_review]
+        types: [opened, edited, reopened, ready_for_review, synchronize]
 
 permissions:
     contents: read
@@ -16,12 +16,11 @@ permissions:
 jobs:
     validate-pr-description:
         name: Validate PR description
-        # Draft PRs may still have incomplete descriptions; validate when review starts.
-        # Bots (dependabot, release-please) write their own bodies and can't follow
-        # the HUMAN/AGENT template, so exempt them rather than failing every such PR.
-        if: >-
-            github.event.pull_request.draft == false
-            && github.event.pull_request.user.type != 'Bot'
+        # Run on drafts too so contributors can iterate on a passing description
+        # before requesting review. Bots (dependabot, release-please) write their
+        # own bodies and can't follow the HUMAN/AGENT template, so exempt them
+        # rather than failing every such PR.
+        if: github.event.pull_request.user.type != 'Bot'
         runs-on: ubuntu-24.04
         steps:
             - name: Checkout trusted workflow scripts
