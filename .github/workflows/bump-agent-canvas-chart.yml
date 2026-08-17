@@ -7,7 +7,7 @@
 # a vX.Y.Z tag, which runs "Docker" to publish
 # ghcr.io/openhands/agent-canvas:X.Y.Z. This workflow watches for those
 # tag-triggered "Docker" runs and bumps the chart.
-name: Bump agent-canvas chart image tag
+name: Bump chart image tag
 
 on:
   workflow_run:
