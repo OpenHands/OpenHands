@@ -393,11 +393,19 @@ jobs:
             pw_exit=0
           fi
 
-          # Clean up the Docker container (belt-and-suspenders)
-          docker ps -q --filter "name=agent-canvas-mock-llm" | xargs -r docker stop 2>/dev/null || true
-
           echo "exit_code=$pw_exit" >> "$GITHUB_OUTPUT"
           exit 0
+
+      - name: Capture Docker container logs
+        if: always()
+        run: |
+          docker ps -a --filter "name=agent-canvas-mock-llm" --format '{{.Names}}\t{{.Status}}' | tee docker-container-status.txt || true
+          : > docker-container-logs.txt
+          for container in $(docker ps -a --filter "name=agent-canvas-mock-llm" --format '{{.Names}}'); do
+            echo "=== $container ===" >> docker-container-logs.txt
+            docker logs "$container" >> docker-container-logs.txt 2>&1 || true
+          done
+          docker ps -aq --filter "name=agent-canvas-mock-llm" | xargs -r docker rm -f 2>/dev/null || true
 
       # ── Reporting ──────────────────────────────────────────────────────
       - name: Upload test artifacts
@@ -411,6 +419,8 @@ jobs:
           path: |
             playwright-report-mock-llm-docker/
             test-results-mock-llm-docker/
+            docker-container-status.txt
+            docker-container-logs.txt
 
       - name: Detect newly added spec files
         if: always() && github.event.pull_request.number

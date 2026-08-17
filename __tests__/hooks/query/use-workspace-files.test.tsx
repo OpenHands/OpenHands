@@ -5,11 +5,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentServerRuntimeService from "#/api/runtime-service/agent-server-runtime-service";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
-import type { GitChange } from "#/api/open-hands.types";
+import { listCloudConversationFiles } from "#/api/cloud/conversation-service.api";
 
-const useActiveBackendMock = vi.fn();
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackend: () => useActiveBackendMock(),
+// The hook reads cloud/local from the backend-registry store (the same source
+// the transport layer branches on), so drive the store snapshot in tests.
+// `getSnapshot` must return a STABLE reference per state or `useSyncExternalStore`
+// re-renders forever — precompute one frozen snapshot per kind.
+const STORE_SNAPSHOTS = {
+  local: {
+    active: {
+      backend: {
+        id: "backend-id",
+        name: "Local",
+        host: "http://127.0.0.1:8000",
+        apiKey: "test-key",
+        kind: "local",
+      },
+      orgId: null,
+    },
+  },
+  cloud: {
+    active: {
+      backend: {
+        id: "backend-id",
+        name: "Production",
+        host: "https://app.all-hands.dev",
+        apiKey: "test-key",
+        kind: "cloud",
+      },
+      orgId: null,
+    },
+  },
+} as const;
+let storeBackendKind: "local" | "cloud" = "local";
+vi.mock("#/api/backend-registry/active-store", () => ({
+  subscribeActiveBackend: () => () => {},
+  getSnapshot: () => STORE_SNAPSHOTS[storeBackendKind],
 }));
 
 const useActiveConversationMock = vi.fn();
@@ -22,12 +53,17 @@ vi.mock("#/hooks/use-runtime-is-ready", () => ({
   useRuntimeIsReady: () => useRuntimeIsReadyMock(),
 }));
 
-const useUnifiedGetGitChangesMock = vi.fn();
-vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
-  useUnifiedGetGitChanges: () => useUnifiedGetGitChangesMock(),
+const useOptionalConversationIdMock = vi.fn();
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => useOptionalConversationIdMock(),
+}));
+
+vi.mock("#/api/cloud/conversation-service.api", () => ({
+  listCloudConversationFiles: vi.fn(),
 }));
 
 const executeCommandSpy = vi.spyOn(AgentServerRuntimeService, "executeCommand");
+const listCloudFilesMock = vi.mocked(listCloudConversationFiles);
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -51,48 +87,28 @@ const conversation = {
   workspace: { working_dir: "/workspace/project" },
 };
 
-function gitChangesResult(data: GitChange[], isLoading = false) {
-  return {
-    data,
-    isLoading,
-    isFetching: false,
-    isSuccess: true,
-    isError: false,
-    error: null,
-    refetch: vi.fn(),
-  };
-}
-
 beforeEach(() => {
-  useActiveBackendMock.mockReset();
+  storeBackendKind = "local";
   useActiveConversationMock.mockReset();
   useRuntimeIsReadyMock.mockReset();
-  useUnifiedGetGitChangesMock.mockReset();
+  useOptionalConversationIdMock.mockReset();
   executeCommandSpy.mockReset();
+  listCloudFilesMock.mockReset();
 
   useRuntimeIsReadyMock.mockReturnValue(true);
   useActiveConversationMock.mockReturnValue({ data: conversation });
-  useUnifiedGetGitChangesMock.mockReturnValue(gitChangesResult([]));
+  useOptionalConversationIdMock.mockReturnValue({ conversationId: "conv-1" });
+  listCloudFilesMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-const makeBackend = (kind: "local" | "cloud") => ({
-  backend: {
-    id: "backend-id",
-    name: kind === "local" ? "Local" : "Production",
-    host:
-      kind === "local" ? "http://127.0.0.1:8000" : "https://app.all-hands.dev",
-    apiKey: "test-key",
-    kind,
-  },
-  orgId: null,
-});
-
 describe("useWorkspaceFiles — local backend", () => {
-  beforeEach(() => useActiveBackendMock.mockReturnValue(makeBackend("local")));
+  beforeEach(() => {
+    storeBackendKind = "local";
+  });
 
   it("lists files via bash find and does not touch git changes", async () => {
     executeCommandSpy.mockResolvedValue({
@@ -113,15 +129,44 @@ describe("useWorkspaceFiles — local backend", () => {
 });
 
 describe("useWorkspaceFiles — cloud backend", () => {
-  beforeEach(() => useActiveBackendMock.mockReturnValue(makeBackend("cloud")));
+  beforeEach(() => {
+    storeBackendKind = "cloud";
+  });
 
-  it("derives the file list from git changes without running bash", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "M", path: "src/index.ts" },
+  it("lists the full tree via the cloud files endpoint without running bash", async () => {
+    listCloudFilesMock.mockResolvedValue([
+      "hello.txt",
+      "src/index.ts",
+      "src/untouched.ts",
+    ]);
+
+    const { result } = renderHook(() => useWorkspaceFiles(), {
+      wrapper: makeWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(result.current.data).toEqual([
+        "hello.txt",
+        "src/index.ts",
+        "src/untouched.ts",
       ]),
     );
+    // The cloud path uses the first-class listing endpoint, anchored at the
+    // conversation's absolute working dir.
+    expect(listCloudFilesMock).toHaveBeenCalledWith(
+      "conv-1",
+      "/workspace/project",
+    );
+    // Cloud must never drive the removed bash/cloud-proxy path.
+    expect(executeCommandSpy).not.toHaveBeenCalled();
+  });
+
+  it("normalizes leading ./ and de-dupes the returned paths", async () => {
+    listCloudFilesMock.mockResolvedValue([
+      "./hello.txt",
+      "hello.txt",
+      "./src/index.ts",
+    ]);
 
     const { result } = renderHook(() => useWorkspaceFiles(), {
       wrapper: makeWrapper(),
@@ -130,34 +175,26 @@ describe("useWorkspaceFiles — cloud backend", () => {
     await waitFor(() =>
       expect(result.current.data).toEqual(["hello.txt", "src/index.ts"]),
     );
-    // Cloud must never drive the removed bash/cloud-proxy path.
-    expect(executeCommandSpy).not.toHaveBeenCalled();
   });
 
-  it("drops deleted files (they can't be opened) and de-dupes", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(
-      gitChangesResult([
-        { status: "A", path: "hello.txt" },
-        { status: "D", path: "gone.txt" },
-        { status: "M", path: "hello.txt" },
-      ]),
-    );
+  it("fires using the route id even when the active-conversation query has no data yet", async () => {
+    // Regression: the query id must come from the route, not from
+    // `useActiveConversation().data.id`. If the batch-get query is still
+    // loading (data === undefined) the listing must still fire — otherwise the
+    // Files tab makes no `/files` call at all on cloud.
+    useActiveConversationMock.mockReturnValue({ data: undefined });
+    listCloudFilesMock.mockResolvedValue(["hello.txt"]);
 
     const { result } = renderHook(() => useWorkspaceFiles(), {
       wrapper: makeWrapper(),
     });
 
     await waitFor(() => expect(result.current.data).toEqual(["hello.txt"]));
-  });
-
-  it("surfaces the git-changes loading state", async () => {
-    useUnifiedGetGitChangesMock.mockReturnValue(gitChangesResult([], true));
-
-    const { result } = renderHook(() => useWorkspaceFiles(), {
-      wrapper: makeWrapper(),
-    });
-
-    expect(result.current.isLoading).toBe(true);
-    expect(executeCommandSpy).not.toHaveBeenCalled();
+    // Falls back to the default working dir when the conversation metadata
+    // (and thus its working_dir) isn't available yet.
+    expect(listCloudFilesMock).toHaveBeenCalledWith(
+      "conv-1",
+      "/workspace/project",
+    );
   });
 });

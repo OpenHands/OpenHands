@@ -125,9 +125,8 @@ async function waitForCreatedAutomationId(
             key === "automation_id" &&
             typeof nested === "string" &&
             /^[0-9a-f-]{36}$/i.test(nested)
-          ) {
+          )
             return nested;
-          }
           const match = findAutomationId(nested);
           if (match) return match;
         }
