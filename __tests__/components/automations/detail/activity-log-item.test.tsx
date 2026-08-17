@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import {
   AutomationRunStatus,
   type Automation,
@@ -25,22 +26,13 @@ const LOGS_BUTTON_NAME = (name: string) =>
 const CANCEL_BUTTON_NAME = (name: string) =>
   name.includes(I18nKey.AUTOMATIONS$CANCEL_RUN);
 
-// The cancel mutation is exercised at the hook boundary rather than through
-// a real network call — same reasoning as mocking RunLogsModal below: these
-// tests are about ActivityLogItem's wiring (does it call mutate with the
-// right ids, does it disable while pending), not react-query's own
-// behaviour, which has its own test coverage.
-const cancelMutationState = vi.hoisted(() => ({
-  mutate: vi.fn(),
-  isPending: false,
-  variables: undefined as { automationId: string; runId: string } | undefined,
-}));
-vi.mock("#/hooks/query/use-automations", () => ({
-  useCancelAutomationRun: () => ({
-    mutate: cancelMutationState.mutate,
-    isPending: cancelMutationState.isPending,
-    variables: cancelMutationState.variables,
-  }),
+// Per this repo's testing rules (AGENTS.md): don't mock the hook, mock the
+// service it calls. useCancelAutomationRun and react-query run for real;
+// only the network call underneath is faked.
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    cancelAutomationRun: vi.fn(),
+  },
 }));
 
 // The modal is wired to react-query + the conversation lookup. The
@@ -328,9 +320,7 @@ describe("ActivityLogItem — cancel button", () => {
     __resetActiveStoreForTests();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
-    cancelMutationState.mutate.mockClear();
-    cancelMutationState.isPending = false;
-    cancelMutationState.variables = undefined;
+    vi.mocked(AutomationService.cancelAutomationRun).mockReset();
   });
 
   afterEach(() => {
@@ -390,7 +380,7 @@ describe("ActivityLogItem — cancel button", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls the cancel mutation with the automation id and run id when clicked", () => {
+  it("calls the cancel service with the run id when clicked", async () => {
     // Arrange
     const run = makeRun({
       id: "run-42",
@@ -398,41 +388,57 @@ describe("ActivityLogItem — cancel button", () => {
       conversation_id: null,
       bash_command_id: null,
     });
-    const automation = makeAutomation({ id: "automation-99" });
+    vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue({
+      ...run,
+      status: AutomationRunStatus.CANCELLED,
+    });
 
     // Act
-    renderItem(run, automation);
+    renderItem(run, makeAutomation({ id: "automation-99" }));
     fireEvent.click(screen.getByRole("button", { name: CANCEL_BUTTON_NAME }));
 
-    // Assert
-    expect(cancelMutationState.mutate).toHaveBeenCalledWith(
-      { automationId: "automation-99", runId: "run-42" },
-      expect.objectContaining({
-        onSuccess: expect.any(Function),
-        onError: expect.any(Function),
-      }),
-    );
+    // Assert — the service only takes the run id; the automation id is used
+    // internally by the hook to invalidate the right query key, not sent to
+    // the API.
+    await waitFor(() => {
+      expect(AutomationService.cancelAutomationRun).toHaveBeenCalledWith(
+        "run-42",
+      );
+    });
   });
 
-  it("disables the cancel button while cancellation for this run is pending", () => {
-    // Arrange
-    const run = makeRun({ id: "run-7", status: AutomationRunStatus.PENDING });
-    cancelMutationState.isPending = true;
-    cancelMutationState.variables = {
-      automationId: "automation-1",
-      runId: "run-7",
-    };
+  it("disables the cancel button while cancellation for this run is pending", async () => {
+    // Arrange: hold the service call open so the mutation stays pending
+    // long enough to observe the disabled state.
+    const run = makeRun({
+      id: "run-7",
+      status: AutomationRunStatus.PENDING,
+      conversation_id: null,
+      bash_command_id: null,
+    });
+    let resolveCancel: (run: AutomationRun) => void = () => {};
+    vi.mocked(AutomationService.cancelAutomationRun).mockReturnValue(
+      new Promise((resolve) => {
+        resolveCancel = resolve;
+      }),
+    );
 
     // Act
     renderItem(run, makeAutomation());
+    fireEvent.click(screen.getByRole("button", { name: CANCEL_BUTTON_NAME }));
 
     // Assert
-    expect(
-      screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
-    ).toBeDisabled();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: CANCEL_BUTTON_NAME }),
+      ).toBeDisabled();
+    });
+
+    // Cleanup: let the mutation settle so it doesn't leak into other tests.
+    resolveCancel({ ...run, status: AutomationRunStatus.CANCELLED });
   });
 
-  it("does not render the cancel button inside the parent link's click target when the run also has a conversation", () => {
+  it("does not trigger the parent row's navigation when the run also has a conversation", async () => {
     // Arrange: a RUNNING run can already have a conversation_id once the
     // sandbox spins up, so both the row link and the cancel button coexist —
     // the click handler's stopPropagation/preventDefault (same contract as
@@ -442,6 +448,10 @@ describe("ActivityLogItem — cancel button", () => {
       status: AutomationRunStatus.RUNNING,
       conversation_id: "conv-live",
       bash_command_id: "cmd-live",
+    });
+    vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue({
+      ...run,
+      status: AutomationRunStatus.CANCELLED,
     });
 
     // Act
@@ -454,6 +464,10 @@ describe("ActivityLogItem — cancel button", () => {
     // Assert
     expect(link.contains(cancelButton)).toBe(true);
     fireEvent.click(cancelButton);
-    expect(cancelMutationState.mutate).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(AutomationService.cancelAutomationRun).toHaveBeenCalledWith(
+        "run-8",
+      );
+    });
   });
 });
