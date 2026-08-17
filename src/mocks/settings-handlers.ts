@@ -345,6 +345,31 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
         },
       ],
     },
+    {
+      // Curated agent_context section (SDK fields_opt_in): only load_memory
+      // is exposed, never the raw AgentContext model. ``label`` mirrors the
+      // server's literal string ("Memory"); the GUI names the page itself via
+      // the SCHEMA$AGENT_CONTEXT$SECTION_LABEL translation, which wins.
+      key: "agent_context",
+      label: "Memory",
+      fields: [
+        {
+          description:
+            "The agent keeps notes under .openhands/memory/ and loads them at the start of each new conversation, learning your codebase and preferences over time.",
+          key: "agent_context.load_memory",
+          label: "Persistent memory",
+          section: "agent_context",
+          section_label: "Memory",
+          value_type: "boolean",
+          default: false,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+      ],
+    },
   ],
 };
 
@@ -570,7 +595,8 @@ const MOCK_MODELS = [
   "openhands/claude-sonnet-4-5-20250929",
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
-  "openhands/minimax-m2.7",
+  "openhands/kimi-k3",
+  "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
 ];
 
@@ -583,7 +609,8 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openai/gpt-5.5",
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
-  "openhands/minimax-m2.7",
+  "openhands/kimi-k3",
+  "openhands/glm-5.2",
 ]);
 
 const MOCK_VERIFIED_PROVIDERS = [
@@ -708,7 +735,7 @@ export const SETTINGS_HANDLERS = [
         "claude-sonnet-4-5-20250929",
       ],
       verified_providers: MOCK_VERIFIED_PROVIDERS,
-      default_model: "openhands/minimax-m2.7",
+      default_model: "openhands/kimi-k3",
     }),
   ),
 

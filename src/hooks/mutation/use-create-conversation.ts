@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { SuggestedTask } from "#/utils/types";
-import { AgentKind, Provider } from "#/types/settings";
+import { Provider } from "#/types/settings";
 import { useTracking } from "#/hooks/use-tracking";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useAgentProfiles } from "#/hooks/query/use-agent-profiles";
@@ -193,39 +193,32 @@ export const useCreateConversation = () => {
         }
       }
 
-      // Only extend the call with the profile tail when launching from a
+      // Only extend the call with the profile fields when launching from a
       // profile, so a plain create stays byte-identical to the legacy
       // agent_settings path (#3727). sandboxId is unused here.
-      // TODO(#1587): createConversation has grown to 11 positional params;
-      // refactor it to an options object so this position-skipping tail isn't
-      // needed.
-      const profileArgs: [undefined, string, AgentKind | undefined] | [] =
-        effectiveAgentProfileId
-          ? [
-              undefined,
-              effectiveAgentProfileId,
-              resolvedAgentProfile?.agent_kind,
-            ]
-          : [];
-
       const conversation =
-        await AgentServerConversationService.createConversation(
-          query,
+        await AgentServerConversationService.createConversation({
+          initialUserMsg: query,
           conversationInstructions,
           plugins,
-          repository
+          metadata: repository
             ? {
                 selected_repository: repository.name,
                 selected_branch: repository.branch ?? null,
                 git_provider: repository.gitProvider,
               }
             : null,
-          workingDir,
+          workingDirOverride: workingDir,
           workspaceMode,
           parentConversationId,
           agentType,
-          ...profileArgs,
-        );
+          ...(effectiveAgentProfileId
+            ? {
+                agentProfileId: effectiveAgentProfileId,
+                agentProfileKind: resolvedAgentProfile?.agent_kind,
+              }
+            : {}),
+        });
 
       // Stamp the active LLM profile onto the (local) conversation so the
       // chat switcher shows the exact profile even when several profiles

@@ -15,6 +15,7 @@ import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
@@ -112,6 +113,7 @@ export function LlmSettingsLocalView() {
     null,
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     setHideSectionHeader(viewMode !== "list");
@@ -320,7 +322,20 @@ export function LlmSettingsLocalView() {
     });
 
     setIsSaving(true);
+    setIsValidating(true);
     try {
+      const preflight = await ProfilesService.validateProfile(trimmedName, {
+        llm: llmConfig as SaveProfileRequest["llm"],
+        include_secrets: true,
+      });
+      if (preflight && !preflight.valid) {
+        const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
+        displayErrorToast(errorMsg);
+        return;
+      }
+
+      setIsValidating(false);
+
       // If editing and name changed, rename the profile first
       if (isRename) {
         await ProfilesService.renameProfile(originalName, trimmedName);
@@ -351,6 +366,7 @@ export function LlmSettingsLocalView() {
       console.error("Failed to save profile:", error);
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
     } finally {
+      setIsValidating(false);
       setIsSaving(false);
     }
   }, [
@@ -427,9 +443,10 @@ export function LlmSettingsLocalView() {
           viewMode === "edit" && editingProfile?.initialValues
             ? // Edit mode: use the existing profile values
               editingProfile.initialValues
-            : // Create mode: start with empty fields for a fresh profile
+            : // Create mode: prefill the model with Canvas' free default,
+              // while keeping secret/base URL fields blank for a fresh profile.
               {
-                "llm.model": "",
+                "llm.model": DEFAULT_SETTINGS.llm_model,
                 "llm.api_key": "",
                 "llm.base_url": "",
                 [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
@@ -454,10 +471,14 @@ export function LlmSettingsLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl}
-          aria-busy={isSaving}
+          isDisabled={!isNameValid || isSaving || isValidating || !saveControl}
+          aria-busy={isSaving || isValidating}
         >
-          {isSaving ? t(I18nKey.STATUS$SAVING) : t(I18nKey.BUTTON$SAVE)}
+          {isValidating
+            ? t(I18nKey.STATUS$VALIDATING)
+            : isSaving
+              ? t(I18nKey.STATUS$SAVING)
+              : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>

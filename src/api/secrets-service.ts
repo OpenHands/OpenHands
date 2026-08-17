@@ -2,39 +2,25 @@ import { SettingsClient } from "@openhands/typescript-client/clients";
 import { isSdkHttpStatusError } from "./agent-server-compatibility";
 import { getActiveBackend } from "./backend-registry/active-store";
 import {
-  createCloudSecret,
   deleteCloudSecret,
   fetchCloudSecrets,
-  updateCloudSecret,
+  saveCloudSecret,
 } from "./cloud/secrets-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import { CustomSecretWithoutValue } from "./secrets-service.types";
+import { withRetry } from "./with-retry";
 
-/**
- * Retry helper for API calls with exponential backoff.
- */
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  baseDelayMs: number = 500,
-): Promise<T> {
-  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt >= maxRetries - 1) {
-        throw error;
-      }
-
-      const delay = baseDelayMs * 2 ** attempt;
-
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, delay);
-      });
-    }
+async function fetchSecrets(): Promise<CustomSecretWithoutValue[]> {
+  if (getActiveBackend().backend.kind === "cloud") {
+    return withRetry(() => fetchCloudSecrets());
   }
-
-  throw new Error("Retry attempts exhausted");
+  const response = await withRetry(() =>
+    new SettingsClient(getAgentServerClientOptions()).listSecrets(),
+  );
+  return response.secrets.map((s) => ({
+    name: s.name,
+    description: s.description,
+  }));
 }
 
 export class SecretsService {
@@ -47,20 +33,19 @@ export class SecretsService {
    */
   static async getSecrets(): Promise<CustomSecretWithoutValue[]> {
     try {
-      if (getActiveBackend().backend.kind === "cloud") {
-        return await withRetry(() => fetchCloudSecrets());
-      }
-      const response = await withRetry(() =>
-        new SettingsClient(getAgentServerClientOptions()).listSecrets(),
-      );
-      return response.secrets.map((s) => ({
-        name: s.name,
-        description: s.description,
-      }));
+      return await fetchSecrets();
     } catch (error) {
       console.error("Failed to fetch secrets after retries:", error);
       return [];
     }
+  }
+
+  /**
+   * List all custom secrets, surfacing failures to callers that must
+   * distinguish an unavailable list from an empty one.
+   */
+  static async getSecretsOrThrow(): Promise<CustomSecretWithoutValue[]> {
+    return fetchSecrets();
   }
 
   /**
@@ -78,7 +63,7 @@ export class SecretsService {
     description?: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
-      await withRetry(() => createCloudSecret(name, value, description));
+      await saveCloudSecret({ name, value, description });
       return;
     }
     await withRetry(() =>
@@ -91,32 +76,41 @@ export class SecretsService {
   }
 
   /**
-   * Update a secret's name and/or description while preserving its value.
-   * The agent-server only exposes an upsert endpoint, so we fetch the
-   * existing value and re-upsert it under the updated name/description.
+   * Update a secret's name and/or description, and optionally overwrite its
+   * value. When no value is given the existing one is preserved: the
+   * agent-server only exposes an upsert endpoint, so we fetch the existing
+   * value and re-upsert it under the updated name/description.
    *
    * @param secretToEdit - Existing secret name
    * @param name - New (or same) secret name
    * @param description - Optional new description
+   * @param value - Optional new value; when omitted the stored value is kept
    * @throws Error if the API call fails after retries
    */
   static async updateSecret(
     secretToEdit: string,
     name: string,
     description?: string,
+    value?: string,
   ): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
-      await withRetry(() => updateCloudSecret(secretToEdit, name, description));
+      await saveCloudSecret({
+        name,
+        value,
+        description,
+        previousName: secretToEdit,
+      });
       return;
     }
 
     const client = new SettingsClient(getAgentServerClientOptions());
-    const value = await withRetry(() => client.getSecret(secretToEdit));
+    const nextValue =
+      value ?? (await withRetry(() => client.getSecret(secretToEdit)));
 
     await withRetry(() =>
       client.upsertSecret({
         name,
-        value,
+        value: nextValue,
         description,
       }),
     );

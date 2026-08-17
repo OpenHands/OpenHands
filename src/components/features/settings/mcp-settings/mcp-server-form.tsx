@@ -354,8 +354,12 @@ export function MCPServerForm({
 
   const buildConfig = (formData: FormData): MCPServerConfig => {
     const baseConfig = {
-      id: server?.id || `${serverType}-${Date.now()}`,
+      id: server?.id || "",
       type: serverType,
+      // The form has no enable/disable control (that lives on the card), so
+      // carry the existing state forward — otherwise saving an edit to a
+      // disabled server would silently switch it back on.
+      ...(server?.enabled === false && { enabled: false }),
     };
 
     if (serverType === "sse" || serverType === "shttp") {
@@ -368,6 +372,10 @@ export function MCPServerForm({
         ...baseConfig,
         ...(name && { name }),
         url: url!,
+        // Raw protocol headers are not editable in this form, but they are
+        // still required for the pre-save connection probe. Persistence uses
+        // a sparse patch and leaves them untouched.
+        ...(server?.headers && { headers: server.headers }),
         ...(auth && { auth }),
       };
 

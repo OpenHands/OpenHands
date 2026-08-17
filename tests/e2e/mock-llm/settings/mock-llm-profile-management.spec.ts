@@ -40,6 +40,7 @@ import {
   setChatInput,
   waitForPath,
   createProfileViaUI,
+  editProfileViaUI,
   deleteProfileIfExists,
   activateProfileViaUI,
   ensureMockLLMAgentProfile,
@@ -414,12 +415,22 @@ test.describe("OpenHands provider hidden base_url preservation", () => {
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "add-llm-profile");
 
-    await deleteProfileIfExists(page, OPENHANDS_PROFILE);
-    await createProfileViaUI(page, {
-      profileName: OPENHANDS_PROFILE,
-      model: OPENHANDS_MODEL,
-      baseUrl: CUSTOM_BASE_URL,
-    });
+    const existingProfile = page
+      .getByTestId("profile-row")
+      .filter({ has: page.locator(`span[title="${OPENHANDS_PROFILE}"]`) });
+    if ((await existingProfile.count()) > 0) {
+      await editProfileViaUI(page, {
+        profileName: OPENHANDS_PROFILE,
+        model: OPENHANDS_MODEL,
+        baseUrl: CUSTOM_BASE_URL,
+      });
+    } else {
+      await createProfileViaUI(page, {
+        profileName: OPENHANDS_PROFILE,
+        model: OPENHANDS_MODEL,
+        baseUrl: CUSTOM_BASE_URL,
+      });
+    }
 
     await test.step("open profile in edit mode", async () => {
       const profileRows = page.getByTestId("profile-row");

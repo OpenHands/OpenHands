@@ -154,6 +154,16 @@ export default defineConfig({
       url: `http://localhost:${INGRESS_PORT}/api/automation/v1`,
       timeout: 180_000, // allow extra time for build + agent-server + automation startup
       reuseExistingServer: !process.env.CI,
+      // Without this, Playwright tears the webServer down with
+      // process.kill(-pid, "SIGKILL"), which the stack cannot catch. Its
+      // services are spawned detached (see scripts/dev-process-utils.mjs), so
+      // they sit in their own process groups and survive that group kill,
+      // orphaning to PID 1 while still holding 18000/18001/18300/3001. Asking
+      // for SIGTERM lets the existing shutdown handler in
+      // scripts/dev-with-automation.mjs run, which stops each service, waits
+      // 3s, then force-kills stragglers. The timeout below leaves headroom
+      // over that 3s pass.
+      gracefulShutdown: { signal: "SIGTERM", timeout: 15_000 },
     },
     // 3. Public-mode static server — same build/, same backend, but with
     //    --auth-required (no session key injected). The agent-server's

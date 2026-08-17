@@ -1,4 +1,4 @@
-import { http, delay, HttpResponse } from "msw";
+import { http, delay, HttpResponse, passthrough } from "msw";
 import type { DirectConversationInfo } from "#/api/agent-server-adapter";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
@@ -10,10 +10,17 @@ import {
   TABLE_DEMO_CONVERSATION_ID,
   TABLE_DEMO_EVENTS,
 } from "#/fixtures/table-demo-conversation";
+import {
+  CANVAS_DEMO_CONVERSATION_ID,
+  CANVAS_DEMO_EVENTS,
+  CANVAS_DEMO_FILE_PATH,
+  CANVAS_DEMO_MARKDOWN,
+} from "#/fixtures/canvas-demo-conversation";
 
 /** Map from conversation id → events returned by GET /events/search */
 const CONVERSATION_EVENTS: Record<string, unknown[]> = {
   [TABLE_DEMO_CONVERSATION_ID]: TABLE_DEMO_EVENTS,
+  [CANVAS_DEMO_CONVERSATION_ID]: CANVAS_DEMO_EVENTS,
 };
 
 const now = Date.now();
@@ -97,6 +104,14 @@ const conversations: MockConversation[] = [
     execution_status: "idle",
     workspace: { working_dir: "/workspace/project" },
   },
+  {
+    id: CANVAS_DEMO_CONVERSATION_ID,
+    title: "Generated canvas demo",
+    created_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+    execution_status: "idle",
+    workspace: { working_dir: "/workspace/project" },
+  },
 ];
 
 const CONVERSATIONS = new Map<string, MockConversation>(
@@ -145,12 +160,12 @@ function searchPaginationEvents(
   const timestampLt = searchParams.get("timestamp__lt");
   const sortOrder = searchParams.get("sort_order");
   const filtered = timestampLt
-    ? events.filter((event) => event.timestamp < timestampLt)
+    ? events.filter((event) => (event.timestamp ?? "") < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
     sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+      ? (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
+      : (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
   );
 
   return {
@@ -335,6 +350,28 @@ export const CONVERSATION_HANDLERS = [
 
   http.post("*/api/conversations/:conversationId/events", async () =>
     HttpResponse.json({ ok: true }),
+  ),
+
+  // The generated-canvas fixture behaves like a real workspace artifact:
+  // after the chat chip opens the Files drawer, its static-session URL serves
+  // the same Markdown bytes carried by the file-editor observation.
+  http.get(
+    "*/api/conversations/:conversationId/workspace/*",
+    ({ params, request }) => {
+      const conversationId = params.conversationId?.toString();
+      const url = new URL(request.url);
+      if (
+        conversationId === CANVAS_DEMO_CONVERSATION_ID &&
+        url.pathname.endsWith(`/${CANVAS_DEMO_FILE_PATH}`)
+      ) {
+        return HttpResponse.text(CANVAS_DEMO_MARKDOWN, {
+          headers: { "Content-Type": "text/markdown; charset=utf-8" },
+        });
+      }
+      // Leave every other workspace-file GET on its previous bypass behavior
+      // so this fixture handler does not force 404s for unrelated mocks.
+      return passthrough();
+    },
   ),
 
   http.post("*/api/conversations/:conversationId/pause", async () =>

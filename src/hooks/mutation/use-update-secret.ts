@@ -7,9 +7,11 @@ export const useUpdateSecret = () =>
       secretToEdit,
       name,
       description,
+      value,
     }: {
       secretToEdit: string;
       name: string;
       description?: string;
-    }) => SecretsService.updateSecret(secretToEdit, name, description),
+      value?: string;
+    }) => SecretsService.updateSecret(secretToEdit, name, description, value),
   });

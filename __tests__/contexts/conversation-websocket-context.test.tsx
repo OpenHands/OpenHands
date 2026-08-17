@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createUserMessageEvent } from "test-utils";
 import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket-context";
 import { useEventStore } from "#/stores/use-event-store";
+import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
@@ -14,33 +15,62 @@ import {
   getStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
 
-// Captures the main socket's `onMessage` (`handleMainMessage`) so tests can
-// drive the live message path without a real WebSocket. Only the main socket
-// gets a non-empty url (planning stays ""), so url presence discriminates it.
+type CapturedWebSocketOptions = {
+  onMessage?: (event: { data: string }) => void;
+  queryParams?: Record<string, string | boolean>;
+  sessionApiKey?: string | null;
+};
+
 const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
+  mainOptions: null as CapturedWebSocketOptions | null,
+  planningOnMessage: null as null | ((event: { data: string }) => void),
+  calls: [] as Array<{
+    url: string;
+    options?: CapturedWebSocketOptions;
+  }>,
+}));
+
+const errorHandlerMocks = vi.hoisted(() => ({
+  trackError: vi.fn(),
 }));
 
 // Keep the units under test real (the provider, `useConversationHistory`, the
 // event store). Only the network is stubbed: the WebSocket transport and the
 // REST service the history query depends on.
 vi.mock("#/hooks/use-websocket", () => ({
-  useWebSocket: vi.fn(
-    (
-      url: string,
-      options?: { onMessage?: (event: { data: string }) => void },
-    ) => {
-      if (url && options?.onMessage) {
-        wsCapture.mainOnMessage = options.onMessage;
-      }
-      return { socket: null, reconnect: vi.fn() };
-    },
-  ),
+  useWebSocket: vi.fn((url: string, options?: CapturedWebSocketOptions) => {
+    if (url) {
+      wsCapture.calls.push({ url, options });
+    }
+    if (
+      url &&
+      options?.onMessage &&
+      options.queryParams &&
+      "resend_mode" in options.queryParams
+    ) {
+      wsCapture.mainOnMessage = options.onMessage;
+      wsCapture.mainOptions = options;
+    }
+    if (
+      url &&
+      options?.onMessage &&
+      options.queryParams &&
+      "resend_all" in options.queryParams
+    ) {
+      wsCapture.planningOnMessage = options.onMessage;
+    }
+    return { socket: null, reconnect: vi.fn() };
+  }),
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: vi.fn(),
+}));
+vi.mock("#/utils/error-handler", () => ({
+  trackError: errorHandlerMocks.trackError,
 }));
 
 const AGENT_REPLY_ID = "evt-agent-reply";
@@ -76,6 +106,9 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
 
   beforeEach(() => {
     wsCapture.mainOnMessage = null;
+    wsCapture.mainOptions = null;
+    wsCapture.planningOnMessage = null;
+    wsCapture.calls.length = 0;
     window.localStorage.clear();
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -89,6 +122,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     });
     useOptimisticUserMessageStore.setState({ pendingMessages: [] });
     useBrowserStore.getState().reset();
+    useMetricsStore.getState().resetMetrics();
     useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
 
@@ -157,6 +191,89 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // stamp this stays null and the header falls back to ambiguous matching.
     expect(getStoredConversationMetadata("conv-switch")?.active_profile).toBe(
       "fast-opus",
+    );
+  });
+
+  it("keeps the session key out of WebSocket query parameters", async () => {
+    const sessionApiKey = `sk-oh-${"c".repeat(64)}`;
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-auth"
+          conversationUrl="http://localhost/api"
+          sessionApiKey={sessionApiKey}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    expect(wsCapture.mainOptions?.sessionApiKey).toBe(sessionApiKey);
+    expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
+      "session_api_key",
+    );
+  });
+
+  it("uses the planning sub-conversation session key", async () => {
+    const mainSessionApiKey = `sk-oh-main-${"m".repeat(48)}`;
+    const planningSessionApiKey = `sk-oh-plan-${"p".repeat(48)}`;
+    const planningConversation: AppConversation = {
+      id: "planning-auth",
+      created_by_user_id: null,
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      title: "Planner",
+      trigger: null,
+      pr_number: [],
+      llm_model: null,
+      metrics: null,
+      created_at: "2026-07-28T00:00:00Z",
+      updated_at: "2026-07-28T00:00:00Z",
+      execution_status: null,
+      conversation_url:
+        "http://planner.example/api/conversations/planning-auth",
+      session_api_key: planningSessionApiKey,
+      sandbox_id: null,
+      sub_conversation_ids: [],
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-auth"
+          conversationUrl="http://main.example/api/conversations/conv-auth"
+          sessionApiKey={mainSessionApiKey}
+          subConversationIds={[planningConversation.id]}
+          subConversations={[planningConversation]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(
+        wsCapture.calls.some(({ url }) =>
+          url.endsWith("/sockets/events/planning-auth"),
+        ),
+      ).toBe(true),
+    );
+
+    const planningCall = wsCapture.calls.find(({ url }) =>
+      url.endsWith("/sockets/events/planning-auth"),
+    );
+
+    expect(planningCall?.url).toBe(
+      "ws://planner.example/sockets/events/planning-auth",
+    );
+    expect(planningCall?.options?.sessionApiKey).toBe(planningSessionApiKey);
+    expect(planningCall?.options?.queryParams).toEqual({ resend_all: true });
+    expect(planningCall?.options?.queryParams).not.toHaveProperty(
+      "session_api_key",
     );
   });
 
@@ -256,13 +373,42 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       },
     });
 
-    const makeConversationError = (id: string, detail: string) => ({
+    const makeConversationError = (
+      id: string,
+      detail: string,
+      classification?: {
+        kind: "auth";
+        retryable: boolean;
+        user_action: "settings";
+      },
+    ) => ({
       id,
       timestamp: new Date().toISOString(),
       source: "environment",
       kind: "ConversationErrorEvent",
       detail,
       code: "SomeError",
+      ...(classification ? { classification } : {}),
+    });
+
+    const makeAgentError = (
+      id: string,
+      classification?: {
+        kind: "auth";
+        retryable: boolean;
+        user_action: "settings";
+      },
+    ) => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      message_id: `msg-${id}`,
+      message_seq: 1,
+      error: "Agent failed",
+      error_type: "AgentError",
+      tool_name: "generic",
+      tool_call_id: `call-${id}`,
+      ...(classification ? { classification } : {}),
     });
 
     const renderCaptured = async () => {
@@ -321,6 +467,115 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       deliver(errorEvent);
       expect(useErrorMessageStore.getState().errorMessage).toBeNull();
     });
+
+    it("forwards error classifications to the banner store and telemetry", async () => {
+      await renderCaptured();
+      const classification = {
+        kind: "auth" as const,
+        retryable: false,
+        user_action: "settings" as const,
+      };
+
+      deliver(
+        makeConversationError(
+          "conv-error-2",
+          "Authentication failed",
+          classification,
+        ),
+      );
+
+      expect(useErrorMessageStore.getState().errorClassification).toEqual(
+        classification,
+      );
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "conversation",
+        metadata: {
+          eventId: "conv-error-2",
+          errorCode: "SomeError",
+        },
+        classification,
+      });
+    });
+
+    it("forwards AgentErrorEvent classifications to telemetry (main agent)", async () => {
+      await renderCaptured();
+      const classification = {
+        kind: "auth" as const,
+        retryable: false,
+        user_action: "settings" as const,
+      };
+
+      deliver(makeAgentError("agent-err-1", classification));
+
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "agent",
+        metadata: {
+          eventId: "agent-err-1",
+          toolName: "generic",
+          toolCallId: "call-agent-err-1",
+        },
+        classification,
+      });
+    });
+
+    it("forwards AgentErrorEvent classifications to telemetry (planning agent)", async () => {
+      const planningConversation: AppConversation = {
+        id: "planning-err",
+        created_by_user_id: null,
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        title: "Planner",
+        trigger: null,
+        pr_number: [],
+        llm_model: null,
+        metrics: null,
+        created_at: "2026-07-28T00:00:00Z",
+        updated_at: "2026-07-28T00:00:00Z",
+        execution_status: null,
+        conversation_url:
+          "http://planner.example/api/conversations/planning-err",
+        session_api_key: null,
+        sandbox_id: null,
+        sub_conversation_ids: [],
+      };
+      const classification = {
+        kind: "auth" as const,
+        retryable: true,
+        user_action: "settings" as const,
+      };
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-err"
+            conversationUrl="http://main.example/api/conversations/conv-err"
+            subConversationIds={[planningConversation.id]}
+            subConversations={[planningConversation]}
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      // Wait for the planning sub-conversation WebSocket to be established.
+      await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+
+      act(() => {
+        wsCapture.planningOnMessage!({
+          data: JSON.stringify(makeAgentError("agent-err-2", classification)),
+        });
+      });
+
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "planning_agent",
+        metadata: {
+          eventId: "agent-err-2",
+          toolName: "generic",
+          toolCallId: "call-agent-err-2",
+        },
+        classification,
+      });
+    });
   });
 
   it("clears the previous conversation's events when switching conversations", async () => {
@@ -368,6 +623,39 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       expect(useBrowserStore.getState().screenshotSrc).toBe(""),
     );
     expect(useBrowserStore.getState().url).toBe("");
+  });
+
+  it("resets the metrics store when switching conversations", async () => {
+    const { rerender } = renderProvider("conv-a");
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+
+    useMetricsStore.setState({
+      cost: 1.5,
+      max_budget_per_task: 5,
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 20,
+        cache_read_tokens: 1,
+        cache_write_tokens: 2,
+        context_window: 128_000,
+        per_turn_token: 500,
+      },
+    });
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-b"
+          conversationUrl={null}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(useMetricsStore.getState().usage).toBeNull());
+    expect(useMetricsStore.getState().cost).toBeNull();
+    expect(useMetricsStore.getState().max_budget_per_task).toBeNull();
   });
 
   it("keeps events that arrived after history when re-entering the same conversation", async () => {

@@ -66,7 +66,7 @@ export function AgentProfileRow({
             className="shrink-0 whitespace-nowrap px-2.5 py-1 text-xs"
             data-testid="agent-profile-active-badge"
           >
-            {t(I18nKey.SETTINGS$PROFILE_ACTIVE)}
+            {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
           </BrandBadge>
         )}
       </div>

@@ -13,6 +13,7 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -42,8 +43,18 @@ export function ChatInputLlmProfileMenuContent({
   settingsIconClassName,
 }: ChatInputLlmProfileMenuContentProps) {
   const { t } = useTranslation("openhands");
-  const { profiles, currentProfileName, selectProfile } =
-    useChatInputLlmProfileState();
+  const {
+    profiles,
+    currentProfileName,
+    currentProfileModel,
+    canSwitchProfile,
+    selectProfile,
+  } = useChatInputLlmProfileState();
+  // Read-only surfaces (a cloud member on the home page, or a start-task route)
+  // still name the active profile — the same shape ChatInputModelMenuContent
+  // uses when the ACP picker is gated off.
+  const showProfileList = canSwitchProfile && profiles.length > 0;
+  const readOnlyProfileName = canSwitchProfile ? null : currentProfileName;
 
   const handleSelect = (profileName: string) => {
     selectProfile(profileName);
@@ -52,7 +63,7 @@ export function ChatInputLlmProfileMenuContent({
 
   return (
     <>
-      {profiles.length > 0 && (
+      {showProfileList && (
         <>
           {/* role="presentation" keeps this a valid <li> child of the
               ContextMenu <ul> without exposing the label as a menu item. */}
@@ -63,6 +74,7 @@ export function ChatInputLlmProfileMenuContent({
           </li>
           {profiles.map((profile) => {
             const isCurrent = profile.name === currentProfileName;
+            const displayModel = formatModelNameForDisplay(profile.model);
             return (
               <ContextMenuListItem
                 key={profile.name}
@@ -97,9 +109,9 @@ export function ChatInputLlmProfileMenuContent({
                     />
                   )}
                 </span>
-                {profile.model && (
+                {displayModel && (
                   <span className="block truncate text-xs leading-4 text-[var(--oh-muted)]">
-                    {profile.model}
+                    {displayModel}
                   </span>
                 )}
               </ContextMenuListItem>
@@ -107,7 +119,23 @@ export function ChatInputLlmProfileMenuContent({
           })}
         </>
       )}
-      {profiles.length > 0 && <Divider inset={dividerInset} />}
+      {readOnlyProfileName && (
+        <li className="text-sm" data-testid="chat-input-llm-profile-current">
+          <div className="flex flex-col gap-0.5 p-2 leading-5 text-[var(--oh-foreground)]">
+            <span className="truncate" title={readOnlyProfileName}>
+              {readOnlyProfileName}
+            </span>
+            {currentProfileModel && (
+              <span className="truncate text-xs leading-4 text-[var(--oh-muted)]">
+                {formatModelNameForDisplay(currentProfileModel)}
+              </span>
+            )}
+          </div>
+        </li>
+      )}
+      {(showProfileList || readOnlyProfileName) && (
+        <Divider inset={dividerInset} />
+      )}
       <li className="text-sm">
         <NavigationLink
           to="/settings/llm"

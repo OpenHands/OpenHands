@@ -6,16 +6,13 @@ import { AgentStatus } from "#/components/features/controls/agent-status";
 import { ChangeAgentButton } from "../change-agent-button";
 import { ChatInputModel, ChatInputModelMenuContent } from "./chat-input-model";
 import {
-  ChatInputProfilePicker,
-  ChatInputProfileMenuContent,
-} from "./chat-input-profile-picker";
-import {
   ChatInputLlmProfilePicker,
   ChatInputLlmProfileMenuContent,
 } from "./chat-input-llm-profile-picker";
 import { resolvePickerKind } from "./resolve-picker-kind";
 import { ChatAddFileButton } from "../chat-add-file-button";
 import { ChatSendButton } from "../chat-send-button";
+import { ContextWindowMeter } from "./context-window-meter";
 import CarretRightFillIcon from "#/icons/carret-right-fill.svg?react";
 import LessonPlanIcon from "#/icons/lesson-plan.svg?react";
 import ThreeDotsVerticalIcon from "#/icons/three-dots-vertical.svg?react";
@@ -70,16 +67,18 @@ export function ChatInputActions({
   const { backend } = useActiveBackend();
   const isCloud = backend.kind === "cloud";
   const modelState = useChatInputModelState();
-  // The home page defaults to the AgentProfile picker (#3727) on both local and
-  // cloud (cloud gained the /api/agent-profiles surface in OpenHands #15060). A
-  // backend without that surface returns none — fall back so the composer still
-  // shows a model affordance instead of nothing (#1571). Only fetched on home.
-  const homeAgentProfiles = useAgentProfiles({
-    enabled: !conversationId,
-  });
-  const agentProfilesUnavailableOnHome =
-    homeAgentProfiles.isFetched &&
-    (homeAgentProfiles.data?.profiles?.length ?? 0) === 0;
+  // Agent-profile switching lives in the "+" tools menu while the conversation
+  // hasn't started (OSS-5735) — the pill itself is always an LLM selector. The
+  // gate is computed here (not in the menu) so ToolsContextMenu only mounts the
+  // profile submenu when it can actually be used: pre-start, not on a task
+  // route, and only when the backend has profiles (#1571 fallback). Fetch is
+  // limited to the pre-start window.
+  const isPreStart = !conversationId || hasStartedConversation === false;
+  const agentProfilesForStart = useAgentProfiles({ enabled: isPreStart });
+  const showAgentProfileSwitch =
+    isPreStart &&
+    !(conversationId?.startsWith("task-") ?? false) &&
+    (agentProfilesForStart.data?.profiles?.length ?? 0) > 0;
   // Code/Plan mode switching is a cloud OpenHands feature — it doesn't apply
   // to ACP conversations (which have no "plan" mode), so hide it when ACP.
   const showChangeAgentButton = isCloud && !modelState.isAcpContext;
@@ -245,15 +244,9 @@ export function ChatInputActions({
     setIsOverflowOpen(false);
   };
 
-  // Which chat-input model/profile picker to show (pure matrix, unit-tested in
-  // `resolve-picker-kind.test.ts`).
-  const pickerKind = resolvePickerKind({
-    hasConversation: !!conversationId,
-    hasStartedConversation,
-    isCloud,
-    isAcp: modelState.isAcpContext,
-    profilesAvailable: !agentProfilesUnavailableOnHome,
-  });
+  // Which chat-input LLM picker to show — the constrained ACP model picker or
+  // the LLM-profile picker (unit-tested in `resolve-picker-kind.test.ts`).
+  const pickerKind = resolvePickerKind({ isAcp: modelState.isAcpContext });
 
   // Shared styling for the settings link inside the overflow submenu content.
   const overflowSettingsLinkClassName = cn(
@@ -416,13 +409,6 @@ export function ChatInputActions({
                   settingsLinkClassName={overflowSettingsLinkClassName}
                   settingsIconClassName={overflowSettingsIconClassName}
                 />
-              ) : pickerKind === "agent-profile" ? (
-                <ChatInputProfileMenuContent
-                  onClose={closeOverflowMenus}
-                  dividerInset="menu"
-                  settingsLinkClassName={overflowSettingsLinkClassName}
-                  settingsIconClassName={overflowSettingsIconClassName}
-                />
               ) : (
                 <ChatInputLlmProfileMenuContent
                   onClose={closeOverflowMenus}
@@ -449,6 +435,7 @@ export function ChatInputActions({
             <ChatAddFileButton
               disabled={disabled}
               handleFileIconClick={onAddFileClick}
+              showAgentProfileSwitch={showAgentProfileSwitch}
             />
           </div>
           {showChangeAgentButton && (
@@ -457,12 +444,10 @@ export function ChatInputActions({
             </div>
           )}
           <div ref={modelRef} className={cn(!showModelInline && "hidden")}>
-            {/* Picker depends on backend + whether we're in a conversation;
-                see the `pickerKind` cases above. */}
+            {/* Picker depends on backend + ACP context; see the `pickerKind`
+                cases above. */}
             {pickerKind === "model" ? (
               <ChatInputModel />
-            ) : pickerKind === "agent-profile" ? (
-              <ChatInputProfilePicker />
             ) : (
               <ChatInputLlmProfilePicker />
             )}
@@ -513,6 +498,7 @@ export function ChatInputActions({
             isPausing={isPausing}
           />
         )}
+        <ContextWindowMeter />
         {showButton && (
           <ChatSendButton
             buttonClassName={buttonClassName}

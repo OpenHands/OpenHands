@@ -16,13 +16,16 @@ interface SetupLlmStepProps {
 }
 
 /**
- * Pre-fills the LLM form with the OpenAI GPT-5.5 model. The SDK's
- * bare default model is `gpt-5.5`; Canvas stores provider-qualified
- * LiteLLM model ids, so the onboarding override uses this OpenAI-prefixed
- * model id. Keeping this as an explicit override marks the model dirty so
- * the Next button persists the suggested default immediately.
+ * Pre-fills the LLM form with the OpenHands provider's free default model
+ * (`openhands/kimi-k3`), matching `DEFAULT_SETTINGS.llm_model`. The OpenHands
+ * provider is the agent the user just selected, so the onboarding override
+ * keeps the LLM provider aligned with that choice rather than silently
+ * switching to OpenAI. Canvas stores provider-qualified LiteLLM model ids,
+ * so the override uses this OpenHands-prefixed model id, and keeping it as an
+ * explicit override marks the model dirty so the Next button persists the
+ * suggested default immediately.
  */
-export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
+export const ONBOARDING_DEFAULT_LLM_MODEL = "openhands/kimi-k3";
 
 /**
  * Step 2: embed the LLM settings form. The screen runs in `embedded`
@@ -39,7 +42,7 @@ export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.5";
  * Note: returning Cloud users who already have an LLM configured are
  * intercepted upstream by `OnboardingHost`, so they never reach this
  * step. Users who do reach it are first-time installs (Cloud or Local)
- * who want the OpenAI/GPT-5.5 default pre-filled.
+ * who want the OpenHands default pre-filled.
  */
 export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const { t } = useTranslation("openhands");
