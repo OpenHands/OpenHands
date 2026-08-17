@@ -12,6 +12,7 @@ import {
 
 interface ResponderDeploymentModalProps {
   isOpen: boolean;
+  isPending: boolean;
   onClose: () => void;
   /** Fired for the "Continue with local setup" action. */
   onContinueLocal: () => void;
@@ -21,6 +22,7 @@ interface ResponderDeploymentModalProps {
 
 export function ResponderDeploymentModal({
   isOpen,
+  isPending,
   onClose,
   onContinueLocal,
   onOpenUrl,
@@ -32,6 +34,8 @@ export function ResponderDeploymentModal({
   return (
     <ModalBackdrop
       onClose={onClose}
+      closeOnEscape={!isPending}
+      closeOnBackdropClick={!isPending}
       aria-label={t(I18nKey.RESPONDER_DEPLOYMENT$TITLE)}
     >
       <div
@@ -41,6 +45,7 @@ export function ResponderDeploymentModal({
         <ModalCloseButton
           onClose={onClose}
           testId="responder-deployment-modal-close"
+          disabled={isPending}
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>
@@ -73,6 +78,12 @@ export function ResponderDeploymentModal({
                   variant="primary"
                   className="mt-auto"
                   testId={option.primaryActionTestId}
+                  isDisabled={isPending}
+                  aria-busy={
+                    isPending && action.kind === "launch-local"
+                      ? true
+                      : undefined
+                  }
                   onClick={() => {
                     if (action.kind === "launch-local") {
                       onContinueLocal();
