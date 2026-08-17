@@ -8,6 +8,7 @@ import { createChatMessage } from "#/services/chat-service";
 import { BtwMessages } from "./btw-messages";
 import { GoalStatusBanner } from "./goal-status-banner";
 import { ModelMessages } from "./model-messages";
+import { SlashCommandOutputMessages } from "./slash-command-output-messages";
 import { useModelStore } from "#/stores/model-store";
 import { useGoalStore } from "#/stores/goal-store";
 import { InteractiveChatBox } from "./interactive-chat-box";
@@ -292,6 +293,7 @@ export function ChatInterface() {
     originalImages: File[],
     originalFiles: File[],
   ) => {
+    // @spec SC-001 — One discoverable command registry
     // Handle /new command for V1 conversations
     if (content.trim() === "/new") {
       if (!conversationId) {
@@ -545,6 +547,10 @@ export function ChatInterface() {
           {/* /model entries created before any event is rendered are
               anchored to `null` and live above the message list. */}
           <ModelMessages conversationId={conversationId} anchorEventId={null} />
+          <SlashCommandOutputMessages
+            conversationId={conversationId}
+            anchorEventId={null}
+          />
 
           {showConversationMessages && renderableEvents.length > 0 && (
             <Messages

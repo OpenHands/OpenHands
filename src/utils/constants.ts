@@ -1,4 +1,5 @@
-import { SlashCommandItem } from "#/hooks/chat/use-slash-command";
+import type { SlashCommandItem } from "#/types/slash-command";
+import { I18nKey } from "#/i18n/declaration";
 
 export const JSON_VIEW_THEME = {
   base00: "transparent", // background
@@ -44,6 +45,12 @@ export const MODEL_COMMAND = "/model";
 /** The /goal slash command — drives the agent toward an objective, judging completion each round. */
 export const GOAL_COMMAND = "/goal";
 
+export const HELP_COMMAND = "/help";
+
+export const FEEDBACK_COMMAND = "/feedback";
+
+export const FEEDBACK_FORM_URL = "https://forms.gle/chHc5VdS3wty5DwW6";
+
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
 export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
   {
@@ -54,6 +61,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: ["/new"],
     },
     command: "/new",
+    descriptionKey: I18nKey.SLASH_COMMAND$NEW_DESCRIPTION,
   },
   {
     skill: {
@@ -63,6 +71,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [BTW_COMMAND],
     },
     command: BTW_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$BTW_DESCRIPTION,
   },
   {
     skill: {
@@ -73,6 +82,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [MODEL_COMMAND],
     },
     command: MODEL_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$MODEL_DESCRIPTION,
   },
   {
     skill: {
@@ -83,6 +93,27 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
       triggers: [GOAL_COMMAND],
     },
     command: GOAL_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$GOAL_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "help",
+      type: "agentskills",
+      content: "List all available slash commands",
+      triggers: [HELP_COMMAND],
+    },
+    command: HELP_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$HELP_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "feedback",
+      type: "agentskills",
+      content: "Open the anonymous feedback form",
+      triggers: [FEEDBACK_COMMAND],
+    },
+    command: FEEDBACK_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$FEEDBACK_DESCRIPTION,
   },
 ];
 
