@@ -107,11 +107,10 @@ function renderAt(path: string, page: React.ReactElement) {
 async function renderDashboardWithSettledInsights() {
   renderAt("/automations", <AutomationsList />);
   await screen.findByTestId("automation-card-a-ok");
-  // The broken automation's badge carries the manifest's failing caption once
-  // its runs summary settles.
+  // Insights have settled once the failed run's status is on the card.
   await within(
     await screen.findByTestId("automation-card-a-broken"),
-  ).findByText("Broken");
+  ).findByTestId("run-status-icon-failed");
 }
 
 beforeEach(() => {
@@ -169,10 +168,12 @@ describe("AutomationsList — manifest-declared dashboard", () => {
       statusFilter: screen.getByLabelText("Filter widgets by state"),
       sortControl: screen.getByLabelText("Order widgets"),
       statsCaptions: screen.getAllByText("Widget wins").length,
+      activity: screen.getAllByTestId(/^automation-activity-/).length,
       launcher: screen.queryByTestId("recommended-automations-section"),
     }).toMatchObject({
       navLabels: 2,
       statsCaptions: 2,
+      activity: 2,
       launcher: null,
     });
   });

@@ -21,3 +21,11 @@ export const automationActivityListClassName =
 
 export const automationActivityRowClassName =
   "group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]";
+
+/** Raised card chrome shared by home pinned cards and the dashboard grid. */
+export const automationRaisedCardClassName =
+  "group relative flex flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-4";
+
+/** Inset last-run strip used under the trigger/sparkline row. */
+export const automationCardStatusStripClassName =
+  "mt-3 flex min-h-9 items-center justify-between gap-2 overflow-hidden rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-3 py-2 text-xs";

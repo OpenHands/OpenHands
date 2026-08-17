@@ -16,6 +16,10 @@ import { AutomationRunStatus, type Automation } from "#/types/automation";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
+import {
+  automationCardStatusStripClassName,
+  automationRaisedCardClassName,
+} from "#/components/features/automations/automation-view-mode";
 import { AutomationRunActivitySparkline } from "./automation-run-activity-sparkline";
 import { buildPinnedAutomationMenuItems } from "./build-pinned-automation-menu-items";
 import { HomeAutomationMenu } from "./home-automation-menu";
@@ -143,7 +147,7 @@ export function PinnedAutomationCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group relative flex flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-4",
+        automationRaisedCardClassName,
         isDragging && "opacity-50",
         isDropTarget &&
           dropPosition === "before" &&
@@ -239,7 +243,7 @@ export function PinnedAutomationCard({
         ) : null}
       </div>
 
-      <div className="mt-3 flex min-h-9 items-center justify-between gap-2 overflow-hidden rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-3 py-2 text-xs">
+      <div className={automationCardStatusStripClassName}>
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isLoading ? (
             <div
