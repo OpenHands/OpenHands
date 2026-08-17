@@ -87,55 +87,46 @@ async function listAutomations(
   );
 }
 
-/**
- * Wait for a newly-created automation to become visible through the list API.
- * Creation and listing are separate backend operations, so the list can lag
- * briefly after the create request succeeds.
- */
-async function waitForAutomation(
+/** Poll the main conversation for the automation ID returned by the create command. */
+async function waitForCreatedAutomationId(
   request: import("@playwright/test").APIRequestContext,
-  name: string,
+  conversationId: string,
   timeoutMs = 30_000,
 ) {
   const deadline = Date.now() + timeoutMs;
-  let pollCount = 0;
-  let lastData: unknown = null;
   while (Date.now() < deadline) {
-    pollCount += 1;
-    const data = await listAutomations(request, 1);
-    lastData = data;
-    const automations = data.automations ?? data.items ?? [];
-    const automation = automations.find(
-      (candidate: { name: string }) => candidate.name === name,
+    const response = await request.get(
+      `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+      {
+        headers: { "X-Session-API-Key": SESSION_API_KEY },
+        params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
+      },
     );
-    if (automation) return automation;
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    if (response.ok()) {
+      const body = (await response.json()) as { items?: unknown[] };
+      const text = JSON.stringify(body.items ?? []);
+      const match = text.match(/automation_id\\?":\\?"([0-9a-f-]{36})/i);
+      if (match) return match[1];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-
-  const llmRequests = await getMockLLMRequests(request).catch(() => []);
-  const llmSummary = llmRequests.map((requestBody, index) => {
-    const messages = requestBody.messages as
-      | Array<{ role?: string; content?: unknown; tool_calls?: unknown }>
-      | undefined;
-    const lastMessage = messages?.at(-1);
-    return {
-      index,
-      messageCount: messages?.length ?? 0,
-      lastRole: lastMessage?.role ?? null,
-      lastContent:
-        typeof lastMessage?.content === "string"
-          ? lastMessage.content.slice(0, 200)
-          : null,
-      hasToolCalls: Boolean(lastMessage?.tool_calls),
-    };
-  });
-
   throw new Error(
-    `Automation "${name}" was not visible after ${timeoutMs}ms. ` +
-      `Polled ${pollCount} times. ` +
-      `Last list response: ${JSON.stringify(lastData).slice(0, 1_000)}. ` +
-      `Mock LLM request summary: ${JSON.stringify(llmSummary)}`,
+    `Created automation ID was not reported after ${timeoutMs}ms`,
   );
+}
+
+async function getAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const response = await request.get(
+    `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}`,
+    { headers: { "X-Session-API-Key": SESSION_API_KEY } },
+  );
+  expect(response.ok(), `GET automation returned ${response.status()}`).toBe(
+    true,
+  );
+  return response.json();
 }
 
 /**
@@ -225,7 +216,8 @@ test.describe.configure({ mode: "serial" });
 test.describe("mock-LLM automation lifecycle", () => {
   const conversationIds = new Set<string>();
   const automationIds = new Set<string>();
-  /** conversation_id from the completed automation run (set in step 2, verified in step 3) */
+  /** IDs carried between the serial lifecycle steps. */
+  let createdAutomationId: string | null = null;
   let runConversationId: string | null = null;
 
   test.beforeEach(async ({ page }) => {
@@ -444,8 +436,13 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: automation was created in the real automation backend ──
 
     await test.step("verify automation was created", async () => {
-      const created = await waitForAutomation(request, AUTOMATION_NAME);
+      createdAutomationId = await waitForCreatedAutomationId(
+        request,
+        conversationId,
+      );
+      const created = await getAutomation(request, createdAutomationId);
       automationIds.add(created.id);
+      expect(created.name).toBe(AUTOMATION_NAME);
       expect(created.trigger?.schedule).toBe(CRON_SCHEDULE);
       expect(created.enabled).toBe(true);
     });
@@ -453,7 +450,8 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: run completed successfully with a conversation link ──
 
     await test.step("verify run completed with conversation link", async () => {
-      const automation = await waitForAutomation(request, AUTOMATION_NAME);
+      expect(createdAutomationId).toBeTruthy();
+      const automation = await getAutomation(request, createdAutomationId!);
       automationIds.add(automation.id);
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
@@ -542,26 +540,20 @@ test.describe("mock-LLM automation lifecycle", () => {
 
     await test.step("automation card visible on list page", async () => {
       await waitForTestId(page, "automations-add-automation", 15_000);
+      expect(createdAutomationId).toBeTruthy();
 
-      // Scope to the automation card (data-testid `automation-card-<id>`) so
-      // the locator only matches the list entry, not the global sidebar's
-      // conversation cards. The automation run creates a conversation named
-      // ``<AUTOMATION_NAME> — <timestamp>`` that the sidebar conversation list
-      // surfaces, so an unscoped ``getByText(AUTOMATION_NAME)`` resolves to
-      // multiple elements (the card + every run conversation) and trips
-      // Playwright strict mode.
-      const automationCard = page
-        .locator('[data-testid^="automation-card-"]')
-        .filter({ hasText: AUTOMATION_NAME });
-
+      const automationCard = page.locator(
+        `[data-testid="automation-card-${createdAutomationId}"]`,
+      );
       await expect(automationCard).toBeVisible({ timeout: 15_000 });
+      await expect(automationCard).toContainText(AUTOMATION_NAME);
     });
 
     await test.step("click through to automation detail page", async () => {
       // The automation card is a link — clicking it navigates to /automations/:id.
-      const automationCard = page
-        .locator('[data-testid^="automation-card-"]')
-        .filter({ hasText: AUTOMATION_NAME });
+      const automationCard = page.locator(
+        `[data-testid="automation-card-${createdAutomationId}"]`,
+      );
 
       await automationCard.click();
       await waitForPath(page, /\/automations\/.+/, 10_000);
