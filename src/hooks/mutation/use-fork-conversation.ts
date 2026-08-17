@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { DirectConversationInfo } from "#/api/agent-server-adapter";
+import type { DirectConversationInfo } from "#/api/conversation-service/conversation-serializer";
 
 interface ForkConversationVariables {
   /** The conversation being branched from. */

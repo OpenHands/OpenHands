@@ -4,7 +4,7 @@ import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
-} from "#/api/agent-server-adapter";
+} from "#/api/conversation-service/conversation-tag-keys";
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";

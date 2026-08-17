@@ -1,5 +1,5 @@
 import { http, delay, HttpResponse, passthrough } from "msw";
-import type { DirectConversationInfo } from "#/api/agent-server-adapter";
+import type { DirectConversationInfo } from "#/api/conversation-service/conversation-serializer";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import {
   ExecutionStatus,
