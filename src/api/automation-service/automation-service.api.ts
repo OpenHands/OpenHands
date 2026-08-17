@@ -14,6 +14,12 @@ import type {
   AutomationsResponse,
   AutomationRunsResponse,
 } from "#/types/automation";
+import type {
+  GitSyncCheckResponse,
+  GitSyncConfigUpdateRequest,
+  GitSyncStatus,
+  GitSyncTriggerResponse,
+} from "#/types/git-sync";
 import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
@@ -597,6 +603,90 @@ class AutomationService {
       path,
       body,
     );
+    return data;
+  }
+
+  // Git sync paths are literal rather than routed through
+  // `getAutomationEndpoint`. That manifest describes the automation surface a
+  // host may remap, and `InterfaceEndpoints` requires every key it declares --
+  // adding these would break existing manifests. Git sync is a local-mode
+  // operator feature outside that surface.
+  static async getGitSyncStatus(): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/status`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "GET",
+        path,
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<GitSyncStatus>(path);
+    return data;
+  }
+
+  static async updateGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/config`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "PUT",
+        path,
+        body: body as Record<string, unknown>,
+      });
+    }
+
+    const { data } = await localAutomationAxios.put<GitSyncStatus>(path, body);
+    return data;
+  }
+
+  /**
+   * Ask whether a configuration can reach its repo, without saving it. Takes
+   * the same body as `updateGitSyncConfig` and answers for the settings that
+   * body would leave in place.
+   */
+  static async checkGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncCheckResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/check`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncCheckResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as Record<string, unknown>,
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<GitSyncCheckResponse>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  static async triggerGitSync(): Promise<GitSyncTriggerResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/sync`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncTriggerResponse>({
+        backend: active,
+        method: "POST",
+        path,
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<GitSyncTriggerResponse>(path);
     return data;
   }
 

@@ -322,6 +322,22 @@ export const useTracking = () => {
     track("automation_imported", { backend_kind: backendKind });
   };
 
+  const trackGitSyncConfigUpdated = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_config_updated", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncTriggered = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_triggered", { backend_kind: backendKind });
+  };
+
   const trackBackendAdded = ({
     backendKind,
     connectionMethod,
@@ -422,6 +438,8 @@ export const useTracking = () => {
     trackAutomationExported,
     trackAutomationActivityLogExported,
     trackAutomationImported,
+    trackGitSyncConfigUpdated,
+    trackGitSyncTriggered,
     trackBackendAdded,
     trackOnboardingStarted,
     trackOnboardingStepViewed,

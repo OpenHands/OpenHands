@@ -17,6 +17,7 @@ describe("formatNativeModelName", () => {
 
   it("labels only configured OpenHands free-model routes as free", () => {
     expect(Object.keys(FREE_OPENHANDS_MODELS)).toEqual([
+      "openhands/kimi-k3",
       "openhands/glm-5.2",
       "openhands/deepseek-v4-flash",
       "openhands/minimax-m2.7",

@@ -437,6 +437,8 @@ type ConversationSettingsPayload = SettingsRecord & {
 };
 
 export const ACP_SERVER_TAG_KEY = "acpserver";
+export const CLIENT_SOURCE_TAG_KEY = "clientsource";
+export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
@@ -460,6 +462,7 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  * rows. Each is either already surfaced by a first-class UI source or is
  * internal routing data:
  * - ``acpserver`` → ACP provider chip
+ * - ``clientsource`` → telemetry attribution
  * - ``title`` → conversation card heading
  * - git / repo / branch / workspace stamps → repo-branch metadata + directory
  *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
@@ -470,6 +473,7 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  CLIENT_SOURCE_TAG_KEY,
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
   "title",
@@ -1123,10 +1127,17 @@ export function buildStartConversationRequest(
     worktree: options.worktree ?? true,
   };
 
+  // Stamp the client source tag so the agent-server can attribute the
+  // conversation to Canvas in telemetry (conversation_source = "canvas").
   // A profile launch resolves the ACP server server-side, so don't stamp the
   // tag from current settings (it may not match the launched profile).
   if (!options.agentProfileId && acpServerTag) {
-    payload.tags = { [ACP_SERVER_TAG_KEY]: acpServerTag };
+    payload.tags = {
+      [ACP_SERVER_TAG_KEY]: acpServerTag,
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    };
+  } else {
+    payload.tags = { [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE };
   }
 
   // ``secrets_encrypted`` makes the agent-server decrypt request secrets at
