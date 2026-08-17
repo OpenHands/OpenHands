@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ChevronDown, ListFilter } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -10,11 +10,23 @@ import type {
   DashboardStatusValue,
   DashboardTriggerValue,
 } from "#/manifests/types";
-import {
-  dropdownFilterTriggerClassName,
-  dropdownMenuListClassName,
-} from "#/utils/dropdown-classes";
+import { dropdownFilterTriggerClassName } from "#/utils/dropdown-classes";
 import { cn } from "#/utils/utils";
+
+function FilterField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      {children}
+    </div>
+  );
+}
 
 function toLabelMap<T extends string>(
   options: readonly { value: T; label: string }[],
@@ -63,6 +75,14 @@ export function AutomationsDashboardControls({
     sort !== spec.sort.default,
   ].filter(Boolean).length;
   const filtersLabel = t(I18nKey.AUTOMATIONS$FILTERS);
+  const defaultStatus = statusFilter?.options[0]?.value;
+  const defaultTrigger = triggerFilter?.options[0]?.value;
+
+  const resetAll = () => {
+    if (defaultStatus) onStatusChange(defaultStatus);
+    if (defaultTrigger) onTriggerChange(defaultTrigger);
+    onSortChange(spec.sort.default);
+  };
 
   return (
     <div
@@ -79,6 +99,7 @@ export function AutomationsDashboardControls({
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
           dropdownFilterTriggerClassName,
+          "h-9 py-0",
           activeCount > 0 && "border-white/60 bg-white/10",
         )}
       >
@@ -103,43 +124,55 @@ export function AutomationsDashboardControls({
           role="group"
           data-testid="automations-filters-menu"
           aria-label={filtersLabel}
-          className={cn(
-            "absolute right-0 top-full z-50 mt-1 min-w-[16rem] w-max",
-            "overflow-visible rounded-[6px] bg-tertiary p-2 context-menu-box-shadow",
-            dropdownMenuListClassName,
-          )}
+          className="absolute right-0 top-full z-50 mt-1 flex min-w-[16rem] w-max flex-col gap-3 overflow-visible rounded-[6px] bg-tertiary p-3 context-menu-box-shadow"
         >
           {statusFilter ? (
-            <EnumFilterDropdown
-              testId="automations-filter-status"
-              value={status}
-              onChange={onStatusChange}
-              options={statusFilter.options.map((option) => option.value)}
-              labelByValue={toLabelMap(statusFilter.options)}
-              ariaLabel={statusFilter.label}
-              fullWidth
-            />
+            <FilterField label={statusFilter.label}>
+              <EnumFilterDropdown
+                testId="automations-filter-status"
+                value={status}
+                onChange={onStatusChange}
+                options={statusFilter.options.map((option) => option.value)}
+                labelByValue={toLabelMap(statusFilter.options)}
+                ariaLabel={statusFilter.label}
+                fullWidth
+              />
+            </FilterField>
           ) : null}
           {triggerFilter ? (
+            <FilterField label={triggerFilter.label}>
+              <EnumFilterDropdown
+                testId="automations-filter-trigger"
+                value={trigger}
+                onChange={onTriggerChange}
+                options={triggerFilter.options.map((option) => option.value)}
+                labelByValue={toLabelMap(triggerFilter.options)}
+                ariaLabel={triggerFilter.label}
+                fullWidth
+              />
+            </FilterField>
+          ) : null}
+          <FilterField label={spec.sort.label}>
             <EnumFilterDropdown
-              testId="automations-filter-trigger"
-              value={trigger}
-              onChange={onTriggerChange}
-              options={triggerFilter.options.map((option) => option.value)}
-              labelByValue={toLabelMap(triggerFilter.options)}
-              ariaLabel={triggerFilter.label}
+              testId="automations-sort"
+              value={sort}
+              onChange={onSortChange}
+              options={spec.sort.options.map((option) => option.value)}
+              labelByValue={toLabelMap(spec.sort.options)}
+              ariaLabel={spec.sort.label}
               fullWidth
             />
+          </FilterField>
+          {activeCount > 0 ? (
+            <button
+              type="button"
+              data-testid="automations-filters-reset"
+              onClick={resetAll}
+              className="self-start text-sm text-muted hover:text-foreground"
+            >
+              {t(I18nKey.AUTOMATIONS$RESET_ALL)}
+            </button>
           ) : null}
-          <EnumFilterDropdown
-            testId="automations-sort"
-            value={sort}
-            onChange={onSortChange}
-            options={spec.sort.options.map((option) => option.value)}
-            labelByValue={toLabelMap(spec.sort.options)}
-            ariaLabel={spec.sort.label}
-            fullWidth
-          />
         </div>
       ) : null}
     </div>

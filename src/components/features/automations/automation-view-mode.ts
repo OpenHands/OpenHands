@@ -20,7 +20,7 @@ export const automationActivityListClassName =
   "divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]";
 
 export const automationActivityRowClassName =
-  "group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]";
+  "group relative flex items-stretch transition-colors hover:bg-surface-raised has-[:focus-visible]:bg-surface-raised";
 
 /** Raised card chrome shared by home pinned cards and the dashboard grid. */
 export const automationRaisedCardClassName =

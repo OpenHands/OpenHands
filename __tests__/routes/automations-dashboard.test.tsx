@@ -224,6 +224,54 @@ describe("AutomationsList — manifest-declared dashboard", () => {
         "automations-sort",
       ),
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Filter widgets by state",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Filter widgets by trigger",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("automations-filters-menu")).getByText(
+        "Order widgets",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filters-reset"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets applied filters from the Filters menu", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    await renderDashboardWithSettledInsights();
+    await user.click(
+      within(screen.getByTestId("automations-filters")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(
+      within(screen.getByTestId("automations-filter-status")).getByTestId(
+        "dropdown-trigger",
+      ),
+    );
+    await user.click(screen.getByTestId("automations-filter-status-failing"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("automation-card-a-ok")).toBeNull();
+    });
+
+    // Act
+    await user.click(screen.getByTestId("automations-filters-reset"));
+
+    // Assert
+    await screen.findByTestId("automation-card-a-ok");
+    expect(screen.getByTestId("automation-card-a-broken")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automations-filters-reset"),
+    ).not.toBeInTheDocument();
   });
 
   it("narrows to latest-run failures through the status filter", async () => {

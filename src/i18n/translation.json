@@ -13208,6 +13208,23 @@
     "uk": "Фільтри",
     "ca": "Filtres"
   },
+  "AUTOMATIONS$RESET_ALL": {
+    "en": "Reset all",
+    "ja": "すべてリセット",
+    "zh-CN": "全部重置",
+    "zh-TW": "全部重設",
+    "ko-KR": "모두 재설정",
+    "no": "Tilbakestill alle",
+    "it": "Reimposta tutto",
+    "pt": "Redefinir tudo",
+    "es": "Restablecer todo",
+    "ar": "إعادة تعيين الكل",
+    "fr": "Tout réinitialiser",
+    "tr": "Tümünü sıfırla",
+    "de": "Alle zurücksetzen",
+    "uk": "Скинути все",
+    "ca": "Restableix-ho tot"
+  },
   "AUTOMATIONS$VIEW_MODE": {
     "en": "View mode",
     "ja": "表示モード",

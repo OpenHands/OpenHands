@@ -33,6 +33,7 @@ import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
   extensionModuleCardPillClassName,
+  extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { StatusBadge } from "./status-badge";
 
@@ -220,7 +221,8 @@ function AutomationCardGrid({
             data-testid={`recommended-automation-card-${automation.id}`}
             onClick={() => onSelect(automation)}
             className={cn(
-              "flex min-w-0 overflow-hidden p-4 text-left rounded-xl bg-surface-raised",
+              "flex min-w-0 overflow-hidden p-4 text-left",
+              extensionModuleCardSurfaceClassName,
               extensionModuleCardInteractiveClassName,
             )}
           >
