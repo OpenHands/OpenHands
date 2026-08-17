@@ -98,8 +98,12 @@ async function waitForAutomation(
   timeoutMs = 30_000,
 ) {
   const deadline = Date.now() + timeoutMs;
+  let pollCount = 0;
+  let lastData: unknown = null;
   while (Date.now() < deadline) {
+    pollCount += 1;
     const data = await listAutomations(request, 1);
+    lastData = data;
     const automations = data.automations ?? data.items ?? [];
     const automation = automations.find(
       (candidate: { name: string }) => candidate.name === name,
@@ -107,7 +111,31 @@ async function waitForAutomation(
     if (automation) return automation;
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  throw new Error(`Automation "${name}" was not visible after ${timeoutMs}ms`);
+
+  const llmRequests = await getMockLLMRequests(request).catch(() => []);
+  const llmSummary = llmRequests.map((requestBody, index) => {
+    const messages = requestBody.messages as
+      | Array<{ role?: string; content?: unknown; tool_calls?: unknown }>
+      | undefined;
+    const lastMessage = messages?.at(-1);
+    return {
+      index,
+      messageCount: messages?.length ?? 0,
+      lastRole: lastMessage?.role ?? null,
+      lastContent:
+        typeof lastMessage?.content === "string"
+          ? lastMessage.content.slice(0, 200)
+          : null,
+      hasToolCalls: Boolean(lastMessage?.tool_calls),
+    };
+  });
+
+  throw new Error(
+    `Automation "${name}" was not visible after ${timeoutMs}ms. ` +
+      `Polled ${pollCount} times. ` +
+      `Last list response: ${JSON.stringify(lastData).slice(0, 1_000)}. ` +
+      `Mock LLM request summary: ${JSON.stringify(llmSummary)}`,
+  );
 }
 
 /**
