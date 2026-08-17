@@ -27624,6 +27624,23 @@
     "uk": "+{{count}}",
     "ca": "+{{count}}"
   },
+  "SETTINGS$SKILLS_PILLS_OVERFLOW_ARIA": {
+    "en": "Show {{count}} more",
+    "ja": "他に{{count}}件を表示",
+    "zh-CN": "显示另外 {{count}} 项",
+    "zh-TW": "顯示另外 {{count}} 項",
+    "ko-KR": "{{count}}개 더 보기",
+    "no": "Vis {{count}} flere",
+    "ar": "عرض {{count}} إضافية",
+    "de": "{{count}} weitere anzeigen",
+    "fr": "Afficher {{count}} de plus",
+    "it": "Mostra altri {{count}}",
+    "pt": "Mostrar mais {{count}}",
+    "es": "Mostrar {{count}} más",
+    "tr": "{{count}} tane daha göster",
+    "uk": "Показати ще {{count}}",
+    "ca": "Mostra {{count}} més"
+  },
   "SETTINGS$SKILLS_SHOW_LESS": {
     "en": "Show less",
     "ja": "折りたたむ",

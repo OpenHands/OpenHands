@@ -400,8 +400,19 @@ describe("home automations composer layout", () => {
     await user.click(screen.getByTestId("running-automation-pin-auto-1"));
 
     const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    const pinnedCard = within(dashboard).getByTestId(
+      "pinned-automation-card-auto-1",
+    );
+    expect(pinnedCard.className).toContain("extension-module-card-interactive");
+    expect(pinnedCard.className).toContain("bg-base-secondary");
+    expect(pinnedCard.className).not.toContain("border-[var(--oh-border)]");
+    expect(pinnedCard).toBeInTheDocument();
     expect(
-      within(dashboard).getByTestId("pinned-automation-card-auto-1"),
+      within(dashboard).getByTestId("pinned-automation-pills-auto-1-wrap"),
+    ).toBeInTheDocument();
+    expect(within(dashboard).getByText("Daily at 09:00")).toBeInTheDocument();
+    expect(
+      within(pinnedCard).getByTestId("automation-run-stats"),
     ).toBeInTheDocument();
     expect(
       await within(dashboard).findByRole("link", {

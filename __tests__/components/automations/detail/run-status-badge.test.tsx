@@ -55,6 +55,15 @@ describe("RunStatusBadge", () => {
     expect(screen.getByTestId("run-status-icon-completed")).toBeInTheDocument();
   });
 
+  it("renders compact pills without an outline and with tighter left padding", () => {
+    render(<RunStatusBadge status={AutomationRunStatus.FAILED} compact />);
+
+    const badge = screen.getByText(I18nKey.AUTOMATIONS$DETAIL$FAILED);
+    expect(badge.className).not.toContain("border");
+    expect(badge).toHaveClass("pl-1");
+    expect(badge).toHaveClass("pr-1.5");
+  });
+
   it("renders the status word next to the icon when showLabel is set", () => {
     render(
       <RunStatusBadge
