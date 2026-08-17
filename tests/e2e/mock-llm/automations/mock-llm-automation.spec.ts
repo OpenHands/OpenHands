@@ -113,8 +113,13 @@ async function waitForCreatedAutomationId(
           return null;
         }
         if (typeof value === "string") {
+          const normalized = value.replaceAll('\\\\"', '"');
+          const inlineMatch = normalized.match(
+            /automation_id["\s:]+([0-9a-f-]{36})/i,
+          );
+          if (inlineMatch) return inlineMatch[1];
           try {
-            return findAutomationId(JSON.parse(value));
+            return findAutomationId(JSON.parse(normalized));
           } catch {
             return null;
           }
