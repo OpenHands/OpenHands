@@ -614,6 +614,48 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("Pre-flight validation", () => {
+    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        ),
+      );
+    }
+
+    it("blocks saving when validation returns an invalid verdict", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+        valid: false,
+        error: { type: "authentication", message: "Invalid API key" },
+      });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(ProfilesService.validateProfile).toHaveBeenCalled(),
+      );
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { valid: true }])(
+      "saves when validation returns %j",
+      async (verdict) => {
+        const user = userEvent.setup();
+        vi.mocked(ProfilesService.validateProfile).mockResolvedValue(verdict);
+        mockSaveMutateAsync.mockResolvedValue({ success: true });
+        renderWithProviders(<LlmSettingsLocalView />);
+        await openEditView(user);
+        await user.click(screen.getByTestId("save-profile-btn"));
+
+        await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      },
+    );
+  });
+
   describe("Basic tab save", () => {
     it("preserves hidden base_url for OpenHands models without a model change", async () => {
       // Arrange — a profile has an actual advanced base_url value. Switching to

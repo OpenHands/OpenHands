@@ -60,16 +60,23 @@ if (typeof requestAnimationFrame === "undefined") {
   );
 }
 
-// MSW's XMLHttpRequest interceptor captures `typeof ProgressEvent !== "undefined"`
-// at module load time (when jsdom is active) and later accesses the bare
-// `ProgressEvent` identifier in async callbacks. When Vitest tears down the
-// jsdom environment between test files, `ProgressEvent` is removed from the
-// global scope, causing `ReferenceError: ProgressEvent is not defined`.
+// MSW's XMLHttpRequest interceptor references the bare `ProgressEvent`
+// global from inside async `respondWith` callbacks (via `createEvent`).
+// Vitest's jsdom environment installs `ProgressEvent` as an own accessor on
+// `globalThis` while the environment is alive and *deletes* it during
+// per-file teardown (it is part of vitest's `LIVING_KEYS`). If an in-flight
+// intercepted XHR (e.g. PostHog analytics) resolves its mocked response
+// after teardown, the late callback evaluates `ProgressEvent` against a
+// torn-down global and throws `ReferenceError: ProgressEvent is not defined`,
+// which Vitest reports as an unhandled rejection and fails the whole run.
 //
-// The previous guard (`if (typeof ProgressEvent === "undefined")`) never
-// installed the polyfill because jsdom always provides `ProgressEvent` at
-// setup time. We use a getter that delegates to jsdom's `ProgressEvent` when
-// available and falls back to a polyfill after teardown.
+// The robust fix is to drain those pending async response callbacks in
+// `afterAll` (which runs *before* jsdom teardown) so they settle while
+// `ProgressEvent` is still defined. See `afterAll` below. The getter below
+// stashes the live class as a light defense-in-depth for any callback that
+// fires before teardown completes; it cannot help after teardown (the
+// accessor is deleted there), which is exactly why the `afterAll` drain is
+// the real fix.
 class MockProgressEvent extends Event {
   readonly lengthComputable: boolean;
 
@@ -85,20 +92,18 @@ class MockProgressEvent extends Event {
   }
 }
 
-// Capture jsdom's native ProgressEvent before we override the global.
-// At setup time, jsdom injects ProgressEvent into globalThis; we save it
-// so our getter can delegate to it while jsdom is alive.
-const _jsdomProgressEvent =
+// `afterAll` runs while jsdom is still active, so `globalThis.ProgressEvent`
+// is jsdom's constructor here. Stash it so the post-teardown getter can
+// keep returning the real class even after the accessor is removed.
+const _liveProgressEvent =
   typeof globalThis.ProgressEvent !== "undefined"
     ? globalThis.ProgressEvent
-    : undefined;
+    : MockProgressEvent;
 
 Object.defineProperty(globalThis, "ProgressEvent", {
   configurable: true,
   get() {
-    // Delegate to jsdom's native ProgressEvent when the jsdom window is
-    // alive; fall back to the polyfill after jsdom teardown.
-    return _jsdomProgressEvent ?? MockProgressEvent;
+    return _liveProgressEvent;
   },
 });
 
@@ -167,7 +172,23 @@ afterEach(async () => {
   await Promise.resolve();
   await Promise.resolve();
 });
-afterAll(() => {
+afterAll(async () => {
+  // Drain pending MSW `respondWith` callbacks (and any other queued
+  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
+  // responses asynchronously; if a late callback (e.g. PostHog analytics
+  // flushed during the last test) settles after teardown, its `createEvent`
+  // call evaluates the bare `ProgressEvent` global against a torn-down
+  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
+  // a few real-timer ticks here lets those callbacks complete while
+  // `ProgressEvent` is still defined. We restore real timers first so a test
+  // that left fake timers active can't stall the drain.
+  vi.useRealTimers();
+  // Reset handlers first so no new intercepted requests start processing
+  // during the drain window.
+  server.resetHandlers();
+  for (let i = 0; i < 30; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
   server.close();
   vi.unstubAllGlobals();
 });
