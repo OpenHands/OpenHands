@@ -21,12 +21,25 @@ export interface AutomationTrigger {
   filter?: string;
 }
 
+export interface AutomationRepository {
+  url: string;
+  ref?: string | null;
+  provider?: string | null;
+  repo_path?: string | null;
+}
+
+export interface AutomationPresetMetadata {
+  repos?: AutomationRepository[];
+}
+
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /** Legacy single-repository fields retained for older automations. */
   repository?: string;
+  preset_metadata?: AutomationPresetMetadata | null;
   /** LLM/model profile name used for automation runs. */
   model?: string | null;
   /**
