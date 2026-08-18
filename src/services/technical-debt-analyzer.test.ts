@@ -1,13 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   TechnicalDebtAnalyzer,
   GENESIS_HASH,
-} from './technical-debt-analyzer';
+} from "./technical-debt-analyzer";
 
-describe('TechnicalDebtAnalyzer', () => {
-  it('should score clean codebase with high production readiness', () => {
+describe("TechnicalDebtAnalyzer", () => {
+  it("should score clean codebase with high production readiness", () => {
     const analyzer = new TechnicalDebtAnalyzer(75);
-    const report = analyzer.analyzeCodebase('enterprise/ai-core', {
+    const report = analyzer.analyzeCodebase("enterprise/ai-core", {
       unboundedLoops: 0,
       tokenMultiplier: 1.0,
       unGatedMutations: 0,
@@ -20,9 +20,9 @@ describe('TechnicalDebtAnalyzer', () => {
     expect(report.auditReceipt.currHash).toBeDefined();
   });
 
-  it('should flag codebase with unbounded loops and un-gated mutations', () => {
+  it("should flag codebase with unbounded loops and un-gated mutations", () => {
     const analyzer = new TechnicalDebtAnalyzer(75);
-    const report = analyzer.analyzeCodebase('legacy/hacky-agent-prototype', {
+    const report = analyzer.analyzeCodebase("legacy/hacky-agent-prototype", {
       unboundedLoops: 2,
       tokenMultiplier: 3.5,
       unGatedMutations: 3,
@@ -31,15 +31,19 @@ describe('TechnicalDebtAnalyzer', () => {
 
     expect(report.isProductionReady).toBe(false);
     expect(report.readinessScore).toBeLessThan(50);
-    expect(report.criticalSmells).toContain('DETECTED_2_UNBOUNDED_REASONING_LOOPS');
-    expect(report.criticalSmells).toContain('DETECTED_3_UNGATED_PRODUCTION_MUTATIONS');
+    expect(report.criticalSmells).toContain(
+      "DETECTED_2_UNBOUNDED_REASONING_LOOPS",
+    );
+    expect(report.criticalSmells).toContain(
+      "DETECTED_3_UNGATED_PRODUCTION_MUTATIONS",
+    );
   });
 
-  it('should maintain cryptographic hash-chain integrity across multiple audits', () => {
+  it("should maintain cryptographic hash-chain integrity across multiple audits", () => {
     const analyzer = new TechnicalDebtAnalyzer();
-    analyzer.analyzeCodebase('repo-alpha', { unboundedLoops: 0 });
-    analyzer.analyzeCodebase('repo-beta', { unboundedLoops: 1 });
-    analyzer.analyzeCodebase('repo-gamma', { unboundedLoops: 0 });
+    analyzer.analyzeCodebase("repo-alpha", { unboundedLoops: 0 });
+    analyzer.analyzeCodebase("repo-beta", { unboundedLoops: 1 });
+    analyzer.analyzeCodebase("repo-gamma", { unboundedLoops: 0 });
 
     const entries = analyzer.getLedger().getEntries();
     expect(entries.length).toBe(3);
