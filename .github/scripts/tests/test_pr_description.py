@@ -226,21 +226,59 @@ https://youtube.com/watch?v=abc123
     assert errors == []
 
 
+# ---------------------------------------------------------------------------
+# Fenced-block regression coverage for #16553.
+#
+# ``## <heading>`` inside a fence must not become a section, so a quoted
+# template or pasted log cannot satisfy the required-sections gate.
+# ---------------------------------------------------------------------------
+
+
+def test_extract_sections_ignores_fenced_h2_heading():
+    # Quoted PR template inside a fence: ``## How to Test`` is inside the
+    # fence, not a real section. The real ``## Summary`` lives outside.
+    body = (
+        "## Why\n"
+        "Because.\n\n"
+        "## Summary\n"
+        "What it does.\n\n"
+        "## Issue Number\n"
+        "Fixes #1\n\n"
+        "Quoting the template for context:\n\n"
+        "```\n"
+        "## How to Test\n"
+        "1. Run it.\n"
+        "```\n"
+    )
+    from check_pr_description import extract_sections
+
+    sections = extract_sections(body)
+    # The required template fields are present.
+    for required in ("Why", "Summary", "Issue Number"):
+        assert required in sections, f"missing {required}"
+    # The fenced "## How to Test" must not appear as a real section.
+    assert "How to Test" not in sections
+
+
 def test_markdown_under_frontend_prefix_is_not_frontend():
     assert not is_frontend_file("__tests__/router.md")
     assert not is_frontend_file("src/notes.md")
     assert not is_frontend_file("public/README.mdx")
 
+
 def test_markdown_outside_frontend_prefix_still_not_frontend():
     assert not is_frontend_file("docs/README.md")
+
 
 def test_frontend_code_under_prefix_still_frontend():
     assert is_frontend_file("src/app.tsx")
     assert is_frontend_file("__tests__/routes/launch.test.tsx")
     assert is_frontend_file("src/styles/main.css")
 
+
 def test_docs_only_change_does_not_require_frontend_evidence():
     assert not touches_frontend(["__tests__/router.md", "docs/README.md"])
+
 
 def test_mixed_change_still_requires_frontend_evidence():
     assert touches_frontend(["__tests__/router.md", "src/app.tsx"])

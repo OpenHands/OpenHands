@@ -32,6 +32,8 @@ import re
 import sys
 from pathlib import Path
 
+from markdown_utils import find_fenced_regions, is_inside_fenced_region
+
 
 # Reject placeholders while allowing a concise human-written sentence.
 MIN_HUMAN_NOTE_CHARS = 20
@@ -132,7 +134,19 @@ def first_visible_line(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    matches = list(HEADING_RE.finditer(body))
+    """Split the body into ``{heading: text}`` using ``## <heading>`` boundaries.
+
+    The PR template uses ``## Section`` for every required block, so this map
+    is what ``validate_pr_body`` uses to enforce the template. Headings
+    inside fenced code blocks (`` ``` `` or `~~~`) are skipped so a
+    quoted template or pasted log cannot satisfy the gate on its own.
+    """
+    regions = find_fenced_regions(body)
+    matches = [
+        m
+        for m in HEADING_RE.finditer(body)
+        if not is_inside_fenced_region(m.start(), regions)
+    ]
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()

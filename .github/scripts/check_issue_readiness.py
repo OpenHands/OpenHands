@@ -33,6 +33,12 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from markdown_utils import (
+    find_fenced_regions,
+    is_inside_fenced_region,
+    strip_fenced_regions,
+)
+
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
@@ -106,8 +112,16 @@ def extract_sections(body: str) -> dict[str, str]:
     Issue forms render every field this way. Free-form issues (not created via a
     form) may still use `###` headings; if they don't, the map is empty and the
     caller falls back to whole-body checks.
+
+    Headings inside fenced code blocks (`` ``` `` or `~~~`) are ignored, so a
+    pasted log or quoted template cannot spoof or truncate a real section.
     """
-    matches = list(HEADING_RE.finditer(body))
+    regions = find_fenced_regions(body)
+    matches = [
+        m
+        for m in HEADING_RE.finditer(body)
+        if not is_inside_fenced_region(m.start(), regions)
+    ]
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()
@@ -125,27 +139,30 @@ def find_section(sections: dict[str, str], *labels: str) -> str:
 
 
 def has_screenshot_or_video(text: str) -> bool:
-    if MARKDOWN_IMAGE_RE.search(text):
+    visible = strip_fenced_regions(text)
+    if MARKDOWN_IMAGE_RE.search(visible):
         return True
-    if HTML_IMG_RE.search(text):
+    if HTML_IMG_RE.search(visible):
         return True
-    if HTML_VIDEO_RE.search(text):
+    if HTML_VIDEO_RE.search(visible):
         return True
-    if GITHUB_ATTACHMENT_RE.search(text):
+    if GITHUB_ATTACHMENT_RE.search(visible):
         return True
-    if VIDEO_FILE_RE.search(text):
+    if VIDEO_FILE_RE.search(visible):
         return True
-    if VIDEO_HOST_RE.search(text):
+    if VIDEO_HOST_RE.search(visible):
         return True
     return False
 
 
 def references_run_method(text: str) -> bool:
-    return any(pattern.search(text) for pattern in RUN_METHOD_PATTERNS)
+    visible = strip_fenced_regions(text)
+    return any(pattern.search(visible) for pattern in RUN_METHOD_PATTERNS)
 
 
 def has_checklist_item(text: str) -> bool:
-    return bool(CHECKLIST_ITEM_RE.search(text))
+    visible = strip_fenced_regions(text)
+    return bool(CHECKLIST_ITEM_RE.search(visible))
 
 
 def check_bug(sections: dict[str, str]) -> ReadinessResult:
