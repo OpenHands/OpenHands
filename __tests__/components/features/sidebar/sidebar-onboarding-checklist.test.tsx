@@ -109,7 +109,7 @@ describe("SidebarOnboardingChecklist", () => {
     });
   });
 
-  it("renders setup items including LLM keys, schedule a task, and Slack", () => {
+  it("renders setup items including LLM keys, agent profiles, schedule a task, and Slack", () => {
     renderChecklist();
 
     expect(
@@ -124,6 +124,9 @@ describe("SidebarOnboardingChecklist", () => {
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-schedule-task"),
     ).toHaveAttribute("href", "/automations");
+    expect(
+      screen.getByTestId("sidebar-onboarding-checklist-item-customize-agent"),
+    ).toHaveAttribute("href", "/settings/agents");
     expect(
       screen.getByTestId("sidebar-onboarding-checklist-item-join-slack"),
     ).toHaveAttribute("href", OPENHANDS_SLACK_COMMUNITY_URL);

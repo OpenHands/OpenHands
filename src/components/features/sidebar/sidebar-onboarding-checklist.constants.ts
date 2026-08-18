@@ -46,7 +46,7 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_ROUTES: Record<
   "connect-mcp": "/mcp",
   "start-conversation": "/conversations",
   "schedule-task": "/automations",
-  "customize-agent": "/customize",
+  "customize-agent": "/settings/agents",
 };
 
 export function isExternalSidebarOnboardingChecklistItem(
@@ -117,10 +117,5 @@ export const SIDEBAR_ONBOARDING_CHECKLIST_DOCS_URLS: Record<
 };
 
 export function isCustomizeChecklistPath(path: string): boolean {
-  return (
-    path === "/customize" ||
-    path.startsWith("/skills") ||
-    path === "/mcp" ||
-    path === "/plugins"
-  );
+  return path === "/settings/agents" || path.startsWith("/settings/agents/");
 }
