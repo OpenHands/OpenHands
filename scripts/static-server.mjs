@@ -37,7 +37,9 @@ import sirv from "sirv";
 import {
   createProxyHandlers,
   createRouter,
+  isServerInfoRequest,
   matchesPathPrefix,
+  proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -630,6 +632,14 @@ export function startStaticServer(config) {
       // Referer carrying the key rides along on those subrequests.
       if (matchesAnyPrefix(url, noReferrerPrefixes)) {
         res.setHeader("Referrer-Policy", "no-referrer");
+      }
+      if (
+        config.runtimeServicesInfo &&
+        isServerInfoRequest(req) &&
+        (req.method === "GET" || req.method === "HEAD")
+      ) {
+        proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
+        return;
       }
       proxy.proxyHttp(req, res, backend);
       return;

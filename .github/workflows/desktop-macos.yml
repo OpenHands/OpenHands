@@ -9,7 +9,7 @@ name: Desktop (macOS)
 # The app is only ad-hoc signed (no signing certs exist for any platform);
 # a downloaded DMG is quarantined by Gatekeeper, which reports the app as
 # "damaged" until the attribute is cleared:
-#   xattr -d com.apple.quarantine "/Applications/Agent Canvas.app"
+#   xattr -d com.apple.quarantine "/Applications/OpenHands Agent Canvas.app"
 # Intel DMGs are not produced — the bundled uv/node runtimes are host-arch
 # only, so Intel users build from source.
 on:

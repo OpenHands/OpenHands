@@ -6,6 +6,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { BrandBadge } from "#/components/shared/badge";
 import { cn } from "#/utils/utils";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
@@ -38,6 +39,7 @@ export function ProfileRow({
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const displayModel = formatModelNameForDisplay(profile.model);
 
   return (
     <div
@@ -51,12 +53,12 @@ export function ProfileRow({
         >
           {profile.name}
         </span>
-        {profile.model ? (
+        {displayModel ? (
           <span
             className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
-            title={profile.model}
+            title={profile.model ?? undefined}
           >
-            {profile.model}
+            {displayModel}
           </span>
         ) : null}
         {isActive && (

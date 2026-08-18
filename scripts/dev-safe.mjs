@@ -53,11 +53,16 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-// Temporary transitive-dep pin: openhands-sdk 1.39.1 leaves agent-client-protocol
+// Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
   SHARED_DEFAULTS.constraints?.agentClientProtocol;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
+  SHARED_DEFAULTS.telemetry.posthogApiKey;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
+  SHARED_DEFAULTS.telemetry.posthogHost;
+const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -406,7 +411,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.39.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.42.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -439,6 +444,8 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `local (${localPath})`;
@@ -463,6 +470,8 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `git (${gitRef})`;
@@ -483,6 +492,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -501,6 +511,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
@@ -684,6 +695,58 @@ function buildConfigFromPorts(ports, cwd, env) {
 }
 
 /**
+ * Telemetry-related env vars for the agent-server process.
+ *
+ * Split out from `buildAgentServerEnv` so callers that assemble their own
+ * agent-server environment can reuse the same mapping.
+ *
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Telemetry env vars for agent-server
+ */
+export function buildAgentServerTelemetryEnv(env = process.env) {
+  const telemetryDisabled =
+    env.VITE_DO_NOT_TRACK === "1" || env.DO_NOT_TRACK === "1";
+  const result = {};
+
+  for (const key of [
+    "OH_TELEMETRY_EXPORTER",
+    "OH_TELEMETRY_POSTHOG_API_KEY",
+    "OH_TELEMETRY_POSTHOG_HOST",
+    "OH_TELEMETRY_HTTP_ENDPOINT",
+    "OH_TELEMETRY_HTTP_TOKEN",
+    "OH_TELEMETRY_CONSENT",
+    "OH_TELEMETRY_CONSENT_MODE",
+    "OH_TELEMETRY_SALT",
+  ]) {
+    if (env[key]) result[key] = env[key];
+  }
+
+  if (telemetryDisabled) {
+    result.DO_NOT_TRACK = "1";
+  }
+
+  const apiKey =
+    env.OH_TELEMETRY_POSTHOG_API_KEY ||
+    env.VITE_POSTHOG_API_KEY ||
+    (telemetryDisabled ? "" : DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY);
+  const exporter = env.OH_TELEMETRY_EXPORTER || (apiKey ? "posthog" : "");
+
+  if (exporter) {
+    result.OH_TELEMETRY_EXPORTER = exporter;
+  }
+
+  if (exporter === "posthog" && apiKey) {
+    result.OH_TELEMETRY_POSTHOG_API_KEY = apiKey;
+    result.OH_TELEMETRY_POSTHOG_HOST =
+      env.OH_TELEMETRY_POSTHOG_HOST ||
+      env.VITE_POSTHOG_HOST ||
+      DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST;
+  }
+
+  return result;
+}
+
+/**
  * Build the environment variables object for spawning the agent-server process.
  *
  * This is exported so downstream consumers (e.g., automation service) can use
@@ -703,13 +766,17 @@ function buildConfigFromPorts(ports, cwd, env) {
  * opts in without one.
  *
  * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
- * @param {{vscodeBasePath?: string | null}} [options] - Opt into prefix-mode by
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>}} [options]
+ * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
  *   passing the path prefix the caller also routes to `config.vscodePort`.
+ * @param {Record<string, string | undefined>} [options.env] - Source
+ *   environment for the telemetry mapping (defaults to `process.env`).
  * @returns {Record<string, string>} Environment variables for agent-server
  */
 export function buildAgentServerEnv(config, options = {}) {
-  const { vscodeBasePath = null } = options;
+  const { vscodeBasePath = null, env = process.env } = options;
   return {
+    ...buildAgentServerTelemetryEnv(env),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
@@ -994,10 +1061,6 @@ async function main() {
   }
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
-  const runtimeServicesInfo = buildRuntimeServicesInfo({
-    mode: "dev:safe",
-    agentServerPort: config.backendPort,
-  });
   frontend = spawnProcess(frontendCommand.command, frontendCommand.args, {
     cwd: config.cwd,
     env: {
@@ -1013,9 +1076,17 @@ async function main() {
       // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
       VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
       VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
-      // Inform the frontend (and downstream, the agent's system prompt) about
-      // which services are available in this dev stack.
-      VITE_RUNTIME_SERVICES_INFO: JSON.stringify(runtimeServicesInfo),
+      // dev:minimal deliberately does NOT supply runtime-services info (the
+      // frontend here talks straight to the agent-server over
+      // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
+      // of it to append `runtime_services` to `/server_info`, and the
+      // frontend's own VITE_RUNTIME_SERVICES_INFO env var is no longer read).
+      // It is a bare agent-server + Vite stack with no companion services to
+      // advertise, so `fetchBackendRuntimeServicesInfo()` correctly returns
+      // null and conversations simply omit the <RUNTIME_SERVICES> block.
+      // Stacks with automation/ingress/frontend services should use
+      // `npm run dev` / `dev:static`, which pass runtime-services info through
+      // ingress/static-server instead.
     },
   });
 

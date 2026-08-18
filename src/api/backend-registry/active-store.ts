@@ -6,6 +6,10 @@ import {
   writeStoredBackends,
 } from "./storage";
 import type { Backend, BackendSelection, ResolvedActiveBackend } from "./types";
+import {
+  currentLocationSearch,
+  readBackendSelectionFromUrl,
+} from "./url-selection";
 
 type Listener = () => void;
 
@@ -88,9 +92,31 @@ function computeSnapshot(
   };
 }
 
+/**
+ * Resolve the selection this tab boots with. A backend pinned in the URL wins
+ * over stored state so a link opened in a new tab (cmd/ctrl-click, middle
+ * click, "Open in new tab") lands on the backend that owns the linked
+ * conversation, even when the new tab starts with an empty `sessionStorage`
+ * and would otherwise adopt the `localStorage` fallback. The honoured
+ * selection is persisted so later in-tab navigation — which drops the query
+ * parameters — keeps the same backend.
+ */
+function readInitialSelection(backends: Backend[]): BackendSelection | null {
+  const fromUrl = readBackendSelectionFromUrl(
+    backends,
+    currentLocationSearch(),
+  );
+  if (fromUrl) {
+    writeStoredActiveBackend(fromUrl);
+    return fromUrl;
+  }
+  return readStoredActiveBackend();
+}
+
+const initialBackends = readStoredBackends();
 let snapshot: Snapshot = computeSnapshot(
-  readStoredBackends(),
-  readStoredActiveBackend(),
+  initialBackends,
+  readInitialSelection(initialBackends),
 );
 
 const listeners = new Set<Listener>();
@@ -161,6 +187,7 @@ export function subscribeActiveBackend(listener: Listener): () => void {
 /** Test-only: re-read storage and clear listeners. */
 
 export function __resetActiveStoreForTests(): void {
-  snapshot = computeSnapshot(readStoredBackends(), readStoredActiveBackend());
+  const backends = readStoredBackends();
+  snapshot = computeSnapshot(backends, readInitialSelection(backends));
   listeners.clear();
 }

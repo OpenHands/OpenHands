@@ -46,7 +46,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -252,6 +252,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
@@ -271,9 +272,33 @@ ACCESS POINTS:
 }
 
 /**
+ * Fail fast on an unusable OH_AUTOMATION_LOCAL_PATH instead of letting
+ * `uv run --project <bad path>` exit on its own -- that leaves the rest of the
+ * stack up and the automations UI just reporting "backend unavailable", with
+ * nothing pointing at the env var. Mirrors validateLocalAgentServerPath.
+ */
+function validateLocalAutomationPath(localPath) {
+  if (!isAbsolute(localPath)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH must be an absolute path, got: ${localPath}`,
+    );
+  }
+  if (!existsSync(localPath)) {
+    throw new Error(`OH_AUTOMATION_LOCAL_PATH does not exist: ${localPath}`);
+  }
+  const projectFile = join(localPath, "pyproject.toml");
+  if (!existsSync(projectFile)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH is not a Python project (no pyproject.toml): ${projectFile}`,
+    );
+  }
+}
+
+/**
  * Build the uvx command for running automation backend.
  *
  * Environment variables (highest precedence first):
+ * - OH_AUTOMATION_LOCAL_PATH: Absolute path to a local checkout
  * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
  * - OH_AUTOMATION_VERSION: Specific PyPI version (e.g., "1.0.0a1")
  *
@@ -282,12 +307,32 @@ ACCESS POINTS:
  * git branch or commit instead.
  */
 function buildAutomationCommand(env = process.env) {
+  const localPath = env.OH_AUTOMATION_LOCAL_PATH;
   const gitRef = env.OH_AUTOMATION_GIT_REF;
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
   const uvxArgs = [];
   let source = "";
+
+  if (localPath) {
+    // Run straight from a local checkout via `uv run --project`, so
+    // uncommitted working-tree changes are picked up. Outranks the other
+    // automation env vars, mirroring OH_AGENT_SERVER_LOCAL_PATH for the
+    // agent-server SDK; buildConfig drops it when --automation-git-ref asks
+    // for a specific ref.
+    return {
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        localPath,
+        "uvicorn",
+        "openhands.automation.app:app",
+      ],
+      source: `local (${localPath})`,
+    };
+  }
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
@@ -331,6 +376,17 @@ async function buildConfig(args, env = process.env) {
   // Apply args to env for buildAutomationCommand
   if (args.automationGitRef) {
     env.OH_AUTOMATION_GIT_REF = args.automationGitRef;
+    // An explicit flag outranks an ambient env var. Otherwise someone with
+    // OH_AUTOMATION_LOCAL_PATH exported in their shell profile would run their
+    // own working tree while believing they were reproducing against the ref
+    // they just passed.
+    if (env.OH_AUTOMATION_LOCAL_PATH) {
+      logStep(
+        "automation",
+        `--automation-git-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
+      );
+      delete env.OH_AUTOMATION_LOCAL_PATH;
+    }
   }
   if (args.automationRepo) {
     env.OH_AUTOMATION_REPO = args.automationRepo;
@@ -686,16 +742,17 @@ const AGENT_SERVER_ROUTE_PREFIXES = [
 function getLocalServiceRoutes(config) {
   const routes = [];
 
+  // These services bind to IPv4 loopback, but localhost can resolve to ::1.
   if (config.launchAutomation) {
     routes.push([
       AUTOMATION_ROUTE_PREFIX,
-      `http://localhost:${config.autoBackendPort}`,
+      `http://127.0.0.1:${config.autoBackendPort}`,
     ]);
   }
 
   if (config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
-      routes.push([prefix, `http://localhost:${config.agentServerPort}`]);
+      routes.push([prefix, `http://127.0.0.1:${config.agentServerPort}`]);
     }
 
     // The editor is a separate process on its own port, but it is reached
@@ -708,7 +765,7 @@ function getLocalServiceRoutes(config) {
     if (config.vscodeBasePath) {
       routes.push([
         config.vscodeBasePath,
-        `http://localhost:${config.vscodePort}`,
+        `http://127.0.0.1:${config.vscodePort}`,
       ]);
     }
   }
@@ -779,17 +836,34 @@ function getFrontendBackend(config) {
 }
 
 function buildViteBackendEnv(config, env = process.env) {
-  const backendBaseUrl = config.launchAgentServer
-    ? `http://127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_BASE_URL ?? "http://127.0.0.1:8000");
+  // VITE_BACKEND_HOST tells the Vite dev-server proxy (vite.config.ts) where
+  // to forward /api, /sockets, etc.  It is NOT read by the frontend at
+  // runtime, so it is safe to keep as an absolute address.
+  //
+  // VITE_BACKEND_BASE_URL is intentionally left unset so the frontend falls
+  // back to window.location.origin (same-origin) at runtime — matching the
+  // behaviour of dev:static / agent-canvas and keeping the dev server
+  // portable across localhost, LAN hosts, SSH tunnels, and ngrok.
   const backendHost = config.launchAgentServer
     ? `127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_HOST ?? new URL(backendBaseUrl).host);
+    : (env.VITE_BACKEND_HOST ??
+      env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
+      "127.0.0.1:8000");
 
-  return {
-    VITE_BACKEND_HOST: backendHost,
-    VITE_BACKEND_BASE_URL: backendBaseUrl,
-  };
+  const env_out = { VITE_BACKEND_HOST: backendHost };
+
+  // If the user supplied VITE_BACKEND_BASE_URL with an https:// scheme and
+  // did not explicitly set VITE_USE_TLS, propagate the HTTPS intent so the
+  // Vite proxy forwards over TLS instead of plain HTTP.
+  if (
+    !config.launchAgentServer &&
+    env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
+    env.VITE_USE_TLS === undefined
+  ) {
+    env_out.VITE_USE_TLS = "true";
+  }
+
+  return env_out;
 }
 
 function buildAgentServerAutomationEnv(config) {
@@ -1013,12 +1087,16 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("SIGHUP", shutdown);
 
 function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
   const frontendBackend = getFrontendBackend(config);
+  const runtimeServicesInfo = config.launchAgentServer
+    ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
+    : null;
 
   spawnService(
     "ingress",
@@ -1027,6 +1105,9 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...(runtimeServicesInfo
+        ? ["--runtime-services-info", runtimeServicesInfo]
+        : []),
       ...buildRouteArgs(getLocalServiceRoutes(config)),
       ...getNoReferrerPrefixArgs(config),
       ...(frontendBackend ? ["--default", frontendBackend] : []),
@@ -1040,8 +1121,8 @@ function startIngress(config) {
 
 /**
  * Build the JSON-serializable runtime services info for an automation
- * stack. Used by both the Vite dev server (dev mode) and static-build.mjs
- * (static mode) so the frontend can populate the agent's
+ * stack. Backend-serving processes append this to `/server_info` so any
+ * frontend connected to the backend can populate the agent's
  * `<RUNTIME_SERVICES>` system-prompt block.
  */
 export function buildAutomationRuntimeServicesInfo(config) {
@@ -1065,9 +1146,6 @@ function startVite(config) {
   logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
 
   const frontendCommand = buildNpmScriptCommand("dev:frontend");
-  const runtimeServicesInfo = config.launchAgentServer
-    ? buildAutomationRuntimeServicesInfo(config)
-    : null;
 
   const viteEnv = {
     // Full-stack mode points Vite at this launcher's ingress. Frontend-only
@@ -1094,12 +1172,6 @@ function startVite(config) {
   if (config.launchAgentServer && config.vscodeBasePath) {
     viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath;
     viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
-  }
-
-  if (runtimeServicesInfo) {
-    // Inform the frontend (and downstream, the agent's system prompt) about
-    // which services are available in this dev stack.
-    viteEnv.VITE_RUNTIME_SERVICES_INFO = JSON.stringify(runtimeServicesInfo);
   }
 
   // In local mode, bake the session key into the frontend so the user
@@ -1404,6 +1476,21 @@ async function main(options = {}) {
     }
   }
 
+  // Same for the automation checkout -- skipped when --automation-git-ref was
+  // passed, since buildConfig drops the env var in favor of the explicit flag.
+  if (
+    !args.frontendOnly &&
+    !args.automationGitRef &&
+    process.env.OH_AUTOMATION_LOCAL_PATH
+  ) {
+    try {
+      validateLocalAutomationPath(process.env.OH_AUTOMATION_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
   // Build config with dynamic port allocation
   const config = await buildConfig(args);
   if (viteWorkingDir) config.viteWorkingDir = viteWorkingDir;
@@ -1515,9 +1602,9 @@ function startStaticFrontend(config, staticDir) {
   logService("static", `Starting on port ${config.vitePort}...`, c.magenta);
   logService("static", `Serving from: ${staticDir}`, c.dim);
 
-  // Build the runtime-services info JSON so the pre-built frontend can
-  // populate the agent's <RUNTIME_SERVICES> system-prompt block without
-  // VITE_RUNTIME_SERVICES_INFO baked in at build time.
+  // Build the runtime-services info JSON so static-server can append it to
+  // /server_info. The static-server also injects the old window global for
+  // compatibility with previously built frontend bundles.
   const runtimeServicesInfo = config.launchAgentServer
     ? JSON.stringify(buildAutomationRuntimeServicesInfo(config))
     : null;
@@ -1586,6 +1673,7 @@ export {
   registerShutdownHook,
   spawnService,
   commandExists,
+  validateLocalAutomationPath,
   logService,
   logStep,
   logSuccess,

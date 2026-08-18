@@ -25,6 +25,7 @@ import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message"
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import McpService from "#/api/mcp-service/mcp-service.api";
+import { MCP_RENAME_CREDENTIAL_ERROR } from "#/utils/mcp-config";
 
 interface CustomServerEditorProps {
   server: MCPServerConfig;
@@ -107,6 +108,10 @@ export function CustomServerEditor({
   // had no `onError` and the modal closed even on a 4xx/5xx, leaving
   // the user to discover the failure on the next page load.
   const handleError = (err: unknown) => {
+    if (err instanceof Error && err.message === MCP_RENAME_CREDENTIAL_ERROR) {
+      displayErrorToast(err.message);
+      return;
+    }
     const message = retrieveAxiosErrorMessage(err as AxiosError);
     displayErrorToast(message || t(I18nKey.ERROR$GENERIC));
   };

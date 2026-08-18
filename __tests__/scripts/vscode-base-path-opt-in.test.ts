@@ -110,8 +110,11 @@ describe("every launcher that advertises the prefix also serves it", () => {
     // and the ingress build their tables from. Behaviour is asserted directly
     // in dev-with-automation.test.ts.
     expect(source).toContain("function getLocalServiceRoutes");
+    // IPv4 loopback, not `localhost`: these services bind to 127.0.0.1 and
+    // `localhost` can resolve to ::1, which is why every other local proxy
+    // target in this repo is written the same way.
     expect(source).toMatch(
-      /config\.vscodeBasePath,\s*\n\s*`http:\/\/localhost/,
+      /config\.vscodeBasePath,\s*\n\s*`http:\/\/127\.0\.0\.1/,
     );
   });
 

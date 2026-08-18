@@ -61,6 +61,7 @@ import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
   getLocalServiceRoutes,
@@ -393,6 +394,12 @@ function startStaticServer(config) {
   // drifted — the editor prefix was missing here, so `/vscode` fell through
   // to the SPA fallback and answered editor requests with the canvas shell.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
   spawnService(
     "static",
     "node",
@@ -410,6 +417,8 @@ function startStaticServer(config) {
       ...(config.sessionApiKey
         ? ["--session-api-key", config.sessionApiKey]
         : []),
+      "--runtime-services-info",
+      runtimeServicesInfo,
       ...buildRouteArgs(getLocalServiceRoutes(config)),
       // Only the static server injects into the document, so only it can tell
       // the frontend this origin serves the editor. The ingress below routes
@@ -428,6 +437,12 @@ function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
 
   spawnService(
     "ingress",
@@ -436,6 +451,8 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      "--runtime-services-info",
+      runtimeServicesInfo,
       ...buildRouteArgs(getLocalServiceRoutes(config)),
       ...getNoReferrerPrefixArgs(config),
       "--default",
