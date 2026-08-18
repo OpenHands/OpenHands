@@ -43,6 +43,41 @@ function httpFailure(status: number) {
   });
 }
 
+function requirementsSchemaFailure() {
+  return Object.assign(new Error("Request failed with status 422"), {
+    isAxiosError: true,
+    response: {
+      status: 422,
+      data: {
+        detail: [
+          {
+            loc: ["body", "requirements"],
+            type: "extra_forbidden",
+            msg: "Extra inputs are not permitted",
+            input: { secretNames: ["GITHUB_TOKEN"] },
+          },
+        ],
+      },
+    },
+  });
+}
+
+function sdkRequirementsSchemaFailure() {
+  return Object.assign(new Error("Request failed with status 422"), {
+    name: "HttpError",
+    status: 422,
+    response: {
+      detail: [
+        {
+          loc: ["body", "requirements"],
+          type: "value_error.extra",
+          msg: "Extra inputs are not permitted",
+        },
+      ],
+    },
+  });
+}
+
 const ENTRY = createSetupEntry();
 const VALUES = { repository: "OpenHands/agent-server-gui", widgetName: "W" };
 
@@ -55,7 +90,7 @@ function runPreflightAgainst(error: unknown) {
 let warn: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   activeBackendState.value = {
     backend: {
       id: "local-test",
@@ -160,6 +195,122 @@ describe("useSetupPreflight", () => {
     });
   });
 
+  it.each([
+    ["the local HTTP client", requirementsSchemaFailure()],
+    ["the cloud SDK client", sdkRequirementsSchemaFailure()],
+  ])(
+    "uses the legacy draft contract when %s rejects requirements as unknown",
+    async (_transport, error) => {
+      // Arrange
+      vi.mocked(AutomationService.validateDraft)
+        .mockRejectedValueOnce(error)
+        .mockResolvedValueOnce({ valid: true, errors: [] });
+      const { result } = renderHook(() => useSetupPreflight(ENTRY));
+
+      // Act
+      const outcome = await result.current.runPreflight(VALUES);
+
+      // Assert - the old endpoint can still validate the draft, but it did not
+      // perform the new deployment checks, so the verdict remains advisory.
+      expect(outcome).toEqual({ status: "unsupported" });
+      expect(AutomationService.validateDraft).toHaveBeenCalledTimes(2);
+      expect(
+        vi.mocked(AutomationService.validateDraft).mock.calls[1][0],
+      ).not.toHaveProperty("requirements");
+      expect(warn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps legacy draft validation errors blocking after the compatibility retry", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft)
+      .mockRejectedValueOnce(requirementsSchemaFailure())
+      .mockResolvedValueOnce({
+        valid: false,
+        errors: [
+          {
+            field: "trigger.schedule",
+            code: "invalid_schedule",
+            message: "Choose a valid schedule.",
+          },
+        ],
+      });
+    const { result } = renderHook(() => useSetupPreflight(ENTRY));
+
+    // Act
+    const outcome = await result.current.runPreflight(VALUES);
+
+    // Assert
+    expect(outcome).toEqual({
+      status: "failed",
+      errors: {
+        fieldErrors: { schedule: "Choose a valid schedule." },
+        formErrors: [],
+        stepErrors: {},
+      },
+    });
+  });
+
+  it("does not treat an unrelated 422 as an unsupported deployment", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error("Request failed with status 422"), {
+        isAxiosError: true,
+        response: {
+          status: 422,
+          data: {
+            detail: [
+              {
+                loc: ["body", "draft", "trigger"],
+                type: "value_error",
+                msg: "Invalid trigger",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const { result } = renderHook(() => useSetupPreflight(ENTRY));
+
+    // Act
+    const outcome = await result.current.runPreflight(VALUES);
+
+    // Assert
+    expect(outcome).toEqual({ status: "unavailable" });
+    expect(AutomationService.validateDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry when a nested requirements value is malformed", async () => {
+    // Arrange - this is a real validation error from a current endpoint, not
+    // evidence that the endpoint predates the top-level requirements field.
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error("Request failed with status 422"), {
+        isAxiosError: true,
+        response: {
+          status: 422,
+          data: {
+            detail: [
+              {
+                loc: ["body", "requirements", "integrations", 0, "id"],
+                type: "extra_forbidden",
+                msg: "Extra inputs are not permitted",
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const { result } = renderHook(() => useSetupPreflight(ENTRY));
+
+    // Act
+    const outcome = await result.current.runPreflight(VALUES);
+
+    // Assert - dropping the entire requirements envelope would hide a current
+    // contract error and incorrectly downgrade the deployment to advisory.
+    expect(outcome).toEqual({ status: "unavailable" });
+    expect(AutomationService.validateDraft).toHaveBeenCalledTimes(1);
+  });
+
   it("does not let an older response overwrite a newer verdict", async () => {
     // Arrange
     let resolveFirst!: (value: { valid: false; errors: never[] }) => void;
@@ -233,6 +384,66 @@ describe("useSetupPreflight", () => {
     resolve({ valid: true, errors: [] });
 
     // Assert - the previous automation's verdict cannot validate the new one.
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("marks an in-flight response stale when the same entry id is refreshed", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, rerender } = renderHook(
+      ({ entry }) => useSetupPreflight(entry),
+      { initialProps: { entry: ENTRY } },
+    );
+    const pending = result.current.runPreflight(VALUES);
+
+    // Act - a catalog refresh can replace an entry without changing its id.
+    rerender({
+      entry: createSetupEntry({
+        description: "Updated catalog description.",
+      }),
+    });
+    resolve({ valid: true, errors: [] });
+
+    // Assert - the old body's verdict cannot validate the refreshed manifest.
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
+  it("invalidates a pending draft when a new assisted entry has no draft", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, rerender } = renderHook(
+      ({ entry }) => useSetupPreflight(entry),
+      { initialProps: { entry: ENTRY } },
+    );
+    const pending = result.current.runPreflight(VALUES);
+
+    // Act - assisted setup has no service draft, but it still supersedes the
+    // direct request that was started by the previous entry.
+    rerender({
+      entry: createSetupEntry({
+        setup: {
+          ...ENTRY.setup,
+          mode: "assisted",
+          prompt: undefined,
+        },
+      }),
+    });
+    await expect(result.current.runPreflight(VALUES)).resolves.toBeNull();
+    resolve({ valid: true, errors: [] });
+
+    // Assert
     await expect(pending).resolves.toEqual({ status: "stale" });
   });
 

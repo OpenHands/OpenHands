@@ -73,6 +73,24 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 
 const ENTRY: SetupEntry = createSetupEntry();
 
+function requirementsSchemaFailure() {
+  return Object.assign(new Error("Request failed with status 422"), {
+    isAxiosError: true,
+    response: {
+      status: 422,
+      data: {
+        detail: [
+          {
+            loc: ["body", "requirements"],
+            type: "extra_forbidden",
+            msg: "Extra inputs are not permitted",
+          },
+        ],
+      },
+    },
+  });
+}
+
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
   render(
@@ -295,6 +313,36 @@ describe("SetupDialog", () => {
       await screen.findByTestId("setup-preflight-unsupported"),
     ).toHaveTextContent("SETUP$PREFLIGHT_UNSUPPORTED");
     expect(screen.getByTestId("setup-review")).toBeInTheDocument();
+  });
+
+  it("keeps an old validate contract advisory while still allowing creation", async () => {
+    // Arrange - the first call rejects only the additive requirements envelope;
+    // the compatibility retry validates the same draft through the old route.
+    vi.mocked(AutomationService.validateDraft)
+      .mockRejectedValueOnce(requirementsSchemaFailure())
+      .mockResolvedValue({ valid: true, errors: [] });
+    mocks.runAction.mockResolvedValue({
+      response: { id: "legacy-automation" },
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert - the old validator did not perform deployment checks, so the
+    // review says advisory while preserving the creation path.
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/legacy-automation",
+      {
+        replace: true,
+      },
+    );
   });
 
   it("creates from the derived payload and opens what was created", async () => {
