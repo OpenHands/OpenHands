@@ -96,23 +96,18 @@ export const useCreateConversation = () => {
       // conversations (#3727), on both local and cloud (cloud gained
       // /api/agent-profiles in OpenHands #15060, #3730). Await the list from
       // the shared query cache: a send fired before the home query resolves
-      // must still launch from the active profile, not fall through to the
-      // agent_settings path. Degrades safely: if the fetch errors (older
-      // backend without the surface), this stays undefined and creation falls
-      // back to the encrypted agent_settings launch path.
-      let agentProfiles: AgentProfileListResponse | undefined;
-      try {
-        agentProfiles = await queryClient.ensureQueryData({
+      // must still launch from the active profile. Do not fall back to the
+      // global agent_settings when profile discovery fails: activation is
+      // pointer-only, so those settings may describe a different agent.
+      const agentProfiles: AgentProfileListResponse =
+        await queryClient.ensureQueryData({
           queryKey: [...AGENT_PROFILES_QUERY_KEYS.all, backend.id, orgId],
           queryFn: AgentProfilesService.listProfiles,
           ...AGENT_PROFILES_RETRY_OPTIONS,
         });
-      } catch {
-        // Profiles unavailable → legacy agent_settings launch.
-      }
 
       const requestedAgentProfileId =
-        agentProfileId ?? agentProfiles?.active_agent_profile_id ?? undefined;
+        agentProfileId ?? agentProfiles.active_agent_profile_id ?? undefined;
 
       // Fall back to the legacy agent_settings launch when the resolved agent
       // profile can't resolve its LLM. The agent-server seeds a `default`

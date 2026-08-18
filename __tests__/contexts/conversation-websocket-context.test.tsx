@@ -83,7 +83,7 @@ const makeAgentReply = (): MessageEvent => ({
   timestamp: new Date(Date.now() + 1000).toISOString(),
   source: "agent",
   llm_message: { role: "assistant", content: [{ type: "text", text: "Hi!" }] },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 });
 

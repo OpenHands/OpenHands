@@ -1060,7 +1060,7 @@ describe("AgentServerConversationService", () => {
       global.fetch = originalFetch;
     });
 
-    it("forwards parent_conversation_id, agent_type, and sandbox_id to the cloud createConversation payload", async () => {
+    it("marks Canvas-created cloud conversations with the GUI trigger", async () => {
       // Arrange
       fetchMock.mockResolvedValueOnce(
         mockJsonResponse({
@@ -1092,6 +1092,7 @@ describe("AgentServerConversationService", () => {
         parent_conversation_id: "parent-conv-1",
         agent_type: "plan",
         sandbox_id: "sandbox-9",
+        trigger: "gui",
       });
     });
 

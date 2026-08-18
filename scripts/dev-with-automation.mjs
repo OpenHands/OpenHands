@@ -46,7 +46,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -252,6 +252,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
@@ -271,9 +272,33 @@ ACCESS POINTS:
 }
 
 /**
+ * Fail fast on an unusable OH_AUTOMATION_LOCAL_PATH instead of letting
+ * `uv run --project <bad path>` exit on its own -- that leaves the rest of the
+ * stack up and the automations UI just reporting "backend unavailable", with
+ * nothing pointing at the env var. Mirrors validateLocalAgentServerPath.
+ */
+function validateLocalAutomationPath(localPath) {
+  if (!isAbsolute(localPath)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH must be an absolute path, got: ${localPath}`,
+    );
+  }
+  if (!existsSync(localPath)) {
+    throw new Error(`OH_AUTOMATION_LOCAL_PATH does not exist: ${localPath}`);
+  }
+  const projectFile = join(localPath, "pyproject.toml");
+  if (!existsSync(projectFile)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH is not a Python project (no pyproject.toml): ${projectFile}`,
+    );
+  }
+}
+
+/**
  * Build the uvx command for running automation backend.
  *
  * Environment variables (highest precedence first):
+ * - OH_AUTOMATION_LOCAL_PATH: Absolute path to a local checkout
  * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
  * - OH_AUTOMATION_VERSION: Specific PyPI version (e.g., "1.0.0a1")
  *
@@ -282,12 +307,32 @@ ACCESS POINTS:
  * git branch or commit instead.
  */
 function buildAutomationCommand(env = process.env) {
+  const localPath = env.OH_AUTOMATION_LOCAL_PATH;
   const gitRef = env.OH_AUTOMATION_GIT_REF;
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
   const uvArgs = [];
   let source = "";
+
+  if (localPath) {
+    // Run straight from a local checkout via `uv run --project`, so
+    // uncommitted working-tree changes are picked up. Outranks the other
+    // automation env vars, mirroring OH_AGENT_SERVER_LOCAL_PATH for the
+    // agent-server SDK; buildConfig drops it when --automation-git-ref asks
+    // for a specific ref.
+    return {
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        localPath,
+        "uvicorn",
+        "openhands.automation.app:app",
+      ],
+      source: `local (${localPath})`,
+    };
+  }
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
@@ -343,6 +388,17 @@ async function buildConfig(args, env = process.env) {
   // Apply args to env for buildAutomationCommand
   if (args.automationGitRef) {
     env.OH_AUTOMATION_GIT_REF = args.automationGitRef;
+    // An explicit flag outranks an ambient env var. Otherwise someone with
+    // OH_AUTOMATION_LOCAL_PATH exported in their shell profile would run their
+    // own working tree while believing they were reproducing against the ref
+    // they just passed.
+    if (env.OH_AUTOMATION_LOCAL_PATH) {
+      logStep(
+        "automation",
+        `--automation-git-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
+      );
+      delete env.OH_AUTOMATION_LOCAL_PATH;
+    }
   }
   if (args.automationRepo) {
     env.OH_AUTOMATION_REPO = args.automationRepo;
@@ -1359,6 +1415,21 @@ async function main(options = {}) {
     }
   }
 
+  // Same for the automation checkout -- skipped when --automation-git-ref was
+  // passed, since buildConfig drops the env var in favor of the explicit flag.
+  if (
+    !args.frontendOnly &&
+    !args.automationGitRef &&
+    process.env.OH_AUTOMATION_LOCAL_PATH
+  ) {
+    try {
+      validateLocalAutomationPath(process.env.OH_AUTOMATION_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
   // Build config with dynamic port allocation
   const config = await buildConfig(args);
   if (viteWorkingDir) config.viteWorkingDir = viteWorkingDir;
@@ -1533,6 +1604,7 @@ export {
   registerShutdownHook,
   spawnService,
   commandExists,
+  validateLocalAutomationPath,
   logService,
   logStep,
   logSuccess,

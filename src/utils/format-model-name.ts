@@ -1,6 +1,7 @@
 export const FREE_MODEL_BADGE_LABEL = "Free";
 
 export const FREE_OPENHANDS_MODELS = {
+  "openhands/kimi-k3": "OpenHands Kimi K3 (free)",
   "openhands/glm-5.2": "OpenHands GLM-5.2 (free)",
   "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
   "openhands/minimax-m2.7": "OpenHands MiniMax M2.7 (free)",

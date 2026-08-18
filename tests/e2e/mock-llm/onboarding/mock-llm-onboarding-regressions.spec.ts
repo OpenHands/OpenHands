@@ -99,8 +99,8 @@ test.describe("onboarding recent regressions", () => {
     // The model input displays the model ID without the provider prefix.
     await expect(
       modelInput,
-      "first-run onboarding should default to GLM-5.2",
-    ).toHaveValue("glm-5.2", {
+      "first-run onboarding should default to Kimi K3",
+    ).toHaveValue("kimi-k3", {
       timeout: 10_000,
     });
     await expect(
