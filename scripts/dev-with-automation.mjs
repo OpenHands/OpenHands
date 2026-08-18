@@ -166,6 +166,7 @@ function parseArgs() {
   const args = process.argv.slice(2);
   const config = {
     port: null,
+    frontendPort: null,
     automationGitRef: null,
     automationRepo: null,
     verbose: false,
@@ -183,6 +184,9 @@ function parseArgs() {
       case "-p":
       case "--port":
         config.port = parseInt(args[++i], 10);
+        break;
+      case "--frontend-port":
+        config.frontendPort = parseInt(args[++i], 10);
         break;
       case "--automation-ref":
         config.automationGitRef = args[++i];
@@ -237,6 +241,7 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  --frontend-port <port>      Frontend (Vite/static) port (default: 3001)
   --automation-ref <ref>      Git ref for automation (branch/tag/SHA)
   --automation-repo <url>     Git repo URL (default: ${DEFAULT_AUTOMATION_REPO})
   --static                    Serve an existing production build instead of Vite
@@ -428,7 +433,8 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_BACKEND_PORT, 10) || DEFAULT_BACKEND_PORT;
   const preferredAutomationPort =
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
-  const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
+  const preferredVitePort =
+    args.frontendPort || parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
   // Fail fast if any preferred port for a service in this mode is already in use.
   const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
@@ -989,7 +995,7 @@ function startAutomationBackend(config) {
         // CORS: allow localhost origins for dev, unless explicitly overridden.
         AUTOMATION_CORS_ORIGINS:
           process.env.AUTOMATION_CORS_ORIGINS ||
-          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:3001,http://127.0.0.1:3001`,
+          `http://localhost:${config.ingressPort},http://127.0.0.1:${config.ingressPort},http://localhost:${config.vitePort},http://127.0.0.1:${config.vitePort}`,
         FILE_STORE: "local",
         LOCAL_STORAGE_PATH: join(config.stateDir, "storage"),
         OPENHANDS_SUPPRESS_BANNER: "1",

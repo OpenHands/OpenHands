@@ -337,6 +337,25 @@ describe("buildConfig", () => {
     expect(config.ingressPort).toBe(preferredPort);
   });
 
+  it("respects --frontend-port arg for the frontend port", async () => {
+    const preferredFrontendPort = 19503;
+    const config = await buildConfig(
+      { frontendPort: preferredFrontendPort },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.vitePort).toBe(preferredFrontendPort);
+  });
+
+  it("args.frontendPort takes precedence over OH_CANVAS_SAFE_VITE_PORT", async () => {
+    const config = await buildConfig(
+      { frontendPort: 19504 },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_VITE_PORT: "19599" }),
+    );
+
+    expect(config.vitePort).toBe(19504);
+  });
+
   it("throws when ingress port is busy", async () => {
     const busyPort = 8100;
 
