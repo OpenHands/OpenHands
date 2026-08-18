@@ -630,22 +630,43 @@ class AutomationService {
       `?name=${encodeURIComponent(name)}`;
     const headers = { "Content-Type": "application/gzip" };
 
-    const upload =
-      active.kind === "cloud"
-        ? await callCloudProxy<Record<string, unknown>>({
-            backend: active,
-            method: "POST",
-            path,
-            body: archive,
-            headers: { ...(await buildAutomationRequestHeaders()), ...headers },
-          })
-        : (
-            await localAutomationAxios.post<Record<string, unknown>>(
-              path,
-              archive,
-              { headers },
-            )
-          ).data;
+    let upload: Record<string, unknown>;
+    if (active.kind === "cloud") {
+      // Post the archive straight to the cloud host rather than through the
+      // cloud client: that client JSON-serializes any non-FormData body, which
+      // would turn the gzip `Uint8Array` into `{"0":31,...}` even though the
+      // header says `application/gzip`. Axios preserves the raw bytes (its
+      // `transformRequest` sends the underlying buffer), so the service still
+      // receives the archive as the stream it expects, with metadata in the
+      // query string. This upload sets no host override, so a direct call
+      // matches the cloud client's own direct-to-host path -- we just add the
+      // two headers that path would (`Bearer` auth and `X-Org-Id`).
+      const { orgId } = getActiveBackend();
+      upload = (
+        await axios.post<Record<string, unknown>>(
+          `${active.host.replace(/\/+$/, "")}${path}`,
+          archive,
+          {
+            headers: {
+              ...(await buildAutomationRequestHeaders()),
+              ...headers,
+              ...(active.apiKey
+                ? { Authorization: `Bearer ${active.apiKey}` }
+                : {}),
+              ...(orgId ? { "X-Org-Id": orgId } : {}),
+            },
+          },
+        )
+      ).data;
+    } else {
+      upload = (
+        await localAutomationAxios.post<Record<string, unknown>>(
+          path,
+          archive,
+          { headers },
+        )
+      ).data;
+    }
 
     const tarballPath = upload.tarball_path;
     if (typeof tarballPath !== "string" || !tarballPath) {
