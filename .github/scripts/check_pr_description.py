@@ -57,6 +57,10 @@ FRONTEND_FILE_EXTENSIONS: tuple[str, ...] = (
     ".sass",
     ".less",
 )
+# Documentation has no visual state, so a screenshot cannot evidence a change to
+# it. Markdown stays non-frontend even under a frontend path prefix; otherwise a
+# link fix in __tests__/*.md or src/*.md is asked for a screenshot it cannot have.
+DOCUMENTATION_FILE_EXTENSIONS: tuple[str, ...] = (".md", ".mdx")
 FRONTEND_CONFIG_GLOBS: tuple[str, ...] = (
     "tailwind.config.*",
     "vite.config.*",
@@ -155,9 +159,11 @@ def extract_human_note(body: str) -> str:
 def is_frontend_file(path: str) -> bool:
     """Return True if a changed file should be treated as frontend code."""
     normalized = path.lstrip("./")
+    lower = normalized.lower()
+    if lower.endswith(DOCUMENTATION_FILE_EXTENSIONS):
+        return False
     if any(normalized.startswith(prefix) for prefix in FRONTEND_PATH_PREFIXES):
         return True
-    lower = normalized.lower()
     if any(lower.endswith(ext) for ext in FRONTEND_FILE_EXTENSIONS):
         return True
     name = normalized.split("/")[-1]
