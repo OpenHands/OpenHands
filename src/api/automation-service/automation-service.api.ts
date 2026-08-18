@@ -20,7 +20,7 @@ import type {
   GitSyncStatus,
   GitSyncTriggerResponse,
 } from "#/types/git-sync";
-import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
+import { automationCreateEndpoint } from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
   getAutomationIdEndpoint,
@@ -587,7 +587,7 @@ class AutomationService {
     body: SetupRequestBody,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${AUTOMATION_CREATE_ENDPOINT}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint()}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
