@@ -148,6 +148,7 @@ export function useSetupPreflight(entry: SetupEntry) {
   const targetKey = JSON.stringify([
     backend.id,
     backend.kind,
+    backend.host,
     backend.connectionRevision ?? 0,
     orgId,
   ]);

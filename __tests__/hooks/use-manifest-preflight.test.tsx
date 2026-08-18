@@ -475,6 +475,37 @@ describe("useSetupPreflight", () => {
     await expect(pending).resolves.toEqual({ status: "stale" });
   });
 
+  it("marks an in-flight response stale when a legacy target changes host", async () => {
+    // Arrange - older persisted backends may not have a connection revision.
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { result, rerender } = renderHook(() => useSetupPreflight(ENTRY));
+    const pending = result.current.runPreflight(VALUES);
+
+    // Act - editing the host changes the destination even when the optional
+    // revision field is absent and id/kind/org remain unchanged.
+    activeBackendState.value = {
+      backend: {
+        id: "local-test",
+        name: "Local test",
+        host: "http://other-localhost:3000",
+        apiKey: "session-key",
+        kind: "local",
+      },
+      orgId: null,
+    };
+    rerender();
+    resolve({ valid: true, errors: [] });
+
+    // Assert
+    await expect(pending).resolves.toEqual({ status: "stale" });
+  });
+
   it("keeps distinct backend targets separate when their text contains delimiters", async () => {
     let resolve!: (value: { valid: true; errors: never[] }) => void;
     vi.mocked(AutomationService.validateDraft).mockImplementation(
