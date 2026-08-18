@@ -237,5 +237,39 @@ describe("useUrlSearch", () => {
         expect(result.current.urlSearchResults).toEqual([]);
       });
     });
+
+    it("should clear prior results when an HTTPS URL does not match repo pattern", async () => {
+      mockSearchGitRepositories.mockResolvedValue({
+        items: [
+          { id: "1", full_name: "owner/repo", git_provider: "github", is_public: true },
+        ],
+        next_page_id: null,
+      });
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toHaveLength(1);
+      });
+
+      rerender({
+        inputValue: "https://example.com/",
+        provider: "github" as const,
+      });
+
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toEqual([]);
+      });
+
+      expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+    });
   });
 });
