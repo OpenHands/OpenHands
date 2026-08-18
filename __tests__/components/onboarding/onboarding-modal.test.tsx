@@ -735,6 +735,12 @@ describe("OnboardingModal", () => {
     const scrollArea = screen.getByTestId("onboarding-scroll-area");
     const rail = screen.getByTestId("onboarding-slide-rail");
     expect(scrollArea.contains(rail)).toBe(true);
+    // Bottom padding matches the header (`pt-7`) so the last control is
+    // not flush against the modal edge. The region must size to its
+    // content (`min-h-0` + overflow, no `flex-1`) so a content-fitting
+    // step does not paint a leftover scrollbar.
+    expect(scrollArea).toHaveClass("pb-7");
+    expect(scrollArea).not.toHaveClass("flex-1");
   });
 
   it("keeps the LLM step heading and Back/Next outside the scrollable settings body", async () => {
