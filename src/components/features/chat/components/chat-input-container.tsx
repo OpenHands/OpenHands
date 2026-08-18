@@ -16,6 +16,7 @@ interface ChatInputContainerProps {
   hasStartedConversation?: boolean;
   isNewConversationPending?: boolean;
   showButton: boolean;
+  placeholder?: string;
   buttonClassName: string;
   chatInputRef: React.RefObject<HTMLDivElement | null>;
   handleFileIconClick: (isDisabled: boolean) => void;
@@ -42,6 +43,7 @@ export function ChatInputContainer({
   hasStartedConversation,
   isNewConversationPending = false,
   showButton,
+  placeholder,
   buttonClassName,
   chatInputRef,
   handleFileIconClick,
@@ -93,6 +95,7 @@ export function ChatInputContainer({
         <ChatInputRow
           chatInputRef={chatInputRef}
           isNewConversationPending={isNewConversationPending}
+          placeholder={placeholder}
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}
