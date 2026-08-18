@@ -6,6 +6,11 @@
  * It chooses between the two outcomes this host offers, and it chooses by
  * declaring a `mode`: a direct entry produces a create request the host derives,
  * an assisted entry hands setup to a conversation.
+ *
+ * A direct entry that ships a bundle takes one more step before that create
+ * request - packing and uploading the archive - but it still names no host, no
+ * path and no method: the endpoints come from the interface manifest and the
+ * files from the published package.
  */
 
 import { useCallback } from "react";
@@ -16,7 +21,12 @@ import {
   setConversationState,
   setPendingTaskDraft,
 } from "#/utils/conversation-local-storage";
-import { buildAssistedMessage } from "./automation-setup";
+import {
+  buildAssistedMessage,
+  buildCreatePayload,
+  isBundleEntry,
+} from "./automation-setup";
+import { packBundle } from "./manifest-bundle";
 import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
 
 export interface SetupActionResult {
@@ -63,7 +73,28 @@ export function useSetupAction() {
       if (!payload) {
         return startConversation(buildAssistedMessage(entry, values));
       }
-      const response = await AutomationService.createAutomationDraft(payload);
+
+      // A bundle entry ships a script rather than a prompt, so what it creates
+      // from is an archive: pack it with the rendered config, upload it, and
+      // create against the path that came back. The payload built for the form
+      // carries a stand-in path, which is replaced here with the real one.
+      if (isBundleEntry(entry)) {
+        const archive = await packBundle(entry, values);
+        const tarballPath = await AutomationService.uploadAutomationTarball(
+          entry.id,
+          archive,
+        );
+        const body = buildCreatePayload(entry, values, tarballPath);
+        if (!body) throw new Error(`'${entry.id}' produced no create request.`);
+        return {
+          response: await AutomationService.createAutomationDraft(body, entry),
+        };
+      }
+
+      const response = await AutomationService.createAutomationDraft(
+        payload,
+        entry,
+      );
       return { response };
     },
     [startConversation],

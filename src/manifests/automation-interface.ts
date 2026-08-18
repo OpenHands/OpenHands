@@ -117,8 +117,13 @@ export function automationTemplatesPath(): string {
   return MOUNTED_ROUTES.templates;
 }
 
+/**
+ * A declared endpoint path. Empty for one the manifest may omit - the two a
+ * bundle needs were added after the block shipped - so a caller that needs one
+ * says so rather than reading a host-held default that does not exist.
+ */
 export function getAutomationEndpoint(name: InterfaceEndpointName): string {
-  return requireInterface().endpoints[name];
+  return requireInterface().endpoints[name] ?? "";
 }
 
 /** An id-parameterized endpoint with `{id}` substituted, encoded. */

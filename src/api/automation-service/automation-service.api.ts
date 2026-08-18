@@ -20,7 +20,10 @@ import type {
   GitSyncStatus,
   GitSyncTriggerResponse,
 } from "#/types/git-sync";
-import { automationCreateEndpoint } from "#/manifests/automation-setup";
+import {
+  automationCreateEndpoint,
+  automationUploadEndpoint,
+} from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
   getAutomationIdEndpoint,
@@ -28,6 +31,7 @@ import {
 } from "#/manifests/automation-interface";
 import type {
   DeploymentCapabilities,
+  SetupEntry,
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
@@ -585,9 +589,11 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
+    /** The entry the draft came from, which decides the create endpoint. */
+    entry?: SetupEntry,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint()}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
@@ -604,6 +610,48 @@ class AutomationService {
       body,
     );
     return data;
+  }
+
+  /**
+   * Upload a packed bundle, and return the `oh-internal://` path the create
+   * call references.
+   *
+   * The body is the archive itself rather than a multipart form - the service
+   * streams it and takes its metadata from the query string, so it never has
+   * to buffer the whole file to start writing.
+   */
+  static async uploadAutomationTarball(
+    name: string,
+    archive: Uint8Array,
+  ): Promise<string> {
+    const active = getActiveBackend().backend;
+    const path =
+      `${AUTOMATION_BASE_PATH}${automationUploadEndpoint()}` +
+      `?name=${encodeURIComponent(name)}`;
+    const headers = { "Content-Type": "application/gzip" };
+
+    const upload =
+      active.kind === "cloud"
+        ? await callCloudProxy<Record<string, unknown>>({
+            backend: active,
+            method: "POST",
+            path,
+            body: archive,
+            headers: { ...(await buildAutomationRequestHeaders()), ...headers },
+          })
+        : (
+            await localAutomationAxios.post<Record<string, unknown>>(
+              path,
+              archive,
+              { headers },
+            )
+          ).data;
+
+    const tarballPath = upload.tarball_path;
+    if (typeof tarballPath !== "string" || !tarballPath) {
+      throw new Error("The upload returned no tarball path.");
+    }
+    return tarballPath;
   }
 
   // Git sync paths are literal rather than routed through

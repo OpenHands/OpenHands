@@ -48,6 +48,8 @@ interface FixtureScenario {
   id: string;
   formValues?: SetupFormValues;
   localValidation?: { valid: boolean };
+  /** Bundle entries only: where the packed archive landed. */
+  upload?: { response: { body: { tarball_path: string } } };
   preflight?: FixtureExchange;
   create?: FixtureExchange;
   conversation?: { request: { action: string; message: string } };
@@ -93,6 +95,8 @@ const CREATE_CASES = BUNDLES.flatMap((bundle) =>
             automationId: bundle.automationId,
             formValues: scenario.formValues ?? {},
             body: scenario.create.request.body,
+            // A prompt entry records none; buildCreatePayload ignores it.
+            tarballPath: scenario.upload?.response.body.tarball_path,
           },
         ]
       : [],
@@ -177,11 +181,16 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
+    // A prompt entry is created through the preset endpoint and a bundle entry
+    // through the raw one, so both appear across the published fixtures.
     expect({
-      create: [...createPaths],
+      create: [...createPaths].sort(),
       preflight: [...preflightPaths],
     }).toEqual({
-      create: [automationCreateEndpoint()],
+      create: [
+        automationCreateEndpoint(requireEntry("github-pr-reviewer")),
+        automationCreateEndpoint(),
+      ].sort(),
       preflight: ["/v1/validate"],
     });
   });
@@ -190,12 +199,14 @@ describe("the contract fixtures", () => {
 describe("buildCreatePayload", () => {
   it.each(CREATE_CASES)(
     "derives the $name create body its fixture pins",
-    ({ automationId, formValues, body }) => {
+    ({ automationId, formValues, body, tarballPath }) => {
       // Arrange
       const entry = requireEntry(automationId);
 
       // Act
-      const payload = buildCreatePayload(entry, formValues);
+      const payload = tarballPath
+        ? buildCreatePayload(entry, formValues, tarballPath)
+        : buildCreatePayload(entry, formValues);
 
       // Assert
       expect(payload).toEqual(body);
@@ -261,7 +272,10 @@ describe("service rejections mapped back to fields", () => {
       );
 
       // Assert
-      expect(mapped).toEqual({ fieldErrors: expectedFieldErrors, formErrors: [] });
+      expect(mapped).toEqual({
+        fieldErrors: expectedFieldErrors,
+        formErrors: [],
+      });
     },
   );
 });
@@ -306,10 +320,11 @@ describe("deriveErrorMap", () => {
     // Assert
     expect(errorMap).toEqual({
       name: ["repository"],
-      prompt: ["triggerLabel", "repository", "reviewTone"],
-      "repos[0].url": ["repository"],
       "trigger.schedule": ["schedule"],
       "trigger.timezone": ["timezone"],
+      "template.config.repos[0]": ["repository"],
+      "template.config.trigger_label": ["triggerLabel"],
+      "template.config.review_tone": ["reviewTone"],
     });
   });
 });

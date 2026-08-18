@@ -67,12 +67,46 @@ export interface SetupForm {
   args: SetupFormFields;
 }
 
+/** A config.json leaf: templated string, number, boolean, null, or a nesting. */
+export type SetupBundleConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SetupBundleConfigValue[]
+  | { [key: string]: SetupBundleConfigValue };
+
+/**
+ * The script tarball a direct entry may ship instead of a prompt, for an
+ * automation that is deterministic machinery rather than judgement.
+ *
+ * `files` maps a path inside the archive to the repository path the extensions
+ * package read it from; the contents themselves come from that package's
+ * `getAutomationBundleFiles`, because this host has the package and not the
+ * repository.
+ */
+export interface SetupBundle {
+  /** Provenance recorded on the created automation, alongside the entry id. */
+  version: string;
+  /** The command the service runs inside the extracted tarball. */
+  entrypoint: string;
+  /** Script run once before the entrypoint. Absent when nothing to install. */
+  setupScript?: string;
+  /** Seconds a run may take, when the service default is not enough. */
+  timeout?: number;
+  files: Record<string, string>;
+  /** Rendered from the form and packed as config.json. */
+  config: Record<string, SetupBundleConfigValue>;
+}
+
 export interface SetupBlock {
   version: typeof SETUP_VERSION;
   mode: SetupMode;
   form: SetupForm;
   /** direct only. What the automation is told to do. */
   prompt?: string;
+  /** direct only, and the alternative to `prompt`. Exactly one is present. */
+  bundle?: SetupBundle;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
   /**
@@ -218,6 +252,13 @@ export interface InterfaceEndpoints {
   validate: string;
   createPrompt: string;
   createPlugin: string;
+  /**
+   * The raw create endpoint, which a bundle entry is created through, and
+   * where its tarball is uploaded first. Optional: a manifest published before
+   * bundles existed declares neither, and is still admitted.
+   */
+  createBundle?: string;
+  uploads?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;

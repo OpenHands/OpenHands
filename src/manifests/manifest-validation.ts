@@ -23,6 +23,13 @@ const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 /** Every `{{` must open a known namespace and close immediately. */
+const BUNDLE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+// A command of plain words and paths. No shell metacharacters, which the
+// service rejects anyway and a bundle has no reason to need.
+const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
+const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+const BUNDLE_SOURCE_PATTERN =
+  /^(skills|automations)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const UNKNOWN_PLACEHOLDER_PATTERN = new RegExp(
   `\\{\\{(?!(?:${SETUP_PLACEHOLDER_NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+\\}\\})`,
 );
@@ -115,6 +122,21 @@ class SetupChecker {
     if (key in container) return this.fail(`${path}.${key}`, reason);
     return true;
   }
+}
+
+/**
+ * A relative path that stays inside the archive it names.
+ *
+ * The character class alone is not enough: `.` and `..` are made of allowed
+ * characters, so a segment check is what actually keeps a packed file from
+ * climbing out of the directory it is extracted into.
+ */
+function isRelativePath(value: unknown, pattern: RegExp): value is string {
+  return (
+    typeof value === "string" &&
+    pattern.test(value) &&
+    !value.split("/").some((segment) => segment === "." || segment === "..")
+  );
 }
 
 function checkRequires(check: SetupChecker, requires: unknown): void {
@@ -321,6 +343,95 @@ function checkMessage(check: SetupChecker, message: unknown): void {
   }
 }
 
+/**
+ * The script tarball a direct entry may ship.
+ *
+ * The strings here are commands and paths this host acts on, so they are held
+ * to a closed character set rather than the placeholder rules copy uses: an
+ * entrypoint with a shell metacharacter, or a packed path that escapes the
+ * archive, is refused here rather than by the service.
+ */
+function checkBundle(check: SetupChecker, bundle: unknown): void {
+  if (!isRecord(bundle)) {
+    check.fail("setup.bundle", "must be an object");
+    return;
+  }
+
+  if (
+    typeof bundle.version !== "string" ||
+    !BUNDLE_VERSION_PATTERN.test(bundle.version)
+  ) {
+    check.fail("setup.bundle.version", "must be a semantic version");
+  }
+  if (
+    typeof bundle.entrypoint !== "string" ||
+    !BUNDLE_COMMAND_PATTERN.test(bundle.entrypoint)
+  ) {
+    check.fail("setup.bundle.entrypoint", "must be a plain command");
+  }
+  if (
+    bundle.setupScript !== undefined &&
+    !isRelativePath(bundle.setupScript, BUNDLE_PATH_PATTERN)
+  ) {
+    check.fail("setup.bundle.setupScript", "must be a relative path");
+  }
+  if (bundle.timeout !== undefined && !isInteger(bundle.timeout, 1)) {
+    check.fail("setup.bundle.timeout", "must be a positive integer");
+  }
+
+  if (!isRecord(bundle.files) || Object.keys(bundle.files).length === 0) {
+    check.fail("setup.bundle.files", "must be a non-empty object");
+  } else {
+    Object.entries(bundle.files).forEach(([packedPath, source]) => {
+      if (!isRelativePath(packedPath, BUNDLE_PATH_PATTERN)) {
+        check.fail(`setup.bundle.files.${packedPath}`, "is not a packed path");
+      }
+      if (!isRelativePath(source, BUNDLE_SOURCE_PATTERN)) {
+        check.fail(
+          `setup.bundle.files.${packedPath}`,
+          "must name a file under skills/ or automations/",
+        );
+      }
+    });
+  }
+
+  if (!isRecord(bundle.config) || Object.keys(bundle.config).length === 0) {
+    check.fail("setup.bundle.config", "must be a non-empty object");
+  } else {
+    checkBundleConfig(check, bundle.config, "setup.bundle.config");
+  }
+}
+
+/** Every string leaf of the config is a payload value: placeholders, no markup rule. */
+function checkBundleConfig(
+  check: SetupChecker,
+  node: unknown,
+  path: string,
+): void {
+  if (typeof node === "string") {
+    check.templateValue(node, path);
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((item, index) =>
+      checkBundleConfig(check, item, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (isRecord(node)) {
+    Object.entries(node).forEach(([key, value]) =>
+      checkBundleConfig(check, value, `${path}.${key}`),
+    );
+    return;
+  }
+  if (node !== null && typeof node !== "number" && typeof node !== "boolean") {
+    check.fail(
+      path,
+      "must be a string, number, boolean, null, array or object",
+    );
+  }
+}
+
 function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   if (!isOneOf(setup.mode, SETUP_MODES)) {
     check.fail("setup.mode", "is not a supported mode");
@@ -328,7 +439,21 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   }
 
   if (setup.mode === "direct") {
-    check.templateValue(setup.prompt, "setup.prompt");
+    // A direct entry produces one of two things: a prompt, or a script bundle
+    // the host packs and uploads. Both would be ambiguous, neither is nothing
+    // to create.
+    const hasPrompt = setup.prompt !== undefined;
+    const hasBundle = setup.bundle !== undefined;
+    if (hasPrompt === hasBundle) {
+      check.fail(
+        "setup",
+        "must declare exactly one of prompt or bundle for direct setup",
+      );
+    } else if (hasBundle) {
+      checkBundle(check, setup.bundle);
+    } else {
+      check.templateValue(setup.prompt, "setup.prompt");
+    }
     // A direct entry may carry a fallback-conversation seed for deployments
     // that cannot run the direct path, held to the same rules as an assisted
     // message.
@@ -360,6 +485,7 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
 
   checkMessage(check, setup.message);
   check.absent(setup, "prompt", "setup", "is only allowed for direct setup");
+  check.absent(setup, "bundle", "setup", "is only allowed for direct setup");
   check.absent(setup, "filter", "setup", "is only allowed for direct setup");
 }
 
