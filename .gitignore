@@ -3,6 +3,10 @@ public/locales/**/*
 src/i18n/declaration.ts
 .env
 .envrc
+
+# OS metadata files
+.DS_Store
+**/.DS_Store
 node_modules/
 build/
 logs/
