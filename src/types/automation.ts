@@ -21,12 +21,38 @@ export interface AutomationTrigger {
   filter?: string;
 }
 
+/** A single repository to clone, as sent to and echoed back by the backend. */
+export interface AutomationRepoSource {
+  url: string;
+  /** Branch, tag, or commit SHA to checkout. Omitted means the default branch. */
+  ref?: string;
+  provider?: "github" | "gitlab" | "bitbucket";
+}
+
+/**
+ * Opaque provenance the backend stores verbatim under `preset_metadata`.
+ * Only the keys the UI actually reads are typed here; the backend may store
+ * more (e.g. `template`) that this UI does not surface.
+ */
+export interface AutomationPresetMetadata {
+  /** Repos cloned for this automation. Absent/empty means none configured. */
+  repos?: AutomationRepoSource[];
+  /** Plugin identifiers baked into the tarball, for plugin-based automations. */
+  plugins?: string[];
+}
+
 export interface Automation {
   id: string;
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /**
+   * Single-repo display fields kept for backward compatibility with
+   * automations created before multi-repo support. Prefer
+   * `preset_metadata.repos` when present — it carries the full repo list.
+   */
   repository?: string;
+  branch?: string;
   /** LLM/model profile name used for automation runs. */
   model?: string | null;
   /**
@@ -34,13 +60,19 @@ export interface Automation {
    * (600s, 10 min); the deployment reports the maximum it accepts.
    */
   timeout?: number | null;
+  /**
+   * If true, the sandbox is left for runtime TTL cleanup after the run
+   * finishes instead of being torn down immediately. `null`/omitted means
+   * explicit cleanup (the server default).
+   */
+  keep_alive?: boolean | null;
+  /** Repo/template/plugin provenance recorded at creation time. */
+  preset_metadata?: AutomationPresetMetadata | null;
 
   created_at: string;
   updated_at: string;
   prompt: string | null;
-  branch?: string;
   plugins?: string[];
-  notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
 }
@@ -74,6 +106,12 @@ export enum AutomationRunStatus {
 
 export interface AutomationRun {
   id: string;
+  /**
+   * ID of the automation this run belongs to. Optional: list-by-automation
+   * responses are already scoped to one automation and some older backend
+   * versions omit it there.
+   */
+  automation_id?: string;
   status: AutomationRunStatus;
   conversation_id: string | null;
   /**
@@ -84,6 +122,8 @@ export interface AutomationRun {
    * dispatched (e.g. sandbox provisioning errors).
    */
   bash_command_id: string | null;
+  /** ID of the sandbox the run executed in. Null before one is provisioned. */
+  sandbox_id?: string | null;
   error_detail: string | null;
   /**
    * Accumulated LLM cost of the run in USD, reported by the SDK in the
@@ -93,8 +133,12 @@ export interface AutomationRun {
    * that added the field, hence optional.
    */
   cost?: number | null;
+  /** When the run was created (queued). Optional for older backends. */
+  created_at?: string;
   started_at: string;
   completed_at: string | null;
+  /** Deadline the run must complete by. Null when the automation has no timeout. */
+  timeout_at?: string | null;
 }
 
 export interface AutomationRunsResponse {

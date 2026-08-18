@@ -34,6 +34,11 @@ export default [
     route("automations", "routes/automations-list.tsx"),
     route("automations/git-sync", "routes/automation-git-sync.tsx"),
     route("automations/templates", "routes/automation-templates.tsx"),
+    route("automations/webhooks", "routes/automation-webhooks.tsx"),
+    route(
+      "automations/new/experiment",
+      "routes/automation-experiment-setup.tsx",
+    ),
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
   ]),

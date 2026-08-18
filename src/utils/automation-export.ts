@@ -163,7 +163,7 @@ export function serializeAutomation(a: Automation): AutomationExportFile {
     ...(a.timeout != null && { timeout: a.timeout }),
     ...(a.branch !== undefined && { branch: a.branch }),
     ...(a.plugins !== undefined && { plugins: [...a.plugins] }),
-    ...(a.notification !== undefined && { notification: a.notification }),
+    ...(a.keep_alive != null && { keep_alive: a.keep_alive }),
     ...(timezone !== undefined && { timezone }),
   };
 
@@ -226,12 +226,6 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     "spec.branch",
     issues,
   );
-  const notification = validateOptionalString(
-    json.spec,
-    "notification",
-    "spec.notification",
-    issues,
-  );
   const timezone = validateOptionalString(
     json.spec,
     "timezone",
@@ -278,6 +272,15 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     }
   }
 
+  let keepAlive: boolean | undefined;
+  if (json.spec.keep_alive !== undefined) {
+    if (typeof json.spec.keep_alive === "boolean") {
+      keepAlive = json.spec.keep_alive;
+    } else {
+      issues.push("spec.keep_alive: expected a boolean");
+    }
+  }
+
   if (issues.length > 0 || !name || !prompt || !trigger) {
     throw new AutomationFileValidationError(issues);
   }
@@ -292,7 +295,7 @@ export function parseAutomationFile(json: unknown): AutomationSpec {
     ...(timeout !== undefined && { timeout }),
     ...(branch !== undefined && { branch }),
     ...(plugins !== undefined && { plugins }),
-    ...(notification !== undefined && { notification }),
+    ...(keepAlive !== undefined && { keep_alive: keepAlive }),
     ...(timezone !== undefined && { timezone }),
   };
 }

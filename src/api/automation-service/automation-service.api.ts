@@ -20,6 +20,15 @@ import type {
   GitSyncStatus,
   GitSyncTriggerResponse,
 } from "#/types/git-sync";
+import type {
+  CreateWebhookRequest,
+  CustomWebhook,
+  CustomWebhookCreateResponse,
+  CustomWebhookListResponse,
+  CustomWebhookSecretResponse,
+  UpdateWebhookRequest,
+} from "#/types/webhook";
+import type { CreateExperimentAutomationRequest } from "#/types/experiment";
 import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
@@ -459,6 +468,38 @@ class AutomationService {
     return data;
   }
 
+  /**
+   * Create a plugin automation with A/B experiment variants.
+   *
+   * Posts directly to `/v1/preset/plugin` (the same endpoint
+   * `createAutomation` uses for import), bypassing the extension-owned
+   * setup-catalog system entirely: that system's `SetupFieldType` union
+   * (text/textarea/select/cron/timezone/repo-picker, versioned in
+   * `@openhands/extensions`) has no field kind for a repeated variant list,
+   * so extending it would require a schema change in that separate repo.
+   * This gives experiment creation a real, working path without waiting on
+   * that.
+   */
+  static async createExperimentAutomation(
+    body: CreateExperimentAutomationRequest,
+  ): Promise<Automation> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/preset/plugin`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<Automation>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as unknown as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<Automation>(path, body);
+    return data;
+  }
+
   static async listAutomationRuns(
     id: string,
     params: { limit?: number; offset?: number } = {},
@@ -687,6 +728,117 @@ class AutomationService {
 
     const { data } =
       await localAutomationAxios.post<GitSyncTriggerResponse>(path);
+    return data;
+  }
+
+  // Webhook management paths are literal for the same reason git-sync's are:
+  // custom webhook sources are org-scoped infrastructure, not part of the
+  // per-automation `InterfaceEndpoints` manifest surface.
+
+  static async listWebhooks(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<CustomWebhookListResponse> {
+    const { limit = 50, offset = 0 } = params;
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookListResponse>({
+        backend: active,
+        method: "GET",
+        path: `${path}?${buildPaginationQuery(limit, offset)}`,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<CustomWebhookListResponse>(
+      path,
+      {
+        params: { limit, offset },
+      },
+    );
+    return data;
+  }
+
+  static async createWebhook(
+    body: CreateWebhookRequest,
+  ): Promise<CustomWebhookCreateResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookCreateResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as unknown as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<CustomWebhookCreateResponse>(path, body);
+    return data;
+  }
+
+  static async updateWebhook(
+    id: string,
+    body: UpdateWebhookRequest,
+  ): Promise<CustomWebhook> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhook>({
+        backend: active,
+        method: "PATCH",
+        path,
+        body: body as unknown as Record<string, unknown>,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } = await localAutomationAxios.patch<CustomWebhook>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  static async deleteWebhook(id: string): Promise<void> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks/${encodeURIComponent(id)}`;
+
+    if (active.kind === "cloud") {
+      await callCloudProxy<unknown>({
+        backend: active,
+        method: "DELETE",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+      return;
+    }
+
+    await localAutomationAxios.delete(path);
+  }
+
+  static async rotateWebhookSecret(
+    id: string,
+  ): Promise<CustomWebhookSecretResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/webhooks/${encodeURIComponent(id)}/rotate-secret`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<CustomWebhookSecretResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        headers: await buildAutomationRequestHeaders(),
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<CustomWebhookSecretResponse>(path);
     return data;
   }
 

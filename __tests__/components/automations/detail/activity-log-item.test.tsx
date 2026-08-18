@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
 import {
   AutomationRunStatus,
+  type Automation,
   type AutomationRun,
 } from "#/types/automation";
 import {
@@ -16,6 +17,18 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
+import AutomationService from "#/api/automation-service/automation-service.api";
+
+vi.mock("#/api/automation-service/automation-service.api", () => ({
+  default: {
+    cancelAutomationRun: vi.fn(),
+  },
+}));
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displaySuccessToast: vi.fn(),
+  displayErrorToast: vi.fn(),
+}));
 
 // In tests the i18n backend doesn't resolve translation values, so the
 // aria-label resolves to the raw key string. Match it explicitly.
@@ -25,27 +38,24 @@ const LOGS_BUTTON_NAME = (name: string) =>
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
 // they don't need to bring up the entire query stack.
-vi.mock(
-  "#/components/features/automations/detail/run-logs-modal",
-  () => ({
-    RunLogsModal: ({
-      isOpen,
-      onClose,
-      bashCommandId,
-    }: {
-      isOpen: boolean;
-      onClose: () => void;
-      bashCommandId: string | null;
-    }) =>
-      isOpen ? (
-        <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </div>
-      ) : null,
-  }),
-);
+vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
+  RunLogsModal: ({
+    isOpen,
+    onClose,
+    bashCommandId,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    bashCommandId: string | null;
+  }) =>
+    isOpen ? (
+      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+        <button type="button" onClick={onClose}>
+          close
+        </button>
+      </div>
+    ) : null,
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -68,7 +78,7 @@ function makeRun(overrides: Partial<AutomationRun> = {}): AutomationRun {
   };
 }
 
-function renderItem(run: AutomationRun) {
+function renderItem(run: AutomationRun, automation?: Automation) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -76,12 +86,22 @@ function renderItem(run: AutomationRun) {
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
         <MemoryRouter>
-          <ActivityLogItem run={run} />
+          <ActivityLogItem run={run} automation={automation} />
         </MemoryRouter>
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
 }
+
+const testAutomation: Automation = {
+  id: "automation-1",
+  name: "Test Automation",
+  trigger: { type: "cron", schedule: "0 9 * * *" },
+  enabled: true,
+  prompt: "hi",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
 
 describe("ActivityLogItem — logs button", () => {
   beforeEach(() => {
@@ -286,5 +306,111 @@ describe("ActivityLogItem — run cost", () => {
     expect(
       screen.queryByText((content) => content.startsWith("$")),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — cancel in-flight run", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+    vi.mocked(AutomationService.cancelAutomationRun).mockReset();
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it.each([AutomationRunStatus.PENDING, AutomationRunStatus.RUNNING])(
+    "shows a cancel button for a %s run when an automation is provided",
+    (status) => {
+      const run = makeRun({ status });
+      renderItem(run, testAutomation);
+
+      expect(screen.getByTestId("cancel-run-button")).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    AutomationRunStatus.COMPLETED,
+    AutomationRunStatus.FAILED,
+    AutomationRunStatus.CANCELLED,
+    AutomationRunStatus.SKIPPED,
+  ])("hides the cancel button for a terminal %s run", (status) => {
+    const run = makeRun({ status });
+    renderItem(run, testAutomation);
+
+    expect(screen.queryByTestId("cancel-run-button")).not.toBeInTheDocument();
+  });
+
+  it("hides the cancel button when no automation is provided, even for an in-flight run", () => {
+    const run = makeRun({ status: AutomationRunStatus.RUNNING });
+    renderItem(run);
+
+    expect(screen.queryByTestId("cancel-run-button")).not.toBeInTheDocument();
+  });
+
+  it("calls cancelAutomationRun with the automation and run id, without navigating the row link", async () => {
+    vi.mocked(AutomationService.cancelAutomationRun).mockResolvedValue(
+      makeRun({ status: AutomationRunStatus.CANCELLED }),
+    );
+    const run = makeRun({
+      id: "run-to-cancel",
+      status: AutomationRunStatus.RUNNING,
+      conversation_id: "conv-should-not-navigate",
+    });
+    renderItem(run, testAutomation);
+
+    fireEvent.click(screen.getByTestId("cancel-run-button"));
+
+    await waitFor(() => {
+      expect(AutomationService.cancelAutomationRun).toHaveBeenCalledWith(
+        "run-to-cancel",
+      );
+    });
+  });
+});
+
+describe("ActivityLogItem — inline error detail", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows the error detail inline for a failed run", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      error_detail: "sandbox provisioning timed out",
+    });
+    renderItem(run);
+
+    expect(screen.getByTestId("run-error-detail")).toHaveTextContent(
+      "sandbox provisioning timed out",
+    );
+  });
+
+  it("does not show an error line for a failed run with no error_detail", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      error_detail: null,
+    });
+    renderItem(run);
+
+    expect(screen.queryByTestId("run-error-detail")).not.toBeInTheDocument();
+  });
+
+  it("does not show an error line for a completed run even if error_detail is set", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      error_detail: "stale field from a prior state",
+    });
+    renderItem(run);
+
+    expect(screen.queryByTestId("run-error-detail")).not.toBeInTheDocument();
   });
 });

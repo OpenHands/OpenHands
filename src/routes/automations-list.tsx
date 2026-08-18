@@ -23,6 +23,7 @@ import {
   useImportAutomation,
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
+import { useDeploymentCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
@@ -114,6 +115,10 @@ export default function AutomationsList() {
   // Edit is a local-backend-only feature in MVP — cloud automations
   // are managed elsewhere and we don't yet surface them here.
   const canEdit = active.backend.kind === "local";
+  const { data: capabilities } = useDeploymentCapabilities();
+  const supportedFeatures = capabilities?.features ?? [];
+  const supportsWebhooks = supportedFeatures.includes("webhookDelivery");
+  const supportsExperiments = supportedFeatures.includes("presetPlugin");
 
   const {
     data: healthData,
@@ -384,6 +389,28 @@ export default function AutomationsList() {
               startContent={<RefreshCw className="size-4" aria-hidden />}
             >
               {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
+            </BrandButton>
+          )}
+          {supportsWebhooks && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-webhooks"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/webhooks")}
+            >
+              {t(I18nKey.AUTOMATIONS$WEBHOOKS$NAV_BUTTON)}
+            </BrandButton>
+          )}
+          {supportsExperiments && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-new-experiment"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/new/experiment")}
+            >
+              {t(I18nKey.AUTOMATIONS$EXPERIMENT$NAV_BUTTON)}
             </BrandButton>
           )}
           <BrandButton

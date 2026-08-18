@@ -144,6 +144,25 @@ export function RunLogsModal({
           {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
         </h2>
 
+        {run && (run.sandbox_id || run.timeout_at) && (
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
+            {run.sandbox_id && (
+              <div className="flex items-center gap-1.5">
+                <dt>{t(I18nKey.AUTOMATIONS$DETAIL$SANDBOX_ID)}:</dt>
+                <dd className="font-mono text-content-2">{run.sandbox_id}</dd>
+              </div>
+            )}
+            {run.timeout_at && (
+              <div className="flex items-center gap-1.5">
+                <dt>{t(I18nKey.AUTOMATIONS$DETAIL$RUN_DEADLINE)}:</dt>
+                <dd className="text-content-2">
+                  {new Date(run.timeout_at).toLocaleString()}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+
         <div
           role="tablist"
           aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}

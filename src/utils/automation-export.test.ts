@@ -20,7 +20,7 @@ const cronAutomation: Automation = {
   model: "fast",
   prompt: "Review open pull requests.",
   plugins: ["github:openhands/extensions"],
-  notification: "Post a summary",
+  keep_alive: true,
   timezone: "America/Los_Angeles",
   created_at: "2026-07-01T00:00:00Z",
   updated_at: "2026-07-02T00:00:00Z",
@@ -43,7 +43,7 @@ describe("automation export files", () => {
         prompt: cronAutomation.prompt,
         branch: cronAutomation.branch,
         plugins: cronAutomation.plugins,
-        notification: cronAutomation.notification,
+        keep_alive: cronAutomation.keep_alive,
         timezone: cronAutomation.timezone,
       },
     });

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { XCircle } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import TerminalIcon from "#/icons/terminal.svg?react";
 import {
@@ -7,8 +8,22 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { useCancelAutomationRun } from "#/hooks/query/use-automations";
+import { useHasPermission } from "#/hooks/use-has-permission";
+import { getApiErrorMessage } from "#/utils/api-error-message";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunLogsModal } from "./run-logs-modal";
+
+function isInFlight(status: AutomationRunStatus): boolean {
+  return (
+    status === AutomationRunStatus.PENDING ||
+    status === AutomationRunStatus.RUNNING
+  );
+}
 
 interface ActivityLogItemProps {
   run: AutomationRun;
@@ -53,6 +68,8 @@ function formatRunCost(cost: number | null | undefined): string | null {
 
 export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
   const { t, i18n } = useTranslation("openhands");
+  const canManage = useHasPermission("manage_automations");
+  const cancelMutation = useCancelAutomationRun();
   const hasConversation = !!run.conversation_id;
   const hasBashCommand = !!run.bash_command_id;
   // Only surface "Conversation not created" when the run has reached a
@@ -106,17 +123,72 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     </button>
   ) : null;
 
+  const canCancel = !!automation && canManage && isInFlight(run.status);
+  const isCancelPending =
+    cancelMutation.isPending && cancelMutation.variables?.runId === run.id;
+
+  const handleCancelClick = (
+    e:
+      | React.MouseEvent<HTMLButtonElement>
+      | React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!automation) return;
+    cancelMutation.mutate(
+      { automationId: automation.id, runId: run.id },
+      {
+        onSuccess: () => {
+          displaySuccessToast(t(I18nKey.AUTOMATIONS$CANCEL_RUN_SUCCESS));
+        },
+        onError: (error) => {
+          displayErrorToast(
+            getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$CANCEL_RUN_ERROR)),
+          );
+        },
+      },
+    );
+  };
+
+  const cancelButton = canCancel ? (
+    <button
+      type="button"
+      data-testid="cancel-run-button"
+      onClick={handleCancelClick}
+      disabled={isCancelPending}
+      className="rounded-md p-1 text-muted hover:bg-surface-raised hover:text-red-500 focus:bg-surface-raised focus:outline-none disabled:opacity-50"
+      aria-label={t(I18nKey.AUTOMATIONS$CANCEL_RUN)}
+      title={t(I18nKey.AUTOMATIONS$CANCEL_RUN)}
+    >
+      <XCircle className="size-4" />
+    </button>
+  ) : null;
+
+  const showInlineError =
+    run.status === AutomationRunStatus.FAILED && !!run.error_detail;
+
   const content = (
     <>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-content">{formattedTimestamp}</span>
-        {showNoConversationLabel && (
-          <span className="text-xs text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-content">{formattedTimestamp}</span>
+          {showNoConversationLabel && (
+            <span className="text-xs text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+            </span>
+          )}
+        </div>
+        {showInlineError && (
+          <span
+            data-testid="run-error-detail"
+            className="truncate text-xs text-red-500"
+            title={run.error_detail ?? undefined}
+          >
+            {run.error_detail}
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {formattedCost && (
           <span
             data-testid="run-cost"
@@ -126,6 +198,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
             {formattedCost}
           </span>
         )}
+        {cancelButton}
         {logsButton}
         <RunStatusBadge status={run.status} />
       </div>

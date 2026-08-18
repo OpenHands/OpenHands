@@ -1,8 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConfigurationSection } from "#/components/features/automations/detail/configuration-section";
 import type { Automation } from "#/types/automation";
+
+function renderSection(automation: Automation) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <ConfigurationSection automation={automation} />
+    </QueryClientProvider>,
+  );
+}
 
 const cronAutomation: Automation = {
   id: "auto-1",
@@ -53,7 +65,7 @@ const eventMultiPatternAutomation: Automation = {
 
 describe("ConfigurationSection", () => {
   it("renders cron trigger with schedule", () => {
-    render(<ConfigurationSection automation={cronAutomation} />);
+    renderSection(cronAutomation);
 
     // t() returns the key in tests
     expect(
@@ -65,7 +77,7 @@ describe("ConfigurationSection", () => {
   });
 
   it("renders event trigger with source, event type, and filter", () => {
-    render(<ConfigurationSection automation={eventAutomation} />);
+    renderSection(eventAutomation);
 
     expect(
       screen.getByText("AUTOMATIONS$DETAIL$TRIGGER_EVENT"),
@@ -78,7 +90,7 @@ describe("ConfigurationSection", () => {
   });
 
   it("does not show schedule field for event triggers", () => {
-    render(<ConfigurationSection automation={eventAutomation} />);
+    renderSection(eventAutomation);
 
     expect(
       screen.queryByText("AUTOMATIONS$DETAIL$SCHEDULE"),
@@ -86,7 +98,7 @@ describe("ConfigurationSection", () => {
   });
 
   it("renders multiple event patterns joined by comma", () => {
-    render(<ConfigurationSection automation={eventMultiPatternAutomation} />);
+    renderSection(eventMultiPatternAutomation);
 
     expect(screen.getByText("push, release.published")).toBeInTheDocument();
   });
@@ -105,7 +117,7 @@ describe("ConfigurationSection", () => {
     };
 
     const user = userEvent.setup();
-    render(<ConfigurationSection automation={automation} />);
+    renderSection(automation);
 
     expect(screen.getByText("SETTINGS$SKILLS_SHOW_MORE")).toBeInTheDocument();
     expect(screen.queryByText(longFilter)).not.toBeInTheDocument();
@@ -125,10 +137,86 @@ describe("ConfigurationSection", () => {
       },
     };
 
-    render(<ConfigurationSection automation={automation} />);
+    renderSection(automation);
 
     expect(
       screen.queryByText("AUTOMATIONS$DETAIL$EVENT_FILTER"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the full repo list from preset_metadata when present", () => {
+    const automation: Automation = {
+      ...cronAutomation,
+      preset_metadata: {
+        repos: [
+          { url: "https://github.com/acme/app", ref: "main" },
+          { url: "https://github.com/acme/design-system" },
+        ],
+      },
+    };
+
+    renderSection(automation);
+
+    expect(screen.getByText("acme/app")).toBeInTheDocument();
+    expect(screen.getByText("acme/design-system")).toBeInTheDocument();
+  });
+
+  it("falls back to the single repository field when preset_metadata has no repos", () => {
+    renderSection(cronAutomation);
+
+    expect(screen.getByText("acme/app")).toBeInTheDocument();
+  });
+
+  it("does not render a phantom notification field", () => {
+    renderSection(cronAutomation);
+
+    expect(
+      screen.queryByText("AUTOMATIONS$DETAIL$NOTIFICATION"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps timeout and keep_alive collapsed by default, revealed after expanding Advanced", async () => {
+    const automation: Automation = {
+      ...cronAutomation,
+      timeout: 900,
+      keep_alive: true,
+    };
+    const user = userEvent.setup();
+    renderSection(automation);
+
+    const toggle = screen.getByTestId("configuration-advanced-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("configuration-advanced")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("configuration-advanced")).toHaveAttribute(
+      "aria-hidden",
+      "false",
+    );
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$TIMEOUT_SECONDS"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KEEP_ALIVE_ON"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the server-default timeout label when timeout is unset", async () => {
+    const user = userEvent.setup();
+    renderSection(cronAutomation);
+
+    await user.click(screen.getByTestId("configuration-advanced-toggle"));
+
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$TIMEOUT_DEFAULT"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$KEEP_ALIVE_OFF"),
+    ).toBeInTheDocument();
   });
 });
