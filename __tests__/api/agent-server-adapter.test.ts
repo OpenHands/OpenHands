@@ -4,6 +4,8 @@ import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversat
 
 import {
   ACP_SERVER_TAG_KEY,
+  AGENT_CANVAS_SOURCE,
+  CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
   fetchBackendRuntimeServicesInfo,
@@ -1371,7 +1373,10 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
       load_project_skills: true,
     });
     expect(Array.isArray(acpAgentContext.skills)).toBe(true);
-    expect(payload.tags).toEqual({ [ACP_SERVER_TAG_KEY]: "claude-code" });
+    expect(payload.tags).toEqual({
+      [ACP_SERVER_TAG_KEY]: "claude-code",
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("forwards mcp_config to the ACP subprocess when servers are configured", () => {
@@ -1441,7 +1446,9 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toBeUndefined();
     expect(payload.agent_settings.acp_server).toBeUndefined();
     expect(payload.agent_settings.llm.model).toBe("gpt-4");
-    expect(payload.tags).toBeUndefined();
+    expect(payload.tags).toEqual({
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("omits acp_model when the user clears it (null)", () => {

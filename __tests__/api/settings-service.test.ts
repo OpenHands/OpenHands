@@ -53,7 +53,7 @@ describe("SettingsService", () => {
 
     // Should have normalized settings with derived fields
     expect(settings.agent).toBe("CodeActAgent");
-    expect(settings.llm_model).toBe("openhands/glm-5.2");
+    expect(settings.llm_model).toBe("openhands/kimi-k3");
     expect(settings.confirmation_mode).toBe(false);
     expect(settings.security_analyzer).toBe("llm");
   });
