@@ -68,6 +68,10 @@ const DEFAULT_IMPORT_EXPORT: InterfaceImportExport = {
 const DEFAULT_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/automations/overview";
 
+/** File-format section for portable `.automation.json` export/import. */
+export const AUTOMATION_FILE_FORMAT_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
+
 /**
  * Proven automations featured above the Beta group. NOT derived from
  * popularityRank (slack-standup-digest@94 outranks slack-channel-monitor@92

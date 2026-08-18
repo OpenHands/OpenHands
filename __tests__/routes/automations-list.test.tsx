@@ -22,6 +22,7 @@ import {
   type Automation,
   type AutomationsResponse,
 } from "#/types/automation";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
@@ -214,9 +215,11 @@ describe("AutomationsList — view mode toggle", () => {
     renderList();
 
     const empty = await screen.findByTestId("automations-empty");
-    expect(
-      await within(empty).findByTestId("recommended-automations-rail"),
-    ).toBeInTheDocument();
+    const rail = await within(empty).findByTestId(
+      "recommended-automations-rail",
+    );
+    expect(rail).toBeInTheDocument();
+    expect(rail).not.toHaveClass(AUTOMATION_STACK_SECTION_BOTTOM_CLASS);
     expect(screen.getAllByTestId("recommended-automations-rail")).toHaveLength(
       1,
     );
@@ -353,6 +356,49 @@ describe("AutomationsList — Run now toasts", () => {
     await waitFor(() => {
       expect(displayErrorToast).toHaveBeenCalledWith("Runner quota exceeded");
     });
+  });
+});
+
+describe("AutomationsList — add automation menu", () => {
+  it("opens create and import from the Add Automation dropdown", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+
+    const addTrigger = screen.getByTestId("automations-add-automation");
+    expect(addTrigger).toHaveClass("bg-base-secondary");
+    expect(
+      screen.queryByTestId("automations-import-automation"),
+    ).not.toBeInTheDocument();
+
+    await user.click(addTrigger);
+    expect(screen.getByTestId("automations-add-automation-menu")).not.toHaveClass(
+      "mt-2",
+    );
+    expect(
+      screen.getByTestId("automations-import-automation"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automations-add-automation-create"));
+    expect(screen.getByTestId("add-automation-modal")).toBeInTheDocument();
+  });
+
+  it("opens the import picker from the Add Automation menu", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText(automation.name);
+
+    await user.click(screen.getByTestId("automations-add-automation"));
+    await user.click(screen.getByTestId("automations-import-automation"));
+
+    const modal = screen.getByTestId("import-automation-modal");
+    expect(modal).toHaveAttribute("data-view", "picker");
+    expect(
+      screen.getByTestId("import-automation-dropzone"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("import-automation-choose-file"),
+    ).toBeInTheDocument();
   });
 });
 
