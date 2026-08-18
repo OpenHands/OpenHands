@@ -237,5 +237,41 @@ describe("useUrlSearch", () => {
         expect(result.current.urlSearchResults).toEqual([]);
       });
     });
+
+    it("should clear results when input changes to an HTTPS URL without a repo path", async () => {
+      mockSearchGitRepositories.mockResolvedValue({
+        items: [
+          { id: "1", full_name: "owner/repo", git_provider: "github", is_public: true },
+        ],
+        next_page_id: null,
+      });
+
+      const { result, rerender } = renderHook(
+        ({ inputValue, provider }) => useUrlSearch(inputValue, provider),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo",
+            provider: "github" as const,
+          },
+        },
+      );
+
+      // Wait for initial search to complete
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toHaveLength(1);
+      });
+
+      // Change to an HTTPS URL that does not contain an owner/repo path
+      rerender({
+        inputValue: "https://example.com/",
+        provider: "github" as const,
+      });
+
+      // Results should be cleared and no new search should start
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toEqual([]);
+      });
+      expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+    });
   });
 });
