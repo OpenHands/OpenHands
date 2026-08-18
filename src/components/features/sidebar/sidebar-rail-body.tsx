@@ -12,6 +12,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   automationListPath,
   getInterfaceCopy,
+  hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
@@ -203,15 +204,17 @@ export function SidebarRailBody({
             </svg>
           }
         />
-        <SidebarNavLink
-          to={automationListPath()}
-          label={
-            getInterfaceCopy().sidebarLabel ?? t(I18nKey.SIDEBAR$AUTOMATIONS)
-          }
-          testId="sidebar-automations-link"
-          collapsed={collapsed}
-          icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
-        />
+        {/* The interface manifest owns this entry's label, so an absent
+            manifest leaves the rail without it rather than with host copy. */}
+        {hasAutomationInterface() && (
+          <SidebarNavLink
+            to={automationListPath()}
+            label={getInterfaceCopy().sidebarLabel}
+            testId="sidebar-automations-link"
+            collapsed={collapsed}
+            icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        )}
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />

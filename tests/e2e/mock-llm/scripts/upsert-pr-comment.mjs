@@ -105,16 +105,29 @@ async function githubRequest(method, path, token, body) {
   const retryableStatuses = new Set([429, 502, 503, 504]);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const response = await fetch(`${API_ROOT}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    let response;
+    try {
+      response = await fetch(`${API_ROOT}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(body === undefined
+            ? {}
+            : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (error) {
+      // Transient network failure (DNS/connect/reset) rejects before any
+      // HTTP status is available — retry it like a retryable status.
+      if (attempt < 4) {
+        await sleep(1000 * 2 ** attempt);
+        continue;
+      }
+      throw error;
+    }
 
     const text = await response.text();
     if (!response.ok && retryableStatuses.has(response.status) && attempt < 4) {

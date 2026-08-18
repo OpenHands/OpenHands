@@ -83,9 +83,8 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 ### Multiple local backends (shared persistence)
 
 To run a second standalone agent-server alongside `npm run dev` while sharing
-its conversation history and encrypted secrets, see
-[docs/multi-backend-setup.md](./docs/multi-backend-setup.md). The
-`npm run dev:extra-backend` helper launches an extra server on `:18002` that
+its conversation history and encrypted secrets, you can use the
+`npm run dev:extra-backend` helper. It launches an extra server on `:18002` that
 reuses the bundled instance's state dir.
 
 ### Frontend against an existing backend
