@@ -96,7 +96,7 @@ describe("AppSettingsScreen", () => {
     const analyticsSwitch = await screen.findByTestId(
       "enable-analytics-switch",
     );
-    const submitButton = screen.getByTestId("submit-button");
+    const submitButton = screen.getByTestId("app-settings-general-submit");
 
     expect(analyticsSwitch).toBeChecked();
     expect(analyticsSwitch).toBeDisabled();
@@ -120,7 +120,7 @@ describe("AppSettingsScreen", () => {
     await user.click(
       await screen.findByTestId("enable-sound-notifications-switch"),
     );
-    await user.click(screen.getByTestId("submit-button"));
+    await user.click(screen.getByTestId("app-settings-general-submit"));
 
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
@@ -150,7 +150,7 @@ describe("AppSettingsScreen", () => {
 
     await user.clear(nameInput);
     await user.type(nameInput, "monalisa");
-    await user.click(screen.getByTestId("submit-button"));
+    await user.click(screen.getByTestId("app-settings-git-submit"));
 
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
@@ -189,7 +189,9 @@ describe("AppSettingsScreen", () => {
     await user.click(
       await screen.findByText("SETTINGS$TITLE_GENERATION_PROFILE_OPTION"),
     );
-    await user.click(screen.getByTestId("submit-button"));
+    await user.click(
+      screen.getByTestId("app-settings-conversation-titles-submit"),
+    );
 
     await waitFor(() => {
       expect(saveSettingsSpy).toHaveBeenCalledWith(
