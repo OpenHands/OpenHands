@@ -16,13 +16,10 @@ import { useHomeAutomationActions } from "#/hooks/use-home-automation-actions";
 import { getDemoConversationTitle } from "#/fixtures/home-automations-demo";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { I18nKey } from "#/i18n/declaration";
-import PlayIcon from "#/icons/play.svg?react";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
-import { automationIconActionButtonClassName } from "#/components/features/automations/automation-action-button-classes";
 import { automationCardStatusStripClassName } from "#/components/features/automations/automation-view-mode";
-import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import {
   extensionModuleCardInteractiveClassName,
   extensionModuleCardSurfaceClassName,
@@ -166,8 +163,8 @@ export function PinnedAutomationCard({
     >
       {/*
         Top padding + title row is the drag surface. Title is not an <a> so
-        browsers don't steal the gesture; click still opens details. Play and
-        menu are opted out via data-no-drag.
+        browsers don't steal the gesture; click still opens details. The
+        menu is opted out via data-no-drag.
       */}
       <header className="flex flex-col gap-1.5">
         <div
@@ -209,28 +206,7 @@ export function PinnedAutomationCard({
             {automation.name}
           </span>
 
-          <div data-no-drag className="flex h-8 shrink-0 items-center gap-0.5">
-            {actions.canManage ? (
-              <StyledTooltip
-                content={t(I18nKey.AUTOMATIONS$RUN_NOW)}
-                placement="top"
-              >
-                <button
-                  type="button"
-                  data-testid={`pinned-automation-run-now-${automation.id}`}
-                  aria-label={t(I18nKey.AUTOMATIONS$RUN_NOW)}
-                  aria-busy={actions.isRunPending}
-                  disabled={actions.isRunPending || !automation.enabled}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    actions.runNow();
-                  }}
-                  className={automationIconActionButtonClassName}
-                >
-                  <PlayIcon className="size-4 shrink-0" aria-hidden />
-                </button>
-              </StyledTooltip>
-            ) : null}
+          <div data-no-drag className="flex h-8 shrink-0 items-center">
             <HomeAutomationMenu
               testId={`pinned-automation-menu-${automation.id}`}
               panelTestId={`pinned-automation-menu-panel-${automation.id}`}

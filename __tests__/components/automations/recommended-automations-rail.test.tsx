@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nKey } from "#/i18n/declaration";
 import { RecommendedAutomationsRail } from "#/components/features/automations/recommended-automations-rail";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -55,6 +56,19 @@ describe("RecommendedAutomationsRail", () => {
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL),
     ).toBeInTheDocument();
+  });
+
+  it("keeps space below the cards when later home sections are empty", () => {
+    render(
+      <RecommendedAutomationsRail
+        installedAutomations={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("recommended-automations-rail")).toHaveClass(
+      AUTOMATION_STACK_SECTION_BOTTOM_CLASS,
+    );
   });
 
   it("calls onSelect when a rail card is clicked", async () => {

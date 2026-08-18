@@ -10,6 +10,8 @@ import {
 } from "#/hooks/use-home-pinned-automations";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
+import { cn } from "#/utils/utils";
 import { PinnedAutomationCard } from "./pinned-automation-card";
 
 /**
@@ -70,7 +72,7 @@ export function PinnedAutomationsDashboard() {
     <section
       data-testid="pinned-automations-dashboard"
       aria-label={t(I18nKey.FEATURED_AUTOMATIONS$PINNED_DASHBOARD_LABEL)}
-      className="w-full"
+      className={cn("w-full", AUTOMATION_STACK_SECTION_BOTTOM_CLASS)}
     >
       <h2 className="mb-2 text-sm font-medium text-[var(--oh-foreground)]">
         {t(I18nKey.FEATURED_AUTOMATIONS$PINNED_TITLE)}

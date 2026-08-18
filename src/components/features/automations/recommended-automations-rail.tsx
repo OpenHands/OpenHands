@@ -15,6 +15,7 @@ import {
 } from "#/utils/recommended-automation-rail";
 import { readScrollFadeState } from "#/utils/scroll-fade-state";
 import type { Automation } from "#/types/automation";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 import { cn } from "#/utils/utils";
 import {
   extensionModuleCardInteractiveClassName,
@@ -122,7 +123,7 @@ export function RecommendedAutomationsRail({
     <section
       data-testid="recommended-automations-rail"
       aria-label={t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
-      className={cn("w-full", className)}
+      className={cn("w-full", AUTOMATION_STACK_SECTION_BOTTOM_CLASS, className)}
     >
       <h2 className="mb-2 text-sm font-medium text-[var(--oh-foreground)]">
         {t(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL)}
