@@ -74,6 +74,19 @@ function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
 }
 
+function isAbortLike(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? error.name : undefined;
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  const cause = "cause" in error ? error.cause : undefined;
+  return (
+    !!cause &&
+    typeof cause === "object" &&
+    "name" in cause &&
+    (cause.name === "AbortError" || cause.name === "TimeoutError")
+  );
+}
+
 class ProfilesService {
   static async listProfiles(): Promise<ProfileListResponse> {
     if (isCloudBackend()) return fetchCloudProfiles();
