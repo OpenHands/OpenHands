@@ -207,7 +207,7 @@ describe("ChatInterface - Chat Suggestions", () => {
         role: "user",
         content: [{ type: "text", text: "Hello" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
 
@@ -348,7 +348,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
@@ -485,7 +485,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
