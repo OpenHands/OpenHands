@@ -312,13 +312,6 @@ export function OnboardingModal({
             />
           </header>
 
-          {/*
-            Size to the active slide (`min-h-0`, no `flex-1`) so a
-            content-fitting step does not paint a leftover scrollbar.
-            `pb-7` matches the header `pt-7` so the last control is not
-            flush against the modal edge. Overflow still kicks in when
-            the modal hits `max-h-[90vh]`.
-          */}
           <div
             data-testid="onboarding-scroll-area"
             className="min-h-0 overflow-y-auto custom-scrollbar-always px-7 pb-7"
