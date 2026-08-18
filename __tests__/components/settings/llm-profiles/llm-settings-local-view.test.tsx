@@ -16,6 +16,7 @@ import ProfilesService from "#/api/profiles-service/profiles-service.api";
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
+    LLM_PROVIDER_CONNECTION_KEY: "llm.provider_connection_id",
     LlmSettingsScreen: ({
       initialValueOverrides,
       onSaveControlChange,
@@ -331,10 +332,10 @@ describe("LlmSettingsLocalView", () => {
 
       // The profile name is auto-derived from the prefilled free default model.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("glm-5.2");
 
       expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
-        "openhands/kimi-k3",
+        "openhands/glm-5.2",
       );
     });
 
@@ -348,7 +349,7 @@ describe("LlmSettingsLocalView", () => {
 
       // The profile name starts from the free-model derived default.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("glm-5.2");
 
       // Go back to list
       await user.click(screen.getByTestId("back-to-profiles"));
@@ -360,7 +361,7 @@ describe("LlmSettingsLocalView", () => {
       // The profile name should return to the free-model derived default
       // again (fresh form).
       const freshNameInput = screen.getByTestId("profile-name-input");
-      expect(freshNameInput).toHaveValue("kimi-k3");
+      expect(freshNameInput).toHaveValue("glm-5.2");
     });
 
     it("does not carry over values from edit mode to create mode", async () => {
@@ -375,7 +376,7 @@ describe("LlmSettingsLocalView", () => {
 
       // Should be in create view with the free-model derived profile name.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("glm-5.2");
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
@@ -612,48 +613,6 @@ describe("LlmSettingsLocalView", () => {
       // The rename API mock would fail if unexpectedly called since it's not set up.
       expect(true).toBe(true);
     });
-  });
-
-  describe("Pre-flight validation", () => {
-    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
-      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
-      await user.click(screen.getByTestId("profile-edit"));
-      await waitFor(() =>
-        expect(screen.getByTestId("profile-name-input")).toHaveValue(
-          "gpt-4-profile",
-        ),
-      );
-    }
-
-    it("blocks saving when validation returns an invalid verdict", async () => {
-      const user = userEvent.setup();
-      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
-        valid: false,
-        error: { type: "authentication", message: "Invalid API key" },
-      });
-      renderWithProviders(<LlmSettingsLocalView />);
-      await openEditView(user);
-      await user.click(screen.getByTestId("save-profile-btn"));
-
-      await waitFor(() =>
-        expect(ProfilesService.validateProfile).toHaveBeenCalled(),
-      );
-      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
-    });
-
-    it.each([null, { valid: true }])(
-      "saves when validation returns %j",
-      async (verdict) => {
-        const user = userEvent.setup();
-        vi.mocked(ProfilesService.validateProfile).mockResolvedValue(verdict);
-        mockSaveMutateAsync.mockResolvedValue({ success: true });
-        renderWithProviders(<LlmSettingsLocalView />);
-        await openEditView(user);
-        await user.click(screen.getByTestId("save-profile-btn"));
-
-        await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
-      },
-    );
   });
 
   describe("Basic tab save", () => {

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
@@ -71,6 +72,16 @@ export function ProfileRow({
                 default `llm_profile_ref` seeded into new agent profiles. */}
             {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
           </BrandBadge>
+        )}
+        {profile.provider_connection_broken && (
+          <span
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
+            title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
+            data-testid="profile-broken-connection-badge"
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            {t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION)}
+          </span>
         )}
       </div>
       {canManage && (
