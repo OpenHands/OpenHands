@@ -104,4 +104,32 @@ describe("ModelMessages", () => {
       "ℹ️ Switched to profile haiku",
     );
   });
+
+  it("labels a free OpenHands route in expanded profile diagnostics", async () => {
+    const user = userEvent.setup();
+    useModelStore.getState().show(CONVERSATION_ID, "event-1", [
+      {
+        name: "free",
+        model: "openhands/glm-5.2",
+        base_url: null,
+        api_key_set: true,
+      },
+    ]);
+
+    renderWithProviders(
+      <ModelMessages
+        conversationId={CONVERSATION_ID}
+        anchorEventId="event-1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "BUTTON$EXPAND" }));
+    await user.click(
+      screen.getByRole("button", { name: "Toggle details for free" }),
+    );
+
+    expect(
+      screen.getByText(/model:\s+OpenHands GLM-5\.2 \(free\)/),
+    ).toBeInTheDocument();
+  });
 });

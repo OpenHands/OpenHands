@@ -178,7 +178,7 @@ describe("createStreamingDeltaBatcher wired into the event store", () => {
     timestamp: "2024-02-01T00:00:00Z",
     source: "user",
     llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 
@@ -215,7 +215,7 @@ describe("createStreamingDeltaBatcher wired into the event store", () => {
         role: "assistant",
         content: [{ type: "text", text: "I'll start working on that. Done." }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.getState().addEvent(finalMessage);

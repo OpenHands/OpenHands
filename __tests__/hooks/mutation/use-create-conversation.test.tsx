@@ -159,20 +159,20 @@ describe("useCreateConversation", () => {
     });
 
     await waitFor(() => {
-      expect(createConversationSpy).toHaveBeenCalledWith(
-        "Please address the comments",
-        "Focus on review comments",
-        undefined,
-        {
+      expect(createConversationSpy).toHaveBeenCalledWith({
+        initialUserMsg: "Please address the comments",
+        conversationInstructions: "Focus on review comments",
+        plugins: undefined,
+        metadata: {
           selected_repository: "owner/repo",
           selected_branch: "main",
           git_provider: "github",
         },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-      );
+        workingDirOverride: undefined,
+        workspaceMode: undefined,
+        parentConversationId: undefined,
+        agentType: undefined,
+      });
     });
   });
 
@@ -200,10 +200,9 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     await waitFor(() => {
-      // sandboxId (#9) is undefined; the active profile id rides as #10.
       const call = createConversationSpy.mock.lastCall;
-      expect(call?.[8]).toBeUndefined();
-      expect(call?.[9]).toBe("profile-abc");
+      expect(call?.[0]?.sandboxId).toBeUndefined();
+      expect(call?.[0]?.agentProfileId).toBe("profile-abc");
     });
   });
 
@@ -242,18 +241,17 @@ describe("useCreateConversation", () => {
     await pending;
 
     const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBe("profile-late");
+    expect(call?.[0]?.agentProfileId).toBe("profile-late");
   });
 
-  it("falls back to the agent_settings launch when the profiles fetch fails", async () => {
-    listAgentProfilesMock.mockRejectedValue(new Error("not supported"));
-    const createConversationSpy = vi
-      .spyOn(AgentServerConversationService, "createConversation")
-      .mockResolvedValue({
-        id: "task-id",
-        app_conversation_id: "conv-1",
-        agent_server_url: "http://agent-server.local",
-      } as never);
+  it("does not downgrade when the profiles fetch fails", async () => {
+    const profileError = new Error("profile endpoint unavailable");
+    listAgentProfilesMock.mockRejectedValue(profileError);
+    const createConversationSpy = vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    );
+    createConversationSpy.mockClear();
 
     const { result } = renderHook(() => useCreateConversation(), {
       wrapper: ({ children }) => (
@@ -263,12 +261,10 @@ describe("useCreateConversation", () => {
       ),
     });
 
-    // Resolves without stalling: the launch-path fetch is retry: false.
-    await result.current.mutateAsync({ query: "hello" });
-
-    // No profile tail — the create stays on the legacy agent_settings path.
-    const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBeUndefined();
+    await expect(result.current.mutateAsync({ query: "hello" })).rejects.toBe(
+      profileError,
+    );
+    expect(createConversationSpy).not.toHaveBeenCalled();
   });
 
   it("invalidates the conversation list and start-tasks queries on success", async () => {
@@ -420,7 +416,7 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBeUndefined();
+    expect(call?.[0]?.agentProfileId).toBeUndefined();
   });
 
   it("keeps the profile path for an ACP `default` profile (agent_settings can't carry ACP config)", async () => {
@@ -460,8 +456,8 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBe("profile-acp-default");
-    expect(call?.[10]).toBe("acp");
+    expect(call?.[0]?.agentProfileId).toBe("profile-acp-default");
+    expect(call?.[0]?.agentProfileKind).toBe("acp");
   });
 
   it("launches the seeded `default` profile from its resolved id on cloud (no agent_settings fallback exists there) (#1571)", async () => {
@@ -510,7 +506,7 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBe("profile-default");
+    expect(call?.[0]?.agentProfileId).toBe("profile-default");
   });
 
   it("stamps the launched openhands profile's llm_profile_ref into conversation metadata (#1082)", async () => {
@@ -556,7 +552,7 @@ describe("useCreateConversation", () => {
     await result.current.mutateAsync({ query: "hello" });
 
     const call = createConversationSpy.mock.lastCall;
-    expect(call?.[9]).toBe("profile-custom");
+    expect(call?.[0]?.agentProfileId).toBe("profile-custom");
     await waitFor(() =>
       expect(
         getStoredConversationMetadata("conv-ref-stamp")?.active_profile,
