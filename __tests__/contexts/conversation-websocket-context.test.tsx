@@ -17,6 +17,7 @@ import {
 } from "#/api/conversation-metadata-store";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
 type CapturedWebSocketOptions = {
   onMessage?: (event: { data: string }) => void;
@@ -678,6 +679,125 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // ...and the re-seed deduped against the existing user message rather than
     // appending a second copy — exactly two events, no double-insertion.
     expect(eventIds()).toHaveLength(2);
+  });
+
+  const makeStreamingDelta = (id: string, content: string) => ({
+    id,
+    timestamp: new Date().toISOString(),
+    source: "agent",
+    kind: "StreamingDeltaEvent",
+    content,
+    reasoning_content: null,
+  });
+
+  const makeAgentMessage = (id: string, text: string): MessageEvent => ({
+    id,
+    timestamp: new Date(Date.now() + 1000).toISOString(),
+    source: "agent",
+    llm_message: { role: "assistant", content: [{ type: "text", text }] },
+    activated_skills: [],
+    extended_content: [],
+  });
+
+  const renderProviderWithUrl = (conversationId: string) =>
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId={conversationId}
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+  it("buffers streaming deltas, then flushes them (reconciled) when the final message arrives", async () => {
+    renderProviderWithUrl("conv-stream");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-stream"]));
+
+    // Deltas arrive: they are buffered by the batcher, NOT committed per token.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("d1", "I'll help")),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("d2", " with that.")),
+      });
+    });
+    expect(eventIds()).toEqual(["user-msg-conv-stream"]);
+
+    // The final agent message is a non-delta event: the handler flushes the
+    // buffered deltas first, so the message reconciles the streamed text in
+    // place instead of racing ahead of it.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(
+          makeAgentMessage("agent-final", "I'll help with that. Done."),
+        ),
+      });
+    });
+
+    const { uiEvents, eventIds: ids } = useEventStore.getState();
+    // One reconciled agent bubble: the canonical final message supersedes the
+    // flushed deltas, so the streamed text renders once and is never duplicated.
+    expect(uiEvents).toHaveLength(2);
+    const bubble = uiEvents[1] as MessageEvent;
+    expect(bubble.id).toBe("agent-final");
+    expect(bubble.llm_message.content).toEqual([
+      { type: "text", text: "I'll help with that. Done." },
+    ]);
+    expect(uiEvents.some((event) => isStreamingDeltaEvent(event))).toBe(false);
+    // eventIds tracks the two durable events, never the deltas.
+    expect(ids.size).toBe(2);
+  });
+
+  it("discards buffered deltas from the previous conversation on switch", async () => {
+    const { rerender } = renderProviderWithUrl("conv-a");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+
+    // Buffer deltas for A, then switch to B before they flush.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("a1", "STALE")),
+      });
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-b"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-b"]));
+
+    // B streams and finalizes. If the switch had NOT reset the batcher, A's
+    // "STALE" delta would still be buffered and merge into B's stream here.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("b1", "fresh")),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeAgentMessage("agent-b", "fresh.")),
+      });
+    });
+
+    const { uiEvents, events } = useEventStore.getState();
+    expect(uiEvents).toHaveLength(2);
+    expect((uiEvents[1] as MessageEvent).llm_message.content).toEqual([
+      { type: "text", text: "fresh." },
+    ]);
+    // The committed delta carries B's text only — had A's buffer survived the
+    // switch it would have merged in ahead of it as "STALEfresh".
+    const committedDeltas = events.filter((event) =>
+      isStreamingDeltaEvent(event),
+    );
+    expect(committedDeltas.map((delta) => delta.content)).toEqual(["fresh"]);
+    expect(JSON.stringify(events)).not.toContain("STALE");
   });
 
   it("consumes the optimistic pending bubble when the echoed user message arrives via REST preload", async () => {
