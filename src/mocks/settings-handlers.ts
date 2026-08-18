@@ -630,6 +630,12 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openhands/glm-5.2",
 ]);
 
+// DB-driven free / default flags for the OpenHands provider. Mirrors the
+// enterprise verified-models seed used to render the "Free" badge and preselect
+// the default model.
+const MOCK_FREE_MODELS = new Set(["openhands/glm-5.2"]);
+const MOCK_DEFAULT_MODEL = "openhands/glm-5.2";
+
 const MOCK_VERIFIED_PROVIDERS = [
   "openhands",
   "anthropic",
@@ -806,6 +812,8 @@ export const SETTINGS_HANDLERS = [
         provider: provider || null,
         name,
         verified: MOCK_VERIFIED_MODELS.has(m),
+        free: MOCK_FREE_MODELS.has(m),
+        default: m === MOCK_DEFAULT_MODEL,
       };
     });
 

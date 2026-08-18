@@ -14,6 +14,7 @@ import {
   setI18n,
 } from "#/i18n";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { useHydrateFreeModels } from "#/hooks/query/use-free-models";
 import type { TelemetryConfig } from "#/services/telemetry";
 import { TelemetryProvider } from "./telemetry-provider";
 import {
@@ -43,6 +44,16 @@ export interface AgentServerUIProvidersProps extends Pick<
   analytics?: AgentServerUIAnalyticsConfig;
   i18n?: I18nInstance;
   withStyleRoot?: boolean;
+}
+
+/**
+ * Fetches the DB-driven free / default model flags once and mirrors them into
+ * the free-models store. Rendered inside the query provider so leaf components
+ * can read the flags synchronously without a QueryClientProvider in scope.
+ */
+function FreeModelsHydrator() {
+  useHydrateFreeModels();
+  return null;
 }
 
 export function AgentServerUIProviders({
@@ -96,7 +107,10 @@ export function AgentServerUIProviders({
         }
       : false;
   const content = (
-    <TelemetryProvider config={posthogConfig}>{children}</TelemetryProvider>
+    <TelemetryProvider config={posthogConfig}>
+      <FreeModelsHydrator />
+      {children}
+    </TelemetryProvider>
   );
 
   const wrappedContent = withStyleRoot ? (

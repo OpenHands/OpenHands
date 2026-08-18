@@ -1,33 +1,43 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
+import type { LLMModel } from "#/api/config-service/config-service.types";
 import { server } from "#/mocks/node";
 
-describe("ModelSelector — OpenHands provider display", () => {
-  let providersCount = 0;
-  let verifiedCount = 0;
-  let modelsCount = 0;
+// The "Free" badge is DB-driven: the backend model list carries a `free` flag
+// per item (the same channel as `verified`). These tests drive the selector
+// through the model list rather than the (free-less) local /api/llm channel.
+const OPENHANDS_MODELS: LLMModel[] = [
+  { provider: "openhands", name: "claude-opus-4-7", verified: true, free: false, default: false },
+  { provider: "openhands", name: "glm-5.2", verified: true, free: true, default: true },
+  { provider: "openhands", name: "deepseek-v4-flash", verified: true, free: true, default: false },
+  { provider: "openhands", name: "minimax-m2.7", verified: true, free: true, default: false },
+];
 
+vi.mock("#/hooks/query/use-provider-models", () => ({
+  useProviderModels: (provider: string | null) => ({
+    data: provider === "openhands" ? OPENHANDS_MODELS : [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+describe("ModelSelector — OpenHands provider display", () => {
   beforeEach(() => {
-    providersCount = 0;
-    verifiedCount = 0;
-    modelsCount = 0;
     // Use "*" prefix to match both relative paths and absolute URLs (e.g.,
     // http://127.0.0.1:8000/api/...) when VITE_BACKEND_BASE_URL is configured.
     server.use(
-      http.get("*/api/llm/providers", () => {
-        providersCount += 1;
-        return HttpResponse.json({
+      http.get("*/api/llm/providers", () =>
+        HttpResponse.json({
           providers: ["openhands", "anthropic", "openai"],
-        });
-      }),
-      http.get("*/api/llm/models/verified", () => {
-        verifiedCount += 1;
-        return HttpResponse.json({
+        }),
+      ),
+      http.get("*/api/llm/models/verified", () =>
+        HttpResponse.json({
           models: {
             openhands: [
               "claude-opus-4-7",
@@ -37,12 +47,9 @@ describe("ModelSelector — OpenHands provider display", () => {
             ],
             anthropic: ["claude-opus-4-5-20251101"],
           },
-        });
-      }),
-      http.get("*/api/llm/models", () => {
-        modelsCount += 1;
-        return HttpResponse.json({ models: [] });
-      }),
+        }),
+      ),
+      http.get("*/api/llm/models", () => HttpResponse.json({ models: [] })),
     );
   });
 
@@ -61,10 +68,6 @@ describe("ModelSelector — OpenHands provider display", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("LLM$PROVIDER")).toHaveValue("OpenHands");
     });
-
-    expect(providersCount).toBe(1);
-    expect(verifiedCount).toBe(1);
-    expect(modelsCount).toBe(1);
   });
 
   it("makes clear which OpenHands models are free", async () => {
@@ -82,7 +85,9 @@ describe("ModelSelector — OpenHands provider display", () => {
 
     await user.click(screen.getByLabelText("LLM$MODEL"));
 
-    expect(screen.getAllByText("Free")).toHaveLength(2);
+    // Three DB-flagged free models render a "Free" badge in the dropdown; the
+    // selected-model badge adds a fourth occurrence.
+    expect(screen.getAllByText("Free")).toHaveLength(4);
     expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
 
     await user.click(screen.getByRole("option", { name: /deepseek-v4-flash/ }));

@@ -1,10 +1,31 @@
 export const FREE_MODEL_BADGE_LABEL = "Free";
 
+/** Suffix appended to a display name for a DB-flagged free OpenHands model. */
+export const FREE_MODEL_SUFFIX = " (free)";
+
+/**
+ * Static pretty-print labels for the OpenHands free models known at build
+ * time. Used by the profile picker to render a human-readable sub-label
+ * **without** waiting for the async DB-driven free-model set to hydrate.
+ *
+ * New free models added only via the DB will fall back to the raw model id
+ * plus the `(free)` suffix (see {@link formatModelPillLabel}).
+ */
 export const FREE_OPENHANDS_MODELS = {
   "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
 } as const;
 
 export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
+
+/**
+ * Set of free ``provider/model`` ids. The frontend no longer hardcodes which
+ * OpenHands models are free — the set is sourced from the backend model list
+ * (DB-driven), the same channel that carries `verified`. See
+ * {@link useFreeModels}. Callers that lack the set treat every model as paid.
+ */
+export type FreeModelSet = ReadonlySet<string>;
+
+const EMPTY_FREE_MODELS: FreeModelSet = new Set<string>();
 
 /**
  * Whether a model id routes through the OpenHands provider (the `openhands/`
@@ -16,31 +37,31 @@ export const isOpenHandsProviderModel = (
   model: string | null | undefined,
 ): boolean => Boolean(model?.startsWith("openhands/"));
 
-export const FREE_OPENHANDS_MODEL_NOTE = `Free OpenHands models: ${FREE_OPENHANDS_MODEL_IDS.join(
-  ", ",
-)}. Other provider endpoints with similar model names may require separate billing.`;
-
 export const isFreeOpenHandsModel = (
   model: string | null | undefined,
-): model is keyof typeof FREE_OPENHANDS_MODELS =>
-  Boolean(model && model in FREE_OPENHANDS_MODELS);
+  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
+): boolean => Boolean(model && freeModels.has(model));
+
+function appendFreeSuffix(display: string, isFree: boolean): string {
+  return isFree ? `${display}${FREE_MODEL_SUFFIX}` : display;
+}
 
 export function formatModelNameForDisplay(
   model: string | null | undefined,
+  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
 ): string | null {
   if (!model) return null;
-  return isFreeOpenHandsModel(model) ? FREE_OPENHANDS_MODELS[model] : model;
+  return appendFreeSuffix(model, isFreeOpenHandsModel(model, freeModels));
 }
 
 export function formatProviderModelNameForDisplay(
   provider: string | null | undefined,
   model: string | null | undefined,
+  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
 ): string | null {
   if (!model) return null;
   const fullModel = provider ? `${provider}/${model}` : model;
-  return isFreeOpenHandsModel(fullModel)
-    ? FREE_OPENHANDS_MODELS[fullModel]
-    : model;
+  return appendFreeSuffix(model, isFreeOpenHandsModel(fullModel, freeModels));
 }
 
 /**
@@ -54,14 +75,36 @@ export function formatProviderModelNameForDisplay(
  * string when stripping the prefix would leave nothing (e.g. a trailing slash)
  * — never an empty string, which would collapse the chip text.
  *
+ * A DB-flagged free model (matched against ``freeModels`` on its full id) keeps
+ * the free suffix so the chip still signals it is free.
+ *
  * Display-only: unlike {@link deriveProfileNameFromModel} this does not sanitize
  * to an identifier, so it keeps the real model id intact for the chip.
  */
 export function formatNativeModelName(
   model: string | null | undefined,
+  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
 ): string | null {
   if (!model) return null;
-  if (isFreeOpenHandsModel(model)) return FREE_OPENHANDS_MODELS[model];
+  const isFree = isFreeOpenHandsModel(model, freeModels);
   const lastSegment = model.split("/").pop();
-  return lastSegment || model;
+  return appendFreeSuffix(lastSegment || model, isFree);
+}
+
+/**
+ * Display label used by the LLM-profile picker sub-line. Looks up the model
+ * in the static {@link FREE_OPENHANDS_MODELS} table first so the label renders
+ * instantly (no async hydration needed). For models that are free according to
+ * the DB-driven `freeModels` set but absent from the static table, falls back
+ * to the raw model id with the `(free)` suffix.
+ */
+export function formatModelPillLabel(
+  model: string | null | undefined,
+  freeModels: FreeModelSet = EMPTY_FREE_MODELS,
+): string | null {
+  if (!model) return null;
+  if (model in FREE_OPENHANDS_MODELS) {
+    return FREE_OPENHANDS_MODELS[model as keyof typeof FREE_OPENHANDS_MODELS];
+  }
+  return formatModelNameForDisplay(model, freeModels);
 }
