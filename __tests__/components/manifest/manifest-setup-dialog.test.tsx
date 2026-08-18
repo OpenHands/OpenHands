@@ -211,7 +211,11 @@ describe("SetupDialog", () => {
         replace: true,
       }),
     );
-    expect(mocks.runAction).toHaveBeenCalledWith(entry, expect.anything(), null);
+    expect(mocks.runAction).toHaveBeenCalledWith(
+      entry,
+      expect.anything(),
+      null,
+    );
   });
 
   it("keeps the unsupported screen close-only when there is nothing to fall back to", () => {

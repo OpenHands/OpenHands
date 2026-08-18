@@ -37,6 +37,7 @@ import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
 import type {
   SetupEntry,
+  SetupFormValue,
   SetupFormValues,
   SetupMode,
   SetupRequestBody,
@@ -148,7 +149,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
 
-  const setFieldValue = (name: string, value: string) => {
+  const setFieldValue = (name: string, value: SetupFormValue) => {
     valuesRef.current = { ...valuesRef.current, [name]: value };
     setValues(valuesRef.current);
     setLocalErrors(({ [name]: _removed, ...rest }) => rest);

@@ -52,6 +52,12 @@ export interface SetupFormField {
   default?: string;
   required: boolean;
   provider?: SetupGitProvider;
+  /**
+   * repo-picker only. The field collects several repositories rather than one,
+   * and its value is a list. A placeholder that is the whole value resolves to
+   * that list, so a payload can state one and get an array.
+   */
+  multiple?: true;
   options?: SetupFieldOption[];
   constraints?: SetupFieldConstraints;
 }
@@ -157,8 +163,15 @@ export interface SetupRequestBody {
   [key: string]: SetupPayloadValue;
 }
 
-/** Form values are collected as strings; the payload mapping shapes them. */
-export type SetupFormValues = Record<string, string>;
+/**
+ * Form values as collected; the payload mapping shapes them.
+ *
+ * A field collecting several values holds a list. Everything else holds a
+ * string, including fields whose value is a number to the service - the
+ * payload mapping is where a value stops being what was typed.
+ */
+export type SetupFormValue = string | string[];
+export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {

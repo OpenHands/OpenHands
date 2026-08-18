@@ -30,8 +30,31 @@ function toText(value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
+  // A multi-value field inside a sentence reads as a list of names.
+  if (Array.isArray(value)) return value.map(toText).filter(Boolean).join(", ");
   // Missing values render as blank; callers that care show their own fallback.
   return "";
+}
+
+/** A template that is exactly one placeholder, or null if it is not. */
+function wholePlaceholderPath(template: string): string | null {
+  const match = /^\{\{([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}\}$/.exec(template);
+  return match ? match[1] : null;
+}
+
+/**
+ * Substitute placeholders, keeping the resolved value's own type when the
+ * template is nothing but that placeholder.
+ *
+ * This is what lets a request body state `"repos": "{{form.repositories}}"` and
+ * get an array. Inside a sentence the same placeholder still reads as text,
+ * because there is nowhere for a list to go in a string.
+ */
+export function interpolateValue(template: string, scope: SetupScope): unknown {
+  const path = wholePlaceholderPath(template);
+  if (path === null) return interpolateText(template, scope);
+  const resolved = getByPath(scope, path);
+  return resolved === undefined ? "" : resolved;
 }
 
 /** Substitute placeholders inside a template string. */

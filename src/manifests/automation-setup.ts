@@ -15,8 +15,12 @@
 
 import { findAutomationCommand } from "#/utils/automation-catalog";
 import { getAutomationEndpoint } from "./automation-interface";
-import { collectFields } from "./manifest-local-validation";
-import { interpolateText } from "./manifest-template";
+import {
+  collectFields,
+  fieldText,
+  fieldValues,
+} from "./manifest-local-validation";
+import { interpolateText, interpolateValue } from "./manifest-template";
 import type {
   SetupBlock,
   SetupBundleConfigValue,
@@ -113,6 +117,25 @@ function findRepoPickerField(setup: SetupBlock) {
   return match ? { name: match[0], field: match[1] } : null;
 }
 
+/** Every repository the form collected, whether the picker takes one or many. */
+function repositories(setup: SetupBlock, values: SetupFormValues): string[] {
+  const picker = findRepoPickerField(setup);
+  return picker ? fieldValues(values[picker.name]) : [];
+}
+
+/**
+ * The created automation's name.
+ *
+ * One repository is worth naming; several are not, so the count stands in
+ * rather than a list of names that would not fit.
+ */
+function deriveName(entry: SetupEntry, values: SetupFormValues): string {
+  const repos = repositories(entry.setup, values);
+  if (repos.length === 0) return entry.name;
+  if (repos.length === 1) return `${entry.name} - ${repos[0]}`;
+  return `${entry.name} - ${repos.length} repositories`;
+}
+
 /** The single trigger kind a direct entry declares, with its fields. */
 function getTrigger(setup: SetupBlock) {
   const entries = Object.entries(setup.form.triggers ?? {});
@@ -145,22 +168,22 @@ export function buildCreatePayload(
 
   const scope = { form: values, automation: entry };
   const repoPicker = findRepoPickerField(setup);
-  const repository = repoPicker ? values[repoPicker.name] : undefined;
+  const repos = repositories(setup, values);
 
   const payload: SetupRequestBody = {
-    name: repository ? `${entry.name} - ${repository}` : entry.name,
+    name: deriveName(entry, values),
     prompt: interpolateText(setup.prompt, scope),
   };
 
-  if (repository && repoPicker?.field.provider) {
+  if (repos.length > 0 && repoPicker?.field.provider) {
     const declared = REPO_PROPERTIES.filter((name) => name in values);
-    payload.repos = [
-      {
-        url: repository,
-        ...Object.fromEntries(declared.map((name) => [name, values[name]])),
-        provider: repoPicker.field.provider,
-      },
-    ];
+    payload.repos = repos.map((url) => ({
+      url,
+      ...Object.fromEntries(
+        declared.map((name) => [name, fieldText(values[name])]),
+      ),
+      provider: repoPicker.field.provider as string,
+    }));
   }
 
   // A filter is optional: an entry that declares none accepts every delivered
@@ -192,7 +215,9 @@ function buildTrigger(
 
   return {
     type: trigger.kind,
-    ...Object.fromEntries(declared.map((name) => [name, values[name] ?? ""])),
+    ...Object.fromEntries(
+      declared.map((name) => [name, fieldText(values[name])]),
+    ),
     ...(trigger.kind === "event" && {
       source: repoPicker?.field.provider ?? "",
       ...(entry.setup.filter && {
@@ -222,12 +247,10 @@ function buildBundlePayload(
   tarballPath: string,
 ): SetupRequestBody {
   const bundle = entry.setup.bundle!;
-  const repoPicker = findRepoPickerField(entry.setup);
-  const repository = repoPicker ? values[repoPicker.name] : undefined;
   const scope = { form: values, automation: entry };
 
   const payload: SetupRequestBody = {
-    name: repository ? `${entry.name} - ${repository}` : entry.name,
+    name: deriveName(entry, values),
   };
 
   const trigger = buildTrigger(entry, values);
@@ -255,7 +278,9 @@ function interpolateConfig(
   node: SetupBundleConfigValue,
   scope: Parameters<typeof interpolateText>[1],
 ): SetupBundleConfigValue {
-  if (typeof node === "string") return interpolateText(node, scope);
+  if (typeof node === "string") {
+    return interpolateValue(node, scope) as SetupBundleConfigValue;
+  }
   if (Array.isArray(node)) {
     return node.map((item) => interpolateConfig(item, scope));
   }
