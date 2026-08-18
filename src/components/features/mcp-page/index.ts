@@ -3,6 +3,7 @@ export { InstalledServerCard } from "./installed-server-card";
 export { MarketplaceSection } from "./marketplace-section";
 export { MarketplaceCard } from "./marketplace-card";
 export { InstallServerModal } from "./install-server-modal";
+export { IntegrationAutomationRecommendationsModal } from "./integration-automation-recommendations-modal";
 export { SaveAsSecretToggle } from "./save-as-secret-toggle";
 export { CustomServerEditor } from "./custom-server-editor";
 export { McpToolbar } from "./mcp-toolbar";

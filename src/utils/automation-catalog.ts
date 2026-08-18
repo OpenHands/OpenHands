@@ -47,6 +47,20 @@ export function getIntegrationIds(automation: RecommendedAutomation): string[] {
 }
 
 /**
+ * Catalog-driven recommendations for one integration. The integration-success
+ * surface uses this reverse lookup instead of owning a second, hard-coded map
+ * from providers to automation ids.
+ */
+export function getAutomationsForIntegration(
+  automations: readonly RecommendedAutomation[],
+  integrationId: string,
+): RecommendedAutomation[] {
+  return automations.filter((automation) =>
+    getIntegrationIds(automation).includes(integrationId),
+  );
+}
+
+/**
  * The integrations that gate this automation. One marked `required: false` can
  * be connected later, during setup, so it is still worth showing on the card
  * but must never stand between the user and a launch.

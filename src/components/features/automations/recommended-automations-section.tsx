@@ -26,6 +26,7 @@ import {
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
   getAutomationIcon,
+  getAutomationsForIntegration,
   getAutomationLaunchPrompt,
   getIntegrationIds,
 } from "#/utils/automation-catalog";
@@ -47,6 +48,8 @@ interface RecommendedAutomationsSectionProps {
   onSelect: (automation: RecommendedAutomation) => void;
   /** When true, title, description, and cards share one scroll area. */
   scrollableGrid?: boolean;
+  /** Restrict the catalog to automations that declare this integration. */
+  integrationId?: string;
 }
 
 export { getAutomationsByPopularity };
@@ -116,11 +119,13 @@ function buildRecommendedAutomationPills(
   installedServers: MCPServerConfig[],
   missingCount: number,
   translate: TFunction,
+  connectedIntegrationId?: string,
 ): SkillCardPill[] {
   const pills: SkillCardPill[] = integrations.map(
     ({ id, entry, mcpInstallable }) => {
       const installed =
-        !!entry && findInstalledEntryMatch(entry, installedServers);
+        id === connectedIntegrationId ||
+        (!!entry && findInstalledEntryMatch(entry, installedServers));
       const name = entry?.name ?? id;
 
       return {
@@ -213,6 +218,7 @@ interface AutomationCardGridProps {
   installedServers: MCPServerConfig[];
   onSelect: (automation: RecommendedAutomation) => void;
   translate: TFunction;
+  connectedIntegrationId?: string;
 }
 
 function AutomationCardGrid({
@@ -220,6 +226,7 @@ function AutomationCardGrid({
   installedServers,
   onSelect,
   translate,
+  connectedIntegrationId,
 }: AutomationCardGridProps) {
   return (
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
@@ -229,7 +236,8 @@ function AutomationCardGrid({
         // actually connect; an external-setup integration is surfaced on its
         // own pill instead.
         const missingCount = integrations.filter(
-          ({ entry, mcpInstallable }) =>
+          ({ id, entry, mcpInstallable }) =>
+            id !== connectedIntegrationId &&
             !!entry &&
             mcpInstallable &&
             !findInstalledEntryMatch(entry, installedServers),
@@ -278,6 +286,7 @@ function AutomationCardGrid({
                     installedServers,
                     missingCount,
                     translate,
+                    connectedIntegrationId,
                   )}
                   testId={`recommended-automation-pills-${automation.id}`}
                 />
@@ -296,20 +305,20 @@ export function RecommendedAutomationsSection({
   query = "",
   onSelect,
   scrollableGrid = false,
+  integrationId,
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
 
-  // Only the query narrows the grid. An automation that declares no
-  // integration needs nothing connected, and one naming an integration this
-  // host cannot resolve is shown with that gap on its pill, so neither is a
-  // reason to hide a card the catalog ships.
-  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) =>
-    automationMatchesQuery(
-      automation,
-      getIntegrationEntries(automation),
-      query,
-    ),
-  );
+  const candidateAutomations = integrationId
+    ? getAutomationsForIntegration(RECOMMENDED_AUTOMATIONS, integrationId)
+    : RECOMMENDED_AUTOMATIONS;
+  const visibleAutomations = candidateAutomations.filter((automation) => {
+    const integrationEntries = getIntegrationEntries(automation);
+    return (
+      isAutomationAvailable(automation) &&
+      automationMatchesQuery(automation, integrationEntries, query)
+    );
+  });
 
   if (visibleAutomations.length === 0) return null;
 
@@ -351,6 +360,7 @@ export function RecommendedAutomationsSection({
               installedServers={installedServers}
               onSelect={onSelect}
               translate={t}
+              connectedIntegrationId={integrationId}
             />
           </>
         )}
@@ -375,6 +385,7 @@ export function RecommendedAutomationsSection({
               installedServers={installedServers}
               onSelect={onSelect}
               translate={t}
+              connectedIntegrationId={integrationId}
             />
           </section>
         )}

@@ -107,9 +107,11 @@ const navigationValue: NavigationContextValue = {
 function renderLauncher({
   withBackendProvider = false,
   variant = "catalog",
+  integrationId,
 }: {
   withBackendProvider?: boolean;
   variant?: "catalog" | "rail";
+  integrationId?: string;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -117,7 +119,10 @@ function renderLauncher({
 
   const launcher = (
     <NavigationProvider value={navigationValue}>
-      <RecommendedAutomationsLauncher variant={variant} />
+      <RecommendedAutomationsLauncher
+        variant={variant}
+        integrationId={integrationId}
+      />
     </NavigationProvider>
   );
 
@@ -295,6 +300,25 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
     ).not.toBeInTheDocument();
+  });
+
+  it("treats the integration-success provider as connected before settings refetches", () => {
+    // Arrange — settings still carry the pre-install snapshot, as they can on
+    // the first render immediately after the mutation succeeds.
+    renderLauncher({ integrationId: "linear" });
+
+    // Act
+    fireEvent.click(
+      screen.getByTestId("recommended-automation-card-linear-triage-assistant"),
+    );
+
+    // Assert — exact provider filtering hides unrelated cards, and the launch
+    // does not ask the user to install Linear a second time.
+    expect(
+      screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    expect(mockCreateConversationMutate).toHaveBeenCalledTimes(1);
   });
 
   it("shows a left-aligned MCP icon stack on each card", () => {
