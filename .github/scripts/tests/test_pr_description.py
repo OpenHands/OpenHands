@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from check_pr_description import (
     extract_linked_issue_numbers,
+    has_screenshot_or_video,
+    validate_frontend_screenshot,
     extract_pr_type,
     validate_linked_issue_ready,
     validate_bug_fix_evidence,
@@ -222,3 +224,42 @@ https://youtube.com/watch?v=abc123
 """
     errors = validate_bug_fix_evidence(body)
     assert errors == []
+
+# ---------------------------------------------------------------------------
+# Fenced code blocks are examples, not evidence
+# ---------------------------------------------------------------------------
+
+BODY_FENCED_SCREENSHOT_ONLY = """## Video/Screenshots
+
+No screenshot yet — the template says to add one like this:
+
+```markdown
+![demo](https://github.com/user-attachments/assets/abc123)
+```
+"""
+
+def test_fenced_screenshot_is_not_evidence():
+    assert not has_screenshot_or_video(BODY_FENCED_SCREENSHOT_ONLY)
+
+def test_real_screenshot_outside_fence_is_evidence():
+    body = (
+        "## Video/Screenshots\n\n"
+        "![demo](https://github.com/user-attachments/assets/abc123)\n\n"
+        "The template example, for reference:\n\n"
+        "```markdown\n![demo](https://example.com/example.png)\n```\n"
+    )
+    assert has_screenshot_or_video(body)
+
+def test_bug_fix_evidence_rejects_fenced_screenshot():
+    body = "## Type of Change\n\n- [x] Bug fix\n\n" + BODY_FENCED_SCREENSHOT_ONLY
+    assert validate_bug_fix_evidence(body)
+
+def test_frontend_screenshot_rejects_fenced_screenshot():
+    errors = validate_frontend_screenshot(
+        BODY_FENCED_SCREENSHOT_ONLY, ["frontend/src/App.tsx"]
+    )
+    assert errors
+
+def test_frontend_screenshot_accepts_real_screenshot():
+    body = "![demo](https://github.com/user-attachments/assets/abc123)\n"
+    assert validate_frontend_screenshot(body, ["frontend/src/App.tsx"]) == []

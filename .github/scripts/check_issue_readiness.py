@@ -33,6 +33,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from _markdown import strip_code_fences
+
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
@@ -125,6 +127,9 @@ def find_section(sections: dict[str, str], *labels: str) -> str:
 
 
 def has_screenshot_or_video(text: str) -> bool:
+    # Fenced blocks are stripped first: an example showing what a screenshot
+    # embed looks like is not a screenshot. Same for the two checks below.
+    text = strip_code_fences(text)
     if MARKDOWN_IMAGE_RE.search(text):
         return True
     if HTML_IMG_RE.search(text):
@@ -141,11 +146,12 @@ def has_screenshot_or_video(text: str) -> bool:
 
 
 def references_run_method(text: str) -> bool:
+    text = strip_code_fences(text)
     return any(pattern.search(text) for pattern in RUN_METHOD_PATTERNS)
 
 
 def has_checklist_item(text: str) -> bool:
-    return bool(CHECKLIST_ITEM_RE.search(text))
+    return bool(CHECKLIST_ITEM_RE.search(strip_code_fences(text)))
 
 
 def check_bug(sections: dict[str, str]) -> ReadinessResult:
