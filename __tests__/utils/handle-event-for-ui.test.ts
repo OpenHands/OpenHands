@@ -73,7 +73,7 @@ describe("handleEventForUI", () => {
       role: "user",
       content: [{ type: "text", text: "Hello, world!" }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 
@@ -111,7 +111,7 @@ describe("handleEventForUI", () => {
       role: "assistant",
       content: [{ type: "text", text: "I'll start working on that. Done." }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 
