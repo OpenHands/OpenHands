@@ -38,6 +38,11 @@ export function useUrlSearch(
           } finally {
             setIsUrlSearchLoading(false);
           }
+        } else {
+          // HTTPS URL that does not contain an owner/repository path.
+          // Clear any prior results so the dropdown never shows a
+          // result that no longer corresponds to the current input.
+          setUrlSearchResults([]);
         }
       } else {
         setUrlSearchResults([]);

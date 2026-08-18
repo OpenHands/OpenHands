@@ -170,6 +170,46 @@ describe("useUrlSearch", () => {
       });
     });
 
+    it("should clear prior results when an HTTPS URL does not match repo pattern", async () => {
+      mockSearchGitRepositories.mockResolvedValue({
+        items: [
+          {
+            id: "1",
+            full_name: "owner/repo",
+            git_provider: "github",
+            is_public: true,
+          },
+        ],
+        next_page_id: null,
+      });
+
+      const { result, rerender } = renderHook(
+        ({ inputValue }: { inputValue: string }) =>
+          useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo",
+          },
+        },
+      );
+
+      // Wait for the initial search to complete and populate results.
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toHaveLength(1);
+      });
+
+      // Change to an HTTPS URL without an owner/repository path.
+      rerender({ inputValue: "https://example.com/" });
+
+      // Prior results must be cleared without issuing another search.
+      await waitFor(() => {
+        expect(result.current.urlSearchResults).toEqual([]);
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+
+      expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+    });
+
     it("should set loading state correctly during search", async () => {
       let resolveSearch: (value: unknown) => void;
       const searchPromise = new Promise((resolve) => {
