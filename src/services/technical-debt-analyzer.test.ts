@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  TechnicalDebtAnalyzer,
-  GENESIS_HASH,
-} from "./technical-debt-analyzer";
+import { TechnicalDebtAnalyzer, GENESIS_HASH } from "./technical-debt-analyzer";
 
 describe("TechnicalDebtAnalyzer", () => {
   it("should score clean codebase with high production readiness", () => {
