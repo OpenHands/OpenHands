@@ -180,16 +180,24 @@ trap cleanup EXIT SIGINT SIGTERM
 # ── 1. Start Agent Server ────────────────────────────────────────────────────
 log "Starting agent-server on port $AGENT_SERVER_PORT..."
 
-if command -v openhands-agent-server >/dev/null 2>&1; then
-  # Binary build (production image)
-  openhands-agent-server --port "$AGENT_SERVER_PORT" &
-elif [ -x /agent-server/.venv/bin/python ]; then
-  # Source build (development image)
-  /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT" &
-else
-  log_error "Cannot find agent-server binary or source venv."
-  exit 1
-fi
+(
+  while true; do
+    if command -v openhands-agent-server >/dev/null 2>&1; then
+      # Binary build (production image)
+      openhands-agent-server --port "$AGENT_SERVER_PORT"
+    elif [ -x /agent-server/.venv/bin/python ]; then
+      # Source build (development image)
+      /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT"
+    else
+      log_error "Cannot find agent-server binary or source venv."
+      exit 1
+    fi
+    log_error "agent-server exited. Restarting in 1s..."
+    sleep 1
+  done
+) &
+
+
 PIDS+=($!)
 
 # ── 2. Start Automation Server ───────────────────────────────────────────────
