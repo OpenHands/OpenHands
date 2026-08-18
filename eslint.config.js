@@ -46,6 +46,54 @@ const compat = new FlatCompat({
   resolvePluginsRelativeTo: __dirname,
 });
 
+/**
+ * ESLint rule: forbid raw `fetch` calls that target an agent-server `/api/...`
+ * path, so API access goes through the typed @openhands/typescript-client
+ * clients. Only statically-resolvable agent-server paths are flagged; external
+ * URLs, dynamic identifiers, and non-`/api/` draws (cookie-auth static
+ * fileserver, OAuth device verification) are left alone.
+ */
+function createNoDirectAgentServerFetchRule() {
+  return {
+    meta: {
+      type: "problem",
+      docs: {
+        description:
+          "Use typed @openhands/typescript-client clients instead of global fetch for agent-server API calls.",
+      },
+      messages: {
+        noRawFetch:
+          "Use a typed @openhands/typescript-client client (or AgentServerClient.request) instead of global fetch for agent-server API calls.",
+      },
+    },
+    create(context) {
+      function resolveStaticUrl(node) {
+        if (node.type === "Literal" && typeof node.value === "string") {
+          return node.value;
+        }
+        if (node.type === "TemplateLiteral") {
+          return node.quasis
+            .map((q) => q.value.raw)
+            .join("");
+        }
+        return null;
+      }
+
+      return {
+        CallExpression(node) {
+          const callee = node.callee;
+          if (callee.type !== "Identifier" || callee.name !== "fetch") return;
+          const urlNode = node.arguments[0];
+          if (!urlNode) return;
+          const url = resolveStaticUrl(urlNode);
+          if (url === null || !url.includes("/api/")) return;
+          context.report({ node, messageId: "noRawFetch" });
+        },
+      };
+    },
+  };
+}
+
 export default [
   // Files / dirs we never want to lint.
   {
@@ -112,6 +160,14 @@ export default [
       // `// eslint-disable-next-line import/foo` comments keep working.
       import: importXPlugin,
       prettier: prettierPlugin,
+      // Local rule enforcing that agent-server API calls go through the typed
+      // @openhands/typescript-client clients instead of a raw `fetch`.
+      local: {
+        rules: {
+          "no-direct-agent-server-fetch":
+            createNoDirectAgentServerFetchRule(),
+        },
+      },
     },
     settings: {
       react: { version: "detect" },
@@ -205,6 +261,14 @@ export default [
           ],
         },
       ],
+      // All agent-server API access must go through the typed
+      // @openhands/typescript-client clients. A raw global `fetch` against an
+      // agent-server `/api/...` path bypasses the typed access layer, so it is
+      // banned here (see also src/api/no-direct-agent-server-calls.test.ts).
+      // Browser-cookie-auth and external (non-agent-server) fetches — e.g. the
+      // workspace static fileserver, OAuth device verification, and the npm
+      // registry version check — do not target `/api/...` and are unaffected.
+      "local/no-direct-agent-server-fetch": "error",
 
       // Allow `interface Foo extends Bar<"foo"> {}` — the codebase uses this
       // discriminated-union pattern in `src/types/agent-server/**` and the

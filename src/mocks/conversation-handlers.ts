@@ -5,7 +5,6 @@ import {
   ExecutionStatus,
   type OpenHandsEvent,
 } from "#/types/agent-server/core";
-import { GetMicroagentsResponse } from "#/api/open-hands.types";
 import {
   TABLE_DEMO_CONVERSATION_ID,
   TABLE_DEMO_EVENTS,
@@ -141,7 +140,7 @@ function createPaginationEvent(
       role: "assistant",
       content: [{ type: "text", text: `${messagePrefix} ${index}` }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 }
@@ -160,12 +159,12 @@ function searchPaginationEvents(
   const timestampLt = searchParams.get("timestamp__lt");
   const sortOrder = searchParams.get("sort_order");
   const filtered = timestampLt
-    ? events.filter((event) => event.timestamp < timestampLt)
+    ? events.filter((event) => (event.timestamp ?? "") < timestampLt)
     : events;
   const sorted = [...filtered].sort((a, b) =>
     sortOrder === "TIMESTAMP_DESC"
-      ? b.timestamp.localeCompare(a.timestamp)
-      : a.timestamp.localeCompare(b.timestamp),
+      ? (b.timestamp ?? "").localeCompare(a.timestamp ?? "")
+      : (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
   );
 
   return {
@@ -476,54 +475,4 @@ export const CONVERSATION_HANDLERS = [
     "/api/v1/conversations/:conversationId/pending-messages",
     async () => HttpResponse.json({ id: "mock-pending-id", position: 0 }),
   ),
-
-  http.get("*/api/conversations/:conversationId/microagents", async () => {
-    const response: GetMicroagentsResponse = {
-      microagents: [
-        {
-          name: "init",
-          type: "agentskills",
-          content: "Initialize an AGENTS.md file for the repository",
-          triggers: ["/init"],
-        },
-        {
-          name: "releasenotes",
-          type: "agentskills",
-          content: "Generate a changelog from the most recent release",
-          triggers: ["/releasenotes"],
-        },
-        {
-          name: "test-runner",
-          type: "agentskills",
-          content: "Run the test suite and report results",
-          triggers: ["/test"],
-        },
-        {
-          name: "code-search",
-          type: "knowledge",
-          content: "Search the codebase semantically",
-          triggers: ["/search"],
-        },
-        {
-          name: "docker",
-          type: "agentskills",
-          content: "Docker usage guide for container environments",
-          triggers: ["docker", "container"],
-        },
-        {
-          name: "github",
-          type: "agentskills",
-          content: "GitHub API interaction guide",
-          triggers: ["github", "git"],
-        },
-        {
-          name: "work_hosts",
-          type: "repo",
-          content: "Available hosts for web applications",
-          triggers: [],
-        },
-      ],
-    };
-    return HttpResponse.json(response);
-  }),
 ];

@@ -520,7 +520,7 @@ export function ConversationWebSocketProvider({
           // them for replayed events (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
@@ -535,15 +535,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -552,13 +559,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 
@@ -736,7 +743,7 @@ export function ConversationWebSocketProvider({
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,
@@ -753,15 +760,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -770,13 +784,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "planning_agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 

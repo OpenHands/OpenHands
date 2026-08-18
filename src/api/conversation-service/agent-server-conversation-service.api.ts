@@ -440,6 +440,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        trigger: "gui",
       };
       return createCloudAppConversation(request);
     }

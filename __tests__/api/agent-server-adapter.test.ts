@@ -4,6 +4,8 @@ import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversat
 
 import {
   ACP_SERVER_TAG_KEY,
+  AGENT_CANVAS_SOURCE,
+  CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
   fetchBackendRuntimeServicesInfo,
@@ -1099,7 +1101,7 @@ describe("toAppConversation", () => {
     const result = toAppConversation({
       ...baseInfo,
       current_model_id: "claude-sonnet-4-6",
-      current_model_name: "Claude Sonnet 4.6",
+      current_model_name: "Claude Sonnet",
       agent: {
         kind: "ACPAgent",
         acp_model: "claude-opus-4-7",
@@ -1107,7 +1109,7 @@ describe("toAppConversation", () => {
       },
     });
     expect(result.agent_kind).toBe("acp");
-    expect(result.llm_model).toBe("Claude Sonnet 4.6");
+    expect(result.llm_model).toBe("Claude Sonnet");
   });
 
   it("surfaces the runtime ACP default model over a configured acp_model", () => {
@@ -1441,7 +1443,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(payload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // LLM-only fields must not leak into the ACP settings payload.
@@ -1458,7 +1460,10 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
       load_project_skills: true,
     });
     expect(Array.isArray(acpAgentContext.skills)).toBe(true);
-    expect(payload.tags).toEqual({ [ACP_SERVER_TAG_KEY]: "claude-code" });
+    expect(payload.tags).toEqual({
+      [ACP_SERVER_TAG_KEY]: "claude-code",
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("forwards mcp_config to the ACP subprocess when servers are configured", () => {
@@ -1528,7 +1533,9 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toBeUndefined();
     expect(payload.agent_settings.acp_server).toBeUndefined();
     expect(payload.agent_settings.llm.model).toBe("gpt-4");
-    expect(payload.tags).toBeUndefined();
+    expect(payload.tags).toEqual({
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("omits acp_model when the user clears it (null)", () => {
@@ -1588,7 +1595,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
   });
 
@@ -1610,7 +1617,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/codex-acp@1.1.2",
+      "@agentclientprotocol/codex-acp@1.1.7",
     ]);
   });
 
@@ -1757,7 +1764,7 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_command).toEqual([
       "npx",
       "-y",
-      "@agentclientprotocol/claude-agent-acp@0.44.0",
+      "@agentclientprotocol/claude-agent-acp@0.63.0",
     ]);
     expect(acpPayload.agent_settings.acp_model).toBe("claude-opus-4-5");
     // acp_env is no longer a forwarded ACP setting — a stale value on saved

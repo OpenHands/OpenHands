@@ -969,7 +969,7 @@ describe("ConversationCard", () => {
 
     it("shows the provider's picker label for a known model ID", () => {
       // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus 4.8 (1M)") instead of the raw ID — matching
+      // human label ("Claude Opus (1M)") instead of the raw ID — matching
       // what the Settings → Agent picker shows for the same value.
       renderWithProviders(
         <ConversationCard
@@ -984,10 +984,10 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("Claude Opus 4.8 (1M)");
+      expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute(
         "title",
-        "Claude Code · Claude Opus 4.8 (1M)",
+        "Claude Code · Claude Opus (1M)",
       );
     });
 
