@@ -22,8 +22,10 @@ import {
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  RuntimeConversationStats,
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
+import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -63,6 +65,12 @@ export interface DirectConversationInfo {
       per_turn_token?: number;
     } | null;
   } | null;
+  /**
+   * Raw per-usage-id LLM stats from the agent-server. Search/list responses
+   * often carry real usage here even when `metrics` above comes back unset;
+   * {@link toAppConversation} combines this as a fallback in that case.
+   */
+  stats?: RuntimeConversationStats | null;
   agent?: {
     /**
      * Pydantic discriminator from the SDK union: ``"ACPAgent"`` for ACP CLI
@@ -381,7 +389,7 @@ export function toAppConversation(
               }
             : null,
         }
-      : null,
+      : combineUsageMetrics(info.stats),
     created_at: info.created_at,
     updated_at: info.updated_at,
     execution_status:

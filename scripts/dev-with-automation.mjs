@@ -735,6 +735,13 @@ const AGENT_SERVER_ROUTE_PREFIXES = [
   "/openapi.json",
 ];
 
+// This launcher starts the agent-server with `--host 127.0.0.1`, but localhost
+// can resolve to ::1 first (notably on Windows), so every request this process
+// or the automation backend makes to it must address IPv4 explicitly.
+function getAgentServerBaseUrl(config) {
+  return `http://127.0.0.1:${config.agentServerPort}`;
+}
+
 function getLocalServiceRoutes(config) {
   const routes = [];
 
@@ -748,7 +755,7 @@ function getLocalServiceRoutes(config) {
 
   if (config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
-      routes.push([prefix, `http://127.0.0.1:${config.agentServerPort}`]);
+      routes.push([prefix, getAgentServerBaseUrl(config)]);
     }
   }
 
@@ -931,10 +938,10 @@ function startAutomationBackend(config) {
         //
         // Priority:
         //   1. AUTOMATION_AGENT_SERVER_URL explicitly set in the user's env
-        //   2. `localhost:<agentServerPort>`
+        //   2. `127.0.0.1:<agentServerPort>`
         AUTOMATION_AGENT_SERVER_URL:
           process.env.AUTOMATION_AGENT_SERVER_URL ||
-          `http://localhost:${config.agentServerPort}`,
+          getAgentServerBaseUrl(config),
         // The URL exported into the in-sandbox bash chain as
         // `AGENT_SERVER_URL` (read by main.py / setup.sh to call back into
         // the agent-server).
@@ -1141,7 +1148,7 @@ async function seedAutomationSecret(config, options = {}) {
 
   logService("secrets", `Seeding ${secretName} into agent-server...`, c.dim);
 
-  const url = `http://localhost:${config.agentServerPort}/api/settings/secrets`;
+  const url = `${getAgentServerBaseUrl(config)}/api/settings/secrets`;
   const body = JSON.stringify({
     name: secretName,
     value: config.sessionApiKey,
@@ -1476,7 +1483,7 @@ async function main(options = {}) {
 
     agentServerReady = await waitForService(
       "agent-server",
-      `http://localhost:${config.agentServerPort}/server_info`,
+      `${getAgentServerBaseUrl(config)}/server_info`,
       agentServerReadyTimeoutMs,
     );
   }
@@ -1586,6 +1593,7 @@ export {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
   main,
