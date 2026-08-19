@@ -38,6 +38,9 @@ export function useUrlSearch(
           } finally {
             setIsUrlSearchLoading(false);
           }
+        } else {
+          // Issue #16663: clear stale results when HTTPS URL lacks owner/repo
+          setUrlSearchResults([]);
         }
       } else {
         setUrlSearchResults([]);
