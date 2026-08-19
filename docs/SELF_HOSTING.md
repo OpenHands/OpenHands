@@ -99,13 +99,9 @@ in step 4.
 > single port, but a path prefix routes requests, it does not isolate them.
 > Script running anywhere on that origin, including editor content reached
 > through an extension or a compromised asset, can read the canvas's
-> `localStorage`, which holds the API key of _every_ backend registered in that
-> browser. Opening the editor already implies shell and filesystem access to
-> its own workspace, so what is newly exposed is other backends' credentials.
-> Until that storage is fixed — tracked in
-> [#16492](https://github.com/OpenHands/OpenHands/issues/16492) — avoid
-> registering backends you care about in the same browser you open the editor
-> from.
+> `localStorage`, which holds the SESSION API key of _every_ backend registered
+> in that browser. Tracked in
+> [#16492](https://github.com/OpenHands/OpenHands/issues/16492).
 
 ## 3. Run Agent Canvas
 
