@@ -50,6 +50,22 @@ describe("parseGitRemoteUrl", () => {
     expect(result?.provider).toBe("gitlab");
   });
 
+  it("parses ssh:// URLs that carry an explicit port", () => {
+    const result = parseGitRemoteUrl(
+      "ssh://git@git.example.com:2222/owner/repo.git",
+    );
+    expect(result?.host).toBe("git.example.com");
+    expect(result?.repository).toBe("owner/repo");
+  });
+
+  it("parses http(s) URLs that carry credentials and a port", () => {
+    const result = parseGitRemoteUrl(
+      "http://user@git.example.com:8080/owner/repo.git",
+    );
+    expect(result?.host).toBe("git.example.com");
+    expect(result?.repository).toBe("owner/repo");
+  });
+
   it("parses Bitbucket Cloud URLs", () => {
     const result = parseGitRemoteUrl(
       "https://bitbucket.org/owner/repo.git",
