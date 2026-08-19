@@ -8,6 +8,7 @@ import {
   type AutomationRun,
 } from "#/types/automation";
 import { RunStatusBadge } from "./run-status-badge";
+import { RunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
 
 interface ActivityLogItemProps {
@@ -65,6 +66,10 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     run.status === AutomationRunStatus.COMPLETED ||
     run.status === AutomationRunStatus.FAILED;
   const showNoConversationLabel = !hasConversation && isTerminal;
+  const showPhase =
+    run.status === AutomationRunStatus.FAILED ||
+    run.status === AutomationRunStatus.PENDING ||
+    run.status === AutomationRunStatus.RUNNING;
   const [logsOpen, setLogsOpen] = useState(false);
   // The backend leaves started_at unset (epoch/zero) while a run is Pending
   // and only populates it once execution begins. Show the user's local time
@@ -116,7 +121,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {formattedCost && (
           <span
             data-testid="run-cost"
@@ -127,6 +132,9 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           </span>
         )}
         {logsButton}
+        {showPhase && (
+          <RunPhase code={run.phase_code} label={run.phase_label} />
+        )}
         <RunStatusBadge status={run.status} />
       </div>
     </>

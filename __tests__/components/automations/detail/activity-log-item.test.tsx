@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
+import { http, HttpResponse } from "msw";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
 import {
   AutomationRunStatus,
   type AutomationRun,
+  type AutomationRunsResponse,
 } from "#/types/automation";
 import {
   __resetActiveStoreForTests,
@@ -16,6 +18,8 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import { I18nKey } from "#/i18n/declaration";
+import { server } from "#/mocks/node";
+import { useAutomationRuns } from "#/hooks/query/use-automation-detail";
 
 // In tests the i18n backend doesn't resolve translation values, so the
 // aria-label resolves to the raw key string. Match it explicitly.
@@ -25,27 +29,24 @@ const LOGS_BUTTON_NAME = (name: string) =>
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
 // they don't need to bring up the entire query stack.
-vi.mock(
-  "#/components/features/automations/detail/run-logs-modal",
-  () => ({
-    RunLogsModal: ({
-      isOpen,
-      onClose,
-      bashCommandId,
-    }: {
-      isOpen: boolean;
-      onClose: () => void;
-      bashCommandId: string | null;
-    }) =>
-      isOpen ? (
-        <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </div>
-      ) : null,
-  }),
-);
+vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
+  RunLogsModal: ({
+    isOpen,
+    onClose,
+    bashCommandId,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    bashCommandId: string | null;
+  }) =>
+    isOpen ? (
+      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+        <button type="button" onClick={onClose}>
+          close
+        </button>
+      </div>
+    ) : null,
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -287,4 +288,345 @@ describe("ActivityLogItem — run cost", () => {
       screen.queryByText((content) => content.startsWith("$")),
     ).not.toBeInTheDocument();
   });
+});
+
+describe("ActivityLogItem — run phase", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows the phase as the place of failure for a FAILED run", () => {
+    // Arrange: the run failed after reaching sandbox_provisioning — a code
+    // known to the frontend, so it renders translated (raw key in tests).
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      conversation_id: null,
+      bash_command_id: null,
+      phase_code: "sandbox_provisioning",
+      phase_label: null,
+      phase_updated_at: "2026-01-01T10:01:30Z",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_SANDBOX_PROVISIONING),
+    ).toBeInTheDocument();
+  });
+
+  it("does not display the phase for a COMPLETED run, even though it was saved", () => {
+    // Arrange: the run completed, but a phase was recorded along the way.
+    const run = makeRun({
+      status: AutomationRunStatus.COMPLETED,
+      phase_code: "running_agent",
+      phase_label: null,
+      phase_updated_at: "2026-01-01T10:01:30Z",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: the field exists on the run (saved), but nothing renders it.
+    expect(run.phase_code).toBe("running_agent");
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase absent entirely", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+    vi.restoreAllMocks();
+  });
+
+  it("renders a RUNNING row unchanged, without console errors, when the automation service omits phase fields entirely", () => {
+    // Arrange: an older automation service response — no phase_code,
+    // phase_label or phase_updated_at keys at all (not even null).
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+    });
+    delete (run as Partial<AutomationRun>).phase_code;
+    delete (run as Partial<AutomationRun>).phase_label;
+    delete (run as Partial<AutomationRun>).phase_updated_at;
+
+    // Act
+    expect(() => renderItem(run)).not.toThrow();
+
+    // Assert: renders as before — status badge present, no phase node, no
+    // console noise from the missing fields.
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActivityLogItem — run phase updates without reload", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("reflects a new phase_code from a prop update (as a poll refetch would produce), with no remount needed", () => {
+    // Arrange
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const buildTree = (run: AutomationRun) => (
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <MemoryRouter>
+            <ActivityLogItem run={run} />
+          </MemoryRouter>
+        </ActiveBackendProvider>
+      </QueryClientProvider>
+    );
+    const runningRun = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      phase_code: "queued",
+      phase_label: null,
+    });
+    const { rerender } = render(buildTree(runningRun));
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED),
+    ).toBeInTheDocument();
+
+    // Act: same run id, new phase — what the 3s poll in
+    // useAutomationRuns would hand down as a new `run` prop.
+    rerender(
+      buildTree({
+        ...runningRun,
+        phase_code: "running_agent",
+        phase_label: null,
+      }),
+    );
+
+    // Assert: the new phase is shown, the old one is gone — no reload.
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — phase truncation layout chain", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("gives the phase's flex-row ancestor min-w-0, so a long label can actually shrink and truncate instead of widening the row", () => {
+    // Arrange: an unrecognized code with a very long author-supplied label
+    // — the case that would otherwise blow out the row width.
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      phase_code: "custom_step",
+      phase_label: "y".repeat(200),
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: the phase node's containing flex row must be allowed to
+    // shrink below its content size for `truncate` + `max-w-*` on the
+    // phase span to have any effect (flex items default to min-width:
+    // auto, which pins them at content size otherwise).
+    const phaseNode = screen.getByTestId("run-phase");
+    const row = phaseNode.parentElement as HTMLElement;
+    expect(row.className).toMatch(/\bmin-w-0\b/);
+  });
+});
+
+describe("ActivityLogItem — run phase (badge still shown)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("shows only the existing status badge (not merely 'no phase') for an active run with an unknown code and an empty label", () => {
+    // Arrange
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      phase_code: "custom_step",
+      phase_label: "",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: no phase node, but the status badge is still on the row —
+    // the requirement is "only the existing status badge", not "nothing".
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — run phase hidden for CANCELLED/SKIPPED", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it.each([
+    [AutomationRunStatus.CANCELLED, I18nKey.AUTOMATIONS$DETAIL$CANCELLED],
+    [AutomationRunStatus.SKIPPED, I18nKey.AUTOMATIONS$DETAIL$SKIPPED],
+  ])(
+    "does not show the phase for a %s run, even with a known phase_code on record",
+    (status, badgeKey) => {
+      // Arrange
+      const run = makeRun({
+        status,
+        phase_code: "running_agent",
+        phase_label: null,
+        completed_at: "2026-01-01T10:02:00Z",
+      });
+
+      // Act
+      renderItem(run);
+
+      // Assert: phase hidden, but the status badge for this terminal
+      // status is still shown.
+      expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(badgeKey)).toBeInTheDocument();
+    },
+  );
+});
+
+describe("ActivityLogItem — run phase updates via live poll (poll→props leg)", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it(
+    "picks up a new phase_code from an actual 3s poll refetch (not just a prop change), driven by MSW",
+    async () => {
+      // Arrange: a harness that mirrors what ActivityLogSection does —
+      // read runs from the real polling hook and hand the first one to
+      // ActivityLogItem — without touching activity-log-section.tsx,
+      // which is out of this segment's scope.
+      let callCount = 0;
+      server.use(
+        http.get("*/api/automation/v1/:id/runs", () => {
+          callCount += 1;
+          const phase_code = callCount === 1 ? "queued" : "running_agent";
+          const response: AutomationRunsResponse = {
+            runs: [
+              {
+                id: "poll-run-1",
+                status: AutomationRunStatus.RUNNING,
+                conversation_id: null,
+                bash_command_id: null,
+                error_detail: null,
+                phase_code,
+                phase_label: null,
+                phase_updated_at: null,
+                started_at: new Date().toISOString(),
+                completed_at: null,
+              },
+            ],
+            total: 1,
+          };
+          return HttpResponse.json(response);
+        }),
+      );
+
+      function PollingHarness() {
+        const { data } = useAutomationRuns({
+          id: "auto-poll-1",
+          limit: 5,
+          offset: 0,
+        });
+        const run = data?.runs[0];
+        return run ? <ActivityLogItem run={run} /> : null;
+      }
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+
+      // Act
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ActiveBackendProvider>
+            <MemoryRouter>
+              <PollingHarness />
+            </MemoryRouter>
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+
+      // Assert: first fetch shows "queued" ...
+      await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED);
+
+      // ... and the 3s poll (useAutomationRuns' real refetchInterval, not
+      // simulated) brings in "running_agent" without any reload/remount.
+      await screen.findByText(
+        I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT,
+        {},
+        { timeout: 6000 },
+      );
+      expect(
+        screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_QUEUED),
+      ).not.toBeInTheDocument();
+      expect(callCount).toBeGreaterThanOrEqual(2);
+    },
+    10000,
+  );
 });

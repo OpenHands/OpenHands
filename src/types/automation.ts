@@ -93,6 +93,21 @@ export interface AutomationRun {
    * that added the field, hence optional.
    */
   cost?: number | null;
+  /**
+   * Machine-readable code for the run's current or last-known phase (e.g.
+   * "sandbox_provisioning"). `null` means nothing has reported one; absent
+   * entirely against an automation service that predates phase reporting.
+   * Code and label are one value, always written together.
+   */
+  phase_code?: string | null;
+  /**
+   * Author-supplied description of the phase (at most 200 characters, no
+   * control or separator characters, emoji and non-Latin text allowed).
+   * Data, not translatable interface copy.
+   */
+  phase_label?: string | null;
+  /** UTC datetime the phase was last written. Same nullability as `phase_code`. */
+  phase_updated_at?: string | null;
   started_at: string;
   completed_at: string | null;
 }
