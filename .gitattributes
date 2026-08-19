@@ -1,6 +1,0 @@
-* text=auto eol=lf
-
-# Icon binaries — never text-normalize (a mangled byte corrupts the file).
-*.png binary
-*.ico binary
-*.icns binary
