@@ -226,10 +226,6 @@ https://youtube.com/watch?v=abc123
     assert errors == []
 
 
-# ---------------------------------------------------------------------------
-# is_frontend_file — documentation carries no visual state
-# ---------------------------------------------------------------------------
-
 def test_markdown_under_frontend_prefix_is_not_frontend():
     assert not is_frontend_file("__tests__/router.md")
     assert not is_frontend_file("src/notes.md")
