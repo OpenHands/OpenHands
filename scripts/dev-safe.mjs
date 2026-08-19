@@ -48,7 +48,6 @@ const LOCAL_AGENT_SERVER_SUBDIRS = [
   "openhands-workspace",
 ];
 const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
-const DEFAULT_AGENT_SERVER_GIT_REF = SHARED_DEFAULTS.gitRefs?.agentServer ?? "";
 // Temporary transitive-dep pin: openhands-sdk 1.40.1 leaves agent-client-protocol
 // unbounded (>=0.10.1), but acp 0.11.0 reordered the ACP prompt() args and breaks
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
@@ -420,7 +419,6 @@ export function buildAgentServerCommand(env = process.env) {
   const localPath = env.OH_AGENT_SERVER_LOCAL_PATH;
   const gitRef = env.OH_AGENT_SERVER_GIT_REF;
   const version = env.OH_AGENT_SERVER_VERSION;
-  const defaultGitRef = DEFAULT_AGENT_SERVER_GIT_REF;
 
   const uvxArgs = [];
   let source = "";
@@ -492,23 +490,6 @@ export function buildAgentServerCommand(env = process.env) {
     uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
-  } else if (defaultGitRef) {
-    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${defaultGitRef}`;
-    uvxArgs.push(
-      "--reinstall",
-      "--from",
-      `${baseGitUrl}#subdirectory=openhands-agent-server`,
-      "--with",
-      `${baseGitUrl}#subdirectory=openhands-sdk`,
-      "--with",
-      `${baseGitUrl}#subdirectory=openhands-tools`,
-      "--with",
-      `${baseGitUrl}#subdirectory=openhands-workspace`,
-      "--with",
-      AGENT_SERVER_POSTHOG_CONSTRAINT,
-      "agent-server",
-    );
-    source = `git (${defaultGitRef}, default)`;
   } else {
     // Default to released PyPI version
     // Pin all SDK packages to the same version for consistency

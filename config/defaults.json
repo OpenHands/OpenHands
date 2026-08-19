@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for version/ref pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
+  "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
   "versions": {
     "agentServer": "1.42.1",
     "agentCanvas": "1.14.0",
@@ -37,10 +37,5 @@
   "telemetry": {
     "posthogApiKey": "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
     "posthogHost": "https://us.i.posthog.com"
-  },
-  "gitRefs": {
-    "_comment": "Commit SHAs used when defaulting to git installs instead of released packages during cross-repo validation.",
-    "agentServer": "8acbbb12dbc533a086e225908158e2dfb25dc49a",
-    "automation": "b07daaec8212ef15dc4dec80a6b3ba0339fb223a"
   }
 }

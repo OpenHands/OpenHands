@@ -36,11 +36,11 @@ it instead.
 
 ### Environment Variables
 
-| Variable                  | Description                    | Default                                               |
-| ------------------------- | ------------------------------ | ----------------------------------------------------- |
-| `PORT`                    | Ingress port                   | `8000`                                                |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `config/defaults.json` `gitRefs.automation` when set  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `config/defaults.json` `gitRefs.agentServer` when set |
+| Variable                  | Description                    | Default |
+| ------------------------- | ------------------------------ | ------- |
+| `PORT`                    | Ingress port                   | `8000`  |
+| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
+| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
 
 ### Alternative: Minimal Mode (without Automation)
 

@@ -28,7 +28,7 @@
  *
  * Environment variables:
  *   - PORT: Ingress port (default: 8000)
- *   - OH_AUTOMATION_GIT_REF: Git ref for automation (defaults to config/defaults.json gitRefs.automation when set)
+ *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
  *   - OH_AGENT_SERVER_LOCAL_PATH: Absolute path to a local software-agent-sdk
  *     checkout. Highest precedence for agent-server source selection: rebuilds
  *     the agent-server from local source and installs openhands-sdk,
@@ -83,7 +83,6 @@ const SHARED_DEFAULTS = JSON.parse(
 const DEFAULT_AUTOMATION_REPO = "https://github.com/OpenHands/automation";
 const DEFAULT_AUTOMATION_PACKAGE = SHARED_DEFAULTS.packages.automation;
 const DEFAULT_AUTOMATION_VERSION = SHARED_DEFAULTS.versions.automation;
-const DEFAULT_AUTOMATION_GIT_REF = SHARED_DEFAULTS.gitRefs?.automation ?? "";
 const DEFAULT_AUTOMATION_SDK_VERSION = SHARED_DEFAULTS.versions.agentServer;
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
 const DEFAULT_AUTOMATION_PORT = SHARED_DEFAULTS.ports.automation;
@@ -251,8 +250,8 @@ OPTIONS:
 
 ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
-  OH_AUTOMATION_GIT_REF       Git ref for automation (overrides config defaults)
-  OH_AUTOMATION_VERSION       Specific PyPI version for automation (overrides config git ref; fallback: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
+  OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
   OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
@@ -303,14 +302,14 @@ function validateLocalAutomationPath(localPath) {
  * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
  * - OH_AUTOMATION_VERSION: Specific PyPI version (e.g., "1.0.0a1")
  *
- * If none are set, defaults to DEFAULT_AUTOMATION_GIT_REF when configured;
- * otherwise falls back to the released DEFAULT_AUTOMATION_VERSION.
+ * If none are set, defaults to the released version specified by
+ * DEFAULT_AUTOMATION_VERSION. Set OH_AUTOMATION_GIT_REF to use a
+ * git branch or commit instead.
  */
 function buildAutomationCommand(env = process.env) {
   const localPath = env.OH_AUTOMATION_LOCAL_PATH;
   const gitRef = env.OH_AUTOMATION_GIT_REF;
   const version = env.OH_AUTOMATION_VERSION;
-  const defaultGitRef = DEFAULT_AUTOMATION_GIT_REF;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
   const uvxArgs = [];
@@ -355,16 +354,6 @@ function buildAutomationCommand(env = process.env) {
       "openhands.automation.app:app",
     );
     source = `PyPI (${version})`;
-  } else if (defaultGitRef) {
-    const gitUrl = `git+${repoUrl}@${defaultGitRef}`;
-    uvxArgs.push(
-      "--refresh",
-      "--from",
-      gitUrl,
-      "uvicorn",
-      "openhands.automation.app:app",
-    );
-    source = `git (${defaultGitRef}, default)`;
   } else {
     // Default to released PyPI version
     uvxArgs.push(

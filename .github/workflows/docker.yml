@@ -90,15 +90,11 @@ jobs:
           AGENT_SERVER_VERSION=$(node -p "require('./config/defaults.json').versions.agentServer")
           AGENT_SERVER_IMAGE_BASE=$(node -p "require('./config/defaults.json').images.agentServer")
           AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation")
-          AGENT_SERVER_SDK_GIT_REF=$(node -p "require('./config/defaults.json').gitRefs?.agentServer || ''")
-          AUTOMATION_GIT_REF=$(node -p "require('./config/defaults.json').gitRefs?.automation || ''")
           AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
           CANVAS_BASE_PATH=$(node -p "require('./config/defaults.json').paths.canvasBasePath")
           echo "agent_server_version=$AGENT_SERVER_VERSION" >> "$GITHUB_OUTPUT"
           echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python" >> "$GITHUB_OUTPUT"
-          echo "agent_server_sdk_git_ref=$AGENT_SERVER_SDK_GIT_REF" >> "$GITHUB_OUTPUT"
           echo "default_automation_version=$AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
-          echo "automation_git_ref=$AUTOMATION_GIT_REF" >> "$GITHUB_OUTPUT"
           echo "agent_canvas_version=$AGENT_CANVAS_VERSION" >> "$GITHUB_OUTPUT"
           echo "canvas_base_path=$CANVAS_BASE_PATH" >> "$GITHUB_OUTPUT"
 
@@ -107,10 +103,8 @@ jobs:
         env:
           AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
           DEFAULT_AGENT_SERVER_IMAGE: ${{ steps.config.outputs.default_agent_server_image }}
-          DEFAULT_AGENT_SERVER_SDK_GIT_REF: ${{ steps.config.outputs.agent_server_sdk_git_ref }}
           AUTOMATION_VERSION_INPUT: ${{ inputs.automation_version }}
           DEFAULT_AUTOMATION_VERSION: ${{ steps.config.outputs.default_automation_version }}
-          DEFAULT_AUTOMATION_GIT_REF: ${{ steps.config.outputs.automation_git_ref }}
           POSTHOG_STAGING_KEY: ${{ vars.POSTHOG_STAGING_KEY }}
           POSTHOG_PROD_KEY: ${{ vars.POSTHOG_PROD_KEY }}
         run: |
@@ -120,19 +114,15 @@ jobs:
           # Resolve agent-server base image (input override > config/defaults.json)
           if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
             echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
-            echo "agent_server_sdk_git_ref=" >> "$GITHUB_OUTPUT"
           else
             echo "agent_server_image=$DEFAULT_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
-            echo "agent_server_sdk_git_ref=$DEFAULT_AGENT_SERVER_SDK_GIT_REF" >> "$GITHUB_OUTPUT"
           fi
 
-          # Resolve automation source (input version override > config git ref > config version)
+          # Resolve automation version (input override > config/defaults.json)
           if [ -n "$AUTOMATION_VERSION_INPUT" ]; then
             echo "automation_version=$AUTOMATION_VERSION_INPUT" >> "$GITHUB_OUTPUT"
-            echo "automation_git_ref=" >> "$GITHUB_OUTPUT"
           else
             echo "automation_version=$DEFAULT_AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
-            echo "automation_git_ref=$DEFAULT_AUTOMATION_GIT_REF" >> "$GITHUB_OUTPUT"
           fi
 
           # Build arch-suffixed tags (e.g., sha-abc1234-amd64)
@@ -206,9 +196,7 @@ jobs:
           tags: ${{ steps.prep.outputs.tags }}
           build-args: |
             AGENT_SERVER_IMAGE=${{ steps.prep.outputs.agent_server_image }}
-            AGENT_SERVER_SDK_GIT_REF=${{ steps.prep.outputs.agent_server_sdk_git_ref }}
             AUTOMATION_VERSION=${{ steps.prep.outputs.automation_version }}
-            AUTOMATION_GIT_REF=${{ steps.prep.outputs.automation_git_ref }}
             AGENT_CANVAS_VERSION=${{ steps.config.outputs.agent_canvas_version }}
             OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
             OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
@@ -234,9 +222,7 @@ jobs:
         env:
           TAGS: ${{ steps.prep.outputs.tags }}
           AGENT_SERVER_IMAGE: ${{ steps.prep.outputs.agent_server_image }}
-          AGENT_SERVER_SDK_GIT_REF: ${{ steps.prep.outputs.agent_server_sdk_git_ref }}
           AUTOMATION_VERSION: ${{ steps.prep.outputs.automation_version }}
-          AUTOMATION_GIT_REF: ${{ steps.prep.outputs.automation_git_ref }}
         run: |
           mkdir -p build-info
           jq -n \
@@ -245,13 +231,11 @@ jobs:
             --arg short_sha "${{ steps.prep.outputs.short_sha }}" \
             --arg tags "$TAGS" \
             --arg agent_server_image "$AGENT_SERVER_IMAGE" \
-            --arg agent_server_sdk_git_ref "$AGENT_SERVER_SDK_GIT_REF" \
             --arg automation_version "$AUTOMATION_VERSION" \
-            --arg automation_git_ref "$AUTOMATION_GIT_REF" \
             --arg platform "${{ matrix.platform }}" \
             --arg git_sha "${{ env.RELEVANT_SHA }}" \
             --arg git_ref "$RELEVANT_REF" \
-            '{arch: $arch, image: $image, short_sha: $short_sha, tags: $tags, agent_server_image: $agent_server_image, agent_server_sdk_git_ref: $agent_server_sdk_git_ref, automation_version: $automation_version, automation_git_ref: $automation_git_ref, platform: $platform, git_sha: $git_sha, git_ref: $git_ref}' \
+            '{arch: $arch, image: $image, short_sha: $short_sha, tags: $tags, agent_server_image: $agent_server_image, automation_version: $automation_version, platform: $platform, git_sha: $git_sha, git_ref: $git_ref}' \
             > "build-info/${{ matrix.arch }}.json"
           cat "build-info/${{ matrix.arch }}.json"
 

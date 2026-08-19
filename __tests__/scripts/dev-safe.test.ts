@@ -454,27 +454,27 @@ describe("buildAgentServerTelemetryEnv", () => {
 });
 
 describe("buildAgentServerCommand", () => {
-  it("uses the pinned SDK git ref by default", () => {
+  it("uses released PyPI version by default with all packages pinned", () => {
     const cmd = buildAgentServerCommand({});
 
     expect(cmd.command).toBe("uvx");
+    // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
-      "--reinstall",
       "--from",
-      "git+https://github.com/OpenHands/software-agent-sdk@8acbbb12dbc533a086e225908158e2dfb25dc49a#subdirectory=openhands-agent-server",
+      "openhands-agent-server==1.42.1",
       "--with",
-      "git+https://github.com/OpenHands/software-agent-sdk@8acbbb12dbc533a086e225908158e2dfb25dc49a#subdirectory=openhands-sdk",
+      "openhands-sdk==1.42.1",
       "--with",
-      "git+https://github.com/OpenHands/software-agent-sdk@8acbbb12dbc533a086e225908158e2dfb25dc49a#subdirectory=openhands-tools",
+      "openhands-tools==1.42.1",
       "--with",
-      "git+https://github.com/OpenHands/software-agent-sdk@8acbbb12dbc533a086e225908158e2dfb25dc49a#subdirectory=openhands-workspace",
+      "openhands-workspace==1.42.1",
+      "--with",
+      "agent-client-protocol<0.11",
       "--with",
       "posthog>=6,<7",
       "agent-server",
     ]);
-    expect(cmd.source).toBe(
-      "git (8acbbb12dbc533a086e225908158e2dfb25dc49a, default)",
-    );
+    expect(cmd.source).toBe("PyPI (1.42.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
