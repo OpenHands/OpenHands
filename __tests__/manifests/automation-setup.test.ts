@@ -3,7 +3,7 @@ import incidentFixture from "@openhands/extensions/testing/automations/incident-
 import prReviewerFixture from "@openhands/extensions/testing/automations/github-pr-reviewer.json";
 import repoMonitorFixture from "@openhands/extensions/testing/automations/github-repo-monitor.json";
 import {
-  AUTOMATION_CREATE_ENDPOINT,
+  automationCreateEndpoint,
   buildAssistedMessage,
   buildCreatePayload,
   buildPreflightBody,
@@ -177,9 +177,13 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
-    expect({ create: [...createPaths], preflight: [...preflightPaths] }).toEqual(
-      { create: [AUTOMATION_CREATE_ENDPOINT], preflight: ["/v1/validate"] },
-    );
+    expect({
+      create: [...createPaths],
+      preflight: [...preflightPaths],
+    }).toEqual({
+      create: [automationCreateEndpoint()],
+      preflight: ["/v1/validate"],
+    });
   });
 });
 
