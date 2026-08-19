@@ -10,7 +10,10 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { SetupAcpSecretsStep } from "#/components/features/onboarding/steps/setup-acp-secrets-step";
+import {
+  SetupAcpSecretsStep,
+  backendRequiresAcpCredentials,
+} from "#/components/features/onboarding/steps/setup-acp-secrets-step";
 import { type OnboardingAgentId } from "#/components/features/onboarding/steps/choose-agent-step";
 import { SecretsService } from "#/api/secrets-service";
 
@@ -465,5 +468,29 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.getByTestId("acp-credential-conflict-warning"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("backendRequiresAcpCredentials", () => {
+  it("never requires credentials when a login is already detected", () => {
+    expect(backendRequiresAcpCredentials("local", "authenticated")).toBe(false);
+    expect(backendRequiresAcpCredentials("cloud", "authenticated")).toBe(false);
+  });
+
+  it("always requires credentials on a cloud backend (no host login)", () => {
+    expect(backendRequiresAcpCredentials("cloud", "unauthenticated")).toBe(
+      true,
+    );
+    expect(backendRequiresAcpCredentials("cloud", "unknown")).toBe(true);
+  });
+
+  it("requires credentials on a logged-out local backend (a fresh container)", () => {
+    expect(backendRequiresAcpCredentials("local", "unauthenticated")).toBe(
+      true,
+    );
+  });
+
+  it("stays permissive on a local backend the probe can't classify", () => {
+    expect(backendRequiresAcpCredentials("local", "unknown")).toBe(false);
   });
 });

@@ -343,8 +343,9 @@ export function getAcpPreferredDefaultModel(
  * Field order is: container subscription/Vertex credentials → API key →
  * optional base URL. Every field is optional at the UI level — the step is
  * skippable, and a subscription / OAuth login on the backend takes precedence
- * over a key at runtime. Whether the *step* is required is a backend-capability
- * decision the onboarding modal makes.
+ * over a key at runtime. (Whether the *step* is required is a
+ * backend-capability decision the onboarding modal makes; see
+ * ``backendRequiresAcpCredentials``.)
  *
  * NB: the base URL is rendered plain-text (not ``secret``), so it never counts
  * toward a required credential step — setting ``ANTHROPIC_BASE_URL`` alongside

@@ -47,9 +47,9 @@ interface SetupAcpSecretsStepProps {
  * native agent-server where the user has already run ``claude``/``codex``/
  * ``gcloud`` login) and **required otherwise** — a fresh Docker container or a
  * cloud backend has no host login, so the agent can't authenticate without
- * credentials. We never block "Next" when the login probe detects an existing
- * session, and we never block a native dev whose host login we just can't
- * classify.
+ * credentials. Required-ness is capability-driven (see {@link backendRequiresAcpCredentials}):
+ * we never block "Next" when the login probe detects an existing session, and
+ * we never block a native dev whose host login we just can't classify.
  *
  * Empty fields are never written (a deliberate skip), and a field whose secret
  * already exists shows an "already saved" placeholder and is left untouched
@@ -90,10 +90,10 @@ export function SetupAcpSecretsStep({
   // docstring). Cloud never has one; a local backend that probes as logged-out
   // is a fresh container — require credentials there, but stay permissive when
   // the probe resolves "unknown" so a native dev is never blocked.
-  const required =
-    !isAuthenticated &&
-    (activeBackend.backend.kind === "cloud" ||
-      authStatus === "unauthenticated");
+  const required = backendRequiresAcpCredentials(
+    activeBackend.backend.kind,
+    authStatus,
+  );
   // Satisfied once the user has an actual credential for the provider — a
   // masked ``secret`` field (blob, OAuth token, or API key), typed now or
   // previously saved. A base URL or GCP project/location alone can't
@@ -221,4 +221,27 @@ export function SetupAcpSecretsStep({
       </div>
     </div>
   );
+}
+
+/**
+ * Whether the credential step must be satisfied before advancing, given the
+ * active backend kind and the ACP login-probe result.
+ *
+ * - **cloud** → always required: a remote backend has no host CLI login to fall
+ *   back on.
+ * - **local + ``"unauthenticated"``** → required: the probe ran and found no
+ *   login, i.e. a fresh containerized agent-server.
+ * - **local + ``"authenticated"`` / ``"unknown"``** → optional: either a login
+ *   exists, or the probe couldn't classify it (CLI missing, odd output) — in
+ *   which case we stay permissive rather than block a working native dev.
+ *
+ * Exported for unit testing the matrix without rendering the modal.
+ */
+export function backendRequiresAcpCredentials(
+  backendKind: "local" | "cloud",
+  authStatus: "authenticated" | "unauthenticated" | "unknown",
+): boolean {
+  if (authStatus === "authenticated") return false;
+  if (backendKind === "cloud") return true;
+  return authStatus === "unauthenticated";
 }
