@@ -63,7 +63,8 @@ function getEntryPoint(
 
 export function ChatInterface() {
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
-  const { setMessageToSend } = useConversationStore();
+  const { setMessageToSend, conversationMode, planContent } =
+    useConversationStore();
   const {
     errorMessage,
     errorCode,
@@ -133,9 +134,11 @@ export function ChatInterface() {
 
   // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
   // This is placed here instead of PlanPreview to avoid duplicate listeners
-  // when multiple PlanPreview components exist in the chat
+  // when multiple PlanPreview components exist in the chat.
+  // Gated on the same conditions as the Build button (ConversationTabs'
+  // `isBuildDisabled`) so it cannot fire outside the plan flow.
   React.useEffect(() => {
-    if (isAgentRunning) {
+    if (isAgentRunning || conversationMode !== "plan" || !planContent) {
       return undefined;
     }
 
@@ -154,7 +157,13 @@ export function ChatInterface() {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isAgentRunning, handleBuildPlanClick, scrollDomToBottom]);
+  }, [
+    isAgentRunning,
+    conversationMode,
+    planContent,
+    handleBuildPlanClick,
+    scrollDomToBottom,
+  ]);
 
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();
