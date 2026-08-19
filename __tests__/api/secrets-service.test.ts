@@ -8,19 +8,18 @@ import {
 } from "#/api/backend-registry/active-store";
 import { SecretsService } from "#/api/secrets-service";
 
-const {
-  mockGetSecret,
-  mockUpsertSecret,
-  mockDeleteSecret,
-} = vi.hoisted(() => ({
-  mockGetSecret: vi.fn(),
-  mockUpsertSecret: vi.fn(),
-  mockDeleteSecret: vi.fn(),
-}));
+const { mockListSecrets, mockGetSecret, mockUpsertSecret, mockDeleteSecret } =
+  vi.hoisted(() => ({
+    mockListSecrets: vi.fn(),
+    mockGetSecret: vi.fn(),
+    mockUpsertSecret: vi.fn(),
+    mockDeleteSecret: vi.fn(),
+  }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
+      listSecrets: mockListSecrets,
       getSecret: mockGetSecret,
       upsertSecret: mockUpsertSecret,
       deleteSecret: mockDeleteSecret,
@@ -42,6 +41,7 @@ describe("SecretsService", () => {
     __resetActiveStoreForTests();
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
+    mockListSecrets.mockReset();
     mockGetSecret.mockReset();
     mockUpsertSecret.mockReset();
     mockDeleteSecret.mockReset();
@@ -49,6 +49,17 @@ describe("SecretsService", () => {
 
   afterEach(() => {
     __resetActiveStoreForTests();
+  });
+
+  it("lists local secret metadata through the strict read", async () => {
+    mockListSecrets.mockResolvedValue({
+      secrets: [{ name: "OPENHANDS_URL", description: "Canvas origin" }],
+    });
+
+    await expect(SecretsService.getSecretsOrThrow()).resolves.toEqual([
+      { name: "OPENHANDS_URL", description: "Canvas origin" },
+    ]);
+    expect(mockListSecrets).toHaveBeenCalledTimes(1);
   });
 
   it("preserves the existing value when updating description", async () => {

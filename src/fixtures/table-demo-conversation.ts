@@ -37,7 +37,7 @@ function createTableDemoMessageEvent(
       role,
       content: [{ type: "text", text }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 }
