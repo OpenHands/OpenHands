@@ -101,7 +101,10 @@ export function AutomationCard({
     >
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h3 className="flex items-center gap-2 truncate text-sm font-semibold text-white">
+          <h3
+            className="flex items-center gap-2 truncate text-sm font-semibold text-white"
+            title={automation.name}
+          >
             {automation.trigger.type === "event" ? (
               <Zap className="size-4 shrink-0 text-muted" aria-hidden="true" />
             ) : (
