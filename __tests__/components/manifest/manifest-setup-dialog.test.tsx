@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   runAction: vi.fn(),
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
+  missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
     trackAutomationSetupValidated: vi.fn(),
@@ -50,6 +51,15 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
+}));
+
+// Which endpoints an entry cannot be created without is read off the published
+// interface manifest, so a real one that declares them leaves the refusal path
+// unreachable. Stubbed so the case states the manifest it is about, rather than
+// depending on the packaged manifest continuing not to publish them.
+vi.mock("#/manifests/automation-setup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/manifests/automation-setup")>()),
+  missingCreateEndpoints: mocks.missingCreateEndpoints,
 }));
 
 vi.mock("#/manifests/manifest-actions", () => ({
@@ -98,6 +108,9 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks resets calls, not implementations, so the one case that
+  // stubs a manifest without the bundle endpoints would leak into the rest.
+  mocks.missingCreateEndpoints.mockReturnValue([]);
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
@@ -282,6 +295,7 @@ describe("SetupDialog", () => {
   it("refuses an entry the published interface declares no way to create", async () => {
     // Arrange — a bundle entry against an interface manifest published before
     // bundles: neither endpoint it needs exists, and no answer supplies them.
+    mocks.missingCreateEndpoints.mockReturnValue(["createBundle", "uploads"]);
     renderDialog(BUNDLE_ENTRY);
 
     // Assert — said before the form, rather than as a Continue button that
