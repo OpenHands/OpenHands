@@ -24,6 +24,7 @@ import { BackendStatusDot } from "#/components/features/backends/backend-status-
 import { CommandMenuTrigger } from "#/components/features/command-menu/command-menu-trigger";
 import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { SidebarConversationList } from "./sidebar-conversation-list";
+import { SidebarOnboardingChecklist } from "./sidebar-onboarding-checklist";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import {
   SIDEBAR_COLLAPSE_TOGGLE_OVERLAY_CLASS,
@@ -312,15 +313,20 @@ export function SidebarRailBody({
       ) : null}
 
       {!collapsed ? (
-        <div
-          className={cn(
-            "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
-            "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
-          )}
-        >
-          <AgentCanvasVersionTile hideWhenUpToDate />
-          <BackendSelector sidebarCollapsed={collapsed} openUpward />
-        </div>
+        <>
+          <div className="mb-2 shrink-0 pr-2.5">
+            <SidebarOnboardingChecklist collapsed={collapsed} />
+          </div>
+          <div
+            className={cn(
+              "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
+              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
+            )}
+          >
+            <AgentCanvasVersionTile hideWhenUpToDate />
+            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+          </div>
+        </>
       ) : null}
     </div>
   );

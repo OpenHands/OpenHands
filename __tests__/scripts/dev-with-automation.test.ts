@@ -21,6 +21,7 @@ import {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
   setServiceLogListener,
@@ -627,6 +628,18 @@ describe("stack mode routing", () => {
       `/server_info=http://127.0.0.1:${config.agentServerPort}`,
     );
     expect(routeArgs).not.toContain("--default");
+  });
+
+  it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // The launcher starts the agent-server with `--host 127.0.0.1`, so the
+    // readiness probe (`/server_info`), the secret-seeding request, and the
+    // automation backend's AUTOMATION_AGENT_SERVER_URL must all skip the
+    // `localhost` lookup that resolves to ::1 first on Windows.
+    expect(getAgentServerBaseUrl(config)).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
   });
 
   it("rejects mutually exclusive partial-stack modes", async () => {

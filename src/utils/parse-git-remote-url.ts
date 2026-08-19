@@ -44,7 +44,7 @@ function buildParsedGitRemoteUrl(
   host: string | null,
   rawPath: string,
 ): ParsedGitRemoteUrl {
-  const path = stripGitSuffix(rawPath.replace(/^\/+/, ""));
+  const path = stripGitSuffix(rawPath.replace(/^\/+|\/+$/g, ""));
   const provider = detectProvider(host);
   const repository =
     provider === "azure_devops" ? normalizeAzureDevOpsPath(path) : path;
