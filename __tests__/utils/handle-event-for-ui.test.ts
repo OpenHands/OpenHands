@@ -742,6 +742,41 @@ describe("handleEventForUI", () => {
       expect(result).toEqual([mockMessageEvent, delta, action]);
     });
 
+    // Non-native tool call: the delta is `thought` + raw `<function=...>` XML, a
+    // superset of the thought, so only the marker signal reconciles it.
+    it("clears the delta when streamed text is the thought plus an unstripped <function=...> block", () => {
+      const thought = "Coding and executing";
+      const delta = makeStreamingDelta(
+        "delta-1",
+        `${thought}<function=terminal>\n<parameter=command>echo hi</parameter>\n<parameter=security_risk>LOW</parameter>\n</function>`,
+      );
+      const action = makeThoughtAction("intermediate-1", thought);
+
+      const result = handleEventForUI(action, [mockMessageEvent, delta]);
+
+      expect(result).toEqual([mockMessageEvent, action]);
+    });
+
+    // The planning and main sockets share this store, so the marker signal must
+    // not let one agent's action strip the other's live delta.
+    it("leaves a marker-bearing delta from the other agent untouched", () => {
+      const delta = {
+        ...makeStreamingDelta(
+          "delta-1",
+          `Planning<function=terminal>\n<parameter=command>echo hi</parameter>\n</function>`,
+        ),
+        isFromPlanningAgent: true,
+      };
+      const action = makeThoughtAction(
+        "intermediate-1",
+        "Coding and executing",
+      );
+
+      const result = handleEventForUI(action, [mockMessageEvent, delta]);
+
+      expect(result).toEqual([mockMessageEvent, delta, action]);
+    });
+
     it("does not reconcile a ThinkAction (its thought renders separately)", () => {
       const thought = "A reasoning step.";
       const delta = makeStreamingDelta("delta-1", thought);
