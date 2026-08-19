@@ -110,6 +110,28 @@ describe("withBackendSelectionParams", () => {
 
     expect(path).toBe(`/conversations/abc?${BACKEND_QUERY_PARAM}=local-1#`);
   });
+
+  it("keeps the org id and the fragment together", () => {
+    const path = withBackendSelectionParams("/conversations/abc#detail", {
+      backend: cloudBackend,
+      orgId: "org-7",
+    });
+
+    expect(path).toBe(
+      `/conversations/abc?${BACKEND_QUERY_PARAM}=prod&${ORG_QUERY_PARAM}=org-7#detail`,
+    );
+  });
+
+  it("keeps query data that itself contains a ?", () => {
+    const path = withBackendSelectionParams("/conversations/abc?next=/a?b=1", {
+      backend: localBackend,
+      orgId: null,
+    });
+
+    expect(path).toBe(
+      `/conversations/abc?next=%2Fa%3Fb%3D1&${BACKEND_QUERY_PARAM}=local-1`,
+    );
+  });
 });
 
 describe("readBackendSelectionFromUrl", () => {

@@ -33,7 +33,15 @@ export function withBackendSelectionParams(
   const fragment = hashIndex === -1 ? "" : path.slice(hashIndex);
   const withoutFragment = hashIndex === -1 ? path : path.slice(0, hashIndex);
 
-  const [pathname, existingSearch = ""] = withoutFragment.split("?");
+  // Split at the *first* `?` only. A later `?` is ordinary query data (a
+  // `next=` redirect carrying its own query, say), and `split("?")` would
+  // silently drop everything past it.
+  const queryIndex = withoutFragment.indexOf("?");
+  const pathname =
+    queryIndex === -1 ? withoutFragment : withoutFragment.slice(0, queryIndex);
+  const existingSearch =
+    queryIndex === -1 ? "" : withoutFragment.slice(queryIndex + 1);
+
   const params = new URLSearchParams(existingSearch);
   params.set(BACKEND_QUERY_PARAM, backend.id);
   if (orgId) params.set(ORG_QUERY_PARAM, orgId);
