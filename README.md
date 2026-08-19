@@ -96,7 +96,7 @@ docker run -it --rm \
   -p 8000:8000 \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.14.0 # x-release-please-version
 ```
 
 > [!NOTE]
@@ -124,7 +124,7 @@ docker run -it --rm \
 >   -p 8000:8000 \
 >   -v "$HOME/.openhands:/home/openhands/.openhands" \
 >   -v "${PROJECTS_PATH}:/projects" \
->   ghcr.io/openhands/agent-canvas:1.12.0 # x-release-please-version
+>   ghcr.io/openhands/agent-canvas:1.14.0 # x-release-please-version
 > ```
 >
 > The `-e HOME=/home/openhands` is required: the entrypoint derives all
