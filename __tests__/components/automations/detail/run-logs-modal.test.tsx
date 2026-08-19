@@ -322,10 +322,15 @@ describe("RunLogsModal", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Temporary API rate limit (HTTP 429).",
+    );
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
       "Sandbox API returned HTTP 429",
     );
-    expect(screen.getByText("Status Code")).toBeInTheDocument();
+    expect(screen.getByText("HTTP status")).toBeInTheDocument();
     expect(screen.getByText("429")).toBeInTheDocument();
+    expect(screen.getByText("Temporary")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND),
     ).toBeInTheDocument();
@@ -365,10 +370,68 @@ describe("RunLogsModal", () => {
     expect(screen.getByTestId("run-status-details")).toHaveTextContent(
       "Completion callback reported failure",
     );
-    expect(screen.getByText("automation_script")).toBeInTheDocument();
+    expect(screen.getByText("Automation Script")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA),
     ).toBeInTheDocument();
+    expect(screen.getByText("Exit Code")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  it("renders execution failures as readable sections without duplicating the raw detail", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const detail = `exit_code=1
+stderr: qa failure stderr
+Traceback (most recent call last):
+  File "/tmp/main.py", line 6, in <module>
+    raise RuntimeError("qa intentional failure")
+RuntimeError: qa intentional failure
+
+stdout: qa failure stdout`;
+    const run: AutomationRun = {
+      id: "run-detail-3",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail: detail,
+      status_detail: {
+        phase: "execution",
+        kind: "execution_error",
+        detail,
+        source: "agent_server",
+        operation: "verify_run",
+        code: "1",
+        transient: false,
+        count: 1,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    const details = screen.getByTestId("run-status-details");
+    expect(details).toHaveTextContent("Execution failed with exit code 1.");
+    expect(screen.getByText("Error output")).toBeInTheDocument();
+    expect(screen.getByText(/qa failure stderr/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/RuntimeError: qa intentional failure/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Output")).toBeInTheDocument();
+    expect(screen.getByText("qa failure stdout")).toBeInTheDocument();
+    expect(screen.getByText("Exit code")).toBeInTheDocument();
+    expect(screen.getByText("No")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/RuntimeError: qa intentional failure/),
+    ).toHaveLength(1);
   });
 });
 
