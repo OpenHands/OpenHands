@@ -38,25 +38,6 @@ const repoRoot = path.resolve(
   "../..",
 );
 
-async function reserveAvailablePort(): Promise<{
-  server: net.Server;
-  port: number;
-}> {
-  const server = net.createServer();
-  const port = await new Promise<number>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        reject(new Error("Expected TCP server address"));
-        return;
-      }
-      resolve(address.port);
-    });
-  });
-  return { server, port };
-}
-
 describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
     const cmd = buildAutomationCommand({});
@@ -356,8 +337,19 @@ describe("buildConfig", () => {
   });
 
   it("throws when ingress port is busy", async () => {
-    const { server, port: busyPort } = await reserveAvailablePort();
-    servers.push(server);
+    const server = net.createServer();
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Expected a TCP server address"));
+          return;
+        }
+        servers.push(server);
+        resolve(address.port);
+      });
+      server.on("error", reject);
+    });
 
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
@@ -465,10 +457,7 @@ describe("buildConfig", () => {
   it("reads sessionApiKey from LOCAL_BACKEND_API_KEY", async () => {
     const config = await buildConfig(
       {},
-      {
-        ...envWithIsolatedKeyPath(),
-        LOCAL_BACKEND_API_KEY: "my-api-key",
-      },
+      { ...envWithIsolatedKeyPath(), LOCAL_BACKEND_API_KEY: "my-api-key" },
     );
 
     expect(config.sessionApiKey).toBe("my-api-key");
