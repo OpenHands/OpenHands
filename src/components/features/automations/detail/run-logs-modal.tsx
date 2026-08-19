@@ -57,18 +57,7 @@ function concatStream(outputs: BashOutput[], key: "stdout" | "stderr"): string {
     .join("");
 }
 
-const STATUS_DETAIL_ROW_KEYS = [
-  "phase",
-  "kind",
-  "source",
-  "operation",
-  "code",
-  "status_code",
-  "transient",
-  "count",
-  "first_seen_at",
-  "last_seen_at",
-] as const;
+const STATUS_DETAIL_ROW_KEYS = ["phase", "kind", "transient"] as const;
 
 type StatusDetailRowKey = (typeof STATUS_DETAIL_ROW_KEYS)[number];
 
@@ -191,22 +180,23 @@ function getStatusDetailSummary(
   return parsedDetail?.message ?? null;
 }
 
-function getStatusDetailRowLabel(
-  key: StatusDetailRowKey,
-  statusDetail: AutomationRun["status_detail"],
-): string {
+function getStatusDetailRowLabel(key: StatusDetailRowKey): string {
   switch (key) {
     case "kind":
-      return "Issue";
+      return "Error";
+    case "transient":
+      return "Transient";
+    default:
+      return formatStatusDetailLabel(key);
+  }
+}
+
+function formatMetadataLabel(key: string): string {
+  switch (key) {
     case "code":
-      return statusDetail?.phase === "execution" ||
-        statusDetail?.kind === "execution_error"
-        ? "Exit code"
-        : "Code";
+      return "Code";
     case "status_code":
       return "HTTP status";
-    case "transient":
-      return "Temporary";
     case "count":
       return "Occurrences";
     case "first_seen_at":
@@ -216,6 +206,14 @@ function getStatusDetailRowLabel(
     default:
       return formatStatusDetailLabel(key);
   }
+}
+
+function formatMetadataValue(key: string, value: unknown): string | null {
+  const formatted = formatStatusDetailValue(value);
+  if (!formatted) return null;
+  return ["source", "operation"].includes(key) && typeof value === "string"
+    ? humanizeToken(value)
+    : formatted;
 }
 
 function getStatusDetailRows(
@@ -234,7 +232,7 @@ function getStatusDetailRows(
     return [
       {
         key,
-        label: getStatusDetailRowLabel(key, statusDetail),
+        label: getStatusDetailRowLabel(key),
         value: displayValue,
       },
     ];
@@ -285,11 +283,12 @@ function flattenMetadataRows(value: unknown, path: string[] = []): DetailRow[] {
   if (["string", "number", "boolean"].includes(typeof value)) {
     const key = path.join(".");
     const labelPath = path[0] === "metadata" ? path.slice(1) : path;
+    const labelKey = labelPath.join("_") || key;
     return [
       {
         key,
-        label: formatStatusDetailLabel(labelPath.join("_") || key),
-        value: formatStatusDetailValue(value) ?? "",
+        label: formatMetadataLabel(labelKey),
+        value: formatMetadataValue(labelKey, value) ?? "",
       },
     ];
   }

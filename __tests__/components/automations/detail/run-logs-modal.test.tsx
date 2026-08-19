@@ -327,10 +327,15 @@ describe("RunLogsModal", () => {
     expect(screen.getByTestId("run-status-details")).toHaveTextContent(
       "Sandbox API returned HTTP 429",
     );
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Api Rate Limited")).toBeInTheDocument();
+    expect(screen.getByText("Transient")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA),
+    ).toBeInTheDocument();
     expect(screen.getByText("HTTP status")).toBeInTheDocument();
     expect(screen.getByText("429")).toBeInTheDocument();
-    expect(screen.getByText("Temporary")).toBeInTheDocument();
-    expect(screen.getByText("Yes")).toBeInTheDocument();
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND),
     ).toBeInTheDocument();
@@ -426,7 +431,7 @@ stdout: qa failure stdout`;
       screen.queryByText(/RuntimeError: qa intentional failure/),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("qa failure stdout")).not.toBeInTheDocument();
-    expect(screen.getByText("Exit code")).toBeInTheDocument();
+    expect(screen.getByText("Code")).toBeInTheDocument();
     expect(screen.getByText("No")).toBeInTheDocument();
   });
 });
