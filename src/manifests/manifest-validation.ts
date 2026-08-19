@@ -16,7 +16,11 @@
  * partial UI, because everything downstream treats its content as instructions.
  */
 
-import { SETUP_PLACEHOLDER_NAMESPACES, SETUP_VERSION } from "./types";
+import {
+  BUNDLE_CONFIG_FILENAME,
+  SETUP_PLACEHOLDER_NAMESPACES,
+  SETUP_VERSION,
+} from "./types";
 
 const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
@@ -24,8 +28,9 @@ const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 /** Every `{{` must open a known namespace and close immediately. */
 const BUNDLE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
-// A command of plain words and paths. No shell metacharacters, which the
-// service rejects anyway and a bundle has no reason to need.
+// The characters a command of plain words and paths is made of. No shell
+// metacharacters, which the service rejects anyway and a bundle has no reason
+// to need; where those words may point is `isPlainCommand`'s to say.
 const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
 const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const BUNDLE_SOURCE_PATTERN =
@@ -139,6 +144,30 @@ function isRelativePath(value: unknown, pattern: RegExp): value is string {
   );
 }
 
+/**
+ * A command whose every word stays inside the archive it is run in.
+ *
+ * The character class is not what keeps it there: `/` and `.` are allowed
+ * characters, so `/bin/sh setup.sh` and `python3 ../../etc/x.py` are made of
+ * them and each names something outside the extracted directory. The segment
+ * rule packed paths are held to is what refuses those, and requiring a word at
+ * all is what refuses an entrypoint of nothing but spaces.
+ */
+function isPlainCommand(value: unknown): value is string {
+  if (typeof value !== "string" || !BUNDLE_COMMAND_PATTERN.test(value)) {
+    return false;
+  }
+  const words = value.split(" ").filter((word) => word.length > 0);
+  return (
+    words.length > 0 &&
+    words.every(
+      (word) =>
+        !word.startsWith("/") &&
+        !word.split("/").some((segment) => segment === ".."),
+    )
+  );
+}
+
 function checkRequires(check: SetupChecker, requires: unknown): void {
   if (!isRecord(requires)) {
     check.fail("requires", "must be an object");
@@ -229,6 +258,18 @@ function checkField(check: SetupChecker, field: unknown, path: string): void {
   }
   if (type === "repo-picker" && provider === undefined) {
     check.fail(`${path}.provider`, "is required for a repository field");
+  }
+  // The host branches on this key to decide whether a field's value is a list,
+  // so a field declaring it anywhere else would be seeded with a list and
+  // rendered as a string.
+  if (
+    field.multiple !== undefined &&
+    (field.multiple !== true || type !== "repo-picker")
+  ) {
+    check.fail(
+      `${path}.multiple`,
+      "may only be true, and only on a repository field",
+    );
   }
 
   if (options !== undefined) {
@@ -363,11 +404,11 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
   ) {
     check.fail("setup.bundle.version", "must be a semantic version");
   }
-  if (
-    typeof bundle.entrypoint !== "string" ||
-    !BUNDLE_COMMAND_PATTERN.test(bundle.entrypoint)
-  ) {
-    check.fail("setup.bundle.entrypoint", "must be a plain command");
+  if (!isPlainCommand(bundle.entrypoint)) {
+    check.fail(
+      "setup.bundle.entrypoint",
+      "must be a plain command that stays inside the archive",
+    );
   }
   if (
     bundle.setupScript !== undefined &&
@@ -386,6 +427,15 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
       if (!isRelativePath(packedPath, BUNDLE_PATH_PATTERN)) {
         check.fail(`setup.bundle.files.${packedPath}`, "is not a packed path");
       }
+      // The rendered config is packed under this name too, and a tar carrying
+      // the name twice leaves which one the script reads to whichever
+      // extractor unpacks it.
+      if (packedPath === BUNDLE_CONFIG_FILENAME) {
+        check.fail(
+          `setup.bundle.files.${packedPath}`,
+          "is the name the rendered config is packed under",
+        );
+      }
       if (!isRelativePath(source, BUNDLE_SOURCE_PATTERN)) {
         check.fail(
           `setup.bundle.files.${packedPath}`,
@@ -393,6 +443,17 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
         );
       }
     });
+
+    // A setup script the archive does not carry is a create request the
+    // service accepts and the first run fails on, and it is also the only
+    // thing packed executable - naming an unpacked file makes that rule
+    // unreachable.
+    if (
+      typeof bundle.setupScript === "string" &&
+      !(bundle.setupScript in bundle.files)
+    ) {
+      check.fail("setup.bundle.setupScript", "must name a packed file");
+    }
   }
 
   if (!isRecord(bundle.config) || Object.keys(bundle.config).length === 0) {

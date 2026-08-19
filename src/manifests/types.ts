@@ -83,6 +83,13 @@ export type SetupBundleConfigValue =
   | { [key: string]: SetupBundleConfigValue };
 
 /**
+ * The name the rendered configuration is packed under, which is therefore a
+ * name a bundle's own files may not claim. Stated here rather than beside the
+ * packing, so admission can refuse the collision without importing it.
+ */
+export const BUNDLE_CONFIG_FILENAME = "config.json";
+
+/**
  * The script tarball a direct entry may ship instead of a prompt, for an
  * automation that is deterministic machinery rather than judgement.
  *

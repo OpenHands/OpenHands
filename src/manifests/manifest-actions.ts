@@ -13,7 +13,7 @@
  * files from the published package.
  */
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useConversationStore } from "#/stores/conversation-store";
@@ -39,6 +39,14 @@ export function useSetupAction() {
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
   );
+
+  // The last archive uploaded, and what the service called it. An upload that
+  // is followed by a create the service rejects cannot be taken back - the
+  // interface declares no endpoint for that - so confirming again after
+  // correcting a field sends the archive that is already there rather than
+  // leaving another copy of it behind. The archive is a pure function of the
+  // entry and the answers, which is what makes the key sound.
+  const uploadedRef = useRef<{ key: string; path: string } | null>(null);
 
   const startConversation = useCallback(
     async (message: string): Promise<SetupActionResult> => {
@@ -79,11 +87,16 @@ export function useSetupAction() {
       // create against the path that came back. The payload built for the form
       // carries a stand-in path, which is replaced here with the real one.
       if (isBundleEntry(entry)) {
-        const archive = await packBundle(entry, values);
-        const tarballPath = await AutomationService.uploadAutomationTarball(
-          entry.id,
-          archive,
-        );
+        const key = `${entry.id}\n${JSON.stringify(values)}`;
+        let tarballPath = uploadedRef.current?.path ?? null;
+        if (uploadedRef.current?.key !== key || tarballPath === null) {
+          const archive = await packBundle(entry, values);
+          tarballPath = await AutomationService.uploadAutomationTarball(
+            entry.id,
+            archive,
+          );
+          uploadedRef.current = { key, path: tarballPath };
+        }
         const body = buildCreatePayload(entry, values, tarballPath);
         if (!body) throw new Error(`'${entry.id}' produced no create request.`);
         return {

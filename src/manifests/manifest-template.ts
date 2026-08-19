@@ -42,6 +42,13 @@ function wholePlaceholderPath(template: string): string | null {
   return match ? match[1] : null;
 }
 
+/** A list of strings, which is the one non-string shape a form value takes. */
+function isStringList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
+}
+
 /**
  * Substitute placeholders, keeping the resolved value's own type when the
  * template is nothing but that placeholder.
@@ -49,12 +56,20 @@ function wholePlaceholderPath(template: string): string | null {
  * This is what lets a request body state `"repos": "{{form.repositories}}"` and
  * get an array. Inside a sentence the same placeholder still reads as text,
  * because there is nowhere for a list to go in a string.
+ *
+ * Only the shapes a form value has are kept whole. A placeholder naming
+ * anything else - `{{automation.setup}}` resolves to the setup block itself -
+ * reads as text like it does inside a sentence, so a manifest cannot state one
+ * value and put its own object graph into the request body.
  */
-export function interpolateValue(template: string, scope: SetupScope): unknown {
+export function interpolateValue(
+  template: string,
+  scope: SetupScope,
+): string | string[] {
   const path = wholePlaceholderPath(template);
   if (path === null) return interpolateText(template, scope);
   const resolved = getByPath(scope, path);
-  return resolved === undefined ? "" : resolved;
+  return isStringList(resolved) ? resolved : toText(resolved);
 }
 
 /** Substitute placeholders inside a template string. */

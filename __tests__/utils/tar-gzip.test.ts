@@ -95,6 +95,18 @@ describe("packTar", () => {
     expect(members[0].content).toBe(content);
   });
 
+  it("writes a multi-byte name as the bytes a reader takes it back from", () => {
+    // Arrange: the name is 8 bytes in UTF-8 and 7 characters in JavaScript,
+    // and the length guard measures the bytes.
+    const name = "café.py";
+
+    // Act
+    const members = readTar(packTar([{ name, content: "" }]));
+
+    // Assert
+    expect(members[0].name).toBe(name);
+  });
+
   it("refuses a name that would not fit a ustar header", () => {
     // Arrange
     const name = `${"nested/".repeat(15)}main.py`;

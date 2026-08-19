@@ -11,10 +11,11 @@
 import * as automations from "@openhands/extensions/automations";
 import { packTarGzip, type TarFile } from "#/utils/tar-gzip";
 import { buildCreatePayload } from "./automation-setup";
-import type { SetupEntry, SetupFormValues } from "./types";
+import { BUNDLE_CONFIG_FILENAME } from "./types";
+import type { SetupBundle, SetupEntry, SetupFormValues } from "./types";
 
 /** The rendered configuration, packed beside the entrypoint. */
-export const BUNDLE_CONFIG_FILENAME = "config.json";
+export { BUNDLE_CONFIG_FILENAME };
 
 type BundleFileReader = (id: string) => Record<string, string> | undefined;
 
@@ -35,6 +36,25 @@ export function getBundleFiles(id: string): Record<string, string> {
     );
   }
   return files;
+}
+
+/**
+ * The packed paths the service executes rather than reads.
+ *
+ * The setup script is run through a shell, and the entrypoint's first word is
+ * the program it runs: an entry whose entrypoint is `./main.py` invokes a
+ * packed file directly, and a file packed non-executable would fail at the
+ * moment of running rather than at admission. Every later word is an argument
+ * to that program, so only the first one is a path being executed.
+ */
+function executablePaths(bundle: SetupBundle): Set<string> {
+  const program = bundle.entrypoint.trim().split(" ")[0] ?? "";
+  const invoked = program.replace(/^\.\//, "");
+  return new Set(
+    [bundle.setupScript, invoked in bundle.files ? invoked : undefined].filter(
+      (name): name is string => name !== undefined,
+    ),
+  );
 }
 
 /**
@@ -66,14 +86,13 @@ export async function packBundle(
   const payload = buildCreatePayload(entry, values);
   const template = payload?.template as { config?: unknown } | undefined;
 
+  const executable = executablePaths(bundle);
   const files: TarFile[] = Object.keys(bundle.files)
     .sort()
     .map((name) => ({
       name,
       content: contents[name],
-      // The service runs the setup script through a shell, so it has to stay
-      // executable; nothing else in a bundle is invoked directly.
-      mode: name === bundle.setupScript ? 0o755 : 0o644,
+      mode: executable.has(name) ? 0o755 : 0o644,
     }));
 
   files.push({

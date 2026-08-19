@@ -13,6 +13,8 @@
  * so any divergence is a hard 422 rather than a dropped field.
  */
 
+import i18n from "#/i18n";
+import { I18nKey } from "#/i18n/declaration";
 import { findAutomationCommand } from "#/utils/automation-catalog";
 import { getAutomationEndpoint } from "./automation-interface";
 import {
@@ -51,12 +53,17 @@ export function automationUploadEndpoint(): string {
   return requireBundleEndpoint("uploads");
 }
 
+/** The endpoints a bundle entry cannot be created without. */
+const BUNDLE_ENDPOINTS = ["createBundle", "uploads"] as const;
+
 /**
  * An endpoint only a bundle needs. The interface manifest may predate bundles,
  * and the host holds no path of its own to fall back to, so this is where that
  * runs out rather than somewhere deep in a request.
  */
-function requireBundleEndpoint(name: "createBundle" | "uploads"): string {
+function requireBundleEndpoint(
+  name: (typeof BUNDLE_ENDPOINTS)[number],
+): string {
   const path = getAutomationEndpoint(name);
   if (!path) {
     throw new Error(
@@ -65,6 +72,20 @@ function requireBundleEndpoint(name: "createBundle" | "uploads"): string {
     );
   }
   return path;
+}
+
+/**
+ * The endpoints this entry needs that the published interface does not declare.
+ *
+ * Asked before the form renders rather than discovered at the moment of
+ * creating: a pinned package that predates bundles can never answer, and the
+ * dialog can say so while nothing has been filled in yet. Empty for every
+ * entry that is not a bundle, which needs nothing beyond what the block has
+ * always declared.
+ */
+export function missingCreateEndpoints(entry: SetupEntry): string[] {
+  if (!isBundleEntry(entry)) return [];
+  return BUNDLE_ENDPOINTS.filter((name) => !getAutomationEndpoint(name));
 }
 
 /** Whether this entry ships a script tarball instead of a prompt. */
@@ -133,7 +154,13 @@ function deriveName(entry: SetupEntry, values: SetupFormValues): string {
   const repos = repositories(entry.setup, values);
   if (repos.length === 0) return entry.name;
   if (repos.length === 1) return `${entry.name} - ${repos[0]}`;
-  return `${entry.name} - ${repos.length} repositories`;
+  // The count is the one word here the host writes rather than reads off the
+  // entry, so it is translated. There is no translator to pass in: the
+  // derivation runs from a memo, an upload and a test alike.
+  const count = i18n.t(I18nKey.SETUP$REPOSITORY_COUNT, {
+    total: repos.length,
+  });
+  return `${entry.name} - ${count}`;
 }
 
 /** The single trigger kind a direct entry declares, with its fields. */
@@ -279,7 +306,7 @@ function interpolateConfig(
   scope: Parameters<typeof interpolateText>[1],
 ): SetupBundleConfigValue {
   if (typeof node === "string") {
-    return interpolateValue(node, scope) as SetupBundleConfigValue;
+    return interpolateValue(node, scope);
   }
   if (Array.isArray(node)) {
     return node.map((item) => interpolateConfig(item, scope));

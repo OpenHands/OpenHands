@@ -111,6 +111,35 @@ beforeEach(() => {
   });
 });
 
+/** The same entry once it asks for several repositories. */
+const MULTI_REPO_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          repository: { ...form.args.repository, multiple: true },
+        },
+      },
+    }),
+  });
+})();
+
+/** An entry that ships a script bundle rather than a prompt. */
+const BUNDLE_ENTRY: SetupEntry = createSetupEntry({
+  setup: createSetup({
+    prompt: undefined,
+    bundle: {
+      version: "1.0.0",
+      entrypoint: "python3 main.py",
+      files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+      config: { repos: ["{{form.repository}}"] },
+    },
+  }),
+});
+
 /** A deployment that answered discovery and came up short. */
 const UNSUPPORTED = {
   capabilities: null,
@@ -226,6 +255,41 @@ describe("SetupDialog", () => {
 
     // Assert
     expect(screen.queryByTestId("setup-fallback-conversation")).toBeNull();
+  });
+
+  it("carries a repository typed but not added through to the review step", async () => {
+    // Arrange — the list is built by adding entries, and the input still shows
+    // what was typed when the user reaches for Continue.
+    const { user } = renderDialog(MULTI_REPO_ENTRY);
+    await user.type(screen.getByTestId("setup-field-widgetName"), "Widgets");
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "OpenHands/automation",
+    );
+
+    // Act — Continue, without pressing Add or Enter first.
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — the answer the user could still see is the one being confirmed.
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-review")).toHaveTextContent(
+      "OpenHands/automation",
+    );
+  });
+
+  it("refuses an entry the published interface declares no way to create", async () => {
+    // Arrange — a bundle entry against an interface manifest published before
+    // bundles: neither endpoint it needs exists, and no answer supplies them.
+    renderDialog(BUNDLE_ENTRY);
+
+    // Assert — said before the form, rather than as a Continue button that
+    // silently does nothing once the form is filled in.
+    expect(screen.getByTestId("setup-unmet-requirements")).toHaveTextContent(
+      "createBundle, uploads",
+    );
+    expect(screen.queryByTestId("setup-field-widgetName")).toBeNull();
   });
 
   it("returns a rejected create to the field the service blamed", async () => {

@@ -14,6 +14,8 @@
  * something that also has to unpack them.
  */
 
+const encoder = new TextEncoder();
+
 const BLOCK_SIZE = 512;
 const NAME_FIELD_SIZE = 100;
 const CHECKSUM_OFFSET = 148;
@@ -27,9 +29,10 @@ export interface TarFile {
   mode?: number;
 }
 
-function header(file: TarFile, size: number): Uint8Array {
+function header(file: TarFile, name: Uint8Array, size: number): Uint8Array {
   const block = new Uint8Array(BLOCK_SIZE);
 
+  /** Host-written ASCII: the octal fields and the format's own markers. */
   const ascii = (offset: number, value: string): void => {
     for (let index = 0; index < value.length; index += 1) {
       block[offset + index] = value.charCodeAt(index) & 0x7f;
@@ -39,7 +42,10 @@ function header(file: TarFile, size: number): Uint8Array {
   const octal = (offset: number, size_: number, value: number): void =>
     ascii(offset, value.toString(8).padStart(size_ - 1, "0"));
 
-  ascii(0, file.name);
+  // The name is the caller's, so it is written as the bytes it encodes to
+  // rather than through `ascii`, whose mask would quietly turn `café.py` into
+  // `cafi.py`. ustar's name field is bytes, and readers take them as UTF-8.
+  block.set(name, 0);
   octal(100, 8, file.mode ?? 0o644);
   octal(108, 8, 0); // uid
   octal(116, 8, 0); // gid
@@ -64,15 +70,15 @@ function header(file: TarFile, size: number): Uint8Array {
 
 /** The uncompressed archive. Exported for tests; callers want `packTarGzip`. */
 export function packTar(files: readonly TarFile[]): Uint8Array<ArrayBuffer> {
-  const encoder = new TextEncoder();
   const blocks: Uint8Array[] = [];
 
   for (const file of files) {
-    if (encoder.encode(file.name).length > NAME_FIELD_SIZE) {
+    const name = encoder.encode(file.name);
+    if (name.length > NAME_FIELD_SIZE) {
       throw new Error(`tar: name too long for a ustar header: ${file.name}`);
     }
     const content = encoder.encode(file.content);
-    blocks.push(header(file, content.length));
+    blocks.push(header(file, name, content.length));
     const padded = new Uint8Array(
       Math.ceil(content.length / BLOCK_SIZE) * BLOCK_SIZE,
     );

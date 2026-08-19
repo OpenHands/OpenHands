@@ -102,8 +102,11 @@ export function SetupRepositoryList({
               testId={`setup-field-${name}`}
               name={name}
               // The field's own label is rendered above the list, so this input
-              // carries none of its own; it is the control that adds an entry.
+              // shows none of its own; it is the control that adds an entry.
+              // It still answers to that label, or it would be an input a
+              // screen reader announces as nothing at all.
               label=""
+              ariaLabel={field.label}
               type="text"
               value={draft}
               placeholder={placeholder}
@@ -116,6 +119,10 @@ export function SetupRepositoryList({
                 event.preventDefault();
                 add(draft);
               }}
+              // A repository typed but not added is still an answer the user
+              // gave: leaving the input commits it, rather than dropping it on
+              // the way to a Continue that reads the list alone.
+              onBlur={() => add(draft)}
             />
           </div>
           <BrandButton

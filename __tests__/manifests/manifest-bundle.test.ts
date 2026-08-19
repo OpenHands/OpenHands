@@ -16,10 +16,15 @@ const { createSetupEntry, createSetup } = await import("./manifest-test-data");
 
 const decoder = new TextDecoder();
 
+interface ArchiveMember {
+  content: string;
+  mode: number;
+}
+
 /** Every member of a packed bundle, keyed by name. */
-function readArchive(archive: Uint8Array): Record<string, string> {
+function readMembers(archive: Uint8Array): Record<string, ArchiveMember> {
   const tar = new Uint8Array(gunzipSync(archive));
-  const contents: Record<string, string> = {};
+  const members: Record<string, ArchiveMember> = {};
   const field = (block: Uint8Array, offset: number, size: number) =>
     decoder.decode(block.subarray(offset, offset + size)).replace(/\0.*$/, "");
 
@@ -28,12 +33,23 @@ function readArchive(archive: Uint8Array): Record<string, string> {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
     const size = parseInt(field(header, 124, 12).trim() || "0", 8);
-    contents[field(header, 0, 100)] = decoder.decode(
-      tar.subarray(offset + 512, offset + 512 + size),
-    );
+    members[field(header, 0, 100)] = {
+      content: decoder.decode(tar.subarray(offset + 512, offset + 512 + size)),
+      mode: parseInt(field(header, 100, 8).trim() || "0", 8),
+    };
     offset += 512 + Math.ceil(size / 512) * 512;
   }
-  return contents;
+  return members;
+}
+
+/** The members' contents alone, for the cases that do not read modes. */
+function readArchive(archive: Uint8Array): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(readMembers(archive)).map(([name, member]) => [
+      name,
+      member.content,
+    ]),
+  );
 }
 
 function bundleEntry(overrides = {}) {
@@ -86,6 +102,55 @@ describe("packBundle", () => {
     expect(JSON.parse(contents["config.json"])).toEqual(
       (payload?.template as { config: unknown }).config,
     );
+  });
+
+  it("keeps a multi-value answer a list where the config states one value", async () => {
+    // Arrange
+    const entry = bundleEntry({ config: { repos: "{{form.repository}}" } });
+
+    // Act
+    const contents = readArchive(
+      await packBundle(entry, {
+        ...VALUES,
+        repository: ["OpenHands/automation", "OpenHands/extensions"],
+      }),
+    );
+
+    // Assert
+    expect(JSON.parse(contents["config.json"])).toEqual({
+      repos: ["OpenHands/automation", "OpenHands/extensions"],
+    });
+  });
+
+  it("renders a placeholder naming something that is not a value as text", async () => {
+    // Arrange: a manifest naming its own setup block would otherwise put that
+    // whole object into the config it ships and the provenance it records.
+    const entry = bundleEntry({ config: { leak: "{{automation.setup}}" } });
+
+    // Act
+    const contents = readArchive(await packBundle(entry, VALUES));
+
+    // Assert
+    expect(JSON.parse(contents["config.json"])).toEqual({ leak: "" });
+  });
+
+  it("packs a file the entrypoint runs itself as executable", async () => {
+    // Arrange
+    const entry = bundleEntry({ entrypoint: "./main.py" });
+
+    // Act
+    const members = readMembers(await packBundle(entry, VALUES));
+
+    // Assert
+    expect(members["main.py"].mode).toBe(0o755);
+  });
+
+  it("packs a file the entrypoint only passes to an interpreter as data", async () => {
+    // Act
+    const members = readMembers(await packBundle(bundleEntry(), VALUES));
+
+    // Assert: `python3 main.py` runs python3, not main.py.
+    expect(members["main.py"].mode).toBe(0o644);
   });
 
   it("reports an entry the published package ships no files for", () => {

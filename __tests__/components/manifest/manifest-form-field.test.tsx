@@ -207,6 +207,42 @@ describe("SetupFormField repo-picker", () => {
     expect(onValueChange).toHaveBeenLastCalledWith(["OpenHands/extensions"]);
   });
 
+  it("names the input the entry's own label for a screen reader", () => {
+    // Arrange — the label is rendered above the list rather than on the input,
+    // which is how an input ends up announced as nothing at all.
+    renderRepositoryField(LOCAL_BACKEND, {
+      field: REPOSITORIES_FIELD,
+      initialValue: [],
+    });
+
+    // Assert
+    expect(screen.getByRole("textbox", { name: "Repositories" })).toBe(
+      screen.getByTestId("setup-field-repository"),
+    );
+  });
+
+  it("keeps a repository typed but not added, rather than dropping it", async () => {
+    // Arrange — the input still shows the text, so leaving the field is the
+    // user saying they answered it.
+    const { onValueChange, user } = renderRepositoryField(LOCAL_BACKEND, {
+      field: REPOSITORIES_FIELD,
+      initialValue: ["OpenHands/automation"],
+    });
+
+    // Act
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "OpenHands/extensions",
+    );
+    await user.tab();
+
+    // Assert
+    expect(onValueChange).toHaveBeenLastCalledWith([
+      "OpenHands/automation",
+      "OpenHands/extensions",
+    ]);
+  });
+
   it("browses the account's repositories on a cloud backend", () => {
     // Arrange / Act
     renderRepositoryField(CLOUD_BACKEND);

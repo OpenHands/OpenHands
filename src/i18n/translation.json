@@ -36430,6 +36430,23 @@
     "uk": "owner/repo",
     "ca": "owner/repo"
   },
+  "SETUP$REPOSITORY_COUNT": {
+    "en": "{{total}} repositories",
+    "ja": "{{total}} 個のリポジトリ",
+    "zh-CN": "{{total}} 个仓库",
+    "zh-TW": "{{total}} 個儲存庫",
+    "ko-KR": "저장소 {{total}}개",
+    "no": "{{total}} repositorier",
+    "it": "{{total}} repository",
+    "pt": "{{total}} repositórios",
+    "es": "{{total}} repositorios",
+    "ar": "{{total}} مستودعات",
+    "fr": "{{total}} dépôts",
+    "tr": "{{total}} depo",
+    "de": "{{total}} Repositorys",
+    "uk": "{{total}} репозиторіїв",
+    "ca": "{{total}} repositoris"
+  },
   "FEATURED_AUTOMATIONS$PIN": {
     "en": "Pin to dashboard",
     "ja": "ダッシュボードにピン留め",
