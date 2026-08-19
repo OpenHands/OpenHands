@@ -70,12 +70,8 @@ export function parseGitRemoteUrl(
   const url = remoteUrl?.trim();
   if (!url) return null;
 
-  // git@host:owner/repo(.git). SCP shorthand never carries a scheme, so a
-  // scheme'd URL is left to the URL parser below. Otherwise the port in
-  // `ssh://git@host:2222/owner/repo` is read as the first path segment.
-  const scpMatch = url.includes("://")
-    ? null
-    : url.match(/^[^@\s]+@([^:\s]+):(.+)$/);
+  // git@host:owner/repo(.git)
+  const scpMatch = url.match(/^[^@\s]+@([^:\s]+):(.+)$/);
   if (scpMatch) {
     const host = scpMatch[1];
     return buildParsedGitRemoteUrl(url, host, scpMatch[2]);

@@ -60,6 +60,15 @@ describe("GitSyncOverviewSection", () => {
     );
   });
 
+  it("keeps a self-hosted forge's path when ssh:// carries a port", () => {
+    renderWith("ssh://git@git.example.com:2222/org/repo.git");
+
+    expect(screen.getByTestId("git-sync-repo-link")).toHaveAttribute(
+      "href",
+      "https://git.example.com/org/repo",
+    );
+  });
+
   // A remote configured with credentials in it must not put them in an href,
   // where they would ride along in the outgoing navigation.
   it("strips credentials from the link", () => {
