@@ -68,7 +68,6 @@ const STATUS_DETAIL_ROW_KEYS = [
   "count",
   "first_seen_at",
   "last_seen_at",
-  "fingerprint",
 ] as const;
 
 type StatusDetailRowKey = (typeof STATUS_DETAIL_ROW_KEYS)[number];
@@ -407,10 +406,9 @@ export function RunLogsModal({
     statusDetail,
     parsedStatusDetail,
   );
-  const statusDetailSections = getDetailSections(
-    parsedStatusDetail,
-    statusDetailSummary,
-  );
+  const statusDetailSections = hasBashCommand
+    ? []
+    : getDetailSections(parsedStatusDetail, statusDetailSummary);
   const statusDetailRows = getStatusDetailRows(statusDetail);
   const statusDetailExtraRows = getStatusDetailExtraRows(statusDetail);
   const errorDetail = run?.error_detail ?? null;
@@ -447,7 +445,7 @@ export function RunLogsModal({
         }}
         role="presentation"
       />
-      <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
+      <div className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] p-6">
         <button
           type="button"
           onClick={onClose}

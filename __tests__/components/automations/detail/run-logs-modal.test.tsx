@@ -378,7 +378,7 @@ describe("RunLogsModal", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
   });
 
-  it("renders execution failures as readable sections without duplicating the raw detail", () => {
+  it("summarizes execution failures without duplicating output when log tabs exist", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
     const detail = `exit_code=1
 stderr: qa failure stderr
@@ -420,18 +420,14 @@ stdout: qa failure stdout`;
 
     const details = screen.getByTestId("run-status-details");
     expect(details).toHaveTextContent("Execution failed with exit code 1.");
-    expect(screen.getByText("Error output")).toBeInTheDocument();
-    expect(screen.getByText(/qa failure stderr/)).toBeInTheDocument();
+    expect(screen.queryByText("Error output")).not.toBeInTheDocument();
+    expect(screen.queryByText(/qa failure stderr/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/RuntimeError: qa intentional failure/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Output")).toBeInTheDocument();
-    expect(screen.getByText("qa failure stdout")).toBeInTheDocument();
+      screen.queryByText(/RuntimeError: qa intentional failure/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("qa failure stdout")).not.toBeInTheDocument();
     expect(screen.getByText("Exit code")).toBeInTheDocument();
     expect(screen.getByText("No")).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/RuntimeError: qa intentional failure/),
-    ).toHaveLength(1);
   });
 });
 
