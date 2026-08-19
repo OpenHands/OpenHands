@@ -102,6 +102,16 @@ def visible_text(text: str) -> str:
     return cleaned
 
 
+def normalize_heading(heading: str) -> str:
+    """Normalize a heading to its lookup key: no trailing punctuation, lowercased.
+
+    Authors commonly write `### Actual Behavior:` by hand, and issue forms are not the only
+    source of these bodies. Without stripping the colon the section is invisible to
+    `find_section`, and a complete report is told to add the sections it already has.
+    """
+    return heading.strip().rstrip(":").strip().lower()
+
+
 def extract_sections(body: str) -> dict[str, str]:
     """Split the body into a {heading: text} map using `### <heading>` boundaries.
 
@@ -114,7 +124,13 @@ def extract_sections(body: str) -> dict[str, str]:
     for index, match in enumerate(matches):
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        sections[match.group(1).strip().lower()] = body[start:end]
+        key = normalize_heading(match.group(1))
+        # A repeated heading appends rather than replaces. Authors paste a section twice, and
+        # dropping the earlier copy can discard the evidence the later one lacks.
+        if key in sections:
+            sections[key] = f"{sections[key]}\n{body[start:end]}"
+        else:
+            sections[key] = body[start:end]
     return sections
 
 

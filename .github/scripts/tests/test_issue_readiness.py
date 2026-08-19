@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from check_issue_readiness import (
     evaluate_readiness,
     extract_sections,
+    normalize_heading,
     has_screenshot_or_video,
     references_run_method,
     has_checklist_item,
@@ -396,3 +397,45 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
     assert len(data["reasons"]) == 0
 
 
+# ---------------------------------------------------------------------------
+# Heading normalization
+# ---------------------------------------------------------------------------
+
+BUG_BODY_COLON_HEADINGS = """### Actual Behavior:
+I ran `npm run dev` and saw this:
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria:
+- [ ] The button lines up with the field above it.
+"""
+
+BUG_BODY_REPEATED_HEADING = """### Actual Behavior
+I ran `npm run dev` and saw this:
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] The button lines up with the field above it.
+
+### Actual Behavior
+(pasted twice by mistake)
+"""
+
+
+def test_normalize_heading_strips_trailing_colon():
+    assert normalize_heading("Actual Behavior:") == "actual behavior"
+    assert normalize_heading("  Acceptance Criteria :  ") == "acceptance criteria"
+    assert normalize_heading("Desired Behavior") == "desired behavior"
+
+def test_bug_ready_with_colon_headings():
+    result = evaluate_readiness(BUG_BODY_COLON_HEADINGS, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+def test_repeated_heading_keeps_the_first_section():
+    sections = extract_sections(BUG_BODY_REPEATED_HEADING)
+    assert "npm run dev" in sections["actual behavior"]
+
+def test_bug_ready_when_a_heading_is_repeated():
+    result = evaluate_readiness(BUG_BODY_REPEATED_HEADING, [BUG_LABEL])
+    assert result.ready, result.reasons
