@@ -206,11 +206,10 @@ button.extension-module-card-interactive {
  */
 :host[data-color-scheme="light"] .text-white:not(.text-on-solid),
 :host[data-color-scheme="light"] .hover\:text-white:not(.text-on-solid):hover,
-:host[data-color-scheme="light"] .focus\:text-white:not(.text-on-solid):focus,
+:host[data-color-scheme="light"]
+  .hover\:enabled\:text-white:not(.text-on-solid):hover:enabled,
 :host[data-color-scheme="light"]
   .focus-within\:text-white:not(.text-on-solid):focus-within,
-:host[data-color-scheme="light"]
-  .focus-visible\:text-white:not(.text-on-solid):focus-visible,
 :host[data-color-scheme="light"]
   .group:hover
   .group-hover\:text-white:not(.text-on-solid),
@@ -237,7 +236,11 @@ button.extension-module-card-interactive {
 }
 
 :host[data-color-scheme="light"] [class~="hover:bg-white/5"]:hover,
-:host[data-color-scheme="light"] [class~="hover:bg-white/10"]:hover {
+:host[data-color-scheme="light"] [class~="hover:bg-white/10"]:hover,
+:host[data-color-scheme="light"] [class~="hover:bg-white/[0.03]"]:hover,
+:host[data-color-scheme="light"] [class~="hover:bg-white/[0.05]"]:hover,
+:host[data-color-scheme="light"] [class~="hover:bg-white/[0.08]"]:hover,
+:host[data-color-scheme="light"] [class~="hover:bg-white/[0.09]"]:hover {
   background-color: color-mix(in srgb, var(--oh-foreground) 9%, transparent);
 }
 

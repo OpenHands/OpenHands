@@ -5,7 +5,7 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Schema } from "hast-util-sanitize";
 import type { PluggableList } from "unified";
-import { Code } from "./code";
+import { code } from "./code";
 import { ul, ol, li } from "./list";
 import { paragraph } from "./paragraph";
 import { anchor } from "./anchor";
@@ -141,7 +141,7 @@ export function MarkdownRenderer({
 }: MarkdownRendererProps) {
   // Build the components object with defaults and optional additions
   const components: Components = {
-    code: Code,
+    code,
     ul,
     ol,
     li,

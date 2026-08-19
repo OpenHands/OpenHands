@@ -10,8 +10,13 @@ import { SyntaxHighlighter } from "./syntax-highlighter";
 
 /**
  * Component to render code blocks in markdown.
+ *
+ * Named `Code` rather than lowercase like its sibling markdown components
+ * because it calls a hook (`useColorTheme`), and `react-hooks/rules-of-hooks`
+ * only treats capitalized functions as components. It is exported as `code`
+ * so the `components` map in markdown-renderer reads like the others.
  */
-export function Code({
+function Code({
   children,
   className,
 }: React.ClassAttributes<HTMLElement> &

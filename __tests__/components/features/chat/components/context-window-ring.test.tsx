@@ -18,8 +18,8 @@ const MIN_RATIO = 3;
  * ships the deepsea scale but `DEFAULT_COLOR_THEME` overrides it at runtime, so
  * a stylesheet-derived assertion validates a palette no default install renders.
  */
-const SURFACE_STOP = "--cool-grey-925"; // dark-theme --oh-surface fallback
-const FOREGROUND_STOP = "--cool-grey-100"; // dark-theme --oh-foreground fallback
+const SURFACE_STOP = "--cool-grey-925"; // --oh-surface, the composer background
+const FOREGROUND_STOP = "--cool-grey-100"; // --oh-foreground, the neutral arc
 
 const HOVER_ALPHA = 0.1;
 
