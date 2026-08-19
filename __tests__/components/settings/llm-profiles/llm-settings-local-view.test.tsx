@@ -615,6 +615,72 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("Pre-flight validation", () => {
+    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        ),
+      );
+    }
+
+    it("blocks saving when validation returns an invalid verdict", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+        valid: false,
+        error: { type: "authentication", message: "Invalid API key" },
+      });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(ProfilesService.validateProfile).toHaveBeenCalled(),
+      );
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { valid: true }])(
+      "saves when validation returns %j",
+      async (verdict) => {
+        const user = userEvent.setup();
+        vi.mocked(ProfilesService.validateProfile).mockResolvedValue(verdict);
+        mockSaveMutateAsync.mockResolvedValue({ success: true });
+        renderWithProviders(<LlmSettingsLocalView />);
+        await openEditView(user);
+        await user.click(screen.getByTestId("save-profile-btn"));
+
+        await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      },
+    );
+
+    it("skips pre-flight validation for a connection-linked profile", async () => {
+      // A linked profile carries no inline key — its credential lives on the
+      // provider connection — so there is nothing on this profile to pre-flight.
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "anthropic/claude-sonnet-4",
+          provider_connection_id: "conn1",
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValue({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Basic tab save", () => {
     it("preserves hidden base_url for OpenHands models without a model change", async () => {
       // Arrange — a profile has an actual advanced base_url value. Switching to
