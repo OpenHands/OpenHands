@@ -369,7 +369,41 @@ describe("recommended automations", () => {
     }
   });
 
+  /**
+   * Puts a non-MCP-installable requirement back on `jira-issue-to-pr`.
+   *
+   * It declared the HTTP-only `jira` until @openhands/extensions 0.17.0 swapped it
+   * for the MCP `atlassian-rovo`, and no catalog automation declares a non-MCP
+   * integration any more. The cases below are about what a card does with one, so
+   * the requirement is restored for their duration rather than the assertions
+   * rewritten around a property the catalog stopped having. Mirrors the
+   * mutate-and-restore already used for the unknown-ID case.
+   *
+   * @returns the restore function, which the caller must run in a `finally`.
+   */
+  function requireNonMcpIntegration(): () => void {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "jira-issue-to-pr",
+    )!;
+    const mutable = automation as RecommendedAutomation & {
+      requires: { integrations: Record<string, { message?: string }> };
+    };
+    const original = mutable.requires.integrations;
+    const { "atlassian-rovo": rovo, ...rest } = original;
+    // Keyed first, so the pill order and the install queue start where they did.
+    mutable.requires.integrations = {
+      jira: {
+        message: rovo?.message ?? "Reads the project for issues.",
+      },
+      ...rest,
+    };
+    return () => {
+      mutable.requires.integrations = original;
+    };
+  }
+
   it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
+    const restoreRequirement = requireNonMcpIntegration();
     // SkillCardPillRow folds pills behind "+N more" when it measures zero
     // widths in jsdom; give it room so every pill renders.
     const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
@@ -428,6 +462,7 @@ describe("recommended automations", () => {
         "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1",
       );
     } finally {
+      restoreRequirement();
       if (offsetWidthDescriptor) {
         Object.defineProperty(
           HTMLElement.prototype,
@@ -497,17 +532,23 @@ describe("recommended automations", () => {
   });
 
   it("queues installs only for MCP-installable required integrations", async () => {
-    renderLauncher();
+    const restoreRequirement = requireNonMcpIntegration();
 
-    fireEvent.click(
-      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
-    );
+    try {
+      renderLauncher();
 
-    // jira cannot go through the local MCP install flow, so the queue starts
-    // directly at github rather than failing or skipping the automation.
-    const modal = await screen.findByTestId("mcp-install-modal");
-    expect(modal).toHaveAttribute("data-marketplace-id", "github");
-    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+      );
+
+      // jira cannot go through the local MCP install flow, so the queue starts
+      // directly at github rather than failing or skipping the automation.
+      const modal = await screen.findByTestId("mcp-install-modal");
+      expect(modal).toHaveAttribute("data-marketplace-id", "github");
+      expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+    } finally {
+      restoreRequirement();
+    }
   });
 
   it("shows a decorative plus badge on each card without toggle behavior", () => {
