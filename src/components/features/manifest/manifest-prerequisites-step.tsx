@@ -8,6 +8,7 @@ const INTEGRATIONS_PATH = "/mcp";
 
 export interface SetupPrerequisitesStepProps {
   prerequisites: SetupPrerequisitesResult;
+  errors?: string[];
 }
 
 /**
@@ -18,6 +19,7 @@ export interface SetupPrerequisitesStepProps {
  */
 export function SetupPrerequisitesStep({
   prerequisites,
+  errors = [],
 }: SetupPrerequisitesStepProps) {
   const { t } = useTranslation("openhands");
   const { blockingIntegrations, warningIntegrations } = prerequisites;
@@ -34,6 +36,17 @@ export function SetupPrerequisitesStep({
           </div>
         ),
       )}
+
+      {errors.map((message) => (
+        <p
+          key={message}
+          role="alert"
+          data-testid="setup-prerequisite-error"
+          className="text-sm text-red-400"
+        >
+          {message}
+        </p>
+      ))}
 
       <NavigationLink to={INTEGRATIONS_PATH} className="text-sm underline">
         {t(I18nKey.SETUP$MANAGE_INTEGRATIONS)}

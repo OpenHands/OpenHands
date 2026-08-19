@@ -40,7 +40,36 @@ describe("normalizeServiceErrors", () => {
       {
         path: "trigger.schedule",
         message: "Minimum interval for this deployment is 5 minutes.",
+        step: undefined,
       },
+    ]);
+  });
+
+  it("preserves a safe setup step without trusting arbitrary step names", () => {
+    // Act
+    const errors = normalizeServiceErrors(
+      {
+        valid: false,
+        errors: [
+          {
+            field: null,
+            step: "prerequisites",
+            message: "Reconnect GitHub.",
+          },
+          {
+            field: null,
+            step: "provider-internals",
+            message: "Try again.",
+          },
+        ],
+      },
+      PAYLOAD,
+    );
+
+    // Assert
+    expect(errors).toEqual([
+      { path: "", message: "Reconnect GitHub.", step: "prerequisites" },
+      { path: "", message: "Try again.", step: undefined },
     ]);
   });
 
@@ -116,6 +145,27 @@ describe("mapServiceErrors", () => {
     expect({ fieldErrors, formErrors }).toEqual({
       fieldErrors: {},
       formErrors: ["Upload failed."],
+    });
+  });
+
+  it("surfaces an unmappable prerequisite error on the step that can fix it", () => {
+    // Act
+    const mapped = mapServiceErrors(
+      [
+        {
+          path: "requirements.integrations[0]",
+          step: "prerequisites",
+          message: "Reconnect GitHub.",
+        },
+      ],
+      ERROR_MAP,
+    );
+
+    // Assert
+    expect(mapped).toEqual({
+      fieldErrors: {},
+      formErrors: [],
+      stepErrors: { prerequisites: ["Reconnect GitHub."] },
     });
   });
 });

@@ -6,6 +6,7 @@ import type { SetupBlock, SetupFormValues } from "#/manifests/types";
 export interface SetupReviewStepProps {
   setup: SetupBlock;
   values: SetupFormValues;
+  preflightStatus?: "passed" | "unsupported" | null;
 }
 
 /**
@@ -16,11 +17,31 @@ export interface SetupReviewStepProps {
  * row per declared field, labelled the way the field was labelled, says the
  * same thing without asking every entry to restate it.
  */
-export function SetupReviewStep({ setup, values }: SetupReviewStepProps) {
+export function SetupReviewStep({
+  setup,
+  values,
+  preflightStatus = null,
+}: SetupReviewStepProps) {
   const { t } = useTranslation("openhands");
 
   return (
     <div className="flex flex-col gap-4" data-testid="setup-review">
+      {preflightStatus === "passed" && (
+        <p
+          data-testid="setup-preflight-passed"
+          className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+        >
+          {t(I18nKey.SETUP$PREFLIGHT_PASSED)}
+        </p>
+      )}
+      {preflightStatus === "unsupported" && (
+        <p
+          data-testid="setup-preflight-unsupported"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+        >
+          {t(I18nKey.SETUP$PREFLIGHT_UNSUPPORTED)}
+        </p>
+      )}
       <dl className="flex flex-col gap-3">
         {Object.entries(collectFields(setup)).map(([name, field]) => (
           <div key={name} className="flex flex-col gap-0.5">

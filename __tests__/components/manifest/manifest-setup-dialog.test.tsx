@@ -73,6 +73,24 @@ const NOTHING_TO_CONNECT: SetupPrerequisitesResult = {
 
 const ENTRY: SetupEntry = createSetupEntry();
 
+function requirementsSchemaFailure() {
+  return Object.assign(new Error("Request failed with status 422"), {
+    isAxiosError: true,
+    response: {
+      status: 422,
+      data: {
+        detail: [
+          {
+            loc: ["body", "requirements"],
+            type: "extra_forbidden",
+            msg: "Extra inputs are not permitted",
+          },
+        ],
+      },
+    },
+  });
+}
+
 function renderDialog(entry: SetupEntry = ENTRY) {
   const user = userEvent.setup();
   render(
@@ -98,6 +116,7 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(AutomationService.validateDraft).mockReset();
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
@@ -159,6 +178,173 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-review")).toBeNull();
   });
 
+  it("blocks review and highlights every field rejected by preflight", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: "repos[0].url",
+          code: "repository_denied",
+          message: "You do not have access to this repository.",
+        },
+        {
+          field: "trigger.schedule",
+          code: "interval_too_short",
+          message: "Choose a schedule of at least five minutes.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-field-repository-error"),
+    ).toHaveTextContent("You do not have access to this repository.");
+    expect(screen.getByTestId("setup-field-schedule-error")).toHaveTextContent(
+      "Choose a schedule of at least five minutes.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("returns prerequisite failures to the step where they can be fixed", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockResolvedValue({
+      valid: false,
+      errors: [
+        {
+          field: null,
+          step: "prerequisites",
+          code: "integration_unavailable",
+          message: "Reconnect GitHub before continuing.",
+        },
+      ],
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-prerequisites"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("setup-prerequisite-error")).toHaveTextContent(
+      "Reconnect GitHub before continuing.",
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+  });
+
+  it("blocks a real service outage without exposing provider details", async () => {
+    // Arrange
+    const secretSentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error(secretSentinel), {
+        name: "HttpError",
+        status: 503,
+        response: { detail: secretSentinel },
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(
+      secretSentinel,
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("does not admit a verdict for values edited during preflight", async () => {
+    // Arrange
+    let resolve!: (value: { valid: true; errors: never[] }) => void;
+    vi.mocked(AutomationService.validateDraft).mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act - the fields stay editable while the explicit service check runs.
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await user.type(screen.getByTestId("setup-field-widgetName"), " changed");
+    resolve({ valid: true, errors: [] });
+
+    // Assert - editing invalidated that request, so its later success cannot
+    // unlock review or the create action.
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-continue-button")).not.toBeDisabled(),
+    );
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
+  });
+
+  it("treats a missing legacy endpoint as advisory on review", async () => {
+    // Arrange
+    vi.mocked(AutomationService.validateDraft).mockRejectedValue(
+      Object.assign(new Error("Not implemented"), {
+        name: "HttpError",
+        status: 501,
+      }),
+    );
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toHaveTextContent("SETUP$PREFLIGHT_UNSUPPORTED");
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument();
+  });
+
+  it("keeps an old validate contract advisory while still allowing creation", async () => {
+    // Arrange - the first call rejects only the additive requirements envelope;
+    // the compatibility retry validates the same draft through the old route.
+    vi.mocked(AutomationService.validateDraft)
+      .mockRejectedValueOnce(requirementsSchemaFailure())
+      .mockResolvedValue({ valid: true, errors: [] });
+    mocks.runAction.mockResolvedValue({
+      response: { id: "legacy-automation" },
+    });
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    // Act
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert - the old validator did not perform deployment checks, so the
+    // review says advisory while preserving the creation path.
+    expect(
+      await screen.findByTestId("setup-preflight-unsupported"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() => expect(mocks.runAction).toHaveBeenCalled());
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/automations/legacy-automation",
+      {
+        replace: true,
+      },
+    );
+  });
+
   it("creates from the derived payload and opens what was created", async () => {
     // Arrange
     mocks.runAction.mockResolvedValue({ response: { id: "automation-1" } });
@@ -169,6 +355,9 @@ describe("SetupDialog", () => {
     await user.click(screen.getByTestId("setup-continue-button"));
     await waitFor(() =>
       expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-preflight-passed")).toHaveTextContent(
+      "SETUP$PREFLIGHT_PASSED",
     );
     await user.click(screen.getByTestId("setup-continue-button"));
 
@@ -185,6 +374,33 @@ describe("SetupDialog", () => {
       repos: [{ url: "OpenHands/agent-server-gui", provider: "github" }],
       trigger: { type: "cron", schedule: "*/15 * * * *" },
     });
+  });
+
+  it("revalidates on confirm and blocks creation when readiness changed", async () => {
+    const sentinel = "provider-secret-sentinel";
+    vi.mocked(AutomationService.validateDraft)
+      .mockResolvedValueOnce({ valid: true, errors: [] })
+      .mockRejectedValueOnce(
+        Object.assign(new Error(sentinel), {
+          name: "HttpError",
+          status: 503,
+        }),
+      );
+    const { user } = renderDialog();
+    await fillForm(user);
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    expect(await screen.findByTestId("setup-form-error")).toHaveTextContent(
+      "SETUP$PREFLIGHT_UNAVAILABLE",
+    );
+    expect(screen.getByTestId("setup-dialog")).not.toHaveTextContent(sentinel);
+    expect(screen.queryByTestId("setup-review")).toBeNull();
+    expect(mocks.runAction).not.toHaveBeenCalled();
   });
 
   it("offers the conversation fallback when the deployment cannot run a direct entry", async () => {
@@ -211,7 +427,11 @@ describe("SetupDialog", () => {
         replace: true,
       }),
     );
-    expect(mocks.runAction).toHaveBeenCalledWith(entry, expect.anything(), null);
+    expect(mocks.runAction).toHaveBeenCalledWith(
+      entry,
+      expect.anything(),
+      null,
+    );
   });
 
   it("keeps the unsupported screen close-only when there is nothing to fall back to", () => {

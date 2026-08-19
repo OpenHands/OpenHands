@@ -16,6 +16,7 @@ import {
 import { validateFormValues } from "#/manifests/manifest-local-validation";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import { createSetupEntry } from "./manifest-test-data";
 
 // The command a skill publishes in its own frontmatter, which the host looks
 // up rather than storing. Pinned so the assertion does not move when the
@@ -66,6 +67,27 @@ const BUNDLES = [
   repoMonitorFixture,
   incidentFixture,
 ] as FixtureBundle[];
+
+const GITHUB_PREFLIGHT_REQUIREMENTS = {
+  integrations: [
+    {
+      id: "github",
+      alternatives: [
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "oauth2",
+        },
+        {
+          transport: "shttp",
+          locator: "https://api.githubcopilot.com/mcp/",
+          authStrategy: "api_key",
+          secretNames: ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        },
+      ],
+    },
+  ],
+};
 
 function requireEntry(automationId: string): SetupEntry {
   const entry = SETUP_REGISTRY.findById(automationId);
@@ -225,9 +247,54 @@ describe("buildPreflightBody", () => {
       const envelope = buildPreflightBody(entry, formValues);
 
       // Assert
-      expect(envelope).toEqual(body);
+      expect(envelope).toEqual({
+        ...body,
+        requirements: GITHUB_PREFLIGHT_REQUIREMENTS,
+      });
     },
   );
+
+  it("derives required secret references from each catalog alternative", () => {
+    // Arrange — the plain Slack team id configures the server but is not a
+    // secret reference; the required bot token is. Optional integrations are
+    // not promoted into blocking preflight requirements.
+    const entry = createSetupEntry({
+      requires: {
+        integrations: {
+          slack: { message: "Posts the report." },
+          notion: { message: "Optionally archives it.", required: false },
+        },
+      },
+    });
+
+    // Act
+    const envelope = buildPreflightBody(entry, {
+      repository: "OpenHands/OpenHands",
+      widgetName: "Widgets",
+    });
+
+    // Assert
+    expect(envelope?.requirements).toEqual({
+      integrations: [
+        {
+          id: "slack",
+          alternatives: [
+            {
+              transport: "shttp",
+              locator: "https://mcp.slack.com/mcp",
+              authStrategy: "oauth2",
+            },
+            {
+              transport: "stdio",
+              locator: "slack",
+              authStrategy: "api_key",
+              secretNames: ["SLACK_BOT_TOKEN"],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });
 
 describe("buildAssistedMessage", () => {
@@ -261,7 +328,11 @@ describe("service rejections mapped back to fields", () => {
       );
 
       // Assert
-      expect(mapped).toEqual({ fieldErrors: expectedFieldErrors, formErrors: [] });
+      expect(mapped).toEqual({
+        fieldErrors: expectedFieldErrors,
+        formErrors: [],
+        stepErrors: {},
+      });
     },
   );
 });
