@@ -636,6 +636,67 @@ describe("AgentServerConversationService", () => {
       expect(result.items[0]?.sandbox_status).toBe("PAUSED");
     });
 
+    it("falls back to aggregated usage metrics from searchConversations stats", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-with-stats",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            metrics: null,
+            stats: {
+              usage_to_metrics: {
+                agent: {
+                  accumulated_cost: 1.25,
+                  max_budget_per_task: 10,
+                  accumulated_token_usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 20,
+                    cache_read_tokens: 30,
+                    cache_write_tokens: 5,
+                    context_window: 128_000,
+                    per_turn_token: 120,
+                  },
+                },
+                condenser: {
+                  accumulated_cost: 0.5,
+                  max_budget_per_task: null,
+                  accumulated_token_usage: {
+                    prompt_tokens: 40,
+                    completion_tokens: 10,
+                    cache_read_tokens: 15,
+                    cache_write_tokens: 2,
+                    context_window: 200_000,
+                    per_turn_token: 50,
+                  },
+                },
+              },
+            },
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.metrics).toEqual({
+        accumulated_cost: 1.75,
+        max_budget_per_task: 10,
+        accumulated_token_usage: {
+          prompt_tokens: 140,
+          completion_tokens: 30,
+          cache_read_tokens: 45,
+          cache_write_tokens: 7,
+          context_window: 200_000,
+          per_turn_token: 120,
+        },
+      });
+    });
+
     it("preserves the launched Agent Profile through the wire normalizer", async () => {
       mockHttpGet.mockResolvedValue({
         data: [
