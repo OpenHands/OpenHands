@@ -72,6 +72,22 @@ export enum AutomationRunStatus {
   SKIPPED = "SKIPPED",
 }
 
+export interface AutomationRunStatusDetail {
+  phase?: string;
+  kind?: string;
+  detail?: string;
+  transient?: boolean;
+  source?: string;
+  operation?: string;
+  code?: string;
+  status_code?: number;
+  fingerprint?: string;
+  first_seen_at?: string;
+  last_seen_at?: string;
+  count?: number;
+  [key: string]: unknown;
+}
+
 export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
@@ -85,6 +101,12 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  /**
+   * Structured current/last run lifecycle details from newer automation
+   * backends. This can describe transient infrastructure issues while a run is
+   * still RUNNING, or terminal context alongside error_detail.
+   */
+  status_detail?: AutomationRunStatusDetail | null;
   /**
    * Accumulated LLM cost of the run in USD, reported by the SDK in the
    * completion callback. `null` means unknown — the run predates cost

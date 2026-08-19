@@ -71,6 +71,7 @@ RUN node -e " \
 FROM ${AGENT_SERVER_IMAGE} AS final
 
 ARG AUTOMATION_VERSION
+ARG AUTOMATION_GIT_REF=""
 ARG AGENT_SERVER_SDK_GIT_REF=""
 ARG OPENHANDS_BUILD_GIT_SHA=unknown
 ARG OPENHANDS_BUILD_GIT_REF=unknown
@@ -103,8 +104,13 @@ RUN if command -v apt-get >/dev/null 2>&1; then \
 # Shared deps (openhands-sdk, fastapi, uvicorn, pydantic, httpx, …) are
 # already satisfied by the agent-server base image, so only automation-
 # specific packages (asyncpg, sqlalchemy, boto3, gcloud, …) are added.
-RUN uv pip install --system "openhands-automation==${AUTOMATION_VERSION}" 2>/dev/null \
-    || pip install --no-cache-dir "openhands-automation==${AUTOMATION_VERSION}"
+RUN if [ -n "${AUTOMATION_GIT_REF}" ]; then \
+      AUTOMATION_SPEC="git+https://github.com/OpenHands/automation@${AUTOMATION_GIT_REF}"; \
+    else \
+      AUTOMATION_SPEC="openhands-automation==${AUTOMATION_VERSION}"; \
+    fi && \
+    uv pip install --system "${AUTOMATION_SPEC}" 2>/dev/null \
+    || pip install --no-cache-dir "${AUTOMATION_SPEC}"
 
 RUN if [ -n "${AGENT_SERVER_SDK_GIT_REF}" ]; then \
       BASE_GIT_URL="git+https://github.com/OpenHands/software-agent-sdk@${AGENT_SERVER_SDK_GIT_REF}" && \

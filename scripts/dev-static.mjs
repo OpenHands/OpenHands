@@ -31,7 +31,7 @@
  *
  * Environment variables (all optional, same as dev):
  *   - PORT: Ingress port (default: 8000)
- *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
+ *   - OH_AUTOMATION_GIT_REF: Git ref for automation (defaults to config/defaults.json gitRefs.automation when set)
  *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
  *   - OH_SECRET_KEY: Session secret key
  */
@@ -156,7 +156,7 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
-  --automation-ref <ref>      Git ref for automation backend (default: main)
+  --automation-ref <ref>      Git ref for automation backend (overrides config default)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
   -v, --verbose               Show detailed output

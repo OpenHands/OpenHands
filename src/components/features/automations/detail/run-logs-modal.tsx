@@ -57,6 +57,65 @@ function concatStream(outputs: BashOutput[], key: "stdout" | "stderr"): string {
     .join("");
 }
 
+const STATUS_DETAIL_ROW_KEYS = [
+  "phase",
+  "kind",
+  "source",
+  "operation",
+  "code",
+  "status_code",
+  "transient",
+  "count",
+  "first_seen_at",
+  "last_seen_at",
+  "fingerprint",
+] as const;
+
+const STATUS_DETAIL_RENDERED_KEYS = new Set<string>([
+  "detail",
+  ...STATUS_DETAIL_ROW_KEYS,
+]);
+
+function formatStatusDetailLabel(key: string): string {
+  return key
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatStatusDetailValue(value: unknown): string | null {
+  if (value == null) return null;
+  if (["string", "number", "boolean"].includes(typeof value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function getStatusDetailRows(
+  statusDetail: AutomationRun["status_detail"],
+): Array<{ key: string; label: string; value: string }> {
+  if (!statusDetail) return [];
+  return STATUS_DETAIL_ROW_KEYS.flatMap((key) => {
+    const value = formatStatusDetailValue(statusDetail[key]);
+    if (!value) return [];
+    return [{ key, label: formatStatusDetailLabel(key), value }];
+  });
+}
+
+function getStatusDetailExtraJson(
+  statusDetail: AutomationRun["status_detail"],
+): string | null {
+  if (!statusDetail) return null;
+  const extra = Object.fromEntries(
+    Object.entries(statusDetail).filter(
+      ([key, value]) =>
+        !STATUS_DETAIL_RENDERED_KEYS.has(key) && value !== undefined,
+    ),
+  );
+  if (Object.keys(extra).length === 0) return null;
+  return JSON.stringify(extra, null, 2);
+}
+
 export function RunLogsModal({
   conversationId,
   bashCommandId,
@@ -107,8 +166,16 @@ export function RunLogsModal({
   if (!isOpen) return null;
 
   const loading = isResolvingConversation || (isFetching && !outputs);
-  const noBashCommand = !bashCommandId;
+  const hasBashCommand = !!bashCommandId;
+  const noBashCommand = !hasBashCommand;
   const activeBody = activeTab === "stdout" ? stdout : stderr;
+  const statusDetail = run?.status_detail ?? null;
+  const statusDetailRows = getStatusDetailRows(statusDetail);
+  const statusDetailExtraJson = getStatusDetailExtraJson(statusDetail);
+  const hasRunDetails = !!run?.error_detail || !!statusDetail;
+  const titleKey = hasBashCommand
+    ? I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE
+    : I18nKey.AUTOMATIONS$DETAIL$RUN_DETAILS_TITLE;
 
   const tabBaseClass =
     "border-b-2 px-3 py-2 text-sm font-normal transition-colors focus:outline-none";
@@ -120,7 +187,7 @@ export function RunLogsModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
+      aria-label={t(titleKey)}
     >
       <div
         className="absolute inset-0 bg-black/60"
@@ -141,12 +208,63 @@ export function RunLogsModal({
         </button>
 
         <h2 className={cn("pr-8", modalTitleLgMediumClassName)}>
-          {t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
+          {t(titleKey)}
         </h2>
+
+        {hasRunDetails && (
+          <div
+            data-testid="run-status-details"
+            className="mt-4 space-y-3 rounded-lg border border-[var(--oh-border)] bg-black/20 p-4 text-sm"
+          >
+            {run?.error_detail && (
+              <div>
+                <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$RUN_ERROR_DETAIL_LABEL)}
+                </h3>
+                <p className="whitespace-pre-wrap break-words text-danger">
+                  {run.error_detail}
+                </p>
+              </div>
+            )}
+
+            {statusDetail && (
+              <div>
+                <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted">
+                  {t(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_LABEL)}
+                </h3>
+                {formatStatusDetailValue(statusDetail.detail) && (
+                  <p className="mb-3 whitespace-pre-wrap break-words text-content">
+                    {formatStatusDetailValue(statusDetail.detail)}
+                  </p>
+                )}
+                {statusDetailRows.length > 0 && (
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs">
+                    {statusDetailRows.map(({ key, label, value }) => (
+                      <div key={key} className="contents">
+                        <dt className="text-muted">{label}</dt>
+                        <dd className="break-words text-content">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {statusDetailExtraJson && (
+                  <details className="mt-3 text-xs">
+                    <summary className="cursor-pointer text-muted hover:text-content">
+                      {t(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA)}
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-black/30 p-3 text-content">
+                      {statusDetailExtraJson}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div
           role="tablist"
-          aria-label={t(I18nKey.AUTOMATIONS$DETAIL$LOGS_TITLE)}
+          aria-label={t(titleKey)}
           className="mt-4 flex gap-1 border-b border-[var(--oh-border)]"
         >
           <button

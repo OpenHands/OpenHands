@@ -285,6 +285,91 @@ describe("RunLogsModal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("shows run details when status_detail is present without a bash command", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-1",
+      status: AutomationRunStatus.RUNNING,
+      conversation_id: null,
+      bash_command_id: null,
+      error_detail: null,
+      status_detail: {
+        phase: "verification",
+        kind: "api_rate_limited",
+        detail: "Sandbox API returned HTTP 429",
+        status_code: 429,
+        transient: true,
+        count: 2,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: null,
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId={null}
+        bashCommandId={null}
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: I18nKey.AUTOMATIONS$DETAIL$RUN_DETAILS_TITLE,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Sandbox API returned HTTP 429",
+    );
+    expect(screen.getByText("Status Code")).toBeInTheDocument();
+    expect(screen.getByText("429")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND),
+    ).toBeInTheDocument();
+  });
+
+  it("shows both terminal error_detail and status_detail metadata", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-2",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail: "Command failed",
+      status_detail: {
+        phase: "callback",
+        detail: "Completion callback reported failure",
+        source: "automation_script",
+        metadata: { exit_code: 1 },
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Command failed",
+    );
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Completion callback reported failure",
+    );
+    expect(screen.getByText("automation_script")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("RunLogsModal — Debug with OpenHands button", () => {

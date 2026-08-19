@@ -40,17 +40,19 @@ const repoRoot = path.resolve(
 );
 
 describe("buildAutomationCommand", () => {
-  it("uses released PyPI version by default", () => {
+  it("uses the pinned automation git ref by default", () => {
     const cmd = buildAutomationCommand({});
 
     expect(cmd.command).toBe("uvx");
     expect(cmd.args).toContain("--from");
     expect(cmd.args).toContain(
-      `${DEFAULT_AUTOMATION_PACKAGE}==${DEFAULT_AUTOMATION_VERSION}`,
+      `git+${DEFAULT_AUTOMATION_REPO}@b07daaec8212ef15dc4dec80a6b3ba0339fb223a`,
     );
     expect(cmd.args).toContain("uvicorn");
     expect(cmd.args).toContain("openhands.automation.app:app");
-    expect(cmd.source).toBe(`PyPI (${DEFAULT_AUTOMATION_VERSION}, default)`);
+    expect(cmd.source).toBe(
+      "git (b07daaec8212ef15dc4dec80a6b3ba0339fb223a, default)",
+    );
   });
 
   it("uses custom git ref from OH_AUTOMATION_GIT_REF", () => {
