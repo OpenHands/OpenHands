@@ -38,8 +38,13 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
+import {
+  createStreamingDeltaBatcher,
+  StreamingDeltaBatcher,
+} from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
@@ -58,7 +63,7 @@ import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { useConversationStore } from "#/stores/conversation-store";
 import { trackError } from "#/utils/error-handler";
 import { useReadConversationFile } from "#/hooks/mutation/use-read-conversation-file";
-import useMetricsStore from "#/stores/metrics-store";
+import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
 import { useConversationHistory } from "#/hooks/query/use-conversation-history";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import {
@@ -154,6 +159,26 @@ export function ConversationWebSocketProvider({
   const { appendInput, appendOutput } = useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
+  // Coalesce streaming deltas to ≤1 store commit/render per frame.
+  // Separate batchers keep the main and planning streams from ever merging.
+  const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (mainDeltaBatcherRef.current === null) {
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore.getState().addEvent(delta);
+      // A delta means connectivity recovered — mirror handleNonErrorEvent.
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+  const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (planningDeltaBatcherRef.current === null) {
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore
+        .getState()
+        .addEvent({ ...delta, isFromPlanningAgent: true });
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
   //   so its loading state mirrors the REST query state (see below).
@@ -191,30 +216,61 @@ export function ConversationWebSocketProvider({
   // Helper function to update metrics from stats event
   const updateMetricsFromStats = useCallback(
     (event: ConversationStateUpdateEventStats) => {
-      if (event.value.usage_to_metrics?.agent) {
-        const agentMetrics = event.value.usage_to_metrics.agent;
-        const metrics = {
-          cost: agentMetrics.accumulated_cost,
-          max_budget_per_task: agentMetrics.max_budget_per_task ?? null,
-          usage: agentMetrics.accumulated_token_usage
-            ? {
-                prompt_tokens:
-                  agentMetrics.accumulated_token_usage.prompt_tokens,
-                completion_tokens:
-                  agentMetrics.accumulated_token_usage.completion_tokens,
-                cache_read_tokens:
-                  agentMetrics.accumulated_token_usage.cache_read_tokens,
-                cache_write_tokens:
-                  agentMetrics.accumulated_token_usage.cache_write_tokens,
-                context_window:
-                  agentMetrics.accumulated_token_usage.context_window,
-                per_turn_token:
-                  agentMetrics.accumulated_token_usage.per_turn_token,
-              }
-            : null,
-        };
-        useMetricsStore.getState().setMetrics(metrics);
+      const usageToMetrics = event.value.usage_to_metrics;
+      if (!usageToMetrics) {
+        return;
       }
+
+      // usage_to_metrics is keyed by arbitrary LLM usage ids ("default",
+      // "condenser", "profile:<name>:<uuid>", …) — combine across all of
+      // them, mirroring getCombinedMetrics on the REST path.
+      const combined = Object.values(usageToMetrics).reduce<{
+        cost: number;
+        maxBudgetPerTask: number | null;
+        usage: MetricsState["usage"];
+      }>(
+        (acc, metrics) => {
+          acc.cost += metrics.accumulated_cost;
+          if (
+            acc.maxBudgetPerTask === null &&
+            metrics.max_budget_per_task !== null
+          ) {
+            acc.maxBudgetPerTask = metrics.max_budget_per_task;
+          }
+          const tokenUsage = metrics.accumulated_token_usage;
+          if (tokenUsage) {
+            acc.usage = {
+              prompt_tokens:
+                (acc.usage?.prompt_tokens ?? 0) + tokenUsage.prompt_tokens,
+              completion_tokens:
+                (acc.usage?.completion_tokens ?? 0) +
+                tokenUsage.completion_tokens,
+              cache_read_tokens:
+                (acc.usage?.cache_read_tokens ?? 0) +
+                tokenUsage.cache_read_tokens,
+              cache_write_tokens:
+                (acc.usage?.cache_write_tokens ?? 0) +
+                tokenUsage.cache_write_tokens,
+              context_window: Math.max(
+                acc.usage?.context_window ?? 0,
+                tokenUsage.context_window,
+              ),
+              per_turn_token: Math.max(
+                acc.usage?.per_turn_token ?? 0,
+                tokenUsage.per_turn_token,
+              ),
+            };
+          }
+          return acc;
+        },
+        { cost: 0, maxBudgetPerTask: null, usage: null },
+      );
+
+      useMetricsStore.getState().setMetrics({
+        cost: combined.cost,
+        max_budget_per_task: combined.maxBudgetPerTask,
+        usage: combined.usage,
+      });
     },
     [],
   );
@@ -257,6 +313,11 @@ export function ConversationWebSocketProvider({
     // half-applied state (events gone but the old id still reported).
     clearEventsForConversation(nextId);
     resetBrowserStore();
+    // The metrics store is conversation-scoped state too: without a reset the
+    // previous conversation's usage/cost keeps rendering in the new
+    // conversation's meter until fresh WS stats arrive — and a brand-new
+    // conversation sends none, so the stale figure stuck indefinitely.
+    useMetricsStore.getState().resetMetrics();
   }, [conversationId, clearEventsForConversation, resetBrowserStore]);
 
   useLayoutEffect(() => {
@@ -462,6 +523,17 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  // Drop buffered deltas on conversation switch/unmount: the store is cleared on
+  // switch, so flushing them would leak into the next conversation.
+  useEffect(() => {
+    const mainBatcher = mainDeltaBatcherRef.current;
+    const planningBatcher = planningDeltaBatcherRef.current;
+    return () => {
+      mainBatcher?.reset();
+      planningBatcher?.reset();
+    };
+  }, [conversationId]);
+
   // Merged loading history state - true if either connection is still loading
   const isLoadingHistory = useMemo(
     () => isLoadingHistoryMain || isLoadingHistoryPlanning,
@@ -479,12 +551,20 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas; nothing else in this handler applies to them.
+          if (isStreamingDeltaEvent(event)) {
+            mainDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          mainDeltaBatcherRef.current?.flush();
+
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           const switchLLMObservation = isSwitchLLMObservationEvent(event)
             ? event
             : null;
@@ -499,15 +579,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -516,13 +603,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 
@@ -696,11 +783,19 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas (the commit re-applies the planning flag).
+          if (isStreamingDeltaEvent(event)) {
+            planningDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          planningDeltaBatcherRef.current?.flush();
+
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
             .getState()
-            .eventIds.has(event.id);
+            .eventIds.has(event.id ?? "");
           // Mark this event as coming from the planning agent
           const eventWithPlanningFlag = {
             ...event,
@@ -717,15 +812,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -734,13 +836,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "planning_agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 

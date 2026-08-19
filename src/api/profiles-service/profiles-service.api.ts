@@ -20,14 +20,15 @@ import {
   ProfilesClient,
   type GetProfileOptions,
 } from "@openhands/typescript-client/clients";
-import type {
-  ProfileInfo,
-  ProfileListResponse,
-  ProfileDetailResponse,
-  ProfileMutationResponse,
-  ActivateProfileResponse,
-  SaveProfileRequest,
-  ExposeSecretsMode,
+import {
+  type ProfileInfo,
+  type ProfileListResponse,
+  type ProfileDetailResponse,
+  type ProfileMutationResponse,
+  type ActivateProfileResponse,
+  type SaveProfileRequest,
+  type ExposeSecretsMode,
+  type ValidateProfileResponse,
 } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import { getActiveBackend } from "../backend-registry/active-store";
@@ -49,10 +50,24 @@ export type {
   ActivateProfileResponse,
   SaveProfileRequest,
   ExposeSecretsMode,
+  ValidateProfileResponse,
 };
 
 function isCloudBackend(): boolean {
   return getActiveBackend().backend.kind === "cloud";
+}
+
+function isAbortLike(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = "name" in error ? error.name : undefined;
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  const cause = "cause" in error ? error.cause : undefined;
+  return (
+    !!cause &&
+    typeof cause === "object" &&
+    "name" in cause &&
+    (cause.name === "AbortError" || cause.name === "TimeoutError")
+  );
 }
 
 class ProfilesService {
@@ -109,6 +124,50 @@ class ProfilesService {
     return new ProfilesClient(getAgentServerClientOptions()).activateProfile(
       name,
     );
+  }
+
+  /**
+   * Pre-flight check: fire a minimal LLM completion to catch misconfigurations
+   * (invalid model names, missing provider prefixes, bad base URLs, invalid
+   * API keys) before a profile is saved.
+   *
+   * Returns `{ valid: true }` when the LLM responds, or
+   * `{ valid: false, error: { type, message } }` on a blocking error.
+   * Transient errors (rate limits, timeouts) are non-blocking.
+   *
+   * Cloud backends do not implement this endpoint; `null` signals
+   * "no verdict" so callers fall through to the normal save path.
+   */
+  static async validateProfile(
+    name: string,
+    request: SaveProfileRequest,
+  ): Promise<ValidateProfileResponse | null> {
+    if (isCloudBackend()) return null;
+    const client = new ProfilesClient({
+      ...getAgentServerClientOptions(),
+      timeout: 30000,
+    });
+    try {
+      return await client.validateProfile(name, request);
+    } catch (error) {
+      // Older agent-server versions don't have the endpoint → 404
+      // Treat as "no verdict" rather than blocking the save.
+      const status =
+        error && typeof error === "object" && "status" in error
+          ? (error as { status?: unknown }).status
+          : undefined;
+      if (
+        status === 404 ||
+        status === 429 ||
+        (typeof status === "number" && status >= 500) ||
+        isAbortLike(error)
+      ) {
+        return null;
+      }
+      throw error;
+    } finally {
+      client.close();
+    }
   }
 }
 

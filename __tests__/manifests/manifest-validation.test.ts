@@ -34,6 +34,23 @@ describe("validateSetupEntry", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  // A catalog may publish an entry ahead of its stable release. The version is
+  // forwarded as provenance, not compared, so a pre-release or build suffix is
+  // a version this host admits rather than a reason to drop the entry.
+  it.each(["1.0.0-beta.1", "1.0.0+build.5", "2.1.0-rc.1+build.5"])(
+    "admits the template version %s",
+    (version) => {
+      // Arrange
+      const entry = createSetupEntry({ version });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    },
+  );
+
   // Each case is a separate invariant the host enforces on data authored in
   // another repository. A manifest that trips any of them must not render.
   it.each([

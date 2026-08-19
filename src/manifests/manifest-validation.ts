@@ -19,8 +19,14 @@
 import { SETUP_PLACEHOLDER_NAMESPACES, SETUP_VERSION } from "./types";
 
 const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-/** Sent to the service as template provenance, so it is checked at admission. */
-const TEMPLATE_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+/**
+ * Sent to the service as template provenance, so it is checked at admission.
+ * Full semver, as the spec at semver.org states it: a catalog entry published
+ * with a pre-release or build suffix is still a version this host may forward,
+ * and refusing one would drop the entry from the registry outright.
+ */
+const TEMPLATE_VERSION_PATTERN =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;

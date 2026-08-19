@@ -78,6 +78,7 @@ describe("conversation-panel-preferences store", () => {
       "groupFolderOrder",
       "organizeMode",
       "selectedAutomationNames",
+      "showArchivedConversations",
       "showHoverMetadata",
       "showLlmProfiles",
       "showOlderConversations",
@@ -93,9 +94,7 @@ describe("conversation-panel-preferences store", () => {
       useConversationPanelPreferencesStore.getState().showLlmProfiles,
     ).toBe(true);
 
-    useConversationPanelPreferencesStore
-      .getState()
-      .toggleShowLlmProfiles();
+    useConversationPanelPreferencesStore.getState().toggleShowLlmProfiles();
     expect(
       useConversationPanelPreferencesStore.getState().showLlmProfiles,
     ).toBe(false);

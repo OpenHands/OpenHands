@@ -275,6 +275,29 @@ export async function readCloudConversationFile(
 }
 
 /**
+ * List every file in a cloud conversation's sandbox workspace. Hits
+ * `GET /api/v1/app-conversations/{id}/files?path=...` on the cloud backend,
+ * which resolves the conversation's runtime and runs a bounded `find`
+ * server-side (see enterprise `list_conversation_files`). Unlike the
+ * git-changes source, this returns the full tree so the Files tab matches the
+ * local-backend experience. Paths come back relative to `path`.
+ */
+export async function listCloudConversationFiles(
+  conversationId: string,
+  path: string,
+): Promise<string[]> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("path", path);
+  const data = await callCloudProxy<string[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/files?${params.toString()}`,
+  });
+  return Array.isArray(data) ? data : [];
+}
+
+/**
  * Fetch a single v1 app-conversation start task. Mirrors OpenHands'
  * `AgentServerConversationService.getStartTask` — uses the batch search endpoint
  * with a single id and unwraps the first result.

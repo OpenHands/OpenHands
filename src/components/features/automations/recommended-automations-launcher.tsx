@@ -4,6 +4,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
+import { useResponderUrlSecret } from "#/hooks/use-responder-url-secret";
 import { useConversationStore } from "#/stores/conversation-store";
 import {
   setConversationState,
@@ -19,7 +20,7 @@ import {
 import {
   findInstalledEntryMatch,
   getMarketplaceEntryById,
-  getMcpMarketplaceCatalog,
+  isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
@@ -44,12 +45,17 @@ interface RecommendedAutomationsLauncherProps {
  * The marketplace entries a launch waits on. An integration the automation is
  * willing to start without is deliberately absent, so it never queues an
  * install modal the user has to dismiss.
+ *
+ * A required integration this backend cannot install as MCP (e.g. Jira's
+ * HTTP-only option) is also excluded here — the install queue can't do
+ * anything with it — but it is not silently dropped from the product: the
+ * automation card keeps it visible and labels it as needing external setup.
  */
 function getRequiredEntries(automation: RecommendedAutomation) {
-  const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
   return getRequiredIntegrationIds(automation)
-    .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
-    .filter((entry): entry is MarketplaceEntry => !!entry);
+    .map((id) => getMarketplaceEntryById(id, MCP_MARKETPLACE))
+    .filter((entry): entry is MarketplaceEntry => !!entry)
+    .filter(isMcpInstallableEntry);
 }
 
 export function RecommendedAutomationsLauncher({
@@ -62,6 +68,7 @@ export function RecommendedAutomationsLauncher({
   const { data: settings } = useSettings();
   const { trackPrebuiltAutomationEnabled } = useTracking();
   const createConversation = useCreateConversation();
+  const ensureResponderUrlSecret = useResponderUrlSecret();
   const isCreatingConversation = useIsCreatingConversation();
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
@@ -73,6 +80,9 @@ export function RecommendedAutomationsLauncher({
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
+  const localSetupInFlightRef = useRef(false);
+  const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
+    useState(false);
 
   const installedMcpConfig = useMemo(
     () =>
@@ -184,11 +194,22 @@ export function RecommendedAutomationsLauncher({
     proceedWithLocalLaunch(automation);
   };
 
-  const handleDeploymentContinueLocal = () => {
+  const handleDeploymentContinueLocal = async () => {
     const automation = deploymentChoiceAutomation;
-    setDeploymentChoiceAutomation(null);
-    if (automation) {
+    if (!automation || localSetupInFlightRef.current) return;
+
+    localSetupInFlightRef.current = true;
+    setIsPreparingLocalResponder(true);
+
+    try {
+      const isSecretReady = await ensureResponderUrlSecret();
+      if (!isSecretReady) return;
+
+      setDeploymentChoiceAutomation(null);
       proceedWithLocalLaunch(automation);
+    } finally {
+      localSetupInFlightRef.current = false;
+      setIsPreparingLocalResponder(false);
     }
   };
 
@@ -256,6 +277,7 @@ export function RecommendedAutomationsLauncher({
 
       <ResponderDeploymentModal
         isOpen={deploymentChoiceAutomation !== null}
+        isPending={isPreparingLocalResponder}
         onClose={handleDeploymentClose}
         onContinueLocal={handleDeploymentContinueLocal}
         onOpenUrl={handleDeploymentOpenUrl}

@@ -37,18 +37,22 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
-// The pinned package may publish an interface manifest whose literal copy
-// replaces the host's translations. Pin the candidate to "not published" so
-// these tests exercise the host defaults whatever the package ships.
-vi.mock("#/manifests/manifest-sources", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
-  AUTOMATION_INTERFACE_CANDIDATE: undefined,
-}));
+// The form is the interface manifest's, so these tests run against the
+// manifest the pinned package publishes — the one a user meets.
+vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
+  const extensions = await import("@openhands/extensions/automations");
+  return {
+    ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
+    AUTOMATION_INTERFACE_CANDIDATE: (
+      extensions as { AUTOMATION_INTERFACE?: unknown }
+    ).AUTOMATION_INTERFACE,
+  };
+});
 
 // The interface seam resolves its manifest once at module load, so the
 // manifest-driven test overrides individual attribute specs here instead of
-// installing a whole manifest. Empty overrides leave the host defaults —
-// today's form — in force for every other test.
+// installing a whole manifest. Empty overrides leave the published
+// manifest's form in force for every other test.
 const specOverrides = vi.hoisted(() => ({
   current: {} as Record<string, object>,
 }));
@@ -298,13 +302,11 @@ describe("EditAutomationModal", () => {
     // The picker pre-fills with the automation's current profile once the
     // available profiles have loaded.
     await waitFor(() =>
-      expect(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL")).toHaveValue(
-        "fast",
-      ),
+      expect(screen.getByLabelText("LLM profile")).toHaveValue("fast"),
     );
 
     // Act — switch to "careful" and save.
-    await user.click(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL"));
+    await user.click(screen.getByLabelText("LLM profile"));
     await user.click(await screen.findByText("careful"));
     await user.click(screen.getByTestId("edit-automation-save"));
 
@@ -331,13 +333,11 @@ describe("EditAutomationModal", () => {
 
     // The picker pre-fills with the pinned profile once profiles have loaded.
     await waitFor(() =>
-      expect(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL")).toHaveValue(
-        "fast",
-      ),
+      expect(screen.getByLabelText("LLM profile")).toHaveValue("fast"),
     );
 
     // Act — clear the pin via the "Active profile" option, then save.
-    await user.click(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL"));
+    await user.click(screen.getByLabelText("LLM profile"));
     await user.click(await screen.findByText("COMMON$ACTIVE_PROFILE"));
     await user.click(screen.getByTestId("edit-automation-save"));
 
@@ -360,7 +360,7 @@ describe("EditAutomationModal", () => {
     renderModal(modeledAutomation);
 
     // Ensure we're on the profiles-available path before editing.
-    await screen.findByLabelText("AUTOMATIONS$DETAIL$MODEL");
+    await screen.findByLabelText("LLM profile");
 
     // Act — change only the name; leave the profile on "fast".
     const nameInput = screen.getByTestId("edit-automation-name");
@@ -384,9 +384,7 @@ describe("EditAutomationModal", () => {
 
     // Assert — once the (empty) profile list resolves, no picker is offered.
     await waitFor(() => {
-      expect(
-        screen.queryByLabelText("AUTOMATIONS$DETAIL$MODEL"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("LLM profile")).not.toBeInTheDocument();
     });
   });
 

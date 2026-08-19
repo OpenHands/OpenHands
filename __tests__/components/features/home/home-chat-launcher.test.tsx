@@ -319,16 +319,10 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      "hello world",
-      undefined,
-      undefined,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+    });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-abc"),
     );
@@ -367,16 +361,12 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      "hello world",
-      undefined,
-      undefined,
-      null,
-      "/p/app",
-      "local_repo",
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "local_repo",
+    });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-ws"),
     );
@@ -407,16 +397,12 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      "hello world",
-      undefined,
-      undefined,
-      null,
-      "/p/app",
-      "new_worktree",
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "new_worktree",
+    });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
     );
@@ -459,20 +445,14 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      "hello world",
-      undefined,
-      undefined,
-      {
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: {
         selected_repository: "org/repo",
         selected_branch: "main",
         git_provider: "github",
       },
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-repo"),
     );
@@ -489,16 +469,9 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      undefined,
-      undefined,
-      undefined,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      metadata: null,
+    });
     await waitFor(() =>
       expect(sendMessageWithAttachments).toHaveBeenCalledTimes(1),
     );
@@ -570,16 +543,9 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      undefined,
-      undefined,
-      undefined,
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      metadata: null,
+    });
     expect(sendMessageWithAttachments).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(enqueueHomeTaskPendingMessage).toHaveBeenCalledWith({
@@ -609,15 +575,10 @@ describe("HomeChatLauncher", () => {
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
-    expect(createSpy).toHaveBeenCalledWith(
-      "hello world",
-      undefined,
-      [{ source: "github:o/a", ref: null, repo_path: null }],
-      null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-    );
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
+      metadata: null,
+    });
   });
 });
