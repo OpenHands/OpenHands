@@ -225,12 +225,27 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     });
   });
 
-  it("creates a seeded discovery conversation from the header CTA", async () => {
+  it("creates a seeded discovery conversation from the Add automation menu", async () => {
     // Arrange
     const user = userEvent.setup();
     const { navigate } = await renderDashboardWithSettledInsights();
 
     // Act
+    const addTrigger = screen.getByTestId("automations-add-automation");
+    expect(addTrigger).toHaveClass("bg-base-secondary");
+    expect(
+      screen.queryByTestId("automations-find-opportunities"),
+    ).not.toBeInTheDocument();
+
+    await user.click(addTrigger);
+    const menu = screen.getByTestId("automations-add-automation-menu");
+    expect(menu).not.toHaveClass("mt-2");
+    const menuItems = within(menu).getAllByRole("button");
+    expect(menuItems[0]).toHaveAttribute(
+      "data-testid",
+      "automations-add-automation-create",
+    );
+    expect(menuItems[0]).toHaveTextContent(I18nKey.AUTOMATIONS$ADD_AUTOMATION);
     await user.click(screen.getByTestId("automations-find-opportunities"));
 
     // Assert
@@ -265,13 +280,14 @@ describe("AutomationsList — manifest-declared dashboard", () => {
     });
   });
 
-  it("creates a seeded add automation conversation from the header CTA", async () => {
+  it("creates a seeded add automation conversation from the Add automation menu", async () => {
     // Arrange
     const user = userEvent.setup();
     const { navigate } = await renderDashboardWithSettledInsights();
 
     // Act
     await user.click(screen.getByTestId("automations-add-automation"));
+    await user.click(screen.getByTestId("automations-add-automation-create"));
 
     // Assert
     expect(captureMock).toHaveBeenCalledWith(

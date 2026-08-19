@@ -36,8 +36,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON]:
-          "Find automation opportunities",
+        [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON]: "Find opportunities",
         [I18nKey.AUTOMATIONS$CREATE_AUTOMATION_PROMPT]:
           "Help me figure out what I should automate.",
         [I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE]:
@@ -66,21 +65,26 @@ vi.mock("react-i18next", () => ({
       return i18nKey;
     }
 
+    const chip = (text: string) =>
+      components?.cmd ? React.cloneElement(components.cmd, {}, text) : text;
+
     return (
       <>
-        Start a new conversation and tell OpenHands to{" "}
+        Start a conversation and ask OpenHands to{" "}
+        {components?.example
+          ? React.cloneElement(
+              components.example,
+              {},
+              chip("help me figure out what I should automate"),
+            )
+          : null}{" "}
+        or{" "}
         {components?.example
           ? React.cloneElement(
               components.example,
               {},
               <>
-                {components.cmd
-                  ? React.cloneElement(
-                      components.cmd,
-                      {},
-                      "help me figure out what I should automate",
-                    )
-                  : null}
+                {chip("Create an automation")}
                 {components.punct
                   ? React.cloneElement(components.punct, {}, ".")
                   : null}
@@ -136,21 +140,26 @@ describe("CreateInstructions", () => {
     window.localStorage.clear();
   });
 
-  it("renders separate discovery and custom automation paths", () => {
+  it("renders add and find-opportunities actions", () => {
     renderCreateInstructions();
 
     expect(
-      screen.getByTestId("automations-discovery-option"),
-    ).toHaveTextContent("Need ideas?");
-    expect(screen.getByTestId("automations-add-option")).toHaveTextContent(
-      "Already know the workflow?",
-    );
-    expect(
-      screen.getByTestId("automations-find-opportunities"),
-    ).toHaveTextContent("Find automation opportunities");
+      screen.queryByTestId("automations-discovery-option"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("automations-add-known-automation"),
     ).toHaveTextContent("Add automation");
+    expect(
+      screen.getByTestId("automations-find-opportunities"),
+    ).toHaveTextContent("Find opportunities");
+    expect(
+      screen.getAllByTestId("automations-create-instructions-example").map(
+        (element) => element.textContent,
+      ),
+    ).toEqual([
+      "help me figure out what I should automate",
+      "Create an automation",
+    ]);
   });
 
   it("captures automation_created_button with intent and source when a CTA is clicked", async () => {

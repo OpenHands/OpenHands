@@ -6,7 +6,6 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { FileUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -38,11 +37,11 @@ import { ErrorState } from "#/components/features/automations/error-state";
 import { BackendNotConfigured } from "#/components/features/automations/backend-not-configured";
 import { DeleteConfirmationModal } from "#/components/features/automations/delete-confirmation-modal";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import { AddAutomationMenu } from "#/components/features/automations/add-automation-menu";
 import { ImportAutomationModal } from "#/components/features/automations/import-automation-modal";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import { AutomationConversationLaunchModal } from "#/components/features/automations/automation-conversation-launch-modal";
 import type { AutomationConversationLaunchRequest } from "#/components/features/automations/use-launch-automation-conversation";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { useTracking } from "#/hooks/use-tracking";
 import type { Automation, AutomationSpec } from "#/types/automation";
 import {
@@ -390,16 +389,11 @@ export default function AutomationsList() {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automations-import-automation"
-            className="whitespace-nowrap"
-            onClick={() => importInputRef.current?.click()}
-            startContent={<FileUp className="size-4" aria-hidden />}
-          >
-            {t(I18nKey.AUTOMATIONS$IMPORT)}
-          </BrandButton>
+          <AddAutomationMenu
+            onSuggest={handleFindOpportunities}
+            onAdd={handleAddAutomation}
+            onImport={() => importInputRef.current?.click()}
+          />
           <input
             ref={importInputRef}
             type="file"
@@ -408,24 +402,6 @@ export default function AutomationsList() {
             data-testid="automations-import-file"
             onChange={handleImportFile}
           />
-          <BrandButton
-            type="button"
-            variant="primary"
-            testId="automations-find-opportunities"
-            className="whitespace-nowrap px-4"
-            onClick={handleFindOpportunities}
-          >
-            {t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="automations-add-automation"
-            className="whitespace-nowrap px-4"
-            onClick={handleAddAutomation}
-          >
-            {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
-          </BrandButton>
         </div>
       </div>
 

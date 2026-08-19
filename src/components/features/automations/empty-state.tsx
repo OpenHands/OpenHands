@@ -12,11 +12,8 @@ export function EmptyState() {
       className={extensionModuleEmptyStateClassName}
     >
       <p className="text-sm text-white">{t(I18nKey.AUTOMATIONS$EMPTY)}</p>
-      <p className="mt-1 text-xs text-tertiary-light">
-        {t(I18nKey.AUTOMATIONS$EMPTY_HINT)}
-      </p>
 
-      <div className="mt-8 flex justify-center border-t border-[var(--oh-border)] pt-8">
+      <div className="mt-4 flex justify-center">
         <CreateInstructions />
       </div>
     </div>
