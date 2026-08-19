@@ -19,12 +19,16 @@ import {
   automationListCellClassName,
 } from "./automation-view-mode";
 import { AutomationHealthBadge } from "./automation-health-badge";
+import { AutomationHealthNotice } from "./automation-health-notice";
 import {
   averageDurationDisplay,
   lastRunText,
   runCountDisplay,
 } from "./automation-run-insights";
-import { deriveAutomationHealth } from "#/manifests/automation-insights";
+import {
+  deriveAutomationHealth,
+  getAutomationHealthDetails,
+} from "#/manifests/automation-insights";
 import type { AutomationInsightsProps } from "./automation-card";
 
 interface AutomationListRowProps {
@@ -114,6 +118,17 @@ export function AutomationListRow({
             </div>
           ) : null}
         </div>
+        {insights ? (
+          <div className="mt-2 max-w-xl">
+            <AutomationHealthNotice
+              automation={automation}
+              canManage={canManage}
+              details={getAutomationHealthDetails(automation, insights.state)}
+              onToggle={onToggle}
+              onView={handleView}
+            />
+          </div>
+        ) : null}
       </td>
 
       {insights ? (

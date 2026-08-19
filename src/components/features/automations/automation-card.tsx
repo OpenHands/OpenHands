@@ -18,9 +18,11 @@ import { buildAutomationMetadataPills } from "./build-automation-pills";
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
 import { automationRunNowTextButtonClassName } from "./automation-action-button-classes";
 import { AutomationHealthBadge } from "./automation-health-badge";
+import { AutomationHealthNotice } from "./automation-health-notice";
 import { AutomationRunStats, lastRunText } from "./automation-run-insights";
 import {
   deriveAutomationHealth,
+  getAutomationHealthDetails,
   type RunSummaryState,
 } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
@@ -138,20 +140,29 @@ export function AutomationCard({
       </header>
 
       {insights ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <AutomationHealthBadge
-            health={deriveAutomationHealth(automation, insights.state)}
-            labels={insights.spec.health}
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+            <AutomationHealthBadge
+              health={deriveAutomationHealth(automation, insights.state)}
+              labels={insights.spec.health}
+            />
+            <span data-testid={`automation-last-run-${automation.id}`}>
+              {`${insights.spec.lastRun.label} ${lastRunText(
+                insights.state?.summary?.latestRun?.started_at ??
+                  automation.last_triggered_at,
+                insights.spec.lastRun,
+                t(I18nKey.CONVERSATION$AGO),
+              )}`}
+            </span>
+          </div>
+          <AutomationHealthNotice
+            automation={automation}
+            canManage={canManage}
+            details={getAutomationHealthDetails(automation, insights.state)}
+            onToggle={onToggle}
+            onView={handleView}
           />
-          <span data-testid={`automation-last-run-${automation.id}`}>
-            {`${insights.spec.lastRun.label} ${lastRunText(
-              insights.state?.summary?.latestRun?.started_at ??
-                automation.last_triggered_at,
-              insights.spec.lastRun,
-              t(I18nKey.CONVERSATION$AGO),
-            )}`}
-          </span>
-        </div>
+        </>
       ) : null}
 
       {pills.length > 0 ? (

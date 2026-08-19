@@ -43,6 +43,10 @@ export interface Automation {
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
+  /** Persisted explanation for an automation that was disabled by the service. */
+  disabled_reason?: string | null;
+  /** Structured failure class that caused the service to disable the automation. */
+  disabled_failure_kind?: string | null;
 }
 
 export type AutomationSpec = Omit<
@@ -93,6 +97,10 @@ export interface AutomationRun {
    * that added the field, hence optional.
    */
   cost?: number | null;
+  /** Structured failure class reported by the automation service, when available. */
+  failure_kind?: string | null;
+  /** Agent-reported reason when the run could not proceed. */
+  blocking_reason?: string | null;
   started_at: string;
   completed_at: string | null;
 }
