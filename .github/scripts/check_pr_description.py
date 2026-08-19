@@ -57,9 +57,7 @@ FRONTEND_FILE_EXTENSIONS: tuple[str, ...] = (
     ".sass",
     ".less",
 )
-# Documentation has no visual state, so a screenshot cannot evidence a change to
-# it. Markdown stays non-frontend even under a frontend path prefix; otherwise a
-# link fix in __tests__/*.md or src/*.md is asked for a screenshot it cannot have.
+# Docs carry no visual state, so a screenshot can't evidence a change to them.
 DOCUMENTATION_FILE_EXTENSIONS: tuple[str, ...] = (".md", ".mdx")
 FRONTEND_CONFIG_GLOBS: tuple[str, ...] = (
     "tailwind.config.*",
