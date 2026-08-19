@@ -7,8 +7,10 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { getTaskOutcomeFromRunMetadata } from "#/utils/task-outcome";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunLogsModal } from "./run-logs-modal";
+import { TaskOutcomeSummary } from "./task-outcome-summary";
 
 interface ActivityLogItemProps {
   run: AutomationRun;
@@ -79,6 +81,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     i18n.language,
   );
   const formattedCost = formatRunCost(run.cost);
+  const taskOutcome = getTaskOutcomeFromRunMetadata(run.run_metadata);
 
   const handleLogsClick = (
     e:
@@ -108,15 +111,18 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
 
   const content = (
     <>
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-content">{formattedTimestamp}</span>
-        {showNoConversationLabel && (
-          <span className="text-xs text-muted">
-            {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
-          </span>
-        )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-content">{formattedTimestamp}</span>
+          {showNoConversationLabel && (
+            <span className="text-xs text-muted">
+              {t(I18nKey.AUTOMATIONS$DETAIL$NO_CONVERSATION)}
+            </span>
+          )}
+        </div>
+        {taskOutcome && <TaskOutcomeSummary outcome={taskOutcome} />}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {formattedCost && (
           <span
             data-testid="run-cost"
@@ -137,13 +143,13 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
       {hasConversation && run.conversation_id ? (
         <a
           href={getConversationUrl(run.conversation_id)}
-          className="flex items-center justify-between px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
+          className="flex items-center justify-between gap-4 px-5 py-3 transition-colors cursor-pointer hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
           aria-label={`View conversation for run at ${formattedTimestamp}`}
         >
           {content}
         </a>
       ) : (
-        <div className="flex items-center justify-between px-5 py-3 cursor-default">
+        <div className="flex items-center justify-between gap-4 px-5 py-3 cursor-default">
           {content}
         </div>
       )}

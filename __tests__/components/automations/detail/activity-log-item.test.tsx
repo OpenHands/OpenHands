@@ -4,10 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 
 import { ActivityLogItem } from "#/components/features/automations/detail/activity-log-item";
-import {
-  AutomationRunStatus,
-  type AutomationRun,
-} from "#/types/automation";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -25,27 +22,24 @@ const LOGS_BUTTON_NAME = (name: string) =>
 // The modal is wired to react-query + the conversation lookup. The
 // ActivityLogItem tests focus on the trigger button; we mock the modal so
 // they don't need to bring up the entire query stack.
-vi.mock(
-  "#/components/features/automations/detail/run-logs-modal",
-  () => ({
-    RunLogsModal: ({
-      isOpen,
-      onClose,
-      bashCommandId,
-    }: {
-      isOpen: boolean;
-      onClose: () => void;
-      bashCommandId: string | null;
-    }) =>
-      isOpen ? (
-        <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
-          <button type="button" onClick={onClose}>
-            close
-          </button>
-        </div>
-      ) : null,
-  }),
-);
+vi.mock("#/components/features/automations/detail/run-logs-modal", () => ({
+  RunLogsModal: ({
+    isOpen,
+    onClose,
+    bashCommandId,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    bashCommandId: string | null;
+  }) =>
+    isOpen ? (
+      <div data-testid="logs-modal" data-bash-command-id={bashCommandId}>
+        <button type="button" onClick={onClose}>
+          close
+        </button>
+      </div>
+    ) : null,
+}));
 
 const localBackend: Backend = {
   id: "local-1",
@@ -285,6 +279,88 @@ describe("ActivityLogItem — run cost", () => {
     // Assert
     expect(
       screen.queryByText((content) => content.startsWith("$")),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ActivityLogItem — task outcome", () => {
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  it("renders TaskOutcome metadata from the FinishTool response", () => {
+    const run = makeRun({
+      run_metadata: {
+        finish_tool_response: {
+          status: "blocked",
+          outcome_summary: "Repository access is required before continuing.",
+          needs_user_action: true,
+          blockers: [
+            {
+              type: "missing_secret",
+              message: "Add a GitHub token.",
+              recoverable: true,
+            },
+          ],
+        },
+      },
+    });
+
+    renderItem(run);
+
+    const outcome = screen.getByTestId("task-outcome-summary");
+    expect(outcome).toHaveTextContent(I18nKey.AUTOMATIONS$DETAIL$TASK_OUTCOME);
+    expect(outcome).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$TASK_OUTCOME_BLOCKED,
+    );
+    expect(outcome).toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$NEEDS_USER_ACTION,
+    );
+    expect(outcome).toHaveTextContent(
+      "Repository access is required before continuing.",
+    );
+    expect(outcome).toHaveTextContent("Add a GitHub token.");
+  });
+
+  it("renders success outcomes as neutral summary text without a success chip", () => {
+    const run = makeRun({
+      run_metadata: {
+        finish_tool_response: {
+          status: "success",
+          outcome_summary: "Printed exactly requested text successfully.",
+        },
+      },
+    });
+
+    renderItem(run);
+
+    const outcome = screen.getByTestId("task-outcome-summary");
+    expect(outcome).toHaveTextContent(I18nKey.AUTOMATIONS$DETAIL$TASK_OUTCOME);
+    expect(outcome).toHaveTextContent(
+      "Printed exactly requested text successfully.",
+    );
+    expect(outcome).not.toHaveTextContent(
+      I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL,
+    );
+  });
+
+  it("does not render outcome chrome for non-TaskOutcome FinishTool responses", () => {
+    const run = makeRun({
+      run_metadata: {
+        finish_tool_response: "not-json",
+      },
+    });
+
+    renderItem(run);
+
+    expect(
+      screen.queryByTestId("task-outcome-summary"),
     ).not.toBeInTheDocument();
   });
 });

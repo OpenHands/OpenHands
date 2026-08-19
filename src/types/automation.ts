@@ -72,6 +72,35 @@ export enum AutomationRunStatus {
   SKIPPED = "SKIPPED",
 }
 
+export const TASK_OUTCOME_STATUSES = [
+  "success",
+  "partial_success",
+  "blocked",
+  "failed",
+  "unknown",
+] as const;
+
+export type TaskOutcomeStatus = (typeof TASK_OUTCOME_STATUSES)[number];
+
+export interface TaskOutcomeBlocker {
+  type?: string;
+  message: string;
+  recoverable?: boolean | null;
+}
+
+export interface TaskOutcome {
+  status: TaskOutcomeStatus;
+  outcome_summary: string | null;
+  blockers: TaskOutcomeBlocker[];
+  confidence: number | null;
+  needs_user_action: boolean;
+}
+
+export interface AutomationRunMetadata {
+  finish_tool_response?: unknown;
+  [key: string]: unknown;
+}
+
 export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
@@ -93,6 +122,7 @@ export interface AutomationRun {
    * that added the field, hence optional.
    */
   cost?: number | null;
+  run_metadata?: AutomationRunMetadata | null;
   started_at: string;
   completed_at: string | null;
 }
