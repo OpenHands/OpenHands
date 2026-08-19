@@ -2,7 +2,12 @@ import { I18nKey } from "#/i18n/declaration";
 
 const SETTINGS_PREFIX = "/settings";
 const CUSTOMIZE_HUB = "/customize";
-const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
+const EXTENSIONS_DETAIL_PATHS = [
+  "/skills",
+  "/mcp",
+  "/sub-agents",
+  "/plugins",
+] as const;
 
 export type MobileTopBarMode = "menu" | "back";
 

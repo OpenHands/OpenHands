@@ -80,7 +80,7 @@ describe("ExtensionsNavigation", () => {
     expect(skillsItem.tagName).toBe("A");
   });
 
-  it("orders MCP Servers before Skills and Plugins", () => {
+  it("orders MCP Servers before Skills, Sub-Agents and Plugins", () => {
     renderExtensionsNavigation(<ExtensionsNavigation />);
 
     const nav = screen.getByTestId("extensions-navbar-desktop");
@@ -89,6 +89,7 @@ describe("ExtensionsNavigation", () => {
     expect(navigationItems.map((item) => item.textContent)).toEqual([
       "MCP Servers",
       "Skills",
+      "Sub-Agents",
       "Plugins",
     ]);
   });

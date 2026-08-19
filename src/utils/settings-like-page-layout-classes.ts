@@ -1,6 +1,6 @@
 /**
  * Shared layout tokens for /settings/* and extensions pages (/skills, /mcp,
- * /plugins) so mobile gets horizontal inset while desktop keeps the aside +
+ * /sub-agents, /plugins) so mobile gets horizontal inset while desktop keeps the aside +
  * `gap-10` + right gutter pattern.
  *
  * `scrollbar-gutter: stable` keeps the gutter reserved when the page stops

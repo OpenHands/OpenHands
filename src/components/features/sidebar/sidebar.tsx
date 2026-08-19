@@ -181,7 +181,8 @@ export function Sidebar() {
     currentPath === "/customize" ||
     currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
-    currentPath === "/mcp";
+    currentPath === "/mcp" ||
+    currentPath === "/sub-agents";
 
   const railBodyProps = {
     collapseToggleLabel,
