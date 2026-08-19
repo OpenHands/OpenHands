@@ -11,6 +11,7 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { I18nKey } from "#/i18n/declaration";
 import { LanguageInput } from "#/components/features/settings/app-settings/language-input";
 import { ThemeInput } from "#/components/features/settings/app-settings/theme-input";
+import { GettingStartedChecklistSwitch } from "#/components/features/settings/app-settings/getting-started-checklist-switch";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -21,6 +22,7 @@ import { SettingsDropdownInput } from "#/components/features/settings/settings-d
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
@@ -72,7 +74,7 @@ export function AppSettingsScreen() {
         label: profile.model
           ? t(I18nKey.SETTINGS$TITLE_GENERATION_PROFILE_OPTION, {
               name: profile.name,
-              model: profile.model,
+              model: formatModelNameForDisplay(profile.model) ?? profile.model,
             })
           : profile.name,
       })) ?? []),
@@ -217,6 +219,8 @@ export function AppSettingsScreen() {
           >
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
+
+          <GettingStartedChecklistSwitch />
 
           <div className="border-t border-[var(--oh-border)] pt-6 mt-2">
             <h3 className="text-lg font-medium mb-2">

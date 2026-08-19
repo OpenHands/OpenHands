@@ -207,7 +207,7 @@ describe("ChatInterface - Chat Suggestions", () => {
         role: "user",
         content: [{ type: "text", text: "Hello" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
 
@@ -348,7 +348,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
@@ -485,7 +485,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
@@ -1031,5 +1031,114 @@ describe("ChatInterface - Tracking", () => {
       );
     });
     expect(trackInitialQuerySubmittedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatInterface - Build plan keyboard shortcut", () => {
+  let queryClient: QueryClient;
+
+  const BUILD_PROMPT =
+    "Execute the plan based on the .agents_tmp/PLAN.md file.";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSend.mockResolvedValue({ queued: false });
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useErrorMessageStore.setState({ errorMessage: null });
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
+      isLoading: false,
+    });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+  });
+
+  function renderInterface() {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  const pressBuildShortcut = () => {
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+  };
+
+  const sentBuildPrompt = () =>
+    mockSend.mock.calls.some(([message]) =>
+      JSON.stringify(message).includes(BUILD_PROMPT),
+    );
+
+  it("does not send the build prompt in code mode", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in code mode when a plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in plan mode when no plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("sends the build prompt in plan mode when a plan exists", async () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(sentBuildPrompt()).toBe(true);
+    });
   });
 });

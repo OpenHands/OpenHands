@@ -180,7 +180,7 @@ describe("useLoadOlderEvents", () => {
       timestamp: "2024-05-01T00:00:00Z",
       source: "user",
       llm_message: { role: "user", content: [{ type: "text", text: "hi" }] },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     } as unknown as OpenHandsEvent;
     const switchObs = {

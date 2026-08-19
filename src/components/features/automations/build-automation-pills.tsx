@@ -1,7 +1,7 @@
 import FolderIcon from "#/icons/folder.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
 import SparkleIcon from "#/icons/sparkle.svg?react";
-import GlobeIcon from "#/icons/globe.svg?react";
+import { Zap } from "lucide-react";
 import type { SkillCardPill } from "#/components/features/skills/skill-card-pill-row";
 import type { Automation } from "#/types/automation";
 import { cn } from "#/utils/utils";
@@ -38,7 +38,7 @@ export function buildAutomationMetadataPills(
       id: "event-trigger",
       node: (
         <span className={cn(extensionModuleCardPillClassName, "gap-1")}>
-          <GlobeIcon className="size-3 shrink-0" />
+          <Zap className="size-3 shrink-0" aria-hidden="true" />
           {eventLabel}
         </span>
       ),

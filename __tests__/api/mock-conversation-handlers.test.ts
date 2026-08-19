@@ -3,12 +3,15 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import AgentServerGitService from "#/api/git-service/agent-server-git-service.api";
 import EventService from "#/api/event-service/event-service.api";
 import { TABLE_DEMO_CONVERSATION_ID } from "#/fixtures/table-demo-conversation";
+import {
+  CANVAS_DEMO_CONVERSATION_ID,
+  CANVAS_DEMO_FILE_PATH,
+} from "#/fixtures/canvas-demo-conversation";
 
 describe("mock conversation handlers", () => {
   it("returns adapted conversations for batch lookups", async () => {
-    const [conversation] = await AgentServerConversationService.batchGetAppConversations([
-      "1",
-    ]);
+    const [conversation] =
+      await AgentServerConversationService.batchGetAppConversations(["1"]);
 
     expect(conversation?.id).toBe("1");
     expect(conversation?.title).toBe("My New Project");
@@ -65,5 +68,31 @@ describe("mock conversation handlers", () => {
     expect(page.items).toHaveLength(2);
     expect(page.items[0]?.source).toBe("agent");
     expect(page.items[1]?.source).toBe("user");
+  });
+
+  it("returns the generated-canvas demo conversation and file event", async () => {
+    const [conversation] =
+      await AgentServerConversationService.batchGetAppConversations([
+        CANVAS_DEMO_CONVERSATION_ID,
+      ]);
+    const page = await EventService.searchEvents(
+      CANVAS_DEMO_CONVERSATION_ID,
+      null,
+      null,
+      { limit: 50, sortOrder: "TIMESTAMP_DESC" },
+    );
+
+    expect(conversation?.title).toBe("Generated canvas demo");
+    expect(page.items).toHaveLength(4);
+    expect(page.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          observation: expect.objectContaining({
+            kind: "FileEditorObservation",
+            path: CANVAS_DEMO_FILE_PATH,
+          }),
+        }),
+      ]),
+    );
   });
 });

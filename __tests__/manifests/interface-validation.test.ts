@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { validateInterfaceManifest } from "#/manifests/interface-validation";
 import type { InterfaceValidationContext } from "#/manifests/interface-validation";
+import type {
+  InterfaceIconSlug,
+  InterfaceManifest,
+  InterfaceSubPageId,
+  OverviewMetric,
+} from "#/manifests/types";
 import {
   createInterfaceManifest,
   createInterfaceManifestWith,
+  createInterfaceManifestWithSubPages,
 } from "./manifest-test-data";
 
 const CONTEXT: InterfaceValidationContext = {
@@ -16,6 +23,15 @@ const CONTEXT: InterfaceValidationContext = {
     list: "/automations",
     setup: "/automations/new/:automationId",
     detail: "/automations/:automationId",
+  },
+};
+
+/** The context of a host that also mounts the templates sub-page. */
+const SUB_PAGE_CONTEXT: InterfaceValidationContext = {
+  ...CONTEXT,
+  mountedRoutes: {
+    ...CONTEXT.mountedRoutes,
+    templates: "/automations/templates",
   },
 };
 
@@ -35,10 +51,7 @@ describe("validateInterfaceManifest", () => {
   // another repository. A manifest that trips any of them reverts the whole
   // interface to the host's defaults.
   it.each([
-    [
-      "a version this host cannot interpret",
-      { version: "2.0" },
-    ],
+    ["a version this host cannot interpret", { version: "2.0" }],
     [
       // The host serves what it has registrations for; a manifest cannot remap
       // the router table, only own link construction against it.
@@ -156,16 +169,177 @@ describe("validateInterfaceManifest", () => {
       "a responder integration id that is not a lowercase slug",
       { responderIntegrationIds: ["GitHub!"] },
     ],
-    [
-      "a key this host does not read",
-      { dashboards: [] },
-    ],
+    ["a key this host does not read", { dashboards: [] }],
   ])("refuses %s", (_case, overrides) => {
     // Arrange
     const candidate = createInterfaceManifestWith(overrides);
 
     // Act
     const result = validateInterfaceManifest(candidate, CONTEXT);
+
+    // Assert
+    expect(result.valid).toBe(false);
+  });
+
+  it("admits a manifest declaring the complete sub-page surface", () => {
+    // Arrange
+    const manifest = createInterfaceManifestWithSubPages();
+
+    // Act
+    const result = validateInterfaceManifest(manifest, SUB_PAGE_CONTEXT);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  // Each case breaks the sub-page surface in one specific way. As with the
+  // base cases, one bad field reverts the whole manifest to host defaults.
+  it.each<[string, (manifest: InterfaceManifest) => InterfaceManifest]>([
+    [
+      // Navigation, routes, and the dashboard sections describe one surface;
+      // a partial declaration would render navigation to a missing page.
+      "a sub-page surface declared only in part",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          list: manifest.pages.list,
+          detail: manifest.pages.detail,
+          edit: manifest.pages.edit,
+        },
+      }),
+    ],
+    [
+      "a templates route the host does not mount",
+      (manifest) => ({
+        ...manifest,
+        routes: { ...manifest.routes, templates: "/automations/library" },
+      }),
+    ],
+    [
+      "a sub-page this host does not serve",
+      (manifest) => ({
+        ...manifest,
+        navigation: {
+          ...manifest.navigation,
+          subPages: [
+            {
+              page: "workflows" as InterfaceSubPageId,
+              label: "Widget flows",
+              icon: "sparkles",
+            },
+          ],
+        },
+      }),
+    ],
+    [
+      "an icon outside the host's icon map",
+      (manifest) => ({
+        ...manifest,
+        navigation: {
+          ...manifest.navigation,
+          subPages: [
+            {
+              page: "list",
+              label: "Widget dashboard",
+              icon: "rocket" as InterfaceIconSlug,
+            },
+          ],
+        },
+      }),
+    ],
+    [
+      "a tile metric this host does not compute",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            overview: {
+              label: "Widget overview",
+              tiles: [
+                {
+                  metric: "mean-time-between-failures" as OverviewMetric,
+                  label: "Widget MTBF",
+                  detail: "Recent widgets",
+                  icon: "timer",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ],
+    [
+      "tile copy using a placeholder its metric does not expose",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            overview: {
+              label: "Widget overview",
+              tiles: [
+                {
+                  metric: "total-runs",
+                  label: "Widget runs",
+                  detail: "{{active}} runs",
+                  icon: "activity",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ],
+    [
+      // "all" is the host's initial selection and reset target; without it a
+      // filter could never be neutral.
+      "a filter without the all option",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            filters: [
+              {
+                id: "status",
+                label: "Filter widgets by state",
+                options: [
+                  { value: "active", label: "Live" },
+                  { value: "disabled", label: "Off" },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    ],
+    [
+      "a sort default the options do not offer",
+      (manifest) => ({
+        ...manifest,
+        pages: {
+          ...manifest.pages,
+          list: {
+            ...manifest.pages.list,
+            sort: {
+              label: "Order widgets",
+              default: "name",
+              options: [{ value: "last-run", label: "Latest" }],
+            },
+          },
+        },
+      }),
+    ],
+  ])("refuses %s", (_case, breakManifest) => {
+    // Arrange
+    const candidate = breakManifest(createInterfaceManifestWithSubPages());
+
+    // Act
+    const result = validateInterfaceManifest(candidate, SUB_PAGE_CONTEXT);
 
     // Assert
     expect(result.valid).toBe(false);

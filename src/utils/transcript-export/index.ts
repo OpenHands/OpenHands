@@ -343,7 +343,7 @@ const buildTranscriptEntries = (
           ]
             .filter(Boolean)
             .join("\n"),
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -357,7 +357,7 @@ const buildTranscriptEntries = (
               kind: "message",
               author: "assistant",
               content,
-              timestamp: event.timestamp,
+              timestamp: event.timestamp ?? "",
             });
           });
         } else if (parsed) {
@@ -365,7 +365,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "user",
             content: parsed,
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -387,7 +387,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "assistant",
             content: reasoningContent,
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         if (message.trim()) {
@@ -395,7 +395,7 @@ const buildTranscriptEntries = (
             kind: "message",
             author: "assistant",
             content: message.trim(),
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -405,7 +405,7 @@ const buildTranscriptEntries = (
         entries.push({
           kind: "error",
           content: event.error,
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -418,7 +418,7 @@ const buildTranscriptEntries = (
               kind: "message",
               author: "assistant",
               content,
-              timestamp: event.timestamp,
+              timestamp: event.timestamp ?? "",
             });
           }
         } else {
@@ -426,7 +426,7 @@ const buildTranscriptEntries = (
             kind: "tool",
             summary: getActionSummary(event),
             details: includeToolDetails ? getSafeActionDetails(event) : "",
-            timestamp: event.timestamp,
+            timestamp: event.timestamp ?? "",
           });
         }
         continue;
@@ -440,7 +440,7 @@ const buildTranscriptEntries = (
           details: includeToolDetails
             ? getSafeObservationDetails(event, correspondingAction)
             : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -452,7 +452,7 @@ const buildTranscriptEntries = (
             stripRedundantTitlePrefix(event) ||
             i18n.t(I18nKey.ACTION_MESSAGE$ACP_TOOL),
           details: includeToolDetails ? getACPToolCallContent(event) : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -464,7 +464,7 @@ const buildTranscriptEntries = (
             command: truncate(cleanInlineText(event.hook_command), 100),
           }),
           details: includeToolDetails ? getHookDetails(event) : "",
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
         continue;
       }
@@ -486,7 +486,7 @@ const buildTranscriptEntries = (
           content: [event.value.objective, event.value.verdict?.missing || ""]
             .filter(Boolean)
             .join("\n\n"),
-          timestamp: event.timestamp,
+          timestamp: event.timestamp ?? "",
         });
       }
     } catch {

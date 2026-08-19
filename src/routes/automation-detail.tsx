@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -17,7 +17,10 @@ import {
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
-import { automationListPath } from "#/manifests/automation-interface";
+import {
+  automationListPath,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { BackLink } from "#/components/features/automations/detail/back-link";
 import { DetailHeader } from "#/components/features/automations/detail/detail-header";
 import { PromptSection } from "#/components/features/automations/detail/prompt-section";
@@ -39,9 +42,23 @@ import {
 } from "#/utils/automation-export";
 import { downloadBlob } from "#/utils/utils";
 
+/**
+ * The page renders the interface manifest's copy, so without an admitted
+ * manifest there is nothing to render: a 404, which the layout's error
+ * boundary renders.
+ */
+export const clientLoader = () => {
+  if (!hasAutomationInterface()) {
+    throw new Response(null, { status: 404, statusText: "Not Found" });
+  }
+  return null;
+};
+
 export default function AutomationDetail() {
   const { t } = useTranslation("openhands");
   const { automationId } = useParams();
+  const [searchParams] = useSearchParams();
+  const highlightedRunId = searchParams.get("run");
   const { navigate } = useNavigation();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -206,7 +223,10 @@ export default function AutomationDetail() {
             createdAt={automation.created_at}
             lastRunAt={automation.last_triggered_at}
           />
-          <ActivityLogSection automation={automation} />
+          <ActivityLogSection
+            automation={automation}
+            highlightedRunId={highlightedRunId}
+          />
           <DeleteConfirmationModal
             automationName={automation.name}
             isOpen={showDeleteModal}

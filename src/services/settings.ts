@@ -3,7 +3,7 @@ import { Settings } from "#/types/settings";
 export const LATEST_SETTINGS_VERSION = 5;
 
 export const DEFAULT_SETTINGS: Settings = {
-  llm_model: "openhands/glm-5.2",
+  llm_model: "openhands/kimi-k3",
   llm_base_url: "",
   agent: "CodeActAgent",
   language: "en",
@@ -24,11 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   search_api_key: "",
   is_new_user: true,
   disabled_skills: [],
-  mcp_config: {
-    sse_servers: [],
-    stdio_servers: [],
-    shttp_servers: [],
-  },
+  mcp_config: {},
   max_budget_per_task: null,
   email: "",
   email_verified: true,
@@ -41,7 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
     agent_kind: "openhands",
     agent: "CodeActAgent",
     llm: {
-      model: "openhands/glm-5.2",
+      model: "openhands/kimi-k3",
     },
     condenser: {
       enabled: true,
