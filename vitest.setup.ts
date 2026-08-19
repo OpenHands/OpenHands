@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
-import { server } from "#/mocks/node";
 import "@testing-library/jest-dom/vitest";
 
 // Some modules read env at import time before Vitest's per-test hooks run.
@@ -27,10 +26,7 @@ windowStub.scrollTo = vi.fn();
 // Node.js 25+ ships a built-in localStorage that requires --localstorage-file
 // and is not functional without it. Stub it with a plain in-memory
 // implementation so zustand's persist middleware works in tests.
-if (
-  typeof localStorage === "undefined" ||
-  typeof localStorage.setItem !== "function"
-) {
+if (typeof HTMLCanvasElement === "undefined") {
   const store: Record<string, string> = {};
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => store[key] ?? null,
@@ -50,6 +46,8 @@ if (
   });
 }
 
+const { server } = await import("#/mocks/node");
+
 if (typeof requestAnimationFrame === "undefined") {
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
     setTimeout(() => callback(0), 0),
@@ -59,56 +57,6 @@ if (typeof requestAnimationFrame === "undefined") {
     (timeoutId: ReturnType<typeof setTimeout>) => clearTimeout(timeoutId),
   );
 }
-
-// MSW's XMLHttpRequest interceptor references the bare `ProgressEvent`
-// global from inside async `respondWith` callbacks (via `createEvent`).
-// Vitest's jsdom environment installs `ProgressEvent` as an own accessor on
-// `globalThis` while the environment is alive and *deletes* it during
-// per-file teardown (it is part of vitest's `LIVING_KEYS`). If an in-flight
-// intercepted XHR (e.g. PostHog analytics) resolves its mocked response
-// after teardown, the late callback evaluates `ProgressEvent` against a
-// torn-down global and throws `ReferenceError: ProgressEvent is not defined`,
-// which Vitest reports as an unhandled rejection and fails the whole run.
-//
-// The robust fix is to drain those pending async response callbacks in
-// `afterAll` (which runs *before* jsdom teardown) so they settle while
-// `ProgressEvent` is still defined. See `afterAll` below. The getter below
-// stashes the live class as a light defense-in-depth for any callback that
-// fires before teardown completes; it cannot help after teardown because
-// Vitest deletes the accessor (part of its `LIVING_KEYS`) during per-file
-// teardown — which is exactly why the `afterAll` drain is the real fix.
-// `configurable: true` is required so Vitest *can* delete the accessor
-// during teardown; `configurable: false` would prevent cleanup and leave
-// a stale getter pointing at a torn-down jsdom environment.
-class MockProgressEvent extends Event {
-  readonly lengthComputable: boolean;
-
-  readonly loaded: number;
-
-  readonly total: number;
-
-  constructor(type: string, eventInitDict: ProgressEventInit = {}) {
-    super(type, eventInitDict);
-    this.lengthComputable = eventInitDict.lengthComputable ?? false;
-    this.loaded = eventInitDict.loaded ?? 0;
-    this.total = eventInitDict.total ?? 0;
-  }
-}
-
-// `afterAll` runs while jsdom is still active, so `globalThis.ProgressEvent`
-// is jsdom's constructor here. Stash it so the post-teardown getter can
-// keep returning the real class even after the accessor is removed.
-const _liveProgressEvent =
-  typeof globalThis.ProgressEvent !== "undefined"
-    ? globalThis.ProgressEvent
-    : MockProgressEvent;
-
-Object.defineProperty(globalThis, "ProgressEvent", {
-  configurable: true,
-  get() {
-    return _liveProgressEvent;
-  },
-});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
@@ -175,23 +123,7 @@ afterEach(async () => {
   await Promise.resolve();
   await Promise.resolve();
 });
-afterAll(async () => {
-  // Drain pending MSW `respondWith` callbacks (and any other queued
-  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
-  // responses asynchronously; if a late callback (e.g. PostHog analytics
-  // flushed during the last test) settles after teardown, its `createEvent`
-  // call evaluates the bare `ProgressEvent` global against a torn-down
-  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
-  // a few real-timer ticks here lets those callbacks complete while
-  // `ProgressEvent` is still defined. We restore real timers first so a test
-  // that left fake timers active can't stall the drain.
-  vi.useRealTimers();
-  // Reset handlers first so no new intercepted requests start processing
-  // during the drain window.
-  server.resetHandlers();
-  for (let i = 0; i < 30; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+afterAll(() => {
   server.close();
   vi.unstubAllGlobals();
 });

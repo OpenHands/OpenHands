@@ -447,7 +447,7 @@ export default defineConfig(({ mode }) => {
     },
     clearScreen: false,
     test: {
-      environment: "jsdom",
+      environment: "./vitest.environment.ts",
       setupFiles: ["vitest.setup.ts"],
       exclude: [...configDefaults.exclude, "tests"],
       // The full suite runs many DOM-heavy tests in parallel, which can
