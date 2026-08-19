@@ -1,6 +1,9 @@
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
-import { TASK_SUGGESTIONS_HANDLERS } from "./task-suggestions-handlers";
 import { SECRETS_HANDLERS } from "./secrets-handlers";
+import {
+  AGENT_PROFILES_HANDLERS,
+  resetMockAgentProfiles,
+} from "./agent-profiles-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "./git-repository-handlers";
 import {
   SETTINGS_HANDLERS,
@@ -23,8 +26,8 @@ import {
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
-  ...TASK_SUGGESTIONS_HANDLERS,
   ...SECRETS_HANDLERS,
+  ...AGENT_PROFILES_HANDLERS,
   ...GIT_REPOSITORY_HANDLERS,
   ...SETTINGS_HANDLERS,
   ...CONVERSATION_HANDLERS,
@@ -42,3 +45,5 @@ export {
   resetAutomationMockData,
   resetMockWorkspaces,
 };
+
+export { AGENT_PROFILES_HANDLERS, resetMockAgentProfiles };

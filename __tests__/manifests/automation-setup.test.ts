@@ -3,7 +3,7 @@ import incidentFixture from "@openhands/extensions/testing/automations/incident-
 import prReviewerFixture from "@openhands/extensions/testing/automations/github-pr-reviewer.json";
 import repoMonitorFixture from "@openhands/extensions/testing/automations/github-repo-monitor.json";
 import {
-  AUTOMATION_CREATE_ENDPOINT,
+  automationCreateEndpoint,
   buildAssistedMessage,
   buildCreatePayload,
   buildPreflightBody,
@@ -16,6 +16,18 @@ import {
 import { validateFormValues } from "#/manifests/manifest-local-validation";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import { createSetup, createSetupEntry } from "./manifest-test-data";
+
+// The one word of a derived name the host writes rather than reads off the
+// entry is translated, and the derivation runs where no translator can be
+// passed in, so it reads the shared instance. Stubbed to pin the key and the
+// count rather than a rendered sentence.
+vi.mock("#/i18n", () => ({
+  default: {
+    t: (key: string, options: Record<string, unknown>) =>
+      `${key}(${options.total})`,
+  },
+}));
 
 // The command a skill publishes in its own frontmatter, which the host looks
 // up rather than storing. Pinned so the assertion does not move when the
@@ -48,6 +60,8 @@ interface FixtureScenario {
   id: string;
   formValues?: SetupFormValues;
   localValidation?: { valid: boolean };
+  /** Bundle entries only: where the packed archive landed. */
+  upload?: { response: { body: { tarball_path: string } } };
   preflight?: FixtureExchange;
   create?: FixtureExchange;
   conversation?: { request: { action: string; message: string } };
@@ -93,6 +107,8 @@ const CREATE_CASES = BUNDLES.flatMap((bundle) =>
             automationId: bundle.automationId,
             formValues: scenario.formValues ?? {},
             body: scenario.create.request.body,
+            // A prompt entry records none; buildCreatePayload ignores it.
+            tarballPath: scenario.upload?.response.body.tarball_path,
           },
         ]
       : [],
@@ -177,26 +193,73 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
-    expect({ create: [...createPaths], preflight: [...preflightPaths] }).toEqual(
-      { create: [AUTOMATION_CREATE_ENDPOINT], preflight: ["/v1/validate"] },
-    );
+    // Every published fixture is a prompt entry created through the preset
+    // endpoint, so the deduped set collapses to that single path.
+    expect({
+      create: [...createPaths].sort(),
+      preflight: [...preflightPaths],
+    }).toEqual({
+      create: [automationCreateEndpoint()],
+      preflight: ["/v1/validate"],
+    });
   });
 });
 
 describe("buildCreatePayload", () => {
   it.each(CREATE_CASES)(
     "derives the $name create body its fixture pins",
-    ({ automationId, formValues, body }) => {
+    ({ automationId, formValues, body, tarballPath }) => {
       // Arrange
       const entry = requireEntry(automationId);
 
       // Act
-      const payload = buildCreatePayload(entry, formValues);
+      const payload = tarballPath
+        ? buildCreatePayload(entry, formValues, tarballPath)
+        : buildCreatePayload(entry, formValues);
 
       // Assert
       expect(payload).toEqual(body);
     },
   );
+
+  it("names an automation after the one repository it watches", () => {
+    // Arrange
+    const entry = requireEntry("github-pr-reviewer");
+
+    // Act
+    const payload = buildCreatePayload(entry, {
+      repository: "OpenHands/automation",
+    });
+
+    // Assert
+    expect(payload?.name).toBe(`${entry.name} - OpenHands/automation`);
+  });
+
+  it("names an automation watching several through the host's translations", () => {
+    // Arrange — several repositories are a count rather than a list of names
+    // that would not fit, and a count is a word this host has to translate.
+    const { form } = createSetup();
+    const entry = createSetupEntry({
+      setup: createSetup({
+        form: {
+          ...form,
+          args: {
+            ...form.args,
+            repository: { ...form.args.repository, multiple: true },
+          },
+        },
+      }),
+    });
+
+    // Act
+    const payload = buildCreatePayload(entry, {
+      repository: ["OpenHands/automation", "OpenHands/extensions"],
+      widgetName: "Widgets",
+    });
+
+    // Assert
+    expect(payload?.name).toBe(`${entry.name} - SETUP$REPOSITORY_COUNT(2)`);
+  });
 
   it("sends no request body for an entry that hands setup to a conversation", () => {
     // Arrange
@@ -257,7 +320,10 @@ describe("service rejections mapped back to fields", () => {
       );
 
       // Assert
-      expect(mapped).toEqual({ fieldErrors: expectedFieldErrors, formErrors: [] });
+      expect(mapped).toEqual({
+        fieldErrors: expectedFieldErrors,
+        formErrors: [],
+      });
     },
   );
 });

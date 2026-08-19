@@ -2,22 +2,43 @@
 
 ## General
 
-- This repository is a near-direct port of the OpenHands frontend. Local backends talk straight to `software-agent-sdk` / `agent_server`; optional Cloud backends use the service layer under `src/api/cloud/` and the local cloud proxy.
+- This repository is the OpenHands frontend.
 - Frontend API adaptation lives mainly in `src/api/`:
-  - `option-service` fabricates an OSS web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
+  - `option-service` fabricates a web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
   - `settings-service` uses `@openhands/typescript-client` settings APIs for persistence; reads schemas from `/api/settings/agent-schema` and `/api/settings/conversation-schema`, fetches settings with optional `X-Expose-Secrets: encrypted` header for conversation start payloads, and saves settings via PATCH with diffs.
   - `agent-server-conversation-service`, `event-service`, `agent-server-git-service`, and `skills-service` route local agent-server access through `@openhands/typescript-client` rather than direct HTTP calls.
 - Supported env vars for deployment:
   - `VITE_BACKEND_BASE_URL` for the agent server base URL.
   - `VITE_SESSION_API_KEY` for optional session auth.
   - `VITE_WORKING_DIR` for the default workspace path sent when starting conversations.
-  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit `BrowserToolSet` from new conversation payloads.
+  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit the `browser_tool_set` tool from new conversation payloads.
   - `VITE_BASE_PATH` for serving the SPA under a subpath such as `/canvas`; pair it with `scripts/static-server.mjs --base-path` at runtime.
 - Public skills are loaded from the `@openhands/extensions` npm package at build time via `SKILLS_CATALOG` (exported from `@openhands/extensions/skills`). The frontend's `SkillsService` maps catalog entries to `SkillInfo` objects and merges them with user/project skills fetched from the agent-server (with `load_public: false`). The agent-server no longer clones the extensions repo or uses `EXTENSIONS_REF` for public skills.
 - Default working-dir fallback is now the relative path `workspace/project` (exported as `DEFAULT_WORKING_DIR` from `src/api/agent-server-config.ts`); git-path heuristics and the default PLAN preview path should reuse that constant instead of hardcoding `/workspace/project`.
 - Current Cloud behavior is implemented explicitly through the backend registry, Cloud service layer, and device authorization flow.
 - Primary verification commands: `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 - GitHub automation now includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm/github-actions updates gated by a 7-day cooldown.
+
+## Repository Map — what belongs where
+
+This repo (`OpenHands/OpenHands`) is **only the agent-canvas frontend**. It is one
+piece of a multi-repo system. Before adding code here, check the change belongs in
+*this* repo — several kinds of work belong in a sibling repo instead.
+
+| Repo | Owns | Add code here when… |
+|------|------|---------------------|
+| **`OpenHands/OpenHands`** (this repo) | The React/TypeScript **frontend** (agent-canvas): UI, routes, frontend services in `src/api/` that *consume* backend APIs. | You are changing UI, frontend state, or how the frontend *calls* an existing backend endpoint. |
+| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server**: agents, tools, conversations, events, and the REST/WebSocket **API surface** (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`). | You are adding or changing a backend endpoint, agent/tool behaviour, or server-side logic. New API **endpoints** live here, not in the frontend. |
+| **`OpenHands/typescript-client`** (`@openhands/typescript-client`) | The generated/maintained **TypeScript client** that mirrors the agent-server API. The frontend's *only* sanctioned way to reach the agent-server (see "API Access Rules"). | You are adding client-side **access to an agent-server endpoint** (typed client method, request/response types). API-access code belongs here, **not** re-implemented in this repo. |
+| **`OpenHands/extensions`** (`@openhands/extensions`) | Public **skills, automations, and integrations** (loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, automation, or MCP integration. |
+
+Common mis-placements to avoid:
+
+- **API endpoint access** → belongs in `typescript-client`, then consumed here. Do **not**
+  add raw `axios`/`fetch` endpoint code to the frontend (CI guard:
+  `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
+- **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
+- **Skills / automations / integrations** → belong in `extensions`.
 
 ## PR Description Human Check
 
@@ -492,10 +513,10 @@ When adding code that needs a new string, decide up front which rule it falls un
 - `scripts/dev-safe.mjs` uses `uvx` for temporary agent-server installation — no permanent `uv tool install` needed. Environment variables (highest precedence first):
   - `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a local `software-agent-sdk` checkout. Runs the local checkout via `uvx` with `--with-editable` for `openhands-sdk`/`openhands-tools`/`openhands-workspace` and `--reinstall` for `openhands-agent-server`, so SDK edits are picked up on restart. Highest precedence.
   - `OH_AGENT_SERVER_GIT_REF` — git commit SHA or branch name (takes precedence over version)
-  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.40.1")
+  - `OH_AGENT_SERVER_VERSION` — specific PyPI version (e.g., "1.42.1")
   - `OH_SECRET_KEY` — secret key for settings encryption; auto-generated and persisted to `~/.openhands/agent-canvas/secret-key.txt` on first run (same file Docker uses), ensuring dev mode and Docker share the same key when both mount the same `~/.openhands` directory. Override with the env var to pin a specific key.
   - `SESSION_API_KEY` / `OH_SESSION_API_KEYS_0` / `VITE_SESSION_API_KEY` — session API key for agent-server authentication; auto-generated using `crypto.randomBytes(32)` if not set, passed to both agent-server (`OH_SESSION_API_KEYS_0`) and frontend (`VITE_SESSION_API_KEY`)
-  - Default: released PyPI version `1.40.1` for agent-server SDK libraries
+  - Default: released PyPI version `1.42.1` for agent-server SDK libraries
 
 - Security: launchers generate and persist a 64-character session API key at `~/.openhands/agent-canvas/session-api-key.txt` unless overridden. The agent-server and automation backend share that session key. `OH_SECRET_KEY` protects settings encryption and is persisted separately at `~/.openhands/agent-canvas/secret-key.txt`.
 - `scripts/dev-safe.mjs` should fail fast if `uvx` cannot be spawned (for example missing PATH entries).

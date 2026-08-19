@@ -25,7 +25,7 @@ const openingMessage: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "Refactor the parser." }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -47,7 +47,7 @@ const midStreamMessage: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "also update the README" }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -56,7 +56,7 @@ const finalMessage: MessageEvent = {
   timestamp: "2026-06-12T12:00:03Z",
   source: "agent",
   llm_message: { role: "assistant", content: [{ type: "text", text: REPLY }] },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 

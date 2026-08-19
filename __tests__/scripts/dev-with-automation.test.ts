@@ -21,10 +21,12 @@ import {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
   setServiceLogListener,
   spawnService,
+  validateLocalAutomationPath,
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
@@ -120,6 +122,69 @@ describe("buildAutomationCommand", () => {
     expect(cmd.args).toContain(`git+${DEFAULT_AUTOMATION_REPO}@main`);
     expect(cmd.args).not.toContain(`${DEFAULT_AUTOMATION_PACKAGE}==1.0.0`);
     expect(cmd.source).toBe("git (main)");
+  });
+
+  it("runs a local checkout in place, ahead of the other env vars", () => {
+    const cmd = buildAutomationCommand({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+      OH_AUTOMATION_GIT_REF: "main",
+      OH_AUTOMATION_VERSION: "1.0.0",
+    });
+
+    expect(cmd.command).toBe("uv");
+    expect(cmd.args).toEqual([
+      "run",
+      "--project",
+      "/checkouts/automation",
+      "uvicorn",
+      "openhands.automation.app:app",
+    ]);
+    expect(cmd.source).toBe("local (/checkouts/automation)");
+  });
+});
+
+describe("validateLocalAutomationPath", () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    while (dirs.length > 0) {
+      const dir = dirs.pop();
+      if (dir) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function makeCheckout({ withProjectFile = true } = {}) {
+    const dir = mkdtempSync(path.join(tmpdir(), "automation-checkout-"));
+    dirs.push(dir);
+    if (withProjectFile) {
+      writeFileSync(path.join(dir, "pyproject.toml"), "[project]\n");
+    }
+    return dir;
+  }
+
+  it("accepts an absolute path to a Python project", () => {
+    expect(() => validateLocalAutomationPath(makeCheckout())).not.toThrow();
+  });
+
+  // Without these, `uv run --project <bad path>` just exits and the rest of
+  // the stack stays up, leaving the automations UI blaming the backend.
+  it("rejects a relative path", () => {
+    expect(() => validateLocalAutomationPath("../automation")).toThrow(
+      /absolute path/i,
+    );
+  });
+
+  it("rejects a path that does not exist", () => {
+    const dir = makeCheckout();
+    rmSync(dir, { recursive: true, force: true });
+
+    expect(() => validateLocalAutomationPath(dir)).toThrow(/does not exist/i);
+  });
+
+  it("rejects a directory that is not a Python project", () => {
+    expect(() =>
+      validateLocalAutomationPath(makeCheckout({ withProjectFile: false })),
+    ).toThrow(/pyproject\.toml/);
   });
 });
 
@@ -235,6 +300,31 @@ describe("buildConfig", () => {
       config.vitePort,
     ]);
     expect(ports.size).toBe(4);
+  });
+
+  it("lets --automation-git-ref win over an exported OH_AUTOMATION_LOCAL_PATH", async () => {
+    // Otherwise someone with the checkout exported in their shell profile
+    // reproduces a bug against their own working tree while believing they
+    // are testing the ref they just passed.
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({ automationGitRef: "abc123" }, env);
+
+    expect(env.OH_AUTOMATION_GIT_REF).toBe("abc123");
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBeUndefined();
+    expect(buildAutomationCommand(env).source).toBe("git (abc123)");
+  });
+
+  it("keeps a local checkout when no ref is passed", async () => {
+    const env = envWithIsolatedKeyPath({
+      OH_AUTOMATION_LOCAL_PATH: "/checkouts/automation",
+    });
+
+    await buildConfig({}, env);
+
+    expect(env.OH_AUTOMATION_LOCAL_PATH).toBe("/checkouts/automation");
   });
 
   it("respects preferred port from args when available", async () => {
@@ -451,7 +541,6 @@ describe("stack mode routing", () => {
 
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: "127.0.0.1:8000",
-      VITE_BACKEND_BASE_URL: "http://127.0.0.1:8000",
     });
   });
 
@@ -460,7 +549,6 @@ describe("stack mode routing", () => {
 
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
-      VITE_BACKEND_BASE_URL: `http://127.0.0.1:${config.ingressPort}`,
     });
   });
 
@@ -476,7 +564,38 @@ describe("stack mode routing", () => {
       }),
     ).toEqual({
       VITE_BACKEND_HOST: "backend.example.test",
-      VITE_BACKEND_BASE_URL: "https://backend.example.test",
+      VITE_USE_TLS: "true",
+    });
+  });
+
+  it("respects an explicit VITE_USE_TLS override with VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "https://backend.example.test",
+        VITE_USE_TLS: "false",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
+    });
+  });
+
+  it("does not set VITE_USE_TLS for http:// VITE_BACKEND_BASE_URL", async () => {
+    const config = await buildConfig(
+      { frontendOnly: true },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(
+      buildViteBackendEnv(config, {
+        VITE_BACKEND_BASE_URL: "http://backend.example.test",
+      }),
+    ).toEqual({
+      VITE_BACKEND_HOST: "backend.example.test",
     });
   });
 
@@ -509,6 +628,18 @@ describe("stack mode routing", () => {
       `/server_info=http://127.0.0.1:${config.agentServerPort}`,
     );
     expect(routeArgs).not.toContain("--default");
+  });
+
+  it("addresses the agent-server over IPv4 for readiness and secret seeding", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    // The launcher starts the agent-server with `--host 127.0.0.1`, so the
+    // readiness probe (`/server_info`), the secret-seeding request, and the
+    // automation backend's AUTOMATION_AGENT_SERVER_URL must all skip the
+    // `localhost` lookup that resolves to ::1 first on Windows.
+    expect(getAgentServerBaseUrl(config)).toBe(
+      `http://127.0.0.1:${config.agentServerPort}`,
+    );
   });
 
   it("rejects mutually exclusive partial-stack modes", async () => {

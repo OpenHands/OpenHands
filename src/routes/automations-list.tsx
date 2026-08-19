@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { FileUp } from "lucide-react";
+import { FileUp, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -24,6 +24,7 @@ import {
 } from "#/hooks/query/use-automations";
 import { useAutomationHealth } from "#/hooks/query/use-automation-health";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useNavigation } from "#/context/navigation-context";
 import { SearchInput } from "#/components/features/automations/search-input";
 import { AutomationGroup } from "#/components/features/automations/automation-group";
 import { AutomationViewToggle } from "#/components/features/automations/automation-view-toggle";
@@ -53,6 +54,7 @@ import {
   automationDetailPath,
   getDashboardSpec,
   getInterfaceCopy,
+  hasAutomationInterface,
 } from "#/manifests/automation-interface";
 import {
   applyDashboardView,
@@ -75,6 +77,18 @@ import { ManifestSubpageLayout } from "#/components/features/manifest/manifest-s
 import { cn, downloadBlob } from "#/utils/utils";
 
 const PAGE_SIZE = 50;
+
+/**
+ * The page renders the interface manifest's copy, so without an admitted
+ * manifest there is nothing to render: a 404, which the layout's error
+ * boundary renders.
+ */
+export const clientLoader = () => {
+  if (!hasAutomationInterface()) {
+    throw new Response(null, { status: 404, statusText: "Not Found" });
+  }
+  return null;
+};
 
 export default function AutomationsList() {
   const { t } = useTranslation("openhands");
@@ -109,6 +123,7 @@ export default function AutomationsList() {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const active = useActiveBackend();
+  const { navigate } = useNavigation();
   // Edit is a local-backend-only feature in MVP — cloud automations
   // are managed elsewhere and we don't yet surface them here.
   const canEdit = active.backend.kind === "local";
@@ -330,11 +345,9 @@ export default function AutomationsList() {
     return renderShell(
       <div>
         <h1 className="text-xl font-medium text-content">
-          {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
+          {interfaceCopy.listTitle}
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-        </p>
+        <p className="mt-1 text-sm text-muted">{interfaceCopy.listSubtitle}</p>
         <div className="mt-6 flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <AutomationCardSkeleton key={`skeleton-${String(i)}`} />
@@ -349,11 +362,9 @@ export default function AutomationsList() {
     return renderShell(
       <div>
         <h1 className="text-xl font-medium text-content">
-          {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
+          {interfaceCopy.listTitle}
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
-        </p>
+        <p className="mt-1 text-sm text-muted">{interfaceCopy.listSubtitle}</p>
         <BackendNotConfigured onRetry={refetchHealth} />
       </div>,
     );
@@ -365,13 +376,25 @@ export default function AutomationsList() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold text-content">
-            {interfaceCopy.listTitle ?? t(I18nKey.AUTOMATIONS$TITLE)}
+            {interfaceCopy.listTitle}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {interfaceCopy.listSubtitle ?? t(I18nKey.AUTOMATIONS$SUBTITLE)}
+            {interfaceCopy.listSubtitle}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {canEdit && (
+            <BrandButton
+              type="button"
+              variant="secondary"
+              testId="automations-git-sync"
+              className="whitespace-nowrap"
+              onClick={() => navigate?.("/automations/git-sync")}
+              startContent={<RefreshCw className="size-4" aria-hidden />}
+            >
+              {t(I18nKey.AUTOMATIONS$GIT_SYNC$NAV_BUTTON)}
+            </BrandButton>
+          )}
           <BrandButton
             type="button"
             variant="secondary"
