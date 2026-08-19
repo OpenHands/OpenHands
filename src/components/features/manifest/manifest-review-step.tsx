@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
-import { collectFields } from "#/manifests/manifest-local-validation";
+import {
+  collectFields,
+  fieldValues,
+} from "#/manifests/manifest-local-validation";
 import type { SetupBlock, SetupFormValues } from "#/manifests/types";
 
 export interface SetupReviewStepProps {
@@ -26,7 +29,9 @@ export function SetupReviewStep({ setup, values }: SetupReviewStepProps) {
           <div key={name} className="flex flex-col gap-0.5">
             <dt className="text-xs text-[var(--oh-muted)]">{field.label}</dt>
             <dd className="text-sm break-words">
-              {(values[name] ?? "").trim() || t(I18nKey.SETUP$EMPTY_VALUE)}
+              {/* A field collecting several values reads as a list of them. */}
+              {fieldValues(values[name]).join(", ") ||
+                t(I18nKey.SETUP$EMPTY_VALUE)}
             </dd>
           </div>
         ))}

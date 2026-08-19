@@ -15,6 +15,7 @@ const useHasGitCommitsMock = vi.fn();
 const useUnifiedGitCommitsMock = vi.fn();
 const useWorkspaceFilesMock = vi.fn();
 const useWorkspaceFileContentMock = vi.fn();
+const useActiveConversationMock = vi.fn();
 const refetchGitChangesMock = vi.fn();
 
 vi.mock("#/hooks/use-has-attached-source", () => ({
@@ -37,6 +38,10 @@ vi.mock("#/hooks/query/use-workspace-files", () => ({
 vi.mock("#/hooks/query/use-workspace-file-content", () => ({
   useWorkspaceFileContent: (path: string | null) =>
     useWorkspaceFileContentMock(path),
+}));
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => useActiveConversationMock(),
 }));
 
 vi.mock("#/hooks/query/use-unified-get-git-changes", () => ({
@@ -94,6 +99,7 @@ describe("FilesTab", () => {
     useUnifiedGitCommitsMock.mockReset();
     useWorkspaceFilesMock.mockReset();
     useWorkspaceFileContentMock.mockReset();
+    useActiveConversationMock.mockReset();
     refetchGitChangesMock.mockReset();
     // Default: pretend the probe has already resolved with at least one
     // commit. Individual tests can override this for "empty repo" cases.
@@ -128,6 +134,11 @@ describe("FilesTab", () => {
       },
       isLoading: false,
       isError: false,
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project" },
+      },
     });
   });
 
@@ -211,6 +222,24 @@ describe("FilesTab", () => {
     expect(
       screen.getByTestId("files-tab-content-mode-toggle"),
     ).toBeInTheDocument();
+  });
+
+  it("shows the active conversation workspace path in files view", () => {
+    useHasAttachedSourceMock.mockReturnValue({
+      hasAttachedSource: false,
+      isLoading: false,
+    });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project/worktree-123" },
+      },
+    });
+
+    renderTab();
+
+    expect(
+      screen.getByTestId("files-tab-workspace-path-value"),
+    ).toHaveTextContent("/workspace/project/worktree-123");
   });
 
   it("lets users toggle diff view off even when a source is attached", async () => {
