@@ -146,6 +146,65 @@ function parseExitCode(
   return match?.[1] ?? null;
 }
 
+function stringField(
+  statusDetail: AutomationRun["status_detail"],
+  key: string,
+): string | null {
+  const value = statusDetail?.[key];
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function firstSentence(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
+  return (match?.[1] ?? normalized).trim();
+}
+
+function formatHumanErrorReason(value: string): string | null {
+  const cleaned = value.trim();
+  if (!cleaned || /^execution failed\.?$/i.test(cleaned)) return null;
+
+  if (
+    /authenticationerror/i.test(cleaned) &&
+    /incorrect api key/i.test(cleaned)
+  ) {
+    return "LLM authentication failed: incorrect API key provided.";
+  }
+  if (/rate.?limit/i.test(cleaned)) {
+    return "LLM provider rate limit reached.";
+  }
+
+  const withoutCommonPrefixes = cleaned
+    .replace(/^litellm\.[A-Za-z]+Error:\s*/i, "")
+    .replace(/^[A-Za-z]+Error:\s*/i, "")
+    .replace(/^OpenAIException\s*-\s*/i, "")
+    .trim();
+
+  return firstSentence(withoutCommonPrefixes);
+}
+
+function getStatusDetailReason(
+  statusDetail: AutomationRun["status_detail"],
+): string | null {
+  const candidates = [
+    stringField(statusDetail, "reason"),
+    stringField(statusDetail, "message"),
+    stringField(statusDetail, "formatted_detail"),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsedCandidate = parseDetailText(candidate);
+    const reason = formatHumanErrorReason(
+      parsedCandidate?.message ?? candidate,
+    );
+    if (reason) return reason;
+  }
+  return null;
+}
+
 function getStatusDetailSummary(
   statusDetail: AutomationRun["status_detail"],
   parsedDetail: ParsedDetailText | null,
@@ -158,6 +217,9 @@ function getStatusDetailSummary(
   const statusCode = statusDetail.status_code;
   const exitCode = parseExitCode(parsedDetail, statusDetail);
   const transient = statusDetail.transient === true;
+  const reason = getStatusDetailReason(statusDetail);
+
+  if (reason) return reason;
 
   if (statusCode === 429 || kind === "api_rate_limited") {
     return `${transient ? "Temporary" : "HTTP"} API rate limit${

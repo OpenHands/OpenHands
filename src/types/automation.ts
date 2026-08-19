@@ -76,6 +76,11 @@ export interface AutomationRunStatusDetail {
   phase?: string;
   kind?: string;
   detail?: string;
+  /** User-facing detail produced by structured SDK callback errors. */
+  formatted_detail?: string;
+  /** Optional short reason/message aliases from structured callback payloads. */
+  reason?: string;
+  message?: string;
   transient?: boolean;
   source?: string;
   operation?: string;

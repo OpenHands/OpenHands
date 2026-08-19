@@ -383,6 +383,51 @@ describe("RunLogsModal", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
   });
 
+  it("surfaces structured SDK callback reasons before generic execution status", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-llm-auth",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail:
+        "litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: sk-dummy********value.",
+      status_detail: {
+        phase: "callback",
+        kind: "execution_error",
+        source: "sdk_callback",
+        formatted_detail:
+          "litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: sk-dummy********value. You can find your API key at https://platform.openai.com/account/api-keys.",
+        transient: false,
+        count: 1,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    const details = screen.getByTestId("run-status-details");
+    expect(details).toHaveTextContent(
+      "LLM authentication failed: incorrect API key provided.",
+    );
+    expect(details).not.toHaveTextContent("Execution failed.");
+    expect(screen.getByText("Phase")).toBeInTheDocument();
+    expect(screen.getByText("Callback")).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Execution Error")).toBeInTheDocument();
+    expect(screen.getByText("Transient")).toBeInTheDocument();
+    expect(screen.getByText("No")).toBeInTheDocument();
+  });
+
   it("summarizes execution failures without duplicating output when log tabs exist", () => {
     useBashCommandLogsMock.mockReturnValue(makeHookResult());
     const detail = `exit_code=1
