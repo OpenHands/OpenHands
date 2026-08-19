@@ -45,6 +45,7 @@ import {
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
+import { getFirstLlmConfigValidationError } from "#/utils/llm-config-validation";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -309,6 +310,14 @@ export function LlmSettingsLocalView() {
     if (!model) {
       displayErrorToast(t(I18nKey.SETTINGS$MODEL_REQUIRED));
       return;
+    }
+
+    if (authType !== LLM_AUTH_TYPE_SUBSCRIPTION) {
+      const validationError = getFirstLlmConfigValidationError(llmConfig);
+      if (validationError) {
+        displayErrorToast(validationError);
+        return;
+      }
     }
 
     const trimmedName = profileName.trim();
