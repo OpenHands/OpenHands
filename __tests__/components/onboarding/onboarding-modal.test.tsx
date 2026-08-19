@@ -14,6 +14,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { OnboardingModal } from "#/components/features/onboarding/onboarding-modal";
 import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
+import { SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
 import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
@@ -174,7 +175,10 @@ function seedCloudBackend() {
   return backend;
 }
 
-function renderModal(onClose = vi.fn()) {
+function renderModal(
+  onClose = vi.fn(),
+  options?: { initialStep?: number },
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -188,7 +192,10 @@ function renderModal(onClose = vi.fn()) {
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
         <NavigationProvider value={navigationValue}>
-          <OnboardingModal onClose={onClose} />
+          <OnboardingModal
+            onClose={onClose}
+            initialStep={options?.initialStep}
+          />
         </NavigationProvider>
       </ActiveBackendProvider>
     </QueryClientProvider>,
@@ -642,7 +649,7 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with OpenAI GPT-5.5", () => {
+  it("pre-fills the LLM step with the OpenHands default model", () => {
     renderModal();
 
     expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
@@ -735,6 +742,12 @@ describe("OnboardingModal", () => {
     const scrollArea = screen.getByTestId("onboarding-scroll-area");
     const rail = screen.getByTestId("onboarding-slide-rail");
     expect(scrollArea.contains(rail)).toBe(true);
+    // Bottom padding matches the header (`pt-7`) so the last control is
+    // not flush against the modal edge. The region must size to its
+    // content (`min-h-0` + overflow, no `flex-1`) so a content-fitting
+    // step does not paint a leftover scrollbar.
+    expect(scrollArea).toHaveClass("pb-7");
+    expect(scrollArea).not.toHaveClass("flex-1");
   });
 
   it("keeps the LLM step heading and Back/Next outside the scrollable settings body", async () => {
@@ -1126,6 +1139,51 @@ describe("OnboardingModal", () => {
           agent: "openhands",
         }),
       );
+    });
+  });
+
+  describe("Getting Started checklist skip", () => {
+    it("renders a centered skip checkbox below the modal on Say Hello", async () => {
+      renderModal(vi.fn(), { initialStep: 3 });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("onboarding-step-say-hello"),
+        ).toBeInTheDocument();
+      });
+
+      const checkbox = screen.getByTestId(
+        "onboarding-skip-getting-started-checklist",
+      );
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+      expect(
+        screen.getByText("ONBOARDING$SKIP_GETTING_STARTED_CHECKLIST"),
+      ).toBeInTheDocument();
+
+      const modal = screen.getByTestId("onboarding-modal");
+      expect(modal.contains(checkbox)).toBe(false);
+    });
+
+    it("persists dismissal when the skip checkbox is checked", async () => {
+      const user = userEvent.setup();
+      renderModal(vi.fn(), { initialStep: 3 });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("onboarding-skip-getting-started-checklist"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByTestId("onboarding-skip-getting-started-checklist"),
+      );
+
+      expect(
+        window.localStorage.getItem(
+          SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
+        ),
+      ).toBe("true");
     });
   });
 });

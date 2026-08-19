@@ -22,6 +22,7 @@ import type { Backend } from "#/api/backend-registry/types";
 vi.mock("#/api/automation-service/automation-service.api", () => ({
   default: {
     updateAutomation: vi.fn(),
+    getCapabilities: vi.fn(),
   },
 }));
 
@@ -35,6 +36,39 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast: vi.fn(),
   displayErrorToast: vi.fn(),
 }));
+
+// The form is the interface manifest's, so these tests run against the
+// manifest the pinned package publishes — the one a user meets.
+vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
+  const extensions = await import("@openhands/extensions/automations");
+  return {
+    ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
+    AUTOMATION_INTERFACE_CANDIDATE: (
+      extensions as { AUTOMATION_INTERFACE?: unknown }
+    ).AUTOMATION_INTERFACE,
+  };
+});
+
+// The interface seam resolves its manifest once at module load, so the
+// manifest-driven test overrides individual attribute specs here instead of
+// installing a whole manifest. Empty overrides leave the published
+// manifest's form in force for every other test.
+const specOverrides = vi.hoisted(() => ({
+  current: {} as Record<string, object>,
+}));
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    getAttributeSpec: (
+      name: Parameters<typeof actual.getAttributeSpec>[0],
+    ) => ({
+      ...actual.getAttributeSpec(name),
+      ...specOverrides.current[name],
+    }),
+  };
+});
 
 const localBackend: Backend = {
   id: "local-1",
@@ -104,11 +138,7 @@ function renderModal(automation: Automation) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
-        <EditAutomationModal
-          automation={automation}
-          isOpen
-          onClose={onClose}
-        />
+        <EditAutomationModal automation={automation} isOpen onClose={onClose} />
       </ActiveBackendProvider>
     </QueryClientProvider>,
   );
@@ -117,6 +147,7 @@ function renderModal(automation: Automation) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  specOverrides.current = {};
   __resetActiveStoreForTests();
   setRegisteredBackends([localBackend]);
   setActiveSelection({ backendId: localBackend.id });
@@ -124,6 +155,15 @@ beforeEach(() => {
   vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
     profiles: [],
     active_profile: null,
+  });
+  vi.mocked(AutomationService.getCapabilities).mockResolvedValue({
+    ready: true,
+    maxAutomationTimeoutSeconds: 900,
+    triggerKinds: ["cron"],
+    eventSources: [],
+    eventTypes: [],
+    triggers: {},
+    features: [],
   });
 });
 
@@ -262,13 +302,11 @@ describe("EditAutomationModal", () => {
     // The picker pre-fills with the automation's current profile once the
     // available profiles have loaded.
     await waitFor(() =>
-      expect(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL")).toHaveValue(
-        "fast",
-      ),
+      expect(screen.getByLabelText("LLM profile")).toHaveValue("fast"),
     );
 
     // Act — switch to "careful" and save.
-    await user.click(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL"));
+    await user.click(screen.getByLabelText("LLM profile"));
     await user.click(await screen.findByText("careful"));
     await user.click(screen.getByTestId("edit-automation-save"));
 
@@ -295,13 +333,11 @@ describe("EditAutomationModal", () => {
 
     // The picker pre-fills with the pinned profile once profiles have loaded.
     await waitFor(() =>
-      expect(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL")).toHaveValue(
-        "fast",
-      ),
+      expect(screen.getByLabelText("LLM profile")).toHaveValue("fast"),
     );
 
     // Act — clear the pin via the "Active profile" option, then save.
-    await user.click(screen.getByLabelText("AUTOMATIONS$DETAIL$MODEL"));
+    await user.click(screen.getByLabelText("LLM profile"));
     await user.click(await screen.findByText("COMMON$ACTIVE_PROFILE"));
     await user.click(screen.getByTestId("edit-automation-save"));
 
@@ -324,7 +360,7 @@ describe("EditAutomationModal", () => {
     renderModal(modeledAutomation);
 
     // Ensure we're on the profiles-available path before editing.
-    await screen.findByLabelText("AUTOMATIONS$DETAIL$MODEL");
+    await screen.findByLabelText("LLM profile");
 
     // Act — change only the name; leave the profile on "fast".
     const nameInput = screen.getByTestId("edit-automation-name");
@@ -348,9 +384,7 @@ describe("EditAutomationModal", () => {
 
     // Assert — once the (empty) profile list resolves, no picker is offered.
     await waitFor(() => {
-      expect(
-        screen.queryByLabelText("AUTOMATIONS$DETAIL$MODEL"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("LLM profile")).not.toBeInTheDocument();
     });
   });
 
@@ -358,7 +392,7 @@ describe("EditAutomationModal", () => {
     // Arrange — automation currently times out after 600s.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue({
       ...timeoutAutomation,
-      timeout: 1800,
+      timeout: 900,
     });
     const user = userEvent.setup();
     renderModal(timeoutAutomation);
@@ -369,9 +403,9 @@ describe("EditAutomationModal", () => {
     ) as HTMLInputElement;
     expect(timeoutInput.value).toBe("600");
 
-    // Act — raise the timeout to the 1800s maximum and save.
+    // Act — raise the timeout to the deployment's 900-second maximum and save.
     await user.clear(timeoutInput);
-    await user.type(timeoutInput, "1800");
+    await user.type(timeoutInput, "900");
     await user.click(screen.getByTestId("edit-automation-save"));
 
     // Assert — the PATCH carries just the new timeout.
@@ -379,7 +413,7 @@ describe("EditAutomationModal", () => {
       expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
     });
     expect(AutomationService.updateAutomation).toHaveBeenCalledWith("auto-4", {
-      timeout: 1800,
+      timeout: 900,
     });
   });
 
@@ -409,11 +443,17 @@ describe("EditAutomationModal", () => {
     // Arrange
     const user = userEvent.setup();
     renderModal(timeoutAutomation);
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "900",
+      );
+    });
 
-    // Act — enter a timeout beyond the 1800s cap and try to save.
+    // Act — enter a timeout beyond the deployment's cap and try to save.
     const timeoutInput = screen.getByTestId("edit-automation-timeout");
     await user.clear(timeoutInput);
-    await user.type(timeoutInput, "2000");
+    await user.type(timeoutInput, "901");
     await user.click(screen.getByTestId("edit-automation-save"));
 
     // Assert — no PATCH fired, inline error appears.
@@ -421,6 +461,50 @@ describe("EditAutomationModal", () => {
     expect(
       screen.getByTestId("edit-automation-timeout-error"),
     ).toBeInTheDocument();
+  });
+
+  it("never lets the manifest raise the deployment timeout ceiling", async () => {
+    // Arrange — the manifest offers 1200 seconds while the service owns 900.
+    specOverrides.current = { timeout: { max: 1200 } };
+    renderModal(timeoutAutomation);
+
+    // Assert — the service value is the effective maximum.
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "900",
+      );
+    });
+  });
+
+  it("lets the manifest lower the deployment timeout ceiling", async () => {
+    // Arrange — this automation surface imposes a stricter product policy.
+    specOverrides.current = { timeout: { max: 600 } };
+    renderModal(timeoutAutomation);
+
+    // Assert — the lower manifest value wins over the service maximum.
+    await waitFor(() => {
+      expect(screen.getByTestId("edit-automation-timeout")).toHaveAttribute(
+        "max",
+        "600",
+      );
+    });
+  });
+
+  it("renders only the attributes the interface manifest declares, with its copy", async () => {
+    // Arrange — an admitted manifest that omits `prompt` and relabels `name`.
+    specOverrides.current = {
+      prompt: { present: false },
+      name: { label: "Widget name" },
+    };
+    renderModal(dailyAutomation);
+
+    // Assert — the prompt control is gone and the manifest's label shows in
+    // place of the host translation.
+    expect(
+      screen.queryByTestId("edit-automation-prompt"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Widget name")).toBeInTheDocument();
   });
 
   it("omits the timeout from the payload when it is left unchanged", async () => {

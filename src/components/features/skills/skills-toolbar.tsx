@@ -1,22 +1,20 @@
-import { Search, X } from "lucide-react";
+import { ListFilter, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import type { SkillTypeFilter } from "./skill-type-filter";
-import { SkillsTypeFilterDropdown } from "./skills-type-filter-dropdown";
 
 interface SkillsToolbarProps {
   search: string;
   onSearchChange: (value: string) => void;
-  typeFilter: SkillTypeFilter;
-  onTypeFilterChange: (filter: SkillTypeFilter) => void;
+  activeFilterCount: number;
+  onOpenFilters: () => void;
 }
 
 export function SkillsToolbar({
   search,
   onSearchChange,
-  typeFilter,
-  onTypeFilterChange,
+  activeFilterCount,
+  onOpenFilters,
 }: SkillsToolbarProps) {
   const { t } = useTranslation("openhands");
 
@@ -59,10 +57,25 @@ export function SkillsToolbar({
         ) : null}
       </div>
 
-      <SkillsTypeFilterDropdown
-        value={typeFilter}
-        onChange={onTypeFilterChange}
-      />
+      {/* The facet rail is desktop-only, so below md this is the only way in. */}
+      <button
+        type="button"
+        data-testid="skills-filters-button"
+        onClick={onOpenFilters}
+        className={cn(
+          "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm md:hidden",
+          "border border-[var(--oh-border)] bg-base-secondary text-white",
+          "cursor-pointer hover:bg-[var(--oh-interactive-hover)]",
+        )}
+      >
+        <ListFilter className="size-4 shrink-0" aria-hidden />
+        {t(I18nKey.SETTINGS$SKILLS_FILTERS_BUTTON)}
+        {activeFilterCount > 0 ? (
+          <span className="rounded-full bg-white px-1.5 text-[11px] font-medium text-black">
+            {activeFilterCount}
+          </span>
+        ) : null}
+      </button>
     </div>
   );
 }

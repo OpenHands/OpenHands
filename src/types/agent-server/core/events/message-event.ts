@@ -9,9 +9,9 @@ export interface MessageEvent extends BaseEvent {
   llm_message: Message;
 
   /**
-   * List of activated microagent names
+   * List of activated skill names
    */
-  activated_microagents: string[];
+  activated_skills: string[];
 
   /**
    * List of content added by agent context

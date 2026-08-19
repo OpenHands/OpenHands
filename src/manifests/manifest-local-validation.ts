@@ -16,6 +16,7 @@ import type {
   SetupFieldOption,
   SetupFormField,
   SetupFormFields,
+  SetupFormValue,
   SetupFormValues,
 } from "./types";
 
@@ -84,12 +85,30 @@ export function getFieldOptions(
   return overrides[name]?.options ?? field.options ?? [];
 }
 
+/**
+ * Every value a field holds, whether it collects one or many.
+ *
+ * Reading both shapes as a list is what keeps validation, interpolation and
+ * the payload mapping from branching on `multiple` at every use.
+ */
+export function fieldValues(value: SetupFormValue | undefined): string[] {
+  if (Array.isArray(value)) return value.filter((item) => item.trim() !== "");
+  return value && value.trim() !== "" ? [value] : [];
+}
+
+/** The single value a field holds, or "" for a field collecting several. */
+export function fieldText(value: SetupFormValue | undefined): string {
+  return typeof value === "string" ? value : "";
+}
+
 /** Initial form state: every declared field, seeded with its declared default. */
 export function getInitialFormValues(setup: SetupBlock): SetupFormValues {
   return Object.fromEntries(
     Object.entries(collectFields(setup)).map(([name, field]) => [
       name,
-      field.default ?? "",
+      // A field collecting several values starts empty rather than holding one
+      // blank entry, so "required" means "add one" rather than "fill this in".
+      field.multiple ? [] : (field.default ?? ""),
     ]),
   );
 }
@@ -97,15 +116,29 @@ export function getInitialFormValues(setup: SetupBlock): SetupFormValues {
 function validateField(
   name: string,
   field: SetupFormField,
-  rawValue: string | undefined,
+  rawValue: SetupFormValue | undefined,
   overrides: SetupFieldOverrides,
 ): SetupFieldError | null {
-  const value = (rawValue ?? "").trim();
+  const entered = fieldValues(rawValue);
 
-  if (!value) {
+  if (entered.length === 0) {
     return field.required ? { code: "required" } : null;
   }
 
+  // Every entry of a multi-value field answers the same field, so each is held
+  // to the same rules and the first failure is the one reported.
+  const failures = entered
+    .map((item) => validateValue(name, field, item.trim(), overrides))
+    .filter((error): error is SetupFieldError => error !== null);
+  return failures[0] ?? null;
+}
+
+function validateValue(
+  name: string,
+  field: SetupFormField,
+  value: string,
+  overrides: SetupFieldOverrides,
+): SetupFieldError | null {
   const { minLength, maxLength, format } = field.constraints ?? {};
   if (minLength !== undefined && value.length < minLength) {
     return { code: "minLength", length: minLength };
