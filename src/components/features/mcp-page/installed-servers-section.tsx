@@ -21,7 +21,7 @@ interface InstalledServersSectionProps {
   /** Current search query — empty string means no filter applied. */
   query?: string;
   onEdit: (server: MCPServerConfig) => void;
-  onDelete: (serverId: string) => void;
+  onToggleEnabled: (server: MCPServerConfig, enabled: boolean) => void;
 }
 
 export function InstalledServersSection({
@@ -29,7 +29,7 @@ export function InstalledServersSection({
   hasAnyInstalled,
   query = "",
   onEdit,
-  onDelete,
+  onToggleEnabled,
 }: InstalledServersSectionProps) {
   const { t } = useTranslation("openhands");
 
@@ -76,7 +76,7 @@ export function InstalledServersSection({
             key={server.id}
             server={server}
             onEdit={() => onEdit(server)}
-            onDelete={() => onDelete(server.id)}
+            onToggleEnabled={(enabled) => onToggleEnabled(server, enabled)}
           />
         ))}
       </div>

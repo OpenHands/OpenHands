@@ -11,7 +11,10 @@ import { HighlightSearchMatch } from "#/components/features/conversation-panel/h
 import { useCommandMenuStore } from "#/stores/command-menu-store";
 import { useSidebarStore } from "#/stores/sidebar-store";
 import { formatTimeDelta } from "#/utils/format-time-delta";
-import { matchesPrimaryModifierShortcut } from "#/utils/keyboard-shortcut";
+import {
+  formatPrimaryModifierShortcut,
+  matchesPrimaryModifierShortcut,
+} from "#/utils/keyboard-shortcut";
 import { cn } from "#/utils/utils";
 import {
   COMMAND_MENU_ID,
@@ -23,6 +26,7 @@ import {
   COMMAND_MENU_GROUP_ORDER_WITH_CONVERSATIONS,
   type CommandMenuGroupId,
   type CommandMenuItemDefinition,
+  commandMenuItemCopy,
   createCommandMenuItems,
 } from "./command-menu-items";
 
@@ -71,9 +75,9 @@ function matchesQuery({
   }
 
   const searchableText = [
-    translate(item.titleKey),
-    translate(item.descriptionKey),
-    translate(item.keywordsKey),
+    commandMenuItemCopy(item.title, item.titleKey, translate),
+    commandMenuItemCopy(item.description, item.descriptionKey, translate),
+    commandMenuItemCopy(item.keywords, item.keywordsKey, translate),
   ]
     .join(" ")
     .toLocaleLowerCase();
@@ -327,7 +331,7 @@ export function CommandMenu() {
             </button>
           ) : null}
           <kbd className="hidden rounded-md border border-[var(--oh-border)] bg-black/25 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--oh-text-dim)] sm:inline-flex">
-            {t(I18nKey.COMMAND_MENU$SHORTCUT)}
+            {formatPrimaryModifierShortcut(CONVERSATION_PANEL_SEARCH_HOTKEY)}
           </kbd>
         </div>
 
@@ -538,10 +542,18 @@ export function CommandMenu() {
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium text-current">
-                              {t(item.titleKey)}
+                              {commandMenuItemCopy(
+                                item.title,
+                                item.titleKey,
+                                t,
+                              )}
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-[var(--oh-text-dim)]">
-                              {t(item.descriptionKey)}
+                              {commandMenuItemCopy(
+                                item.description,
+                                item.descriptionKey,
+                                t,
+                              )}
                             </span>
                           </span>
                           <span className="hidden shrink-0 rounded-md border border-[var(--oh-border)] px-2 py-1 text-[10px] font-medium text-[var(--oh-text-dim)] sm:inline-flex">

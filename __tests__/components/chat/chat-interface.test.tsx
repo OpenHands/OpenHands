@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  test,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import {
   fireEvent,
   render,
@@ -27,7 +19,11 @@ import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
 import { useConfig } from "#/hooks/query/use-config";
 import { useUnifiedUploadFiles } from "#/hooks/mutation/use-unified-upload-files";
-import type { MessageEvent } from "#/types/agent-server/core";
+import {
+  SecurityRisk,
+  type ActionEvent,
+  type MessageEvent,
+} from "#/types/agent-server/core";
 import { useEventStore } from "#/stores/use-event-store";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { useLoadOlderEvents } from "#/hooks/use-load-older-events";
@@ -211,7 +207,7 @@ describe("ChatInterface - Chat Suggestions", () => {
         role: "user",
         content: [{ type: "text", text: "Hello" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
 
@@ -256,11 +252,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    renderWithQueryClient(
-      <ChatInterface />,
-      queryClient,
-      "/task-abc",
-    );
+    renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
   });
@@ -282,11 +274,7 @@ describe("ChatInterface - Chat Suggestions", () => {
       },
     });
 
-    renderWithQueryClient(
-      <ChatInterface />,
-      queryClient,
-      "/task-abc",
-    );
+    renderWithQueryClient(<ChatInterface />, queryClient, "/task-abc");
 
     expect(screen.queryByTestId("chat-suggestions")).not.toBeInTheDocument();
   });
@@ -360,7 +348,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
@@ -497,7 +485,7 @@ describe("ChatInterface - Scroll-up loads older events", () => {
         role: "user",
         content: [{ type: "text", text: "Existing message" }],
       },
-      activated_microagents: [],
+      activated_skills: [],
       extended_content: [],
     };
     useEventStore.setState({
@@ -884,6 +872,59 @@ describe("ChatInterface - Auto-scroll on submit (issue #817)", () => {
 });
 
 describe("ChatInterface - Status Indicator", () => {
+  it("shows the unresolved terminal action while the agent is running", () => {
+    const terminalAction: ActionEvent = {
+      id: "action-running-terminal",
+      timestamp: "2026-07-27T18:00:00Z",
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "TerminalAction",
+        command: "git status",
+        is_input: false,
+        timeout: null,
+        reset: false,
+      },
+      tool_name: "terminal",
+      tool_call_id: "tool-running-terminal",
+      tool_call: {
+        id: "tool-running-terminal",
+        type: "function",
+        function: {
+          name: "terminal",
+          arguments: '{"command":"git status"}',
+        },
+      },
+      llm_response_id: "response-running-terminal",
+      security_risk: SecurityRisk.LOW,
+    };
+    useEventStore.setState({
+      events: [terminalAction],
+      eventIds: new Set([terminalAction.id]),
+      uiEvents: [terminalAction],
+    });
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.RUNNING,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    const chip = screen.getByTestId("live-activity-chip");
+    expect(chip).toHaveTextContent("ACTION_MESSAGE$RUN");
+    expect(chip.parentElement).toHaveClass("inset-x-9");
+  });
+
+  it("hides the live activity chip when the agent is no longer running", () => {
+    vi.mocked(useAgentState).mockReturnValue({
+      curAgentState: AgentState.PAUSED,
+    });
+
+    renderChatInterfaceWithRouter();
+
+    expect(screen.queryByTestId("live-activity-chip")).not.toBeInTheDocument();
+  });
+
   it("should render ChatStatusIndicator when agent is not awaiting user input / conversation is NOT ready", () => {
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.LOADING,
@@ -990,5 +1031,114 @@ describe("ChatInterface - Tracking", () => {
       );
     });
     expect(trackInitialQuerySubmittedMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatInterface - Build plan keyboard shortcut", () => {
+  let queryClient: QueryClient;
+
+  const BUILD_PROMPT =
+    "Execute the plan based on the .agents_tmp/PLAN.md file.";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSend.mockResolvedValue({ queued: false });
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    useOptimisticUserMessageStore.setState({ pendingMessages: [] });
+    useErrorMessageStore.setState({ errorMessage: null });
+    (useConfig as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {},
+    });
+    (
+      useUnifiedUploadFiles as unknown as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockResolvedValue({ skipped_files: [], uploaded_files: [] }),
+      isLoading: false,
+    });
+    useEventStore.setState({ events: [], eventIds: new Set(), uiEvents: [] });
+  });
+
+  function renderInterface() {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/test-conversation-id"]}>
+          <Routes>
+            <Route path=":conversationId" element={<ChatInterface />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  const pressBuildShortcut = () => {
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+    fireEvent.keyDown(document, { key: "Enter", ctrlKey: true });
+  };
+
+  const sentBuildPrompt = () =>
+    mockSend.mock.calls.some(([message]) =>
+      JSON.stringify(message).includes(BUILD_PROMPT),
+    );
+
+  it("does not send the build prompt in code mode", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in code mode when a plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "code",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("does not send the build prompt in plan mode when no plan exists", () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: null,
+      });
+    });
+
+    renderInterface();
+    pressBuildShortcut();
+
+    expect(sentBuildPrompt()).toBe(false);
+  });
+
+  it("sends the build prompt in plan mode when a plan exists", async () => {
+    act(() => {
+      useConversationStore.setState({
+        conversationMode: "plan",
+        planContent: "# Plan\n\n- step one",
+      });
+    });
+
+    renderInterface();
+    fireEvent.keyDown(document, { key: "Enter", metaKey: true });
+
+    await waitFor(() => {
+      expect(sentBuildPrompt()).toBe(true);
+    });
   });
 });

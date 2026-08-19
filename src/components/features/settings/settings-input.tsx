@@ -25,6 +25,12 @@ interface SettingsInputProps {
   /** Validation message shown when pattern doesn't match */
   title?: string;
   labelClassName?: string;
+  /**
+   * The input's accessible name, for the caller that renders the visible label
+   * itself. Only for those: a field labelled by this component reads its label,
+   * and two names would disagree.
+   */
+  ariaLabel?: string;
   /** ARIA describedby attribute for accessibility */
   ariaDescribedBy?: string;
   /** ARIA invalid attribute for accessibility */
@@ -36,6 +42,12 @@ interface SettingsInputProps {
   error?: string;
   /** Renders a red asterisk next to the label to mark the field as required. */
   showRequiredTag?: boolean;
+  /**
+   * Short guidance rendered next to the label, above the input. It sits inside
+   * the `<label>`, so it is announced as part of the field's accessible name —
+   * keep it to a phrase that reads well after the label text.
+   */
+  hint?: string;
   onBlur?: () => void;
   /** Extra classes merged onto the `<input>` element. */
   inputClassName?: string;
@@ -64,10 +76,12 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
       pattern,
       title,
       labelClassName,
+      ariaLabel,
       ariaDescribedBy,
       ariaInvalid,
       error,
       showRequiredTag,
+      hint,
       onBlur,
       inputClassName,
     },
@@ -85,6 +99,14 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
             </span>
           )}
           {showOptionalTag && <OptionalTag />}
+          {hint && (
+            <span
+              data-testid={testId ? `${testId}-hint` : undefined}
+              className="min-w-0 text-xs text-[var(--oh-muted)]"
+            >
+              {hint}
+            </span>
+          )}
         </div>
         <input
           ref={ref}
@@ -104,6 +126,7 @@ export const SettingsInput = forwardRef<HTMLInputElement, SettingsInputProps>(
           required={required}
           pattern={pattern}
           title={title}
+          aria-label={ariaLabel}
           aria-describedby={errorId ?? ariaDescribedBy}
           aria-invalid={!!error || ariaInvalid}
           className={cn(

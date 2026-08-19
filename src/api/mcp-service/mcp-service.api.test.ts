@@ -78,7 +78,7 @@ describe("McpService.testServer", () => {
     });
 
     await McpService.testServer({
-      id: "shttp-0",
+      id: "linear",
       type: "shttp",
       name: "linear",
       url: "https://mcp.linear.app/mcp",
@@ -92,7 +92,7 @@ describe("McpService.testServer", () => {
     expect(testServer.mock.calls[0][0]).toMatchObject({
       name: "linear",
       server: {
-        transport: "http",
+        type: "http",
         url: "https://mcp.linear.app/mcp",
         auth: { strategy: "bearer", value: encryptedAuth },
       },
@@ -126,7 +126,7 @@ describe("McpService.testServer", () => {
     expect(testServer.mock.calls[0][0]).toMatchObject({
       name: "superhuman-mail",
       server: {
-        transport: "http",
+        type: "http",
         url: "https://mcp.mail.superhuman.com/mcp",
         auth: {
           strategy: "oauth2",
@@ -202,7 +202,7 @@ describe("McpService.testServer", () => {
     expect(startOAuth.mock.calls[0][0]).toMatchObject({
       name: "superhuman-mail",
       server: {
-        transport: "http",
+        type: "http",
         url: "https://mcp.mail.superhuman.com/mcp",
         auth: {
           strategy: "oauth2",

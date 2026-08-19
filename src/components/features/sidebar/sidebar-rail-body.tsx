@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
+import {
+  automationListPath,
+  getInterfaceCopy,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
 import { I18nKey } from "#/i18n/declaration";
@@ -16,7 +21,9 @@ import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { BackendSelector } from "#/components/features/backends/backend-selector";
 import { BackendStatusDot } from "#/components/features/backends/backend-status-dot";
+import { AgentCanvasVersionTile } from "#/components/features/settings/agent-canvas-version-tile";
 import { SidebarConversationList } from "./sidebar-conversation-list";
+import { SidebarOnboardingChecklist } from "./sidebar-onboarding-checklist";
 import AutomationsIcon from "#/icons/automations.svg?react";
 import CustomizeBoxesIcon from "#/icons/customize-boxes.svg?react";
 import {
@@ -171,13 +178,17 @@ export function SidebarRailBody({
           forceActive={isExtensionsActive}
           icon={<CustomizeBoxesIcon width={ICON_SIZE} height={ICON_SIZE} />}
         />
-        <SidebarNavLink
-          to="/automations"
-          label={t(I18nKey.SIDEBAR$AUTOMATIONS)}
-          testId="sidebar-automations-link"
-          collapsed={collapsed}
-          icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
-        />
+        {/* The interface manifest owns this entry's label, so an absent
+            manifest leaves the rail without it rather than with host copy. */}
+        {hasAutomationInterface() && (
+          <SidebarNavLink
+            to={automationListPath()}
+            label={getInterfaceCopy().sidebarLabel}
+            testId="sidebar-automations-link"
+            collapsed={collapsed}
+            icon={<AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        )}
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />
@@ -275,14 +286,20 @@ export function SidebarRailBody({
       ) : null}
 
       {!collapsed ? (
-        <div
-          className={cn(
-            "flex flex-col items-stretch max-w-none box-border shrink-0",
-            "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
-          )}
-        >
-          <BackendSelector sidebarCollapsed={collapsed} openUpward />
-        </div>
+        <>
+          <div className="mb-2 shrink-0 pr-2.5">
+            <SidebarOnboardingChecklist collapsed={collapsed} />
+          </div>
+          <div
+            className={cn(
+              "flex flex-col items-stretch max-w-none box-border shrink-0 gap-2",
+              "-ml-2.5 w-[calc(100%+0.625rem)] border-t border-[var(--oh-border)] pt-2 px-2.5",
+            )}
+          >
+            <AgentCanvasVersionTile hideWhenUpToDate />
+            <BackendSelector sidebarCollapsed={collapsed} openUpward />
+          </div>
+        </>
       ) : null}
     </div>
   );

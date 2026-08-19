@@ -1,20 +1,31 @@
 import React from "react";
-import { AppWindow, ChevronLeft, Plus, Settings, Shield } from "lucide-react";
+import {
+  Bot,
+  Home,
+  Keyboard,
+  KeyRound,
+  ListTodo,
+  PanelsTopLeft,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+  Zap,
+} from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
-import AutomationsIcon from "#/icons/automations.svg?react";
-import CustomizeBoxesIcon from "#/icons/customize-boxes.svg?react";
-import CircuitIcon from "#/icons/u-circuit.svg?react";
-import KeyIcon from "#/icons/key.svg?react";
-import MemoryIcon from "#/icons/memory_icon.svg?react";
-import RobotIcon from "#/icons/u-robot.svg?react";
-import ServerProcessIcon from "#/icons/server-process.svg?react";
+import {
+  automationListPath,
+  getInterfaceCopy,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 
 const ICON_SIZE = 18;
 
 export const COMMAND_MENU_ROUTE = {
   conversations: "/conversations",
   customize: "/customize",
-  automations: "/automations",
+  automations: automationListPath(),
   mcp: "/mcp",
   settings: "/settings",
   agentSettings: "/settings/agents",
@@ -47,12 +58,30 @@ export type CommandMenuItemId =
 export interface CommandMenuItemDefinition {
   id: CommandMenuItemId;
   group: CommandMenuGroupId;
-  titleKey: I18nKey;
-  descriptionKey: I18nKey;
-  keywordsKey: I18nKey;
+  /** Absent on an item whose copy a manifest owns, which sets the literal. */
+  titleKey?: I18nKey;
+  descriptionKey?: I18nKey;
+  keywordsKey?: I18nKey;
+  /** Literal copy, for an item a manifest owns. */
+  title?: string;
+  description?: string;
+  keywords?: string;
   icon: React.ReactElement;
   to?: string;
   perform?: () => void;
+}
+
+/**
+ * An item's copy: its literal when a manifest owns the item, its translation
+ * otherwise.
+ */
+export function commandMenuItemCopy(
+  literal: string | undefined,
+  key: I18nKey | undefined,
+  translate: (key: I18nKey) => string,
+): string {
+  if (literal !== undefined) return literal;
+  return key === undefined ? "" : translate(key);
 }
 
 export const COMMAND_MENU_GROUP_LABELS: Record<CommandMenuGroupId, I18nKey> = {
@@ -83,7 +112,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$NEW_CHAT_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$NEW_CHAT_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$NEW_CHAT_KEYWORDS,
-    icon: <Plus width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Home size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.conversations,
   },
   {
@@ -92,25 +121,31 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$CUSTOMIZE_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$CUSTOMIZE_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$CUSTOMIZE_KEYWORDS,
-    icon: <CustomizeBoxesIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Sparkles size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.customize,
   },
-  {
-    id: "automations",
-    group: "navigation",
-    titleKey: I18nKey.COMMAND_MENU$AUTOMATIONS_TITLE,
-    descriptionKey: I18nKey.COMMAND_MENU$AUTOMATIONS_DESCRIPTION,
-    keywordsKey: I18nKey.COMMAND_MENU$AUTOMATIONS_KEYWORDS,
-    icon: <AutomationsIcon width={ICON_SIZE} height={ICON_SIZE} />,
-    to: COMMAND_MENU_ROUTE.automations,
-  },
+  // The automation interface owns this entry's copy, so an absent manifest
+  // leaves the command menu without it rather than with host copy.
+  ...(hasAutomationInterface()
+    ? [
+        {
+          id: "automations" as const,
+          group: "navigation" as const,
+          title: getInterfaceCopy().commandMenuTitle,
+          description: getInterfaceCopy().commandMenuDescription,
+          keywords: getInterfaceCopy().commandMenuKeywords,
+          icon: <Zap size={ICON_SIZE} />,
+          to: COMMAND_MENU_ROUTE.automations,
+        },
+      ]
+    : []),
   {
     id: "mcp",
     group: "navigation",
     titleKey: I18nKey.COMMAND_MENU$MCP_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$MCP_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$MCP_KEYWORDS,
-    icon: <ServerProcessIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Wrench size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.mcp,
   },
   {
@@ -119,7 +154,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$SETTINGS_KEYWORDS,
-    icon: <Settings width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Settings size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.settings,
   },
   {
@@ -128,7 +163,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$AGENT_SETTINGS_KEYWORDS,
-    icon: <RobotIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Bot size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.agentSettings,
   },
   {
@@ -137,7 +172,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$LLM_SETTINGS_KEYWORDS,
-    icon: <CircuitIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Search size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.llmSettings,
   },
   {
@@ -146,7 +181,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$CONDENSER_SETTINGS_KEYWORDS,
-    icon: <MemoryIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <ListTodo size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.condenserSettings,
   },
   {
@@ -155,7 +190,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$VERIFICATION_SETTINGS_KEYWORDS,
-    icon: <Shield width={ICON_SIZE} height={ICON_SIZE} strokeWidth={2} />,
+    icon: <ShieldCheck size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.verificationSettings,
   },
   {
@@ -164,7 +199,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$APP_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$APP_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$APP_SETTINGS_KEYWORDS,
-    icon: <AppWindow width={ICON_SIZE} height={ICON_SIZE} strokeWidth={2} />,
+    icon: <PanelsTopLeft size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.appSettings,
   },
   {
@@ -173,7 +208,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$SECRETS_SETTINGS_KEYWORDS,
-    icon: <KeyIcon width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <KeyRound size={ICON_SIZE} />,
     to: COMMAND_MENU_ROUTE.secretsSettings,
   },
   {
@@ -182,7 +217,7 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
-    icon: <ChevronLeft width={ICON_SIZE} height={ICON_SIZE} />,
+    icon: <Keyboard size={ICON_SIZE} />,
     perform: toggleSidebar,
   },
 ];

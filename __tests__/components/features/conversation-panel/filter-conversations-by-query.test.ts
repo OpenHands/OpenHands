@@ -5,7 +5,7 @@ import {
   conversationMatchesQuery,
   filterConversationsByQuery,
   getConversationSearchText,
-} from "#/components/features/conversation-panel/filter-conversations-by-query";
+} from "#/utils/conversation-search-filter";
 
 const baseConversation: AppConversation = {
   id: "1",

@@ -1,5 +1,4 @@
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
-import { filterConversationsByQuery } from "#/utils/conversation-search-filter";
 import AgentServerConversationService from "./agent-server-conversation-service.api";
 import {
   CONVERSATION_SEARCH_RECENT_LIMIT,
@@ -11,10 +10,9 @@ export type SearchMatchingConversationsOptions = {
 };
 
 /**
- * Search conversations via the backend title filter, not by downloading the
- * full conversation index. Cloud uses `title__contains`; local agent-server
- * uses the same `titleContains` param. Client-side multi-field filtering still
- * runs on the returned page so repo/workspace/model tokens refine matches.
+ * Search conversations by title via the backend `title__contains` filter.
+ * Cloud and local agent-server both receive the same wire param
+ * (`title__contains`); the JS option is named `titleContains`.
  */
 export async function searchMatchingConversations(
   rawQuery: string,
@@ -37,5 +35,5 @@ export async function searchMatchingConversations(
   });
   options.signal?.throwIfAborted();
 
-  return filterConversationsByQuery(page.items, query);
+  return page.items;
 }

@@ -11,12 +11,24 @@ import { useSidebarStore } from "#/stores/sidebar-store";
 import { renderWithProviders } from "../../../../test-utils";
 
 const SEARCH_LABEL_KEY = "COMMAND_MENU$SEARCH_LABEL";
-const AUTOMATIONS_TITLE_KEY = "COMMAND_MENU$AUTOMATIONS_TITLE";
+// The automation entry's copy is the interface manifest's, never a key.
+const AUTOMATIONS_TITLE = "Automation center";
 const NEW_CHAT_TITLE_KEY = "COMMAND_MENU$NEW_CHAT_TITLE";
 const SECRETS_TITLE_KEY = "COMMAND_MENU$SECRETS_SETTINGS_TITLE";
 const TOGGLE_SIDEBAR_TITLE_KEY = "COMMAND_MENU$TOGGLE_SIDEBAR_TITLE";
 const CONVERSATIONS_GROUP_KEY = "COMMAND_MENU$GROUP_CONVERSATIONS";
 const SEARCH_NO_RESULTS_KEY = "CONVERSATION_PANEL$SEARCH_NO_RESULTS";
+
+// Pin the published interface manifest to the factory one, so the automation
+// entry's copy is known whatever the pinned package ships.
+vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
+  const { createInterfaceManifest } =
+    await import("../../../manifests/manifest-test-data");
+  return {
+    ...(await importOriginal<typeof import("#/manifests/manifest-sources")>()),
+    AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifest(),
+  };
+});
 
 const navigateMock = vi.fn();
 
@@ -113,7 +125,7 @@ describe("CommandMenu", () => {
     useCommandMenuStore.getState().open();
     const { navigate } = renderCommandMenu();
 
-    await userEvent.click(screen.getByText(AUTOMATIONS_TITLE_KEY));
+    await userEvent.click(screen.getByText(AUTOMATIONS_TITLE));
 
     expect(navigate).toHaveBeenCalledWith(COMMAND_MENU_ROUTE.automations);
     await waitFor(() => {

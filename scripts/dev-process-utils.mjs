@@ -15,7 +15,11 @@ export function isProcessRunning(proc) {
 }
 
 /**
- * Add spawn options needed for process-tree cleanup.
+ * Add spawn options needed for safe service launches and process-tree cleanup.
+ *
+ * Arguments must bypass shell parsing so values such as version constraints
+ * containing `<` are forwarded literally. Callers that need shell behavior
+ * must invoke the shell explicitly as the command.
  *
  * On POSIX, `detached: true` makes the spawned service the leader of a new
  * process group. Later we can signal `-pid` to terminate that whole group,
@@ -30,6 +34,7 @@ export function isProcessRunning(proc) {
 export function getProcessTreeSpawnOptions(options = {}) {
   return {
     ...options,
+    shell: false,
     detached: process.platform !== "win32",
   };
 }

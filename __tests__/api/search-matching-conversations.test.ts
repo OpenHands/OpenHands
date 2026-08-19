@@ -51,12 +51,12 @@ describe("searchMatchingConversations", () => {
     const unrelated = createConversation({
       id: "1",
       title: "Visible in sidebar",
-      selected_repository: "org/figma-tools",
+      selected_repository: "org/other-tools",
     });
 
     const searchSpy = vi
       .spyOn(AgentServerConversationService, "searchConversations")
-      .mockResolvedValue({ items: [match, unrelated], next_page_id: null });
+      .mockResolvedValue({ items: [match], next_page_id: null });
 
     const results = await searchMatchingConversations("figma");
 
@@ -65,8 +65,7 @@ describe("searchMatchingConversations", () => {
       limit: 50,
       titleContains: "figma",
     });
-    // Client filter keeps title + multi-field matches from the server page.
-    expect(results).toEqual([match, unrelated]);
+    expect(results).toEqual([match]);
   });
 
   it("does not download additional pages beyond the bounded title search", async () => {

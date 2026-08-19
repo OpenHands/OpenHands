@@ -10,6 +10,7 @@ vi.mock("react-i18next", () => ({
         SETTINGS$PROFILES_LOAD_ERROR: "Failed to load profiles",
         SETTINGS$PROFILES_EMPTY: "No profiles saved yet",
         SETTINGS$PROFILE_ACTIVE: "Active",
+        SETTINGS$PROFILE_DEFAULT: "Default",
         SETTINGS$PROFILE_MENU: "Profile menu",
         SETTINGS$PROFILE_EDIT: "Edit",
         BUTTON$RENAME: "Rename",
