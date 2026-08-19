@@ -328,7 +328,7 @@ export function OnboardingModal({
 
           <div
             data-testid="onboarding-scroll-area"
-            className="flex-1 min-h-0 overflow-y-auto custom-scrollbar-always px-7"
+            className="min-h-0 overflow-y-auto custom-scrollbar-always px-7 pb-7"
           >
             <div
               data-testid="onboarding-slide-rail"

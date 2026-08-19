@@ -1,0 +1,63 @@
+# Opens a PR in OpenHands/OpenHands-Cloud pointing the agent-canvas chart's
+# image.tag at the agent-canvas image for this release. Triggered by the
+# "Docker" workflow completing (rather than the tag push itself) so the chart
+# PR only opens once the release image tag has actually been built and pushed.
+#
+# agent-canvas releases are cut by release-please: merging its release PR pushes
+# a vX.Y.Z tag, which runs "Docker" to publish
+# ghcr.io/openhands/agent-canvas:X.Y.Z. This workflow watches for those
+# tag-triggered "Docker" runs and bumps the chart.
+name: Bump chart image tag
+
+on:
+  workflow_run:
+    workflows: ["Docker"]
+    types: [completed]
+
+jobs:
+  # "Docker" runs on branch pushes, PRs and tag pushes, but only a release-please
+  # release pushes a vX.Y.Z tag. Filter to successful tag-push runs and derive
+  # the image tag ("Docker" publishes X.Y.Z, i.e. the tag without its leading v).
+  prepare-tag:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      release: ${{ steps.tag.outputs.release }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Derive image tag from release tag
+        id: tag
+        env:
+          # For tag-triggered runs, head_branch is the tag name (e.g. v1.14.0).
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          # Accept only release-please semver tags: vX.Y.Z with optional
+          # -prerelease / +build metadata. Anything else is a branch that merely
+          # starts with "v"; skip it so we never bump the chart off a branch push.
+          if [[ ! "$HEAD_BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+].+)?$ ]]; then
+            echo "::notice::'$HEAD_BRANCH' is not a vX.Y.Z release tag; not bumping the chart."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # "Docker" tags the image without the leading v, matching the chart's
+          # image.tag (e.g. values.yaml pins "1.14.0", not "v1.14.0").
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${HEAD_BRANCH#v}" >> "$GITHUB_OUTPUT"
+
+  bump-chart:
+    needs: prepare-tag
+    if: needs.prepare-tag.outputs.release == 'true'
+    # secrets: inherit forwards the org secrets RELEASE_APP_ID /
+    # RELEASE_APP_PRIVATE_KEY that the reusable workflow needs.
+    secrets: inherit
+    uses: OpenHands/OpenHands-Cloud/.github/workflows/bump-image-tag.yml@main
+    with:
+      component: agent-canvas
+      chart_file: charts/openhands/charts/agent-canvas/values.yaml
+      # image_tag_path defaults to .image.tag, which matches the chart.
+      tag: ${{ needs.prepare-tag.outputs.tag }}
