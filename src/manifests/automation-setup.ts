@@ -14,6 +14,7 @@
  */
 
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import { getAutomationEndpoint } from "./automation-interface";
 import { collectFields } from "./manifest-local-validation";
 import { interpolateText } from "./manifest-template";
 import type {
@@ -24,8 +25,14 @@ import type {
   SetupTriggerKind,
 } from "./types";
 
-/** The creation endpoint a derived draft would be posted to. */
-export const AUTOMATION_CREATE_ENDPOINT = "/v1/preset/prompt";
+/**
+ * The creation endpoint a derived draft would be posted to. Resolved on call
+ * rather than at import, because the endpoint is the interface manifest's and
+ * this module loads whether or not one was admitted.
+ */
+export function automationCreateEndpoint(): string {
+  return getAutomationEndpoint("createPrompt");
+}
 
 /**
  * Trigger properties a form field may fill, per trigger kind. A field under a
@@ -141,7 +148,7 @@ export function buildPreflightBody(
 
   return {
     automationId: entry.id,
-    endpoint: AUTOMATION_CREATE_ENDPOINT,
+    endpoint: automationCreateEndpoint(),
     draft,
   };
 }

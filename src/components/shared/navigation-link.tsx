@@ -24,16 +24,27 @@ function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
   return event.metaKey || event.altKey || event.ctrlKey || event.shiftKey;
 }
 
+/**
+ * `currentPath` is a pathname, so compare against the pathname portion of
+ * `to`. Links may carry a query string (e.g. the backend identity pinned on
+ * sidebar conversation links) that must not defeat the active check.
+ */
+function toPathname(to: string) {
+  return to.split(/[?#]/)[0];
+}
+
 function isPathActive(currentPath: string, to: string, end: boolean) {
-  if (to === "/") {
-    return currentPath === to;
+  const path = toPathname(to);
+
+  if (path === "/") {
+    return currentPath === path;
   }
 
   if (end) {
-    return currentPath === to;
+    return currentPath === path;
   }
 
-  return currentPath === to || currentPath.startsWith(`${to}/`);
+  return currentPath === path || currentPath.startsWith(`${path}/`);
 }
 
 export const NavigationLink = React.forwardRef<

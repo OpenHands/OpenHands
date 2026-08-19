@@ -78,14 +78,12 @@ async function assertActivatedSkills(
 
         const diag = items.map((item: unknown) => {
           const e = item as Record<string, unknown>;
-          return `${String(e.source)}:${String(e.event_type)}(skills=${JSON.stringify(e.activated_skills ?? e.activated_microagents ?? [])})`;
+          return `${String(e.source)}:${String(e.event_type)}(skills=${JSON.stringify(e.activated_skills ?? [])})`;
         });
 
         const found = items.some((item: unknown) => {
           const e = item as Record<string, unknown>;
-          const skills =
-            (e.activated_skills as string[] | undefined) ??
-            (e.activated_microagents as string[] | undefined);
+          const skills = e.activated_skills as string[] | undefined;
           return Array.isArray(skills) && skills.length > 0;
         });
 
@@ -180,7 +178,11 @@ test.describe("preset automation → slash command conversation", () => {
     });
 
     await routeSessionApiKey(page);
-    await page.goto("/automations", { waitUntil: "domcontentloaded" });
+    // The catalog launcher lives on the Templates sub-page, which is where
+    // the interface manifest places it.
+    await page.goto("/automations/templates", {
+      waitUntil: "domcontentloaded",
+    });
     await dismissAnalyticsModal(page);
 
     // Click the Slack standup digest automation card

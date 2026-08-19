@@ -225,7 +225,7 @@ const eventRendersReasoning = (event: OpenHandsEvent): boolean => {
 // The final MessageEvent/FinishAction is authoritative for the turn's text. Drop
 // the provisional streamed deltas and render the canonical final event instead,
 // so the message is rendered exactly once (never holey or duplicated) and its
-// metadata — critic_result, activated_microagents — renders too. Stream-only
+// metadata — critic_result, activated_skills — renders too. Stream-only
 // reasoning is preserved. Returns null when there is no streamed content to
 // reconcile, leaving the caller to append the final event normally.
 const finalizeStreamingDeltasInPlace = (

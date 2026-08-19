@@ -61,6 +61,7 @@ import {
   buildAgentServerAutomationEnv,
   buildAutomationCommand,
   buildAutomationTelemetryEnv,
+  buildAutomationRuntimeServicesInfo,
   buildConfig,
 } from "./dev-with-automation.mjs";
 
@@ -284,6 +285,44 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // dev-with-automation; the only difference is the frontend service.)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Both backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
+// resolve to ::1 first (notably on Windows). Every proxy target and readiness
+// probe pointed at them must therefore address IPv4 explicitly.
+function getAgentServerBaseUrl(config) {
+  return `http://127.0.0.1:${config.agentServerPort}`;
+}
+
+function getAutomationBaseUrl(config) {
+  return `http://127.0.0.1:${config.autoBackendPort}`;
+}
+
+const AUTOMATION_ROUTE_PREFIX = "/api/automation";
+const AGENT_SERVER_ROUTE_PREFIXES = [
+  "/api",
+  "/sockets",
+  "/server_info",
+  "/health",
+  "/ready",
+  "/alive",
+  "/docs",
+  "/redoc",
+  "/openapi.json",
+];
+
+// The static server and the ingress proxy front the same two local backends,
+// so they share one route table.
+function buildLocalServiceRouteArgs(config) {
+  const agentServerUrl = getAgentServerBaseUrl(config);
+  return [
+    "--route",
+    `${AUTOMATION_ROUTE_PREFIX}=${getAutomationBaseUrl(config)}`,
+    ...AGENT_SERVER_ROUTE_PREFIXES.flatMap((prefix) => [
+      "--route",
+      `${prefix}=${agentServerUrl}`,
+    ]),
+  ];
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -327,7 +366,7 @@ function startAgentServer(config) {
 function buildAutomationBackendEnv(config, env = process.env) {
   // Both backends share the same session API key value.
   return {
-    AUTOMATION_AGENT_SERVER_URL: `http://localhost:${config.agentServerPort}`,
+    AUTOMATION_AGENT_SERVER_URL: getAgentServerBaseUrl(config),
     AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
     AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(config.stateDir, "automations.db")}`,
     AUTOMATION_BASE_URL: `http://localhost:${config.ingressPort}`,
@@ -379,6 +418,12 @@ function startStaticServer(config) {
   // is forwarded to the agent-server instead of falling back to the SPA
   // shell). Without this, /server_info on :3001 returns index.html.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
   spawnService(
     "static",
     "node",
@@ -396,26 +441,9 @@ function startStaticServer(config) {
       ...(config.sessionApiKey
         ? ["--session-api-key", config.sessionApiKey]
         : []),
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      "--runtime-services-info",
+      runtimeServicesInfo,
+      ...buildLocalServiceRouteArgs(config),
     ],
     {
       cwd: config.canvasPath,
@@ -428,6 +456,12 @@ function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
 
   const ingressScript = join(projectRoot, "scripts", "ingress.mjs");
+  const runtimeServicesInfo = JSON.stringify(
+    buildAutomationRuntimeServicesInfo({
+      ...config,
+      frontendKind: "static",
+    }),
+  );
 
   spawnService(
     "ingress",
@@ -436,26 +470,9 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
-      "--route",
-      `/api/automation=http://localhost:${config.autoBackendPort}`,
-      "--route",
-      `/api=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/sockets=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/server_info=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/health=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/ready=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/alive=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/docs=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/redoc=http://localhost:${config.agentServerPort}`,
-      "--route",
-      `/openapi.json=http://localhost:${config.agentServerPort}`,
+      "--runtime-services-info",
+      runtimeServicesInfo,
+      ...buildLocalServiceRouteArgs(config),
       "--default",
       `http://localhost:${config.vitePort}`,
     ],
@@ -604,7 +621,7 @@ async function main() {
   startAgentServer(config);
   await waitForService(
     "agent-server",
-    `http://localhost:${config.agentServerPort}/server_info`,
+    `${getAgentServerBaseUrl(config)}/server_info`,
   );
 
   startAutomationBackend(config);
@@ -624,7 +641,13 @@ async function main() {
 // Exports for testing
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { buildAutomationBackendEnv, buildFrontend, startStaticServer };
+export {
+  buildAutomationBackendEnv,
+  buildFrontend,
+  buildLocalServiceRouteArgs,
+  getAgentServerBaseUrl,
+  startStaticServer,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Main entry point (only when run directly, not when imported)
