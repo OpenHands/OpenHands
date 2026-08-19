@@ -336,6 +336,26 @@ function parseBooleanFieldValue(rawValue: string | boolean): boolean | null {
   throw new Error(`Expected a boolean value, received: ${rawValue}`);
 }
 
+/** Fields whose value is a URL, by naming convention. Decides both the
+ *  `type="url"` input rendering and the save-time format check, so the two can
+ *  never disagree. */
+export function isUrlField(field: SettingsFieldSchema): boolean {
+  return field.key.endsWith("url") || field.key.endsWith("_url");
+}
+
+/** A URL we are willing to send to a provider: parseable, and http(s) rather
+ *  than `file:`, `javascript:` or a bare host that parses as its own scheme
+ *  (`localhost:8000` yields `protocol === "localhost:"`). Matches the check
+ *  MCP server URLs already get in `mcp-server-form.tsx`. */
+export function isValidSettingsUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function coerceFieldValue(
   field: SettingsFieldSchema,
   rawValue: string | boolean,
@@ -403,6 +423,14 @@ export function coerceFieldValue(
   const stringValue = String(rawValue);
   if (stringValue === "" && !field.secret) {
     return null;
+  }
+
+  // Reject a malformed URL here rather than saving it: the field is optional so
+  // blank stays valid, but a value like "." is accepted all the way to a green
+  // "saved" toast and only resurfaces later as an opaque provider error.
+  const trimmedValue = stringValue.trim();
+  if (trimmedValue && isUrlField(field) && !isValidSettingsUrl(trimmedValue)) {
+    throw new Error(`${field.label} must use http:// or https://`);
   }
 
   return stringValue;

@@ -375,4 +375,66 @@ describe("sdk settings schema helpers", () => {
       expect(getVisibleSettingsSections(malformed, {}, "basic")).toEqual([]);
     });
   });
+
+  describe("URL field validation", () => {
+    const buildPayloadWithBaseUrl = (baseUrl: string) =>
+      buildSdkSettingsPayload(
+        BASE_SETTINGS.agent_settings_schema!,
+        {
+          ...buildInitialSettingsFormValues(BASE_SETTINGS),
+          "llm.base_url": baseUrl,
+        },
+        { "llm.base_url": true },
+      );
+
+    it.each([".", "-", "localhost:8000", "api.openai.com", "ftp://files.test"])(
+      "refuses to build a payload for the malformed base URL %j",
+      (baseUrl) => {
+        // SDK-defined: the field is what the user typed into Settings -> LLM,
+        // and a value this broken must never reach the provider.
+        expect(() => buildPayloadWithBaseUrl(baseUrl)).toThrow(
+          "Base URL must use http:// or https://",
+        );
+      },
+    );
+
+    it.each([
+      "https://api.openai.com",
+      "https://api.openai.com/v1",
+      "http://127.0.0.1:8000",
+    ])("passes the valid base URL %j through unchanged", (baseUrl) => {
+      expect(buildPayloadWithBaseUrl(baseUrl)).toEqual({
+        llm: { base_url: baseUrl },
+      });
+    });
+
+    it("treats a blank base URL as clearing the field, not as invalid", () => {
+      // SDK-defined: `llm.base_url` is optional, so blank means "use the
+      // provider default" and must stay saveable.
+      expect(buildPayloadWithBaseUrl("")).toEqual({ llm: { base_url: null } });
+    });
+
+    it("validates the trimmed value but stores the raw one", () => {
+      // Pins current coercion behaviour: surrounding whitespace is tolerated
+      // for the format check, while trimming itself stays the adapter's job.
+      expect(buildPayloadWithBaseUrl("  https://api.openai.com  ")).toEqual({
+        llm: { base_url: "  https://api.openai.com  " },
+      });
+    });
+
+    it("leaves string fields that are not URLs unvalidated", () => {
+      // Proves the gate is scoped by field key: a model name is a plain
+      // string and "." is a legitimate (if odd) value for it.
+      const payload = buildSdkSettingsPayload(
+        BASE_SETTINGS.agent_settings_schema!,
+        {
+          ...buildInitialSettingsFormValues(BASE_SETTINGS),
+          "llm.model": ".",
+        },
+        { "llm.model": true },
+      );
+
+      expect(payload).toEqual({ llm: { model: "." } });
+    });
+  });
 });
