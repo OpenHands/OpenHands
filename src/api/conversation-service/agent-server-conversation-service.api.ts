@@ -135,6 +135,38 @@ function normalizeMetrics(value: unknown): MetricsSnapshot | null {
   };
 }
 
+function normalizeConversationStats(
+  value: unknown,
+): DirectConversationInfo["stats"] {
+  if (!isRecord(value) || !isRecord(value.usage_to_metrics)) return null;
+
+  const usageToMetrics: NonNullable<
+    DirectConversationInfo["stats"]
+  >["usage_to_metrics"] = {};
+
+  for (const [usageId, rawMetrics] of Object.entries(value.usage_to_metrics)) {
+    if (!isRecord(rawMetrics)) continue;
+
+    usageToMetrics[usageId] = {
+      model_name: stringOrNull(rawMetrics.model_name) ?? "",
+      accumulated_cost: numberOrZero(rawMetrics.accumulated_cost),
+      max_budget_per_task: numberOrNull(rawMetrics.max_budget_per_task),
+      accumulated_token_usage: normalizeTokenUsage(
+        rawMetrics.accumulated_token_usage,
+      ),
+      costs: Array.isArray(rawMetrics.costs) ? rawMetrics.costs : [],
+      response_latencies: Array.isArray(rawMetrics.response_latencies)
+        ? rawMetrics.response_latencies
+        : [],
+      token_usages: Array.isArray(rawMetrics.token_usages)
+        ? rawMetrics.token_usages
+        : [],
+    };
+  }
+
+  return { usage_to_metrics: usageToMetrics };
+}
+
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
   if (!isRecord(value)) return null;
   const llm = isRecord(value.llm)
@@ -244,6 +276,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
     metrics: normalizeMetrics(item.metrics),
+    stats: normalizeConversationStats(item.stats),
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
     tags: normalizeTags(item.tags),
@@ -658,19 +691,14 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    type RawRuntime = DirectConversationInfo & {
-      stats?: RuntimeConversationInfo["stats"];
-    };
-
     // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
     const response = await new ConversationClient(
       getAgentServerClientOptions({
         conversationUrl,
         sessionApiKey,
       }),
-    ).getConversation<RawRuntime>(conversationId);
+    ).getConversation<DirectConversationInfo>(conversationId);
     const data = requireDirectConversationInfo(response);
-    const stats = isRecord(response) ? response.stats : null;
 
     return {
       id: data.id,
@@ -681,7 +709,7 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
-      stats: isRecord(stats) ? stats : { usage_to_metrics: {} },
+      stats: data.stats ?? { usage_to_metrics: {} },
     };
   }
 

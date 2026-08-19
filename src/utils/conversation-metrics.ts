@@ -9,7 +9,7 @@ import type {
  * Combines metrics from all LLM usage IDs in the conversation stats
  */
 export function getCombinedMetrics(
-  conversationInfo: RuntimeConversationInfo,
+  conversationInfo: Pick<RuntimeConversationInfo, "stats">,
 ): MetricsSnapshot {
   const { stats } = conversationInfo;
 

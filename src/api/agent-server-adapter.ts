@@ -22,6 +22,7 @@ import {
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  RuntimeConversationStats,
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
 import SettingsService from "./settings-service/settings-service.api";
@@ -42,6 +43,7 @@ import {
   LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
   LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
 } from "./launch-child-conversation-client-tool";
+import { getCombinedMetrics } from "#/utils/conversation-metrics";
 
 export interface DirectConversationInfo {
   id: string;
@@ -63,6 +65,7 @@ export interface DirectConversationInfo {
       per_turn_token?: number;
     } | null;
   } | null;
+  stats?: RuntimeConversationStats | null;
   agent?: {
     /**
      * Pydantic discriminator from the SDK union: ``"ACPAgent"`` for ACP CLI
@@ -310,6 +313,9 @@ export function toAppConversation(
   info: DirectConversationInfo,
 ): AppConversation {
   const metadata = getStoredConversationMetadata(info.id);
+  const metrics =
+    info.metrics ??
+    (info.stats ? getCombinedMetrics({ stats: info.stats }) : null);
   // ACPAgent conversations carry a sentinel ``llm`` on older SDKs. Prefer the
   // runtime model fields when available, then the configured ``acp_model`` that
   // Canvas saves for built-in providers. ``agent_kind`` still gates model
@@ -354,24 +360,24 @@ export function toAppConversation(
           sdkLlm: info.agent?.llm?.model,
         })
       : (info.agent?.llm?.model ?? DEFAULT_SETTINGS.llm_model),
-    metrics: info.metrics
+    metrics: metrics
       ? {
-          accumulated_cost: info.metrics.accumulated_cost ?? null,
-          max_budget_per_task: info.metrics.max_budget_per_task ?? null,
-          accumulated_token_usage: info.metrics.accumulated_token_usage
+          accumulated_cost: metrics.accumulated_cost ?? null,
+          max_budget_per_task: metrics.max_budget_per_task ?? null,
+          accumulated_token_usage: metrics.accumulated_token_usage
             ? {
                 prompt_tokens:
-                  info.metrics.accumulated_token_usage.prompt_tokens ?? 0,
+                  metrics.accumulated_token_usage.prompt_tokens ?? 0,
                 completion_tokens:
-                  info.metrics.accumulated_token_usage.completion_tokens ?? 0,
+                  metrics.accumulated_token_usage.completion_tokens ?? 0,
                 cache_read_tokens:
-                  info.metrics.accumulated_token_usage.cache_read_tokens ?? 0,
+                  metrics.accumulated_token_usage.cache_read_tokens ?? 0,
                 cache_write_tokens:
-                  info.metrics.accumulated_token_usage.cache_write_tokens ?? 0,
+                  metrics.accumulated_token_usage.cache_write_tokens ?? 0,
                 context_window:
-                  info.metrics.accumulated_token_usage.context_window ?? 0,
+                  metrics.accumulated_token_usage.context_window ?? 0,
                 per_turn_token:
-                  info.metrics.accumulated_token_usage.per_turn_token ?? 0,
+                  metrics.accumulated_token_usage.per_turn_token ?? 0,
               }
             : null,
         }
