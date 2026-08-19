@@ -15,7 +15,7 @@ function createUserMessage(id: string): MessageEvent {
       role: "user",
       content: [{ type: "text", text: `User message ${id}` }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   };
 }
