@@ -150,6 +150,7 @@ RUN mkdir -p /home/openhands/.openhands/agent-canvas/conversations \
              /home/openhands/.openhands/agent-canvas/bash_events \
              /home/openhands/.openhands/automation \
              /projects && \
+    chmod 755 /home/openhands && \
     chown -R openhands:openhands /home/openhands/.openhands /projects
 
 USER openhands
