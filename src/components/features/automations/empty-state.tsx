@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
-import { cn } from "#/utils/utils";
 import { CreateInstructions } from "./create-instructions";
 import { RecommendedAutomationsLauncher } from "./recommended-automations-launcher";
 
@@ -11,7 +10,7 @@ export function EmptyState() {
   return (
     <div
       data-testid="automations-empty"
-      className={cn(extensionModuleEmptyStateClassName, "border-0")}
+      className={extensionModuleEmptyStateClassName}
     >
       <p className="text-sm text-white">{t(I18nKey.AUTOMATIONS$EMPTY)}</p>
 
