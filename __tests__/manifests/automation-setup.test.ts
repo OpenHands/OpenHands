@@ -181,16 +181,13 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
-    // A prompt entry is created through the preset endpoint and a bundle entry
-    // through the raw one, so both appear across the published fixtures.
+    // Every published fixture is a prompt entry created through the preset
+    // endpoint, so the deduped set collapses to that single path.
     expect({
       create: [...createPaths].sort(),
       preflight: [...preflightPaths],
     }).toEqual({
-      create: [
-        automationCreateEndpoint(requireEntry("github-pr-reviewer")),
-        automationCreateEndpoint(),
-      ].sort(),
+      create: [automationCreateEndpoint()],
       preflight: ["/v1/validate"],
     });
   });
@@ -319,12 +316,11 @@ describe("deriveErrorMap", () => {
 
     // Assert
     expect(errorMap).toEqual({
-      name: ["repositories"],
+      name: ["repository"],
+      prompt: ["triggerLabel", "repository", "reviewTone"],
+      "repos[0].url": ["repository"],
       "trigger.schedule": ["schedule"],
       "trigger.timezone": ["timezone"],
-      "template.config.repos": ["repositories"],
-      "template.config.trigger_label": ["triggerLabel"],
-      "template.config.review_tone": ["reviewTone"],
     });
   });
 });
