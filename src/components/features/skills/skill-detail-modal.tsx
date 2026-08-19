@@ -100,10 +100,10 @@ export function SkillDetailModal({
       <div
         data-testid="skill-detail-modal"
         data-skill-name={skill.name}
-        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+        className="relative flex w-[520px] max-w-[90vw] max-h-[85vh] flex-col overflow-hidden rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton onClose={onClose} testId="skill-detail-modal-close" />
-        <header className="flex flex-shrink-0 items-start gap-3 px-6 pb-4 pt-6 pr-12">
+        <header className="flex flex-shrink-0 items-start gap-3 pb-4 pl-6 pr-12 pt-6">
           <SkillIconBadge skillName={skill.name} />
           <div className="min-w-0 flex-1">
             <h2
@@ -148,7 +148,7 @@ export function SkillDetailModal({
 
         <div
           data-testid="skill-detail-modal-content"
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 custom-scrollbar-always"
+          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-6 custom-scrollbar-always"
         >
           <div
             data-testid={`skill-modal-enable-row-${skill.name}`}
@@ -171,7 +171,7 @@ export function SkillDetailModal({
           {description ? (
             <p
               data-testid={`skill-modal-description-${skill.name}`}
-              className="text-xs text-tertiary-light"
+              className="break-words whitespace-pre-line text-xs text-tertiary-light"
             >
               {description}
             </p>
