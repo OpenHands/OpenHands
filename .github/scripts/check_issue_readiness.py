@@ -144,6 +144,20 @@ def references_run_method(text: str) -> bool:
     return any(pattern.search(text) for pattern in RUN_METHOD_PATTERNS)
 
 
+def has_reproduction_output(text: str) -> bool:
+    """Return True when Actual Behavior contains a run method and output."""
+    has_command = references_run_method(text)
+
+    # A reproduction command and its resulting output should both be present.
+    # Code blocks are the clearest signal for command output, but plain text
+    # output is also accepted when the section contains multiple non-empty lines.
+    has_code_block = bool(re.search(r"(?ms)```.*?```", text))
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    has_output = has_code_block or len(lines) >= 2
+
+    return has_command and has_output
+
+
 def has_checklist_item(text: str) -> bool:
     return bool(CHECKLIST_ITEM_RE.search(text))
 
@@ -163,10 +177,10 @@ def check_bug(sections: dict[str, str]) -> ReadinessResult:
                 "The Actual Behavior section must reference a supported run method: "
                 "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`."
             )
-        if not has_screenshot_or_video(actual):
+        if not has_screenshot_or_video(actual) and not has_reproduction_output(actual):
             result.add(
-                "The Actual Behavior section must include a screenshot or video of "
-                "the bug (drag a file into the field or paste a link)."
+                "The Actual Behavior section must include a screenshot or video "
+                "of the bug, or a reproduction command together with its output."
             )
 
     acceptance = visible_text(find_section(sections, "acceptance criteria", "acceptance"))
