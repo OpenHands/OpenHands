@@ -146,6 +146,7 @@ export type Settings = {
   git_user_name?: string;
   git_user_email?: string;
   title_llm_profile?: string | null;
+  title_generation_prompt?: string | null;
   agent_settings_schema?: SettingsSchema | null;
   agent_settings?: Record<string, SettingsValue> | null;
   conversation_settings_schema?: SettingsSchema | null;

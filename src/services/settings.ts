@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   git_user_name: "openhands",
   git_user_email: "openhands@all-hands.dev",
   title_llm_profile: null,
+  title_generation_prompt: null,
   agent_settings_schema: null,
   agent_settings: {
     schema_version: 6,

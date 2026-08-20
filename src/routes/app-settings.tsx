@@ -23,6 +23,8 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
@@ -51,6 +53,8 @@ export function AppSettingsScreen() {
   const [titleLlmProfileInput, setTitleLlmProfileInput] = React.useState<
     string | null | undefined
   >(undefined);
+  const [titleGenerationPromptInput, setTitleGenerationPromptInput] =
+    React.useState<string | undefined>(undefined);
 
   const storedTitleLlmProfile = React.useMemo(() => {
     const preference = settings?.title_llm_profile ?? null;
@@ -63,6 +67,12 @@ export function AppSettingsScreen() {
     titleLlmProfileInput === undefined
       ? storedTitleLlmProfile
       : titleLlmProfileInput;
+  const storedTitleGenerationPrompt = settings?.title_generation_prompt ?? null;
+  const titleGenerationPrompt =
+    titleGenerationPromptInput === undefined
+      ? (storedTitleGenerationPrompt ?? "")
+      : titleGenerationPromptInput;
+  const normalizedTitleGenerationPrompt = titleGenerationPrompt.trim() || null;
   const titleLlmProfileItems = React.useMemo(
     () => [
       {
@@ -110,6 +120,7 @@ export function AppSettingsScreen() {
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
+        title_generation_prompt: normalizedTitleGenerationPrompt,
       },
       {
         onSuccess: () => {
@@ -127,6 +138,7 @@ export function AppSettingsScreen() {
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
+          setTitleGenerationPromptInput(undefined);
         },
       },
     );
@@ -171,6 +183,7 @@ export function AppSettingsScreen() {
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
+    normalizedTitleGenerationPrompt === storedTitleGenerationPrompt &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
@@ -252,6 +265,46 @@ export function AppSettingsScreen() {
             >
               {t(I18nKey.SETTINGS$MANAGE_LLM_PROFILES)}
             </NavigationLink>
+            <div className="mt-5 flex flex-col gap-2.5">
+              <label
+                htmlFor="title-generation-prompt-input"
+                className="text-sm"
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT)}
+              </label>
+              <p
+                id="title-generation-prompt-description"
+                className="text-xs leading-5 text-tertiary-light"
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_DESCRIPTION)}
+              </p>
+              <textarea
+                id="title-generation-prompt-input"
+                data-testid="title-generation-prompt-input"
+                name="title-generation-prompt-input"
+                value={titleGenerationPrompt}
+                maxLength={2000}
+                aria-describedby="title-generation-prompt-description"
+                placeholder={t(
+                  I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_PLACEHOLDER,
+                )}
+                onChange={(event) =>
+                  setTitleGenerationPromptInput(event.target.value)
+                }
+                className={cn(
+                  formControlMultilineFieldClassName,
+                  "min-h-32 resize-y placeholder:italic",
+                )}
+              />
+              <BrandButton
+                variant="tertiary"
+                type="button"
+                isDisabled={!titleGenerationPrompt}
+                onClick={() => setTitleGenerationPromptInput("")}
+              >
+                {t(I18nKey.SETTINGS$TITLE_GENERATION_PROMPT_RESET)}
+              </BrandButton>
+            </div>
           </div>
 
           <div className="border-t border-[var(--oh-border)] pt-6 mt-2">

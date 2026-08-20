@@ -200,6 +200,39 @@ describe("SettingsService", () => {
     ]);
   });
 
+  it("stores the title-generation prompt as a local app preference", async () => {
+    const patchBodies: Array<Record<string, unknown>> = [];
+    server.use(
+      http.patch("*/api/settings", async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({
+          agent_settings: {},
+          conversation_settings: {},
+          llm_api_key_is_set: false,
+          misc_settings: {
+            app_preferences: {
+              title_generation_prompt: "Summarize {conversation_content}",
+            },
+          },
+        });
+      }),
+    );
+
+    await SettingsService.saveSettings({
+      title_generation_prompt: "Summarize {conversation_content}",
+    });
+
+    expect(patchBodies).toEqual([
+      {
+        misc_settings_diff: {
+          app_preferences: {
+            title_generation_prompt: "Summarize {conversation_content}",
+          },
+        },
+      },
+    ]);
+  });
+
   it("treats omitted app-preferences analytics consent as unset", async () => {
     server.use(
       http.get("*/api/settings", () =>
@@ -230,6 +263,7 @@ describe("SettingsService", () => {
       enable_sound_notifications: true,
       user_consents_to_analytics: true,
       title_llm_profile: "Titles",
+      title_generation_prompt: "Summarize {conversation_content}",
       disabled_skills: ["SSH Microagent"],
     };
     await SettingsService.saveSettings(appPrefs);
@@ -244,6 +278,7 @@ describe("SettingsService", () => {
       enable_sound_notifications: settings.enable_sound_notifications,
       user_consents_to_analytics: settings.user_consents_to_analytics,
       title_llm_profile: settings.title_llm_profile,
+      title_generation_prompt: settings.title_generation_prompt,
       disabled_skills: settings.disabled_skills,
     }).toEqual(appPrefs);
   });
