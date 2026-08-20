@@ -70,26 +70,26 @@ export function parseGitRemoteUrl(
   const url = remoteUrl?.trim();
   if (!url) return null;
 
-  // git@host:owner/repo(.git). SCP shorthand never carries a scheme, so a
-  // scheme'd URL is left to the URL parser below. Otherwise the port in
-  // `ssh://git@host:2222/owner/repo` is read as the first path segment.
-  const scpMatch = url.includes("://")
-    ? null
-    : url.match(/^[^@\s]+@([^:\s]+):(.+)$/);
+  // ssh://, https://, http://, git://. Tried before the shorthand match
+  // below, whose `[^@\s]+` would otherwise swallow `ssh://git` and read the
+  // port in `ssh://git@host:2222/owner/repo` as the first path segment.
+  try {
+    const parsed = new URL(url);
+    // A bare Windows path (`C:/src/repo`) parses as a `c:` scheme with an
+    // empty host, so it is left to the shorthand match below.
+    if (parsed.hostname) {
+      return buildParsedGitRemoteUrl(url, parsed.hostname, parsed.pathname);
+    }
+  } catch {
+    // Not a URL the WHATWG parser accepts, so try the shorthand form.
+  }
+
+  // git@host:owner/repo(.git)
+  const scpMatch = url.match(/^[^@\s]+@([^:\s]+):(.+)$/);
   if (scpMatch) {
     const host = scpMatch[1];
     return buildParsedGitRemoteUrl(url, host, scpMatch[2]);
   }
 
-  // ssh://, https://, http://, git://
-  try {
-    const parsed = new URL(url);
-    return buildParsedGitRemoteUrl(
-      url,
-      parsed.hostname || null,
-      parsed.pathname,
-    );
-  } catch {
-    return null;
-  }
+  return null;
 }

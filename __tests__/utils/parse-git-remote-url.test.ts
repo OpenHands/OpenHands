@@ -58,12 +58,40 @@ describe("parseGitRemoteUrl", () => {
     expect(result?.repository).toBe("owner/repo");
   });
 
-  it("parses http(s) URLs that carry credentials and a port", () => {
+  // The shorthand match would read `github.com:owner` as host and port; only
+  // a colon segment that is a port belongs to the host.
+  it("parses ssh:// URLs whose colon segment is a path, not a port", () => {
+    const result = parseGitRemoteUrl("ssh://git@github.com:owner/repo.git");
+    expect(result).toEqual({
+      url: "ssh://git@github.com:owner/repo.git",
+      host: "github.com",
+      repository: "owner/repo",
+      provider: "github",
+    });
+  });
+
+  it("parses http URLs that carry credentials and a port", () => {
     const result = parseGitRemoteUrl(
       "http://user@git.example.com:8080/owner/repo.git",
     );
-    expect(result?.host).toBe("git.example.com");
-    expect(result?.repository).toBe("owner/repo");
+    expect(result).toEqual({
+      url: "http://user@git.example.com:8080/owner/repo.git",
+      host: "git.example.com",
+      repository: "owner/repo",
+      provider: null,
+    });
+  });
+
+  it("parses https URLs that carry a user:password pair and a port", () => {
+    const result = parseGitRemoteUrl(
+      "https://user:tok@git.example.com:8443/owner/repo.git",
+    );
+    expect(result).toEqual({
+      url: "https://user:tok@git.example.com:8443/owner/repo.git",
+      host: "git.example.com",
+      repository: "owner/repo",
+      provider: null,
+    });
   });
 
   it("parses Bitbucket Cloud URLs", () => {

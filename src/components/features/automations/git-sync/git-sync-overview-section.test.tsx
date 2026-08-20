@@ -60,7 +60,9 @@ describe("GitSyncOverviewSection", () => {
     );
   });
 
-  it("keeps a self-hosted forge's path when ssh:// carries a port", () => {
+  // The ssh port says nothing about where the web UI listens, so the rebuilt
+  // link drops it -- unlike the https case above, which keeps its own port.
+  it("drops the ssh port when rebuilding the browse link over https", () => {
     renderWith("ssh://git@git.example.com:2222/org/repo.git");
 
     expect(screen.getByTestId("git-sync-repo-link")).toHaveAttribute(
