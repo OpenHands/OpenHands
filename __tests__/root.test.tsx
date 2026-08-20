@@ -449,7 +449,7 @@ describe("App root agent-server availability guard", () => {
   it("shows the manage-backends modal when the connected server reports an old version", async () => {
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     server.use(
-      http.get("/server_info", () =>
+      http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.27.1" }),
       ),
     );
@@ -471,7 +471,7 @@ describe("App root agent-server availability guard", () => {
   it("shows the manage-backends modal when the server omits a version field", async () => {
     window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     server.use(
-      http.get("/server_info", () =>
+      http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0 }),
       ),
     );

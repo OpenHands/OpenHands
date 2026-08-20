@@ -1,5 +1,5 @@
 import { MCPClient } from "@openhands/typescript-client/clients";
-import type { MCPTestRequest } from "@openhands/typescript-client";
+import type { AgentServerMCPTestRequest } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
 import {
   getActiveBackend,
@@ -9,7 +9,6 @@ import {
   getCredentialValidationForServer,
   type CredentialValidation,
 } from "#/utils/mcp-credential-validation";
-import type { MCPAuthCredential } from "#/types/mcp-auth";
 import type {
   ExtendedMCPTestResponse,
   MCPOAuthStartResponse,
@@ -21,30 +20,12 @@ import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
 
-type MCPTestServer = {
-  transport?: "stdio" | "http" | "sse";
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
-  auth?: MCPAuthCredential;
-};
-
-interface ExtendedMCPTestRequest {
-  server: MCPTestServer;
-  name?: string;
-  timeout?: number;
-  tool_call?: {
-    name: string;
-    arguments: Record<string, unknown>;
-  };
-}
-
-function toMcpServer(server: MCPServerConfig): MCPTestServer {
+function toMcpServer(
+  server: MCPServerConfig,
+): AgentServerMCPTestRequest["server"] {
   if (server.type === "stdio") {
     return {
-      transport: "stdio",
+      type: "stdio",
       command: server.command!,
       ...(server.args?.length && { args: server.args }),
       ...(server.env &&
@@ -52,7 +33,7 @@ function toMcpServer(server: MCPServerConfig): MCPTestServer {
     };
   }
   return {
-    transport: server.type === "sse" ? "sse" : "http",
+    type: server.type === "sse" ? "sse" : "http",
     url: server.url!,
     ...(server.headers &&
       Object.keys(server.headers).length > 0 && { headers: server.headers }),
@@ -66,7 +47,7 @@ function getMcpTestTimeout(server: MCPServerConfig): number | undefined {
 }
 
 async function buildMcpTestRequest(server: MCPServerConfig): Promise<{
-  request: ExtendedMCPTestRequest;
+  request: AgentServerMCPTestRequest;
   substituted: MCPServerConfig;
 }> {
   const validation = getCredentialValidationForServer(server);
@@ -218,7 +199,7 @@ class McpService {
     try {
       const { request, substituted } = await buildMcpTestRequest(server);
       const result = (await client.testServer(
-        request as MCPTestRequest,
+        request,
       )) as ExtendedMCPTestResponse;
       // Redact against both config forms: `server` may hold fresh plaintext
       // input, `substituted` the stored (encrypted) round-trip values.
@@ -335,14 +316,18 @@ class McpService {
     server: MCPServerConfig,
   ): Promise<MCPOAuthStartResponse> {
     const { request } = await buildMcpTestRequest(server);
-    return client.startOAuth(request as MCPTestRequest);
+    return client.startOAuth(request);
   }
 
+  // typescript-client 1.36 types the OAuth probes with the generated
+  // agent-server models, which describe the opaque `oauth_state` JSON blobs as
+  // `unknown` rather than the recursive `MCPJsonValue` the local types use. The
+  // wire shape is unchanged, so narrow back to the app's boundary type.
   private static async getOAuthStatusWithClient(
     client: MCPClient,
     jobId: string,
   ): Promise<MCPOAuthStatusResponse> {
-    return client.getOAuthStatus(jobId);
+    return (await client.getOAuthStatus(jobId)) as MCPOAuthStatusResponse;
   }
 
   private static async submitOAuthCallbackWithClient(
@@ -350,7 +335,9 @@ class McpService {
     jobId: string,
     callbackUrl: string,
   ): Promise<MCPOAuthStatusResponse> {
-    return client.submitOAuthCallback(jobId, { callback_url: callbackUrl });
+    return (await client.submitOAuthCallback(jobId, {
+      callback_url: callbackUrl,
+    })) as MCPOAuthStatusResponse;
   }
 }
 

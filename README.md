@@ -12,7 +12,7 @@
 </div>
 <div align="center">
   <a href="https://github.com/OpenHands/incubator-program"><img src="https://img.shields.io/badge/status-beta-blue?style=for-the-badge" alt="Project status beta"></a>
-  <a href="https://github.com/OpenHands/agent-canvas/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/agent-canvas/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
+  <a href="https://github.com/OpenHands/OpenHands/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/OpenHands/OpenHands/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
   <a href="https://www.npmjs.com/package/@openhands/agent-canvas"><img src="https://img.shields.io/npm/v/%40openhands%2Fagent-canvas?style=for-the-badge&logo=npm" alt="npm version"></a>
   <a href="https://docs.openhands.dev/openhands/usage/agent-canvas/backends"><img src="https://img.shields.io/badge/Documentation-000?logo=googledocs&logoColor=FFE165&style=for-the-badge" alt="Documentation"></a>
   <a href="https://go.openhands.dev/slack"><img src="https://img.shields.io/badge/Slack-Join%20the%20community-611f69?logo=slack&logoColor=white&style=for-the-badge" alt="Join us on Slack"></a>
@@ -96,7 +96,7 @@ docker run -it --rm \
   -p 8000:8000 \
   -v "$HOME/.openhands:/home/openhands/.openhands" \
   -v "${PROJECTS_PATH}:/projects" \
-  ghcr.io/openhands/agent-canvas:1.6.1 # x-release-please-version
+  ghcr.io/openhands/agent-canvas:1.14.0 # x-release-please-version
 ```
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
@@ -111,8 +111,8 @@ The agent will be able to access any project under `PROJECTS_PATH`.
 **Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
 
 ```sh
-git clone https://github.com/OpenHands/agent-canvas.git
-cd agent-canvas
+git clone https://github.com/OpenHands/OpenHands.git
+cd OpenHands
 npm install
 npm run dev
 ```

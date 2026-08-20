@@ -6,6 +6,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useActiveAgentProfile } from "#/hooks/use-active-agent-profile";
 import { isSettingsPageHidden } from "#/utils/settings-utils";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME } from "#/api/agent-profiles-service/agent-profiles-service.api";
 import {
   CONFIG_CACHE_OPTIONS,
   LLM_PROFILES_QUERY_KEYS,
@@ -69,8 +70,15 @@ export function useLlmConfigured(): LlmConfiguredResult {
   // The LLM that will actually power the next conversation is the profile the
   // active AGENT profile references (`llm_profile_ref`) — conversations launch
   // from the agent profile, not the standalone "active LLM profile".
+  // Except the local seeded `default` profile: `useCreateConversation` launches
+  // it via `agent_settings` on the ACTIVE LLM, not the seed's ref, so gating on
+  // that ref blocks launches that would have succeeded (#16193).
   const referencedLlmProfileName =
-    activeAgentProfile?.agent_kind === "openhands"
+    activeAgentProfile?.agent_kind === "openhands" &&
+    !(
+      isLocal &&
+      activeAgentProfile.name === WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME
+    )
       ? activeAgentProfile.llm_profile_ref
       : undefined;
   const referencedProfile = referencedLlmProfileName

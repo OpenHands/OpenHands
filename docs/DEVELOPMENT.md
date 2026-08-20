@@ -83,9 +83,8 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 ### Multiple local backends (shared persistence)
 
 To run a second standalone agent-server alongside `npm run dev` while sharing
-its conversation history and encrypted secrets, see
-[docs/multi-backend-setup.md](./docs/multi-backend-setup.md). The
-`npm run dev:extra-backend` helper launches an extra server on `:18002` that
+its conversation history and encrypted secrets, you can use the
+`npm run dev:extra-backend` helper. It launches an extra server on `:18002` that
 reuses the bundled instance's state dir.
 
 ### Frontend against an existing backend
@@ -121,6 +120,33 @@ Useful targeted verification for the isolated dev launcher:
 ```sh
 npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-safe.test.ts
 ```
+
+### Mutation testing
+
+Stryker checks whether the Vitest suite detects deliberate changes to the
+first-party TypeScript source under `src/`. The default configuration excludes
+tests, declarations, generated files, fixtures, mocks, and development seeds.
+
+```sh
+# Full mutation run (expensive for the whole frontend)
+npm run test:mutation
+
+# Reuse results from the previous run
+npm run test:mutation:incremental
+
+# Mutate only production files changed from the local main branch
+npm run test:mutation:diff
+
+# Compare with another base ref, such as the latest remote main
+npm run test:mutation:diff -- origin/main
+```
+
+The HTML report is written to `reports/mutation.html`. Mutation scores are
+report-only initially; establish a stable baseline before adding a failing
+threshold.
+
+Stryker does not cover the small Python surface in this repository; mutating it
+would need a Python test harness and Python-specific mutation tool.
 
 ## CSS isolation and host-app customization
 

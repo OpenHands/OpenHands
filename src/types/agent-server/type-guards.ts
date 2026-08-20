@@ -2,6 +2,7 @@ import {
   CANVAS_UI_CLIENT_TOOL_NAME,
   LEGACY_CANVAS_UI_TOOL_NAME,
 } from "#/constants/canvas-ui";
+import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
 import {
   OpenHandsEvent,
@@ -16,6 +17,7 @@ import {
   BrowserNavigateAction,
   SwitchLLMObservation,
   CanvasUIAction,
+  LaunchChildConversationAction,
 } from "./core";
 import { AgentErrorEvent } from "./core/events/observation-event";
 import { MessageEvent } from "./core/events/message-event";
@@ -33,6 +35,7 @@ import { HookExecutionEvent } from "./core/events/hook-execution-event";
 import { ACPToolCallEvent } from "./core/events/acp-tool-call-event";
 import { StreamingDeltaEvent } from "./core/events/streaming-delta-event";
 import { SystemPromptEvent } from "./core/events/system-event";
+import { CondensationEvent } from "./core/events/condensation-event";
 
 /**
  * Type guard to check if an unknown value is a valid BaseEvent
@@ -185,6 +188,18 @@ export const isCanvasUIActionEvent = (
     event.tool_name === CANVAS_UI_CLIENT_TOOL_NAME);
 
 /**
+ * Type guard for launch-child-conversation tool ActionEvents.
+ *
+ * Discriminates on tool_name, like `isCanvasUIActionEvent`, so the
+ * SDK-generated action kind stays contained in the constants module.
+ */
+export const isLaunchChildConversationActionEvent = (
+  event: OpenHandsEvent,
+): event is ActionEvent<LaunchChildConversationAction> =>
+  isActionEvent(event) &&
+  event.tool_name === LAUNCH_CHILD_CONVERSATION_TOOL_NAME;
+
+/**
  * Type guard function to check if an event is a system prompt event
  */
 export const isSystemPromptEvent = (
@@ -264,6 +279,14 @@ export const isStreamingDeltaEvent = (
   event: OpenHandsEvent,
 ): event is StreamingDeltaEvent =>
   "kind" in event && event.kind === "StreamingDeltaEvent";
+
+/**
+ * Type guard for condensation completion events (history was compacted).
+ */
+export const isCondensationEvent = (
+  event: OpenHandsEvent,
+): event is CondensationEvent =>
+  "kind" in event && event.kind === "Condensation";
 
 // =============================================================================
 // COMPATIBILITY TYPE GUARDS
