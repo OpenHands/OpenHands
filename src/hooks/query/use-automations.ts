@@ -103,6 +103,9 @@ export function useDispatchAutomation() {
       queryClient.invalidateQueries({
         queryKey: [...AUTOMATION_RUNS_QUERY_KEY, id],
       });
+      // Dispatch creates a conversation_id; refresh the sidebar list because
+      // automations routes pause the conversations poll.
+      queryClient.invalidateQueries({ queryKey: ["user", "conversations"] });
       trackAutomationExecuted({ backendKind: active.backend.kind });
     },
   });

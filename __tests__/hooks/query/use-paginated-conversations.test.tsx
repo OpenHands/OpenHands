@@ -70,7 +70,9 @@ describe("usePaginatedConversations", () => {
     renderAtPath("/conversations");
 
     await waitFor(() => {
-      expect(AgentServerConversationService.searchConversations).toHaveBeenCalled();
+      expect(
+        AgentServerConversationService.searchConversations,
+      ).toHaveBeenCalled();
     });
 
     const query = queryClient
@@ -94,7 +96,9 @@ describe("usePaginatedConversations", () => {
     renderAtPath("/automations");
 
     await waitFor(() => {
-      expect(AgentServerConversationService.searchConversations).toHaveBeenCalled();
+      expect(
+        AgentServerConversationService.searchConversations,
+      ).toHaveBeenCalled();
     });
 
     const query = queryClient

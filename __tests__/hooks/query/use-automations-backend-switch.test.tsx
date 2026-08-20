@@ -181,6 +181,22 @@ describe("automation hooks — backend switch", () => {
 
     expect(AutomationService.dispatchAutomation).toHaveBeenCalledWith("auto-1");
   });
+
+  it("useDispatchAutomation invalidates paginated conversations", async () => {
+    const invalidateSpy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
+    const { result } = renderHook(() => useDispatchAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync("auto-1");
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ queryKey: ["user", "conversations"] }),
+    );
+    invalidateSpy.mockRestore();
+  });
 });
 
 describe("useAutomationRuns — polling", () => {
@@ -203,53 +219,49 @@ describe("useAutomationRuns — polling", () => {
     completed_at: "2026-01-02T00:00:30Z",
   };
 
-  it(
-    "re-fetches while a run is non-terminal, and stops once all runs are terminal",
-    async () => {
-      // Arrange: first fetch returns a PENDING run (polling should engage);
-      // subsequent fetches return a COMPLETED run (polling should then stop).
-      const pendingResponse: AutomationRunsResponse = {
-        runs: [pendingRun],
-        total: 1,
-      };
-      const completedResponse: AutomationRunsResponse = {
-        runs: [completedRun],
-        total: 1,
-      };
-      vi.mocked(AutomationService.getAutomationRuns)
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValue(completedResponse);
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
 
-      // Act
-      renderHook(
-        () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
-        { wrapper: makeWrapper() },
-      );
+    // Act
+    renderHook(
+      () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
+      { wrapper: makeWrapper() },
+    );
 
-      // Assert: the initial fetch fires once.
-      await waitFor(() => {
-        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
-      });
+    // Assert: the initial fetch fires once.
+    await waitFor(() => {
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+    });
 
-      // The cached data still contains a PENDING run, so refetchInterval
-      // engages and a second fetch arrives within the poll window.
-      await waitFor(
-        () => {
-          expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-        },
-        { timeout: 5000 },
-      );
+    // The cached data still contains a PENDING run, so refetchInterval
+    // engages and a second fetch arrives within the poll window.
+    await waitFor(
+      () => {
+        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 5000 },
+    );
 
-      // The second fetch returned a COMPLETED run, so polling should stop.
-      // Give the would-be next poll window plenty of slack and assert no
-      // further calls happen.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 4000);
-      });
-      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-    },
-    15000,
-  );
+    // The second fetch returned a COMPLETED run, so polling should stop.
+    // Give the would-be next poll window plenty of slack and assert no
+    // further calls happen.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 4000);
+    });
+    expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+  }, 15000);
 });
 
 describe("automation mutation hooks — analytics tracking", () => {
