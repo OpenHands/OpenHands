@@ -1,27 +1,24 @@
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
+import { ChevronDown, FileUp, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import KebabVerticalIcon from "#/icons/kebab-vertical.svg?react";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
+import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
 import { ContextMenu } from "#/ui/context-menu";
-import { cn } from "#/utils/utils";
-import { automationIconActionButtonClassName } from "./automation-action-button-classes";
 import { KebabMenuItemContent } from "./kebab-menu-item-content";
 
-export interface KebabMenuItem {
-  label: string;
-  icon: React.ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
+interface AddAutomationMenuProps {
+  onAdd: () => void;
+  onImport: () => void;
+  isAddDisabled?: boolean;
 }
 
-interface KebabMenuProps {
-  items: KebabMenuItem[];
-  triggerClassName?: string;
-}
-
-export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
+export function AddAutomationMenu({
+  onAdd,
+  onImport,
+  isAddDisabled = false,
+}: AddAutomationMenuProps) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = useState(false);
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
@@ -35,11 +32,10 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      const gap = 4;
       setPortalStyle({
         position: "fixed",
         zIndex: 9999,
-        top: rect.bottom + gap,
+        top: rect.bottom + 2,
         right: window.innerWidth - rect.right,
       });
     };
@@ -81,43 +77,68 @@ export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
     };
   }, [open]);
 
+  const closeAnd = (action: () => void) => {
+    action();
+    setOpen(false);
+  };
+
   const menu =
     open && portalStyle ? (
-      <ContextMenu ref={menuRef} theme="popover" className="min-w-[10rem]">
-        {items.map((item) => (
-          <li key={item.label}>
-            <ContextMenuListItem
-              onClick={(event) => {
-                event.stopPropagation();
-                item.onClick();
-                setOpen(false);
-              }}
-              isDisabled={item.disabled}
-              className="group"
-            >
-              <KebabMenuItemContent icon={item.icon} label={item.label} />
-            </ContextMenuListItem>
-          </li>
-        ))}
+      <ContextMenu
+        ref={menuRef}
+        testId="automations-add-automation-menu"
+        theme="popover"
+        position="none"
+        alignment="none"
+        spacing="none"
+        className="min-w-[10rem]"
+      >
+        <li>
+          <ContextMenuListItem
+            testId="automations-add-automation-create"
+            isDisabled={isAddDisabled}
+            className="group"
+            onClick={() => {
+              if (isAddDisabled) return;
+              closeAnd(onAdd);
+            }}
+          >
+            <KebabMenuItemContent
+              icon={<Plus className="size-4" aria-hidden />}
+              label={t(I18nKey.AUTOMATIONS$CREATE_AUTOMATION_BUTTON)}
+            />
+          </ContextMenuListItem>
+        </li>
+        <li>
+          <ContextMenuListItem
+            testId="automations-import-automation"
+            className="group"
+            onClick={() => closeAnd(onImport)}
+          >
+            <KebabMenuItemContent
+              icon={<FileUp className="size-4" aria-hidden />}
+              label={t(I18nKey.AUTOMATIONS$IMPORT)}
+            />
+          </ContextMenuListItem>
+        </li>
       </ContextMenu>
     ) : null;
 
   return (
     <>
-      <button
+      <BrandButton
         ref={triggerRef}
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((current) => !current);
-        }}
-        className={cn(automationIconActionButtonClassName, triggerClassName)}
-        aria-label={t(I18nKey.AUTOMATIONS$ACTIONS_MENU)}
-        aria-expanded={open}
+        variant="secondary"
+        testId="automations-add-automation"
+        className="whitespace-nowrap"
         aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
       >
-        <KebabVerticalIcon className="size-4" />
-      </button>
+        {t(I18nKey.AUTOMATIONS$ADD_AUTOMATION)}
+        <ChevronDown className="size-4 shrink-0" aria-hidden />
+      </BrandButton>
 
       {open && portalStyle && typeof document !== "undefined"
         ? ReactDOM.createPortal(
