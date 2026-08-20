@@ -9,16 +9,30 @@ import { cn } from "#/utils/utils";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { I18nKey } from "#/i18n/declaration";
 import type { MetaProfile } from "#/api/meta-profiles-service/meta-profiles-service.api";
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
 } from "./default-meta-profile";
 
+// Dropdown key that means "don't create any router profiles" (i.e. all the
+// referenced LLM profiles already exist or the user will create them manually).
+const NO_ROUTER_CONNECTION_KEY = "";
+
 interface MetaProfileEditorProps {
   mode: "create" | "edit";
   initialName?: string;
   initialConfig?: MetaProfile;
-  initialCreateMissingRouterProfiles?: boolean;
+  /**
+   * When true (create mode, built-in templates), the first provider connection
+   * is pre-selected so the router's LLM profiles are created on save.
+   */
+  selectRouterConnectionByDefault?: boolean;
+  /**
+   * Provider connections offered for populating the router's LLM profiles.
+   * Empty on cloud / older backends, where the picker is hidden.
+   */
+  providerConnections?: ProviderConnection[];
   /** Names of saved LLM profiles, offered as dropdown options. */
   availableProfiles: string[];
   /**
@@ -31,7 +45,7 @@ interface MetaProfileEditorProps {
   onSave: (
     name: string,
     config: MetaProfile,
-    createMissingRouterProfiles: boolean,
+    providerConnectionId: string | null,
   ) => void;
   onCancel: () => void;
 }
@@ -64,7 +78,8 @@ export function MetaProfileEditor({
   mode,
   initialName,
   initialConfig,
-  initialCreateMissingRouterProfiles,
+  selectRouterConnectionByDefault,
+  providerConnections = [],
   availableProfiles,
   existingNames = [],
   isSaving,
@@ -81,12 +96,29 @@ export function MetaProfileEditor({
     initialName ?? (isEdit ? "" : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME),
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
-  const [createMissingRouterProfiles, setCreateMissingRouterProfiles] =
-    useState(initialCreateMissingRouterProfiles ?? !isEdit);
+  const showRouterConnectionPicker = !isEdit && providerConnections.length > 0;
+  const [routerConnectionId, setRouterConnectionId] = useState(() =>
+    selectRouterConnectionByDefault && providerConnections.length > 0
+      ? providerConnections[0].id
+      : NO_ROUTER_CONNECTION_KEY,
+  );
 
   const profileItems = useMemo(
     () => availableProfiles.map((p) => ({ key: p, label: p })),
     [availableProfiles],
+  );
+  const routerConnectionItems = useMemo(
+    () => [
+      {
+        key: NO_ROUTER_CONNECTION_KEY,
+        label: t(I18nKey.SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE),
+      },
+      ...providerConnections.map((connection) => ({
+        key: connection.id,
+        label: `${connection.display_name} (${connection.provider})`,
+      })),
+    ],
+    [providerConnections, t],
   );
 
   const nameValid = isProfileNameValid(name, { isRequired: true });
@@ -111,7 +143,9 @@ export function MetaProfileEditor({
         prompt_template: (config.prompt_template ?? "").trim(),
         model_table: config.model_table?.trim() || null,
       },
-      createMissingRouterProfiles,
+      showRouterConnectionPicker && routerConnectionId
+        ? routerConnectionId
+        : null,
     );
   };
 
@@ -256,30 +290,24 @@ export function MetaProfileEditor({
         </p>
       </div>
 
-      {!isEdit ? (
-        <div className="flex items-start gap-2.5">
-          <input
-            id="meta-profile-create-router-profiles"
-            data-testid="meta-profile-create-router-profiles"
-            type="checkbox"
-            checked={createMissingRouterProfiles}
-            onChange={(event) =>
-              setCreateMissingRouterProfiles(event.target.checked)
+      {showRouterConnectionPicker ? (
+        <div className="flex flex-col gap-2">
+          <SettingsDropdownInput
+            testId="meta-profile-router-connection"
+            name="router_connection"
+            label={t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES)}
+            items={routerConnectionItems}
+            selectedKey={routerConnectionId}
+            isDisabled={isSaving}
+            onSelectionChange={(key) =>
+              setRouterConnectionId(
+                key ? String(key) : NO_ROUTER_CONNECTION_KEY,
+              )
             }
-            disabled={isSaving}
-            className="mt-1 h-4 w-4 shrink-0 rounded"
           />
-          <label
-            htmlFor="meta-profile-create-router-profiles"
-            className="flex cursor-pointer flex-col gap-1"
-          >
-            <span className="text-sm">
-              {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES)}
-            </span>
-            <span className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
-            </span>
-          </label>
+          <p className="text-xs text-[var(--oh-muted)]">
+            {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
+          </p>
         </div>
       ) : null}
 

@@ -11,6 +11,18 @@ import {
 
 const AVAILABLE = ["minimax", "minimax-m3", "gpt", "deepseek"];
 
+const CONNECTIONS = [
+  {
+    id: "conn-openhands",
+    display_name: "OpenHands",
+    provider: "openhands",
+    base_url: null,
+    created_at: 0,
+    updated_at: 0,
+    api_key_set: true,
+  },
+];
+
 const FILLED: MetaProfile = {
   classifier_model: "minimax",
   default_model: "gpt",
@@ -27,6 +39,8 @@ describe("MetaProfileEditor", () => {
     renderWithProviders(
       <MetaProfileEditor
         mode="create"
+        providerConnections={CONNECTIONS}
+        selectRouterConnectionByDefault
         availableProfiles={AVAILABLE}
         isSaving={false}
         onSave={onSave}
@@ -49,16 +63,16 @@ describe("MetaProfileEditor", () => {
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT.model_table,
     );
-    expect(
-      screen.getByTestId("meta-profile-create-router-profiles"),
-    ).toBeChecked();
+    expect(screen.getByTestId("meta-profile-router-connection")).toHaveValue(
+      "OpenHands (openhands)",
+    );
 
     await user.click(screen.getByTestId("meta-profile-save"));
 
     expect(onSave).toHaveBeenCalledWith(
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
       DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
-      true,
+      "conn-openhands",
     );
   });
 
@@ -82,7 +96,7 @@ describe("MetaProfileEditor", () => {
 
     await user.click(save);
 
-    expect(onSave).toHaveBeenCalledWith("balanced", FILLED, false);
+    expect(onSave).toHaveBeenCalledWith("balanced", FILLED, null);
   });
 
   it("disables the name field in edit mode", () => {
@@ -153,6 +167,8 @@ describe("MetaProfileEditor", () => {
       <MetaProfileEditor
         mode="create"
         initialConfig={FILLED}
+        providerConnections={CONNECTIONS}
+        selectRouterConnectionByDefault
         availableProfiles={AVAILABLE}
         existingNames={["balanced"]}
         isSaving={false}
@@ -171,7 +187,31 @@ describe("MetaProfileEditor", () => {
     expect(save).toBeEnabled();
 
     await user.click(save);
-    expect(onSave).toHaveBeenCalledWith("fast", FILLED, true);
+    expect(onSave).toHaveBeenCalledWith("fast", FILLED, "conn-openhands");
+  });
+
+  it("returns no connection when the picker is set to don't create", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        initialConfig={FILLED}
+        providerConnections={CONNECTIONS}
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.clear(screen.getByTestId("meta-profile-name-input"));
+    await user.type(screen.getByTestId("meta-profile-name-input"), "fast");
+    // Without selectRouterConnectionByDefault the picker starts on "don't
+    // create", so no provider connection is returned.
+    await user.click(screen.getByTestId("meta-profile-save"));
+
+    expect(onSave).toHaveBeenCalledWith("fast", FILLED, null);
   });
 
   it("allows the existing name in edit mode (no duplicate warning)", () => {

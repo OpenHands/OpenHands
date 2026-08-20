@@ -6,6 +6,7 @@ import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-ba
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
 import MetaProfilesService, {
@@ -25,10 +26,13 @@ import { DeleteMetaProfileModal } from "./delete-meta-profile-modal";
 import {
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-  DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES,
   DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
   DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
 } from "./default-meta-profile";
+import {
+  buildRouterModel,
+  collectRequiredRouterModelNames,
+} from "./router-profiles";
 
 type ViewMode = "list" | "create" | "edit";
 type RouterTemplate = "max-score-pareto" | "min-cost-pareto" | "custom";
@@ -50,6 +54,7 @@ export function MetaLlmSettingsView() {
   const { t } = useTranslation("openhands");
   const { data, isLoading, error } = useMetaProfiles();
   const { data: llmProfilesData } = useLlmProfiles();
+  const { data: providerConnections } = useProviderConnections();
   const saveMetaProfile = useSaveMetaProfile();
   const activateMetaProfile = useActivateMetaProfile();
 
@@ -58,10 +63,11 @@ export function MetaLlmSettingsView() {
   const [createInitial, setCreateInitial] = useState<EditingMetaProfile | null>(
     null,
   );
-  const [
-    createMissingRouterProfilesByDefault,
-    setCreateMissingRouterProfilesByDefault,
-  ] = useState(true);
+  // Whether the create editor should pre-select a provider connection to
+  // populate the router's LLM profiles (true for the built-in Pareto templates,
+  // false for a blank custom profile).
+  const [createRouterProfilesByDefault, setCreateRouterProfilesByDefault] =
+    useState(true);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [nameToDelete, setNameToDelete] = useState<string | null>(null);
   const [isCreatingRouterProfiles, setIsCreatingRouterProfiles] =
@@ -72,6 +78,7 @@ export function MetaLlmSettingsView() {
   const availableProfiles = (llmProfilesData?.profiles ?? []).map(
     (p) => p.name,
   );
+  const connections = providerConnections ?? [];
   const existingNames = metaProfiles.map((p) => p.name);
   // A 404 means the backend predates the /api/meta-profiles endpoints
   // (software-agent-sdk #3744). Surface that explicitly instead of a generic
@@ -112,16 +119,16 @@ export function MetaLlmSettingsView() {
         name: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
         config: DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
       });
-      setCreateMissingRouterProfilesByDefault(true);
+      setCreateRouterProfilesByDefault(true);
     } else if (template === "min-cost-pareto") {
       setCreateInitial({
         name: DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
         config: DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
       });
-      setCreateMissingRouterProfilesByDefault(true);
+      setCreateRouterProfilesByDefault(true);
     } else {
       setCreateInitial({ name: "", config: CUSTOM_META_PROFILE_CONFIG });
-      setCreateMissingRouterProfilesByDefault(false);
+      setCreateRouterProfilesByDefault(false);
     }
 
     setEditing(null);
@@ -129,35 +136,35 @@ export function MetaLlmSettingsView() {
     setView("create");
   };
 
-  const createMissingRouterLlmProfiles = async () => {
+  // Create an LLM profile for every model the router config needs that does not
+  // already exist, linking the chosen provider connection for credentials. The
+  // endpoint is derived by convention from the connection's provider
+  // (``<provider>/<name>``); the profile name stays the bare model name so the
+  // router can match the classifier's answer against it.
+  const createMissingRouterLlmProfiles = async (
+    config: MetaProfile,
+    providerConnectionId: string,
+  ) => {
+    const connection = connections.find((c) => c.id === providerConnectionId);
+    if (!connection) {
+      throw new Error("The selected provider connection no longer exists.");
+    }
+
     const existingProfileNames = new Set(
       availableProfiles.map((profileName) => profileName.toLowerCase()),
     );
-    const missingProfiles = DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES.filter(
-      (profile) => !existingProfileNames.has(profile.name.toLowerCase()),
+    const missingNames = collectRequiredRouterModelNames(config).filter(
+      (modelName) => !existingProfileNames.has(modelName.toLowerCase()),
     );
-    if (missingProfiles.length === 0) return;
-
-    const activeProfile = llmProfilesData?.active_profile;
-    if (!activeProfile) {
-      throw new Error(
-        "Select an active LLM profile before creating router profiles.",
-      );
-    }
-
-    const template = await ProfilesService.getProfile(
-      activeProfile,
-      "encrypted",
-    );
-    const templateConfig = template.config as Record<string, unknown>;
+    if (missingNames.length === 0) return;
 
     await Promise.all(
-      missingProfiles.map((profile) =>
-        ProfilesService.saveProfile(profile.name, {
+      missingNames.map((modelName) =>
+        ProfilesService.saveProfile(modelName, {
           llm: {
-            ...templateConfig,
-            model: profile.model,
-            usage_id: profile.name,
+            model: buildRouterModel(connection.provider, modelName),
+            usage_id: modelName,
+            provider_connection_id: connection.id,
           } as SaveProfileRequest["llm"],
           include_secrets: true,
         }),
@@ -168,13 +175,13 @@ export function MetaLlmSettingsView() {
   const handleSave = async (
     name: string,
     config: MetaProfile,
-    createMissingRouterProfiles: boolean,
+    providerConnectionId: string | null,
   ) => {
     const shouldActivateAfterCreate = view === "create" && active === null;
     try {
-      if (view === "create" && createMissingRouterProfiles) {
+      if (view === "create" && providerConnectionId) {
         setIsCreatingRouterProfiles(true);
-        await createMissingRouterLlmProfiles();
+        await createMissingRouterLlmProfiles(config, providerConnectionId);
       }
       await saveMetaProfile.mutateAsync({ name, config });
       if (shouldActivateAfterCreate) {
@@ -220,8 +227,9 @@ export function MetaLlmSettingsView() {
         initialConfig={
           view === "edit" ? editing?.config : createInitial?.config
         }
-        initialCreateMissingRouterProfiles={
-          view === "create" ? createMissingRouterProfilesByDefault : false
+        providerConnections={connections}
+        selectRouterConnectionByDefault={
+          view === "create" ? createRouterProfilesByDefault : false
         }
         availableProfiles={availableProfiles}
         existingNames={existingNames}

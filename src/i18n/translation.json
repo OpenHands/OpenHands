@@ -5847,8 +5847,25 @@
     "uk": "Необов'язковий текст, який вставляється всюди, де шаблон промпта використовує {{ model_table }}.",
     "ca": "Text opcional inserit allà on la plantilla d'indicació usa {{ model_table }}."
   },
+  "SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE": {
+    "en": "Don't create profiles",
+    "ja": "プロファイルを作成しない",
+    "zh-CN": "不创建配置文件",
+    "zh-TW": "不建立設定檔",
+    "ko-KR": "프로필을 만들지 않음",
+    "no": "Ikke opprett profiler",
+    "ar": "عدم إنشاء ملفات تعريف",
+    "de": "Keine Profile erstellen",
+    "fr": "Ne pas créer de profils",
+    "it": "Non creare profili",
+    "pt": "Não criar perfis",
+    "es": "No crear perfiles",
+    "ca": "No creïs perfils",
+    "tr": "Profil oluşturma",
+    "uk": "Не створювати профілі"
+  },
   "SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES": {
-    "en": "Create missing LLM profiles for this router",
+    "en": "Create missing router LLM profiles using",
     "ja": "このルーターに不足している LLM プロファイルを作成",
     "zh-CN": "为此路由器创建缺失的 LLM 配置文件",
     "zh-TW": "為此路由器建立缺少的 LLM 設定檔",
@@ -5865,7 +5882,7 @@
     "ca": "Crea els perfils LLM que falten per a aquest encaminador"
   },
   "SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP": {
-    "en": "This will reuse your current provider settings for all router models.",
+    "en": "Missing models from the table are created as LLM profiles linked to the selected provider connection.",
     "ja": "すべてのルーターモデルに現在のプロバイダー設定を再利用します。",
     "zh-CN": "这会为所有路由器模型复用当前的提供商设置。",
     "zh-TW": "這會為所有路由器模型重用目前的提供者設定。",

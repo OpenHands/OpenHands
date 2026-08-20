@@ -6,20 +6,23 @@ import { renderWithProviders } from "test-utils";
 import { MetaLlmSettingsView } from "#/components/features/settings/meta-llm-profiles";
 import * as useMetaProfilesHook from "#/hooks/query/use-meta-profiles";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
+import * as useProviderConnectionsHook from "#/hooks/query/use-provider-connections";
 import * as useSaveMetaProfileHook from "#/hooks/mutation/use-save-meta-profile";
 import * as useActivateMetaProfileHook from "#/hooks/mutation/use-activate-meta-profile";
 import * as useDeleteMetaProfileHook from "#/hooks/mutation/use-delete-meta-profile";
 import MetaProfilesService from "#/api/meta-profiles-service/meta-profiles-service.api";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import {
+  DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
   DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME,
-  DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES,
   DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT,
   DEFAULT_MIN_COST_PARETO_META_PROFILE_NAME,
 } from "#/components/features/settings/meta-llm-profiles/default-meta-profile";
+import { collectRequiredRouterModelNames } from "#/components/features/settings/meta-llm-profiles/router-profiles";
 
 vi.mock("#/hooks/query/use-meta-profiles");
 vi.mock("#/hooks/query/use-llm-profiles");
+vi.mock("#/hooks/query/use-provider-connections");
 vi.mock("#/hooks/mutation/use-save-meta-profile");
 vi.mock("#/hooks/mutation/use-activate-meta-profile");
 vi.mock("#/hooks/mutation/use-delete-meta-profile");
@@ -46,6 +49,18 @@ const mockLlmProfiles = [
   { name: "minimax", model: "m", base_url: null, api_key_set: true },
   { name: "gpt", model: "g", base_url: null, api_key_set: true },
   { name: "deepseek", model: "d", base_url: null, api_key_set: true },
+];
+
+const mockProviderConnections = [
+  {
+    id: "conn-openhands",
+    display_name: "OpenHands",
+    provider: "openhands",
+    base_url: null,
+    created_at: 0,
+    updated_at: 0,
+    api_key_set: true,
+  },
 ];
 
 function mockMutation<T>(mutateAsync: Mock, overrides: Partial<T> = {}): T {
@@ -85,6 +100,16 @@ describe("MetaLlmSettingsView", () => {
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useLlmProfilesHook.useLlmProfiles>);
+
+    vi.mocked(
+      useProviderConnectionsHook.useProviderConnections,
+    ).mockReturnValue({
+      data: mockProviderConnections,
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<
+      typeof useProviderConnectionsHook.useProviderConnections
+    >);
 
     vi.mocked(useSaveMetaProfileHook.useSaveMetaProfile).mockReturnValue(
       mockMutation(saveMutateAsync),
@@ -195,9 +220,11 @@ describe("MetaLlmSettingsView", () => {
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue(
       DEFAULT_MIN_COST_PARETO_META_PROFILE_DEFAULT.model_table,
     );
-    expect(
-      screen.getByTestId("meta-profile-create-router-profiles"),
-    ).toBeChecked();
+    // The built-in templates pre-select the first provider connection so the
+    // router's LLM profiles are created on save.
+    expect(screen.getByTestId("meta-profile-router-connection")).toHaveValue(
+      "OpenHands (openhands)",
+    );
   });
 
   it("opens a blank custom editor from the template chooser", async () => {
@@ -212,12 +239,13 @@ describe("MetaLlmSettingsView", () => {
     expect(screen.getByTestId("meta-profile-default-input")).toHaveValue("");
     expect(screen.getByTestId("meta-profile-prompt-template")).toHaveValue("");
     expect(screen.getByTestId("meta-profile-model-table")).toHaveValue("");
+    // Custom profiles default to "don't create profiles".
     expect(
-      screen.getByTestId("meta-profile-create-router-profiles"),
-    ).not.toBeChecked();
+      screen.getByTestId("meta-profile-router-connection"),
+    ).not.toHaveValue("OpenHands (openhands)");
   });
 
-  it("creates missing router LLM profiles from the active profile before saving", async () => {
+  it("creates missing router LLM profiles linked to the selected provider connection", async () => {
     const user = userEvent.setup();
     saveMutateAsync.mockResolvedValue({ name: "default-max-score-pareto" });
     renderWithProviders(<MetaLlmSettingsView />);
@@ -225,24 +253,28 @@ describe("MetaLlmSettingsView", () => {
     await openMaxScoreTemplate(user);
     await user.click(screen.getByTestId("meta-profile-save"));
 
+    // Every model in the built-in table (plus classifier/default) that is not
+    // already a saved profile is created, linked to the connection.
+    const expectedNames = collectRequiredRouterModelNames(
+      DEFAULT_MAX_SCORE_PARETO_META_PROFILE_DEFAULT,
+    ).filter((n) => !["minimax", "gpt", "deepseek"].includes(n.toLowerCase()));
+
     await waitFor(() =>
-      expect(ProfilesService.getProfile).toHaveBeenCalledWith(
-        "minimax",
-        "encrypted",
-      ),
+      expect(ProfilesService.saveProfile).toHaveBeenCalledWith("GPT-5.4", {
+        llm: {
+          model: "openhands/GPT-5.4",
+          usage_id: "GPT-5.4",
+          provider_connection_id: "conn-openhands",
+        },
+        include_secrets: true,
+      }),
     );
     expect(ProfilesService.saveProfile).toHaveBeenCalledTimes(
-      DEFAULT_MAX_SCORE_PARETO_ROUTER_LLM_PROFILES.length,
+      expectedNames.length,
     );
-    expect(ProfilesService.saveProfile).toHaveBeenCalledWith("GPT-5.4", {
-      llm: {
-        model: "litellm_proxy/openai/gpt-5.4",
-        base_url: "https://llm-proxy.example",
-        api_key: "gAAAA_encrypted",
-        usage_id: "GPT-5.4",
-      },
-      include_secrets: true,
-    });
+    // Router profiles reuse shared credentials via the connection, so they
+    // must not clone an active profile's key.
+    expect(ProfilesService.getProfile).not.toHaveBeenCalled();
     await waitFor(() => expect(saveMutateAsync).toHaveBeenCalled());
   });
 
@@ -260,7 +292,6 @@ describe("MetaLlmSettingsView", () => {
     await openMaxScoreTemplate(user);
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
-    await user.click(screen.getByTestId("meta-profile-create-router-profiles"));
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
     });
@@ -300,7 +331,6 @@ describe("MetaLlmSettingsView", () => {
     await openMaxScoreTemplate(user);
     await user.clear(screen.getByTestId("meta-profile-name-input"));
     await user.type(screen.getByTestId("meta-profile-name-input"), "pareto");
-    await user.click(screen.getByTestId("meta-profile-create-router-profiles"));
     fireEvent.change(screen.getByTestId("meta-profile-classifier-input"), {
       target: { value: "minimax" },
     });
@@ -309,6 +339,9 @@ describe("MetaLlmSettingsView", () => {
     });
     fireEvent.change(screen.getByTestId("meta-profile-prompt-template"), {
       target: { value: "Task:\n{{ instance_text }}" },
+    });
+    fireEvent.change(screen.getByTestId("meta-profile-model-table"), {
+      target: { value: "" },
     });
     await user.click(screen.getByTestId("meta-profile-save"));
 
