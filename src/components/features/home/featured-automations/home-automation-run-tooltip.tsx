@@ -4,6 +4,10 @@ import { useTranslation } from "react-i18next";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
+import {
+  resolveRunPhaseText,
+  shouldShowRunPhase,
+} from "#/components/features/automations/detail/run-phase";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
@@ -54,6 +58,12 @@ export function HomeAutomationRunTooltip({
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
+  // The row that opens this hovercard has to clip a long phase; here there is
+  // room to wrap, so this is where the whole thing is readable.
+  const phaseText =
+    latestRun && shouldShowRunPhase(latestRun.status)
+      ? resolveRunPhaseText(t, latestRun.phase_code, latestRun.phase_label)
+      : null;
 
   return (
     <div className="flex w-[280px] flex-col gap-3 p-3">
@@ -78,6 +88,12 @@ export function HomeAutomationRunTooltip({
             <span>{t(getRunStatusLabelKey(runState))}</span>
           </span>
         </PreviewRow>
+
+        {phaseText ? (
+          <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
+            <span data-testid="run-phase-row">{phaseText}</span>
+          </PreviewRow>
+        ) : null}
 
         {timestamp ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$LAST_RUN)}>

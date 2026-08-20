@@ -1,6 +1,8 @@
+import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationRunStatus } from "#/types/automation";
+import { cn } from "#/utils/utils";
 
 /**
  * Whether a run's phase is worth showing at all: it answers "what is it doing
@@ -23,6 +25,8 @@ interface RunPhaseProps {
   code: string | null | undefined;
   /** `AutomationRun.phase_label` — free-form author text, not interface copy. */
   label: string | null | undefined;
+  /** More width before clipping, for rows far wider than a card. */
+  wide?: boolean;
 }
 
 /**
@@ -40,37 +44,56 @@ const KNOWN_PHASE_CODES: Record<string, I18nKey> = {
 };
 
 /**
- * A run's current or last-known phase: the translation of a code the frontend
- * knows, otherwise the author-supplied label verbatim, and nothing at all
- * when neither is usable. An absent code counts as unrecognized rather than
- * as an absent phase — the service accepts a phase carrying only a label.
- *
- * The label is data, not interface copy, so it is rendered as-is: passing it
- * through `t()` would be wrong, it is not a key.
+ * The one place a stored phase becomes text, so a run cannot read one way on
+ * a card and another way in that card's own tooltip. An absent code counts as
+ * unrecognized rather than as an absent phase: the service accepts a phase
+ * carrying only a label, and dropping those would hide a real phase.
  */
-export function RunPhase({ code, label }: RunPhaseProps) {
+export function resolveRunPhaseText(
+  t: (key: I18nKey) => string,
+  code: string | null | undefined,
+  label: string | null | undefined,
+): string | null {
+  const knownKey = code ? KNOWN_PHASE_CODES[code] : undefined;
+  if (knownKey) return t(knownKey);
+  return label || null;
+}
+
+/**
+ * A run's current or last-known phase, clipped to the room the surface has
+ * with the full text one hover away — author-supplied labels routinely
+ * outgrow any row. The label is data, not interface copy, so it is rendered
+ * as-is: passing it through `t()` would be wrong, it is not a key.
+ */
+export function RunPhase({ code, label, wide = false }: RunPhaseProps) {
   const { t } = useTranslation("openhands");
 
-  const knownKey = code ? KNOWN_PHASE_CODES[code] : undefined;
-  if (knownKey) {
-    return (
-      <span
-        data-testid="run-phase"
-        className="min-w-0 max-w-[12rem] truncate text-xs text-muted"
-      >
-        {t(knownKey)}
-      </span>
-    );
-  }
-
-  if (!label) return null;
+  const text = resolveRunPhaseText(t, code, label);
+  if (!text) return null;
 
   return (
-    <span
-      data-testid="run-phase"
-      className="min-w-0 max-w-[12rem] truncate text-xs text-muted"
+    <Tooltip
+      content={text}
+      placement="top"
+      closeDelay={100}
+      disableAnimation={import.meta.env.MODE === "test"}
+      // The `content` slot, not `className`: HeroUI leaves the slot itself
+      // transparent, so styling the component instead of the slot renders the
+      // text straight onto whatever is behind the tooltip.
+      classNames={{
+        content:
+          "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl",
+      }}
     >
-      {label}
-    </span>
+      <span
+        data-testid="run-phase"
+        className={cn(
+          "min-w-0 cursor-default truncate text-xs text-muted",
+          wide ? "max-w-[28rem]" : "max-w-[12rem]",
+        )}
+      >
+        {text}
+      </span>
+    </Tooltip>
   );
 }

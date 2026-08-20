@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { RunPhase } from "#/components/features/automations/detail/run-phase";
+import {
+  resolveRunPhaseText,
+  RunPhase,
+} from "#/components/features/automations/detail/run-phase";
 import { I18nKey } from "#/i18n/declaration";
 // Source of truth for translated values — not a hand-maintained duplicate.
 import translationData from "#/i18n/translation.json";
@@ -108,5 +111,35 @@ describe("RunPhase — fields absent entirely (older automation service)", () =>
     expect(screen.getByTestId("run-phase")).toHaveTextContent(
       "Reticulating splines",
     );
+  });
+});
+
+describe("resolveRunPhaseText — one answer for the row and its tooltip", () => {
+  // The row shows a clipped copy of this text and the tooltip shows all of
+  // it, so both have to resolve the same phase the same way; a surface that
+  // resolved it on its own could show one thing and reveal another.
+  const t = (key: string) => TRANSLATIONS[key]?.fr ?? key;
+
+  it("resolves a known code to its translation", () => {
+    expect(resolveRunPhaseText(t, "sandbox_provisioning", null)).toBe(
+      TRANSLATIONS[I18nKey.AUTOMATIONS$DETAIL$PHASE_SANDBOX_PROVISIONING].fr,
+    );
+  });
+
+  it("resolves an unknown code to the author's label, verbatim", () => {
+    expect(resolveRunPhaseText(t, "poll_prs", "🔍 Опрашиваем PR-ы")).toBe(
+      "🔍 Опрашиваем PR-ы",
+    );
+  });
+
+  it("resolves a phase carrying only a label to that label", () => {
+    expect(resolveRunPhaseText(t, null, "Reticulating splines")).toBe(
+      "Reticulating splines",
+    );
+  });
+
+  it("resolves to null when there is nothing to show", () => {
+    expect(resolveRunPhaseText(t, "poll_prs", "")).toBeNull();
+    expect(resolveRunPhaseText(t, null, null)).toBeNull();
   });
 });

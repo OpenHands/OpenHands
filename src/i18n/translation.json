@@ -13837,6 +13837,23 @@
     "uk": "Пропущено",
     "ca": "Omès"
   },
+  "AUTOMATIONS$DETAIL$PHASE": {
+    "ar": "المرحلة",
+    "ca": "Fase",
+    "de": "Phase",
+    "en": "Phase",
+    "es": "Fase",
+    "fr": "Phase",
+    "it": "Fase",
+    "ja": "フェーズ",
+    "ko-KR": "단계",
+    "no": "Fase",
+    "pt": "Fase",
+    "tr": "Aşama",
+    "uk": "Етап",
+    "zh-CN": "阶段",
+    "zh-TW": "階段"
+  },
   "AUTOMATIONS$DETAIL$PHASE_QUEUED": {
     "ar": "في قائمة الانتظار",
     "ca": "A la cua",
