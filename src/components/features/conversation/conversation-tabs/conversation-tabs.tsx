@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
 import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -92,6 +93,15 @@ export function ConversationTabs({
       label: t(I18nKey.COMMON$FILES),
     },
     {
+      tabValue: "commits",
+      isActive: isTabActive("commits"),
+      icon: LuFileDiff,
+      onClick: () => selectTab("commits"),
+      tooltipContent: t(I18nKey.DIFF_VIEWER$COMMITS),
+      tooltipAriaLabel: t(I18nKey.DIFF_VIEWER$COMMITS),
+      label: t(I18nKey.DIFF_VIEWER$COMMITS),
+    },
+    {
       tabValue: "planner",
       isActive: isTabActive("planner"),
       icon: ListTodo,
@@ -131,8 +141,8 @@ export function ConversationTabs({
   ];
 
   if (hasTaskList) {
-    // Insert after `files` so the leftmost slot stays Files.
-    tabs.splice(1, 0, {
+    // Insert after the file-related tabs.
+    tabs.splice(2, 0, {
       tabValue: "tasklist",
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,

@@ -124,8 +124,11 @@ describe("every launcher that advertises the prefix also serves it", () => {
     // Both of its proxies (static server and ingress) must build their routes
     // from the shared helper rather than a hand-maintained copy. The copy this
     // replaced had already drifted: it was missing the editor prefix.
+    expect(source).toMatch(
+      /function buildLocalServiceRouteArgs[\s\S]*?buildRouteArgs\(\s*getLocalServiceRoutes\(/,
+    );
     const routeArgUses = source.match(
-      /buildRouteArgs\(getLocalServiceRoutes\(config\)\)/g,
+      /\.\.\.buildLocalServiceRouteArgs\(config\)/g,
     );
     expect(routeArgUses).toHaveLength(2);
   });
@@ -206,7 +209,9 @@ describe("every launcher that advertises the prefix also serves it", () => {
       block,
       "the viteEnv editor block is still recognizable",
     ).not.toBeNull();
-    expect(block?.[1]).toContain("VITE_VSCODE_BASE_PATH = config.vscodeBasePath");
+    expect(block?.[1]).toContain(
+      "VITE_VSCODE_BASE_PATH = config.vscodeBasePath",
+    );
     // The editor is its own process on its own port, so the proxy target is
     // that port and not the backend/ingress host.
     expect(block?.[1]).toContain(

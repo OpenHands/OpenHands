@@ -64,8 +64,10 @@ import {
   buildAutomationRuntimeServicesInfo,
   buildConfig,
   buildRouteArgs,
+  getAgentServerBaseUrl,
   getLocalServiceRoutes,
   getNoReferrerPrefixArgs,
+  getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -288,6 +290,27 @@ async function waitForService(name, url, timeoutMs = 30000) {
 // dev-with-automation; the only difference is the frontend service.)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// The static server and the ingress proxy front the same local backends, so
+// they share one route table — dev-with-automation's, rather than a second
+// copy here. The copy this replaces claimed to stay identical to that table
+// but nothing enforced it, and it had already drifted: the editor prefix was
+// missing, so `/vscode` fell through to the SPA fallback and answered editor
+// requests with the canvas shell.
+//
+// This mode always launches both local backends (it never runs frontend-only),
+// so it asks for their routes unconditionally. Every target is IPv4 loopback:
+// the backends bind to `0.0.0.0`, which only accepts IPv4, but localhost can
+// resolve to ::1 first (notably on Windows).
+function buildLocalServiceRouteArgs(config) {
+  return buildRouteArgs(
+    getLocalServiceRoutes({
+      ...config,
+      launchAgentServer: true,
+      launchAutomation: true,
+    }),
+  );
+}
+
 function startAgentServer(config) {
   logService(
     "agent-server",
@@ -336,7 +359,7 @@ function startAgentServer(config) {
 function buildAutomationBackendEnv(config, env = process.env) {
   // Both backends share the same session API key value.
   return {
-    AUTOMATION_AGENT_SERVER_URL: `http://localhost:${config.agentServerPort}`,
+    AUTOMATION_AGENT_SERVER_URL: getAgentServerBaseUrl(config),
     AUTOMATION_AGENT_SERVER_API_KEY: config.sessionApiKey,
     AUTOMATION_DB_URL: `sqlite+aiosqlite:///${join(config.stateDir, "automations.db")}`,
     AUTOMATION_BASE_URL: `http://localhost:${config.ingressPort}`,
@@ -387,12 +410,6 @@ function startStaticServer(config) {
   // hitting :3001 directly behaves like Vite's dev server (e.g. /server_info
   // is forwarded to the agent-server instead of falling back to the SPA
   // shell). Without this, /server_info on :3001 returns index.html.
-  //
-  // Built from dev-with-automation's `getLocalServiceRoutes` rather than
-  // duplicated inline. The duplicate copy this replaces claimed to stay
-  // identical to that table but nothing enforced it, and it had already
-  // drifted — the editor prefix was missing here, so `/vscode` fell through
-  // to the SPA fallback and answered editor requests with the canvas shell.
   const staticServerScript = join(projectRoot, "scripts", "static-server.mjs");
   const runtimeServicesInfo = JSON.stringify(
     buildAutomationRuntimeServicesInfo({
@@ -419,7 +436,7 @@ function startStaticServer(config) {
         : []),
       "--runtime-services-info",
       runtimeServicesInfo,
-      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...buildLocalServiceRouteArgs(config),
       // Only the static server injects into the document, so only it can tell
       // the frontend this origin serves the editor. The ingress below routes
       // the same prefix but proxies the HTML through untouched.
@@ -453,7 +470,7 @@ function startIngress(config) {
       config.ingressPort.toString(),
       "--runtime-services-info",
       runtimeServicesInfo,
-      ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...buildLocalServiceRouteArgs(config),
       ...getNoReferrerPrefixArgs(config),
       "--default",
       `http://localhost:${config.vitePort}`,
@@ -603,7 +620,7 @@ async function main() {
   startAgentServer(config);
   await waitForService(
     "agent-server",
-    `http://localhost:${config.agentServerPort}/server_info`,
+    `${getAgentServerBaseUrl(config)}/server_info`,
   );
 
   startAutomationBackend(config);
@@ -623,7 +640,12 @@ async function main() {
 // Exports for testing
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { buildAutomationBackendEnv, buildFrontend, startStaticServer };
+export {
+  buildAutomationBackendEnv,
+  buildFrontend,
+  buildLocalServiceRouteArgs,
+  startStaticServer,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Main entry point (only when run directly, not when imported)
