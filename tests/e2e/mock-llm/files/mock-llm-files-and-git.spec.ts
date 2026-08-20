@@ -372,12 +372,17 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
       await page.waitForTimeout(500);
     });
 
-    // Click the Files tab
-    await test.step("click files tab", async () => {
+    // Ensure the Files surface is showing. Opening the drawer already
+    // defaults the selection to Files, and clicking the active tab again
+    // deliberately closes the drawer (see useSelectConversationTab), so only
+    // click when the Files panel is not already visible.
+    await test.step("ensure files tab is active", async () => {
       const filesTab = page.getByTestId("conversation-tab-files");
       await expect(filesTab).toBeVisible({ timeout: 10_000 });
-      await filesTab.click();
-      await page.waitForTimeout(300);
+      if (!(await page.getByTestId("files-tab").isVisible())) {
+        await filesTab.click();
+        await page.waitForTimeout(300);
+      }
     });
 
     await test.step("verify files tab shows file browser (not diff)", async () => {
