@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
+import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
+import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { ApiKeyModalBase } from "#/components/features/settings/api-key-modal-base";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
@@ -43,12 +45,23 @@ export function ProviderConnectionModal({
   const { t } = useTranslation("openhands");
   const createConnection = useCreateProviderConnection();
   const updateConnection = useUpdateProviderConnection();
+  const { data: providers = [] } = useSearchProviders();
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState("");
   const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+
+  // Provider options come from the same litellm source as the model selector.
+  // `custom` is always offered so a provider missing from the catalog can still
+  // be used; `allowsCustomValue` also lets the user type a free-form value.
+  const providerItems = useMemo(() => {
+    const names = new Set<string>([DEFAULT_PROVIDER]);
+    for (const p of providers) names.add(p.name);
+    if (provider) names.add(provider);
+    return Array.from(names).map((name) => ({ key: name, label: name }));
+  }, [providers, provider]);
 
   const isOpen = isCreate || Boolean(connection);
   const keyAlreadySet = Boolean(connection?.api_key_set);
@@ -163,13 +176,18 @@ export function ProviderConnectionModal({
           onChange={setDisplayName}
           required
         />
-        <SettingsInput
+        <SettingsDropdownInput
           testId="provider-connection-provider-input"
+          name="provider-connection-provider"
           label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-          type="text"
-          className="w-full"
-          value={provider}
-          onChange={setProvider}
+          items={providerItems}
+          selectedKey={provider}
+          allowsCustomValue
+          isClearable={false}
+          onSelectionChange={(key) => {
+            if (typeof key === "string") setProvider(key);
+          }}
+          onInputChange={setProvider}
         />
         <SettingsInput
           testId="provider-connection-api-key-input"

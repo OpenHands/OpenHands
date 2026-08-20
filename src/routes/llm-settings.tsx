@@ -38,12 +38,14 @@ import {
   FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
+import {
+  NEW_PROVIDER_CONNECTION,
+  NO_PROVIDER_CONNECTION,
+  resolveProviderConnectionSelection,
+} from "#/utils/resolve-provider-connection";
 
 /** Form-values key for the shared provider connection a profile links to. */
 export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
-
-/** Dropdown sentinel for "no provider connection" (an inline key is used). */
-const NO_PROVIDER_CONNECTION = "__none__";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -250,27 +252,31 @@ export function LlmSettingsScreen({
         ? apiKeyValue.length > 0
         : Boolean(settings?.llm_api_key_set);
 
-      // A profile linked to a provider connection reads its api_key / base_url
-      // from that connection, so the inline key + base URL inputs are hidden.
+      // Resolve which connection option is effectively selected from the
+      // stored form value + the model's provider + the existing connections.
+      // An empty stored value means "no explicit choice yet", in which case the
+      // resolver defaults to reusing a same-provider connection, else offering
+      // to create one — so provider selection doubles as connection selection.
       const connectionValue =
         typeof values[LLM_PROVIDER_CONNECTION_KEY] === "string"
           ? values[LLM_PROVIDER_CONNECTION_KEY]
           : "";
-      const isLinkedToConnection = Boolean(connectionValue);
-      // Show the selector whenever connections can be linked here. Include the
-      // linked case so a profile pointing at an orphaned connection (its only
-      // connection deleted, or the list still loading) still exposes a control
-      // to unlink — otherwise the API key / base URL inputs stay hidden with no
-      // way to recover.
+      const selection = resolveProviderConnectionSelection({
+        model: modelValue,
+        storedValue: connectionValue,
+        connections: connectionOptions,
+      });
+      // A profile linked to an *existing* connection reads its api_key /
+      // base_url from that connection, so the inline key + base URL inputs are
+      // hidden. In "create" mode the connection does not exist yet, so the key
+      // (and optional base URL) must be entered here to seed it; in "none" mode
+      // the profile keeps its own inline creds. So only "link" hides them.
+      const hideInlineCredentials = selection.mode === "link";
+      // Show the selector for the local profile editor unless the user is on
+      // subscription auth. It stays visible even with zero connections so the
+      // "create for <provider>" default is offered up front.
       const showConnectionSelector =
-        showProviderConnection &&
-        !isSubscriptionAuth &&
-        (isLinkedToConnection || connectionOptions.length > 0);
-      // Surface an orphaned link (a selected id absent from the fetched list)
-      // as its own option so the dropdown reflects it and can be cleared.
-      const isOrphanedLink =
-        isLinkedToConnection &&
-        !connectionOptions.some((c) => c.id === connectionValue);
+        showProviderConnection && !isSubscriptionAuth;
 
       const renderConnectionSelector = () => (
         <SettingsDropdownInput
@@ -278,28 +284,41 @@ export function LlmSettingsScreen({
           name={LLM_PROVIDER_CONNECTION_KEY}
           label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_SELECT_LABEL)}
           items={[
-            {
-              key: NO_PROVIDER_CONNECTION,
-              label: t(I18nKey.SETTINGS$MCP_AUTH_MODE_NONE),
-            },
             ...connectionOptions.map((connection) => ({
               key: connection.id,
               label: connection.display_name,
             })),
-            ...(isOrphanedLink
+            // Offer to create a new connection for the model's provider when no
+            // existing connection already covers it.
+            ...(selection.provider &&
+            !connectionOptions.some((c) => c.provider === selection.provider)
+              ? [
+                  {
+                    key: NEW_PROVIDER_CONNECTION,
+                    label: t(I18nKey.SETTINGS$PROVIDER_CONNECTION_CREATE_NEW, {
+                      provider: selection.provider,
+                    }),
+                  },
+                ]
+              : []),
+            {
+              key: NO_PROVIDER_CONNECTION,
+              label: t(I18nKey.SETTINGS$PROVIDER_CONNECTION_USE_INLINE_KEY),
+            },
+            // Surface an orphaned link (a selected id absent from the fetched
+            // list) as its own option so it can be seen and cleared.
+            ...(selection.isOrphanedLink
               ? [{ key: connectionValue, label: connectionValue }]
               : []),
           ]}
-          selectedKey={connectionValue || NO_PROVIDER_CONNECTION}
+          selectedKey={selection.selectedKey}
           isClearable={false}
           isDisabled={isDisabled}
           onSelectionChange={(selectedKey) => {
-            const next =
-              typeof selectedKey === "string" &&
-              selectedKey !== NO_PROVIDER_CONNECTION
-                ? selectedKey
-                : "";
-            onChange(LLM_PROVIDER_CONNECTION_KEY, next);
+            onChange(
+              LLM_PROVIDER_CONNECTION_KEY,
+              typeof selectedKey === "string" ? selectedKey : "",
+            );
           }}
         />
       );
@@ -446,11 +465,11 @@ export function LlmSettingsScreen({
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
+                  {showOpenHandsApiKeyHelp && !hideInlineCredentials ? (
                     <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
                   ) : null}
 
-                  {isLinkedToConnection
+                  {hideInlineCredentials
                     ? null
                     : renderApiKeyInput(
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
@@ -483,7 +502,7 @@ export function LlmSettingsScreen({
                     isDisabled={isDisabled}
                   />
 
-                  {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
+                  {showOpenHandsApiKeyHelp && !hideInlineCredentials ? (
                     <>
                       {isFreeOpenHandsModel(modelValue) ? (
                         <OpenHandsFreeModelsNote />
@@ -494,7 +513,7 @@ export function LlmSettingsScreen({
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {isLinkedToConnection ? null : (
+                  {hideInlineCredentials ? null : (
                     <SettingsInput
                       testId="base-url-input"
                       label={t(I18nKey.SETTINGS$BASE_URL)}
@@ -508,7 +527,7 @@ export function LlmSettingsScreen({
                     />
                   )}
 
-                  {isLinkedToConnection
+                  {hideInlineCredentials
                     ? null
                     : renderApiKeyInput(
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing

@@ -11,7 +11,10 @@ import {
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
+import * as useProviderConnectionsHook from "#/hooks/query/use-provider-connections";
+import * as useCreateProviderConnectionHook from "#/hooks/mutation/use-create-provider-connection";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
@@ -32,21 +35,25 @@ vi.mock("#/routes/llm-settings", async () => {
       }) => void;
     }) => {
       const initialValueOverridesRef = React.useRef(initialValueOverrides);
-      const initialValuesRef = React.useRef({
+      const initialValuesRef = React.useRef<Record<string, string | boolean>>({
         "llm.model": "openai/gpt-4o",
         "llm.api_key": "test-api-key",
         "llm.base_url": "",
+        "llm.provider_connection_id": "",
         ...(initialValueOverrides ?? {}),
       });
       const [view, setView] = React.useState<"basic" | "all">("basic");
       const [model, setModel] = React.useState(
         String(initialValuesRef.current["llm.model"] ?? ""),
       );
-      const [apiKey] = React.useState(
+      const [apiKey, setApiKey] = React.useState(
         String(initialValuesRef.current["llm.api_key"] ?? ""),
       );
       const [baseUrl] = React.useState(
         String(initialValuesRef.current["llm.base_url"] ?? ""),
+      );
+      const [connection, setConnection] = React.useState(
+        String(initialValuesRef.current["llm.provider_connection_id"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
       React.useEffect(() => {
@@ -55,6 +62,7 @@ vi.mock("#/routes/llm-settings", async () => {
           "llm.model": model,
           "llm.api_key": apiKey,
           "llm.base_url": baseUrl,
+          "llm.provider_connection_id": connection,
         };
         onSaveControlChange?.({
           save: vi.fn(),
@@ -75,7 +83,15 @@ vi.mock("#/routes/llm-settings", async () => {
             };
           },
         });
-      }, [apiKey, baseUrl, model, onSaveControlChange, temperature, view]);
+      }, [
+        apiKey,
+        baseUrl,
+        connection,
+        model,
+        onSaveControlChange,
+        temperature,
+        view,
+      ]);
 
       return (
         <div data-testid="mock-llm-settings-screen">
@@ -100,6 +116,20 @@ vi.mock("#/routes/llm-settings", async () => {
               onChange={(event) => setModel(event.currentTarget.value)}
             />
           ) : null}
+          {view === "basic" ? (
+            <input
+              data-testid="mock-basic-api-key-input"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.currentTarget.value)}
+            />
+          ) : null}
+          {view === "basic" ? (
+            <input
+              data-testid="mock-connection-input"
+              value={connection}
+              onChange={(event) => setConnection(event.currentTarget.value)}
+            />
+          ) : null}
           {view === "all" ? (
             <input
               data-testid="sdk-settings-llm.temperature"
@@ -116,6 +146,8 @@ vi.mock("#/routes/llm-settings", async () => {
 vi.mock("#/hooks/query/use-llm-profiles");
 vi.mock("#/hooks/mutation/use-activate-llm-profile");
 vi.mock("#/hooks/mutation/use-save-llm-profile");
+vi.mock("#/hooks/query/use-provider-connections");
+vi.mock("#/hooks/mutation/use-create-provider-connection");
 vi.mock("#/api/profiles-service/profiles-service.api");
 
 const mockProfiles = [
@@ -184,6 +216,17 @@ function createMockMutationReturn<T>(
 describe("LlmSettingsLocalView", () => {
   const mockActivateMutateAsync = vi.fn();
   const mockSaveMutateAsync = vi.fn();
+  const mockCreateConnectionMutateAsync = vi.fn();
+
+  function setProviderConnections(connections: ProviderConnection[]) {
+    vi.mocked(
+      useProviderConnectionsHook.useProviderConnections,
+    ).mockReturnValue({
+      data: connections,
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useProviderConnectionsHook.useProviderConnections>);
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -203,6 +246,19 @@ describe("LlmSettingsLocalView", () => {
         ReturnType<typeof useSaveLlmProfileHook.useSaveLlmProfile>
       >(mockSaveMutateAsync),
     );
+
+    vi.mocked(
+      useCreateProviderConnectionHook.useCreateProviderConnection,
+    ).mockReturnValue(
+      createMockMutationReturn<
+        ReturnType<
+          typeof useCreateProviderConnectionHook.useCreateProviderConnection
+        >
+      >(mockCreateConnectionMutateAsync),
+    );
+
+    // Default: no existing connections. Individual tests override this.
+    setProviderConnections([]);
   });
 
   it("renders profile list by default", () => {
@@ -846,6 +902,141 @@ describe("LlmSettingsLocalView", () => {
       expect(savedLlm.temperature).toBe(0.7);
       expect(savedLlm.model).toBe("anthropic/claude-opus-4-5-20251101");
       expect(savedLlm.api_key).toBe("gAAAA_encrypted_key");
+    });
+  });
+
+  describe("provider connection auto-create / reuse", () => {
+    const openaiConnection: ProviderConnection = {
+      id: "conn-openai",
+      display_name: "openai",
+      provider: "openai",
+      base_url: null,
+      created_at: 1,
+      updated_at: 1,
+      api_key_set: true,
+    };
+
+    async function openCreateView(user: ReturnType<typeof userEvent.setup>) {
+      renderWithProviders(<LlmSettingsLocalView />);
+      await user.click(screen.getByTestId("add-llm-profile"));
+      await screen.findByTestId("mock-basic-model-input");
+    }
+
+    it("auto-creates a connection named after the provider and links the profile", async () => {
+      const user = userEvent.setup();
+      mockCreateConnectionMutateAsync.mockResolvedValueOnce({
+        ...openaiConnection,
+        id: "conn-new",
+      });
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      await openCreateView(user);
+
+      // Choose a provider-prefixed model and enter a key (no connections exist).
+      const modelInput = screen.getByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      const keyInput = screen.getByTestId("mock-basic-api-key-input");
+      await user.clear(keyInput);
+      await user.type(keyInput, "sk-secret");
+
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(mockCreateConnectionMutateAsync).toHaveBeenCalledWith({
+          display_name: "openai",
+          provider: "openai",
+          api_key: "sk-secret",
+          base_url: null,
+        }),
+      );
+
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.provider_connection_id).toBe("conn-new");
+      // The profile keeps no inline credential once linked.
+      expect(savedLlm.api_key).toBeUndefined();
+      expect(savedLlm.base_url).toBeUndefined();
+    });
+
+    it("reuses an existing same-provider connection without creating a new one", async () => {
+      const user = userEvent.setup();
+      setProviderConnections([openaiConnection]);
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      await openCreateView(user);
+
+      const modelInput = screen.getByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      expect(mockCreateConnectionMutateAsync).not.toHaveBeenCalled();
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.provider_connection_id).toBe("conn-openai");
+      expect(savedLlm.api_key).toBeUndefined();
+    });
+
+    it("aborts the save when connection creation fails", async () => {
+      const user = userEvent.setup();
+      mockCreateConnectionMutateAsync.mockRejectedValueOnce(
+        new AxiosError("boom"),
+      );
+
+      await openCreateView(user);
+
+      const modelInput = screen.getByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      const keyInput = screen.getByTestId("mock-basic-api-key-input");
+      await user.clear(keyInput);
+      await user.type(keyInput, "sk-secret");
+
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(mockCreateConnectionMutateAsync).toHaveBeenCalled(),
+      );
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("keeps the profile inline when the user selects the inline-key option", async () => {
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      await openCreateView(user);
+
+      const modelInput = screen.getByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/gpt-4o");
+      const keyInput = screen.getByTestId("mock-basic-api-key-input");
+      await user.clear(keyInput);
+      await user.type(keyInput, "sk-secret");
+      // Explicitly opt out of connections.
+      const connectionInput = screen.getByTestId("mock-connection-input");
+      await user.clear(connectionInput);
+      await user.type(connectionInput, "__none__");
+
+      await waitFor(() =>
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled(),
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      expect(mockCreateConnectionMutateAsync).not.toHaveBeenCalled();
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.api_key).toBe("sk-secret");
+      expect(savedLlm.provider_connection_id).toBeNull();
     });
   });
 });

@@ -39251,5 +39251,39 @@
     "uk": "Підключення \"{{name}}\" оновлено",
     "zh-CN": "已更新连接“{{name}}”",
     "zh-TW": "已更新連線「{{name}}」"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_CREATE_NEW": {
+    "ar": "إنشاء اتصال جديد لـ {{provider}}",
+    "ca": "Crea una connexió nova per a {{provider}}",
+    "de": "Neue Verbindung für {{provider}} erstellen",
+    "en": "Create new connection for {{provider}}",
+    "es": "Crear nueva conexión para {{provider}}",
+    "fr": "Créer une connexion pour {{provider}}",
+    "it": "Crea nuova connessione per {{provider}}",
+    "ja": "{{provider}} の新しい接続を作成",
+    "ko-KR": "{{provider}}에 대한 새 연결 만들기",
+    "no": "Opprett ny tilkobling for {{provider}}",
+    "pt": "Criar nova conexão para {{provider}}",
+    "tr": "{{provider}} için yeni bağlantı oluştur",
+    "uk": "Створити нове підключення для {{provider}}",
+    "zh-CN": "为 {{provider}} 创建新连接",
+    "zh-TW": "為 {{provider}} 建立新連線"
+  },
+  "SETTINGS$PROVIDER_CONNECTION_USE_INLINE_KEY": {
+    "ar": "استخدام مفتاح خاص بهذا الملف فقط",
+    "ca": "Usa una clau només per a aquest perfil",
+    "de": "Einen Schlüssel nur für dieses Profil verwenden",
+    "en": "Use a key just for this profile",
+    "es": "Usar una clave solo para este perfil",
+    "fr": "Utiliser une clé propre à ce profil",
+    "it": "Usa una chiave solo per questo profilo",
+    "ja": "このプロファイル専用のキーを使用",
+    "ko-KR": "이 프로필 전용 키 사용",
+    "no": "Bruk en nøkkel bare for denne profilen",
+    "pt": "Usar uma chave só para este perfil",
+    "tr": "Yalnızca bu profil için bir anahtar kullan",
+    "uk": "Використовувати ключ лише для цього профілю",
+    "zh-CN": "仅为此配置使用单独密钥",
+    "zh-TW": "僅為此設定檔使用單獨金鑰"
   }
 }

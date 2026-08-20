@@ -432,6 +432,92 @@ describe("LlmSettingsScreen - provider connection selector", () => {
       await screen.findByTestId("llm-provider-connection-input"),
     ).toBeInTheDocument();
   });
+
+  it("shows the selector on local even with zero connections", async () => {
+    // With no explicit link and no connections, a provider-prefixed model
+    // still surfaces the selector so the "create for <provider>" default is
+    // offered up front — this is what makes connections the default path. The
+    // key field stays visible in "create" mode so the new connection can be
+    // seeded with a key.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      await screen.findByTestId("llm-provider-connection-input"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+  });
+
+  it("hides the inline key field when linked to an existing connection", async () => {
+    // A same-provider connection already exists, so the default resolves to
+    // "link": the credential lives on the connection and the inline key field
+    // is hidden (the reuse case from the feature spec).
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      {
+        id: "conn-openai",
+        display_name: "openai",
+        provider: "openai",
+        base_url: null,
+        created_at: 1,
+        updated_at: 1,
+        api_key_set: true,
+      },
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-provider-connection-input");
+    await waitFor(() =>
+      expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows the inline key field when the user opts out of connections", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        // Explicit "none" sentinel = inline credentials.
+        "llm.provider_connection_id": "__none__",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-provider-connection-input");
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+  });
 });
 
 describe("LlmSettingsRoute - backend mode rendering", () => {
