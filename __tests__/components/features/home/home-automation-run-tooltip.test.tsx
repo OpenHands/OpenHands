@@ -11,7 +11,10 @@ import {
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    // Counted keys keep their count, so a test can assert which relative-time
+    // key was chosen *and* the number handed to it, not just the key.
+    t: (key: string, options?: Record<string, unknown>) =>
+      options?.count === undefined ? key : `${key}:${options.count}`,
     i18n: { language: "en" },
   }),
 }));
@@ -80,6 +83,40 @@ describe("HomeAutomationRunTooltip — phase", () => {
     expect(screen.getByTestId("run-phase-row")).toHaveTextContent(
       "AUTOMATIONS$DETAIL$PHASE_BUNDLE_UPLOAD",
     );
+  });
+
+  it("says how long the run has held the phase, so a stall is visible without opening the run", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={automation}
+        runState={makeState(
+          makeRun({
+            phase_code: "drafting_notes",
+            phase_label: LONG_LABEL,
+            phase_updated_at: new Date(Date.now() - 25 * 60_000).toISOString(),
+          }),
+        )}
+      />,
+    );
+
+    expect(screen.getByTestId("run-phase-row")).toHaveTextContent(
+      "AUTOMATIONS$DETAIL$TIME_MINUTES_AGO:25",
+    );
+  });
+
+  it("shows the phase without an age against a service that sends no timestamp", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={automation}
+        runState={makeState(
+          makeRun({ phase_code: "drafting_notes", phase_label: LONG_LABEL }),
+        )}
+      />,
+    );
+
+    const row = screen.getByTestId("run-phase-row");
+    expect(row).toHaveTextContent(LONG_LABEL);
+    expect(row.textContent).not.toContain("AUTOMATIONS$DETAIL$TIME_");
   });
 
   it("omits the phase row for a finished run, matching every other surface", () => {

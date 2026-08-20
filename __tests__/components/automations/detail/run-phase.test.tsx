@@ -2,12 +2,14 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import {
+  formatRunPhaseAge,
   resolveRunPhaseText,
   RunPhase,
 } from "#/components/features/automations/detail/run-phase";
 import { I18nKey } from "#/i18n/declaration";
 // Source of truth for translated values — not a hand-maintained duplicate.
 import translationData from "#/i18n/translation.json";
+import { formatRelativeTime } from "#/utils/format-relative-time";
 
 type TranslationEntry = Record<string, string>;
 const TRANSLATIONS = translationData as unknown as Record<
@@ -19,16 +21,29 @@ const TRANSLATIONS = translationData as unknown as Record<
 // French ("fr"), the same pattern used elsewhere in this repo (see
 // server-status.test.tsx) to assert on genuine translated copy rather than
 // the ambient test i18n backend, which never resolves real values.
+function translate(key: string, options?: Record<string, unknown>): string {
+  const value = TRANSLATIONS[key]?.fr ?? key;
+  if (!options) return value;
+  // Interpolate the same way i18next does, so a test can assert on "il y a
+  // 12min" rather than on the untouched "il y a {{count}}min" placeholder.
+  return value.replace(/{{(\w+)}}/g, (_, name: string) =>
+    String(options[name] ?? `{{${name}}}`),
+  );
+}
+
 vi.mock("react-i18next", async () => {
   const actual = await vi.importActual("react-i18next");
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string) => TRANSLATIONS[key]?.fr ?? key,
+      t: translate,
       i18n: { language: "fr" },
     }),
   };
 });
+
+const minutesAgo = (minutes: number) =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
 
 describe("RunPhase — known code, non-English language", () => {
   it("shows the French translation.json value for a known phase code, not the raw code", () => {
@@ -141,5 +156,85 @@ describe("resolveRunPhaseText — one answer for the row and its tooltip", () =>
   it("resolves to null when there is nothing to show", () => {
     expect(resolveRunPhaseText(t, "poll_prs", "")).toBeNull();
     expect(resolveRunPhaseText(t, null, null)).toBeNull();
+  });
+});
+
+describe("formatRunPhaseAge — telling a moving run from a stalled one", () => {
+  it("reports how long the run has held the phase, localized", () => {
+    expect(formatRunPhaseAge(minutesAgo(12), "fr", translate)).toBe(
+      "il y a 12min",
+    );
+  });
+
+  it("reports a phase written seconds ago as 'just now', not as zero minutes", () => {
+    expect(formatRunPhaseAge(minutesAgo(0), "fr", translate)).toBe(
+      TRANSLATIONS[I18nKey.AUTOMATIONS$DETAIL$TIME_JUST_NOW].fr,
+    );
+  });
+
+  it("boundary: 60 minutes rolls over to the hours wording", () => {
+    expect(formatRunPhaseAge(minutesAgo(60), "fr", translate)).toBe(
+      "il y a 1h",
+    );
+  });
+
+  it("returns null when the service reported no timestamp", () => {
+    expect(formatRunPhaseAge(null, "fr", translate)).toBeNull();
+    expect(formatRunPhaseAge(undefined, "fr", translate)).toBeNull();
+  });
+
+  it("negative: returns null for an unparseable timestamp, which the underlying formatter would render as 'Invalid Date'", () => {
+    // The guard is the whole point: left to itself, the shared relative-time
+    // formatter falls through to a locale date string and prints the garbage.
+    expect(formatRelativeTime("not-a-date", "fr", translate)).toMatch(
+      /Invalid/,
+    );
+
+    expect(formatRunPhaseAge("not-a-date", "fr", translate)).toBeNull();
+  });
+});
+
+describe("RunPhase — how long the run has been in this phase", () => {
+  it("shows the age beside the phase, so a stalled run reads differently from a moving one", () => {
+    render(
+      <RunPhase code="running_agent" label={null} updatedAt={minutesAgo(41)} />,
+    );
+
+    expect(screen.getByTestId("run-phase-age")).toHaveTextContent(
+      "il y a 41min",
+    );
+  });
+
+  it("keeps the age out of the clipped text, so a maximum-length label cannot push it out of sight", () => {
+    // Arrange: the longest label the backend contract allows, in the surface
+    // with the least room.
+    const label = "x".repeat(200);
+
+    render(
+      <RunPhase code="poll_prs" label={label} updatedAt={minutesAgo(7)} />,
+    );
+
+    // Assert: the age is its own node, outside the truncating one, and is
+    // not itself subject to truncation.
+    const text = screen.getByTestId("run-phase");
+    const age = screen.getByTestId("run-phase-age");
+    expect(text).not.toContainElement(age);
+    expect(age.className).toMatch(/\bshrink-0\b/);
+    expect(age.className).not.toMatch(/\btruncate\b/);
+  });
+
+  it("shows no age at all against a service that reports phases without a timestamp", () => {
+    render(<RunPhase code="running_agent" label={null} />);
+
+    expect(screen.getByTestId("run-phase")).toBeInTheDocument();
+    expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
+  });
+
+  it("shows no age when the timestamp is present but unparseable", () => {
+    render(
+      <RunPhase code="running_agent" label={null} updatedAt="not-a-date" />,
+    );
+
+    expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
   });
 });

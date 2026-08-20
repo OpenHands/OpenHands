@@ -293,6 +293,7 @@ export function PinnedAutomationCard({
                 <RunPhase
                   code={latestRun.phase_code}
                   label={latestRun.phase_label}
+                  updatedAt={latestRun.phase_updated_at}
                 />
               ) : null}
 

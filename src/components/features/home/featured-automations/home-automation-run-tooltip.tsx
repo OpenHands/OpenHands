@@ -5,10 +5,15 @@ import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automati
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
 import {
+  formatRunPhaseAge,
   resolveRunPhaseText,
   shouldShowRunPhase,
 } from "#/components/features/automations/detail/run-phase";
-import { AutomationRunStatus, type Automation } from "#/types/automation";
+import {
+  AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
+} from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
 import {
@@ -43,6 +48,32 @@ function PreviewRow({
 }
 
 /**
+ * The run's phase and how long it has held it. The row that opens this
+ * hovercard has to clip a long phase; here there is room to wrap, so this is
+ * where the whole thing is readable — and the age is what says whether the
+ * run is moving through phases or sitting in one.
+ */
+function PhaseRow({ run }: { run: AutomationRun | null }) {
+  const { t, i18n } = useTranslation("openhands");
+
+  if (!run || !shouldShowRunPhase(run.status)) return null;
+
+  const text = resolveRunPhaseText(t, run.phase_code, run.phase_label);
+  if (!text) return null;
+
+  const age = formatRunPhaseAge(run.phase_updated_at, i18n.language, t);
+
+  return (
+    <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
+      <span data-testid="run-phase-row">
+        {text}
+        {age ? <span className="text-muted"> · {age}</span> : null}
+      </span>
+    </PreviewRow>
+  );
+}
+
+/**
  * Left-nav-style hovercard body for an automation's latest-run health.
  * Matches `ConversationCardPreview` layout: title + label/value rows.
  */
@@ -58,12 +89,6 @@ export function HomeAutomationRunTooltip({
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
   const TriggerIcon = automation.trigger.type === "event" ? Zap : ClockIcon;
   const health = deriveRunHealth(runState);
-  // The row that opens this hovercard has to clip a long phase; here there is
-  // room to wrap, so this is where the whole thing is readable.
-  const phaseText =
-    latestRun && shouldShowRunPhase(latestRun.status)
-      ? resolveRunPhaseText(t, latestRun.phase_code, latestRun.phase_label)
-      : null;
 
   return (
     <div className="flex w-[280px] flex-col gap-3 p-3">
@@ -89,11 +114,7 @@ export function HomeAutomationRunTooltip({
           </span>
         </PreviewRow>
 
-        {phaseText ? (
-          <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
-            <span data-testid="run-phase-row">{phaseText}</span>
-          </PreviewRow>
-        ) : null}
+        <PhaseRow run={latestRun} />
 
         {timestamp ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$LAST_RUN)}>
