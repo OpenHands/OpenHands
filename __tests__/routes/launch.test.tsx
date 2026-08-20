@@ -79,15 +79,13 @@ describe("LaunchRoute", () => {
     });
 
     it("should parse valid UTF-8 base64 encoded plugins (Unicode support)", async () => {
-      // Single plugin with Unicode parameters
       const plugins = [
         {
           source: "github:owner/repo",
           parameters: { task: "整理发布说明 🚀" },
         },
       ];
-      const jsonString = JSON.stringify(plugins);
-      const bytes = new TextEncoder().encode(jsonString);
+      const bytes = new TextEncoder().encode(JSON.stringify(plugins));
       const binaryString = Array.from(bytes, (byte) =>
         String.fromCharCode(byte),
       ).join("");
@@ -98,7 +96,6 @@ describe("LaunchRoute", () => {
       expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
       expect(screen.getByText("owner/repo")).toBeInTheDocument();
       
-      // We can also verify that the parameter input correctly rendered the unicode
       const input = screen.getByTestId("plugin-0-param-task");
       expect(input).toHaveValue("整理发布说明 🚀");
     });
