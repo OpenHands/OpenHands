@@ -28,20 +28,22 @@ let captureMock: MockInstance<typeof telemetry.trackEvent>;
 // Both the backend status badge in the embedded edit form and the
 // step-1 health probe ride on `useBackendsHealth`, which resolves
 // server metadata through `ServerClient`.
-vi.mock("@openhands/typescript-client/clients", () => ({
-  ServerClient: vi.fn(function ServerClientMock(options?: { host?: string }) {
-    return {
-      getServerInfo: vi.fn(() => getServerInfoMock(options)),
-    };
-  }),
-  // The always-mounted LLM slide initializes settings hooks even though
-  // `LlmSettingsScreen` is stubbed, so provide the minimal client it needs.
-  SettingsClient: vi.fn(function SettingsClientMock() {
-    return {
-      getSettings: vi.fn().mockResolvedValue({}),
-    };
-  }),
-}));
+vi.mock("@openhands/typescript-client/clients", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openhands/typescript-client/clients")>();
+  return {
+    ...actual,
+    ServerClient: vi.fn(function ServerClientMock(options?: { host?: string }) {
+      return {
+        getServerInfo: vi.fn(() => getServerInfoMock(options)),
+      };
+    }),
+    SettingsClient: vi.fn(function SettingsClientMock() {
+      return {
+        getSettings: vi.fn().mockResolvedValue({}),
+      };
+    }),
+  };
+});
 
 vi.mock("#/api/cloud/organization-service.api", () => ({
   getCurrentCloudApiKey: vi.fn().mockResolvedValue({
