@@ -40,6 +40,21 @@ const repoRoot = path.resolve(
   "../..",
 );
 
+async function getFreePort() {
+  const server = net.createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Expected a TCP address");
+  }
+  const { port } = address;
+  server.close();
+  await once(server, "close");
+  return port;
+}
+
 describe("buildAutomationCommand", () => {
   it("uses released PyPI version by default", () => {
     const cmd = buildAutomationCommand({});
@@ -762,6 +777,92 @@ describe("setServiceLogListener", () => {
 });
 
 describe("dev-with-automation CLI", () => {
+  it("does not install signal handlers when imported", async () => {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `const signals = ["SIGINT", "SIGTERM", "SIGHUP"]; const before = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)])); await import(${JSON.stringify(moduleUrl)}); const after = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)])); console.log(JSON.stringify({ before, after }));`,
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    const [code] = await once(child, "exit");
+    expect(code).toBe(0);
+    expect(JSON.parse(output.trim())).toEqual({
+      before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+      after: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+    });
+  });
+
+  it("installs signal handlers when main is called", async () => {
+    const moduleUrl = pathToFileURL(
+      path.join(repoRoot, "scripts", "dev-with-automation.mjs"),
+    ).href;
+    const stateDir = mkdtempSync(
+      path.join(tmpdir(), "agent-canvas-main-handlers-"),
+    );
+    const child = spawn(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        `const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+const before = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)]));
+const { main } = await import(${JSON.stringify(moduleUrl)});
+process.argv = [process.execPath, "dev-with-automation.mjs", "--frontend-only", "--backend-only"];
+let mainError;
+try {
+  await main({});
+} catch (error) {
+  mainError = error;
+}
+if (!mainError?.message.includes("cannot be used together")) {
+  throw mainError ?? new Error("Expected mutually exclusive launch modes to reject");
+}
+const after = Object.fromEntries(signals.map((signal) => [signal, process.listenerCount(signal)]));
+process.stdout.write(` +
+          "`\n${JSON.stringify({ before, after })}\n`" +
+          `);`,
+      ],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, OH_CANVAS_SAFE_STATE_DIR: stateDir },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      const [code] = await once(child, "exit");
+      expect(code, output).toBe(0);
+      const result = JSON.parse(output.trim().split("\n").at(-1) ?? "");
+      expect(result).toEqual({
+        before: { SIGINT: 0, SIGTERM: 0, SIGHUP: 0 },
+        after: { SIGINT: 1, SIGTERM: 1, SIGHUP: 1 },
+      });
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === "win32")(
     "cleans up detached services when the launcher receives SIGHUP",
     async () => {
@@ -773,10 +874,26 @@ describe("dev-with-automation CLI", () => {
         "const server = net.createServer(() => {});",
         'server.listen(0, "127.0.0.1", () => console.log("READY", process.pid, server.address().port));',
       ].join("\n");
+      const staticDir = mkdtempSync(
+        path.join(tmpdir(), "agent-canvas-static-"),
+      );
+      const stateDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-state-"));
+      writeFileSync(path.join(staticDir, "index.html"), "<!doctype html>");
       const supervisorSource = [
-        `import { spawnService } from ${JSON.stringify(moduleUrl)};`,
-        `const fixture = spawnService("fixture", process.execPath, ["--input-type=module", "--eval", ${JSON.stringify(fixtureSource)}]);`,
-        'console.log("SPAWNED", fixture.pid);',
+        `import { main, spawnService } from ${JSON.stringify(moduleUrl)};`,
+        'process.argv = [process.execPath, "dev-with-automation.mjs", "--frontend-only"];',
+        `process.env.PORT = "${await getFreePort()}";`,
+        `process.env.OH_CANVAS_SAFE_VITE_PORT = "${await getFreePort()}";`,
+        `process.env.OH_CANVAS_SAFE_STATE_DIR = ${JSON.stringify(stateDir)};`,
+        "await main({",
+        "  staticMode: true,",
+        `  staticDir: ${JSON.stringify(staticDir)},`,
+        "  skipNpmCheck: true,",
+        "  extraPrereqs: () => {",
+        `    const fixture = spawnService("fixture", process.execPath, ["--input-type=module", "--eval", ${JSON.stringify(fixtureSource)}]);`,
+        '    console.log("SPAWNED", fixture.pid);',
+        "  },",
+        "});",
         "setInterval(() => {}, 1_000);",
       ].join("\n");
 
@@ -855,6 +972,8 @@ describe("dev-with-automation CLI", () => {
             if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
           }
         }
+        rmSync(staticDir, { recursive: true, force: true });
+        rmSync(stateDir, { recursive: true, force: true });
       }
     },
     15_000,

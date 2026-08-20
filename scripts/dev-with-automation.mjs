@@ -1037,9 +1037,11 @@ function shutdown() {
   }, 3000);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-process.on("SIGHUP", shutdown);
+function installSignalHandlers(handler = shutdown) {
+  process.on("SIGINT", handler);
+  process.on("SIGTERM", handler);
+  process.on("SIGHUP", handler);
+}
 
 function startIngress(config) {
   logService("ingress", `Starting on port ${config.ingressPort}...`, c.yellow);
@@ -1357,6 +1359,7 @@ async function main(options = {}) {
   // Install the listener early so log lines emitted before the first
   // `spawnService` call (e.g. by future setup steps) are also captured.
   setServiceLogListener(onServiceLog);
+  installSignalHandlers();
 
   const args = parseArgs();
 
@@ -1596,6 +1599,7 @@ export {
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
+  installSignalHandlers,
   main,
   registerShutdownHook,
   spawnService,

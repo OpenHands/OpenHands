@@ -63,6 +63,7 @@ import {
   buildAutomationTelemetryEnv,
   buildAutomationRuntimeServicesInfo,
   buildConfig,
+  installSignalHandlers,
 } from "./dev-with-automation.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -510,9 +511,6 @@ function shutdown() {
   }, 3000);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
 function printBanner(config) {
   console.log("");
   console.log(
@@ -657,6 +655,7 @@ const isMainModule =
   process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMainModule) {
+  installSignalHandlers(shutdown);
   main().catch((err) => {
     logError(`Fatal error: ${err.message}`);
     if (err.stack) {
