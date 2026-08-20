@@ -29,6 +29,25 @@ describe("RecommendedAutomationsRail", () => {
     vi.unstubAllGlobals();
   });
 
+  function mockScrollMetrics(
+    element: HTMLElement,
+    metrics: { scrollWidth: number; clientWidth: number; scrollLeft: number },
+  ) {
+    Object.defineProperty(element, "scrollWidth", {
+      configurable: true,
+      value: metrics.scrollWidth,
+    });
+    Object.defineProperty(element, "clientWidth", {
+      configurable: true,
+      value: metrics.clientWidth,
+    });
+    Object.defineProperty(element, "scrollLeft", {
+      configurable: true,
+      writable: true,
+      value: metrics.scrollLeft,
+    });
+  }
+
   it("renders remaining proven workflows before conversation-only extras", () => {
     render(
       <RecommendedAutomationsRail
@@ -134,25 +153,6 @@ describe("RecommendedAutomationsRail", () => {
   });
 
   describe("clipped-content fades", () => {
-    function mockScrollMetrics(
-      element: HTMLElement,
-      metrics: { scrollWidth: number; clientWidth: number; scrollLeft: number },
-    ) {
-      Object.defineProperty(element, "scrollWidth", {
-        configurable: true,
-        value: metrics.scrollWidth,
-      });
-      Object.defineProperty(element, "clientWidth", {
-        configurable: true,
-        value: metrics.clientWidth,
-      });
-      Object.defineProperty(element, "scrollLeft", {
-        configurable: true,
-        writable: true,
-        value: metrics.scrollLeft,
-      });
-    }
-
     it("shows an edge gradient only on the clipped side", () => {
       render(
         <RecommendedAutomationsRail
@@ -188,6 +188,122 @@ describe("RecommendedAutomationsRail", () => {
 
       expect(leftFade).toHaveAttribute("data-visible", "true");
       expect(rightFade).toHaveAttribute("data-visible", "false");
+    });
+  });
+
+  describe("drag-to-scroll", () => {
+    it("scrolls the rail while dragging with the mouse", () => {
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const scroller = screen.getByTestId(
+        "recommended-automations-rail-scroll",
+      );
+      mockScrollMetrics(scroller, {
+        scrollWidth: 900,
+        clientWidth: 320,
+        scrollLeft: 100,
+      });
+
+      fireEvent.mouseDown(scroller, { button: 0, clientX: 300 });
+      fireEvent.mouseMove(document, { clientX: 250, buttons: 1 });
+
+      expect(scroller.scrollLeft).toBe(150);
+    });
+
+    it("does not select a card on the click that ends a drag, but allows the next click", () => {
+      const onSelect = vi.fn();
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={onSelect}
+        />,
+      );
+      const card = screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      );
+
+      fireEvent.mouseDown(card, { button: 0, clientX: 300 });
+      fireEvent.mouseMove(document, { clientX: 250, buttons: 1 });
+      fireEvent.mouseUp(document);
+      fireEvent.click(card);
+
+      expect(onSelect).not.toHaveBeenCalled();
+
+      fireEvent.mouseDown(card, { button: 0, clientX: 250 });
+      fireEvent.mouseUp(document);
+      fireEvent.click(card);
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats movement below the drag threshold as a click", () => {
+      const onSelect = vi.fn();
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={onSelect}
+        />,
+      );
+      const card = screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      );
+
+      fireEvent.mouseDown(card, { button: 0, clientX: 300 });
+      fireEvent.mouseMove(document, { clientX: 301, buttons: 1 });
+      fireEvent.mouseUp(document);
+      fireEvent.click(card);
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores drags started with a non-primary mouse button", () => {
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const scroller = screen.getByTestId(
+        "recommended-automations-rail-scroll",
+      );
+      mockScrollMetrics(scroller, {
+        scrollWidth: 900,
+        clientWidth: 320,
+        scrollLeft: 100,
+      });
+
+      fireEvent.mouseDown(scroller, { button: 2, clientX: 300 });
+      fireEvent.mouseMove(document, { clientX: 250, buttons: 2 });
+
+      expect(scroller.scrollLeft).toBe(100);
+    });
+
+    it("ends the drag once the primary button is no longer held", () => {
+      render(
+        <RecommendedAutomationsRail
+          installedAutomations={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      const scroller = screen.getByTestId(
+        "recommended-automations-rail-scroll",
+      );
+      mockScrollMetrics(scroller, {
+        scrollWidth: 900,
+        clientWidth: 320,
+        scrollLeft: 100,
+      });
+
+      fireEvent.mouseDown(scroller, { button: 0, clientX: 300 });
+      fireEvent.mouseMove(document, { clientX: 250, buttons: 1 });
+      fireEvent.mouseMove(document, { clientX: 200, buttons: 0 });
+      fireEvent.mouseMove(document, { clientX: 100, buttons: 1 });
+
+      expect(scroller.scrollLeft).toBe(150);
     });
   });
 });

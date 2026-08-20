@@ -14,6 +14,7 @@ import {
   getRecommendedRailGroups,
 } from "#/utils/recommended-automation-rail";
 import { readScrollFadeState } from "#/utils/scroll-fade-state";
+import { useDragScroll } from "#/hooks/use-drag-scroll";
 import type { Automation } from "#/types/automation";
 import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 import { cn } from "#/utils/utils";
@@ -87,6 +88,8 @@ export function RecommendedAutomationsRail({
     getRecommendedRailGroups(installedAutomations),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { handleMouseDown, handleClickCapture, handleDragStart } =
+    useDragScroll(scrollRef);
   const [fadeState, setFadeState] = useState({ left: false, right: false });
 
   const updateFadeState = useCallback(() => {
@@ -130,12 +133,16 @@ export function RecommendedAutomationsRail({
       </h2>
 
       <div className="relative">
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mouse drag-to-scroll is a pointer convenience; keyboard users scroll the list natively via the focusable cards. */}
         <div
           ref={scrollRef}
           role="list"
           data-testid="recommended-automations-rail-scroll"
           onScroll={updateFadeState}
-          className="flex flex-nowrap gap-3 overflow-x-auto scrollbar-hide"
+          onMouseDown={handleMouseDown}
+          onClickCapture={handleClickCapture}
+          onDragStart={handleDragStart}
+          className="flex flex-nowrap gap-3 overflow-x-auto scrollbar-hide select-none"
         >
           {items.map((automation) => (
             <div key={automation.id} role="listitem">
