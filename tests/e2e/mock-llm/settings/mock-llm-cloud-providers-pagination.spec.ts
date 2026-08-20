@@ -357,6 +357,14 @@ test.describe("cloud LLM provider-picker pagination", () => {
       "xai is selectable in the picker (it sorts past page 1)",
     ).toBeVisible({ timeout: 10_000 });
 
+    // Let the dropdown's open transition finish before the test moves on.
+    // Playwright's toBeVisible passes mid-fade (mounted + nonzero size),
+    // so without this the recorded video ends on a translucent menu.
+    await expect(
+      page.getByRole("listbox"),
+      "dropdown open transition settled",
+    ).toHaveCSS("opacity", "1");
+
     const openrouterOption = page.getByRole("option", {
       name: /^openrouter$/i,
     });
