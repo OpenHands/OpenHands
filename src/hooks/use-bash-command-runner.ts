@@ -45,6 +45,12 @@ function isBashError(event: BashEvent): event is BashError {
   return event.kind === "BashError";
 }
 
+// Browsers never time out a socket stuck in CONNECTING on their own, and
+// Chrome serializes WebSocket handshakes per host — a hung bash-events
+// handshake would also block the conversation's events socket (the one the
+// chat needs) until it settles. Close it after this long to release the lock.
+const HANDSHAKE_TIMEOUT_MS = 10_000;
+
 /**
  * Maintains a persistent WebSocket connection to the agent-server's
  * `/sockets/bash-events` endpoint and exposes a `runCommand` function that
@@ -78,7 +84,15 @@ export function useBashCommandRunner(
     wsRef.current = ws;
     readyWsRef.current = null;
 
+    // Abort a handshake stuck in CONNECTING (see HANDSHAKE_TIMEOUT_MS above).
+    const handshakeTimeout = setTimeout(() => {
+      if (ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    }, HANDSHAKE_TIMEOUT_MS);
+
     ws.onopen = () => {
+      clearTimeout(handshakeTimeout);
       sendWebSocketAuth(ws, sessionApiKey);
       readyWsRef.current = ws;
       for (const {
@@ -142,6 +156,7 @@ export function useBashCommandRunner(
     }
 
     ws.onclose = () => {
+      clearTimeout(handshakeTimeout);
       wsRef.current = null;
       readyWsRef.current = null;
       rejectAll("Bash WebSocket closed");
@@ -154,6 +169,8 @@ export function useBashCommandRunner(
     };
 
     return () => {
+      // The close handler is nulled below, so clear the watchdog here.
+      clearTimeout(handshakeTimeout);
       // Prevent the close/error handlers from double-rejecting after unmount
       ws.onclose = null;
       ws.onerror = null;
