@@ -1,0 +1,91 @@
+name: Desktop (macOS)
+
+# Builds the Agent Canvas macOS DMG (Apple Silicon).
+#   pull_request:      paths-filtered smoke build — the uploaded artifact is
+#                      what a tester downloads to verify a PR on macOS.
+#   release published: rebuilds from the release tag and attaches the .dmg
+#                      to the GitHub Release created by release-please.
+#   workflow_dispatch: manual escape hatch for any ref.
+# The app is only ad-hoc signed (no signing certs exist for any platform);
+# a downloaded DMG is quarantined by Gatekeeper, which reports the app as
+# "damaged" until the attribute is cleared:
+#   xattr -d com.apple.quarantine "/Applications/OpenHands Agent Canvas.app"
+# Intel DMGs are not produced — the bundled uv/node runtimes are host-arch
+# only, so Intel users build from source.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/desktop-macos.yml
+      - electron/**
+      - electron-builder.config.mjs
+      - scripts/download-uv.mjs
+      - scripts/download-node.mjs
+  release:
+    types: [published]
+
+concurrency:
+  group: desktop-macos-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# `gh release upload` needs contents: write on release events. Fork PR runs
+# are downgraded to a read-only token by GitHub automatically.
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS DMG
+        env:
+          # Production analytics key only for release builds (same split as
+          # docker.yml); PR/manual runs get the staging key. Both are public
+          # client-side keys stored as repo vars — empty on fork PRs, which
+          # simply disables analytics in the built app.
+          VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
+          # Authenticates download-uv.mjs's GitHub API version lookup so it
+          # doesn't hit the unauthenticated per-IP rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run build:desktop
+
+      - name: Verify DMG output
+        run: |
+          ls -la dist-electron
+          dmg_count=$(find dist-electron -maxdepth 1 -name '*.dmg' | wc -l | tr -d ' ')
+          if [ "$dmg_count" -ne 1 ]; then
+            echo "::error::Expected exactly one DMG in dist-electron/, found $dmg_count"
+            exit 1
+          fi
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-canvas-macos-dmg
+          path: dist-electron/*.dmg
+          if-no-files-found: error
+          # The DMG is large (~175 MB); keep PR artifacts long enough for
+          # manual QA without hoarding storage.
+          retention-days: 14
+
+      - name: Attach DMG to GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist-electron/*.dmg --clobber

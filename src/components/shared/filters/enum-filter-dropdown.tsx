@@ -1,0 +1,130 @@
+import React from "react";
+import { Check, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { I18nKey } from "#/i18n/declaration";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
+import { cn } from "#/utils/utils";
+import {
+  dropdownFilterTriggerClassName,
+  dropdownMenuListClassName,
+  dropdownMenuRowClassName,
+} from "#/utils/dropdown-classes";
+
+interface EnumFilterDropdownProps<T extends string> {
+  testId: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: readonly T[];
+  labelKeyByValue?: Record<T, I18nKey>;
+  /** Plain-string labels, e.g. manifest-supplied copy. Wins over the keys. */
+  labelByValue?: Record<T, string>;
+  ariaLabel?: string;
+  className?: string;
+  /** Stretch the trigger to the container width, e.g. inside a parent menu. */
+  fullWidth?: boolean;
+}
+
+export function EnumFilterDropdown<T extends string>({
+  testId,
+  value,
+  onChange,
+  options,
+  labelKeyByValue,
+  labelByValue,
+  ariaLabel,
+  className,
+  fullWidth = false,
+}: EnumFilterDropdownProps<T>) {
+  const { t } = useTranslation("openhands");
+  const [open, setOpen] = React.useState(false);
+  const containerRef = useClickOutsideElement<HTMLDivElement>(() =>
+    setOpen(false),
+  );
+
+  const getOptionLabel = (option: T): string =>
+    labelByValue?.[option] ??
+    (labelKeyByValue ? t(labelKeyByValue[option]) : option);
+  const resolvedAriaLabel =
+    ariaLabel ?? t(I18nKey.CONVERSATION_PANEL$FILTER_LABEL);
+
+  const defaultOption = options[0];
+  const selectedLabel = getOptionLabel(value);
+
+  return (
+    <div
+      ref={containerRef}
+      className={cn(
+        "relative shrink-0",
+        fullWidth ? "w-full" : "w-auto",
+        className,
+      )}
+      data-testid={testId}
+    >
+      <button
+        type="button"
+        data-testid="dropdown-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={resolvedAriaLabel}
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          dropdownFilterTriggerClassName,
+          fullWidth && "w-full justify-between",
+          defaultOption &&
+            value !== defaultOption &&
+            "border-white/60 bg-white/10",
+        )}
+      >
+        <span className="whitespace-nowrap">{selectedLabel}</span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-tertiary-alt transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          data-testid={`${testId}-menu`}
+          aria-label={resolvedAriaLabel}
+          className={cn(
+            "absolute right-0 top-full z-50 mt-1 min-w-full w-max",
+            "max-h-60 overflow-auto rounded-[6px] bg-tertiary p-1 context-menu-box-shadow",
+            dropdownMenuListClassName,
+          )}
+        >
+          {options.map((option) => {
+            const selected = option === value;
+            return (
+              <button
+                key={option}
+                type="button"
+                role="menuitemradio"
+                aria-checked={selected}
+                data-testid={`${testId}-${option}`}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+                className={cn(
+                  dropdownMenuRowClassName,
+                  selected && "bg-[var(--oh-interactive-selected)]",
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {getOptionLabel(option)}
+                </span>
+                {selected ? (
+                  <Check className="h-4 w-4 shrink-0" aria-hidden />
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}

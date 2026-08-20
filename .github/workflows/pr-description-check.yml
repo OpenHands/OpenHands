@@ -1,0 +1,44 @@
+---
+name: PR Description Check
+
+# Use pull_request_target so fork PR descriptions can be checked, but only run
+# trusted validation code from the base branch checkout below.
+
+on:
+    pull_request_target:
+        types: [opened, edited, reopened, ready_for_review, synchronize]
+
+permissions:
+    contents: read
+    pull-requests: read
+    issues: read
+
+jobs:
+    validate-pr-description:
+        name: Validate PR description
+        # Run on drafts too so contributors can iterate on a passing description
+        # before requesting review. Bots (dependabot, release-please) write their
+        # own bodies and can't follow the HUMAN/AGENT template, so exempt them
+        # rather than failing every such PR.
+        if: github.event.pull_request.user.type != 'Bot'
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout trusted workflow scripts
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ github.event.pull_request.base.sha }}
+
+            - name: Fetch changed file paths
+              id: pr_files
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+                      --paginate --jq '.[].filename' > pr-files.txt
+                  echo "count=$(wc -l < pr-files.txt)" >> "$GITHUB_OUTPUT"
+
+            - name: Validate HUMAN note, PR template, frontend evidence, and linked-issue readiness
+              env:
+                  GITHUB_TOKEN: ${{ github.token }}
+              run: python .github/scripts/check_pr_description.py --files-file pr-files.txt

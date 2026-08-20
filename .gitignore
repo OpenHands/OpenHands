@@ -1,0 +1,45 @@
+# i18n translation files make by script using `make build`
+public/locales/**/*
+src/i18n/declaration.ts
+.env
+.envrc
+node_modules/
+build/
+logs/
+/.tmp/live-e2e-state/
+# Scratch space for local E2E runs. Ignore the whole directory: besides the
+# mock-llm state dirs, the suite also drops an automation DB and an unignored
+# `secrets.json` here, which should never be committable.
+/.tmp/
+dist/
+__pycache__
+
+
+/test-results/
+/test-results-live/
+/test-results-mock-llm/
+/test-results-mock-llm-docker/
+/.mock-llm-markers/
+/playwright-report/
+/playwright-report-live/
+/playwright-report-mock-llm/
+/playwright-report-mock-llm-docker/
+/blob-report/
+/playwright/.cache/
+/.stryker-tmp/
+/reports/
+.react-router/
+ralph/
+.vercel
+*.tgz
+
+# Local runtime artifacts produced by static-server / agent-server runs
+workspace/
+build-fresh/
+
+# Electron desktop build outputs
+/dist-electron/
+# Downloaded uv binary (populated by `npm run download-uv` before packaging)
+/resources/bin/
+# Downloaded Node.js distribution (populated by `npm run download-node` before packaging)
+/resources/node/

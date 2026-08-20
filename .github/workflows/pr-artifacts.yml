@@ -1,0 +1,213 @@
+name: PR Artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-on-approval:
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pr-artifacts-live-e2e-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check if fork PR
+        id: check_fork
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.event.pull_request.base.repo.full_name }}" ]; then
+            echo "is_fork=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork PR detected - skipping automatic .pr cleanup."
+          else
+            echo "is_fork=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve PR context
+        id: pr_context
+        if: steps.check_fork.outputs.is_fork == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr_api="repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}"
+          head_ref="$(gh api "$pr_api" --jq '.head.ref')"
+          head_sha="$(gh api "$pr_api" --jq '.head.sha')"
+          echo "head_ref=$head_ref" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          if gh api "repos/${{ github.repository }}/contents/.pr?ref=$head_sha" --silent >/dev/null 2>&1; then
+            echo "has_pr_dir=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pr_dir=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No .pr directory exists at the approved PR head; skipping artifact cleanup."
+          fi
+
+      - name: Check out PR branch
+        if: steps.check_fork.outputs.is_fork == 'false' && steps.pr_context.outputs.has_pr_dir == 'true'
+        env:
+          PR_ARTIFACT_PUSH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin "$PR_HEAD_SHA"
+          git checkout --detach FETCH_HEAD
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$PR_HEAD_SHA" ]; then
+            echo "::error::SHA mismatch: expected $PR_HEAD_SHA, got $actual_sha"
+            exit 1
+          fi
+          git config credential.helper '!f() { echo "username=x-access-token"; echo "password=$PR_ARTIFACT_PUSH_TOKEN"; }; f'
+
+      - name: Remove .pr directory
+        id: remove
+        if: steps.check_fork.outputs.is_fork == 'false' && steps.pr_context.outputs.has_pr_dir == 'true'
+        env:
+          PR_ARTIFACT_PUSH_TOKEN: ${{ secrets.OPENHANDS_BOT_GITHUB_PAT_PUBLIC || github.token }}
+          PR_HEAD_REF: ${{ steps.pr_context.outputs.head_ref }}
+          PR_HEAD_SHA: ${{ steps.pr_context.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -d ".pr" ]; then
+            echo "removed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No .pr directory to remove."
+            exit 0
+          fi
+
+          git config user.name "allhands-bot"
+          git config user.email "allhands-bot@users.noreply.github.com"
+          git rm -rf --ignore-unmatch .pr/
+          if git diff --cached --quiet; then
+            echo "removed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No tracked .pr files to remove."
+            exit 0
+          fi
+          git commit -m "chore: Remove PR-only artifacts"
+          push_succeeded=false
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/$PR_HEAD_REF"; then
+              push_succeeded=true
+              break
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              echo "::notice::Failed to push cleanup commit, rebasing and retrying."
+              git fetch origin "$PR_HEAD_REF"
+              if ! git rebase FETCH_HEAD; then
+                echo "::error::Failed to rebase .pr cleanup commit. Manual resolution required."
+                exit 1
+              fi
+              if ! git merge-base --is-ancestor "$PR_HEAD_SHA" HEAD; then
+                echo "::error::Rebased .pr cleanup commit no longer descends from the approved PR head $PR_HEAD_SHA."
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+          if [ "$push_succeeded" != "true" ]; then
+            echo "::error::Failed to push .pr cleanup commit after retries."
+            exit 1
+          fi
+          echo "removed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Update PR artifacts comment
+        if: steps.check_fork.outputs.is_fork == 'false' && steps.pr_context.outputs.has_pr_dir == 'true' && steps.remove.outputs.removed == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = '<!-- pr-artifacts-notice -->';
+            const body = [
+              marker,
+              '**PR Artifacts Cleaned Up**',
+              '',
+              'The `.pr/` directory has been removed after approval.',
+              '',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            }
+
+  check-pr-artifacts:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check for .pr directory
+        id: check
+        run: |
+          if [ -d ".pr" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::.pr directory exists and will be automatically removed when the PR is approved. Fork PRs require manual cleanup before merging."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post or update PR artifacts comment
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = '<!-- pr-artifacts-notice -->';
+            const body = [
+              marker,
+              '**PR Artifacts Notice**',
+              '',
+              'This PR contains a `.pr/` directory with PR-specific artifacts. This directory will be **automatically removed** when the PR is approved.',
+              '',
+              '> Fork PRs require manual cleanup before merging.',
+              '',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((comment) => comment.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

@@ -1,0 +1,91 @@
+name: Desktop (Windows)
+
+# Builds the Agent Canvas Windows NSIS installer (npm run build:desktop on a
+# Windows runner).
+#   pull_request:      paths-filtered smoke build — the uploaded artifact is
+#                      what a tester downloads to verify a PR on Windows.
+#   release published: rebuilds from the release tag and attaches the .exe to
+#                      the GitHub Release created by release-please.
+#   workflow_dispatch: manual escape hatch for any ref.
+# The installer is not code-signed (no signing certs exist for any platform);
+# Windows SmartScreen therefore warns on first run — dismiss it via
+# "More info" → "Run anyway".
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/desktop-windows.yml
+      - electron/**
+      - electron-builder.config.mjs
+      - scripts/download-uv.mjs
+      - scripts/download-node.mjs
+  release:
+    types: [published]
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# `gh release upload` needs contents: write on release events. Fork PR runs
+# are downgraded to a read-only token by GitHub automatically.
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js with npm cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        env:
+          # Production analytics key only for release builds (same split as
+          # docker.yml); PR/manual runs get the staging key. Both are public
+          # client-side keys stored as repo vars — empty on fork PRs, which
+          # simply disables analytics in the built app.
+          VITE_POSTHOG_API_KEY: ${{ github.event_name == 'release' && vars.POSTHOG_PROD_KEY || vars.POSTHOG_STAGING_KEY }}
+          # Authenticates download-uv.mjs's GitHub API version lookup so it
+          # doesn't hit the unauthenticated per-IP rate limit on shared runners.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run build:desktop
+
+      - name: Verify installer output
+        shell: bash
+        run: |
+          ls -la dist-electron
+          exe_count=$(find dist-electron -maxdepth 1 -name '*.exe' | wc -l)
+          if [ "$exe_count" -ne 1 ]; then
+            echo "::error::Expected exactly one NSIS installer in dist-electron/, found $exe_count"
+            exit 1
+          fi
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-canvas-windows-installer
+          path: dist-electron/*.exe
+          if-no-files-found: error
+          # The installer is large (~200 MB); keep PR artifacts long enough
+          # for manual QA without hoarding storage.
+          retention-days: 14
+
+      - name: Attach installer to GitHub release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist-electron/*.exe --clobber

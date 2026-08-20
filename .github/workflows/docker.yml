@@ -1,0 +1,548 @@
+---
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      agent_server_image:
+        description: Agent Server base image (ghcr.io/openhands/agent-server:TAG)
+        type: string
+        default: ""
+      automation_version:
+        description: Automation server version (pip)
+        type: string
+        default: ""
+      image:
+        description: GHCR image name
+        type: string
+        default: ghcr.io/openhands/agent-canvas
+
+# Cancel redundant runs for the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ (github.head_ref && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ${{ inputs.image != '' && inputs.image || 'ghcr.io/openhands/agent-canvas' }}
+  # Use the PR head SHA for PR events so tags point at the actual code.
+  RELEVANT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  RELEVANT_REF: ${{ github.head_ref != '' && format('refs/heads/{0}', github.head_ref) || github.ref }}
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Build & Push (per-architecture, native runners)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-and-push-image:
+    name: Build & Push (${{ matrix.arch }})
+    # Skip fork PRs — they cannot authenticate to GHCR.
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       !github.event.pull_request.head.repo.fork)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+
+    env:
+      ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || '' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read defaults from config/defaults.json
+        id: config
+        run: |
+          # Single source of truth for version pins — no hardcoded values in this workflow.
+          AGENT_SERVER_VERSION=$(node -p "require('./config/defaults.json').versions.agentServer")
+          AGENT_SERVER_IMAGE_BASE=$(node -p "require('./config/defaults.json').images.agentServer")
+          AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation")
+          AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
+          CANVAS_BASE_PATH=$(node -p "require('./config/defaults.json').paths.canvasBasePath")
+          echo "agent_server_version=$AGENT_SERVER_VERSION" >> "$GITHUB_OUTPUT"
+          echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python" >> "$GITHUB_OUTPUT"
+          echo "default_automation_version=$AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
+          echo "agent_canvas_version=$AGENT_CANVAS_VERSION" >> "$GITHUB_OUTPUT"
+          echo "canvas_base_path=$CANVAS_BASE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Compute metadata and tags
+        id: prep
+        env:
+          AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
+          DEFAULT_AGENT_SERVER_IMAGE: ${{ steps.config.outputs.default_agent_server_image }}
+          AUTOMATION_VERSION_INPUT: ${{ inputs.automation_version }}
+          DEFAULT_AUTOMATION_VERSION: ${{ steps.config.outputs.default_automation_version }}
+          POSTHOG_STAGING_KEY: ${{ vars.POSTHOG_STAGING_KEY }}
+          POSTHOG_PROD_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+        run: |
+          SHORT_SHA=$(echo "$RELEVANT_SHA" | cut -c1-7)
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          # Resolve agent-server base image (input override > config/defaults.json)
+          if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
+            echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
+          else
+            echo "agent_server_image=$DEFAULT_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Resolve automation version (input override > config/defaults.json)
+          if [ -n "$AUTOMATION_VERSION_INPUT" ]; then
+            echo "automation_version=$AUTOMATION_VERSION_INPUT" >> "$GITHUB_OUTPUT"
+          else
+            echo "automation_version=$DEFAULT_AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Build arch-suffixed tags (e.g., sha-abc1234-amd64)
+          TAGS=""
+          add_tag() { TAGS="${TAGS:+${TAGS},}${IMAGE}:${1}-${ARCH}"; }
+
+          # SHA tags (always)
+          add_tag "sha-${SHORT_SHA}"
+
+          # Branch / PR / tag-based tags
+          if [[ "$RELEVANT_REF" == refs/heads/* ]]; then
+            # Sanitize branch name for Docker tag safety:
+            # replace any char outside [a-zA-Z0-9._-] with -, strip leading/trailing .-
+            BRANCH="${RELEVANT_REF#refs/heads/}"
+            BRANCH=$(echo "$BRANCH" | tr -c 'a-zA-Z0-9._-' '-' | sed 's/^[-.]//; s/[-.]*$//')
+            add_tag "$BRANCH"
+          fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            add_tag "pr-${{ github.event.pull_request.number }}"
+          fi
+
+          if [[ "$RELEVANT_REF" == refs/tags/v* ]]; then
+            VERSION="${RELEVANT_REF#refs/tags/v}"
+            add_tag "$VERSION"
+
+            # Strip pre-release/build metadata for major.minor.patch derivation
+            VERSION_BASE="${VERSION%%-*}"
+            VERSION_BASE="${VERSION_BASE%%+*}"
+
+            # Only create abbreviated + latest tags for stable (non-pre-release) versions
+            if [[ "$VERSION" != *"-"* ]] && [[ "$VERSION" != *"+"* ]]; then
+              # major.minor
+              MINOR="${VERSION_BASE%.*}"
+              if [ "$MINOR" != "$VERSION_BASE" ]; then
+                add_tag "$MINOR"
+              fi
+              # major
+              MAJOR="${VERSION_BASE%%.*}"
+              if [ "$MAJOR" != "$VERSION_BASE" ] && [ "$MAJOR" != "$MINOR" ]; then
+                add_tag "$MAJOR"
+              fi
+              add_tag "latest"
+            fi
+          fi
+
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+          # Use the production PostHog config only for tagged releases;
+          # everything else (PR / main / local) uses staging. Both keys are
+          # public, client-side keys — not secrets — so they live in repo vars.
+          if [[ "$RELEVANT_REF" == refs/tags/v* ]]; then
+            echo "posthog_api_key=$POSTHOG_PROD_KEY" >> "$GITHUB_OUTPUT"
+          else
+            echo "posthog_api_key=$POSTHOG_STAGING_KEY" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "=== Build outputs ==="
+          echo "Short SHA: $SHORT_SHA"
+          echo "Tags: $TAGS"
+          echo "===================="
+
+      - name: Build & Push (${{ matrix.arch }})
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.prep.outputs.tags }}
+          build-args: |
+            AGENT_SERVER_IMAGE=${{ steps.prep.outputs.agent_server_image }}
+            AUTOMATION_VERSION=${{ steps.prep.outputs.automation_version }}
+            AGENT_CANVAS_VERSION=${{ steps.config.outputs.agent_canvas_version }}
+            OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
+            OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
+            VITE_POSTHOG_API_KEY=${{ steps.prep.outputs.posthog_api_key }}
+            VITE_BASE_PATH=${{ steps.config.outputs.canvas_base_path }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Summary (${{ matrix.arch }})
+        env:
+          TAGS: ${{ steps.prep.outputs.tags }}
+        run: |
+          echo "Image: $IMAGE"
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Short SHA: ${{ steps.prep.outputs.short_sha }}"
+          echo "Tags: $TAGS"
+          echo "Build digest: ${{ steps.build.outputs.digest }}"
+
+      - name: Save build info for consolidation
+        env:
+          TAGS: ${{ steps.prep.outputs.tags }}
+          AGENT_SERVER_IMAGE: ${{ steps.prep.outputs.agent_server_image }}
+          AUTOMATION_VERSION: ${{ steps.prep.outputs.automation_version }}
+        run: |
+          mkdir -p build-info
+          jq -n \
+            --arg arch "${{ matrix.arch }}" \
+            --arg image "$IMAGE" \
+            --arg short_sha "${{ steps.prep.outputs.short_sha }}" \
+            --arg tags "$TAGS" \
+            --arg agent_server_image "$AGENT_SERVER_IMAGE" \
+            --arg automation_version "$AUTOMATION_VERSION" \
+            --arg platform "${{ matrix.platform }}" \
+            --arg git_sha "${{ env.RELEVANT_SHA }}" \
+            --arg git_ref "$RELEVANT_REF" \
+            '{arch: $arch, image: $image, short_sha: $short_sha, tags: $tags, agent_server_image: $agent_server_image, automation_version: $automation_version, platform: $platform, git_sha: $git_sha, git_ref: $git_ref}' \
+            > "build-info/${{ matrix.arch }}.json"
+          cat "build-info/${{ matrix.arch }}.json"
+
+      - name: Upload build info artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-info-${{ matrix.arch }}
+          path: build-info/${{ matrix.arch }}.json
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Merge Multi-Arch Manifests
+  # ═══════════════════════════════════════════════════════════════════════════
+  merge-manifests:
+    name: Merge Multi-Arch Manifests
+    needs: build-and-push-image
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       !github.event.pull_request.head.repo.fork)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download build info artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: build-info-*
+          merge-multiple: true
+          path: build-info
+
+      - name: Extract SHORT_SHA from build info
+        id: get_sha
+        run: |
+          SHORT_SHA=$(jq -r '.short_sha' build-info/amd64.json)
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Using SHORT_SHA: $SHORT_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifests
+        id: create_manifests
+        run: |
+          # Validate both architectures built successfully
+          if [[ ! -f build-info/amd64.json ]] || [[ ! -f build-info/arm64.json ]]; then
+            echo "::error::Missing architecture builds (need both amd64.json and arm64.json)"
+            echo "Available: $(ls -1 build-info/*.json 2>/dev/null || echo 'none')"
+            exit 1
+          fi
+
+          SHORT_SHA=${{ steps.get_sha.outputs.short_sha }}
+          AMD64_TAGS_CSV=$(jq -r '.tags' build-info/amd64.json)
+          declare -A SEEN_MANIFEST_TAGS=()
+          MANIFEST_TAGS=()
+
+          create_manifest() {
+            local manifest_tag=$1
+            local source_tag=${2:-$1}
+
+            echo "Creating multi-arch manifest: ${IMAGE}:${manifest_tag}"
+            docker buildx imagetools create -t "${IMAGE}:${manifest_tag}" \
+              "${IMAGE}:${source_tag}-amd64" \
+              "${IMAGE}:${source_tag}-arm64"
+
+            echo "Inspecting multi-arch manifest:"
+            docker buildx imagetools inspect "${IMAGE}:${manifest_tag}"
+            echo "✓ Multi-arch manifest created: ${IMAGE}:${manifest_tag}"
+          }
+
+          IFS=',' read -ra AMD64_TAGS <<< "$AMD64_TAGS_CSV"
+          for AMD64_IMAGE_TAG in "${AMD64_TAGS[@]}"; do
+            if [ -z "$AMD64_IMAGE_TAG" ]; then
+              continue
+            fi
+
+            TAG_NAME=${AMD64_IMAGE_TAG#${IMAGE}:}
+            if [ "$TAG_NAME" = "$AMD64_IMAGE_TAG" ] || [[ ! "$TAG_NAME" == *-amd64 ]]; then
+              echo "Skipping unexpected architecture tag: $AMD64_IMAGE_TAG"
+              continue
+            fi
+
+            MANIFEST_TAG=${TAG_NAME%-amd64}
+            if [ -n "${SEEN_MANIFEST_TAGS[$MANIFEST_TAG]+x}" ]; then
+              continue
+            fi
+
+            SEEN_MANIFEST_TAGS[$MANIFEST_TAG]=1
+            MANIFEST_TAGS+=("$MANIFEST_TAG")
+            create_manifest "$MANIFEST_TAG"
+          done
+
+          # `latest` multi-arch manifest is created automatically above when a
+          # stable version tag is pushed (the per-arch build adds `latest-{arch}`
+          # tags for non-pre-release tags, and the loop above merges them into a
+          # `latest` manifest). We intentionally do NOT alias main to latest here
+          # so that `latest` always points at the highest stable tagged release,
+          # not at unreleased main-branch code.
+
+          MANIFEST_TAG_CSV=$(IFS=,; echo "${MANIFEST_TAGS[*]}")
+          echo "manifest_tags=$MANIFEST_TAG_CSV" >> "$GITHUB_OUTPUT"
+
+          # Save manifest info for consolidation
+          mkdir -p manifest-info
+          jq -n \
+            --arg image "$IMAGE" \
+            --arg short_sha "$SHORT_SHA" \
+            --arg manifest_tags "$MANIFEST_TAG_CSV" \
+            '{image: $image, short_sha: $short_sha, manifest_tags: $manifest_tags}' \
+            > manifest-info/manifests.json
+          cat manifest-info/manifests.json
+
+      - name: Upload manifest info artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: manifest-info
+          path: manifest-info/manifests.json
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Consolidate Build Information
+  # ═══════════════════════════════════════════════════════════════════════════
+  consolidate-build-info:
+    name: Consolidate Build Information
+    needs: [build-and-push-image, merge-manifests]
+    if: github.event_name == 'pull_request' && always() && (needs.build-and-push-image.result == 'success' || needs.build-and-push-image.result == 'failure')
+    runs-on: ubuntu-24.04
+    outputs:
+      build_summary: ${{ steps.consolidate.outputs.build_summary }}
+
+    steps:
+      - name: Download build info artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: build-info-*
+          merge-multiple: true
+          path: build-info
+
+      - name: Download manifest info artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest-info
+          path: manifest-info
+        continue-on-error: true
+
+      - name: Consolidate build information from artifacts
+        id: consolidate
+        run: |
+          echo "Processing build info artifacts..."
+          ls -la build-info/
+
+          IMAGE=""
+          SHORT_SHA=""
+          ALL_TAGS=""
+          AGENT_SERVER_IMAGE=""
+          AUTOMATION_VERSION=""
+          GIT_SHA=""
+          GIT_REF=""
+          ARCHS=""
+
+          for info_file in build-info/*.json; do
+            if [[ ! -f "$info_file" ]]; then
+              continue
+            fi
+            echo "=== Processing $info_file ==="
+            cat "$info_file"
+
+            ARCH=$(jq -r '.arch' "$info_file")
+            FILE_IMAGE=$(jq -r '.image' "$info_file")
+            FILE_SHA=$(jq -r '.short_sha' "$info_file")
+            FILE_TAGS=$(jq -r '.tags' "$info_file")
+
+            if [[ -z "$IMAGE" ]]; then
+              IMAGE="$FILE_IMAGE"
+              SHORT_SHA="$FILE_SHA"
+              AGENT_SERVER_IMAGE=$(jq -r '.agent_server_image' "$info_file")
+              AUTOMATION_VERSION=$(jq -r '.automation_version' "$info_file")
+              GIT_SHA=$(jq -r '.git_sha' "$info_file")
+              GIT_REF=$(jq -r '.git_ref' "$info_file")
+            fi
+
+            ARCHS="${ARCHS:+${ARCHS}, }${ARCH}"
+
+            if [[ -n "$FILE_TAGS" ]]; then
+              TAG_LIST=$(echo "$FILE_TAGS" | tr ',' '\n')
+              ALL_TAGS="${ALL_TAGS:+${ALL_TAGS}
+          }${TAG_LIST}"
+            fi
+          done
+
+          # Add manifest tags
+          if [[ -f "manifest-info/manifests.json" ]]; then
+            MANIFEST_TAG_CSV=$(jq -r '.manifest_tags' manifest-info/manifests.json)
+            MANIFEST_TAG_LIST=$(echo "$MANIFEST_TAG_CSV" | tr ',' '\n' | sed "s|^|${IMAGE}:|")
+            ALL_TAGS="${ALL_TAGS:+${ALL_TAGS}
+          }${MANIFEST_TAG_LIST}"
+          fi
+
+          BUILD_SUMMARY=$(jq -n \
+            --arg image "$IMAGE" \
+            --arg short_sha "$SHORT_SHA" \
+            --arg all_tags "$ALL_TAGS" \
+            --arg archs "$ARCHS" \
+            --arg agent_server_image "$AGENT_SERVER_IMAGE" \
+            --arg automation_version "$AUTOMATION_VERSION" \
+            --arg git_sha "$GIT_SHA" \
+            --arg git_ref "$GIT_REF" \
+            --arg ghcr_url "https://github.com/OpenHands/OpenHands/pkgs/container/agent-canvas" \
+            '{image: $image, short_sha: $short_sha, all_tags: $all_tags, architectures: $archs, agent_server_image: $agent_server_image, automation_version: $automation_version, git_sha: $git_sha, git_ref: $git_ref, ghcr_package_url: $ghcr_url}')
+
+          echo "Consolidated build summary:"
+          echo "$BUILD_SUMMARY" | jq .
+
+          {
+            echo 'build_summary<<EOF'
+            echo "$BUILD_SUMMARY"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Update PR description with image info (PRs only)
+  # ═══════════════════════════════════════════════════════════════════════════
+  update-pr-description:
+    name: Update PR description with Docker image
+    needs: consolidate-build-info
+    if: github.event_name == 'pull_request' && needs.consolidate-build-info.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Generate PR description from build summary
+        id: generate_description
+        env:
+          BUILD_SUMMARY: ${{ needs.consolidate-build-info.outputs.build_summary }}
+        run: |
+          echo "Build summary received:"
+          echo "$BUILD_SUMMARY" | jq .
+
+          IMAGE=$(echo "$BUILD_SUMMARY" | jq -r '.image')
+          SHORT_SHA=$(echo "$BUILD_SUMMARY" | jq -r '.short_sha')
+          GHCR_URL=$(echo "$BUILD_SUMMARY" | jq -r '.ghcr_package_url')
+          ALL_TAGS=$(echo "$BUILD_SUMMARY" | jq -r '.all_tags')
+          ARCHS=$(echo "$BUILD_SUMMARY" | jq -r '.architectures')
+          AGENT_SERVER_IMAGE=$(echo "$BUILD_SUMMARY" | jq -r '.agent_server_image')
+          AUTOMATION_VERSION=$(echo "$BUILD_SUMMARY" | jq -r '.automation_version')
+          GIT_SHA=$(echo "$BUILD_SUMMARY" | jq -r '.git_sha')
+
+          PR_CONTENT=$(cat << EOF
+
+          <!-- AGENT_CANVAS_DOCKER_START -->
+          ---
+          **🐳 Docker images for this PR**
+
+          • **GHCR package:** ${GHCR_URL}
+
+          | Component | Value |
+          |---|---|
+          | **Image** | \`${IMAGE}\` |
+          | **Architectures** | ${ARCHS} |
+          | **Agent Server** | \`${AGENT_SERVER_IMAGE}\` |
+          | **Automation** | \`openhands-automation==${AUTOMATION_VERSION}\` |
+          | **Commit** | \`${GIT_SHA}\` |
+
+          **Pull (multi-arch manifest)**
+          \`\`\`bash
+          # Multi-arch manifest — Docker automatically pulls the correct architecture
+          docker pull ${IMAGE}:sha-${SHORT_SHA}
+          \`\`\`
+
+          **Run**
+          \`\`\`bash
+          docker run -it --rm \\
+            -p 8000:8000 \\
+            ${IMAGE}:sha-${SHORT_SHA}
+          \`\`\`
+
+          **All tags pushed for this build**
+          \`\`\`
+          ${ALL_TAGS}
+          \`\`\`
+
+          **About Multi-Architecture Support**
+          - Each tag (e.g., \`sha-${SHORT_SHA}\`) is a **multi-arch manifest** supporting both **amd64** and **arm64**
+          - Docker automatically pulls the correct architecture for your platform
+          - Individual architecture tags (e.g., \`sha-${SHORT_SHA}-amd64\`) are also available if needed
+          <!-- AGENT_CANVAS_DOCKER_END -->
+          EOF
+          )
+
+          {
+            echo 'pr_content<<EOF'
+            echo "$PR_CONTENT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update PR description with docker image details
+        uses: nefrob/pr-description@v1.3.0
+        with:
+          content: ${{ steps.generate_description.outputs.pr_content }}
+          regex: "<!-- AGENT_CANVAS_DOCKER_START -->.*?<!-- AGENT_CANVAS_DOCKER_END -->"
+          regexFlags: s
+          token: ${{ secrets.GITHUB_TOKEN }}

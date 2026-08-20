@@ -1,0 +1,345 @@
+name: Mock-LLM E2E Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: mock-llm-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-pr-changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_run: ${{ steps.detect.outputs.should_run }}
+    steps:
+      - name: Detect PR changes relevant to mock-LLM E2E
+        id: detect
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED_FILES=$(gh api \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename')
+
+          SHOULD_RUN=false
+          while IFS= read -r file; do
+            case "$file" in
+              src/*|public/*|scripts/*|bin/*|config/*|tests/e2e/mock-llm/*|tests/e2e/support/*|package.json|package-lock.json|vite.config.ts|tsconfig.json|react-router.config.ts|playwright.mock-llm.config.ts|tailwind.config.js|hero.ts|.github/workflows/mock-llm-e2e.yml)
+                SHOULD_RUN=true
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
+  mock-llm-e2e:
+    needs: detect-pr-changes
+    if: github.event_name != 'pull_request' || needs.detect-pr-changes.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    # Full-suite runs can spend several minutes on dependency, browser, uv,
+    # and frontend setup before Playwright starts. Keep Playwright's own
+    # 10-minute test deadline below, but give the job enough wall-clock room
+    # for setup plus reporting so GitHub does not terminate it mid-suite.
+    timeout-minutes: 30
+
+    env:
+      MOCK_LLM_REPORT_PATH: mock-llm-report.md
+      MOCK_LLM_WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Read defaults from config/defaults.json
+        id: defaults
+        run: |
+          echo "agent_server_version=$(node -p "require('./config/defaults.json').versions.agentServer")" >> "$GITHUB_OUTPUT"
+          echo "automation_version=$(node -p "require('./config/defaults.json').versions.automation")" >> "$GITHUB_OUTPUT"
+          echo "acp_constraint=$(node -p "require('./config/defaults.json').constraints.agentClientProtocol")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # Pin to 24.15.x — Node 24.16.0 has a zip-extraction regression
+          # (nodejs/node#63487) that hangs `playwright install` for Playwright
+          # < 1.60.0. Remove this pin after upgrading to Playwright >= 1.60.0.
+          node-version: "24.15"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Get Playwright version
+        id: pw_version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw_cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw_version.outputs.version }}
+
+      - name: Install Playwright Chromium
+        if: steps.pw_cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+
+      - name: Install Playwright system deps
+        run: npx playwright install-deps chromium
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install openhands-sdk (for mock LLM server)
+        env:
+          AGENT_SERVER_VERSION: ${{ steps.defaults.outputs.agent_server_version }}
+          # Pin agent-client-protocol to the range openhands-sdk 1.35.0 is
+          # compatible with. acp 0.11.0 reordered the ACP prompt() args and
+          # breaks the SDK's ACP client; the mock ACP server runs from this
+          # venv, so keep it on the same acp version as the agent-server.
+          ACP_CONSTRAINT: ${{ steps.defaults.outputs.acp_constraint }}
+        run: |
+          uv venv .mock-llm-venv
+          uv pip install -p .mock-llm-venv "openhands-sdk==$AGENT_SERVER_VERSION" "$ACP_CONSTRAINT"
+
+      - name: Pre-warm automation backend (uvx cache)
+        env:
+          AUTOMATION_VERSION: ${{ steps.defaults.outputs.automation_version }}
+        run: |
+          # Pre-install openhands-automation into the uvx cache so the
+          # agent-canvas binary doesn't need to download it at startup.
+          # Without this, the 180s Playwright webServer timeout expires
+          # before the automation backend finishes installing (~60-90s).
+          uvx --from "openhands-automation==$AUTOMATION_VERSION" python -c "from openhands.automation.app import app; print('automation package cached')"
+
+      - name: Verify mock LLM server starts
+        run: |
+          .mock-llm-venv/bin/python3 tests/e2e/mock-llm/scripts/mock-llm-server.py --port 9998 &
+          SERVER_PID=$!
+          # Retry up to 30 seconds — openhands-sdk's litellm import is slow
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:9998/v1/chat/completions \
+              -H "Content-Type: application/json" \
+              -d '{"model":"test","messages":[]}' > /dev/null 2>&1; then
+              echo "Mock LLM server responded on attempt $i"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:9998/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"model":"test","messages":[]}' | python3 -m json.tool
+          kill $SERVER_PID
+
+      - name: Build frontend (for agent-canvas binary)
+        env:
+          # VITE_ENABLE_BROWSER_TOOLS is evaluated at Vite build time;
+          # setting it only when the static stack starts is too late.
+          VITE_ENABLE_BROWSER_TOOLS: "false"
+        run: npm run build:app
+
+      - name: Resolve affected test directories
+        id: affected_tests
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Get changed files from the PR
+          CHANGED_FILES=$(gh api \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename' | tr '\n' ',')
+
+          # Resolve which test directories to run. If the resolver fails
+          # (for example malformed test-mapping.json), fail closed by
+          # running the full suite instead of treating stderr as test paths.
+          if ! RESULT=$(node tests/e2e/mock-llm/scripts/resolve-affected-tests.mjs \
+            --files "$CHANGED_FILES"); then
+            echo "::warning::Affected-test resolver failed — running full mock-LLM suite"
+            echo "test_paths=" >> "$GITHUB_OUTPUT"
+            echo "selective=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$RESULT" ]; then
+            echo "No affected test directories — running full suite as fallback"
+            echo "test_paths=" >> "$GITHUB_OUTPUT"
+            echo "selective=false" >> "$GITHUB_OUTPUT"
+          elif [ "$RESULT" = "__ALL__" ]; then
+            echo "Cross-cutting change detected — running full suite"
+            echo "test_paths=" >> "$GITHUB_OUTPUT"
+            echo "selective=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Running selective tests: $RESULT"
+            echo "test_paths=$RESULT" >> "$GITHUB_OUTPUT"
+            echo "selective=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run mock-LLM E2E tests
+        id: run_tests
+        env:
+          MOCK_LLM_PYTHON: .mock-llm-venv/bin/python3
+          AFFECTED_TEST_PATHS: ${{ steps.affected_tests.outputs.test_paths }}
+          SELECTIVE_TESTS: ${{ steps.affected_tests.outputs.selective }}
+        run: |
+          set +e
+          MARKER_DIR=".mock-llm-markers"
+          DONE_MARKER="$MARKER_DIR/.tests-done"
+          PASS_MARKER="$MARKER_DIR/.all-passed"
+          rm -rf "$MARKER_DIR"
+
+          # Build the Playwright command — either selective or full suite.
+          # workflow_dispatch always runs the full suite (SELECTIVE_TESTS is empty).
+          if [ "$SELECTIVE_TESTS" = "true" ] && [ -n "$AFFECTED_TEST_PATHS" ]; then
+            echo "::notice::Running selective E2E tests: $AFFECTED_TEST_PATHS"
+            PW_CMD="npx playwright test --config=playwright.mock-llm.config.ts $AFFECTED_TEST_PATHS"
+          else
+            PW_CMD="npm run test:e2e:mock-llm"
+          fi
+
+          # Run Playwright in background so our shell survives if we have
+          # to kill it (the webServer teardown can hang indefinitely).
+          $PW_CMD &
+          PW_PID=$!
+
+          # Wait for tests to complete. Playwright's globalTimeout is 600s
+          # (10 min) in CI; we add 60s buffer for webServer startup/teardown.
+          # The custom DoneMarkerReporter writes .tests-done only after ALL
+          # tests finish (pass or fail), before webServer teardown begins.
+          # .results.json is flushed after every single test, so even if we
+          # hit the deadline mid-suite the report script still has data.
+          deadline=$((SECONDS + 660))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if ! kill -0 "$PW_PID" 2>/dev/null; then
+              break
+            fi
+            if [ -f "$DONE_MARKER" ]; then
+              echo "Tests completed: $(cat "$DONE_MARKER")"
+              break
+            fi
+            sleep 2
+          done
+
+          # If Playwright is still running (teardown hang or deadline hit),
+          # give it 5s grace then force-kill.
+          if kill -0 "$PW_PID" 2>/dev/null; then
+            sleep 5
+            if kill -0 "$PW_PID" 2>/dev/null; then
+              if [ -f "$DONE_MARKER" ]; then
+                echo "::warning::Killing lingering Playwright process (teardown hung)"
+              else
+                echo "::warning::Killing Playwright process (deadline reached, tests still running)"
+              fi
+              kill "$PW_PID" 2>/dev/null
+              sleep 5
+              kill -9 "$PW_PID" 2>/dev/null
+            fi
+            wait "$PW_PID" 2>/dev/null
+            pw_exit=124
+          else
+            wait "$PW_PID"
+            pw_exit=$?
+          fi
+
+          echo "Playwright exited with code $pw_exit"
+
+          # When killed during teardown, the exit code is non-zero but
+          # tests may have passed. The reporter writes .all-passed only
+          # when all tests pass, so use that as the definitive signal.
+          if [ "$pw_exit" -ne 0 ] && [ -f "$PASS_MARKER" ]; then
+            echo "::notice::All tests passed (marker file present); non-zero exit was teardown-related"
+            pw_exit=0
+          fi
+
+          echo "exit_code=$pw_exit" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload test artifacts
+        id: upload_artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mock-llm-e2e-results
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            playwright-report-mock-llm/
+            test-results-mock-llm/
+
+      - name: Detect newly added spec files
+        if: always() && github.event.pull_request.number
+        id: new_specs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # Find mock-LLM spec files added (not just modified) in this PR
+          # Uses the GitHub API instead of git diff to avoid shallow-clone issues
+          NEW_FILES=$(gh api \
+            "/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate \
+            --jq '[.[] | select(.status == "added") | .filename
+                   | select(test("tests/e2e/mock-llm/.*\\.spec\\.ts$"))]
+                   | join(",")')
+          echo "files=$NEW_FILES" >> "$GITHUB_OUTPUT"
+
+      - name: Render test report
+        if: always()
+        run: |
+          node tests/e2e/mock-llm/scripts/render-mock-llm-report.mjs \
+            --results "test-results-mock-llm/results.json" \
+            --output "$MOCK_LLM_REPORT_PATH" \
+            --workflow-url "$MOCK_LLM_WORKFLOW_URL" \
+            --commit "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --artifact-url "${{ steps.upload_artifacts.outputs.artifact-url || '' }}" \
+            --exit-code "${{ steps.run_tests.outputs.exit_code }}" \
+            --new-files "${{ steps.new_specs.outputs.files || '' }}"
+          cat "$MOCK_LLM_REPORT_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save PR number for comment workflow
+        if: always() && github.event.pull_request.number
+        run: echo "${{ github.event.pull_request.number }}" > pr_number.txt
+
+      - name: Upload PR comment payload
+        if: always() && github.event.pull_request.number
+        uses: actions/upload-artifact@v7
+        with:
+          name: mock-llm-pr-comment-payload
+          retention-days: 3
+          path: |
+            ${{ env.MOCK_LLM_REPORT_PATH }}
+            pr_number.txt
+
+      - name: Post PR comment (same-repo PRs only)
+        if: >-
+          always() &&
+          github.event.pull_request.number &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node tests/e2e/mock-llm/scripts/upsert-pr-comment.mjs \
+            --issue-number "${{ github.event.pull_request.number }}" \
+            --body-file "$MOCK_LLM_REPORT_PATH" \
+            --marker "<!-- agent-canvas-mock-llm-e2e-report -->" \
+            --legacy-title "Mock-LLM E2E Tests"
+
+      - name: Fail job when tests fail
+        if: always()
+        run: |
+          exit_code="${{ steps.run_tests.outputs.exit_code }}"
+          exit "${exit_code:-1}"

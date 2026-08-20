@@ -1,0 +1,148 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v1.0.0-alpha.8)'
+        required: true
+        type: string
+
+concurrency:
+  group: npm-publish-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Trusted publishing requires Node 22.14.0+ and npm 11.5.1+
+      # See: https://docs.npmjs.com/trusted-publishers/
+      - name: Set up Node.js for npm trusted publishing
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm version supports trusted publishing
+        run: |
+          echo "Node version: $(node --version)"
+          echo "npm version: $(npm --version)"
+          NPM_VERSION=$(npm --version)
+          NPM_MAJOR=$(echo $NPM_VERSION | cut -d. -f1)
+          NPM_MINOR=$(echo $NPM_VERSION | cut -d. -f2)
+          if [ "$NPM_MAJOR" -lt 11 ] || ([ "$NPM_MAJOR" -eq 11 ] && [ "$NPM_MINOR" -lt 5 ]); then
+            echo "Error: npm 11.5.1+ required for trusted publishing, got $NPM_VERSION"
+            exit 1
+          fi
+          echo "✓ npm $NPM_VERSION meets trusted publishing requirements"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build app
+        env:
+          # Public client key baked into the packaged production app.
+          VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+        run: npm run build
+
+      - name: Build library
+        env:
+          # The precompiled library keeps the production default; embedded
+          # consumers can still override it through runtime analytics config.
+          VITE_POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+        run: npm run build:lib
+
+      - name: Bake package telemetry defaults
+        env:
+          # The CLI launcher runs after install, so it cannot read the build-time
+          # Vite env baked into the browser bundle. Store the public production
+          # key in the packaged defaults used by bin/agent-canvas.mjs.
+          POSTHOG_API_KEY: ${{ vars.POSTHOG_PROD_KEY }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const path = "config/defaults.json";
+            const defaults = JSON.parse(fs.readFileSync(path, "utf8"));
+            defaults.telemetry.posthogApiKey = process.env.POSTHOG_API_KEY;
+            fs.writeFileSync(path, `${JSON.stringify(defaults, null, 2)}\n`);
+          '
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Validate package version matches release tag
+        env:
+          # Pass inputs.tag via env var to prevent script injection from
+          # GitHub Actions expression interpolation inside run blocks.
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          # Resolve tag: prefer workflow_dispatch input, fall back to push-event GITHUB_REF
+          if [ -n "$INPUT_TAG" ]; then
+            RAW_TAG="$INPUT_TAG"
+          else
+            RAW_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          TAG_VERSION="${RAW_TAG#v}"
+          echo "Package version: $PACKAGE_VERSION"
+          echo "Release tag version: $TAG_VERSION"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) doesn't match release tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "✓ Version $PACKAGE_VERSION matches release tag"
+
+      # Determine if any full stable release (no pre-release suffix) has ever been
+      # published. Until one exists, all releases use --tag latest so plain
+      # `npm install @openhands/agent-canvas` always resolves to the newest build.
+      # Once a stable version is published, pre-release versions revert to their
+      # own dist-tags (alpha / beta / rc) and only stable versions keep latest.
+      # Note: OIDC trusted-publishing tokens cover only the `npm publish` call
+      # itself; a separate `npm dist-tag add` would fail with E401, so the tag
+      # is resolved and passed directly in one step.
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          VERSIONS_JSON=$(npm view @openhands/agent-canvas versions --json 2>/dev/null || echo "[]")
+          STABLE_EXISTS=$(VERSIONS_JSON="$VERSIONS_JSON" node -e "
+            const vs = JSON.parse(process.env.VERSIONS_JSON);
+            const arr = Array.isArray(vs) ? vs : [vs];
+            console.log(arr.some(v => !v.includes('-')));
+          ")
+          if [[ "$STABLE_EXISTS" != "true" ]]; then
+            DIST_TAG="latest"
+          elif [[ "$VERSION" == *-alpha* ]]; then
+            DIST_TAG="alpha"
+          elif [[ "$VERSION" == *-beta* ]]; then
+            DIST_TAG="beta"
+          elif [[ "$VERSION" == *-rc* ]]; then
+            DIST_TAG="rc"
+          else
+            DIST_TAG="latest"
+          fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "📦 Version $VERSION → dist-tag: $DIST_TAG (stable release exists: $STABLE_EXISTS)"
+
+      - name: Publish to npm with provenance
+        run: npm publish --access public --provenance --tag ${{ steps.dist_tag.outputs.dist_tag }}

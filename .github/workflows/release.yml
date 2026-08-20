@@ -1,0 +1,87 @@
+name: release
+
+# release-please caller (OpenHands/release-actions). On push to main, maintains a
+# "release PR" that, on merge, bumps package.json + tags vX.Y.Z + creates the
+# Release; that release drives the publish workflows via `release: published`.
+# Config: release-please-config.json, .release-please-manifest.json, .github/release.yml.
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'   # maintenance branches; the release is scoped to this branch
+
+jobs:
+  # release-please only creates a tag/Release on the release-PR-merge push, which
+  # lands as a squash commit `chore(<scope>): release <version>`. The "Release Tag"
+  # ruleset requires the `test-and-build (ubuntu)` check to be green on the tagged
+  # commit, so wait for it here first — otherwise release-please races CI and the
+  # tag push is rejected with a pre-receive rule violation (the manual-re-run
+  # problem). Non-release pushes skip the wait entirely: release-please only
+  # upserts the release PR on those and never touches a tag.
+  await-required-checks:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+    steps:
+      - name: Wait for test-and-build (ubuntu) on the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+          REQUIRED_CHECK: test-and-build (ubuntu)
+          COMMIT_SHA: ${{ github.sha }}
+          TIMEOUT_SECONDS: "2400" # 40 min > CI job timeout (25) + queue slack
+          POLL_SECONDS: "20"
+        run: |
+          set -euo pipefail
+
+          # Only the release-PR-merge commit creates a tag, so only it needs to wait.
+          subject="${HEAD_MSG%%$'\n'*}"
+          case "$subject" in
+            chore\(*\):\ release\ *) : ;; # chore(main): release X.Y.Z / chore(release/1.2): release ...
+            *)
+              echo "::notice::'$subject' is not a release commit; release-please will only upsert the release PR. Not waiting."
+              exit 0
+              ;;
+          esac
+
+          echo "Release commit detected; waiting for '$REQUIRED_CHECK' to pass on $COMMIT_SHA."
+          deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+          while :; do
+            # Newest check run with this exact name on this commit ("missing" until CI creates it).
+            state="$(gh api --method GET "repos/$GITHUB_REPOSITORY/commits/$COMMIT_SHA/check-runs" \
+              -f per_page=100 \
+              --jq '([.check_runs[] | select(.name == env.REQUIRED_CHECK)] | sort_by(.started_at) | last) as $r
+                    | if $r == null then "missing none" else "\($r.status) \($r.conclusion // "none")" end')"
+            check_status="${state%% *}"
+            check_conclusion="${state#* }"
+
+            case "$check_status" in
+              completed)
+                if [ "$check_conclusion" = "success" ]; then
+                  echo "::notice::'$REQUIRED_CHECK' passed on $COMMIT_SHA."
+                  exit 0
+                fi
+                echo "::error::'$REQUIRED_CHECK' concluded '$check_conclusion' on $COMMIT_SHA; not releasing."
+                exit 1
+                ;;
+              missing) echo "Check not created yet; waiting…" ;;
+              *) echo "Check status: $check_status; waiting…" ;;
+            esac
+
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out after ${TIMEOUT_SECONDS}s waiting for '$REQUIRED_CHECK' on $COMMIT_SHA."
+              exit 1
+            fi
+            sleep "$POLL_SECONDS"
+          done
+
+  release-please:
+    needs: await-required-checks
+    permissions:
+      contents: write
+      pull-requests: write
+    # Required, not an optimization: release-please needs the org App token
+    # (RELEASE_APP_ID / RELEASE_APP_PRIVATE_KEY) so the release it creates fires
+    # `release: published` — a GITHUB_TOKEN release would be suppressed.
+    secrets: inherit
+    uses: OpenHands/release-actions/.github/workflows/release-please.yml@main
