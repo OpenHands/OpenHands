@@ -138,6 +138,11 @@ async function fetchGitlabJson<T>(
     headers["PRIVATE-TOKEN"] = token;
   }
 
+  // gitlab.com's public REST API — an external host, not the agent-server
+  // `/api` surface the rule guards (its `/api/v4` prefix just trips the
+  // substring heuristic; the companion no-direct-agent-server-calls test
+  // matches only relative `/api/...` URLs and is not affected).
+  // eslint-disable-next-line local/no-direct-agent-server-fetch
   const response = await fetch(`https://gitlab.com/api/v4${path}`, { headers });
   if (!response.ok) {
     throw new Error(`GitLab API ${response.status}`);
