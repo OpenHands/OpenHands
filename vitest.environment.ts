@@ -17,6 +17,8 @@ class ProgressEventFallback extends Event implements ProgressEvent {
   }
 }
 
+// Node 25 exposes an unusable localStorage before jsdom setup; remove it now
+// so jsdom can install its implementation.
 Reflect.deleteProperty(globalThis, "localStorage");
 
 const environment: Environment = {
