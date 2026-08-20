@@ -27,7 +27,12 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
   if (pluginsParam) {
     try {
       const decoded = atob(pluginsParam);
-      const parsed = JSON.parse(decoded);
+      const bytes = new Uint8Array(decoded.length);
+      for (let i = 0; i < decoded.length; i++) {
+        bytes[i] = decoded.charCodeAt(i);
+      }
+      const utf8Decoded = new TextDecoder().decode(bytes);
+      const parsed = JSON.parse(utf8Decoded);
 
       if (!Array.isArray(parsed)) {
         return { plugins: [], error: "invalid_format" };

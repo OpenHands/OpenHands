@@ -78,6 +78,31 @@ describe("LaunchRoute", () => {
       expect(screen.getByText("owner/repo")).toBeInTheDocument();
     });
 
+    it("should parse valid UTF-8 base64 encoded plugins (Unicode support)", async () => {
+      // Single plugin with Unicode parameters
+      const plugins = [
+        {
+          source: "github:owner/repo",
+          parameters: { task: "整理发布说明 🚀" },
+        },
+      ];
+      const jsonString = JSON.stringify(plugins);
+      const bytes = new TextEncoder().encode(jsonString);
+      const binaryString = Array.from(bytes, (byte) =>
+        String.fromCharCode(byte),
+      ).join("");
+      const encoded = btoa(binaryString);
+
+      renderLaunchRoute(`?plugins=${encodeURIComponent(encoded)}`);
+
+      expect(screen.getByTestId("plugin-launch-modal")).toBeInTheDocument();
+      expect(screen.getByText("owner/repo")).toBeInTheDocument();
+      
+      // We can also verify that the parameter input correctly rendered the unicode
+      const input = screen.getByTestId("plugin-0-param-task");
+      expect(input).toHaveValue("整理发布说明 🚀");
+    });
+
     it("should parse multiple plugins from base64", async () => {
       const plugins = [
         { source: "github:owner/repo1", parameters: { key: "value1" } },
