@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 import { AUTOMATION_RUNS_QUERY_KEY } from "#/hooks/query/use-automation-detail";
 import {
   summarizeAutomationRuns,
@@ -40,12 +41,16 @@ export function useAutomationRunSummaries(
         active.orgId,
       ],
       queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          RECENT_RUN_SAMPLE_SIZE,
-          0,
+        automationRunRequestsLimiter.run(() =>
+          AutomationService.getAutomationRuns(
+            automation.id,
+            RECENT_RUN_SAMPLE_SIZE,
+            0,
+          ),
         ),
       staleTime: 60 * 1000,
+      retry: false,
+      refetchOnWindowFocus: false,
       enabled: enabled && !!automation.id,
     })),
     combine: (results) => {

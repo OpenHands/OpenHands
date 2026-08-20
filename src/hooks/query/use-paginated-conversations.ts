@@ -3,12 +3,18 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { useIsAuthed } from "./use-is-authed";
 import { isNoBackend } from "#/api/backend-registry/active-store";
 import { useActiveBackend } from "#/contexts/active-backend-context";
+import { useNavigation } from "#/context/navigation-context";
 import { AppConversationPage } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { isAutomationsRoute } from "#/manifests/automation-interface";
+
+const CONVERSATION_LIST_POLL_INTERVAL_MS = 30_000;
 
 export const usePaginatedConversations = (limit: number = 20) => {
   const { data: userIsAuthenticated } = useIsAuthed();
   const active = useActiveBackend();
   const hasBackend = !isNoBackend(active.backend);
+  const { currentPath } = useNavigation();
+  const pollConversationList = !isAutomationsRoute(currentPath);
 
   return useInfiniteQuery({
     // Include the active backend identity so each (backend, org) pair
@@ -41,8 +47,14 @@ export const usePaginatedConversations = (limit: number = 20) => {
     // events WebSocket handshake). Consumers must gate initial-load UI (e.g.
     // skeletons) on `isLoading`, not `isFetching` — `isFetching` flips back to
     // true on every background refetch, which would cause the skeleton to
-    // flicker on each poll when the list is empty.
-    refetchInterval: 30_000,
+    // flicker on each poll when the list is empty. Skip the poll entirely on
+    // automations routes — those pages own the data plane via their own
+    // queries, and the sidebar conversations list doesn't need to stay in sync
+    // while the user is interacting with automation results.
+    refetchInterval: pollConversationList
+      ? CONVERSATION_LIST_POLL_INTERVAL_MS
+      : false,
+    refetchIntervalInBackground: false,
     // A successful fetch proves the backend is reachable. The global
     // QueryCache onSuccess handler reads this to clear any persisted
     // failure state, re-arming the status dot without user intervention.

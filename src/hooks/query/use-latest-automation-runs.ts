@@ -7,6 +7,7 @@ import {
   type AutomationRun,
   type AutomationRunsResponse,
 } from "#/types/automation";
+import { automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 import { AUTOMATION_RUNS_QUERY_KEY } from "./use-automation-detail";
 
 /**
@@ -54,10 +55,12 @@ export function useLatestAutomationRuns(
         active.orgId,
       ],
       queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          AUTOMATION_RUN_ACTIVITY_LIMIT,
-          0,
+        automationRunRequestsLimiter.run(() =>
+          AutomationService.getAutomationRuns(
+            automation.id,
+            AUTOMATION_RUN_ACTIVITY_LIMIT,
+            0,
+          ),
         ),
       staleTime: 60 * 1000,
       // No retries: the home section settles into its degraded "unknown"

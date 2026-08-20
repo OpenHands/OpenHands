@@ -50,6 +50,13 @@ const MOUNTED_ROUTES = {
 export const AUTOMATION_FILE_FORMAT_DOCS_URL =
   "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
 
+/** True when the host is rendering any registered automations route. */
+export function isAutomationsRoute(path: string): boolean {
+  return (
+    path === MOUNTED_ROUTES.list || path.startsWith(`${MOUNTED_ROUTES.list}/`)
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
