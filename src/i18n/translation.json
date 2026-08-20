@@ -18733,23 +18733,6 @@
     "uk": "% використано",
     "ca": "% utilitzat"
   },
-  "CONVERSATION$NO_BUDGET_LIMIT": {
-    "en": "No budget limit",
-    "ja": "予算制限なし",
-    "zh-CN": "无预算限制",
-    "zh-TW": "無預算限制",
-    "ko-KR": "예산 제한 없음",
-    "de": "Kein Budgetlimit",
-    "no": "Ingen budsjettgrense",
-    "it": "Nessun limite di budget",
-    "pt": "Sem limite de orçamento",
-    "es": "Sin límite de presupuesto",
-    "ar": "لا حد للميزانية",
-    "fr": "Pas de limite de budget",
-    "tr": "Bütçe limiti yok",
-    "uk": "Без обмеження бюджету",
-    "ca": "Sense límit de pressupost"
-  },
   "CONVERSATION$INPUT": {
     "en": "Input",
     "ja": "入力",

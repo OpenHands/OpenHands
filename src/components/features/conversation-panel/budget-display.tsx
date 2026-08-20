@@ -1,6 +1,3 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import { I18nKey } from "#/i18n/declaration";
 import { BudgetProgressBar } from "./budget-progress-bar";
 import { BudgetUsageText } from "./budget-usage-text";
 
@@ -10,25 +7,14 @@ interface BudgetDisplayProps {
 }
 
 export function BudgetDisplay({ cost, maxBudgetPerTask }: BudgetDisplayProps) {
-  const { t } = useTranslation("openhands");
-
-  // Don't render anything if cost is not available
-  if (cost === null) {
+  if (cost === null || maxBudgetPerTask === null || maxBudgetPerTask <= 0) {
     return null;
   }
 
   return (
     <div>
-      {maxBudgetPerTask !== null && maxBudgetPerTask > 0 ? (
-        <>
-          <BudgetProgressBar currentCost={cost} maxBudget={maxBudgetPerTask} />
-          <BudgetUsageText currentCost={cost} maxBudget={maxBudgetPerTask} />
-        </>
-      ) : (
-        <span className="text-xs text-[var(--oh-muted)]">
-          {t(I18nKey.CONVERSATION$NO_BUDGET_LIMIT)}
-        </span>
-      )}
+      <BudgetProgressBar currentCost={cost} maxBudget={maxBudgetPerTask} />
+      <BudgetUsageText currentCost={cost} maxBudget={maxBudgetPerTask} />
     </div>
   );
 }
