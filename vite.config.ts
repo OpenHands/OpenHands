@@ -126,30 +126,6 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       {
-        name: "cloud-proxy",
-        apply: "serve",
-        async configureServer(server) {
-          const { handleCloudProxy, isCloudProxyRequest } = await import(
-            "./scripts/cloud-proxy.mjs"
-          );
-          server.middlewares.use((req, res, next) => {
-            if (!isCloudProxyRequest(req)) {
-              next();
-              return;
-            }
-            handleCloudProxy(req, res).catch((error) => {
-              console.error("Cloud proxy middleware error:", error);
-              if (!res.headersSent) {
-                res.writeHead(502, {
-                  "Content-Type": "application/json; charset=utf-8",
-                });
-                res.end(JSON.stringify({ detail: "Cloud proxy failed" }));
-              }
-            });
-          });
-        },
-      },
-      {
         name: "suppress-chrome-devtools-well-known",
         apply: "serve",
         configureServer(server) {

@@ -30,23 +30,9 @@ function activeOrgForBackend(backend: Backend): string | null {
   return active.backend.id === backend.id ? active.orgId : null;
 }
 
-/**
- * Host for the Canvas-owned `/api/cloud-proxy` hop. Must be the page's own
- * origin in the browser — `getAgentServerBaseUrl()` can resolve to a
- * loopback alias (`127.0.0.1`) while the user opened `localhost`, and those
- * are different origins for CORS. The proxy is served by the same ingress /
- * Vite / static-server edge as the SPA, so same-origin is always correct.
- */
-function getCloudProxyBaseUrl(): string | null {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-  return getAgentServerBaseUrl();
-}
-
 export function createCloudClient(backend?: Backend): CloudClient {
   const target = requireCloudBackend(backend);
-  const proxyBaseUrl = getCloudProxyBaseUrl();
+  const proxyBaseUrl = getAgentServerBaseUrl();
   const proxyHeaders = proxyBaseUrl ? getAgentServerHeaders() : {};
 
   return new CloudClient({

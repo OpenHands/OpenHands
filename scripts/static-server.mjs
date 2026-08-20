@@ -34,7 +34,6 @@ import process from "node:process";
 import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
-import { handleCloudProxy, isCloudProxyRequest } from "./cloud-proxy.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -559,12 +558,6 @@ export function startStaticServer(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
 
   const server = createServer((req, res) => {
-    // Same Cloud runtime hop as ingress: see scripts/cloud-proxy.mjs.
-    if (isCloudProxyRequest(req)) {
-      handleCloudProxy(req, res);
-      return;
-    }
-
     const backend = route(req.url ?? "/");
     if (backend) {
       if (
