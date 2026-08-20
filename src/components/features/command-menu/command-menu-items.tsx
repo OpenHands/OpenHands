@@ -1,6 +1,7 @@
 import React from "react";
-import { AppWindow, ChevronLeft, Plus, Settings, Shield } from "lucide-react";
+import { AppWindow, Plus, Settings, Shield } from "lucide-react";
 import AutomationsIcon from "#/icons/automations.svg?react";
+import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
 import CustomizeBoxesIcon from "#/icons/customize-boxes.svg?react";
 import KeyIcon from "#/icons/key.svg?react";
 import MemoryIcon from "#/icons/memory_icon.svg?react";
@@ -211,7 +212,9 @@ export const createCommandMenuItems = ({
     titleKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_TITLE,
     descriptionKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_DESCRIPTION,
     keywordsKey: I18nKey.COMMAND_MENU$TOGGLE_SIDEBAR_KEYWORDS,
-    icon: <ChevronLeft size={ICON_SIZE} />,
+    icon: (
+      <BlockDrawerLeftIcon width={ICON_SIZE} height={ICON_SIZE} aria-hidden />
+    ),
     perform: toggleSidebar,
   },
 ];
