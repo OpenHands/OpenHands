@@ -1,4 +1,5 @@
 import React from "react";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -32,11 +33,23 @@ import {
   resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
+import { useProviderConnections } from "#/hooks/query/use-provider-connections";
+import {
+  FREE_OPENHANDS_MODEL_NOTE,
+  isFreeOpenHandsModel,
+} from "#/utils/format-model-name";
+
+/** Form-values key for the shared provider connection a profile links to. */
+export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
+
+/** Dropdown sentinel for "no provider connection" (an inline key is used). */
+const NO_PROVIDER_CONNECTION = "__none__";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
   "llm.api_key",
   "llm.base_url",
+  LLM_PROVIDER_CONNECTION_KEY,
   LLM_AUTH_TYPE_KEY,
   LLM_SUBSCRIPTION_VENDOR_KEY,
 ]);
@@ -103,6 +116,18 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
   );
 }
 
+function OpenHandsFreeModelsNote() {
+  return (
+    <p
+      data-testid="openhands-free-models-note"
+      className="flex items-start gap-2 text-xs text-warning"
+    >
+      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
+    </p>
+  );
+}
+
 export function LlmSettingsScreen({
   scope = "personal",
   onSaveSuccess,
@@ -111,6 +136,7 @@ export function LlmSettingsScreen({
   hideSaveButton,
   suppressSuccessToast,
   onSaveControlChange,
+  showProviderConnection,
 }: {
   scope?: SettingsScope;
   /** Optional hook fired after a successful save (e.g. advance an onboarding step). */
@@ -125,8 +151,20 @@ export function LlmSettingsScreen({
   suppressSuccessToast?: boolean;
   /** Forwarded to {@link SdkSectionPage}. */
   onSaveControlChange?: (control: SdkSectionSaveControl) => void;
+  /**
+   * When true (the local profile editor), show a "Provider connection" selector
+   * that links this profile to a shared connection. Only rendered when at least
+   * one connection exists, so the form is unchanged until the user creates one.
+   */
+  showProviderConnection?: boolean;
 }) {
   const { t } = useTranslation("openhands");
+
+  const { data: providerConnections } = useProviderConnections();
+  const connectionOptions = React.useMemo(
+    () => (showProviderConnection ? (providerConnections ?? []) : []),
+    [showProviderConnection, providerConnections],
+  );
 
   const { data: settings } = useSettings(scope);
   const { data: schema } = useAgentSettingsSchema(
@@ -211,6 +249,60 @@ export function LlmSettingsScreen({
       const apiKeyIsSet = embedded
         ? apiKeyValue.length > 0
         : Boolean(settings?.llm_api_key_set);
+
+      // A profile linked to a provider connection reads its api_key / base_url
+      // from that connection, so the inline key + base URL inputs are hidden.
+      const connectionValue =
+        typeof values[LLM_PROVIDER_CONNECTION_KEY] === "string"
+          ? values[LLM_PROVIDER_CONNECTION_KEY]
+          : "";
+      const isLinkedToConnection = Boolean(connectionValue);
+      // Show the selector whenever connections can be linked here. Include the
+      // linked case so a profile pointing at an orphaned connection (its only
+      // connection deleted, or the list still loading) still exposes a control
+      // to unlink — otherwise the API key / base URL inputs stay hidden with no
+      // way to recover.
+      const showConnectionSelector =
+        showProviderConnection &&
+        !isSubscriptionAuth &&
+        (isLinkedToConnection || connectionOptions.length > 0);
+      // Surface an orphaned link (a selected id absent from the fetched list)
+      // as its own option so the dropdown reflects it and can be cleared.
+      const isOrphanedLink =
+        isLinkedToConnection &&
+        !connectionOptions.some((c) => c.id === connectionValue);
+
+      const renderConnectionSelector = () => (
+        <SettingsDropdownInput
+          testId="llm-provider-connection-input"
+          name={LLM_PROVIDER_CONNECTION_KEY}
+          label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_SELECT_LABEL)}
+          items={[
+            {
+              key: NO_PROVIDER_CONNECTION,
+              label: t(I18nKey.SETTINGS$MCP_AUTH_MODE_NONE),
+            },
+            ...connectionOptions.map((connection) => ({
+              key: connection.id,
+              label: connection.display_name,
+            })),
+            ...(isOrphanedLink
+              ? [{ key: connectionValue, label: connectionValue }]
+              : []),
+          ]}
+          selectedKey={connectionValue || NO_PROVIDER_CONNECTION}
+          isClearable={false}
+          isDisabled={isDisabled}
+          onSelectionChange={(selectedKey) => {
+            const next =
+              typeof selectedKey === "string" &&
+              selectedKey !== NO_PROVIDER_CONNECTION
+                ? selectedKey
+                : "";
+            onChange(LLM_PROVIDER_CONNECTION_KEY, next);
+          }}
+        />
+      );
 
       const renderApiKeyInput = (testId: string, helpTestId: string) => (
         <>
@@ -352,16 +444,20 @@ export function LlmSettingsScreen({
                     isDisabled={isDisabled}
                   />
 
-                  {showOpenHandsApiKeyHelp ? (
+                  {showConnectionSelector ? renderConnectionSelector() : null}
+
+                  {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
                     <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
                   ) : null}
 
-                  {renderApiKeyInput(
-                    // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
-                    "llm-api-key-input",
-                    // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
-                    "llm-api-key-help-anchor",
-                  )}
+                  {isLinkedToConnection
+                    ? null
+                    : renderApiKeyInput(
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "llm-api-key-input",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "llm-api-key-help-anchor",
+                      )}
                 </>
               )}
             </div>
@@ -387,28 +483,39 @@ export function LlmSettingsScreen({
                     isDisabled={isDisabled}
                   />
 
-                  {showOpenHandsApiKeyHelp ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                  {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
+                    <>
+                      {isFreeOpenHandsModel(modelValue) ? (
+                        <OpenHandsFreeModelsNote />
+                      ) : null}
+                      <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
+                    </>
                   ) : null}
 
-                  <SettingsInput
-                    testId="base-url-input"
-                    label={t(I18nKey.SETTINGS$BASE_URL)}
-                    type="text"
-                    className="w-full"
-                    value={baseUrlValue}
-                    // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
-                    placeholder="https://api.openai.com"
-                    onChange={(value) => onChange("llm.base_url", value)}
-                    isDisabled={isDisabled}
-                  />
+                  {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {renderApiKeyInput(
-                    // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
-                    "llm-api-key-input",
-                    // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
-                    "llm-api-key-help-anchor-advanced",
+                  {isLinkedToConnection ? null : (
+                    <SettingsInput
+                      testId="base-url-input"
+                      label={t(I18nKey.SETTINGS$BASE_URL)}
+                      type="text"
+                      className="w-full"
+                      value={baseUrlValue}
+                      // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
+                      placeholder="https://api.openai.com"
+                      onChange={(value) => onChange("llm.base_url", value)}
+                      isDisabled={isDisabled}
+                    />
                   )}
+
+                  {isLinkedToConnection
+                    ? null
+                    : renderApiKeyInput(
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "llm-api-key-input",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "llm-api-key-help-anchor-advanced",
+                      )}
                 </>
               )}
             </div>
@@ -417,6 +524,8 @@ export function LlmSettingsScreen({
       );
     },
     [
+      connectionOptions,
+      showProviderConnection,
       defaultModel,
       embedded,
       isWaitingForSubscriptionModels,

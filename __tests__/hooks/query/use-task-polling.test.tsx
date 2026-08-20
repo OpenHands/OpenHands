@@ -94,9 +94,12 @@ describe("useTaskPolling", () => {
 
     await waitFor(() => expect(result.current.taskStatus).toBe("READY"));
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith("/conversations/conversation-1", {
-        replace: true,
-      });
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backend=default-local",
+        {
+          replace: true,
+        },
+      );
     });
 
     expect(getConversationState("conversation-1").draftMessage).toBe(
@@ -129,9 +132,12 @@ describe("useTaskPolling", () => {
     renderHook(() => useTaskPollingController(), { wrapper: createWrapper() });
 
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith("/conversations/conversation-1", {
-        replace: true,
-      });
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backend=default-local",
+        {
+          replace: true,
+        },
+      );
     });
     expect(getStoredConversationMetadata("conversation-1")).toEqual({
       selected_repository: "OpenHands/agent-canvas",
@@ -184,9 +190,12 @@ describe("useTaskPolling", () => {
     });
 
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith("/conversations/conversation-1", {
-        replace: true,
-      });
+      expect(navigate).toHaveBeenCalledWith(
+        "/conversations/conversation-1?backend=default-local",
+        {
+          replace: true,
+        },
+      );
     });
 
     renderHook(() => useTaskPollingController(), {

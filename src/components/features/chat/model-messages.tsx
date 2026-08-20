@@ -5,6 +5,7 @@ import { useModelStore } from "#/stores/model-store";
 import { I18nKey } from "#/i18n/declaration";
 import InfoCircleIcon from "#/icons/info-circle.svg?react";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import { GenericEventMessage } from "./generic-event-message";
 
 interface ProfileRowProps {
@@ -13,6 +14,7 @@ interface ProfileRowProps {
 
 function ProfileRow({ profile }: ProfileRowProps) {
   const [expanded, setExpanded] = React.useState(false);
+  const displayModel = formatModelNameForDisplay(profile.model);
 
   return (
     <div className="border border-neutral-700 rounded-md overflow-hidden">
@@ -34,7 +36,7 @@ function ProfileRow({ profile }: ProfileRowProps) {
         <>
           <hr className="border-neutral-700" />
           <div className="px-3 py-2 text-xs text-neutral-300 font-mono whitespace-pre-wrap">
-            {`model:    ${profile.model ?? "—"}\n` +
+            {`model:    ${displayModel ?? "—"}\n` +
               `base_url: ${profile.base_url ?? "—"}\n` +
               // eslint-disable-next-line i18next/no-literal-string -- diagnostic readout; field labels are intentionally untranslated
               `api_key:  ${profile.api_key_set ? "set" : "not set"}`}

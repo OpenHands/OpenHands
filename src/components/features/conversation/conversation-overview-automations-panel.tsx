@@ -37,23 +37,39 @@ export function ConversationOverviewAutomationsPanel({
     if (openAdd) setIsAddModalOpen(true);
   }, [openAdd]);
 
+  // Every state renders inside the same panel container so the drawer's
+  // DOM contract (one `conversation-overview-automations-panel` node) holds
+  // regardless of backend health or list contents.
+  let body;
   if (isHealthLoading || (health?.status === "ok" && isLoading)) {
-    return (
-      <div data-testid="conversation-overview-automations-panel">
-        <AutomationCardSkeleton />
-      </div>
-    );
-  }
-  if (health?.status !== "ok") {
-    return <BackendNotConfigured onRetry={refetchHealth} />;
-  }
-  if (isError) {
-    return <ErrorState onRetry={refetch} />;
-  }
-  if (!data?.automations.length) {
-    return (
+    body = <AutomationCardSkeleton />;
+  } else if (health?.status !== "ok") {
+    body = <BackendNotConfigured onRetry={refetchHealth} />;
+  } else if (isError) {
+    body = <ErrorState onRetry={refetch} />;
+  } else if (!data?.automations.length) {
+    body = (
       <>
         <EmptyState />
+        <AddAutomationModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+        />
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <AutomationGroup
+          title={t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS)}
+          count={data.automations.length}
+          automations={data.automations}
+          view="list"
+          onToggle={NOOP}
+          onRunNow={NOOP}
+          onDelete={NOOP}
+          onExport={NOOP}
+        />
         <AddAutomationModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
@@ -63,21 +79,6 @@ export function ConversationOverviewAutomationsPanel({
   }
 
   return (
-    <div data-testid="conversation-overview-automations-panel">
-      <AutomationGroup
-        title={t(I18nKey.AUTOMATIONS$TITLE)}
-        count={data.automations.length}
-        automations={data.automations}
-        view="list"
-        onToggle={NOOP}
-        onRunNow={NOOP}
-        onDelete={NOOP}
-        onExport={NOOP}
-      />
-      <AddAutomationModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-      />
-    </div>
+    <div data-testid="conversation-overview-automations-panel">{body}</div>
   );
 }

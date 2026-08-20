@@ -11,7 +11,8 @@ export type ConversationTab =
   | "browser"
   | "terminal"
   | "planner"
-  | "tasklist";
+  | "tasklist"
+  | "usage";
 
 export type ConversationMode = "code" | "plan";
 

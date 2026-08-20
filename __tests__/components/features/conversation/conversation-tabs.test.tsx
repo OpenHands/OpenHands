@@ -20,7 +20,7 @@ const REAL_CONVERSATION_ID = "conv-abc123";
 let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
+  useOptionalConversationId: () => ({ conversationId: mockConversationId }),
   useConversationId: () => ({ conversationId: mockConversationId }),
 }));
 

@@ -1,4 +1,3 @@
-/* eslint-disable react/jsx-props-no-spreading */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,6 +15,7 @@ import {
 // Mocks must be declared before the SUT is imported.
 const useWorkspaceFilesMock = vi.fn();
 const useWorkspaceFileContentMock = vi.fn();
+const useActiveConversationMock = vi.fn();
 
 vi.mock("#/hooks/query/use-workspace-files", () => ({
   useWorkspaceFiles: () => useWorkspaceFilesMock(),
@@ -24,6 +24,10 @@ vi.mock("#/hooks/query/use-workspace-files", () => ({
 vi.mock("#/hooks/query/use-workspace-file-content", () => ({
   useWorkspaceFileContent: (path: string | null) =>
     useWorkspaceFileContentMock(path),
+}));
+
+vi.mock("#/hooks/query/use-active-conversation", () => ({
+  useActiveConversation: () => useActiveConversationMock(),
 }));
 
 function renderTab(conversationId: string | null = null) {
@@ -63,6 +67,7 @@ describe("FilesTab", () => {
 
     useWorkspaceFilesMock.mockReset();
     useWorkspaceFileContentMock.mockReset();
+    useActiveConversationMock.mockReset();
 
     useWorkspaceFilesMock.mockReturnValue({
       data: ["index.html", "src/main.ts", "README.md"],
@@ -80,6 +85,11 @@ describe("FilesTab", () => {
       isLoading: false,
       isError: false,
     });
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project" },
+      },
+    });
   });
 
   it("renders the file browser without a Diff/Commits toggle", () => {
@@ -89,7 +99,9 @@ describe("FilesTab", () => {
     expect(
       screen.queryByTestId("files-tab-content-mode-toggle"),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("files-tab-diff-toggle")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("files-tab-diff-toggle"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not open file tabs until a file is selected", () => {
@@ -102,12 +114,28 @@ describe("FilesTab", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the active conversation workspace path", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        workspace: { working_dir: "/workspace/project/worktree-123" },
+      },
+    });
+
+    renderTab();
+
+    expect(
+      screen.getByTestId("files-tab-workspace-path-value"),
+    ).toHaveTextContent("/workspace/project/worktree-123");
+  });
+
   it("opens a tab when a file is selected and closes it from the tab strip", async () => {
     const user = userEvent.setup();
     openFile("src/main.ts");
     renderTab();
 
-    expect(screen.getByTestId("file-quick-row-item-src/main.ts")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("file-quick-row-item-src/main.ts"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
       "main.ts",
     );
@@ -126,10 +154,12 @@ describe("FilesTab", () => {
     openFile("src/main.ts");
     renderTab();
 
-    const firstTab = screen.getByTestId("file-quick-row-item-README.md")
-      .parentElement;
-    const secondTab = screen.getByTestId("file-quick-row-item-src/main.ts")
-      .parentElement;
+    const firstTab = screen.getByTestId(
+      "file-quick-row-item-README.md",
+    ).parentElement;
+    const secondTab = screen.getByTestId(
+      "file-quick-row-item-src/main.ts",
+    ).parentElement;
     expect(firstTab).toHaveClass("border-l");
     expect(firstTab).toHaveClass("border-r");
     expect(secondTab).toHaveClass("border-r");
@@ -206,7 +236,9 @@ describe("FilesTab", () => {
     await user.click(screen.getByTestId("file-tree-file-README.md"));
 
     expect(useFilesTabStore.getState().openPaths).toContain("README.md");
-    expect(screen.getByTestId("file-quick-row-item-README.md")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("file-quick-row-item-README.md"),
+    ).toBeInTheDocument();
   });
 
   it("renders markdown content via MarkdownRenderer in rich mode", async () => {

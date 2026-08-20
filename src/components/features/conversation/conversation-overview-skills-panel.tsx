@@ -9,8 +9,16 @@ import { SkillCard } from "#/components/features/skills/skill-card";
 import { SkillDetailModal } from "#/components/features/skills/skill-detail-modal";
 import { AddSkillModal } from "#/components/features/skills/add-skill-modal";
 import { SkillsToolbar } from "#/components/features/skills/skills-toolbar";
-import { getSkillCardDescription } from "#/components/features/skills/get-skill-card-description";
-import type { SkillTypeFilter } from "#/components/features/skills/skill-type-filter";
+import { SkillFiltersModal } from "#/components/features/skills/skill-filters-modal";
+import {
+  applySkillFilters,
+  buildSkillFacetGroups,
+  clearSkillFilterFacets,
+  countActiveFilters,
+  toggleSkillFilterValue,
+  EMPTY_SKILL_FILTER_STATE,
+  type SkillFilterState,
+} from "#/components/features/skills/skill-filter";
 import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
@@ -33,24 +41,6 @@ interface ConversationOverviewSkillsPanelProps {
   openAdd: boolean;
 }
 
-function matchesSearch(skill: SkillInfo, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-  const haystacks = [
-    skill.name,
-    getSkillCardDescription(skill),
-    skill.description ?? "",
-    skill.content ?? "",
-    skill.license ?? "",
-    skill.compatibility ?? "",
-    ...(skill.triggers ?? []),
-    ...(skill.allowed_tools ?? []),
-  ];
-  const lowered = query.toLowerCase();
-  return haystacks.some((value) => value.toLowerCase().includes(lowered));
-}
-
 export function ConversationOverviewSkillsPanel({
   openAdd,
 }: ConversationOverviewSkillsPanelProps) {
@@ -70,8 +60,10 @@ export function ConversationOverviewSkillsPanel({
     useState<ConversationOverviewProjectScope>(
       CONVERSATION_OVERVIEW_PROJECT_SCOPE.project,
     );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<SkillTypeFilter>("all");
+  const [filter, setFilter] = useState<SkillFilterState>(
+    EMPTY_SKILL_FILTER_STATE,
+  );
+  const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [selectedSkill, setSelectedSkill] = useState<SkillInfo | null>(null);
   const [showAddSkillModal, setShowAddSkillModal] = useState(false);
 
@@ -128,13 +120,8 @@ export function ConversationOverviewSkillsPanel({
   }, [skills, projectScope, projectDir]);
 
   const filteredSkills = useMemo(
-    () =>
-      scopedSkills.filter(
-        (skill) =>
-          (typeFilter === "all" || skill.type === typeFilter) &&
-          matchesSearch(skill, searchQuery),
-      ),
-    [scopedSkills, typeFilter, searchQuery],
+    () => applySkillFilters(scopedSkills, disabledSet, filter),
+    [scopedSkills, disabledSet, filter],
   );
 
   const handleToggle = (skillName: string, enabled: boolean) => {
@@ -192,10 +179,12 @@ export function ConversationOverviewSkillsPanel({
         testId="conversation-overview-skills-scope"
       />
       <SkillsToolbar
-        search={searchQuery}
-        onSearchChange={setSearchQuery}
-        typeFilter={typeFilter}
-        onTypeFilterChange={setTypeFilter}
+        search={filter.query}
+        onSearchChange={(query) =>
+          setFilter((previous) => ({ ...previous, query }))
+        }
+        activeFilterCount={countActiveFilters(filter)}
+        onOpenFilters={() => setIsFiltersModalOpen(true)}
       />
 
       {scopedSkills.length === 0 ? (
@@ -248,6 +237,22 @@ export function ConversationOverviewSkillsPanel({
 
       {showAddSkillModal ? (
         <AddSkillModal onClose={() => setShowAddSkillModal(false)} />
+      ) : null}
+
+      {isFiltersModalOpen ? (
+        <SkillFiltersModal
+          groups={buildSkillFacetGroups(scopedSkills, disabledSet, filter)}
+          activeCount={countActiveFilters(filter)}
+          onToggle={(groupId, value) =>
+            setFilter((previous) =>
+              toggleSkillFilterValue(previous, groupId, value),
+            )
+          }
+          onClearAll={() =>
+            setFilter((previous) => clearSkillFilterFacets(previous))
+          }
+          onClose={() => setIsFiltersModalOpen(false)}
+        />
       ) : null}
     </div>
   );

@@ -1,35 +1,28 @@
-import { MCPServerConfig } from "#/types/mcp-server";
-import { MCPConfig } from "#/types/settings";
+import type { MCPConfig } from "@openhands/typescript-client";
+import type { MCPServerConfig } from "#/types/mcp-server";
+import { getMcpServerEnabled } from "./mcp-config";
 
 export function flattenMcpConfig(config: MCPConfig): MCPServerConfig[] {
-  return [
-    ...config.sse_servers.map((server, index) => ({
-      id: `sse-${index}`,
-      type: "sse" as const,
-      name: typeof server === "object" ? server.name : undefined,
-      url: typeof server === "string" ? server : server.url,
-      headers: typeof server === "object" ? server.headers : undefined,
-      auth: typeof server === "object" ? server.auth : undefined,
-      enabled: typeof server === "object" ? server.enabled : undefined,
-    })),
-    ...config.stdio_servers.map((server, index) => ({
-      id: `stdio-${index}`,
-      type: "stdio" as const,
-      name: server.name,
-      command: server.command,
-      args: server.args,
-      env: server.env,
-      enabled: server.enabled,
-    })),
-    ...config.shttp_servers.map((server, index) => ({
-      id: `shttp-${index}`,
-      type: "shttp" as const,
-      name: typeof server === "object" ? server.name : undefined,
-      url: typeof server === "string" ? server : server.url,
-      headers: typeof server === "object" ? server.headers : undefined,
-      timeout: typeof server === "object" ? server.timeout : undefined,
-      auth: typeof server === "object" ? server.auth : undefined,
-      enabled: typeof server === "object" ? server.enabled : undefined,
-    })),
-  ];
+  return Object.entries(config).map(([settingsKey, server]) =>
+    server.transport === "stdio"
+      ? {
+          id: settingsKey,
+          type: "stdio",
+          name: settingsKey,
+          command: server.command,
+          args: server.args ?? undefined,
+          env: server.env ?? undefined,
+          enabled: getMcpServerEnabled(server),
+        }
+      : {
+          id: settingsKey,
+          type: server.transport === "sse" ? "sse" : "shttp",
+          name: settingsKey,
+          url: server.url,
+          headers: server.headers ?? undefined,
+          timeout: server.timeout ?? undefined,
+          auth: server.auth ?? undefined,
+          enabled: getMcpServerEnabled(server),
+        },
+  );
 }

@@ -31,7 +31,7 @@ interface ConversationOverviewDrawerContentProps {
 function getSectionTitleKey(section: ConversationOverviewDrawerSection) {
   switch (section) {
     case CONVERSATION_OVERVIEW_DRAWER_SECTION.automations:
-      return I18nKey.AUTOMATIONS$TITLE;
+      return I18nKey.CONVERSATION_PANEL$AUTOMATIONS;
     case CONVERSATION_OVERVIEW_DRAWER_SECTION.skills:
       return I18nKey.SETTINGS$NAV_SKILLS;
     case CONVERSATION_OVERVIEW_DRAWER_SECTION.mcp:

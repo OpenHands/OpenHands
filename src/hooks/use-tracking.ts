@@ -82,7 +82,7 @@ export const useTracking = () => {
     hasParentConversation: boolean;
     entryPoint?: string;
   }) => {
-    track("conversation_created", {
+    track("conversation_start_requested", {
       conversation_id: conversationId,
       task_id: taskId,
       is_start_task: conversationId.startsWith("task-"),
@@ -301,12 +301,41 @@ export const useTracking = () => {
     track("automation_exported", { backend_kind: backendKind });
   };
 
+  const trackAutomationActivityLogExported = ({
+    backendKind,
+    format,
+  }: {
+    backendKind: BackendKind;
+    format: "json" | "csv";
+  }) => {
+    track("automation_activity_log_exported", {
+      backend_kind: backendKind,
+      format,
+    });
+  };
+
   const trackAutomationImported = ({
     backendKind,
   }: {
     backendKind: BackendKind;
   }) => {
     track("automation_imported", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncConfigUpdated = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_config_updated", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncTriggered = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_triggered", { backend_kind: backendKind });
   };
 
   const trackBackendAdded = ({
@@ -407,7 +436,10 @@ export const useTracking = () => {
     trackAutomationDisableButton,
     trackAutomationEdited,
     trackAutomationExported,
+    trackAutomationActivityLogExported,
     trackAutomationImported,
+    trackGitSyncConfigUpdated,
+    trackGitSyncTriggered,
     trackBackendAdded,
     trackOnboardingStarted,
     trackOnboardingStepViewed,

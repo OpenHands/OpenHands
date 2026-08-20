@@ -4,6 +4,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
+import { useResponderUrlSecret } from "#/hooks/use-responder-url-secret";
 import { useConversationStore } from "#/stores/conversation-store";
 import {
   setConversationState,
@@ -19,16 +20,22 @@ import {
 import {
   findInstalledEntryMatch,
   getMarketplaceEntryById,
-  getMcpMarketplaceCatalog,
+  isMcpInstallableEntry,
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
+import {
+  automationSetupPath,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
   getRequiredIntegrationIds,
 } from "#/utils/automation-catalog";
 import { isResponderAutomation } from "#/utils/responder-deployment";
+import { useAutomations } from "#/hooks/query/use-automations";
+import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
 
@@ -37,30 +44,44 @@ interface RecommendedAutomationsLauncherProps {
   onLaunched?: () => void;
   /** When true, only the automation card grid scrolls inside its section. */
   scrollableGrid?: boolean;
+  /**
+   * Compact discovery rail for New Chat and the automations dashboard.
+   * The templates page keeps the full catalog section.
+   */
+  variant?: "catalog" | "rail";
+  className?: string;
 }
 
 /**
  * The marketplace entries a launch waits on. An integration the automation is
  * willing to start without is deliberately absent, so it never queues an
  * install modal the user has to dismiss.
+ *
+ * A required integration this backend cannot install as MCP (e.g. Jira's
+ * HTTP-only option) is also excluded here — the install queue can't do
+ * anything with it — but it is not silently dropped from the product: the
+ * automation card keeps it visible and labels it as needing external setup.
  */
 function getRequiredEntries(automation: RecommendedAutomation) {
-  const mcpMarketplace = getMcpMarketplaceCatalog(MCP_MARKETPLACE);
   return getRequiredIntegrationIds(automation)
-    .map((id) => getMarketplaceEntryById(id, mcpMarketplace))
-    .filter((entry): entry is MarketplaceEntry => !!entry);
+    .map((id) => getMarketplaceEntryById(id, MCP_MARKETPLACE))
+    .filter((entry): entry is MarketplaceEntry => !!entry)
+    .filter(isMcpInstallableEntry);
 }
 
 export function RecommendedAutomationsLauncher({
   query,
   onLaunched,
   scrollableGrid = false,
+  variant = "catalog",
+  className,
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
   const { data: settings } = useSettings();
   const { trackPrebuiltAutomationEnabled } = useTracking();
   const createConversation = useCreateConversation();
+  const ensureResponderUrlSecret = useResponderUrlSecret();
   const isCreatingConversation = useIsCreatingConversation();
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
@@ -72,15 +93,22 @@ export function RecommendedAutomationsLauncher({
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
+  const localSetupInFlightRef = useRef(false);
+  const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
+    useState(false);
+  const isRail = variant === "rail";
+  const { data: automationsData, isLoading: isAutomationsLoading } =
+    useAutomations({
+      enabled: isRail && activeBackend.backend.kind === "local",
+    });
 
-  // A disabled server is withheld from the agent, so treating it as installed
-  // would show "Connected" for an automation that then fails at runtime.
   const installedMcpConfig = useMemo(
     () =>
       flattenMcpConfig(
-        parseMcpConfig(settings?.agent_settings?.mcp_config),
+        settings?.mcp_config ??
+          parseMcpConfig(settings?.agent_settings?.mcp_config),
       ).filter((server) => server.enabled !== false),
-    [settings?.agent_settings?.mcp_config],
+    [settings?.agent_settings?.mcp_config, settings?.mcp_config],
   );
 
   const launchAutomation = useCallback(
@@ -98,7 +126,7 @@ export function RecommendedAutomationsLauncher({
       // form, so the answers are collected before anything is created. The rest
       // still hand a slash command to an agent to interpret.
       if (SETUP_REGISTRY.findById(automation.id)) {
-        navigate?.(`/automations/new/${automation.id}`);
+        navigate?.(automationSetupPath(automation.id));
         onLaunched?.();
         return;
       }
@@ -184,11 +212,22 @@ export function RecommendedAutomationsLauncher({
     proceedWithLocalLaunch(automation);
   };
 
-  const handleDeploymentContinueLocal = () => {
+  const handleDeploymentContinueLocal = async () => {
     const automation = deploymentChoiceAutomation;
-    setDeploymentChoiceAutomation(null);
-    if (automation) {
+    if (!automation || localSetupInFlightRef.current) return;
+
+    localSetupInFlightRef.current = true;
+    setIsPreparingLocalResponder(true);
+
+    try {
+      const isSecretReady = await ensureResponderUrlSecret();
+      if (!isSecretReady) return;
+
+      setDeploymentChoiceAutomation(null);
       proceedWithLocalLaunch(automation);
+    } finally {
+      localSetupInFlightRef.current = false;
+      setIsPreparingLocalResponder(false);
     }
   };
 
@@ -230,19 +269,33 @@ export function RecommendedAutomationsLauncher({
 
   const installEntry = installQueue[0] ?? null;
 
+  // Like every automation surface, the launcher renders only behind the
+  // interface-manifest gate; New Chat mounts it outside the gated routes.
+  if (!hasAutomationInterface()) return null;
+
   // Recommended automations are a local-backend-only feature; cloud
   // automations are managed elsewhere.
   if (activeBackend.backend.kind === "cloud") return null;
 
+  if (isRail && isAutomationsLoading) return null;
+
   return (
     <>
-      <RecommendedAutomationsSection
-        backendKind={activeBackend.backend.kind}
-        installedServers={installedMcpConfig}
-        query={query}
-        onSelect={handleSelectAutomation}
-        scrollableGrid={scrollableGrid}
-      />
+      {isRail ? (
+        <RecommendedAutomationsRail
+          className={className}
+          installedAutomations={automationsData?.automations ?? []}
+          onSelect={handleSelectAutomation}
+        />
+      ) : (
+        <RecommendedAutomationsSection
+          backendKind={activeBackend.backend.kind}
+          installedServers={installedMcpConfig}
+          query={query}
+          onSelect={handleSelectAutomation}
+          scrollableGrid={scrollableGrid}
+        />
+      )}
 
       {installEntry && (
         <InstallServerModal
@@ -256,6 +309,7 @@ export function RecommendedAutomationsLauncher({
 
       <ResponderDeploymentModal
         isOpen={deploymentChoiceAutomation !== null}
+        isPending={isPreparingLocalResponder}
         onClose={handleDeploymentClose}
         onContinueLocal={handleDeploymentContinueLocal}
         onOpenUrl={handleDeploymentOpenUrl}

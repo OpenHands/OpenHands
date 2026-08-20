@@ -275,9 +275,7 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
         await commitsTab.click();
       } else {
         await page.getByTestId("ellipsis-button").click();
-        await page
-          .getByTestId("conversation-tabs-menu-open-commits")
-          .click();
+        await page.getByTestId("conversation-tabs-menu-open-commits").click();
       }
       await expect(page.getByTestId("conversation-tab-commits")).toBeVisible({
         timeout: 15_000,
@@ -386,13 +384,19 @@ test.describe("files tab, conversation overview git, and browser tab", () => {
       await expect(page.getByTestId("files-tab")).toBeVisible({
         timeout: 15_000,
       });
+      // The file browser's tab strip renders once loading settles; the
+      // content mode toggle only appears after a file is opened, and the
+      // legacy Diff/Commits toggle is gone from the Files surface.
+      await expect(page.getByTestId("file-quick-row")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByTestId("files-tab-content")).toBeVisible({
+        timeout: 10_000,
+      });
       await expect(
         page.getByTestId("files-tab-content-mode-toggle"),
-      ).toBeVisible({ timeout: 10_000 });
-      await expect(
-        page.getByTestId("files-tab-diff-toggle"),
       ).toHaveCount(0);
+      await expect(page.getByTestId("files-tab-diff-toggle")).toHaveCount(0);
     });
   });
 });
-
