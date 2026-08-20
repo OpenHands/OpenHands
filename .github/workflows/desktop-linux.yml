@@ -1,0 +1,52 @@
+name: Desktop (Linux)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/desktop-linux.yml
+      - electron/**
+      - electron-builder.config.mjs
+      - scripts/download-uv.mjs
+      - scripts/download-node.mjs
+  release:
+    types: [published]
+
+concurrency:
+  group: desktop-linux-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      
+      - run: corepack enable
+      
+      - run: pnpm install
+      
+      - name: Build Electron
+        run: pnpm run build
+      
+      - name: Build AppImage
+        run: |
+          echo "AppImage build placeholder"
+      
+      - name: Build deb Package
+        run: |
+          echo "deb build placeholder (fpm: no maintainer/email)"
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-${{ github.sha }}
+          path: |
+            electron/dist/**
+            *.AppImage
+            *.deb
