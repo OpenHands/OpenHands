@@ -82,6 +82,8 @@ const seedConversationState = (
     JSON.stringify({
       selectedTab: "files",
       unpinnedTabs: [],
+      unpinnedOverviewSections: [],
+      unpinnedOverviewGitParts: [],
       conversationMode: "code",
       subConversationTaskId: null,
       draftMessage: null,
@@ -102,6 +104,7 @@ function seedActiveBackend(backend: Backend): void {
 const setActiveTabState = (tab: "files" | "planner") => {
   seedConversationState(REAL_CONVERSATION_ID, {
     selectedTab: tab,
+    rightPanelShown: true,
   });
   useConversationStore.setState({
     selectedTab: tab,
@@ -160,9 +163,7 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("unpinnedTabs");
-      // The right-drawer open state is session-only and must never
-      // be persisted into the consolidated conversation-state blob.
-      expect(parsed).not.toHaveProperty("rightPanelShown");
+      expect(parsed.rightPanelShown).toBe(true);
     });
   });
 
@@ -186,16 +187,15 @@ describe("ConversationTabs localStorage behavior", () => {
       const terminalTab = screen.getByTestId("conversation-tab-terminal");
       await user.click(terminalTab);
 
-      // Assert: Panel should be open and terminal tab selected (in-memory only).
+      // Assert: Panel should be open and terminal tab selected.
       expect(useConversationStore.getState().selectedTab).toBe("terminal");
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
-      // Tab selection persists to localStorage; drawer-open state does not.
       const storedState = JSON.parse(
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
-      expect(storedState).not.toHaveProperty("rightPanelShown");
+      expect(storedState.rightPanelShown).toBe(true);
     });
 
     it("should close panel when clicking the same active tab", async () => {
@@ -203,6 +203,10 @@ describe("ConversationTabs localStorage behavior", () => {
       const user = userEvent.setup();
 
       // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
       useConversationStore.setState({
         selectedTab: "files",
         isRightPanelShown: true,
@@ -217,17 +221,13 @@ describe("ConversationTabs localStorage behavior", () => {
       const editorTab = screen.getByTestId("conversation-tab-files");
       await user.click(editorTab);
 
-      // Assert: Panel should be closed (in-memory only).
+      // Assert: Panel should be closed and persisted.
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
 
-      // localStorage must NOT carry the drawer-open state — that's
-      // session-only by design.
-      const raw = localStorage.getItem(
-        `conversation-state-${REAL_CONVERSATION_ID}`,
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
-      if (raw !== null) {
-        expect(JSON.parse(raw)).not.toHaveProperty("rightPanelShown");
-      }
+      expect(storedState.rightPanelShown).toBe(false);
     });
 
     it("should switch to different tab when clicking another tab while panel is open", async () => {
@@ -235,6 +235,10 @@ describe("ConversationTabs localStorage behavior", () => {
       const user = userEvent.setup();
 
       // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
       useConversationStore.setState({
         selectedTab: "files",
         isRightPanelShown: true,
@@ -289,7 +293,7 @@ describe("ConversationTabs localStorage behavior", () => {
       expect(refreshButtons).toHaveLength(0);
     });
 
-    it("places the Files tab leftmost in the tab bar", () => {
+    it("places the Files tab leftmost, followed by Commits", () => {
       setActiveTabState("files");
 
       render(<ConversationTabs />, {
@@ -300,8 +304,13 @@ describe("ConversationTabs localStorage behavior", () => {
         document.querySelectorAll('[data-testid^="conversation-tab-"]'),
       );
       const testIds = tabs.map((t) => t.getAttribute("data-testid"));
-      // Files must be the first tab rendered in the bar.
+      // Files must be the first tab; Commits sits beside it as the git view.
       expect(testIds[0]).toBe("conversation-tab-files");
+      expect(testIds).toContain("conversation-tab-commits");
+      expect(testIds).not.toContain("conversation-tab-changes");
+      expect(testIds.indexOf("conversation-tab-files")).toBeLessThan(
+        testIds.indexOf("conversation-tab-commits"),
+      );
     });
 
     it("keeps Files leftmost even when the task list tab is present", () => {
@@ -335,6 +344,7 @@ describe("ConversationTabs localStorage behavior", () => {
       seedConversationState(REAL_CONVERSATION_ID, {
         selectedTab: "planner",
         unpinnedTabs: ["planner"],
+        rightPanelShown: true,
       });
       useConversationStore.setState({
         selectedTab: "planner",
@@ -365,6 +375,7 @@ describe("ConversationTabs localStorage behavior", () => {
       seedConversationState(REAL_CONVERSATION_ID, {
         selectedTab: "files",
         unpinnedTabs: ["planner"],
+        rightPanelShown: true,
       });
       useConversationStore.setState({
         selectedTab: "files",

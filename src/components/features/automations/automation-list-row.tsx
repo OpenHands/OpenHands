@@ -1,31 +1,38 @@
-import { useMemo } from "react";
+import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { Zap } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { KebabMenu } from "./kebab-menu";
 import { useHasPermission } from "#/hooks/use-has-permission";
 import { useNavigation } from "#/context/navigation-context";
+import { NavigationLink } from "#/components/shared/navigation-link";
 import PlayIcon from "#/icons/play.svg?react";
 import ClockIcon from "#/icons/clock.svg?react";
-import { Zap } from "lucide-react";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
-import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { cn } from "#/utils/utils";
+import { formatRelativeTime } from "#/utils/format-relative-time";
+import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { automationIconActionButtonClassName } from "./automation-action-button-classes";
-import { buildAutomationMetadataPills } from "./build-automation-pills";
 import { buildAutomationMenuItems } from "./build-automation-menu-items";
+import { automationActivityRowClassName } from "./automation-view-mode";
+import { RunStatusBadge } from "./detail/run-status-badge";
+import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
+import { AutomationHealthIndicator } from "#/components/features/home/featured-automations/automation-health-indicator";
 import {
-  automationListRowClassName,
-  automationListCellClassName,
-} from "./automation-view-mode";
-import { AutomationHealthBadge } from "./automation-health-badge";
+  HomeAutomationRunTooltip,
+  getRunStatusLabelKey,
+} from "#/components/features/home/featured-automations/home-automation-run-tooltip";
 import {
-  averageDurationDisplay,
-  lastRunText,
-  runCountDisplay,
-} from "./automation-run-insights";
-import { deriveAutomationHealth } from "#/manifests/automation-insights";
+  deriveRunHealth,
+  formatTriggerSourceLabel,
+  getLastRunTimestamp,
+  getTriggerEventLabel,
+  getTriggerScheduleLabel,
+  getTriggerSource,
+} from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
+import { toLatestRunState } from "./to-latest-run-state";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -49,15 +56,8 @@ export function AutomationListRow({
   insights,
 }: AutomationListRowProps) {
   const { navigate } = useNavigation();
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const canManage = useHasPermission("manage_automations");
-
-  const scheduleLabel =
-    automation.trigger.schedule_human || automation.trigger.type;
-  const pills = useMemo(
-    () => buildAutomationMetadataPills(automation, scheduleLabel),
-    [automation, scheduleLabel],
-  );
 
   const handleView = () => {
     navigate?.(`/automations/${automation.id}`);
@@ -76,119 +76,147 @@ export function AutomationListRow({
     onDelete,
   });
 
-  const handleRowClick = () => {
-    handleView();
-  };
+  const isEventTrigger = automation.trigger.type === "event";
+  const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
+  const triggerEventLabel = getTriggerEventLabel(automation);
+  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
+  const triggerSource = getTriggerSource(automation);
+  const hasTriggerMeta = Boolean(
+    triggerEventLabel || triggerScheduleLabel || triggerSource,
+  );
+
+  const runState = toLatestRunState(insights?.state);
+  const health = deriveRunHealth(runState);
+  const latestRun = runState.latestRun;
+  const lastRunAt = latestRun
+    ? getLastRunTimestamp(latestRun)
+    : automation.last_triggered_at;
+  const whenLabel = lastRunAt
+    ? formatRelativeTime(lastRunAt, i18n.language, t)
+    : null;
+  const hasMeta =
+    hasTriggerMeta || Boolean(whenLabel) || Boolean(latestRun?.status);
+  const detailHref = `/automations/${encodeURIComponent(automation.id)}`;
+  const statusLabelKey = getRunStatusLabelKey(runState);
+  const disableAnimation = import.meta.env.MODE === "test";
 
   return (
-    <tr
+    <li
       data-testid={`automation-list-row-${automation.id}`}
-      onClick={handleRowClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          handleRowClick();
-        }
-      }}
-      tabIndex={0}
-      className={cn(automationListRowClassName, "cursor-pointer")}
+      className={automationActivityRowClassName}
     >
-      <td className={automationListCellClassName}>
-        <div className="flex min-w-0 items-center gap-1.5">
-          {automation.trigger.type === "event" ? (
-            <Zap className="size-4 shrink-0 text-muted" aria-hidden="true" />
-          ) : (
-            <ClockIcon className="size-4 shrink-0 text-muted" />
-          )}
-          <span
-            className="max-w-[40%] shrink-0 truncate text-sm font-medium text-white"
-            title={automation.name}
-          >
-            {automation.name}
-          </span>
-          {pills.length > 0 ? (
-            <div className="min-w-0 flex-1">
-              <SkillCardPillRow
-                pills={pills}
-                testId={`automation-pills-${automation.id}`}
-              />
-            </div>
-          ) : null}
-        </div>
-      </td>
-
-      {insights ? (
-        <>
-          <td
-            data-testid={`automation-health-${automation.id}`}
-            className={cn(
-              "hidden w-[110px] @min-[36rem]:table-cell",
-              automationListCellClassName,
-            )}
-          >
-            <AutomationHealthBadge
-              health={deriveAutomationHealth(automation, insights.state)}
-              labels={insights.spec.health}
-            />
-          </td>
-          <td
-            data-testid={`automation-last-run-${automation.id}`}
-            className={cn(
-              "hidden w-[84px] whitespace-nowrap text-xs text-muted @min-[44rem]:table-cell",
-              automationListCellClassName,
-            )}
-          >
-            {lastRunText(
-              insights.state?.summary?.latestRun?.started_at ??
-                automation.last_triggered_at,
-              insights.spec.lastRun,
-              t(I18nKey.CONVERSATION$AGO),
-            )}
-          </td>
-          <td
-            data-testid={`automation-run-stats-${automation.id}`}
-            title={`${insights.spec.stats.runs} · ${insights.spec.stats.averageDuration}`}
-            className={cn(
-              "hidden w-[140px] whitespace-nowrap text-right text-xs text-muted @min-[56rem]:table-cell",
-              automationListCellClassName,
-            )}
-          >
-            {`${runCountDisplay(insights.state)} · ${averageDurationDisplay(insights.state)}`}
-          </td>
-        </>
-      ) : null}
-
-      <td
-        className={cn(
-          insights ? "w-[90px]" : "w-0",
-          "whitespace-nowrap",
-          automationListCellClassName,
-        )}
+      <Tooltip
+        content={
+          <HomeAutomationRunTooltip
+            automation={automation}
+            runState={runState}
+          />
+        }
+        placement="top-start"
+        closeDelay={100}
+        disableAnimation={disableAnimation}
+        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
       >
-        <div className="flex items-center justify-end gap-0.5">
-          {canManage ? (
-            <StyledTooltip
-              content={t(I18nKey.AUTOMATIONS$RUN_NOW)}
-              placement="top"
+        <NavigationLink
+          to={detailHref}
+          aria-label={`${automation.name} ${t(statusLabelKey)}`}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
+        >
+          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+            <span
+              data-testid={`automation-health-${automation.id}`}
+              className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center"
             >
-              <button
-                type="button"
-                data-testid={`automation-run-now-${automation.id}`}
-                aria-label={t(I18nKey.AUTOMATIONS$RUN_NOW)}
-                aria-busy={isRunPending}
-                disabled={isRunPending || !automation.enabled}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRunNow(automation.id);
-                }}
-                className={automationIconActionButtonClassName}
-              >
-                <PlayIcon className="size-4 shrink-0" aria-hidden />
-              </button>
-            </StyledTooltip>
-          ) : null}
-          <KebabMenu items={menuItems} />
-        </div>
-      </td>
-    </tr>
+              <AutomationHealthIndicator health={health} />
+            </span>
+            <span className="truncate text-sm font-medium leading-5 text-[var(--oh-foreground)]">
+              {automation.name}
+            </span>
+            {hasMeta ? (
+              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-[var(--oh-text-secondary)]">
+                <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
+                {triggerEventLabel ? (
+                  <span className="truncate">{triggerEventLabel}</span>
+                ) : null}
+                {triggerScheduleLabel ? (
+                  <span className="truncate">{triggerScheduleLabel}</span>
+                ) : null}
+                {triggerSource ? (
+                  <span
+                    className={cn(
+                      extensionModuleCardPillClassName,
+                      "shrink-0 px-1.5 py-0 text-[var(--oh-text-secondary)]",
+                    )}
+                  >
+                    {formatTriggerSourceLabel(triggerSource)}
+                  </span>
+                ) : null}
+                {whenLabel ? (
+                  <>
+                    {hasTriggerMeta ? (
+                      <span className="shrink-0" aria-hidden="true">
+                        ·
+                      </span>
+                    ) : null}
+                    <span
+                      data-testid={`automation-last-run-${automation.id}`}
+                      className="truncate"
+                    >
+                      {whenLabel}
+                    </span>
+                  </>
+                ) : null}
+                {latestRun ? (
+                  <>
+                    {hasTriggerMeta || whenLabel ? (
+                      <span className="shrink-0" aria-hidden="true">
+                        ·
+                      </span>
+                    ) : null}
+                    <RunStatusBadge status={latestRun.status} compact />
+                  </>
+                ) : null}
+              </span>
+            ) : null}
+            <span className="sr-only">{t(statusLabelKey)}</span>
+          </div>
+        </NavigationLink>
+      </Tooltip>
+
+      <div className="flex shrink-0 items-center gap-1.5 pr-1.5">
+        {insights ? (
+          <AutomationRunActivitySparkline
+            automationId={automation.id}
+            runs={runState.recentRuns}
+            testId={`automation-activity-${automation.id}`}
+          />
+        ) : null}
+        {canManage ? (
+          <StyledTooltip
+            content={t(I18nKey.AUTOMATIONS$RUN_NOW)}
+            placement="top"
+          >
+            <button
+              type="button"
+              data-testid={`automation-run-now-${automation.id}`}
+              aria-label={t(I18nKey.AUTOMATIONS$RUN_NOW)}
+              aria-busy={isRunPending}
+              disabled={isRunPending || !automation.enabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRunNow(automation.id);
+              }}
+              className={automationIconActionButtonClassName}
+            >
+              <PlayIcon className="size-4 shrink-0" aria-hidden />
+            </button>
+          </StyledTooltip>
+        ) : null}
+        <KebabMenu
+          items={menuItems}
+          triggerClassName="opacity-70 group-hover:opacity-100"
+        />
+      </div>
+    </li>
   );
 }

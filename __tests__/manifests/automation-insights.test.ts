@@ -49,6 +49,7 @@ function settled(summary: Partial<AutomationRunSummary>): RunSummaryState {
     summary: {
       total: 0,
       latestRun: null,
+      recentRuns: [],
       recentSuccessRate: null,
       averageDurationMs: null,
       ...summary,
@@ -157,6 +158,7 @@ describe("summarizeAutomationRuns", () => {
     expect(summary).toEqual({
       total: 40,
       latestRun: runs[0],
+      recentRuns: runs,
       recentSuccessRate: 0.5,
       averageDurationMs: (30_000 + 90_000) / 2,
     });

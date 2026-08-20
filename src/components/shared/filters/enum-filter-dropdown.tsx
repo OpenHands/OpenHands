@@ -19,6 +19,9 @@ interface EnumFilterDropdownProps<T extends string> {
   /** Plain-string labels, e.g. manifest-supplied copy. Wins over the keys. */
   labelByValue?: Record<T, string>;
   ariaLabel?: string;
+  className?: string;
+  /** Stretch the trigger to the container width, e.g. inside a parent menu. */
+  fullWidth?: boolean;
 }
 
 export function EnumFilterDropdown<T extends string>({
@@ -29,6 +32,8 @@ export function EnumFilterDropdown<T extends string>({
   labelKeyByValue,
   labelByValue,
   ariaLabel,
+  className,
+  fullWidth = false,
 }: EnumFilterDropdownProps<T>) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = React.useState(false);
@@ -48,7 +53,11 @@ export function EnumFilterDropdown<T extends string>({
   return (
     <div
       ref={containerRef}
-      className="relative shrink-0 w-auto"
+      className={cn(
+        "relative shrink-0",
+        fullWidth ? "w-full" : "w-auto",
+        className,
+      )}
       data-testid={testId}
     >
       <button
@@ -60,6 +69,7 @@ export function EnumFilterDropdown<T extends string>({
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
           dropdownFilterTriggerClassName,
+          fullWidth && "w-full justify-between",
           defaultOption &&
             value !== defaultOption &&
             "border-white/60 bg-white/10",
