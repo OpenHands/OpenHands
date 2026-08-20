@@ -27,33 +27,32 @@ const statusConfig: Record<
 > = {
   [AutomationRunStatus.COMPLETED]: {
     label: I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL,
-    style:
-      "border-[var(--oh-success)]/50 bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
+    style: "bg-[var(--oh-success)]/10 text-[var(--oh-success)]",
     iconTone: "text-[var(--oh-success)]",
   },
   [AutomationRunStatus.FAILED]: {
     label: I18nKey.AUTOMATIONS$DETAIL$FAILED,
-    style: "border-[var(--oh-danger)]/50 bg-[var(--oh-danger)]/10 text-danger",
+    style: "bg-[var(--oh-danger)]/10 text-danger",
     iconTone: "text-danger",
   },
   [AutomationRunStatus.PENDING]: {
     label: I18nKey.AUTOMATIONS$DETAIL$PENDING,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.RUNNING]: {
     label: I18nKey.AUTOMATIONS$DETAIL$RUNNING,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.CANCELLED]: {
     label: I18nKey.AUTOMATIONS$DETAIL$CANCELLED,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
   [AutomationRunStatus.SKIPPED]: {
     label: I18nKey.AUTOMATIONS$DETAIL$SKIPPED,
-    style: "border-[var(--oh-border)] bg-surface-raised text-muted",
+    style: "bg-surface-raised text-muted",
     iconTone: "text-muted",
   },
 };
@@ -147,10 +146,10 @@ export function RunStatusBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border font-medium",
+        "inline-flex items-center rounded-full font-medium",
         compact
-          ? "gap-1 px-1.5 py-0 text-[10px] leading-4"
-          : "gap-1.5 px-2.5 py-1 text-xs",
+          ? "gap-1 pl-1 pr-1.5 py-0 text-[10px] leading-4"
+          : "gap-1.5 pl-2 pr-2.5 py-1 text-xs",
         config.style,
       )}
     >
