@@ -93,9 +93,20 @@ describe("RunPhase — fields absent entirely (older automation service)", () =>
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it("renders nothing when the code itself is null (nothing has reported a phase yet)", () => {
+  it("renders nothing when both code and label are null (nothing has reported a phase yet)", () => {
     render(<RunPhase code={null} label={null} />);
 
     expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+  });
+
+  it("renders the label when only a label was reported and no code", () => {
+    // The service accepts a phase carrying just a label, so a custom
+    // automation may report one. An absent code is the most unknown code
+    // there is, and the idea says an unknown code falls back to its label.
+    render(<RunPhase code={null} label="Reticulating splines" />);
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Reticulating splines",
+    );
   });
 });

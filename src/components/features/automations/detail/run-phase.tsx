@@ -1,5 +1,22 @@
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
+import { AutomationRunStatus } from "#/types/automation";
+
+/**
+ * Whether a run's phase is worth showing at all: it answers "what is it doing
+ * now" or "where did it stop", so a finished, cancelled or skipped run has
+ * nothing to add. Shared by every surface, so one run cannot show a phase on
+ * one screen and hide it on another.
+ */
+export function shouldShowRunPhase(
+  status: AutomationRunStatus | null | undefined,
+): boolean {
+  return (
+    status === AutomationRunStatus.FAILED ||
+    status === AutomationRunStatus.PENDING ||
+    status === AutomationRunStatus.RUNNING
+  );
+}
 
 interface RunPhaseProps {
   /** `AutomationRun.phase_code` — `null`/absent means no phase reported. */
@@ -23,21 +40,18 @@ const KNOWN_PHASE_CODES: Record<string, I18nKey> = {
 };
 
 /**
- * Renders a run's current/last-known phase: a translated label for a code
- * the frontend recognizes, the author-supplied `phase_label` verbatim for an
- * unrecognized code, or nothing at all when there is no code, or the code is
- * unrecognized and the label is empty.
+ * A run's current or last-known phase: the translation of a code the frontend
+ * knows, otherwise the author-supplied label verbatim, and nothing at all
+ * when neither is usable. An absent code counts as unrecognized rather than
+ * as an absent phase — the service accepts a phase carrying only a label.
  *
- * `phase_label` is free-form data from an automation author (not interface
- * copy) and is rendered as-is — routing it through `t()` would be wrong,
- * since it is not a translation key.
+ * The label is data, not interface copy, so it is rendered as-is: passing it
+ * through `t()` would be wrong, it is not a key.
  */
 export function RunPhase({ code, label }: RunPhaseProps) {
   const { t } = useTranslation("openhands");
 
-  if (!code) return null;
-
-  const knownKey = KNOWN_PHASE_CODES[code];
+  const knownKey = code ? KNOWN_PHASE_CODES[code] : undefined;
   if (knownKey) {
     return (
       <span

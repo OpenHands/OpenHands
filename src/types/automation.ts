@@ -138,4 +138,9 @@ export interface AutomationRunExportRow {
    * missing field to null so every exported record has the same shape.
    */
   cost: number | null;
+  /**
+   * The raw `phase_code`, like `status`, falling back to `phase_label` for a
+   * phase reported without a code. Null only when the run has no phase.
+   */
+  phase: string | null;
 }

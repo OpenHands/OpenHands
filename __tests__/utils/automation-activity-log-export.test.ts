@@ -57,6 +57,7 @@ const sampleRow = (
   conversation_url: "http://localhost:8000/conversations/c1",
   error: "boom",
   cost: null,
+  phase: null,
   ...overrides,
 });
 
@@ -111,6 +112,72 @@ describe("automation-activity-log-export", () => {
     // Assert
     expect(csv.split("\n")[0]).toContain("cost");
     expect(csv.split("\n")[1]).toContain("0.4213");
+  });
+
+  it("carries the run's raw phase_code into the export row's phase field", () => {
+    // Arrange
+    const run = sampleRun({ phase_code: "sandbox_provisioning" });
+
+    // Act
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    // Assert
+    expect(row.phase).toBe("sandbox_provisioning");
+  });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+  ])(
+    "normalizes a %s phase_code to a null phase field",
+    (_label, phase_code) => {
+      // Arrange
+      const run = sampleRun({ phase_code });
+
+      // Act
+      const row = mapAutomationRunToExportRow(run, automation);
+
+      // Assert
+      expect(row.phase).toBeNull();
+    },
+  );
+
+  it("includes a phase column in the CSV header", () => {
+    const rows: AutomationRunExportRow[] = [sampleRow({ phase: "queued" })];
+    const csv = serializeActivityLogRowsCsv(rows);
+    expect(csv.split("\n")[0].split(",")).toContain("phase");
+  });
+
+  it("renders an empty cell (not the string 'null') for a run without a phase", () => {
+    // Arrange: one run with a phase, one without — both in the same export.
+    // `trigger` is overridden to a single-key object so its JSON-stringified,
+    // quoted cell has no internal comma to confuse the naive column split
+    // below (the CSV escaping itself is covered by a separate test).
+    const rows: AutomationRunExportRow[] = [
+      sampleRow({
+        run_id: "r-with-phase",
+        trigger: { type: "cron" },
+        phase: "running_agent",
+      }),
+      sampleRow({
+        run_id: "r-without-phase",
+        trigger: { type: "cron" },
+        phase: null,
+      }),
+    ];
+
+    // Act
+    const csv = serializeActivityLogRowsCsv(rows);
+    const lines = csv.trim().split("\n");
+    const header = lines[0].split(",");
+    const phaseColumnIndex = header.indexOf("phase");
+
+    // Assert
+    const withPhaseCells = lines[1].split(",");
+    const withoutPhaseCells = lines[2].split(",");
+    expect(withPhaseCells[phaseColumnIndex]).toBe("running_agent");
+    expect(withoutPhaseCells[phaseColumnIndex]).toBe("");
+    expect(withoutPhaseCells[phaseColumnIndex]).not.toBe("null");
   });
 
   it("serializes CSV with conversation URL and escaped fields", () => {
@@ -212,5 +279,21 @@ describe("automation-activity-log-export", () => {
     );
     const blob = vi.mocked(downloadBlob).mock.calls[0][0] as Blob;
     expect(blob.type).toBe("text/csv;charset=utf-8");
+  });
+
+  it("falls back to the label when a phase carries no code, so an empty cell means no phase", () => {
+    // Arrange — the service accepts a phase with only a label, and the UI
+    // shows it. Exporting the code alone would make such a run look identical
+    // to one that never reported a phase.
+    const run = sampleRun({
+      phase_code: null,
+      phase_label: "Reticulating splines",
+    });
+
+    // Act
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    // Assert
+    expect(row.phase).toBe("Reticulating splines");
   });
 });

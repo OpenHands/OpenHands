@@ -24,6 +24,7 @@ const CSV_COLUMNS = [
   // Appended rather than grouped with the other run metrics so existing
   // consumers that read the CSV by column position keep working.
   "cost",
+  "phase",
 ] as const;
 
 export function getActivityLogExportFilename(
@@ -104,6 +105,9 @@ export function mapAutomationRunToExportRow(
     // Exports carry the raw number and leave formatting to the consumer; the
     // Activity Log row is the only place that renders it as USD.
     cost: run.cost ?? null,
+    // Falling back to the label: without it, a phase reported with only a
+    // label would export as an empty cell, indistinguishable from no phase.
+    phase: run.phase_code ?? run.phase_label ?? null,
   };
 }
 
