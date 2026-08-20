@@ -45,9 +45,10 @@ vi.mock("#/routes/llm-settings", async () => {
       const [apiKey] = React.useState(
         String(initialValuesRef.current["llm.api_key"] ?? ""),
       );
-      const [baseUrl] = React.useState(
+      const [baseUrl, setBaseUrl] = React.useState(
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
+      const [baseUrlDirty, setBaseUrlDirty] = React.useState(false);
       const [temperature, setTemperature] = React.useState("0.2");
       React.useEffect(() => {
         const values = {
@@ -66,16 +67,23 @@ vi.mock("#/routes/llm-settings", async () => {
             if (view === "all") {
               return { llm: { temperature: Number(temperature) } };
             }
-            return {
-              llm: {
-                model: values["llm.model"],
-                api_key: values["llm.api_key"],
-                base_url: values["llm.base_url"],
-              },
+            const llm: Record<string, unknown> = {
+              model: values["llm.model"],
+              api_key: values["llm.api_key"],
             };
+            if (baseUrlDirty) llm.base_url = values["llm.base_url"];
+            return { llm };
           },
         });
-      }, [apiKey, baseUrl, model, onSaveControlChange, temperature, view]);
+      }, [
+        apiKey,
+        baseUrl,
+        baseUrlDirty,
+        model,
+        onSaveControlChange,
+        temperature,
+        view,
+      ]);
 
       return (
         <div data-testid="mock-llm-settings-screen">
@@ -94,11 +102,21 @@ vi.mock("#/routes/llm-settings", async () => {
             All
           </button>
           {view === "basic" ? (
-            <input
-              data-testid="mock-basic-model-input"
-              value={model}
-              onChange={(event) => setModel(event.currentTarget.value)}
-            />
+            <>
+              <input
+                data-testid="mock-basic-model-input"
+                value={model}
+                onChange={(event) => setModel(event.currentTarget.value)}
+              />
+              <input
+                data-testid="mock-basic-base-url-input"
+                value={baseUrl}
+                onChange={(event) => {
+                  setBaseUrlDirty(true);
+                  setBaseUrl(event.currentTarget.value);
+                }}
+              />
+            </>
           ) : null}
           {view === "all" ? (
             <input
@@ -757,6 +775,41 @@ describe("LlmSettingsLocalView", () => {
       const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
       expect(savedLlm.model).toBe("litellm_proxy/claude-opus-4-8");
       expect(savedLlm.base_url).toBe("https://llm-proxy.app.all-hands.dev/");
+    });
+
+    it("persists a Base URL edited from the Basic view", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "azure/gpt-35-turbo",
+          api_key: "gAAAA_encrypted_key",
+          base_url: "",
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+      await user.click(await screen.findByTestId("sdk-section-basic-toggle"));
+      const baseUrlInput = await screen.findByTestId(
+        "mock-basic-base-url-input",
+      );
+      await user.type(baseUrlInput, "https://azure.example.com/openai");
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.model).toBe("azure/gpt-35-turbo");
+      expect(savedLlm.base_url).toBe("https://azure.example.com/openai");
     });
 
     it("drops hidden base_url when the Basic view model changes", async () => {

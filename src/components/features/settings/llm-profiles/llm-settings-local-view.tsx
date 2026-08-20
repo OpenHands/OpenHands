@@ -312,10 +312,14 @@ export function LlmSettingsLocalView() {
       // cloud the field stays untouched below).
       if (isLocal) llmConfig.provider_connection_id = null;
 
-      // The Basic tab has no base_url field. Preserve an existing hidden value
-      // when the model did not actually change; if the user chooses a new model,
-      // drop the old base URL so provider defaults can apply to that model.
-      if (didChangeModelInBasic) {
+      // Preserve an existing base URL when the model did not actually change;
+      // if the user chooses a new model without editing the now-visible URL,
+      // drop the old value so provider defaults can apply to that model. An
+      // explicit URL edit, including clearing the field, always wins.
+      if (
+        didChangeModelInBasic &&
+        !Object.prototype.hasOwnProperty.call(dirtyLlm, "base_url")
+      ) {
         delete llmConfig.base_url;
       }
 
