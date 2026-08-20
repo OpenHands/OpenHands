@@ -4,6 +4,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useIsCreatingConversation } from "#/hooks/use-is-creating-conversation";
+import { useResponderUrlSecret } from "#/hooks/use-responder-url-secret";
 import { useConversationStore } from "#/stores/conversation-store";
 import {
   setConversationState,
@@ -23,7 +24,10 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
-import { automationSetupPath } from "#/manifests/automation-interface";
+import {
+  automationSetupPath,
+  hasAutomationInterface,
+} from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import {
   getAutomationLaunchPrompt,
@@ -77,6 +81,7 @@ export function RecommendedAutomationsLauncher({
   const { data: settings } = useSettings();
   const { trackPrebuiltAutomationEnabled } = useTracking();
   const createConversation = useCreateConversation();
+  const ensureResponderUrlSecret = useResponderUrlSecret();
   const isCreatingConversation = useIsCreatingConversation();
   const setMessageToSend = useConversationStore(
     (state) => state.setMessageToSend,
@@ -88,6 +93,9 @@ export function RecommendedAutomationsLauncher({
   const [installQueue, setInstallQueue] = useState<MarketplaceEntry[]>([]);
   const completedInstallRef = useRef(false);
   const launchInFlightRef = useRef(false);
+  const localSetupInFlightRef = useRef(false);
+  const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
+    useState(false);
   const isRail = variant === "rail";
   const { data: automationsData, isLoading: isAutomationsLoading } =
     useAutomations({
@@ -204,11 +212,22 @@ export function RecommendedAutomationsLauncher({
     proceedWithLocalLaunch(automation);
   };
 
-  const handleDeploymentContinueLocal = () => {
+  const handleDeploymentContinueLocal = async () => {
     const automation = deploymentChoiceAutomation;
-    setDeploymentChoiceAutomation(null);
-    if (automation) {
+    if (!automation || localSetupInFlightRef.current) return;
+
+    localSetupInFlightRef.current = true;
+    setIsPreparingLocalResponder(true);
+
+    try {
+      const isSecretReady = await ensureResponderUrlSecret();
+      if (!isSecretReady) return;
+
+      setDeploymentChoiceAutomation(null);
       proceedWithLocalLaunch(automation);
+    } finally {
+      localSetupInFlightRef.current = false;
+      setIsPreparingLocalResponder(false);
     }
   };
 
@@ -250,6 +269,10 @@ export function RecommendedAutomationsLauncher({
 
   const installEntry = installQueue[0] ?? null;
 
+  // Like every automation surface, the launcher renders only behind the
+  // interface-manifest gate; New Chat mounts it outside the gated routes.
+  if (!hasAutomationInterface()) return null;
+
   // Recommended automations are a local-backend-only feature; cloud
   // automations are managed elsewhere.
   if (activeBackend.backend.kind === "cloud") return null;
@@ -286,6 +309,7 @@ export function RecommendedAutomationsLauncher({
 
       <ResponderDeploymentModal
         isOpen={deploymentChoiceAutomation !== null}
+        isPending={isPreparingLocalResponder}
         onClose={handleDeploymentClose}
         onContinueLocal={handleDeploymentContinueLocal}
         onOpenUrl={handleDeploymentOpenUrl}

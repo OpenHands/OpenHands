@@ -22,9 +22,11 @@ import { FileQuickRow } from "#/components/features/files-tab/file-quick-row";
 import { FileTreeView } from "#/components/features/files-tab/file-tree-view";
 import { FileContentViewer } from "#/components/features/files-tab/file-content-viewer";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
+import { WorkspacePath } from "#/components/features/files-tab/workspace-path";
 import type { ViewMode } from "#/components/features/files-tab/view-mode";
 import RefreshIcon from "#/icons/u-refresh.svg?react";
 import LinkExternalIcon from "#/icons/link-external.svg?react";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useUnifiedGitCommits } from "#/hooks/query/use-unified-git-commits";
 import GitChanges from "./changes-tab";
 import GitCommits from "./commits-tab";
@@ -34,6 +36,9 @@ function FilesTab() {
 
   // Keep the list / content / diff caches fresh as the agent writes files.
   useAutoRefreshFilesOnEdit();
+
+  const { data: activeConversation } = useActiveConversation();
+  const workspacePath = activeConversation?.workspace?.working_dir;
 
   const { hasAttachedSource, isLoading: isAttachedSourceLoading } =
     useHasAttachedSource();
@@ -237,6 +242,7 @@ function FilesTab() {
       )}
       {activeView === "off" && (
         <div className="flex flex-1 flex-col min-h-0">
+          <WorkspacePath path={workspacePath} />
           {filesQuery.isLoading ? (
             <div className="flex flex-1 items-center justify-center text-sm text-[var(--oh-muted)]">
               {t(I18nKey.FILES$LOADING_FILES)}

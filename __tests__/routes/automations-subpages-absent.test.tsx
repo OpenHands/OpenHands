@@ -16,12 +16,18 @@ import { clientLoader as templatesLoader } from "#/routes/automation-templates";
 import type { Backend } from "#/api/backend-registry/types";
 import type { Automation } from "#/types/automation";
 
-// Pin the published data source to "no interface manifest", independent of
-// whatever the pinned package ships: the sub-page surface must stay dark.
+// Pin the published data source to a manifest that declares no sub-page
+// surface, independent of whatever the pinned package ships: the interface
+// exists, so the page renders, but the sub-page surface must stay dark.
 vi.mock("#/manifests/manifest-sources", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("#/manifests/manifest-sources")>();
-  return { ...actual, AUTOMATION_INTERFACE_CANDIDATE: undefined };
+  const { createInterfaceManifest } =
+    await import("../manifests/manifest-test-data");
+  return {
+    ...actual,
+    AUTOMATION_INTERFACE_CANDIDATE: createInterfaceManifest(),
+  };
 });
 
 vi.mock("#/api/automation-service/automation-service.api", () => ({
@@ -88,7 +94,7 @@ afterEach(() => {
   __resetActiveStoreForTests();
 });
 
-describe("the sub-page surface without a declared manifest", () => {
+describe("an interface manifest that declares no sub-page surface", () => {
   it("keeps today's plain list: launcher on the page, no dashboard chrome", async () => {
     // Arrange & Act
     renderList();

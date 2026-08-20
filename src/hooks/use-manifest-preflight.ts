@@ -58,13 +58,19 @@ export function useSetupPreflight(entry: SetupEntry) {
     async (
       formValues: SetupFormValues,
     ): Promise<MappedManifestErrors | null> => {
-      const body = buildPreflightBody(entry, formValues);
-      if (!body) return null;
-
-      latestRequestRef.current += 1;
-      const requestId = latestRequestRef.current;
-
       try {
+        // Deriving the body is inside the guard too: a bundle entry resolves
+        // the create endpoint here, and an interface manifest published before
+        // bundles declares none. That is the same "cannot be checked" as a
+        // validator that will not answer, and left outside it rejected a
+        // promise no caller handles - which reads as a Continue button that
+        // does nothing at all.
+        const body = buildPreflightBody(entry, formValues);
+        if (!body) return null;
+
+        latestRequestRef.current += 1;
+        const requestId = latestRequestRef.current;
+
         const result = await AutomationService.validateDraft(body);
         if (requestId !== latestRequestRef.current) return null;
         if (result?.valid) return NO_ERRORS;

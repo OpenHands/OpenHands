@@ -10,8 +10,6 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useTracking } from "#/hooks/use-tracking";
 import { getAutomationsDocsUrl } from "#/manifests/automation-interface";
 
-const DOCS_URL = getAutomationsDocsUrl();
-
 function InlineExampleWrap({ children }: { children?: ReactNode }) {
   return <span className="whitespace-nowrap">{children}</span>;
 }
@@ -72,7 +70,7 @@ export function CreateInstructionsContent({
         />{" "}
         {t(I18nKey.AUTOMATIONS$CREATE_INSTRUCTIONS_GUIDANCE)}{" "}
         <a
-          href={DOCS_URL}
+          href={getAutomationsDocsUrl()}
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted underline transition-colors hover:text-foreground"

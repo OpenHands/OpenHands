@@ -4,6 +4,8 @@ import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversat
 
 import {
   ACP_SERVER_TAG_KEY,
+  AGENT_CANVAS_SOURCE,
+  CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
   fetchBackendRuntimeServicesInfo,
@@ -916,6 +918,93 @@ describe("toAppConversation", () => {
     updated_at: "2026-01-01T00:00:00Z",
   };
 
+  it("combines stats.usage_to_metrics into metrics when the backend doesn't set metrics directly (#16480)", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      stats: {
+        usage_to_metrics: {
+          agent: {
+            model_name: "agent-model",
+            accumulated_cost: 1.5,
+            max_budget_per_task: 10,
+            accumulated_token_usage: {
+              prompt_tokens: 100,
+              completion_tokens: 20,
+              cache_read_tokens: 5,
+              cache_write_tokens: 1,
+              context_window: 8000,
+              per_turn_token: 120,
+            },
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+          condenser: {
+            model_name: "condenser-model",
+            accumulated_cost: 0.5,
+            max_budget_per_task: null,
+            accumulated_token_usage: {
+              prompt_tokens: 40,
+              completion_tokens: 10,
+              cache_read_tokens: 0,
+              cache_write_tokens: 0,
+              context_window: 4000,
+              per_turn_token: 50,
+            },
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+        },
+      },
+    });
+
+    expect(result.metrics).toEqual({
+      accumulated_cost: 2,
+      max_budget_per_task: 10,
+      accumulated_token_usage: {
+        prompt_tokens: 140,
+        completion_tokens: 30,
+        cache_read_tokens: 5,
+        cache_write_tokens: 1,
+        context_window: 8000,
+        per_turn_token: 120,
+      },
+    });
+  });
+
+  it("prefers backend-provided metrics over stats.usage_to_metrics when both are present", () => {
+    const result = toAppConversation({
+      ...baseInfo,
+      metrics: { accumulated_cost: 3, max_budget_per_task: null },
+      stats: {
+        usage_to_metrics: {
+          agent: {
+            model_name: "agent-model",
+            accumulated_cost: 999,
+            max_budget_per_task: null,
+            accumulated_token_usage: null,
+            costs: [],
+            response_latencies: [],
+            token_usages: [],
+          },
+        },
+      },
+    });
+
+    expect(result.metrics?.accumulated_cost).toBe(3);
+  });
+
+  it("defaults metrics to a zero-cost snapshot when neither metrics nor stats are present", () => {
+    const result = toAppConversation({ ...baseInfo });
+
+    expect(result.metrics).toEqual({
+      accumulated_cost: 0,
+      max_budget_per_task: null,
+      accumulated_token_usage: null,
+    });
+  });
+
   it("falls back to the default title when the backend returns null", () => {
     const result = toAppConversation({ ...baseInfo, title: null });
     expect(result.title).toBe("Conversation 372eb");
@@ -1371,7 +1460,10 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
       load_project_skills: true,
     });
     expect(Array.isArray(acpAgentContext.skills)).toBe(true);
-    expect(payload.tags).toEqual({ [ACP_SERVER_TAG_KEY]: "claude-code" });
+    expect(payload.tags).toEqual({
+      [ACP_SERVER_TAG_KEY]: "claude-code",
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("forwards mcp_config to the ACP subprocess when servers are configured", () => {
@@ -1441,7 +1533,9 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(payload.agent_settings.acp_command).toBeUndefined();
     expect(payload.agent_settings.acp_server).toBeUndefined();
     expect(payload.agent_settings.llm.model).toBe("gpt-4");
-    expect(payload.tags).toBeUndefined();
+    expect(payload.tags).toEqual({
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    });
   });
 
   it("omits acp_model when the user clears it (null)", () => {
