@@ -456,6 +456,76 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(true);
     });
 
+    // #15598 — workspace/repo metadata used to live only in this client's
+    // localStorage, so sidebar grouping and the repo/branch badge vanished on
+    // any other device pointed at the same agent-server. Stamping them as
+    // server-side tags makes the grouping portable.
+    it("stamps workspace and repo metadata as server-side tags", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        metadata: {
+          selected_repository: "OpenHands/OpenHands",
+          selected_branch: "main",
+          git_provider: "github",
+        },
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags).toMatchObject({
+        repository: "OpenHands/OpenHands",
+        selected_branch: "main",
+        git_provider: "github",
+        workspace: "/Users/jane/projects/foo",
+      });
+      // The client-source tag is stamped by buildStartConversationRequest;
+      // the metadata tags must merge into it, not replace it.
+      expect(payload.tags.clientsource).toBe("agentcanvas");
+    });
+
+    it("omits metadata tags entirely when nothing was selected", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { tags: Record<string, string> };
+      expect(payload.tags).not.toHaveProperty("repository");
+      expect(payload.tags).not.toHaveProperty("workspace");
+    });
+
     it("links a local conversation to its parent", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },

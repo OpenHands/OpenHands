@@ -3,7 +3,12 @@ import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import { AgentKind, Settings, SettingsValue } from "#/types/settings";
+import {
+  AgentKind,
+  Settings,
+  SettingsValue,
+  isProvider,
+} from "#/types/settings";
 import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
@@ -337,15 +342,19 @@ export function toAppConversation(
     id: info.id,
     created_by_user_id: null,
     selected_repository:
-      metadata?.selected_repository ?? info.tags?.repository ?? null,
+      metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
     selected_branch:
-      metadata?.selected_branch ?? info.tags?.selected_branch ?? null,
+      metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
+    // The ``git_provider`` tag is free-form wire data — validate it against
+    // the known provider union instead of casting, so an unrecognized value
+    // degrades to "no provider" rather than poisoning provider-keyed lookups.
     git_provider:
       metadata?.git_provider ??
-      (info.tags?.git_provider as AppConversation["git_provider"]) ??
-      null,
+      (isProvider(info.tags?.[GIT_PROVIDER_TAG_KEY])
+        ? info.tags[GIT_PROVIDER_TAG_KEY]
+        : null),
     selected_workspace:
-      metadata?.selected_workspace ?? info.tags?.workspace ?? null,
+      metadata?.selected_workspace ?? info.tags?.[WORKSPACE_TAG_KEY] ?? null,
     active_profile: metadata?.active_profile ?? null,
     title: info.title?.trim()
       ? info.title
@@ -450,6 +459,19 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
 export const CLIENT_SOURCE_TAG_KEY = "clientsource";
 export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
+/**
+ * Tag keys that mirror the client-side ``ConversationMetadata`` selection
+ * (workspace / repo / branch / provider) onto the agent-server at creation
+ * time. Server-side tags are the only durable home for this metadata — the
+ * localStorage copy is a per-device warm cache, so a second client pointed at
+ * the same backend can only reconstruct workspace grouping and the repo/branch
+ * badge by reading these back in {@link toAppConversation} (#15598).
+ */
+export const REPOSITORY_TAG_KEY = "repository";
+export const SELECTED_BRANCH_TAG_KEY = "selected_branch";
+export const GIT_PROVIDER_TAG_KEY = "git_provider";
+export const WORKSPACE_TAG_KEY = "workspace";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -487,14 +509,14 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
   "title",
-  "git_provider",
+  GIT_PROVIDER_TAG_KEY,
   "repo_name",
   "repo",
-  "repository",
-  "selected_branch",
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   "branch",
   "archiveworkspacepath",
-  "workspace",
+  WORKSPACE_TAG_KEY,
   "working_dir",
 ]);
 

@@ -36,6 +36,10 @@ import {
 } from "../cloud/conversation-service.api";
 import {
   DirectConversationInfo,
+  GIT_PROVIDER_TAG_KEY,
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
+  WORKSPACE_TAG_KEY,
   assertSubscriptionAuthReady,
   buildStartConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
@@ -487,20 +491,31 @@ class AgentServerConversationService {
 
     // Stamp workspace/repo metadata as server-side tags so that other
     // clients pointed at the same backend can hydrate conversation grouping
-    // without needing this client's localStorage (OpenHands#15598).
+    // without needing this client's localStorage (OpenHands#15598). Stamp the
+    // raw `workingDirOverride`, not the resolved absolute `workingDir`: the
+    // sidebar groups by the workspace path the user picked, and a worktree
+    // launch resolves `workingDir` to a path that matches no workspace entry.
+    // Merge into (not replace) `payload.tags` — `buildStartConversationRequest`
+    // already stamps `clientsource` and, for ACP launches, `acpserver`.
     const metadataTags: Record<string, string> = {};
-    if (metadata?.selected_repository)
-      metadataTags.repository = metadata.selected_repository;
-    if (metadata?.selected_branch)
-      metadataTags.selected_branch = metadata.selected_branch;
-    if (metadata?.git_provider)
-      metadataTags.git_provider = metadata.git_provider;
-    if (workingDirOverride) metadataTags.workspace = workingDirOverride;
+    if (metadata?.selected_repository) {
+      metadataTags[REPOSITORY_TAG_KEY] = metadata.selected_repository;
+    }
+    if (metadata?.selected_branch) {
+      metadataTags[SELECTED_BRANCH_TAG_KEY] = metadata.selected_branch;
+    }
+    if (metadata?.git_provider) {
+      metadataTags[GIT_PROVIDER_TAG_KEY] = metadata.git_provider;
+    }
+    if (workingDirOverride) {
+      metadataTags[WORKSPACE_TAG_KEY] = workingDirOverride;
+    }
     if (Object.keys(metadataTags).length > 0) {
-      payload.tags = {
-        ...(payload.tags as Record<string, string>),
-        ...metadataTags,
-      };
+      // `payload` is a loosely-typed `Record<string, unknown>`; `tags` is
+      // always a `Record<string, string>` when present (see
+      // `StartConversationPayload` in the adapter).
+      const existingTags = payload.tags as Record<string, string> | undefined;
+      payload.tags = { ...existingTags, ...metadataTags };
     }
 
     const data = await new ConversationClient(
