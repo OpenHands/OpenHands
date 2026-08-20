@@ -1,4 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  createElement,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { RecommendedAutomation } from "@openhands/extensions/automations";
 import {
@@ -8,7 +14,10 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import { McpLogoBadge } from "#/components/features/mcp-logo-badge";
 import { getMarketplaceEntryById } from "#/utils/mcp-marketplace-utils";
-import { getIntegrationIds } from "#/utils/automation-catalog";
+import {
+  getAutomationIcon,
+  getIntegrationIds,
+} from "#/utils/automation-catalog";
 import {
   flattenRecommendedRailGroups,
   getRecommendedRailGroups,
@@ -42,23 +51,40 @@ function integrationEntries(
 }
 
 function RailIntegrationIcons({
+  automation,
   entries,
   testId,
 }: {
+  automation: RecommendedAutomation;
   entries: MarketplaceEntry[];
   testId: string;
 }) {
   const visibleEntries = entries.slice(0, 4);
   const isOverlap = visibleEntries.length > 1;
+  // A declared glyph replaces the logos rather than joining them: it is the
+  // whole identity of an entry that names one.
+  const Icon = getAutomationIcon(automation);
 
   return (
     <span
       aria-hidden="true"
       data-testid={testId}
-      data-layout={isOverlap ? "overlap" : undefined}
-      className={cn(RAIL_ICON_ROW_CLASS_NAME, isOverlap && "-space-x-2")}
+      data-layout={isOverlap && !Icon ? "overlap" : undefined}
+      className={cn(
+        RAIL_ICON_ROW_CLASS_NAME,
+        isOverlap && !Icon && "-space-x-2",
+      )}
     >
-      {visibleEntries.length === 0 ? (
+      {Icon ? (
+        <McpLogoBadge
+          entry={null}
+          size="base"
+          fallback={createElement(Icon, {
+            className: "h-5 w-5",
+            strokeWidth: 2.25,
+          })}
+        />
+      ) : visibleEntries.length === 0 ? (
         <McpLogoBadge entry={null} size="base" />
       ) : (
         visibleEntries.map((entry) => (
@@ -157,6 +183,7 @@ export function RecommendedAutomationsRail({
                 )}
               >
                 <RailIntegrationIcons
+                  automation={automation}
                   entries={integrationEntries(automation)}
                   testId={`recommended-automation-rail-icon-${automation.id}`}
                 />
