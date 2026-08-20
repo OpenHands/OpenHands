@@ -28,10 +28,8 @@ const DEMO_HISTORY_PATTERN: AutomationRunStatus[] = [
 /**
  * Local preview of every pinned-card + activity-list state.
  *
- * Enable with any of:
+ * Enable with either:
  * - `HOME_AUTOMATIONS_FORCE_DEMO = true` below
- * - `localStorage.setItem("oh:home-automations-demo", "1")`
- * - `?demoAutomations=1` in the URL
  * - `VITE_HOME_AUTOMATIONS_DEMO=true`
  */
 export const HOME_AUTOMATIONS_FORCE_DEMO = false;
@@ -40,18 +38,7 @@ export const HOME_AUTOMATIONS_DEMO_KEY = "oh:home-automations-demo";
 
 export function isHomeAutomationsDemoEnabled(): boolean {
   if (HOME_AUTOMATIONS_FORCE_DEMO) return true;
-  if (import.meta.env.VITE_HOME_AUTOMATIONS_DEMO === "true") return true;
-  if (typeof window === "undefined") return false;
-  if (window.localStorage.getItem(HOME_AUTOMATIONS_DEMO_KEY) === "1") {
-    return true;
-  }
-  try {
-    return (
-      new URLSearchParams(window.location.search).get("demoAutomations") === "1"
-    );
-  } catch {
-    return false;
-  }
+  return import.meta.env.VITE_HOME_AUTOMATIONS_DEMO === "true";
 }
 
 const DEMO_CONVERSATION_TITLES: Record<string, string | null> = {

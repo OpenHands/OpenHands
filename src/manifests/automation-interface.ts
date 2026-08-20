@@ -42,6 +42,14 @@ const MOUNTED_ROUTES = {
   templates: "/automations/templates",
 } satisfies InterfaceRoutes;
 
+/**
+ * File-format section for portable `.automation.json` export/import. A docs
+ * pointer for the host's import picker, not interface data — the manifest's
+ * `importExport` block has no docs field.
+ */
+export const AUTOMATION_FILE_FORMAT_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -117,8 +125,13 @@ export function automationTemplatesPath(): string {
   return MOUNTED_ROUTES.templates;
 }
 
+/**
+ * A declared endpoint path. Empty for one the manifest may omit - the two a
+ * bundle needs were added after the block shipped - so a caller that needs one
+ * says so rather than reading a host-held default that does not exist.
+ */
 export function getAutomationEndpoint(name: InterfaceEndpointName): string {
-  return requireInterface().endpoints[name];
+  return requireInterface().endpoints[name] ?? "";
 }
 
 /** An id-parameterized endpoint with `{id}` substituted, encoded. */

