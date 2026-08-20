@@ -11,8 +11,7 @@ import type { PluginSpec } from "#/api/conversation-service/agent-server-convers
  * string (a raw `+` would otherwise be decoded as a space and break `atob`).
  */
 export function buildPluginLaunchPath(plugins: PluginSpec[]): string {
-  const jsonString = JSON.stringify(plugins);
-  const bytes = new TextEncoder().encode(jsonString);
+  const bytes = new TextEncoder().encode(JSON.stringify(plugins));
   const binaryString = Array.from(bytes, (byte) =>
     String.fromCharCode(byte),
   ).join("");

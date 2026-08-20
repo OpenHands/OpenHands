@@ -24,7 +24,6 @@ describe("buildPluginLaunchPath", () => {
   });
 
   it("correctly encodes plugins with Unicode parameters", () => {
-    // Arrange: plugin with Unicode characters
     const plugins: PluginSpec[] = [
       {
         source: "github:owner/repo",
@@ -32,20 +31,13 @@ describe("buildPluginLaunchPath", () => {
       },
     ];
 
-    // Act: build the path
     const path = buildPluginLaunchPath(plugins);
     const url = new URL(path, "http://localhost");
     
-    // Manually decode the way launch.tsx does
     const decodedB64 = atob(url.searchParams.get("plugins") ?? "");
-    const bytes = new Uint8Array(decodedB64.length);
-    for (let i = 0; i < decodedB64.length; i++) {
-      bytes[i] = decodedB64.charCodeAt(i);
-    }
-    const utf8Decoded = new TextDecoder().decode(bytes);
-    const decoded = JSON.parse(utf8Decoded);
+    const bytes = Uint8Array.from(decodedB64, (c) => c.charCodeAt(0));
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
 
-    // Assert: Unicode is preserved exactly
     expect(decoded).toEqual(plugins);
   });
 });
