@@ -11,6 +11,7 @@ import { PinnedAutomationsDashboard } from "#/components/features/home/featured-
 import { RunningAutomationsList } from "#/components/features/home/featured-automations/running-automations-list";
 import { NavigationProvider } from "#/context/navigation-context";
 import { HOME_PINNED_AUTOMATIONS_KEY } from "#/hooks/use-home-pinned-automations";
+import { AUTOMATION_STACK_SECTION_BOTTOM_CLASS } from "#/utils/automation-stack-section";
 import {
   AutomationRunStatus,
   type Automation,
@@ -400,8 +401,20 @@ describe("home automations composer layout", () => {
     await user.click(screen.getByTestId("running-automation-pin-auto-1"));
 
     const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    expect(dashboard).toHaveClass(AUTOMATION_STACK_SECTION_BOTTOM_CLASS);
+    const pinnedCard = within(dashboard).getByTestId(
+      "pinned-automation-card-auto-1",
+    );
+    expect(pinnedCard.className).toContain("extension-module-card-interactive");
+    expect(pinnedCard.className).toContain("bg-base-secondary");
+    expect(pinnedCard.className).not.toContain("border-[var(--oh-border)]");
+    expect(pinnedCard).toBeInTheDocument();
     expect(
-      within(dashboard).getByTestId("pinned-automation-card-auto-1"),
+      within(dashboard).getByTestId("pinned-automation-pills-auto-1-wrap"),
+    ).toBeInTheDocument();
+    expect(within(dashboard).getByText("Daily at 09:00")).toBeInTheDocument();
+    expect(
+      within(pinnedCard).getByTestId("automation-run-stats"),
     ).toBeInTheDocument();
     expect(
       await within(dashboard).findByRole("link", {
@@ -419,6 +432,10 @@ describe("home automations composer layout", () => {
     ).toBeInTheDocument();
 
     expect(getStoredPinnedIds()).toContain("auto-1");
+
+    expect(
+      screen.queryByTestId("pinned-automation-run-now-auto-1"),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId("pinned-automation-menu-auto-1"));
     expect(
