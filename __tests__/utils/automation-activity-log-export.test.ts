@@ -142,6 +142,29 @@ describe("automation-activity-log-export", () => {
     },
   );
 
+  it.each([
+    ["completed", AutomationRunStatus.COMPLETED],
+    ["cancelled", AutomationRunStatus.CANCELLED],
+  ])(
+    "exports the last phase of a %s run, which no screen shows",
+    (_label, status) => {
+      // The export deliberately does not go through `shouldShowRunPhase`:
+      // that predicate decides what deserves screen space, and hides the
+      // phase once a run's status says everything. A record is not a screen —
+      // filtering here would make a run that finished in a known phase
+      // indistinguishable from one that never reported a phase at all.
+      const run = sampleRun({
+        status,
+        phase_code: "running_agent",
+        phase_label: null,
+      });
+
+      const row = mapAutomationRunToExportRow(run, automation);
+
+      expect(row.phase).toBe("running_agent");
+    },
+  );
+
   it("includes a phase column in the CSV header", () => {
     const rows: AutomationRunExportRow[] = [sampleRow({ phase: "queued" })];
     const csv = serializeActivityLogRowsCsv(rows);
@@ -218,14 +241,22 @@ describe("automation-activity-log-export", () => {
       "http://localhost:8000/conversations/c2",
     );
     expect(AutomationService.listAutomationRuns).toHaveBeenCalledTimes(2);
-    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(1, "a1", {
-      limit: 100,
-      offset: 0,
-    });
-    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(2, "a1", {
-      limit: 100,
-      offset: 1,
-    });
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(
+      1,
+      "a1",
+      {
+        limit: 100,
+        offset: 0,
+      },
+    );
+    expect(AutomationService.listAutomationRuns).toHaveBeenNthCalledWith(
+      2,
+      "a1",
+      {
+        limit: 100,
+        offset: 1,
+      },
+    );
   });
 
   it("downloads JSON after paging list runs", async () => {

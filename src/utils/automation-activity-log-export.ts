@@ -105,6 +105,13 @@ export function mapAutomationRunToExportRow(
     // Exports carry the raw number and leave formatting to the consumer; the
     // Activity Log row is the only place that renders it as USD.
     cost: run.cost ?? null,
+    // Deliberately not filtered through `shouldShowRunPhase`: that predicate
+    // decides what is worth a user's attention on screen, and hides the phase
+    // of a run whose status already says everything. An export is a record,
+    // not a screen — a completed run's last phase is real data, and dropping
+    // it here would make the phase of a run that finished indistinguishable
+    // from one that never reported a phase at all.
+    //
     // Falling back to the label: without it, a phase reported with only a
     // label would export as an empty cell, indistinguishable from no phase.
     phase: run.phase_code ?? run.phase_label ?? null,
