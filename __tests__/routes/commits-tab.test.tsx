@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,6 +10,8 @@ import AgentServerGitService from "#/api/git-service/agent-server-git-service.ap
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import type { GitCommit } from "#/api/open-hands.types";
+import { useEventStore } from "#/stores/use-event-store";
+import type { OHEvent } from "#/stores/use-event-store";
 
 const conversation = {
   conversation_url: "http://localhost:18000/api/conversations/c1",
@@ -58,6 +60,7 @@ describe("Commits Tab", () => {
   const getGitChangesSpy = vi.spyOn(AgentServerGitService, "getGitChanges");
 
   beforeEach(() => {
+    act(() => useEventStore.getState().clearEvents());
     getGitCommitsSpy.mockReset();
     getCommitChangesSpy.mockReset();
     getGitChangesSpy.mockReset();
@@ -176,5 +179,34 @@ describe("Commits Tab", () => {
     expect(
       await screen.findByTestId("commit-list-cap-notice"),
     ).toBeInTheDocument();
+  });
+
+  it("refreshes commits and uncommitted changes after a terminal command", async () => {
+    // Arrange
+    getGitCommitsSpy.mockResolvedValue({ commits: [], hasMore: false });
+    render(<GitCommits />, { wrapper });
+    await waitFor(() => expect(getGitCommitsSpy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getGitChangesSpy).toHaveBeenCalledTimes(1));
+
+    const terminalObservation = {
+      id: "terminal-observation-1",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: "terminal",
+      tool_call_id: "tool-call-1",
+      action_id: "action-1",
+      observation: {
+        kind: "TerminalObservation",
+        command: "git commit -m 'done'",
+        output: "committed",
+      },
+    } as unknown as OHEvent;
+
+    // Act
+    act(() => useEventStore.getState().addEvent(terminalObservation));
+
+    // Assert
+    await waitFor(() => expect(getGitCommitsSpy).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getGitChangesSpy).toHaveBeenCalledTimes(2));
   });
 });
