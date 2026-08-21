@@ -9,6 +9,8 @@ describe("transformVSCodeUrl", () => {
     Object.defineProperty(window, "location", {
       value: {
         hostname: "example.com",
+        port: "8081",
+        protocol: "https:",
       },
       writable: true,
     });
@@ -28,7 +30,17 @@ describe("transformVSCodeUrl", () => {
 
   it("should replace localhost with current hostname when they differ", () => {
     const input = "http://localhost:8080/?tkn=abc123&folder=/workspace";
-    const expected = "http://example.com:8080/?tkn=abc123&folder=/workspace";
+    const expected =
+      "https://example.com:8081/?tkn=abc123&folder=/workspace";
+
+    expect(transformVSCodeUrl(input)).toBe(expected);
+  });
+
+  it("should route localhost VS Code URLs through the reverse proxy port", () => {
+    const input =
+      "http://localhost:8001/?tkn=abc123&folder=/workspace/project";
+    const expected =
+      "https://example.com:8081/?tkn=abc123&folder=/workspace/project";
 
     expect(transformVSCodeUrl(input)).toBe(expected);
   });
@@ -44,6 +56,8 @@ describe("transformVSCodeUrl", () => {
     Object.defineProperty(window, "location", {
       value: {
         hostname: "localhost",
+        port: "8081",
+        protocol: "http:",
       },
       writable: true,
     });
