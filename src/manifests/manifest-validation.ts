@@ -26,8 +26,11 @@ const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
-/** Every `{{` must open a known namespace and close immediately. */
-const BUNDLE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+/**
+ * A template version, declared as `version` by a prompt entry and as
+ * `setup.bundle.version` by a bundle one.
+ */
+const TEMPLATE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
 // The characters a command of plain words and paths is made of. No shell
 // metacharacters, which the service rejects anyway and a bundle has no reason
 // to need; where those words may point is `isPlainCommand`'s to say.
@@ -35,6 +38,7 @@ const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
 const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const BUNDLE_SOURCE_PATTERN =
   /^(skills|automations)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+/** Every `{{` must open a known namespace and close immediately. */
 const UNKNOWN_PLACEHOLDER_PATTERN = new RegExp(
   `\\{\\{(?!(?:${SETUP_PLACEHOLDER_NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+\\}\\})`,
 );
@@ -175,8 +179,11 @@ function checkRequires(check: SetupChecker, requires: unknown): void {
   }
 
   const { integrations, features } = requires;
-  if (!isRecord(integrations) || Object.keys(integrations).length === 0) {
-    check.fail("requires.integrations", "must be a non-empty object");
+  // Empty is meaningful rather than malformed: an automation that needs no
+  // credential connects to nothing, and the key stays required so that saying
+  // so is a deliberate statement instead of an omission.
+  if (!isRecord(integrations)) {
+    check.fail("requires.integrations", "must be an object");
   } else {
     Object.entries(integrations).forEach(([id, requirement]) => {
       const path = `requires.integrations.${id}`;
@@ -400,7 +407,7 @@ function checkBundle(check: SetupChecker, bundle: unknown): void {
 
   if (
     typeof bundle.version !== "string" ||
-    !BUNDLE_VERSION_PATTERN.test(bundle.version)
+    !TEMPLATE_VERSION_PATTERN.test(bundle.version)
   ) {
     check.fail("setup.bundle.version", "must be a semantic version");
   }
@@ -587,6 +594,13 @@ export function validateSetupEntry(candidate: unknown): SetupValidationResult {
   }
   check.copy(candidate.name, "name");
   check.copy(candidate.description, "description");
+  if (
+    candidate.version !== undefined &&
+    (typeof candidate.version !== "string" ||
+      !TEMPLATE_VERSION_PATTERN.test(candidate.version))
+  ) {
+    check.fail("version", "must be a semantic version");
+  }
   if (
     candidate.skill !== undefined &&
     (typeof candidate.skill !== "string" ||
