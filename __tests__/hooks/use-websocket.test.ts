@@ -659,7 +659,7 @@ describe("useWebSocket", () => {
     }
   });
 
-  it("spaces reconnect attempts with exponential backoff", async () => {
+  it("spaces reconnect attempts with exponential backoff capped at 30s", async () => {
     // Arrange: every connection attempt fails immediately.
     class MockWebSocket {
       static readonly CONNECTING = 0;
@@ -727,6 +727,18 @@ describe("useWebSocket", () => {
       await expectInstancesAfter(1, 3);
       await expectInstancesAfter(3_999, 3);
       await expectInstancesAfter(1, 4);
+      await expectInstancesAfter(7_999, 4);
+      await expectInstancesAfter(1, 5);
+      await expectInstancesAfter(15_999, 5);
+      await expectInstancesAfter(1, 6);
+
+      // The sixth failure would double to 32s; the cap holds it at 30s...
+      await expectInstancesAfter(29_999, 6);
+      await expectInstancesAfter(1, 7);
+
+      // ...and every failure after that stays at 30s rather than growing.
+      await expectInstancesAfter(29_999, 7);
+      await expectInstancesAfter(1, 8);
 
       unmount();
     } finally {

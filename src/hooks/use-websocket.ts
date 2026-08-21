@@ -1,5 +1,6 @@
 import React from "react";
 import { sendWebSocketAuth } from "#/utils/websocket-auth";
+import { startHandshakeWatchdog } from "#/utils/websocket-handshake";
 
 export interface WebSocketHookOptions {
   queryParams?: Record<string, string | boolean>;
@@ -13,12 +14,6 @@ export interface WebSocketHookOptions {
     maxAttempts?: number;
   };
 }
-
-// Browsers never time out a socket stuck in CONNECTING on their own, and
-// Chrome serializes WebSocket handshakes per host — a hung handshake also
-// blocks every other socket to this origin until it settles. Close it after
-// this long so the retry (and any other queued handshake) can proceed.
-const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 // Reconnect backoff bounds: 1s, 2s, 4s, … capped at 30s.
 const RECONNECT_BASE_DELAY_MS = 1_000;
@@ -63,17 +58,13 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     // Mark this WebSocket instance as allowed to reconnect
     allowedToReconnectRef.current.add(ws);
 
-    // Handshake watchdog: abort a socket stuck in CONNECTING so it can't hold
-    // Chrome's per-host handshake lock indefinitely. close() fires onclose
-    // (code 1006), which flows into the normal reconnect path below.
-    const handshakeTimeout = setTimeout(() => {
-      if (ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-      }
-    }, HANDSHAKE_TIMEOUT_MS);
+    // Abort a socket stuck in CONNECTING so it can't hold Chrome's per-host
+    // handshake lock indefinitely; its close flows into the reconnect path
+    // below.
+    const cancelHandshakeWatchdog = startHandshakeWatchdog(ws);
 
     ws.onopen = (event) => {
-      clearTimeout(handshakeTimeout);
+      cancelHandshakeWatchdog();
       sendWebSocketAuth(ws, optionsRef.current?.sessionApiKey);
       setIsConnected(true);
       setError(null); // Clear any previous errors
@@ -90,7 +81,7 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
     };
 
     ws.onclose = (event) => {
-      clearTimeout(handshakeTimeout);
+      cancelHandshakeWatchdog();
       // Check if this specific WebSocket instance is allowed to reconnect
       const canReconnect = allowedToReconnectRef.current.has(ws);
       setIsConnected(false);
