@@ -28,9 +28,14 @@ const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
 /**
  * A template version, declared as `version` by a prompt entry and as
- * `setup.bundle.version` by a bundle one.
+ * `setup.bundle.version` by a bundle one. Sent to the service as template
+ * provenance, so it is checked at admission. Full semver, as the spec at
+ * semver.org states it: a catalog entry published with a pre-release or build
+ * suffix is still a version this host may forward, and refusing one would drop
+ * the entry from the registry outright.
  */
-const TEMPLATE_VERSION_PATTERN = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+const TEMPLATE_VERSION_PATTERN =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 // The characters a command of plain words and paths is made of. No shell
 // metacharacters, which the service rejects anyway and a bundle has no reason
 // to need; where those words may point is `isPlainCommand`'s to say.
