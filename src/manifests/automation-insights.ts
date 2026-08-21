@@ -52,6 +52,8 @@ export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
   total: number;
   latestRun: AutomationRun | null;
+  /** Newest-first sample used by the list sparkline (same page as the summary). */
+  recentRuns: AutomationRun[];
   /** COMPLETED over COMPLETED+FAILED in the sample. Null with no terminal runs. */
   recentSuccessRate: number | null;
   /** Mean completed_at − started_at over the sample's terminal runs. */
@@ -92,6 +94,7 @@ export function summarizeAutomationRuns(
   return {
     total: response.total,
     latestRun: response.runs[0] ?? null,
+    recentRuns: response.runs,
     recentSuccessRate:
       terminal.length === 0 ? null : completed / terminal.length,
     averageDurationMs:

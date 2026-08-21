@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   runAction: vi.fn(),
   prerequisites: vi.fn(),
   capabilities: vi.fn(),
+  missingCreateEndpoints: vi.fn<(entry: SetupEntry) => string[]>(() => []),
   tracking: {
     trackAutomationSetupOpened: vi.fn(),
     trackAutomationSetupValidated: vi.fn(),
@@ -50,6 +51,15 @@ vi.mock("#/hooks/query/use-manifest-capabilities", () => ({
 
 vi.mock("#/hooks/query/use-manifest-prerequisites", () => ({
   useSetupPrerequisites: () => mocks.prerequisites(),
+}));
+
+// Which endpoints an entry cannot be created without is read off the published
+// interface manifest, so a real one that declares them leaves the refusal path
+// unreachable. Stubbed so the case states the manifest it is about, rather than
+// depending on the packaged manifest continuing not to publish them.
+vi.mock("#/manifests/automation-setup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("#/manifests/automation-setup")>()),
+  missingCreateEndpoints: mocks.missingCreateEndpoints,
 }));
 
 vi.mock("#/manifests/manifest-actions", () => ({
@@ -98,6 +108,9 @@ async function fillForm(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks resets calls, not implementations, so the one case that
+  // stubs a manifest without the bundle endpoints would leak into the rest.
+  mocks.missingCreateEndpoints.mockReturnValue([]);
   mocks.prerequisites.mockReturnValue(NOTHING_TO_CONNECT);
   mocks.capabilities.mockReturnValue({
     capabilities: null,
@@ -109,6 +122,35 @@ beforeEach(() => {
     valid: true,
     errors: [],
   });
+});
+
+/** The same entry once it asks for several repositories. */
+const MULTI_REPO_ENTRY: SetupEntry = (() => {
+  const { form } = createSetup();
+  return createSetupEntry({
+    setup: createSetup({
+      form: {
+        ...form,
+        args: {
+          ...form.args,
+          repository: { ...form.args.repository, multiple: true },
+        },
+      },
+    }),
+  });
+})();
+
+/** An entry that ships a script bundle rather than a prompt. */
+const BUNDLE_ENTRY: SetupEntry = createSetupEntry({
+  setup: createSetup({
+    prompt: undefined,
+    bundle: {
+      version: "1.0.0",
+      entrypoint: "python3 main.py",
+      files: { "main.py": "skills/widget-monitor/scripts/main.py" },
+      config: { repos: ["{{form.repository}}"] },
+    },
+  }),
 });
 
 /** A deployment that answered discovery and came up short. */
@@ -211,7 +253,11 @@ describe("SetupDialog", () => {
         replace: true,
       }),
     );
-    expect(mocks.runAction).toHaveBeenCalledWith(entry, expect.anything(), null);
+    expect(mocks.runAction).toHaveBeenCalledWith(
+      entry,
+      expect.anything(),
+      null,
+    );
   });
 
   it("keeps the unsupported screen close-only when there is nothing to fall back to", () => {
@@ -222,6 +268,42 @@ describe("SetupDialog", () => {
 
     // Assert
     expect(screen.queryByTestId("setup-fallback-conversation")).toBeNull();
+  });
+
+  it("carries a repository typed but not added through to the review step", async () => {
+    // Arrange — the list is built by adding entries, and the input still shows
+    // what was typed when the user reaches for Continue.
+    const { user } = renderDialog(MULTI_REPO_ENTRY);
+    await user.type(screen.getByTestId("setup-field-widgetName"), "Widgets");
+    await user.type(
+      screen.getByTestId("setup-field-repository"),
+      "OpenHands/automation",
+    );
+
+    // Act — Continue, without pressing Add or Enter first.
+    await user.click(screen.getByTestId("setup-continue-button"));
+
+    // Assert — the answer the user could still see is the one being confirmed.
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("setup-review")).toHaveTextContent(
+      "OpenHands/automation",
+    );
+  });
+
+  it("refuses an entry the published interface declares no way to create", async () => {
+    // Arrange — a bundle entry against an interface manifest published before
+    // bundles: neither endpoint it needs exists, and no answer supplies them.
+    mocks.missingCreateEndpoints.mockReturnValue(["createBundle", "uploads"]);
+    renderDialog(BUNDLE_ENTRY);
+
+    // Assert — said before the form, rather than as a Continue button that
+    // silently does nothing once the form is filled in.
+    expect(screen.getByTestId("setup-unmet-requirements")).toHaveTextContent(
+      "createBundle, uploads",
+    );
+    expect(screen.queryByTestId("setup-field-widgetName")).toBeNull();
   });
 
   it("returns a rejected create to the field the service blamed", async () => {

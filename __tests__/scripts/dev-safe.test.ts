@@ -433,17 +433,23 @@ describe("buildAgentServerTelemetryEnv", () => {
   it("includes telemetry defaults in the full agent-server environment", () => {
     const env = buildAgentServerEnv(
       {
+        cwd: "/tmp/cwd",
+        backendPort: 18000,
         tmuxTmpDir: "/tmp/tmux",
         stateDir: "/tmp/state",
         conversationsPath: "/tmp/conversations",
+        workspacesPath: "/tmp/workspaces",
         bashEventsDir: "/tmp/bash-events",
         vscodePort: 19000,
+        vscodeBasePath: "/vscode",
         secretKey: "secret",
         sessionApiKey: "session",
         backendBaseUrl: "http://127.0.0.1:18000",
+        backendHost: "127.0.0.1:18000",
+        workingDir: "/tmp/workspaces",
         canvasToolsDir: "/tmp/tools",
       },
-      {},
+      { env: {} },
     );
 
     expect(env).toMatchObject({

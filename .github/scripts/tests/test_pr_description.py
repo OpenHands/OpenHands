@@ -8,6 +8,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from check_pr_description import (
+    is_frontend_file,
+    touches_frontend,
     extract_linked_issue_numbers,
     extract_pr_type,
     validate_linked_issue_ready,
@@ -222,3 +224,23 @@ https://youtube.com/watch?v=abc123
 """
     errors = validate_bug_fix_evidence(body)
     assert errors == []
+
+
+def test_markdown_under_frontend_prefix_is_not_frontend():
+    assert not is_frontend_file("__tests__/router.md")
+    assert not is_frontend_file("src/notes.md")
+    assert not is_frontend_file("public/README.mdx")
+
+def test_markdown_outside_frontend_prefix_still_not_frontend():
+    assert not is_frontend_file("docs/README.md")
+
+def test_frontend_code_under_prefix_still_frontend():
+    assert is_frontend_file("src/app.tsx")
+    assert is_frontend_file("__tests__/routes/launch.test.tsx")
+    assert is_frontend_file("src/styles/main.css")
+
+def test_docs_only_change_does_not_require_frontend_evidence():
+    assert not touches_frontend(["__tests__/router.md", "docs/README.md"])
+
+def test_mixed_change_still_requires_frontend_evidence():
+    assert touches_frontend(["__tests__/router.md", "src/app.tsx"])

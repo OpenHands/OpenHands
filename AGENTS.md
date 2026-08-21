@@ -2,22 +2,43 @@
 
 ## General
 
-- This repository is a near-direct port of the OpenHands frontend. Local backends talk straight to `software-agent-sdk` / `agent_server`; optional Cloud backends use the service layer under `src/api/cloud/` and the local cloud proxy.
+- This repository is the OpenHands frontend.
 - Frontend API adaptation lives mainly in `src/api/`:
-  - `option-service` fabricates an OSS web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
+  - `option-service` fabricates a web-client config and reads models/providers through `@openhands/typescript-client` LLM endpoints.
   - `settings-service` uses `@openhands/typescript-client` settings APIs for persistence; reads schemas from `/api/settings/agent-schema` and `/api/settings/conversation-schema`, fetches settings with optional `X-Expose-Secrets: encrypted` header for conversation start payloads, and saves settings via PATCH with diffs.
   - `agent-server-conversation-service`, `event-service`, `agent-server-git-service`, and `skills-service` route local agent-server access through `@openhands/typescript-client` rather than direct HTTP calls.
 - Supported env vars for deployment:
   - `VITE_BACKEND_BASE_URL` for the agent server base URL.
   - `VITE_SESSION_API_KEY` for optional session auth.
   - `VITE_WORKING_DIR` for the default workspace path sent when starting conversations.
-  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit `BrowserToolSet` from new conversation payloads.
+  - `VITE_ENABLE_BROWSER_TOOLS=false` to omit the `browser_tool_set` tool from new conversation payloads.
   - `VITE_BASE_PATH` for serving the SPA under a subpath such as `/canvas`; pair it with `scripts/static-server.mjs --base-path` at runtime.
 - Public skills are loaded from the `@openhands/extensions` npm package at build time via `SKILLS_CATALOG` (exported from `@openhands/extensions/skills`). The frontend's `SkillsService` maps catalog entries to `SkillInfo` objects and merges them with user/project skills fetched from the agent-server (with `load_public: false`). The agent-server no longer clones the extensions repo or uses `EXTENSIONS_REF` for public skills.
 - Default working-dir fallback is now the relative path `workspace/project` (exported as `DEFAULT_WORKING_DIR` from `src/api/agent-server-config.ts`); git-path heuristics and the default PLAN preview path should reuse that constant instead of hardcoding `/workspace/project`.
 - Current Cloud behavior is implemented explicitly through the backend registry, Cloud service layer, and device authorization flow.
 - Primary verification commands: `npm run lint`, `npm test`, `npm run build`, and `npm run build:lib`.
 - GitHub automation now includes `.github/workflows/ci.yml` for `npm ci`, `npm test`, and `npm run build`, plus `.github/dependabot.yml` with weekly npm/github-actions updates gated by a 7-day cooldown.
+
+## Repository Map — what belongs where
+
+This repo (`OpenHands/OpenHands`) is **only the agent-canvas frontend**. It is one
+piece of a multi-repo system. Before adding code here, check the change belongs in
+*this* repo — several kinds of work belong in a sibling repo instead.
+
+| Repo | Owns | Add code here when… |
+|------|------|---------------------|
+| **`OpenHands/OpenHands`** (this repo) | The React/TypeScript **frontend** (agent-canvas): UI, routes, frontend services in `src/api/` that *consume* backend APIs. | You are changing UI, frontend state, or how the frontend *calls* an existing backend endpoint. |
+| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server**: agents, tools, conversations, events, and the REST/WebSocket **API surface** (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`). | You are adding or changing a backend endpoint, agent/tool behaviour, or server-side logic. New API **endpoints** live here, not in the frontend. |
+| **`OpenHands/typescript-client`** (`@openhands/typescript-client`) | The generated/maintained **TypeScript client** that mirrors the agent-server API. The frontend's *only* sanctioned way to reach the agent-server (see "API Access Rules"). | You are adding client-side **access to an agent-server endpoint** (typed client method, request/response types). API-access code belongs here, **not** re-implemented in this repo. |
+| **`OpenHands/extensions`** (`@openhands/extensions`) | Public **skills, automations, and integrations** (loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, automation, or MCP integration. |
+
+Common mis-placements to avoid:
+
+- **API endpoint access** → belongs in `typescript-client`, then consumed here. Do **not**
+  add raw `axios`/`fetch` endpoint code to the frontend (CI guard:
+  `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
+- **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
+- **Skills / automations / integrations** → belong in `extensions`.
 
 ## PR Description Human Check
 
@@ -52,6 +73,54 @@ One Canvas-owned PostHog client owns telemetry and app analytics.
 1. Add a typed function to `useTracking` in `src/hooks/use-tracking.ts`
 2. Add the function to the hook's `return` object
 3. Destructure and call it from the component: `const { trackFoo } = useTracking()`
+
+### Event dictionary: onboarding_link_clicked
+
+One stable event for every onboarding link/CTA click. New onboarding links must
+reuse this contract (extend the unions in `use-tracking.ts`), never add one-off
+events per destination.
+
+Properties (all values controlled enums or booleans — never raw destination
+URLs, query params, or link text; `current_url` is the standard app-page common
+property, not a destination):
+- `link_id` (`OnboardingLinkId`): `configure_llm` | `start_conversation` |
+  `schedule_task` | `customize_agent` | `connect_mcp` | `join_slack` |
+  `open_docs`
+- `destination_type` (`OnboardingLinkDestinationType`): `community` |
+  `integration` | `documentation` | `settings` | `conversation` | `automation`
+- `surface` (`OnboardingLinkSurface`): `landing_checklist` |
+  `onboarding_modal` (reserved; no modal links are instrumented yet)
+- `checklist_item` (optional): the owning checklist item's `link_id`; set on
+  every `landing_checklist` emission, including `open_docs` clicks
+- `step_id` (optional): reserved for future onboarding-modal links
+- `is_external` (boolean): whether the destination leaves the app
+
+Instrumented CTAs (sidebar "Getting started" checklist; the row link and its
+preview action CTA intentionally share one `link_id` — same destination):
+
+| Checklist item | Row + preview action | Preview docs link |
+|---|---|---|
+| Add LLM API key | `configure_llm` / `settings` / internal | `open_docs` / `documentation` / external |
+| Start your first chat | `start_conversation` / `conversation` / internal | `open_docs` |
+| Schedule a task | `schedule_task` / `automation` / internal | `open_docs` |
+| Customize your agent | `customize_agent` / `settings` / internal | `open_docs` |
+| Connect an MCP integration | `connect_mcp` / `integration` / internal | `open_docs` |
+| Join the OpenHands Slack | `join_slack` / `community` / external | `open_docs` |
+
+Excluded CTAs (per the one-canonical-capture rule above):
+- Onboarding-modal wizard controls (back/next/skip/close, agent cards) →
+  covered by `onboarding_step_viewed` / `onboarding_completed` /
+  `onboarding_skipped`
+- Modal backend-connect CTAs and the backend form's docs links →
+  `backend_added` with `source: "onboarding"`
+- LLM settings help links inside the embedded settings screen (shared with
+  non-onboarding surfaces) → setup outcome captured by `settings_saved`
+- Recommended-automation cards → `prebuilt_automation_enabled`
+- Checklist expand/collapse toggle and the settings visibility switch → UI
+  state, not destination links
+
+Known limitation: middle-click (`auxclick`) opens are not captured; tracking
+uses React `onClick` only and never prevents default navigation.
 
 ### Env vars
 `VITE_POSTHOG_API_KEY` is the sole build-time PostHog key. Unconfigured source builds use staging; official release workflows set production explicitly. Precompiled consumers use runtime configuration instead.

@@ -38,8 +38,13 @@ import {
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
   isCanvasUIActionEvent,
+  isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
 } from "#/types/agent-server/type-guards";
+import {
+  createStreamingDeltaBatcher,
+  StreamingDeltaBatcher,
+} from "#/utils/streaming-delta-batcher";
 import { handleCanvasUIAction } from "#/services/canvas-ui";
 import { handleLaunchChildConversationAction } from "#/services/child-conversation-launch";
 import { ConversationStateUpdateEventStats } from "#/types/agent-server/core/events/conversation-state-event";
@@ -154,6 +159,26 @@ export function ConversationWebSocketProvider({
   const { appendInput, appendOutput } = useCommandStore();
   const resetBrowserStore = useBrowserStore((state) => state.reset);
 
+  // Coalesce streaming deltas to ≤1 store commit/render per frame.
+  // Separate batchers keep the main and planning streams from ever merging.
+  const mainDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (mainDeltaBatcherRef.current === null) {
+    mainDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore.getState().addEvent(delta);
+      // A delta means connectivity recovered — mirror handleNonErrorEvent.
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+  const planningDeltaBatcherRef = useRef<StreamingDeltaBatcher | null>(null);
+  if (planningDeltaBatcherRef.current === null) {
+    planningDeltaBatcherRef.current = createStreamingDeltaBatcher((delta) => {
+      useEventStore
+        .getState()
+        .addEvent({ ...delta, isFromPlanningAgent: true });
+      useErrorMessageStore.getState().clearConnectionError();
+    });
+  }
+
   // History loading state.
   // - Main conversation history is now loaded via REST (`useConversationHistory`),
   //   so its loading state mirrors the REST query state (see below).
@@ -255,17 +280,14 @@ export function ConversationWebSocketProvider({
   // user scrolls to the top of the chat. The WebSocket connection waits for
   // this query so it can subscribe with `resend_mode='since'` and avoid
   // re-streaming everything REST already returned.
-  const {
-    data: preloadedHistory,
-    isPending: isPreloadingHistory,
-    isFetching: isFetchingHistory,
-    isError: isPreloadHistoryError,
-  } = useConversationHistory(conversationId);
+  const { data: preloadedHistory, isPending: isPreloadingHistory } =
+    useConversationHistory(conversationId);
 
   // Skeleton only on the genuine first load (no cached data yet). On return the
   // cached page is present, so `isPending` is false and we render the
   // last-known discussion immediately while the tail refetch runs in the
-  // background — see the socket gate below, which waits on `isFetching`.
+  // background — the socket gate below also keys on `isPending`, so that
+  // refetch never drops a live socket.
   const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
 
   // Clear the (global, not conversation-scoped) event store when the active
@@ -337,48 +359,45 @@ export function ConversationWebSocketProvider({
   /**
    * Timestamp of the latest event we already have from REST. Used as
    * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the REST query settles
-   * (we hold the WS connection open until then to avoid an `all` resend).
+   * events strictly after this point. `null` until the first REST page lands
+   * (the WS connection is gated on that — see `wsUrl` below). During
+   * background refetches `preloadedHistory` keeps the last-known page, so the
+   * anchor holds steady instead of flipping to null; reconnects read the
+   * freshest value from the options ref at connect time.
    */
   const initialAfterTimestamp = useMemo<string | null>(() => {
-    // Wait for the history query to settle — including the refetch fired when
-    // returning to a conversation — so we anchor `since` to the freshest event
-    // we have rather than a stale cached tail.
-    if (isFetchingHistory) return null;
     const events = preloadedHistory?.events ?? [];
     const latest = events[events.length - 1];
     if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
     return latest.timestamp;
-  }, [preloadedHistory, isFetchingHistory]);
+  }, [preloadedHistory]);
 
   // Build WebSocket URL from props.
   //
-  // We deliberately wait for the history fetch to settle before opening the
-  // socket so the WS subscription can use `resend_mode='since'` with a
-  // meaningful `after_timestamp`. This gate is on `isFetching`, not just the
-  // first-load `isPending`, so the refetch fired when returning to a
-  // conversation also completes first: the socket bakes `after_timestamp` into
-  // its URL at connect time and will NOT re-subscribe when the value changes
-  // later (see use-websocket — options live in a ref, reconnect keys on the URL
-  // only). Connecting mid-fetch would therefore pin `since` to the stale cached
-  // tail and replay the entire backlog over the socket. Without any gate the WS
-  // would instead fall back to `resend_mode='all'`. If the REST query errored we
-  // fall through and connect with `resend_mode='all'` so the user still sees
-  // live events.
+  // We deliberately wait for the FIRST history load (`isPending`: no data for
+  // this query key yet) before opening the socket, so the WS subscription can
+  // use `resend_mode='since'` with a meaningful `after_timestamp` instead of
+  // falling back to `resend_mode='all'`. The gate is intentionally NOT on
+  // `isFetching`: background refetches (e.g. the `refetchOnMount` fired when
+  // returning to a conversation) must never tear a live socket down — on a
+  // flaky link that caused a refetch → teardown → reconnect → refetch loop
+  // that kept the conversation stuck at "Connecting" for minutes. Connecting
+  // during a background refetch anchors `since` to the cached tail; the
+  // overlap with the refetched page is deduped by the event store and the
+  // `isDuplicateEvent` guards in the message handlers. A query-key reset
+  // (backend swap / new session key) makes `isPending` true again, so a
+  // genuine reset still re-gates. If the initial load errors, `isPending`
+  // flips false and we fall through to connect with `resend_mode='all'` so
+  // the user still sees live events.
   const wsUrl = useMemo(() => {
     if (!conversationId || !conversationUrl) {
       return null;
     }
-    if (isFetchingHistory && !isPreloadHistoryError) {
+    if (isPreloadingHistory) {
       return null;
     }
     return buildWebSocketUrl(conversationId, conversationUrl);
-  }, [
-    conversationId,
-    conversationUrl,
-    isFetchingHistory,
-    isPreloadHistoryError,
-  ]);
+  }, [conversationId, conversationUrl, isPreloadingHistory]);
 
   const planningAgentWsUrl = useMemo(() => {
     if (!subConversations?.length) {
@@ -498,6 +517,17 @@ export function ConversationWebSocketProvider({
     latestPlanningFileEventRef.current = null;
   }, [conversationId]);
 
+  // Drop buffered deltas on conversation switch/unmount: the store is cleared on
+  // switch, so flushing them would leak into the next conversation.
+  useEffect(() => {
+    const mainBatcher = mainDeltaBatcherRef.current;
+    const planningBatcher = planningDeltaBatcherRef.current;
+    return () => {
+      mainBatcher?.reset();
+      planningBatcher?.reset();
+    };
+  }, [conversationId]);
+
   // Merged loading history state - true if either connection is still loading
   const isLoadingHistory = useMemo(
     () => isLoadingHistoryMain || isLoadingHistoryPlanning,
@@ -515,6 +545,14 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas; nothing else in this handler applies to them.
+          if (isStreamingDeltaEvent(event)) {
+            mainDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          mainDeltaBatcherRef.current?.flush();
+
           // A reconnect replays the backlog from a stale anchor. The store
           // dedups by id, but the side-effects below aren't idempotent, so skip
           // them for replayed events (#1656).
@@ -535,15 +573,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -552,13 +597,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 
@@ -732,6 +777,14 @@ export function ConversationWebSocketProvider({
 
         // Use type guard to validate v1 event structure
         if (isAgentServerEvent(event)) {
+          // Buffer deltas (the commit re-applies the planning flag).
+          if (isStreamingDeltaEvent(event)) {
+            planningDeltaBatcherRef.current?.enqueue(event);
+            return;
+          }
+          // Flush buffered deltas before this event so it can't overtake them.
+          planningDeltaBatcherRef.current?.flush();
+
           // Skip non-idempotent side-effects for replayed events, as in the
           // main handler (#1656).
           const isDuplicateEvent = useEventStore
@@ -753,15 +806,22 @@ export function ConversationWebSocketProvider({
             const errorEvent = event as
               | ConversationErrorEvent
               | ServerErrorEvent;
+            const classification =
+              "classification" in errorEvent ? errorEvent.classification : null;
             trackError({
-              message: errorEvent.detail,
               source: "planning_conversation",
               metadata: {
                 eventId: errorEvent.id,
                 errorCode: errorEvent.code,
               },
+              classification,
             });
-            setErrorMessage(errorEvent.detail, "conversation", errorEvent.code);
+            setErrorMessage(
+              errorEvent.detail,
+              "conversation",
+              errorEvent.code,
+              classification,
+            );
           } else {
             handleNonErrorEvent();
           }
@@ -770,13 +830,13 @@ export function ConversationWebSocketProvider({
           // them for analytics but keep them out of the banner above the chat box.
           if (isAgentErrorEvent(event)) {
             trackError({
-              message: event.error,
               source: "planning_agent",
               metadata: {
                 eventId: event.id,
                 toolName: event.tool_name,
                 toolCallId: event.tool_call_id,
               },
+              classification: event.classification,
             });
           }
 
