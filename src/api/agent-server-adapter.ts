@@ -341,11 +341,9 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    // Stored metadata wins over the tags, which are a creation-time snapshot:
-    // `updateConversationRepository` rewrites localStorage without PATCHing
-    // the tags, so preferring tags would make a repo change look like a no-op
-    // on the client that made it — and would resurrect a repo the user
-    // cleared. Tags are the cross-client fallback, not the live value.
+    // Stored metadata wins over the tags — localStorage is the warm cache on
+    // the creating client; tags are the cross-client fallback for devices
+    // that don't have this client's localStorage.
     selected_repository:
       metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
     selected_branch:

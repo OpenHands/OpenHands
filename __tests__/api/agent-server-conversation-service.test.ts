@@ -22,6 +22,7 @@ const {
   mockHttpGet,
   mockHttpPost,
   mockHttpDelete,
+  mockHttpPatch,
   mockConversationClient,
   mockFileClient,
   mockSettingsClient,
@@ -36,6 +37,7 @@ const {
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
   mockHttpDelete: vi.fn(),
+  mockHttpPatch: vi.fn(),
   mockConversationClient: vi.fn(),
   mockFileClient: vi.fn(),
   mockSettingsClient: vi.fn(),
@@ -106,6 +108,7 @@ describe("AgentServerConversationService", () => {
     mockHttpGet.mockReset();
     mockHttpPost.mockReset();
     mockHttpDelete.mockReset();
+    mockHttpPatch.mockReset();
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
     mockListProfiles.mockReset().mockResolvedValue({
@@ -139,9 +142,23 @@ describe("AgentServerConversationService", () => {
         return response.data;
       },
       searchConversations: vi.fn(),
-      getConversation: vi.fn(),
+      getConversation: async (conversationId: string) => {
+        const response = await mockHttpGet(
+          `/api/conversations/${conversationId}`,
+        );
+        return response.data;
+      },
       sendEvent: vi.fn(),
-      updateConversation: vi.fn(),
+      updateConversation: async (
+        conversationId: string,
+        update: unknown,
+      ) => {
+        const response = await mockHttpPatch(
+          `/api/conversations/${conversationId}`,
+          update,
+        );
+        return response.data;
+      },
       switchProfile: mockSwitchProfile,
       switchLLM: mockSwitchLLM,
     });
@@ -456,10 +473,6 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(true);
     });
 
-    // #15598 — workspace/repo metadata used to live only in this client's
-    // localStorage, so sidebar grouping and the repo/branch badge vanished on
-    // any other device pointed at the same agent-server. Stamping them as
-    // server-side tags makes the grouping portable.
     it("stamps workspace and repo metadata as server-side tags", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },
@@ -609,7 +622,11 @@ describe("AgentServerConversationService", () => {
 
   describe("conversation update fallbacks", () => {
     it("throws a useful error when repository update cannot reload the conversation", async () => {
-      mockHttpGet.mockResolvedValue({ data: [] });
+      // getConversation (tag read) succeeds; getConversations (re-fetch) returns empty.
+      mockHttpGet
+        .mockResolvedValueOnce({ data: { id: "missing-conv" } })
+        .mockResolvedValueOnce({ data: [] });
+      mockHttpPatch.mockResolvedValue({ data: {} });
 
       await expect(
         AgentServerConversationService.updateConversationRepository(
@@ -619,7 +636,40 @@ describe("AgentServerConversationService", () => {
       ).rejects.toThrow("Conversation missing-conv was not found");
     });
 
+    it("merges new repo metadata into existing tags without clobbering unrelated keys", async () => {
+      mockHttpGet
+        .mockResolvedValueOnce({
+          data: {
+            id: "conv-abc",
+            tags: { clientsource: "agentcanvas", acpserver: "my-acp" },
+          },
+        })
+        .mockResolvedValueOnce({ data: [{ id: "conv-abc" }] });
+      mockHttpPatch.mockResolvedValue({ data: {} });
+
+      await AgentServerConversationService.updateConversationRepository(
+        "conv-abc",
+        "OpenHands/agent-canvas",
+        "main",
+        "github",
+      );
+
+      expect(mockHttpPatch).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+        expect.objectContaining({
+          tags: expect.objectContaining({
+            repository: "OpenHands/agent-canvas",
+            selected_branch: "main",
+            git_provider: "github",
+            clientsource: "agentcanvas",
+            acpserver: "my-acp",
+          }),
+        }),
+      );
+    });
+
     it("throws a useful error when title update cannot reload the conversation", async () => {
+      mockHttpPatch.mockResolvedValue({ data: {} });
       mockHttpGet.mockResolvedValue({ data: [] });
 
       await expect(

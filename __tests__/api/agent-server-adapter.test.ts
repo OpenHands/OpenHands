@@ -1195,11 +1195,7 @@ describe("toAppConversation", () => {
     expect(result.acp_server).toBeNull();
   });
 
-  describe("server-side tag fallback (#15598)", () => {
-    // Workspace/repo metadata is stamped as server-side conversation tags at
-    // creation time so a second client — a phone, an incognito window, another
-    // machine — pointed at the same agent-server can rebuild sidebar grouping
-    // and the repo/branch badge without the creating client's localStorage.
+  describe("server-side tag fallback", () => {
     const taggedInfo: DirectConversationInfo = {
       ...baseInfo,
       tags: {
