@@ -11,6 +11,7 @@ import type {
   AppConversationStartTask,
 } from "../conversation-service/agent-server-conversation-service.types";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "../client-source";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import { callCloudProxy } from "./proxy";
 
 /**
@@ -153,12 +154,20 @@ export async function createCloudAppConversation(
   backendOverride?: Backend,
 ): Promise<AppConversationStartTask> {
   const backend = backendOverride ?? getActiveCloudBackend();
+  const telemetryDistinctId = await getTelemetryDistinctId();
   const data = await callCloudProxy<AppConversationStartTask>({
     backend,
     method: "POST",
     path: "/api/v1/app-conversations",
     body: request as unknown as Record<string, unknown>,
-    headers: AGENT_CANVAS_CLIENT_HEADERS,
+    headers: {
+      ...AGENT_CANVAS_CLIENT_HEADERS,
+      ...(telemetryDistinctId
+        ? {
+            "X-OpenHands-Telemetry-Distinct-Id": telemetryDistinctId,
+          }
+        : {}),
+    },
   });
   return data;
 }

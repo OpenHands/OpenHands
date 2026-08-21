@@ -5,6 +5,7 @@ import {
   type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
+  AgentServerClient,
   ConversationClient,
   FileClient,
   ProfilesClient,
@@ -50,6 +51,7 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
@@ -486,9 +488,21 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
-    const data = await new ConversationClient(
+    const telemetryDistinctId = await getTelemetryDistinctId();
+    const data = await new AgentServerClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>(payload);
+    ).request<DirectConversationInfo>({
+      method: "POST",
+      path: "/api/conversations",
+      body: payload,
+      ...(telemetryDistinctId
+        ? {
+            headers: {
+              "X-OpenHands-Telemetry-Distinct-Id": telemetryDistinctId,
+            },
+          }
+        : {}),
+    });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
