@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -24,6 +25,7 @@ import {
 } from "#/utils/mcp-marketplace-utils";
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import {
+  getAutomationIcon,
   getAutomationLaunchPrompt,
   getIntegrationIds,
 } from "#/utils/automation-catalog";
@@ -109,15 +111,6 @@ function automationMatchesQuery(
   return haystack.includes(query);
 }
 
-/**
- * Keep any automation with declared integrations visible, including when a
- * catalog entry is missing. This makes catalog drift actionable instead of
- * silently hiding the automation.
- */
-function isAutomationAvailable(automation: RecommendedAutomation) {
-  return getIntegrationIds(automation).length > 0;
-}
-
 function buildRecommendedAutomationPills(
   integrations: AutomationIntegration[],
   installedServers: MCPServerConfig[],
@@ -177,6 +170,44 @@ function buildRecommendedAutomationPills(
   return pills;
 }
 
+/**
+ * A card's badge: the declared glyph when the entry names one, and its
+ * integration logos otherwise. Both render into the same slot at the same
+ * size, so a card is laid out the same either way.
+ */
+function AutomationCardIcon({
+  automation,
+  integrations,
+  size,
+  testId,
+}: {
+  automation: RecommendedAutomation;
+  integrations: AutomationIntegration[];
+  size: "base" | "md";
+  testId: string;
+}) {
+  const Icon = getAutomationIcon(automation);
+  if (Icon) {
+    return (
+      <McpLogoBadge
+        entry={null}
+        size={size}
+        testId={testId}
+        fallback={createElement(Icon, {
+          className: "h-5 w-5",
+          strokeWidth: 2.25,
+        })}
+      />
+    );
+  }
+  return (
+    <McpLogoStackBadge
+      entries={integrations.flatMap(({ entry }) => (entry ? [entry] : []))}
+      testId={testId}
+    />
+  );
+}
+
 interface AutomationCardGridProps {
   automations: RecommendedAutomation[];
   installedServers: MCPServerConfig[];
@@ -217,10 +248,10 @@ function AutomationCardGrid({
             )}
           >
             <div className="flex min-w-0 flex-1 items-start gap-3">
-              <McpLogoStackBadge
-                entries={integrations.flatMap(({ entry }) =>
-                  entry ? [entry] : [],
-                )}
+              <AutomationCardIcon
+                automation={automation}
+                integrations={integrations}
+                size="md"
                 testId={`recommended-automation-icon-${automation.id}`}
               />
               <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -268,13 +299,17 @@ export function RecommendedAutomationsSection({
 }: RecommendedAutomationsSectionProps) {
   const { t } = useTranslation("openhands");
 
-  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) => {
-    const integrationEntries = getIntegrationEntries(automation);
-    return (
-      isAutomationAvailable(automation) &&
-      automationMatchesQuery(automation, integrationEntries, query)
-    );
-  });
+  // Only the query narrows the grid. An automation that declares no
+  // integration needs nothing connected, and one naming an integration this
+  // host cannot resolve is shown with that gap on its pill, so neither is a
+  // reason to hide a card the catalog ships.
+  const visibleAutomations = RECOMMENDED_AUTOMATIONS.filter((automation) =>
+    automationMatchesQuery(
+      automation,
+      getIntegrationEntries(automation),
+      query,
+    ),
+  );
 
   if (visibleAutomations.length === 0) return null;
 

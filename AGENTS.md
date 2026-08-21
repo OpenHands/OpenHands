@@ -74,6 +74,54 @@ One Canvas-owned PostHog client owns telemetry and app analytics.
 2. Add the function to the hook's `return` object
 3. Destructure and call it from the component: `const { trackFoo } = useTracking()`
 
+### Event dictionary: onboarding_link_clicked
+
+One stable event for every onboarding link/CTA click. New onboarding links must
+reuse this contract (extend the unions in `use-tracking.ts`), never add one-off
+events per destination.
+
+Properties (all values controlled enums or booleans — never raw destination
+URLs, query params, or link text; `current_url` is the standard app-page common
+property, not a destination):
+- `link_id` (`OnboardingLinkId`): `configure_llm` | `start_conversation` |
+  `schedule_task` | `customize_agent` | `connect_mcp` | `join_slack` |
+  `open_docs`
+- `destination_type` (`OnboardingLinkDestinationType`): `community` |
+  `integration` | `documentation` | `settings` | `conversation` | `automation`
+- `surface` (`OnboardingLinkSurface`): `landing_checklist` |
+  `onboarding_modal` (reserved; no modal links are instrumented yet)
+- `checklist_item` (optional): the owning checklist item's `link_id`; set on
+  every `landing_checklist` emission, including `open_docs` clicks
+- `step_id` (optional): reserved for future onboarding-modal links
+- `is_external` (boolean): whether the destination leaves the app
+
+Instrumented CTAs (sidebar "Getting started" checklist; the row link and its
+preview action CTA intentionally share one `link_id` — same destination):
+
+| Checklist item | Row + preview action | Preview docs link |
+|---|---|---|
+| Add LLM API key | `configure_llm` / `settings` / internal | `open_docs` / `documentation` / external |
+| Start your first chat | `start_conversation` / `conversation` / internal | `open_docs` |
+| Schedule a task | `schedule_task` / `automation` / internal | `open_docs` |
+| Customize your agent | `customize_agent` / `settings` / internal | `open_docs` |
+| Connect an MCP integration | `connect_mcp` / `integration` / internal | `open_docs` |
+| Join the OpenHands Slack | `join_slack` / `community` / external | `open_docs` |
+
+Excluded CTAs (per the one-canonical-capture rule above):
+- Onboarding-modal wizard controls (back/next/skip/close, agent cards) →
+  covered by `onboarding_step_viewed` / `onboarding_completed` /
+  `onboarding_skipped`
+- Modal backend-connect CTAs and the backend form's docs links →
+  `backend_added` with `source: "onboarding"`
+- LLM settings help links inside the embedded settings screen (shared with
+  non-onboarding surfaces) → setup outcome captured by `settings_saved`
+- Recommended-automation cards → `prebuilt_automation_enabled`
+- Checklist expand/collapse toggle and the settings visibility switch → UI
+  state, not destination links
+
+Known limitation: middle-click (`auxclick`) opens are not captured; tracking
+uses React `onClick` only and never prevents default navigation.
+
 ### Env vars
 `VITE_POSTHOG_API_KEY` is the sole build-time PostHog key. Unconfigured source builds use staging; official release workflows set production explicitly. Precompiled consumers use runtime configuration instead.
 
