@@ -150,14 +150,15 @@ export interface SetupPrerequisites {
  */
 export interface SetupEntry {
   id: string;
-  /**
-   * Semantic version of the template. When present, the create payload carries
-   * template provenance so the service can dedupe repeat enables and record
-   * version identity; entries without one send the payload unchanged.
-   */
-  version?: string;
   name: string;
   description: string;
+  /**
+   * Version of the template this entry publishes, sent with the create request
+   * as provenance. A bundle declares its own at `setup.bundle.version`; a
+   * prompt entry declares it here. Absent means the entry sends none, so the
+   * service records no template for what it creates.
+   */
+  version?: string;
   requires: SetupPrerequisites;
   /** The skill that owns the launch command. Defaults to `id`. */
   skill?: string;
