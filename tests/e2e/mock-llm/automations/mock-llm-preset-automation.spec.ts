@@ -1,8 +1,9 @@
 /**
  * Mock-LLM E2E test: preset automation card → slash command → skill activation.
  *
- * The `slack-standup-digest` skill ships in the public OpenHands extensions
- * repo with `triggers: ["/standup-digest:setup"]`. The frontend bundles
+ * The `slack-channel-monitor` skill ships in the public OpenHands extensions
+ * repo with `triggers: ["/slack-monitor:poll"]`. It is a featured automation,
+ * which is what the catalog section offers. The frontend bundles
  * public skills from the `@openhands/extensions` npm package and passes
  * them directly in `agent_context.skills` at conversation-start, so the
  * SDK's trigger matching activates them without the agent-server needing
@@ -36,8 +37,8 @@ import {
   setChatInput,
 } from "../utils/mock-llm-helpers";
 
-const SLASH_COMMAND = "/standup-digest:setup";
-const AUTOMATION_CARD_ID = "slack-standup-digest";
+const SLASH_COMMAND = "/slack-monitor:poll";
+const AUTOMATION_CARD_ID = "slack-channel-monitor";
 const REPLY_TOKEN = "PRESET_AUTOMATION_REPLY_OK";
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ async function setupTrajectory(
   // Response 1: the actual agent reply.
   await registerTrajectory(request, "preset-automation", [
     { text: "" },
-    { text: `I'll help you set up the standup digest. ${REPLY_TOKEN}` },
+    { text: `I'll help you set up the Slack channel monitor. ${REPLY_TOKEN}` },
   ]);
   await activateTrajectory(request, "preset-automation");
 }
@@ -185,7 +186,7 @@ test.describe("preset automation → slash command conversation", () => {
     });
     await dismissAnalyticsModal(page);
 
-    // Click the Slack standup digest automation card
+    // Click the Slack channel monitor automation card
     await test.step("click automation card", async () => {
       await waitForTestId(page, "recommended-automations-section", 15_000);
       const card = page.getByTestId(

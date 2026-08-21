@@ -33166,23 +33166,6 @@
     "tr": "Her şablon bir ajan istemini, uygulama taslağını ve onu kullanışlı kılan MCP'leri içerir. Önceden doldurulmuş bir konuşma açmak ve ayrıntıları ajanla tamamlamak için birini seçin.",
     "uk": "Кожен шаблон містить запит для агента, ескіз реалізації та MCP, потрібні, щоб зробити його корисним. Виберіть один, щоб відкрити попередньо заповнену розмову й завершити деталі з агентом."
   },
-  "RECOMMENDED_AUTOMATIONS$BETA_LABEL": {
-    "en": "Beta",
-    "ja": "ベータ",
-    "zh-CN": "测试版",
-    "zh-TW": "測試版",
-    "ko-KR": "베타",
-    "no": "Beta",
-    "ar": "تجريبي",
-    "de": "Beta",
-    "fr": "Bêta",
-    "it": "Beta",
-    "pt": "Beta",
-    "es": "Beta",
-    "ca": "Beta",
-    "tr": "Beta",
-    "uk": "Бета"
-  },
   "RECOMMENDED_AUTOMATIONS$POPULARITY_SORTED": {
     "en": "Popularity sorted",
     "ja": "人気順",

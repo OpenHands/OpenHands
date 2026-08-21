@@ -47,6 +47,27 @@ const {
   mockUseSettings: vi.fn(),
 }));
 
+const { featuredIdsOverride } = vi.hoisted(() => ({
+  featuredIdsOverride: { current: null as readonly string[] | null },
+}));
+
+// The section offers only the featured automations, so a test that exercises
+// card behaviour on a specific catalog entry has to feature that entry.
+vi.mock("#/manifests/automation-interface", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/manifests/automation-interface")>();
+  return {
+    ...actual,
+    getFeaturedAutomationIds: () =>
+      featuredIdsOverride.current ?? actual.getFeaturedAutomationIds(),
+  };
+});
+
+/** Feature the whole catalog, for tests about a card rather than the set. */
+const featureAllAutomations = () => {
+  featuredIdsOverride.current = AUTOMATION_CATALOG.map((entry) => entry.id);
+};
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, vars?: Record<string, unknown>) => {
@@ -184,10 +205,11 @@ describe("recommended automations", () => {
 
   afterEach(() => {
     localStorage.clear();
+    featuredIdsOverride.current = null;
     __resetActiveStoreForTests();
   });
 
-  it("renders the proven automations before the beta ones, each in popularity order", () => {
+  it("renders only the proven automations, in popularity order", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -210,17 +232,10 @@ describe("recommended automations", () => {
       "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
-      "github-repo-monitor",
-      "slack-standup-digest",
-      "linear-triage-assistant",
-      "jira-issue-to-pr",
-      "research-brief-writer",
-      "upstream-fork-sync",
-      "incident-retrospective-drafter",
     ]);
   });
 
-  it("groups the non-proven automations under a labeled Beta section", () => {
+  it("offers no Beta group and no non-proven automation", () => {
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -234,26 +249,11 @@ describe("recommended automations", () => {
     ).parentElement!;
     expect(within(provenHeading).getByText("5")).toBeInTheDocument();
 
-    const betaHeading = screen.getByTestId(
-      "recommended-automations-beta-heading",
-    );
-    expect(betaHeading).toHaveTextContent(
-      I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
-    );
-    expect(within(betaHeading).getByText("7")).toBeInTheDocument();
-
-    const betaSection = screen.getByTestId(
-      "recommended-automations-beta-section",
-    );
     expect(
-      within(betaSection).getByTestId(
-        "recommended-automation-card-slack-standup-digest",
-      ),
-    ).toBeInTheDocument();
+      screen.queryByTestId("recommended-automations-beta-section"),
+    ).not.toBeInTheDocument();
     expect(
-      within(betaSection).queryByTestId(
-        "recommended-automation-card-github-pr-reviewer",
-      ),
+      screen.queryByTestId("recommended-automation-card-slack-standup-digest"),
     ).not.toBeInTheDocument();
   });
 
@@ -280,6 +280,8 @@ describe("recommended automations", () => {
   });
 
   it("filters recommendations by required MCP keywords", () => {
+    featureAllAutomations();
+
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -298,6 +300,8 @@ describe("recommended automations", () => {
   });
 
   it("shows a left-aligned MCP icon stack on each card", () => {
+    featureAllAutomations();
+
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -338,6 +342,8 @@ describe("recommended automations", () => {
   });
 
   it("renders missing MCP connect copy as a pill on the same row", () => {
+    featureAllAutomations();
+
     const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
       "offsetWidth",
@@ -431,6 +437,8 @@ describe("recommended automations", () => {
   }
 
   it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
+    featureAllAutomations();
+
     const restoreRequirement = requireNonMcpIntegration();
     // SkillCardPillRow folds pills behind "+N more" when it measures zero
     // widths in jsdom; give it room so every pill renders.
@@ -506,6 +514,8 @@ describe("recommended automations", () => {
   });
 
   it("finds an automation by searching for its non-MCP-installable integration", () => {
+    featureAllAutomations();
+
     render(
       <RecommendedAutomationsSection
         backendKind="local"
@@ -521,6 +531,8 @@ describe("recommended automations", () => {
   });
 
   it("does not silently hide an unknown required integration ID", () => {
+    featureAllAutomations();
+
     const automation = AUTOMATION_CATALOG.find(
       (item) => item.id === "jira-issue-to-pr",
     )!;
@@ -560,6 +572,8 @@ describe("recommended automations", () => {
   });
 
   it("queues installs only for MCP-installable required integrations", async () => {
+    featureAllAutomations();
+
     const restoreRequirement = requireNonMcpIntegration();
 
     try {
@@ -794,6 +808,8 @@ describe("recommended automations", () => {
   });
 
   it("launches an automation that ships no setup form with its slash command", () => {
+    featureAllAutomations();
+
     // Arrange
     mockUseSettings.mockReturnValue({
       data: settingsWithMcpConfig({
@@ -818,6 +834,8 @@ describe("recommended automations", () => {
   });
 
   it("launches without waiting for an integration the automation can start without", () => {
+    featureAllAutomations();
+
     // Arrange — Slack and Linear are connected; Notion, which the entry marks
     // as connectable later, is not.
     mockUseSettings.mockReturnValue({
@@ -993,6 +1011,8 @@ describe("recommended automations", () => {
   });
 
   it("does not show the deployment choice modal for non-responder automations", () => {
+    featureAllAutomations();
+
     renderLauncher();
 
     fireEvent.click(
