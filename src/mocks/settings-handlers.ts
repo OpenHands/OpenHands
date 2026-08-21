@@ -169,6 +169,21 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           secret: false,
           required: false,
         },
+        {
+          key: "llm.provider_connection_id",
+          label: "Provider connection",
+          description:
+            "Shared provider connection this profile links to for its credential.",
+          section: "llm",
+          section_label: "LLM",
+          value_type: "string",
+          default: null,
+          choices: [],
+          depends_on: [],
+          prominence: "minor",
+          secret: false,
+          required: false,
+        },
       ],
     },
     {
