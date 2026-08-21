@@ -1,4 +1,4 @@
-import { Check, Loader2 } from "lucide-react";
+import { Check, KeyRound, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { AcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
@@ -6,6 +6,8 @@ import type { AcpAuthStatus } from "#/hooks/query/use-acp-auth-status";
 interface AcpAuthStatusBannerProps {
   status: AcpAuthStatus;
   isChecking: boolean;
+  /** Whether a credential is saved for this provider on the active backend. */
+  credentialsConfigured: boolean;
   providerName: string;
   /**
    * Prefix for the banner test ids, e.g. ``"onboarding-acp-auth"`` →
@@ -17,13 +19,14 @@ interface AcpAuthStatusBannerProps {
 /**
  * Auth-status banner shared by the ACP credential forms (the onboarding step
  * and Settings → Agent): a green "already signed in" banner when the local
- * login probe detects a session, or a spinner while it's checking. Renders
- * nothing otherwise (unauthenticated / unknown / non-local backend), so the
- * caller falls back to the API-key fields.
+ * login probe detects a session, a neutral configured-credentials banner when
+ * the active backend has a saved credential whose validity is not verified,
+ * or a spinner while the probe is checking. Renders nothing otherwise.
  */
 export function AcpAuthStatusBanner({
   status,
   isChecking,
+  credentialsConfigured,
   providerName,
   testIdPrefix,
 }: AcpAuthStatusBannerProps) {
@@ -54,6 +57,22 @@ export function AcpAuthStatusBanner({
         <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
         <span>
           {t(I18nKey.ONBOARDING$ACP_AUTH_CHECKING, { provider: providerName })}
+        </span>
+      </div>
+    );
+  }
+
+  if (credentialsConfigured) {
+    return (
+      <div
+        data-testid={`${testIdPrefix}-configured`}
+        className="flex items-start gap-2 rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-3 text-sm text-sky-200"
+      >
+        <KeyRound className="mt-0.5 size-4 shrink-0 text-sky-400" aria-hidden />
+        <span>
+          {t(I18nKey.ONBOARDING$ACP_CREDENTIALS_CONFIGURED, {
+            provider: providerName,
+          })}
         </span>
       </div>
     );

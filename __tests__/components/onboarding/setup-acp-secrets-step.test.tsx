@@ -277,6 +277,38 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows saved credentials as configured on a cloud backend", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.dev",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: false,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "CLAUDE_CODE_OAUTH_TOKEN" },
+    ]);
+
+    renderStep("claude-code");
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("onboarding-acp-auth-configured"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("onboarding-acp-auth-detected"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the Codex subscription blob as a multiline textarea", () => {
     renderStep("codex");
 

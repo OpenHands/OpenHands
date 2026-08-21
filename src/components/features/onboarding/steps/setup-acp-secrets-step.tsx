@@ -86,6 +86,9 @@ export function SetupAcpSecretsStep({
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
 
   const isAuthenticated = authStatus === "authenticated";
+  const credentialsConfigured = fields.some(
+    (field) => field.secret && secretExists(field.name),
+  );
   // Required when the backend can't fall back to a host login (see component
   // docstring). Cloud never has one; a local backend that probes as logged-out
   // is a fresh container — require credentials there, but stay permissive when
@@ -170,6 +173,7 @@ export function SetupAcpSecretsStep({
       <AcpAuthStatusBanner
         status={authStatus}
         isChecking={isCheckingAuth}
+        credentialsConfigured={credentialsConfigured}
         providerName={providerName}
         testIdPrefix="onboarding-acp-auth"
       />

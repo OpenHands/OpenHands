@@ -1,10 +1,14 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { AcpCredentialsSection } from "#/components/features/settings/acp-credentials-section";
 import { useAcpCredentialForm } from "#/hooks/use-acp-credential-form";
@@ -55,6 +59,7 @@ beforeEach(() => {
   vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
 });
 afterEach(() => {
+  localStorage.clear();
   __resetActiveStoreForTests();
 });
 
@@ -139,6 +144,60 @@ describe("AcpCredentialsSection", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("settings-acp-auth-checking"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows saved credentials as configured on a cloud backend", async () => {
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.dev",
+        apiKey: "key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: false,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "CLAUDE_CODE_OAUTH_TOKEN" },
+    ]);
+
+    renderSection("claude-code");
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("settings-acp-auth-configured"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("settings-acp-auth-detected"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows saved credentials when a local backend cannot classify login", async () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "CLAUDE_CODE_OAUTH_TOKEN" },
+    ]);
+
+    renderSection("claude-code");
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("settings-acp-auth-configured"),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("settings-acp-auth-detected"),
     ).not.toBeInTheDocument();
   });
 });

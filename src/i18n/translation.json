@@ -254,6 +254,23 @@
     "zh-CN": "您已登录 {{provider}} — 下面的字段可以留空。",
     "zh-TW": "您已登入 {{provider}} — 下方欄位可以留空。"
   },
+  "ONBOARDING$ACP_CREDENTIALS_CONFIGURED": {
+    "en": "Credentials for {{provider}} are saved on this backend. Their validity isn't checked here.",
+    "ja": "{{provider}} の認証情報はこのバックエンドに保存されています。ここでは有効性を確認していません。",
+    "zh-CN": "已在此后端保存 {{provider}} 的凭据。此处不会验证其有效性。",
+    "zh-TW": "已在此後端儲存 {{provider}} 的憑證。此處不會驗證其有效性。",
+    "ko-KR": "이 백엔드에 {{provider}} 자격 증명이 저장되어 있습니다. 여기서는 유효성을 확인하지 않습니다.",
+    "no": "Påloggingsinformasjon for {{provider}} er lagret i denne backend-en. Gyldigheten kontrolleres ikke her.",
+    "ar": "تم حفظ بيانات اعتماد {{provider}} على هذا الخادم الخلفي. لا يتم التحقق من صلاحيتها هنا.",
+    "de": "Anmeldedaten für {{provider}} sind in diesem Backend gespeichert. Ihre Gültigkeit wird hier nicht geprüft.",
+    "fr": "Les identifiants de {{provider}} sont enregistrés sur ce backend. Leur validité n'est pas vérifiée ici.",
+    "it": "Le credenziali per {{provider}} sono salvate in questo backend. La loro validità non viene verificata qui.",
+    "pt": "As credenciais de {{provider}} estão salvas neste backend. A validade delas não é verificada aqui.",
+    "es": "Las credenciales de {{provider}} están guardadas en este backend. Aquí no se verifica su validez.",
+    "ca": "Les credencials de {{provider}} estan desades en aquest backend. Aquí no se'n verifica la validesa.",
+    "tr": "{{provider}} kimlik bilgileri bu arka uçta kayıtlı. Geçerlilikleri burada doğrulanmaz.",
+    "uk": "Облікові дані {{provider}} збережено на цьому бекенді. Їхню дійсність тут не перевіряють."
+  },
   "ONBOARDING$ACP_AUTH_CHECKING": {
     "ar": "جارٍ التحقق من وجود تسجيل دخول حالي إلى {{provider}}…",
     "ca": "S'està comprovant si hi ha una sessió existent de {{provider}}…",

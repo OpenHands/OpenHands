@@ -10,9 +10,9 @@ import type { AcpCredentialForm } from "#/hooks/use-acp-credential-form";
 
 /**
  * Settings → Agent credentials section for a built-in ACP provider: renders the
- * same fields the onboarding step collects (and the same "already signed in"
- * auth banner), so credentials can be added or rotated after onboarding. The
- * form state and the save are owned by the parent (Settings → Agent) so the
+ * same fields the onboarding step collects (and the same auth-status banner),
+ * so credentials can be added or rotated after onboarding. The form state and
+ * the save are owned by the parent (Settings → Agent) so the
  * page has a single Save button for both agent settings and credentials.
  * Renders nothing for providers without credential fields.
  */
@@ -26,6 +26,9 @@ export function AcpCredentialsSection({
   const { t } = useTranslation("openhands");
   const { fields, values, setValue, secretExists, conflicts } = form;
   const { status: authStatus, isChecking } = useAcpAuthStatus(providerKey);
+  const credentialsConfigured = fields.some(
+    (field) => field.secret && secretExists(field.name),
+  );
   const providerName = getAcpProviderDisplayName(providerKey) ?? providerKey;
 
   if (fields.length === 0) return null;
@@ -44,6 +47,7 @@ export function AcpCredentialsSection({
       <AcpAuthStatusBanner
         status={authStatus}
         isChecking={isChecking}
+        credentialsConfigured={credentialsConfigured}
         providerName={providerName}
         testIdPrefix="settings-acp-auth"
       />
