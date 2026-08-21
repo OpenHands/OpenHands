@@ -55,10 +55,13 @@ describe("Commits Tab", () => {
     AgentServerGitService,
     "getCommitChanges",
   );
+  const getGitChangesSpy = vi.spyOn(AgentServerGitService, "getGitChanges");
 
   beforeEach(() => {
     getGitCommitsSpy.mockReset();
     getCommitChangesSpy.mockReset();
+    getGitChangesSpy.mockReset();
+    getGitChangesSpy.mockResolvedValue([]);
     vi.mocked(useAgentState).mockReturnValue({
       curAgentState: AgentState.RUNNING,
     });
@@ -112,6 +115,22 @@ describe("Commits Tab", () => {
     expect(await screen.findByText("add logging")).toBeInTheDocument();
     expect(screen.getByText("fix tests")).toBeInTheDocument();
     expect(screen.getByText("aaaaaaa")).toBeInTheDocument();
+    expect(screen.getByTestId("uncommitted-changes-row")).toBeInTheDocument();
+  });
+
+  it("shows Uncommitted alone when there are working-tree changes but no commits", async () => {
+    // Arrange
+    getGitCommitsSpy.mockResolvedValue({ commits: [], hasMore: false });
+    getGitChangesSpy.mockResolvedValue([{ path: "src/a.ts", status: "M" }]);
+
+    // Act
+    render(<GitCommits />, { wrapper });
+
+    // Assert
+    expect(
+      await screen.findByTestId("uncommitted-changes-row"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("commit-row")).not.toBeInTheDocument();
   });
 
   it("expanding a commit fetches and lists the files it changed", async () => {

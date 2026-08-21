@@ -42,6 +42,14 @@ const MOUNTED_ROUTES = {
   templates: "/automations/templates",
 } satisfies InterfaceRoutes;
 
+/**
+ * File-format section for portable `.automation.json` export/import. A docs
+ * pointer for the host's import picker, not interface data — the manifest's
+ * `importExport` block has no docs field.
+ */
+export const AUTOMATION_FILE_FORMAT_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

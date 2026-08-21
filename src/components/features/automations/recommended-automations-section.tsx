@@ -27,12 +27,14 @@ import {
   getAutomationLaunchPrompt,
   getIntegrationIds,
 } from "#/utils/automation-catalog";
+import { getAutomationsByPopularity } from "#/utils/recommended-automation-rail";
 import { cn } from "#/utils/utils";
 import {
   extensionModuleCardInteractiveClassName,
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
   extensionModuleCardPillClassName,
+  extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { StatusBadge } from "./status-badge";
 
@@ -45,18 +47,7 @@ interface RecommendedAutomationsSectionProps {
   scrollableGrid?: boolean;
 }
 
-export function getAutomationsByPopularity(
-  catalog: RecommendedAutomation[],
-): RecommendedAutomation[] {
-  return catalog
-    .map((automation, index) => ({ automation, index }))
-    .sort((a, b) => {
-      const byPopularity =
-        (b.automation.popularityRank ?? 0) - (a.automation.popularityRank ?? 0);
-      return byPopularity || a.index - b.index;
-    })
-    .map(({ automation }) => automation);
-}
+export { getAutomationsByPopularity };
 
 const RECOMMENDED_AUTOMATIONS = getAutomationsByPopularity(AUTOMATION_CATALOG);
 
@@ -220,7 +211,8 @@ function AutomationCardGrid({
             data-testid={`recommended-automation-card-${automation.id}`}
             onClick={() => onSelect(automation)}
             className={cn(
-              "flex min-w-0 overflow-hidden p-4 text-left rounded-xl bg-surface-raised",
+              "flex min-w-0 overflow-hidden p-4 text-left",
+              extensionModuleCardSurfaceClassName,
               extensionModuleCardInteractiveClassName,
             )}
           >
