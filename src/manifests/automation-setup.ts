@@ -218,7 +218,31 @@ export function buildCreatePayload(
   const trigger = buildTrigger(entry, values);
   if (trigger) payload.trigger = trigger;
 
+  const template = buildTemplate(entry, values);
+  if (template) payload.template = template;
+
   return payload;
+}
+
+/**
+ * The `template` provenance a prompt entry sends, or undefined for one that
+ * publishes no version.
+ *
+ * It is what lets the service recognise a second setup of the same entry as
+ * the automation it already holds. The bundle path derives the same block from
+ * the config the bundle declares; a prompt entry declares none, so the answer
+ * to "what was this created from" is the form as submitted.
+ */
+function buildTemplate(
+  entry: SetupEntry,
+  values: SetupFormValues,
+): SetupRequestBody | undefined {
+  if (!entry.version) return undefined;
+  return {
+    id: entry.id,
+    version: entry.version,
+    config: { ...values },
+  };
 }
 
 /**

@@ -291,6 +291,43 @@ describe("buildCreatePayload", () => {
     // Assert
     expect(payload).toBeNull();
   });
+
+  it("attaches template provenance when the entry carries a version", () => {
+    // Arrange
+    const entry = createSetupEntry({ version: "1.0.0" });
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload?.template).toEqual({
+      id: "widget-monitor",
+      version: "1.0.0",
+      config: values,
+    });
+  });
+
+  it("sends the payload unchanged for an entry without a version", () => {
+    // Arrange
+    const entry = createSetupEntry();
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload).not.toBeNull();
+    expect(payload).not.toHaveProperty("template");
+  });
 });
 
 describe("buildPreflightBody", () => {
