@@ -60,6 +60,18 @@ describe("mock automation runs — the phase branches mock mode has to reach", (
     expect(labelOnly.length).toBeGreaterThan(0);
   });
 
+  it("covers a phase carrying only a code, which the service also accepts", () => {
+    const codeOnly = IN_FLIGHT.filter(
+      (run) =>
+        !run.phase_label &&
+        !!run.phase_code &&
+        resolveRunPhaseText(t, run.phase_code, run.phase_label) ===
+          run.phase_code,
+    );
+
+    expect(codeOnly.length).toBeGreaterThan(0);
+  });
+
   it("covers an in-flight run with no phase fields at all — an older service", () => {
     const noPhase = IN_FLIGHT.filter(
       (run) => run.phase_code === undefined && run.phase_label === undefined,

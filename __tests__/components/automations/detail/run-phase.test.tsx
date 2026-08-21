@@ -63,14 +63,22 @@ describe("RunPhase — unknown code (custom automations)", () => {
     expect(screen.getByText("🔍 Опрашиваем PR-ы")).toBeInTheDocument();
   });
 
-  it("renders nothing when the code is unknown and the label is an empty string", () => {
-    render(<RunPhase code="poll_prs" label="" />);
+  it("shows the raw code when the automation reported a code and no label", () => {
+    // The service accepts `{"code": "checking_out"}` with no label at all, so
+    // this run has a real phase and dropping it would show nothing.
+    render(<RunPhase code="checking_out" label={null} />);
 
-    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(screen.getByTestId("run-phase")).toHaveTextContent("checking_out");
   });
 
-  it("renders nothing when the code is unknown and the label is null", () => {
-    render(<RunPhase code="poll_prs" label={null} />);
+  it("shows the raw code when the label is present but blank", () => {
+    render(<RunPhase code="checking_out" label="" />);
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent("checking_out");
+  });
+
+  it("renders nothing when neither field carries anything", () => {
+    render(<RunPhase code={null} label="" />);
 
     expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
   });
@@ -153,8 +161,21 @@ describe("resolveRunPhaseText — one answer for the row and its tooltip", () =>
     );
   });
 
+  it("resolves a phase carrying only a code to that code, verbatim", () => {
+    // Mirrors the backend contract: `code` and `label` are independently
+    // optional, so a code-only phase is valid and must reach the screen.
+    expect(resolveRunPhaseText(t, "checking_out", null)).toBe("checking_out");
+    expect(resolveRunPhaseText(t, "checking_out", "")).toBe("checking_out");
+  });
+
+  it("prefers the author's label over the raw code when both are present", () => {
+    expect(resolveRunPhaseText(t, "poll_prs", "Polling PRs")).toBe(
+      "Polling PRs",
+    );
+  });
+
   it("resolves to null when there is nothing to show", () => {
-    expect(resolveRunPhaseText(t, "poll_prs", "")).toBeNull();
+    expect(resolveRunPhaseText(t, "", "")).toBeNull();
     expect(resolveRunPhaseText(t, null, null)).toBeNull();
   });
 });

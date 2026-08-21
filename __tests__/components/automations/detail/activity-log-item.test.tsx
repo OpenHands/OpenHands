@@ -483,8 +483,28 @@ describe("ActivityLogItem — run phase (badge still shown)", () => {
     __resetActiveStoreForTests();
   });
 
-  it("shows only the existing status badge (not merely 'no phase') for an active run with an unknown code and an empty label", () => {
+  it("shows only the existing status badge (not merely 'no phase') for an active run whose phase is blank on both fields", () => {
     // Arrange
+    const run = makeRun({
+      status: AutomationRunStatus.RUNNING,
+      completed_at: null,
+      phase_code: null,
+      phase_label: "",
+    });
+
+    // Act
+    renderItem(run);
+
+    // Assert: no phase node, but the status badge is still on the row —
+    // the requirement is "only the existing status badge", not "nothing".
+    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the status badge beside a phase reported as a bare code", () => {
+    // Arrange: the service accepts `{"code": "custom_step"}` with no label.
     const run = makeRun({
       status: AutomationRunStatus.RUNNING,
       completed_at: null,
@@ -495,9 +515,9 @@ describe("ActivityLogItem — run phase (badge still shown)", () => {
     // Act
     renderItem(run);
 
-    // Assert: no phase node, but the status badge is still on the row —
-    // the requirement is "only the existing status badge", not "nothing".
-    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    // Assert: the phase reaches the row, and it is added to the badge rather
+    // than replacing it.
+    expect(screen.getByTestId("run-phase")).toHaveTextContent("custom_step");
     expect(
       screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNNING),
     ).toBeInTheDocument();

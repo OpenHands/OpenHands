@@ -149,6 +149,12 @@ export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
       label: "Running QA checks on PR #4821",
       ageMinutes: 4,
     }),
+    // A code with no label: also accepted, and shown as the raw code.
+    makeInFlightRun("r6-06", AutomationRunStatus.RUNNING, 6, true, {
+      code: "checking_out",
+      label: null,
+      ageMinutes: 2,
+    }),
     makeRun("r6-01", AutomationRunStatus.COMPLETED, 0, 14),
     makeRun("r6-02", AutomationRunStatus.COMPLETED, 0, 11),
     makeRun("r6-03", AutomationRunStatus.FAILED, 1, 16),

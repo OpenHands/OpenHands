@@ -51,6 +51,12 @@ const KNOWN_PHASE_CODES: Record<string, I18nKey> = {
  * a card and another way in that card's own tooltip. An absent code counts as
  * unrecognized rather than as an absent phase: the service accepts a phase
  * carrying only a label, and dropping those would hide a real phase.
+ *
+ * `code` and `label` are independently optional in the service's contract, so
+ * the last resort is the raw code — a code-only phase is a real phase and
+ * must reach the screen. It is shown as stored rather than prettified: the
+ * code is data like the label, and turning `poll_prs` into "Poll prs" would
+ * invent English-shaped copy no automation author wrote.
  */
 export function resolveRunPhaseText(
   t: (key: I18nKey) => string,
@@ -59,7 +65,7 @@ export function resolveRunPhaseText(
 ): string | null {
   const knownKey = code ? KNOWN_PHASE_CODES[code] : undefined;
   if (knownKey) return t(knownKey);
-  return label || null;
+  return label || code || null;
 }
 
 /**
