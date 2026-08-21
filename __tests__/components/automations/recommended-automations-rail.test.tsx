@@ -65,8 +65,10 @@ describe("RecommendedAutomationsRail", () => {
       );
 
     expect(cardIds).toEqual([
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
       "slack-standup-digest",
       "linear-triage-assistant",
       "jira-issue-to-pr",
@@ -115,8 +117,10 @@ describe("RecommendedAutomationsRail", () => {
       <RecommendedAutomationsRail
         installedAutomations={[
           { name: "GitHub Code Review Agent" },
-          { name: "GitHub repository monitor" },
+          { name: "GitHub Issue to PR Agent" },
           { name: "Slack channel monitor" },
+          { name: "AGENTS.md Maintainer" },
+          { name: "Daily news digest" },
           { name: "Slack standup digest" },
           { name: "Linear issue triage assistant" },
           { name: "Jira issue to GitHub PR" },
