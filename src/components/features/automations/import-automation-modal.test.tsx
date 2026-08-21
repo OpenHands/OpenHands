@@ -104,7 +104,8 @@ describe("ImportAutomationModal", () => {
     expect(markup).toContain(spec.name);
     expect(markup).toContain("github: pull_request.opened");
     expect(markup).toContain(spec.prompt!);
-    expect(markup).toContain(spec.plugins!.join(", "));
+    expect(markup).toContain(spec.plugins![0]!);
+    expect(markup).toContain(spec.plugins![1]!);
     expect(markup).toContain(I18nKey.AUTOMATIONS$IMPORT_DISABLED_NOTICE);
     expect(markup).toContain('data-testid="import-automation-confirm"');
   });

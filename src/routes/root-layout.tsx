@@ -23,6 +23,8 @@ import { useAppTitle } from "#/hooks/use-app-title";
 import { ReactRouterNavigationProvider } from "./react-router-navigation-provider";
 import { OnboardingHost } from "#/components/features/onboarding";
 import { isOnboardingPreviewActive } from "#/components/features/onboarding/onboarding-preview";
+import { isSetupReviewPreviewActive } from "#/components/features/manifest/setup-review-preview";
+import { SetupReviewPreviewHost } from "#/components/features/manifest/setup-review-preview-host";
 
 const EnvironmentSwitchOverlay = React.lazy(
   () => import("#/components/features/backends/environment-switch-overlay"),
@@ -104,6 +106,7 @@ export default function MainApp() {
     location.pathname,
   );
   const showOnboardingPreview = isOnboardingPreviewActive(location.search);
+  const showSetupReviewPreview = isSetupReviewPreviewActive(location.search);
 
   return (
     <ReactRouterNavigationProvider>
@@ -144,6 +147,7 @@ export default function MainApp() {
           <CommandMenu />
         </React.Suspense>
         {showOnboardingPreview ? <OnboardingHost /> : null}
+        {showSetupReviewPreview ? <SetupReviewPreviewHost /> : null}
       </SidebarMobileNavProvider>
     </ReactRouterNavigationProvider>
   );

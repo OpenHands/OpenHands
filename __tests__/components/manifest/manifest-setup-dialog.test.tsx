@@ -185,6 +185,31 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-prerequisites")).toBeNull();
   });
 
+  it("opens on the review step when initialStep is review", () => {
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <SetupDialog
+          entry={ENTRY}
+          onClose={vi.fn()}
+          initialStep="review"
+          preview
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("setup-review")).toBeInTheDocument();
+    const review = screen.getByTestId("setup-review").textContent ?? "";
+    expect(review.indexOf("Widget monitor")).toBeLessThan(
+      review.indexOf("Check frequency"),
+    );
+    expect(screen.getByTestId("setup-back-button")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-continue-button")).toBeInTheDocument();
+  });
+
   it("holds an unanswered required field back from the service", async () => {
     // Arrange — nothing typed, so two required fields are still empty.
     const { user } = renderDialog();

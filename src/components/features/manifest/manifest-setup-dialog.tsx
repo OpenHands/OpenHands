@@ -75,6 +75,18 @@ function getDestination(response: Record<string, unknown>): string | null {
 export interface SetupDialogProps {
   entry: SetupEntry;
   onClose: () => void;
+  /** Skip the form and open on this stage. Used by the design preview. */
+  initialStep?: SetupStep;
+  /**
+   * Design-review mode: ignore capability/prereq gates and do not submit.
+   * Confirm just dismisses so iterating on the review chrome cannot create
+   * a real automation.
+   */
+  preview?: boolean;
+  /** Render the panel only — no backdrop. Used for side-by-side previews. */
+  embedded?: boolean;
+  /** Override form defaults. Used by the design preview for long-content cases. */
+  previewValues?: SetupFormValues;
 }
 
 /**
@@ -85,7 +97,14 @@ export interface SetupDialogProps {
  * manifest supplies only what varies. Any string the user reads here is either
  * manifest-authored or host chrome.
  */
-export function SetupDialog({ entry, onClose }: SetupDialogProps) {
+export function SetupDialog({
+  entry,
+  onClose,
+  initialStep,
+  preview = false,
+  embedded = false,
+  previewValues,
+}: SetupDialogProps) {
   const { t } = useTranslation("openhands");
   const navigate = useNavigate();
 
@@ -100,10 +119,11 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     trackAutomationSetupFailed,
   } = useTracking();
 
-  const [step, setStep] = useState<SetupStep>("prerequisites");
-  const [values, setValues] = useState<SetupFormValues>(() =>
-    getInitialFormValues(entry.setup),
-  );
+  const [step, setStep] = useState<SetupStep>(initialStep ?? "prerequisites");
+  const [values, setValues] = useState<SetupFormValues>(() => ({
+    ...getInitialFormValues(entry.setup),
+    ...previewValues,
+  }));
   const [repositories, setRepositories] = useState<
     Record<string, GitRepository | null>
   >({});
@@ -151,7 +171,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     [entry],
   );
   const isUnsupported =
-    capabilities.supported === false || missingEndpoints.length > 0;
+    !preview &&
+    (capabilities.supported === false || missingEndpoints.length > 0);
   const unmet = [...capabilities.unmet, ...missingEndpoints];
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
@@ -258,7 +279,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     return local ? formatFieldError(local, t) : serviceErrors.fieldErrors[name];
   };
 
-  const isLoading = capabilities.isLoading || prerequisites.isLoading;
+  const isLoading =
+    !preview && (capabilities.isLoading || prerequisites.isLoading);
 
   const title = (() => {
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
@@ -268,21 +290,37 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     return entry.name;
   })();
 
-  return (
-    <ModalBackdrop onClose={onClose} aria-label={entry.name}>
-      <div
-        data-testid="setup-dialog"
-        className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
-      >
-        <ModalCloseButton
-          onClose={onClose}
-          testId="setup-dialog-close"
-          disabled={isSubmitting}
-        />
-        <header className="flex-shrink-0 px-6 pb-4 pt-6">
-          <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
-        </header>
+  const panel = (
+    <div
+      data-testid="setup-dialog"
+      className={cn(
+        "relative flex max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary",
+        embedded ? "w-[min(32rem,46vw)]" : "w-[min(36rem,calc(100vw-2rem))]",
+      )}
+    >
+      <ModalCloseButton
+        onClose={onClose}
+        testId="setup-dialog-close"
+        disabled={isSubmitting}
+      />
+      <header className="flex-shrink-0 px-6 pb-4 pt-6">
+        <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
+        {currentStep === "review" && (
+          <p className="mt-2 text-sm text-tertiary-light">
+            {t(I18nKey.SETUP$REVIEW_DESCRIPTION)}
+          </p>
+        )}
+      </header>
 
+      {currentStep === "review" && !isLoading && !isUnsupported && (
+        <SetupReviewStep
+          setup={entry.setup}
+          values={values}
+          automationName={entry.name}
+        />
+      )}
+
+      {currentStep !== "review" && (
         <div className="min-h-0 flex-1 overflow-y-auto px-6">
           {isLoading && (
             <div className="flex justify-center py-6">
@@ -348,10 +386,6 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             </div>
           )}
 
-          {!isLoading && !isUnsupported && currentStep === "review" && (
-            <SetupReviewStep setup={entry.setup} values={values} />
-          )}
-
           {serviceErrors.formErrors.map((message) => (
             <p
               key={message}
@@ -363,63 +397,92 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             </p>
           ))}
         </div>
+      )}
 
-        <footer className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4">
-          {currentStep === "review" && (
+      {currentStep === "review" &&
+        serviceErrors.formErrors.map((message) => (
+          <p
+            key={message}
+            role="alert"
+            data-testid="setup-form-error"
+            className="px-6 pt-4 text-sm text-red-400"
+          >
+            {message}
+          </p>
+        ))}
+
+      <footer
+        className={cn(
+          "flex flex-shrink-0 justify-end px-6",
+          currentStep === "review" ? "gap-3 py-5" : "gap-2 pb-6 pt-4",
+        )}
+      >
+        {currentStep === "review" && (
+          <BrandButton
+            testId="setup-back-button"
+            type="button"
+            variant="secondary"
+            isDisabled={isSubmitting}
+            onClick={() => setStep("form")}
+          >
+            {t(I18nKey.BUTTON$BACK)}
+          </BrandButton>
+        )}
+
+        {isUnsupported ? (
+          <>
             <BrandButton
-              testId="setup-back-button"
               type="button"
               variant="secondary"
               isDisabled={isSubmitting}
-              onClick={() => setStep("form")}
+              onClick={onClose}
             >
-              {t(I18nKey.BUTTON$BACK)}
+              {t(I18nKey.BUTTON$CLOSE)}
             </BrandButton>
-          )}
-
-          {isUnsupported ? (
-            <>
+            {canFallBackToConversation && (
               <BrandButton
+                testId="setup-fallback-conversation"
                 type="button"
-                variant="secondary"
+                variant="primary"
                 isDisabled={isSubmitting}
-                onClick={onClose}
+                onClick={handleFallbackConversation}
               >
-                {t(I18nKey.BUTTON$CLOSE)}
+                {t(I18nKey.SETUP$FALLBACK_CONVERSATION)}
               </BrandButton>
-              {canFallBackToConversation && (
-                <BrandButton
-                  testId="setup-fallback-conversation"
-                  type="button"
-                  variant="primary"
-                  isDisabled={isSubmitting}
-                  onClick={handleFallbackConversation}
-                >
-                  {t(I18nKey.SETUP$FALLBACK_CONVERSATION)}
-                </BrandButton>
-              )}
-            </>
-          ) : (
-            <BrandButton
-              testId="setup-continue-button"
-              type="button"
-              variant="primary"
-              isDisabled={
-                isLoading ||
-                isSubmitting ||
-                (currentStep === "prerequisites" && prerequisites.isBlocked)
-              }
-              onClick={
-                currentStep === "review" ? handleConfirm : handleContinue
-              }
-            >
-              {currentStep === "review"
-                ? t(I18nKey.SETUP$CONFIRM)
-                : t(I18nKey.BUTTON$CONTINUE)}
-            </BrandButton>
-          )}
-        </footer>
-      </div>
+            )}
+          </>
+        ) : (
+          <BrandButton
+            testId="setup-continue-button"
+            type="button"
+            variant="primary"
+            isDisabled={
+              isLoading ||
+              isSubmitting ||
+              (currentStep === "prerequisites" && prerequisites.isBlocked)
+            }
+            onClick={
+              currentStep === "review"
+                ? preview
+                  ? onClose
+                  : handleConfirm
+                : handleContinue
+            }
+          >
+            {currentStep === "review"
+              ? t(I18nKey.SETUP$CONFIRM)
+              : t(I18nKey.BUTTON$CONTINUE)}
+          </BrandButton>
+        )}
+      </footer>
+    </div>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <ModalBackdrop onClose={onClose} aria-label={entry.name}>
+      {panel}
     </ModalBackdrop>
   );
 }
