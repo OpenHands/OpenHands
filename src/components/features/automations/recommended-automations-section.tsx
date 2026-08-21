@@ -314,10 +314,7 @@ export function RecommendedAutomationsSection({
     : RECOMMENDED_AUTOMATIONS;
   const visibleAutomations = candidateAutomations.filter((automation) => {
     const integrationEntries = getIntegrationEntries(automation);
-    return (
-      isAutomationAvailable(automation) &&
-      automationMatchesQuery(automation, integrationEntries, query)
-    );
+    return automationMatchesQuery(automation, integrationEntries, query);
   });
 
   if (visibleAutomations.length === 0) return null;
