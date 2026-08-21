@@ -104,21 +104,19 @@ describe("buildStartConversationRequest", () => {
   it("includes a custom title-generation prompt when configured", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
-      titleGenerationPrompt: "Summarize {conversation_content}",
+      prompt: "Summarize {conversation_content}",
     });
 
-    expect(payload.title_generation_prompt).toBe(
-      "Summarize {conversation_content}",
-    );
+    expect(payload.prompt).toBe("Summarize {conversation_content}");
   });
 
   it("omits a blank title-generation prompt", () => {
     const payload = buildStartConversationRequest({
       settings: DEFAULT_SETTINGS,
-      titleGenerationPrompt: "",
+      prompt: "",
     });
 
-    expect(payload).not.toHaveProperty("title_generation_prompt");
+    expect(payload).not.toHaveProperty("prompt");
   });
 
   it("uses nested settings as the source of truth and lets the SDK create the agent", () => {

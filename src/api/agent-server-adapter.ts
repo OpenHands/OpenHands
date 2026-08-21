@@ -1012,7 +1012,7 @@ type StartConversationPayload = Record<string, unknown> & {
   stuck_detection: true;
   autotitle: true;
   title_llm_profile?: string;
-  title_generation_prompt?: string;
+  prompt?: string;
   worktree: boolean;
   secrets_encrypted?: true;
   conversation_id?: string;
@@ -1045,7 +1045,7 @@ export interface StartConversationOptions {
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
-  titleGenerationPrompt?: string;
+  prompt?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
 }
 
@@ -1130,9 +1130,7 @@ export function buildStartConversationRequest(
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),
-    ...(options.titleGenerationPrompt
-      ? { title_generation_prompt: options.titleGenerationPrompt }
-      : {}),
+    ...(options.prompt ? { prompt: options.prompt } : {}),
     worktree: options.worktree ?? true,
   };
 
@@ -1268,7 +1266,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
-  titleGenerationPrompt?: string;
+  prompt?: string;
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
 

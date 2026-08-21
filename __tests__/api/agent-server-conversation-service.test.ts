@@ -287,7 +287,7 @@ describe("AgentServerConversationService", () => {
         "/api/conversations",
         expect.objectContaining({
           title_llm_profile: "Titles",
-          title_generation_prompt: "Summarize {conversation_content}",
+          prompt: "Summarize {conversation_content}",
         }),
       );
     });
