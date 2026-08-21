@@ -211,7 +211,7 @@ OPTIONS:
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
-  --reject-prefix <prefix>     Return 503 for requests matching <prefix>
+  --reject-prefix <prefix>     Return 404 for requests matching <prefix>
                                instead of SPA-fallbacking to index.html;
                                may be repeated. Useful in --frontend-only
                                mode to cleanly reject API paths.
@@ -220,7 +220,7 @@ OPTIONS:
 ROUTING:
   • Routes are matched by longest prefix first (most-specific wins).
   • Reject prefixes are checked before SPA fallback — matching requests
-    get 503 immediately.
+    get 404 immediately.
   • Anything that does not match a route or reject prefix is served
     from --dir.
   • Unknown paths fall back to index.html (SPA mode), unless they look
@@ -420,8 +420,8 @@ function matchesAnyPrefix(urlPath, prefixes) {
 }
 
 function rejectUnavailable(res) {
-  res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end("Service Unavailable (no backend configured for this route)");
+  res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Not Found (no backend configured for this route)");
 }
 
 function notFound(res) {
@@ -615,7 +615,7 @@ export function startStaticServer(config) {
       }
       if (rejectPrefixes.length > 0) {
         for (const prefix of rejectPrefixes) {
-          console.log(`  ${prefix} -> 503 (rejected)`);
+          console.log(`  ${prefix} -> 404 (rejected)`);
         }
       }
       if (config.lockToCloud) {

@@ -628,6 +628,39 @@ describe("static-server.mjs", () => {
     });
   });
 
+  describe("--reject-prefix", () => {
+    // Uses prefixes distinct from the real API paths (/api, /server_info, ...)
+    // because those collide with this suite's global MSW handlers, which
+    // intercept by path regardless of origin and would mask the real
+    // response from this test's own server. The real paths are covered
+    // end-to-end by tests/e2e/mock-llm/backends/mock-llm-partial-stack.spec.ts.
+    it("returns 404 (not 503) for a request matching a reject prefix", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const origin = await startServer(buildDir, {
+        rejectPrefixes: ["/no-backend-route"],
+      });
+      const response = await fetch(`${origin}/no-backend-route`);
+
+      expect(response.status).toBe(404);
+    });
+
+    it("rejects nested paths under a configured prefix", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+      const origin = await startServer(buildDir, {
+        rejectPrefixes: ["/no-backend-route"],
+      });
+      const response = await fetch(`${origin}/no-backend-route/nested`);
+
+      expect(response.status).toBe(404);
+    });
+  });
+
   it("keeps paths confined to the static directory", async () => {
     const parentDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-parent-"));
     tempDirs.push(parentDir);

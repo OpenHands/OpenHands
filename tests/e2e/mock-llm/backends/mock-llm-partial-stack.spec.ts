@@ -3,7 +3,7 @@
  * and port conflict handling.
  *
  * These tests spawn `bin/agent-canvas.mjs` with partial-stack flags and verify:
- *   1. --frontend-only: static frontend is served, backend APIs return 503
+ *   1. --frontend-only: static frontend is served, backend APIs return 404
  *   2. --backend-only: backend APIs work, frontend root returns 503
  *   3. Port conflict: binary fails with a clear error when the port is busy,
  *      then succeeds when a free port is used
@@ -180,7 +180,7 @@ test.describe("partial stack: --frontend-only", () => {
     if (stateDir) rmSync(stateDir, { recursive: true, force: true });
   });
 
-  test("serves the frontend but returns 503 for backend routes", async ({
+  test("serves the frontend but returns 404 for backend routes", async ({
     page,
     request,
   }) => {
@@ -212,37 +212,39 @@ test.describe("partial stack: --frontend-only", () => {
     const html = await rootResp.text();
     expect(html).toContain("<!DOCTYPE html");
 
-    // Verify: backend API routes return 503 because the static server
+    // Verify: backend API routes return 404 because the static server
     // rejects known API prefixes via --reject-prefix when no backend
-    // is configured (frontend-only mode).
+    // is configured (frontend-only mode). 404 is the honest status here
+    // since these routes can never become available on this origin —
+    // unlike 503, it keeps deliberate rejections out of 5xx SLOs.
     const serverInfoResp = await request.get(
       `${FRONTEND_ONLY_URL}/server_info`,
       { failOnStatusCode: false },
     );
-    expect(serverInfoResp.status()).toBe(503);
+    expect(serverInfoResp.status()).toBe(404);
 
     const settingsResp = await request.get(
       `${FRONTEND_ONLY_URL}/api/settings`,
       { failOnStatusCode: false },
     );
-    expect(settingsResp.status()).toBe(503);
+    expect(settingsResp.status()).toBe(404);
 
     const automationResp = await request.get(
       `${FRONTEND_ONLY_URL}/api/automation/v1`,
       { failOnStatusCode: false },
     );
-    expect(automationResp.status()).toBe(503);
+    expect(automationResp.status()).toBe(404);
 
     // Verify: browser loads the app and shows "agent server unavailable"
-    // because the /server_info probe fails with 503.
+    // because the /server_info probe fails (non-401 status).
     await seedLocalStorage(page);
     await page.goto(FRONTEND_ONLY_URL, { waitUntil: "domcontentloaded" });
 
     // The app should detect the missing backend and show the manage-backends
     // modal or an equivalent unavailable notice.
-    await expect(
-      page.getByTestId("manage-backends-modal"),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("manage-backends-modal")).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });
 
@@ -294,21 +296,16 @@ test.describe("partial stack: --backend-only", () => {
     ).not.toBeNull();
 
     // Verify: /server_info returns 200 (agent-server running)
-    const serverInfoResp = await request.get(
-      `${BACKEND_ONLY_URL}/server_info`,
-    );
+    const serverInfoResp = await request.get(`${BACKEND_ONLY_URL}/server_info`);
     expect(serverInfoResp.status()).toBe(200);
     const serverInfo = await serverInfoResp.json();
     expect(serverInfo).toHaveProperty("version");
 
     // Verify: /api/settings is reachable (may return 401 without key, but not 503)
-    const settingsResp = await request.get(
-      `${BACKEND_ONLY_URL}/api/settings`,
-      {
-        headers: { "X-Session-API-Key": sessionKey },
-        failOnStatusCode: false,
-      },
-    );
+    const settingsResp = await request.get(`${BACKEND_ONLY_URL}/api/settings`, {
+      headers: { "X-Session-API-Key": sessionKey },
+      failOnStatusCode: false,
+    });
     expect(settingsResp.status()).not.toBe(503);
 
     // Verify: automation backend is also running and reachable
@@ -325,10 +322,9 @@ test.describe("partial stack: --backend-only", () => {
     expect(rootResp.status()).toBe(503);
 
     // Verify: a random static-asset-like path also returns 503
-    const assetResp = await request.get(
-      `${BACKEND_ONLY_URL}/assets/index.js`,
-      { failOnStatusCode: false },
-    );
+    const assetResp = await request.get(`${BACKEND_ONLY_URL}/assets/index.js`, {
+      failOnStatusCode: false,
+    });
     expect(assetResp.status()).toBe(503);
   });
 });
@@ -373,17 +369,22 @@ test.describe("partial stack: port conflict", () => {
     // The process should exit non-zero because the port is busy
     const result = await waitForExit(child, 20_000);
 
-    expect(result.timedOut, "Process should exit promptly on port conflict").toBe(
-      false,
-    );
-    expect(result.code, "Process should exit non-zero on port conflict").not.toBe(
-      0,
-    );
+    expect(
+      result.timedOut,
+      "Process should exit promptly on port conflict",
+    ).toBe(false);
+    expect(
+      result.code,
+      "Process should exit non-zero on port conflict",
+    ).not.toBe(0);
 
     // The error message should mention the blocked port
     const text = output.get();
     expect(text).toMatch(
-      new RegExp(`(port\\s+${conflictPort}|${conflictPort}.*in use|EADDRINUSE)`, "i"),
+      new RegExp(
+        `(port\\s+${conflictPort}|${conflictPort}.*in use|EADDRINUSE)`,
+        "i",
+      ),
     );
   });
 
