@@ -4,7 +4,10 @@ import { useConversationStore } from "#/stores/conversation-store";
 import { setConversationState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
+import {
+  conversationHeaderActionSlotClassName,
+  mobileTopBarIconButtonClassName,
+} from "#/utils/mobile-top-bar-icon-button-classes";
 import BlockDrawerLeftIcon from "#/icons/block-drawer-left.svg?react";
 import { ChatActionTooltip } from "../chat/chat-action-tooltip";
 import { useBreakpoint } from "#/hooks/use-breakpoint";
@@ -81,25 +84,27 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
   const ariaPressed = isMobile ? false : isRightPanelShown;
 
   return (
-    <ChatActionTooltip tooltip={tooltipText} ariaLabel={tooltipText}>
-      <button
-        type="button"
-        onClick={handleToggle}
-        disabled={isArchivedConversation}
-        className={cn(
-          mobileTopBarIconButtonClassName,
-          "size-7 self-center",
-          isArchivedConversation &&
-            "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
-          className,
-        )}
-        aria-label={tooltipText}
-        aria-pressed={ariaPressed}
-        aria-disabled={isArchivedConversation}
-        data-testid="right-panel-toggle"
-      >
-        <BlockDrawerLeftIcon className="size-5 -scale-x-100" />
-      </button>
-    </ChatActionTooltip>
+    <div className={conversationHeaderActionSlotClassName}>
+      <ChatActionTooltip tooltip={tooltipText} ariaLabel={tooltipText}>
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={isArchivedConversation}
+          className={cn(
+            mobileTopBarIconButtonClassName,
+            "size-7",
+            isArchivedConversation &&
+              "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
+            className,
+          )}
+          aria-label={tooltipText}
+          aria-pressed={ariaPressed}
+          aria-disabled={isArchivedConversation}
+          data-testid="right-panel-toggle"
+        >
+          <BlockDrawerLeftIcon className="size-4 -scale-x-100" />
+        </button>
+      </ChatActionTooltip>
+    </div>
   );
 }

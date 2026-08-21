@@ -21,6 +21,7 @@ import {
   isExecutionPaused,
 } from "#/utils/status";
 import { I18nKey } from "#/i18n/declaration";
+import { conversationHeaderActionsClassName } from "#/utils/mobile-top-bar-icon-button-classes";
 
 export function ConversationNameWithStatus() {
   const { t } = useTranslation("openhands");
@@ -146,7 +147,10 @@ export function ConversationNameWithStatus() {
         </div>
         <ConversationName />
       </div>
-      <div className="mr-2 flex shrink-0 items-center gap-1">
+      <div
+        data-testid="conversation-header-actions"
+        className={conversationHeaderActionsClassName}
+      >
         <ConversationGitActionsToggle />
         <ConversationOverviewToggle />
         <RightPanelToggle />

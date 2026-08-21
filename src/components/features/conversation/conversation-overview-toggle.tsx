@@ -4,13 +4,19 @@ import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useConversationStore } from "#/stores/conversation-store";
 import {
+  closeConversationOverviewPanelPeek,
   openConversationOverviewPanelPeek,
   scheduleCloseConversationOverviewPanelPeek,
   useSyncConversationOverviewPanelPeek,
 } from "#/hooks/use-conversation-overview-panel-peek";
+import { useBreakpoint } from "#/hooks/use-breakpoint";
+import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
-import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
+import {
+  conversationHeaderActionSlotClassName,
+  mobileTopBarIconButtonClassName,
+} from "#/utils/mobile-top-bar-icon-button-classes";
 import { ChatActionTooltip } from "../chat/chat-action-tooltip";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
@@ -25,16 +31,19 @@ interface ConversationOverviewToggleProps {
 /**
  * Info toggle for the session-only overview panel beside the chat thread.
  * Opening overview closes the files/diffs drawer; the panel also auto-hides
- * when that drawer opens from elsewhere. While the drawer is open, hovering
- * this control peeks the overview as a portaled overlay.
+ * when that drawer opens from elsewhere. While the drawer is open on desktop,
+ * hovering this control peeks the overview as a portaled overlay. On mobile
+ * the panel is a click-only dropdown that closes on outside click.
  */
 export function ConversationOverviewToggle({
   className,
 }: ConversationOverviewToggleProps) {
   const { t } = useTranslation("openhands");
+  const isMobile = useBreakpoint();
   const isArchivedConversation = useIsArchivedConversation();
   const { conversationId } = useOptionalConversationId();
   const triggerRef = useRef<HTMLDivElement>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [peekPosition, setPeekPosition] = useState<{
     top: number;
     left: number;
@@ -56,12 +65,49 @@ export function ConversationOverviewToggle({
     }
   }, [isOverviewPanelShown, isRightPanelShown, setIsOverviewPanelShown]);
 
+  useEffect(() => {
+    if (!isMobile) {
+      setIsMobileMenuOpen(false);
+      return;
+    }
+
+    if (isOverviewPanelShown) {
+      setIsOverviewPanelShown(false);
+    }
+    closeConversationOverviewPanelPeek();
+  }, [isMobile, isOverviewPanelShown, setIsOverviewPanelShown]);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) {
+      return undefined;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobileMenuOpen]);
+
   const canPeekOnHover =
-    !isArchivedConversation && isRightPanelShown && !isOverviewPanelShown;
+    !isMobile &&
+    !isArchivedConversation &&
+    isRightPanelShown &&
+    !isOverviewPanelShown;
   const showPeek = canPeekOnHover && isOverviewPanelPeeked;
+  const showMobileDropdown =
+    isMobile && isMobileMenuOpen && !isArchivedConversation;
+  const showPortaledPanel = showPeek || showMobileDropdown;
+
+  const dropdownRef = useClickOutsideElement<HTMLDivElement>(
+    () => setIsMobileMenuOpen(false),
+    triggerRef,
+  );
 
   useLayoutEffect(() => {
-    if (!showPeek) {
+    if (!showPortaledPanel) {
       setPeekPosition(null);
       return undefined;
     }
@@ -85,10 +131,15 @@ export function ConversationOverviewToggle({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [showPeek]);
+  }, [showPortaledPanel]);
 
   const handleToggle = () => {
     if (isArchivedConversation) {
+      return;
+    }
+
+    if (isMobile) {
+      setIsMobileMenuOpen((open) => !open);
       return;
     }
 
@@ -107,27 +158,37 @@ export function ConversationOverviewToggle({
     setIsOverviewPanelShown(!isOverviewPanelShown);
   };
 
-  const isOverviewVisible = isOverviewPanelShown || showPeek;
+  const isOverviewVisible =
+    (!isMobile && isOverviewPanelShown) || showPeek || showMobileDropdown;
 
   const tooltipText = isArchivedConversation
     ? t(I18nKey.CONVERSATION$UNAVAILABLE_FOR_ARCHIVES)
-    : isOverviewPanelShown
+    : isOverviewVisible
       ? t(I18nKey.CONVERSATION$HIDE_OVERVIEW)
       : t(I18nKey.CONVERSATION$SHOW_OVERVIEW);
 
   const peek =
-    showPeek && peekPosition
+    showPortaledPanel && peekPosition
       ? ReactDOM.createPortal(
           <div
-            data-testid="conversation-overview-peek"
+            ref={showMobileDropdown ? dropdownRef : undefined}
+            data-testid={
+              showMobileDropdown
+                ? "conversation-overview-dropdown"
+                : "conversation-overview-peek"
+            }
             className="fixed z-50"
             style={{
               top: peekPosition.top,
               left: peekPosition.left,
               width: CONVERSATION_OVERVIEW_PANEL_WIDTH_PX,
             }}
-            onMouseEnter={openConversationOverviewPanelPeek}
-            onMouseLeave={scheduleCloseConversationOverviewPanelPeek}
+            onMouseEnter={
+              showPeek ? openConversationOverviewPanelPeek : undefined
+            }
+            onMouseLeave={
+              showPeek ? scheduleCloseConversationOverviewPanelPeek : undefined
+            }
           >
             <div className="shadow-lg">
               <ConversationOverviewPanel />
@@ -141,7 +202,7 @@ export function ConversationOverviewToggle({
     <>
       <div
         ref={triggerRef}
-        className="relative inline-flex items-center self-center"
+        className={conversationHeaderActionSlotClassName}
         onMouseEnter={() => {
           if (canPeekOnHover) {
             openConversationOverviewPanelPeek();
@@ -169,7 +230,9 @@ export function ConversationOverviewToggle({
               className,
             )}
             aria-label={tooltipText}
-            aria-pressed={isOverviewPanelShown}
+            aria-pressed={isOverviewVisible}
+            aria-expanded={showMobileDropdown}
+            aria-haspopup={isMobile ? "dialog" : undefined}
             aria-disabled={isArchivedConversation}
             data-testid="conversation-overview-toggle"
           >

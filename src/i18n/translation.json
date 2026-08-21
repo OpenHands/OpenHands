@@ -24394,6 +24394,23 @@
     "uk": "Код",
     "ca": "Codi"
   },
+  "COMMON$COMMIT": {
+    "en": "Commit",
+    "ja": "コミット",
+    "zh-CN": "提交",
+    "zh-TW": "提交",
+    "ko-KR": "커밋",
+    "no": "Commit",
+    "it": "Commit",
+    "pt": "Commit",
+    "es": "Commit",
+    "ar": "إيداع",
+    "fr": "Commit",
+    "tr": "Commit",
+    "de": "Commit",
+    "uk": "Коміт",
+    "ca": "Commit"
+  },
   "COMMON$CREATE_NEW_BRANCH": {
     "en": "Create New Branch",
     "ja": "新しいブランチを作成",
