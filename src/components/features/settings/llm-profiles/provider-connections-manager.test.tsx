@@ -91,6 +91,51 @@ describe("ProviderConnectionsManager", () => {
     expect(providerSelector).toHaveValue("Anthropic");
   });
 
+  it("submits the raw provider id when creating a connection", async () => {
+    const user = userEvent.setup();
+    const createSpy = vi
+      .spyOn(ProviderConnectionsService, "create")
+      .mockResolvedValue({
+        ...connection,
+        id: "conn-anthropic",
+        display_name: "My Anthropic",
+        provider: "anthropic",
+      });
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "My Anthropic",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-anthropic"));
+
+    await user.type(
+      screen.getByTestId("provider-connection-api-key-input"),
+      "test-key",
+    );
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: "anthropic" }),
+      );
+    });
+  });
+
   it("lists a row per connection with its display name and provider", () => {
     renderWith(
       <ProviderConnectionsManager
