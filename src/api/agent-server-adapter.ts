@@ -341,6 +341,11 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
+    // Stored metadata wins over the tags, which are a creation-time snapshot:
+    // `updateConversationRepository` rewrites localStorage without PATCHing
+    // the tags, so preferring tags would make a repo change look like a no-op
+    // on the client that made it — and would resurrect a repo the user
+    // cleared. Tags are the cross-client fallback, not the live value.
     selected_repository:
       metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
     selected_branch:
@@ -459,14 +464,6 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
 export const CLIENT_SOURCE_TAG_KEY = "clientsource";
 export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
-/**
- * Tag keys that mirror the client-side ``ConversationMetadata`` selection
- * (workspace / repo / branch / provider) onto the agent-server at creation
- * time. Server-side tags are the only durable home for this metadata — the
- * localStorage copy is a per-device warm cache, so a second client pointed at
- * the same backend can only reconstruct workspace grouping and the repo/branch
- * badge by reading these back in {@link toAppConversation} (#15598).
- */
 export const REPOSITORY_TAG_KEY = "repository";
 export const SELECTED_BRANCH_TAG_KEY = "selected_branch";
 export const GIT_PROVIDER_TAG_KEY = "git_provider";
