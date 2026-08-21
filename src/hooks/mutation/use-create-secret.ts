@@ -1,9 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
 import { SecretsService } from "#/api/secrets-service";
+import { syncSecretToActiveConversation } from "#/api/conversation-service/conversation-secret-sync";
 
 export const useCreateSecret = () =>
   useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       name,
       value,
       description,
@@ -11,5 +12,9 @@ export const useCreateSecret = () =>
       name: string;
       value: string;
       description?: string;
-    }) => SecretsService.createSecret(name, value, description),
+    }) => {
+      const res = await SecretsService.createSecret(name, value, description);
+      await syncSecretToActiveConversation(name, description);
+      return res;
+    },
   });

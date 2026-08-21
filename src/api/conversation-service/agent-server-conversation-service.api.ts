@@ -2,6 +2,8 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type LookupSecret,
+  type StaticSecret,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
@@ -919,6 +921,30 @@ class AgentServerConversationService {
       conversationId,
       model,
     );
+  }
+
+  /**
+   * Post updated secrets (as LookupSecret or StaticSecret references) to a live
+   * conversation's SecretRegistry.
+   */
+  static async updateSecrets(
+    conversationId: string,
+    secrets: Record<string, LookupSecret | StaticSecret>,
+  ): Promise<void> {
+    const { backend } = getActiveBackend();
+    if (backend.kind === "cloud") {
+      await callCloudProxy({
+        backend,
+        method: "POST",
+        path: `/api/v1/app-conversations/${conversationId}/secrets`,
+        body: { secrets },
+      });
+      return;
+    }
+
+    const clientOptions = getAgentServerClientOptions();
+    const conversationClient = new ConversationClient(clientOptions);
+    await conversationClient.updateSecrets(conversationId, { secrets });
   }
 }
 
