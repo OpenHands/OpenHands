@@ -185,23 +185,15 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-prerequisites")).toBeNull();
   });
 
-  it("opens on the review step when initialStep is review", () => {
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <SetupDialog
-          entry={ENTRY}
-          onClose={vi.fn()}
-          initialStep="review"
-          preview
-        />
-      </QueryClientProvider>,
+  it("shows the catalog name before schedule on review", async () => {
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
     );
 
-    expect(screen.getByTestId("setup-review")).toBeInTheDocument();
     const review = screen.getByTestId("setup-review").textContent ?? "";
     expect(review.indexOf("Widget monitor")).toBeLessThan(
       review.indexOf("Check frequency"),

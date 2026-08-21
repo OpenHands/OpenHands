@@ -75,18 +75,6 @@ function getDestination(response: Record<string, unknown>): string | null {
 export interface SetupDialogProps {
   entry: SetupEntry;
   onClose: () => void;
-  /** Skip the form and open on this stage. Used by the design preview. */
-  initialStep?: SetupStep;
-  /**
-   * Design-review mode: ignore capability/prereq gates and do not submit.
-   * Confirm just dismisses so iterating on the review chrome cannot create
-   * a real automation.
-   */
-  preview?: boolean;
-  /** Render the panel only — no backdrop. Used for side-by-side previews. */
-  embedded?: boolean;
-  /** Override form defaults. Used by the design preview for long-content cases. */
-  previewValues?: SetupFormValues;
 }
 
 /**
@@ -97,14 +85,7 @@ export interface SetupDialogProps {
  * manifest supplies only what varies. Any string the user reads here is either
  * manifest-authored or host chrome.
  */
-export function SetupDialog({
-  entry,
-  onClose,
-  initialStep,
-  preview = false,
-  embedded = false,
-  previewValues,
-}: SetupDialogProps) {
+export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const { t } = useTranslation("openhands");
   const navigate = useNavigate();
 
@@ -119,11 +100,10 @@ export function SetupDialog({
     trackAutomationSetupFailed,
   } = useTracking();
 
-  const [step, setStep] = useState<SetupStep>(initialStep ?? "prerequisites");
-  const [values, setValues] = useState<SetupFormValues>(() => ({
-    ...getInitialFormValues(entry.setup),
-    ...previewValues,
-  }));
+  const [step, setStep] = useState<SetupStep>("prerequisites");
+  const [values, setValues] = useState<SetupFormValues>(() =>
+    getInitialFormValues(entry.setup),
+  );
   const [repositories, setRepositories] = useState<
     Record<string, GitRepository | null>
   >({});
@@ -171,8 +151,7 @@ export function SetupDialog({
     [entry],
   );
   const isUnsupported =
-    !preview &&
-    (capabilities.supported === false || missingEndpoints.length > 0);
+    capabilities.supported === false || missingEndpoints.length > 0;
   const unmet = [...capabilities.unmet, ...missingEndpoints];
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
@@ -279,8 +258,7 @@ export function SetupDialog({
     return local ? formatFieldError(local, t) : serviceErrors.fieldErrors[name];
   };
 
-  const isLoading =
-    !preview && (capabilities.isLoading || prerequisites.isLoading);
+  const isLoading = capabilities.isLoading || prerequisites.isLoading;
 
   const title = (() => {
     if (isUnsupported) return t(I18nKey.SETUP$UNAVAILABLE_TITLE);
@@ -295,7 +273,7 @@ export function SetupDialog({
       data-testid="setup-dialog"
       className={cn(
         "relative flex max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary",
-        embedded ? "w-[min(32rem,46vw)]" : "w-[min(36rem,calc(100vw-2rem))]",
+        "w-[min(36rem,calc(100vw-2rem))]",
       )}
     >
       <ModalCloseButton
@@ -461,13 +439,7 @@ export function SetupDialog({
               isSubmitting ||
               (currentStep === "prerequisites" && prerequisites.isBlocked)
             }
-            onClick={
-              currentStep === "review"
-                ? preview
-                  ? onClose
-                  : handleConfirm
-                : handleContinue
-            }
+            onClick={currentStep === "review" ? handleConfirm : handleContinue}
           >
             {currentStep === "review"
               ? t(I18nKey.SETUP$CONFIRM)
@@ -477,8 +449,6 @@ export function SetupDialog({
       </footer>
     </div>
   );
-
-  if (embedded) return panel;
 
   return (
     <ModalBackdrop onClose={onClose} aria-label={entry.name}>

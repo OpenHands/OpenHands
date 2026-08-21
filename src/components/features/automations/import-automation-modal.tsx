@@ -31,8 +31,6 @@ interface ImportAutomationModalProps {
   onClose: () => void;
   onImport: () => void;
   onFile: (file: File) => void;
-  /** Render the panel only — no backdrop. Used for side-by-side previews. */
-  embedded?: boolean;
 }
 
 function takeDroppedFile(event: DragEvent<HTMLElement>): File | null {
@@ -142,7 +140,6 @@ export function ImportAutomationModal({
   onClose,
   onImport,
   onFile,
-  embedded = false,
 }: ImportAutomationModalProps) {
   const { t } = useTranslation("openhands");
 
@@ -215,7 +212,7 @@ export function ImportAutomationModal({
       data-view={spec ? "preview" : "picker"}
       className={cn(
         "relative flex max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary",
-        embedded ? "w-[min(32rem,46vw)]" : "w-[min(36rem,calc(100vw-2rem))]",
+        "w-[min(36rem,calc(100vw-2rem))]",
       )}
     >
       <ModalCloseButton
@@ -283,8 +280,6 @@ export function ImportAutomationModal({
       )}
     </div>
   );
-
-  if (embedded) return panel;
 
   return (
     <ModalBackdrop
