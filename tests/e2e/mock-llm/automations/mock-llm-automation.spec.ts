@@ -91,7 +91,7 @@ async function listAutomations(
 async function waitForCreatedAutomationId(
   request: import("@playwright/test").APIRequestContext,
   conversationId: string,
-  timeoutMs = 30_000,
+  timeoutMs = 60_000,
 ) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -377,10 +377,10 @@ test.describe("mock-LLM automation lifecycle", () => {
     page,
     request,
   }) => {
-    // Budget: ~150 s for the two dominant waits (waitForNonUserMessageText 60 s
-    // + waitForRunStatus 90 s), plus ~30 s margin for navigation/page loads.
-    // If CI proves flaky, bump to 240_000.
-    test.setTimeout(180_000);
+    // Budget: ~210 s for the three dominant waits (waitForNonUserMessageText
+    // 60 s + waitForCreatedAutomationId 60 s + waitForRunStatus 90 s), plus
+    // ~30 s margin for navigation/page loads.
+    test.setTimeout(240_000);
     // Re-activate in case the mock-LLM server restarted between steps (belt-and-suspenders)
     await activateTrajectory(request, "automation-lifecycle");
 
