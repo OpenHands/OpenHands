@@ -213,6 +213,7 @@ export function AutomationCard({
 
                 {showPhase ? (
                   <RunPhase
+                    status={latestRun.status}
                     code={latestRun.phase_code}
                     label={latestRun.phase_label}
                     updatedAt={latestRun.phase_updated_at}

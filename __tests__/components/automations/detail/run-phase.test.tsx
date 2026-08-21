@@ -9,6 +9,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 // Source of truth for translated values — not a hand-maintained duplicate.
 import translationData from "#/i18n/translation.json";
+import { AutomationRunStatus } from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 
 type TranslationEntry = Record<string, string>;
@@ -45,9 +46,13 @@ vi.mock("react-i18next", async () => {
 const minutesAgo = (minutes: number) =>
   new Date(Date.now() - minutes * 60_000).toISOString();
 
+const RUNNING = AutomationRunStatus.RUNNING;
+
 describe("RunPhase — known code, non-English language", () => {
   it("shows the French translation.json value for a known phase code, not the raw code", () => {
-    render(<RunPhase code="sandbox_provisioning" label={null} />);
+    render(
+      <RunPhase status={RUNNING} code="sandbox_provisioning" label={null} />,
+    );
 
     const expected =
       TRANSLATIONS[I18nKey.AUTOMATIONS$DETAIL$PHASE_SANDBOX_PROVISIONING].fr;
@@ -58,7 +63,9 @@ describe("RunPhase — known code, non-English language", () => {
 
 describe("RunPhase — unknown code (custom automations)", () => {
   it("shows the label as-is, including emoji and non-Latin text, for an unknown code", () => {
-    render(<RunPhase code="poll_prs" label="🔍 Опрашиваем PR-ы" />);
+    render(
+      <RunPhase status={RUNNING} code="poll_prs" label="🔍 Опрашиваем PR-ы" />,
+    );
 
     expect(screen.getByText("🔍 Опрашиваем PR-ы")).toBeInTheDocument();
   });
@@ -66,75 +73,76 @@ describe("RunPhase — unknown code (custom automations)", () => {
   it("shows the raw code when the automation reported a code and no label", () => {
     // The service accepts `{"code": "checking_out"}` with no label at all, so
     // this run has a real phase and dropping it would show nothing.
-    render(<RunPhase code="checking_out" label={null} />);
+    render(<RunPhase status={RUNNING} code="checking_out" label={null} />);
 
     expect(screen.getByTestId("run-phase")).toHaveTextContent("checking_out");
   });
 
-  it("shows the raw code when the label is present but blank", () => {
-    render(<RunPhase code="checking_out" label="" />);
+  it.each([
+    ["null code and empty label", null, ""],
+    ["undefined on both fields (an older service)", undefined, undefined],
+    ["null on both fields", null, null],
+    ["whitespace on both fields", "   ", "   "],
+  ])(
+    "renders nothing and never touches the console with %s",
+    (_case, code, label) => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    expect(screen.getByTestId("run-phase")).toHaveTextContent("checking_out");
-  });
+      expect(() =>
+        render(<RunPhase status={RUNNING} code={code} label={label} />),
+      ).not.toThrow();
 
-  it("renders nothing when neither field carries anything", () => {
-    render(<RunPhase code={null} label="" />);
+      expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+    },
+  );
 
-    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
-  });
-
-  it("boundary: a 200-character label (the contract's max) is kept intact in the DOM and marked for CSS truncation, not sliced in JS", () => {
-    // Arrange: the longest label the backend contract allows.
-    const label = "x".repeat(200);
-
-    // Act
-    render(<RunPhase code="poll_prs" label={label} />);
-
-    // Assert: the full string is still there — truncation must be visual
-    // (CSS), never a JS slice that would lose characters.
-    const node = screen.getByTestId("run-phase");
-    expect(node).toHaveTextContent(label);
-    // Assert: the node itself carries both halves of what CSS truncation
-    // needs — `truncate` alone is inert without a width to clip against.
-    expect(node.className).toMatch(/\btruncate\b/);
-    expect(node.className).toMatch(/max-w-/);
-  });
-});
-
-describe("RunPhase — fields absent entirely (older automation service)", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("renders nothing and never touches the console when code/label are undefined", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("boundary: a 200-character label (the contract's max) reaches the DOM whole, so truncation stays visual", () => {
+    // Arrange: the longest label the backend contract allows.
+    const label = "x".repeat(200);
 
-    expect(() =>
-      render(<RunPhase code={undefined} label={undefined} />),
-    ).not.toThrow();
+    // Act
+    render(<RunPhase status={RUNNING} code="poll_prs" label={label} />);
 
-    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
-    expect(errorSpy).not.toHaveBeenCalled();
-    expect(warnSpy).not.toHaveBeenCalled();
-  });
-
-  it("renders nothing when both code and label are null (nothing has reported a phase yet)", () => {
-    render(<RunPhase code={null} label={null} />);
-
-    expect(screen.queryByTestId("run-phase")).not.toBeInTheDocument();
+    // Assert: the full string is still there — clipping must be CSS, never a
+    // JS slice that would lose characters no tooltip could bring back.
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(label);
   });
 
   it("renders the label when only a label was reported and no code", () => {
     // The service accepts a phase carrying just a label, so a custom
     // automation may report one. An absent code is the most unknown code
-    // there is, and the idea says an unknown code falls back to its label.
-    render(<RunPhase code={null} label="Reticulating splines" />);
+    // there is, and an unknown code falls back to its label.
+    render(
+      <RunPhase status={RUNNING} code={null} label="Reticulating splines" />,
+    );
 
     expect(screen.getByTestId("run-phase")).toHaveTextContent(
       "Reticulating splines",
     );
   });
+});
+
+describe("RunPhase — phase text is data, not a lookup into JavaScript itself", () => {
+  // `phase_code` is author-supplied, so a plain-object lookup answers these
+  // from `Object.prototype` and hands a function to `t()` — taking the card
+  // tree down inside render instead of falling back to the label.
+  it.each(["toString", "constructor", "__proto__", "hasOwnProperty"])(
+    "treats %s as an ordinary unknown code and shows the label",
+    (code) => {
+      expect(() =>
+        render(<RunPhase status={RUNNING} code={code} label="Полный аудит" />),
+      ).not.toThrow();
+
+      expect(screen.getByTestId("run-phase")).toHaveTextContent("Полный аудит");
+    },
+  );
 });
 
 describe("resolveRunPhaseText — one answer for the row and its tooltip", () => {
@@ -174,6 +182,14 @@ describe("resolveRunPhaseText — one answer for the row and its tooltip", () =>
     );
   });
 
+  it("falls through a whitespace-only label, which the service stores as sent", () => {
+    // Only a phase blank on *both* fields is rejected: `{"code": "x",
+    // "label": "  "}` is recorded verbatim, and rendering that label would
+    // put an empty span on the row with the age dangling beside it.
+    expect(resolveRunPhaseText(t, "checking_out", "   ")).toBe("checking_out");
+    expect(resolveRunPhaseText(t, "   ", "   ")).toBeNull();
+  });
+
   it("resolves to null when there is nothing to show", () => {
     expect(resolveRunPhaseText(t, "", "")).toBeNull();
     expect(resolveRunPhaseText(t, null, null)).toBeNull();
@@ -204,21 +220,33 @@ describe("formatRunPhaseAge — telling a moving run from a stalled one", () => 
     expect(formatRunPhaseAge(undefined, "fr", translate)).toBeNull();
   });
 
-  it("negative: returns null for an unparseable timestamp, which the underlying formatter would render as 'Invalid Date'", () => {
+  it("negative: returns null for timestamps the formatter would print as garbage", () => {
     // The guard is the whole point: left to itself, the shared relative-time
-    // formatter falls through to a locale date string and prints the garbage.
+    // formatter prints "Invalid Date" for an unparseable string and a 1970
+    // date for the epoch, which is how the backend leaves a datetime unset.
     expect(formatRelativeTime("not-a-date", "fr", translate)).toMatch(
       /Invalid/,
     );
+    expect(formatRelativeTime("1970-01-01T00:00:00Z", "fr", translate)).toMatch(
+      /1970/,
+    );
 
     expect(formatRunPhaseAge("not-a-date", "fr", translate)).toBeNull();
+    expect(
+      formatRunPhaseAge("1970-01-01T00:00:00Z", "fr", translate),
+    ).toBeNull();
   });
 });
 
 describe("RunPhase — how long the run has been in this phase", () => {
   it("shows the age beside the phase, so a stalled run reads differently from a moving one", () => {
     render(
-      <RunPhase code="running_agent" label={null} updatedAt={minutesAgo(41)} />,
+      <RunPhase
+        status={RUNNING}
+        code="running_agent"
+        label={null}
+        updatedAt={minutesAgo(41)}
+      />,
     );
 
     expect(screen.getByTestId("run-phase-age")).toHaveTextContent(
@@ -226,36 +254,86 @@ describe("RunPhase — how long the run has been in this phase", () => {
     );
   });
 
-  it("keeps the age out of the clipped text, so a maximum-length label cannot push it out of sight", () => {
+  it("keeps the age in its own node, outside the clipped text, so a maximum-length label cannot push it out of sight", () => {
     // Arrange: the longest label the backend contract allows, in the surface
     // with the least room.
     const label = "x".repeat(200);
 
     render(
-      <RunPhase code="poll_prs" label={label} updatedAt={minutesAgo(7)} />,
+      <RunPhase
+        status={RUNNING}
+        code="poll_prs"
+        label={label}
+        updatedAt={minutesAgo(7)}
+      />,
     );
 
-    // Assert: the age is its own node, outside the truncating one, and is
-    // not itself subject to truncation.
     const text = screen.getByTestId("run-phase");
     const age = screen.getByTestId("run-phase-age");
     expect(text).not.toContainElement(age);
-    expect(age.className).toMatch(/\bshrink-0\b/);
-    expect(age.className).not.toMatch(/\btruncate\b/);
   });
 
   it("shows no age at all against a service that reports phases without a timestamp", () => {
-    render(<RunPhase code="running_agent" label={null} />);
+    render(<RunPhase status={RUNNING} code="running_agent" label={null} />);
 
     expect(screen.getByTestId("run-phase")).toBeInTheDocument();
     expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
   });
 
-  it("shows no age when the timestamp is present but unparseable", () => {
+  it.each([
+    ["unparseable", "not-a-date"],
+    [
+      "the epoch, which is how an unset datetime arrives",
+      "1970-01-01T00:00:00Z",
+    ],
+  ])("shows no age when the timestamp is %s", (_case, updatedAt) => {
     render(
-      <RunPhase code="running_agent" label={null} updatedAt="not-a-date" />,
+      <RunPhase
+        status={RUNNING}
+        code="running_agent"
+        label={null}
+        updatedAt={updatedAt}
+      />,
     );
 
     expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
+  });
+
+  it("drops the age on a failed run, whose phase is where it stopped rather than something still running", () => {
+    // A months-old failure would otherwise render an absolute date — a
+    // second timestamp beside the one the row already shows.
+    render(
+      <RunPhase
+        status={AutomationRunStatus.FAILED}
+        code="sandbox_provisioning"
+        label={null}
+        updatedAt={minutesAgo(41)}
+      />,
+    );
+
+    expect(screen.getByTestId("run-phase")).toBeInTheDocument();
+    expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
+  });
+});
+
+describe("RunPhase — reachable without a mouse", () => {
+  it("names the whole phase, age included, on a focusable trigger", () => {
+    // The clipped text is recoverable only through the hover tooltip, so
+    // without a tab stop and an accessible name a 200-character label is
+    // unreachable by keyboard and by screen reader.
+    const label = "x".repeat(200);
+
+    render(
+      <RunPhase
+        status={RUNNING}
+        code="poll_prs"
+        label={label}
+        updatedAt={minutesAgo(7)}
+      />,
+    );
+
+    const trigger = screen.getByLabelText(`${label} · il y a 7min`);
+    expect(trigger).toHaveAttribute("tabindex", "0");
+    expect(trigger).toContainElement(screen.getByTestId("run-phase"));
   });
 });

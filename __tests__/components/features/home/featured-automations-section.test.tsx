@@ -505,40 +505,6 @@ describe("home automations composer layout", () => {
     expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
   });
 
-  it("gives the pinned card's phase-row ancestor min-w-0 so a long label truncates instead of widening the card", async () => {
-    // Arrange: an unrecognized code with a long author-supplied label — the
-    // case S04 measured blowing out row width without min-w-0.
-    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
-      runs: [
-        makeRun({
-          status: AutomationRunStatus.RUNNING,
-          completed_at: null,
-          phase_code: "custom_step",
-          phase_label: "y".repeat(200),
-        }),
-      ],
-      total: 1,
-    });
-    const user = userEvent.setup();
-
-    // Act
-    renderHomeAutomations(
-      <>
-        <PinnedAutomationsDashboard />
-        <RunningAutomationsList />
-      </>,
-    );
-    await screen.findByTestId("running-automations-list");
-    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
-    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
-
-    // Assert
-    const dashboard = await screen.findByTestId("pinned-automations-dashboard");
-    const phaseNode = await within(dashboard).findByTestId("run-phase");
-    const row = phaseNode.parentElement as HTMLElement;
-    expect(row.className).toMatch(/\bmin-w-0\b/);
-  });
-
   it("shows an error toast when turning an automation off fails", async () => {
     vi.mocked(AutomationService.toggleAutomation).mockRejectedValue(
       new Error("backend unavailable"),

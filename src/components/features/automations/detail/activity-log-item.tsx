@@ -7,6 +7,7 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { isInvalidTimestamp } from "#/utils/format-relative-time";
 import { RunStatusBadge } from "./run-status-badge";
 import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
@@ -26,12 +27,6 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function isInvalidTimestamp(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return true;
-  const t = new Date(dateStr).getTime();
-  return Number.isNaN(t) || t === 0;
 }
 
 function getConversationUrl(conversationId: string): string {
@@ -131,6 +126,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         {logsButton}
         {showPhase && (
           <RunPhase
+            status={run.status}
             code={run.phase_code}
             label={run.phase_label}
             updatedAt={run.phase_updated_at}

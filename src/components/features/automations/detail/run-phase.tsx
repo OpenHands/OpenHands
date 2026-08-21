@@ -2,7 +2,10 @@ import { Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationRunStatus } from "#/types/automation";
-import { formatRelativeTime } from "#/utils/format-relative-time";
+import {
+  formatRelativeTime,
+  isInvalidTimestamp,
+} from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
 
 /**
@@ -21,13 +24,35 @@ export function shouldShowRunPhase(
   );
 }
 
-interface RunPhaseProps {
+/**
+ * Whether the phase's age is worth showing. Only for a run still in flight:
+ * the age exists to separate a moving run from a stalled one, and a run that
+ * has failed is neither — its phase is the place it stopped. Left in, the age
+ * of an old failure degrades to an absolute date (`formatRelativeTime` gives
+ * up past a week), which reads as a second timestamp beside the one the row
+ * already shows.
+ */
+export function shouldShowRunPhaseAge(
+  status: AutomationRunStatus | null | undefined,
+): boolean {
+  return (
+    status === AutomationRunStatus.PENDING ||
+    status === AutomationRunStatus.RUNNING
+  );
+}
+
+interface RunPhaseFields {
+  /** `AutomationRun.status` — decides whether the age is meaningful. */
+  status: AutomationRunStatus | null | undefined;
   /** `AutomationRun.phase_code` — `null`/absent means no phase reported. */
   code: string | null | undefined;
   /** `AutomationRun.phase_label` — free-form author text, not interface copy. */
   label: string | null | undefined;
   /** `AutomationRun.phase_updated_at` — when this phase was last written. */
   updatedAt?: string | null;
+}
+
+interface RunPhaseProps extends RunPhaseFields {
   /** More width before clipping, for rows far wider than a card. */
   wide?: boolean;
 }
@@ -57,15 +82,23 @@ const KNOWN_PHASE_CODES: Record<string, I18nKey> = {
  * must reach the screen. It is shown as stored rather than prettified: the
  * code is data like the label, and turning `poll_prs` into "Poll prs" would
  * invent English-shaped copy no automation author wrote.
+ *
+ * Both fields are author-supplied, which is why the lookup is an own-property
+ * check and both are trimmed. A code of `toString` would otherwise resolve to
+ * `Object.prototype.toString` and be handed to `t()`, and the service stores
+ * a whitespace-only field as sent — it rejects only a phase blank on *both*.
  */
 export function resolveRunPhaseText(
   t: (key: I18nKey) => string,
   code: string | null | undefined,
   label: string | null | undefined,
 ): string | null {
-  const knownKey = code ? KNOWN_PHASE_CODES[code] : undefined;
+  const knownKey =
+    code && Object.hasOwn(KNOWN_PHASE_CODES, code)
+      ? KNOWN_PHASE_CODES[code]
+      : undefined;
   if (knownKey) return t(knownKey);
-  return label || code || null;
+  return label?.trim() || code?.trim() || null;
 }
 
 /**
@@ -74,19 +107,41 @@ export function resolveRunPhaseText(
  * This is the half of the phase that separates progress from a stall: the
  * phase text alone says a run is "Running agent", and only its age says
  * whether it entered that phase seconds ago or forty minutes ago. Returns
- * `null` when the service reported no timestamp (or an unparseable one) —
- * an older service omits the field entirely, and an age nobody can compute
- * must not surface as "Invalid Date".
+ * `null` when the service reported no usable timestamp — an older service
+ * omits the field entirely, and an unset datetime arrives as the epoch — so
+ * an age nobody can compute never surfaces as "Invalid Date" or "Jan 1, 1970".
  */
 export function formatRunPhaseAge(
   updatedAt: string | null | undefined,
   locale: string,
   t: (key: I18nKey, options?: Record<string, unknown>) => string,
 ): string | null {
-  if (!updatedAt) return null;
-  const parsed = new Date(updatedAt).getTime();
-  if (Number.isNaN(parsed)) return null;
+  if (!updatedAt || isInvalidTimestamp(updatedAt)) return null;
   return formatRelativeTime(updatedAt, locale, t);
+}
+
+/**
+ * The resolved phase of a run, or `null` when it has none worth showing.
+ * Every surface goes through this — the clipped row below, the home
+ * hovercard's wrapping one — so they cannot drift into resolving a phase, or
+ * deciding to show its age, on their own terms.
+ */
+export function useRunPhase({
+  status,
+  code,
+  label,
+  updatedAt,
+}: RunPhaseFields): { text: string; age: string | null } | null {
+  const { t, i18n } = useTranslation("openhands");
+
+  const text = resolveRunPhaseText(t, code, label);
+  if (!text) return null;
+
+  const age = shouldShowRunPhaseAge(status)
+    ? formatRunPhaseAge(updatedAt, i18n.language, t)
+    : null;
+
+  return { text, age };
 }
 
 /**
@@ -96,19 +151,22 @@ export function formatRunPhaseAge(
  * it is rendered as-is: passing it through `t()` would be wrong, it is not a
  * key. The age sits outside the clipped text so a long label can never push it
  * out of sight — it is the part that stays legible when everything else is cut.
+ *
+ * The trigger is focusable and carries the whole phase as its accessible name:
+ * a hover tooltip is the only route to a clipped label, and on its own that
+ * route exists for a mouse and for nothing else.
  */
 export function RunPhase({
+  status,
   code,
   label,
   updatedAt,
   wide = false,
 }: RunPhaseProps) {
-  const { t, i18n } = useTranslation("openhands");
+  const phase = useRunPhase({ status, code, label, updatedAt });
+  if (!phase) return null;
 
-  const text = resolveRunPhaseText(t, code, label);
-  if (!text) return null;
-
-  const age = formatRunPhaseAge(updatedAt, i18n.language, t);
+  const { text, age } = phase;
 
   return (
     <Tooltip
@@ -126,9 +184,18 @@ export function RunPhase({
           "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl",
       }}
     >
-      <span className="flex min-w-0 cursor-default items-center gap-1">
+      <span
+        // A span rather than a button: there is no action here, only text
+        // that does not fit — but a tooltip opens on hover or focus and
+        // nothing else, so the trigger still needs a tab stop.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        aria-label={age ? `${text} · ${age}` : text}
+        className="flex min-w-0 cursor-default items-center gap-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+      >
         <span
           data-testid="run-phase"
+          aria-hidden="true"
           className={cn(
             "min-w-0 truncate text-xs text-muted",
             wide ? "max-w-[28rem]" : "max-w-[12rem]",
@@ -139,6 +206,7 @@ export function RunPhase({
         {age ? (
           <span
             data-testid="run-phase-age"
+            aria-hidden="true"
             className="shrink-0 whitespace-nowrap text-xs text-muted"
           >
             · {age}

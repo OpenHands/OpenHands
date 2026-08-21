@@ -83,15 +83,11 @@ function makeInFlightRun(
 }
 
 // Newest run first: the cards and home rows read runs[0] as the latest, so
-// the in-flight rows below are the ones they show.
+// the in-flight rows below are the ones they show. Only three automations get
+// one: `latestRun` also drives health, "Last run" and the status badge, so a
+// never-terminal fixture pins all three to "running".
 export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
   "a1000000-0000-0000-0000-000000000001": [
-    // A known code: translated interface copy, entered moments ago.
-    makeInFlightRun("r1-00", AutomationRunStatus.RUNNING, 6, true, {
-      code: "running_agent",
-      label: null,
-      ageMinutes: 1,
-    }),
     makeRun("r1-01", AutomationRunStatus.COMPLETED, 0),
     makeRun("r1-02", AutomationRunStatus.COMPLETED, 1),
     // Failed, keeping the phase it stopped at: died while the sandbox came up.
@@ -155,6 +151,9 @@ export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
       label: null,
       ageMinutes: 2,
     }),
+    // No phase fields at all — an older service: a status pill, no empty
+    // slot. Below the head, so it costs no card its health.
+    makeInFlightRun("r6-07", AutomationRunStatus.RUNNING, 21),
     makeRun("r6-01", AutomationRunStatus.COMPLETED, 0, 14),
     makeRun("r6-02", AutomationRunStatus.COMPLETED, 0, 11),
     makeRun("r6-03", AutomationRunStatus.FAILED, 1, 16),
@@ -162,9 +161,6 @@ export const MOCK_AUTOMATION_RUNS: Record<string, AutomationRun[]> = {
     makeRun("r6-05", AutomationRunStatus.COMPLETED, 3, 9),
   ],
   "a1000000-0000-0000-0000-000000000007": [
-    // No phase fields at all — an older service. The row must look exactly as
-    // it did before this feature: a status pill, no empty slot.
-    makeInFlightRun("r7-00", AutomationRunStatus.RUNNING, 8),
     makeRun("r7-01", AutomationRunStatus.COMPLETED, 3, 15),
     makeRun("r7-02", AutomationRunStatus.COMPLETED, 10, 12),
   ],

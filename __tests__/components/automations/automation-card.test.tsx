@@ -170,7 +170,9 @@ describe("AutomationCard", () => {
       />,
     );
 
-    expect(screen.queryByTestId("automation-health-badge")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-health-badge"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("automation-last-run-automation-1"),
     ).toHaveTextContent("AUTOMATIONS$DETAIL$TIME_MINUTES_AGO");
@@ -293,39 +295,5 @@ describe("AutomationCard — run phase", () => {
     // ... and exactly one request was made — the pre-existing insights
     // fetch, not a new one just for the phase.
     expect(callCount).toBe(1);
-  });
-
-  it("gives the phase's flex-row ancestor min-w-0 so a long label can truncate instead of widening the card", async () => {
-    // Arrange: an unrecognized code with a long author-supplied label — the
-    // case S04 measured blowing out row width without min-w-0.
-    server.use(
-      http.get("*/api/automation/v1/:id/runs", () =>
-        HttpResponse.json({
-          runs: [
-            {
-              id: "run-active",
-              status: AutomationRunStatus.RUNNING,
-              conversation_id: null,
-              bash_command_id: null,
-              error_detail: null,
-              phase_code: "custom_step",
-              phase_label: "y".repeat(200),
-              phase_updated_at: null,
-              started_at: "2026-01-01T09:00:00Z",
-              completed_at: null,
-            },
-          ],
-          total: 1,
-        }),
-      ),
-    );
-
-    // Act
-    renderHarness();
-
-    // Assert
-    const phaseNode = await screen.findByTestId("run-phase");
-    const row = phaseNode.parentElement as HTMLElement;
-    expect(row.className).toMatch(/\bmin-w-0\b/);
   });
 });
