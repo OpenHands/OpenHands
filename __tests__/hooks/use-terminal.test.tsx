@@ -123,6 +123,18 @@ describe("useTerminal", () => {
     expect(mockTerminal.writeln).toHaveBeenNthCalledWith(2, "echo hello");
   });
 
+  it("should initialize every terminal from preloaded commands", () => {
+    const commands: Command[] = [
+      { content: "echo hello", type: "input" },
+      { content: "hello", type: "output" },
+    ];
+    useCommandStore.setState({ commands });
+
+    renderWithProviders(<TestTerminalPair />);
+
+    expect(mockTerminal.writeln).toHaveBeenCalledTimes(4);
+  });
+
   it("should not call fit() when terminal.element is null", () => {
     // Temporarily set element to null to simulate terminal not being opened
     const originalElement = mockTerminal.element;

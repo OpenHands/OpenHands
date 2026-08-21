@@ -1,6 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import React from "react";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { Command, useCommandStore } from "#/stores/command-store";
 import { parseTerminalOutput } from "#/utils/parse-terminal-output";
 
@@ -85,7 +86,21 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
+type ConversationTerminalState = {
+  activeTerminals: number;
+  lastCommandIndex: number;
+};
+
+// Keep the cursor across navigation, while allowing multiple terminals for the
+// same conversation to initialize independently.
+const terminalStateByConversation = new Map<
+  string,
+  ConversationTerminalState
+>();
+
 export const useTerminal = () => {
+  const { data: activeConversation } = useActiveConversation();
+  const conversationId = activeConversation?.id ?? "unknown";
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
@@ -141,6 +156,18 @@ export const useTerminal = () => {
 
     terminal.current = createTerminal(host);
     fitAddon.current = new FitAddon();
+    const conversationState = terminalStateByConversation.get(
+      conversationId,
+    ) ?? {
+      activeTerminals: 0,
+      lastCommandIndex: 0,
+    };
+    lastCommandIndex.current =
+      conversationState.activeTerminals === 0
+        ? conversationState.lastCommandIndex
+        : 0;
+    conversationState.activeTerminals += 1;
+    terminalStateByConversation.set(conversationId, conversationState);
 
     if (ref.current) {
       initializeTerminal();
@@ -163,11 +190,24 @@ export const useTerminal = () => {
     return () => {
       isDisposed.current = true;
       terminal.current?.dispose();
-      lastCommandIndex.current = 0;
+      const state = terminalStateByConversation.get(conversationId);
+      if (state) {
+        state.lastCommandIndex = lastCommandIndex.current;
+        state.activeTerminals -= 1;
+        if (state.activeTerminals === 0 && commands.length === 0) {
+          terminalStateByConversation.delete(conversationId);
+        }
+      }
     };
-  }, []);
+  }, [conversationId]);
 
   React.useEffect(() => {
+    if (commands.length === 0) {
+      lastCommandIndex.current = 0;
+      const state = terminalStateByConversation.get(conversationId);
+      if (state) state.lastCommandIndex = 0;
+      return;
+    }
     if (
       terminal.current &&
       commands.length > 0 &&
@@ -182,8 +222,10 @@ export const useTerminal = () => {
         renderCommand(commands[i], terminal.current, false);
       }
       lastCommandIndex.current = commands.length;
+      const state = terminalStateByConversation.get(conversationId);
+      if (state) state.lastCommandIndex = commands.length;
     }
-  }, [commands]);
+  }, [commands, conversationId]);
 
   React.useEffect(() => {
     let resizeObserver: ResizeObserver | null = null;
