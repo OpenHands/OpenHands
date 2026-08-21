@@ -738,3 +738,111 @@ describe("ingress socket-error resilience", () => {
     expect(ingressStderr).not.toContain("Unhandled 'error' event");
   });
 });
+
+describe("ingress --disable-secure workspace-session cookie", () => {
+  let backend: Server;
+  let defaultIngress: ChildProcess;
+  let disableSecureIngress: ChildProcess;
+  let backendPort: number;
+  let defaultPort: number;
+  let disableSecurePort: number;
+
+  beforeAll(async () => {
+    backend = createServer((_req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Set-Cookie": [
+          "oh_workspace_session_key=abc123; Path=/api/conversations; HttpOnly; Secure; SameSite=None; Partitioned",
+          "other_cookie=xyz; Path=/; HttpOnly; Secure; SameSite=None",
+        ],
+      });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    backendPort = await listenOnLoopback(backend);
+
+    defaultPort = await getFreePort();
+    defaultIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        defaultPort.toString(),
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await waitForPort(defaultPort, defaultIngress);
+
+    disableSecurePort = await getFreePort();
+    disableSecureIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        disableSecurePort.toString(),
+        "--disable-secure",
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    await waitForPort(disableSecurePort, disableSecureIngress);
+  });
+
+  afterAll(async () => {
+    await stopChild(defaultIngress);
+    await stopChild(disableSecureIngress);
+    await closeServer(backend);
+  });
+
+  async function getCookies(port: number) {
+    return new Promise<{ status: number; cookies: string[] }>(
+      (resolve, reject) => {
+        const req = request(
+          `http://127.0.0.1:${port}/api/auth/workspace-session`,
+          { method: "GET" },
+          (res) => {
+            resolve({
+              status: res.statusCode ?? 0,
+              cookies: (res.headers["set-cookie"] as string[]) ?? [],
+            });
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      },
+    );
+  }
+
+  it("keeps Secure/SameSite=None/Partitioned on the workspace cookie by default", async () => {
+    const { status, cookies } = await getCookies(defaultPort);
+    expect(status).toBe(200);
+
+    const workspaceCookie = cookies.find((c) =>
+      c.startsWith("oh_workspace_session_key="),
+    );
+    expect(workspaceCookie).toBeDefined();
+    expect(workspaceCookie).toMatch(/;\s*Secure(?:;|$)/i);
+    expect(workspaceCookie).toMatch(/SameSite=None/i);
+    expect(workspaceCookie).toMatch(/Partitioned/i);
+  });
+
+  it("drops Secure/Partitioned and downgrades SameSite with --disable-secure", async () => {
+    const { status, cookies } = await getCookies(disableSecurePort);
+    expect(status).toBe(200);
+
+    const workspaceCookie = cookies.find((c) =>
+      c.startsWith("oh_workspace_session_key="),
+    );
+    expect(workspaceCookie).toBeDefined();
+    expect(workspaceCookie).not.toMatch(/;\s*Secure(?:;|$)/i);
+    expect(workspaceCookie).not.toMatch(/Partitioned/i);
+    expect(workspaceCookie).toMatch(/SameSite=Lax/i);
+
+    // Other cookies are left untouched.
+    const otherCookie = cookies.find((c) => c.startsWith("other_cookie="));
+    expect(otherCookie).toMatch(/;\s*Secure(?:;|$)/i);
+    expect(otherCookie).toMatch(/SameSite=None/i);
+  });
+});
