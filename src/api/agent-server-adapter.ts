@@ -781,6 +781,11 @@ function buildAgentContext(
     load_public_skills: false,
     load_user_skills: true,
     load_project_skills: true,
+    // The backend also auto-loads user/project skills from disk and lazily
+    // resolves project skills once the workspace is known; the deny-list must
+    // travel with the context so those skills are excluded from the system
+    // prompt too (not just the bundled list filtered above).
+    disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix
       ? { system_message_suffix: runtimeServicesSuffix }
       : {}),

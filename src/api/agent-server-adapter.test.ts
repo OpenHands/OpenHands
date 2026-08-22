@@ -151,6 +151,15 @@ describe("buildStartConversationRequest", () => {
     expect(skillNames).not.toContain("disabled-custom");
     expect(skillNames).toContain("enabled-custom");
     expect(skillNames).toContain("add-javadoc");
+
+    // As well as dropping disabled skills from the explicit bundled/existing
+    // skill list above, the deny-list must travel inside agent_context so the
+    // backend's auto-loaded user/project skill resolution (which happens after
+    // this payload leaves the client) also excludes them from the system prompt.
+    expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
+      "agent-memory",
+      "disabled-custom",
+    ]);
   });
 
   it("excludes disabled skills from ACP conversation context", () => {
@@ -175,6 +184,15 @@ describe("buildStartConversationRequest", () => {
     expect(skillNames).not.toContain("disabled-custom");
     expect(skillNames).toContain("enabled-custom");
     expect(skillNames).toContain("add-javadoc");
+
+    // As well as dropping disabled skills from the explicit bundled/existing
+    // skill list above, the deny-list must travel inside agent_context so the
+    // backend's auto-loaded user/project skill resolution (which happens after
+    // this payload leaves the client) also excludes them from the system prompt.
+    expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
+      "agent-memory",
+      "disabled-custom",
+    ]);
   });
 });
 
