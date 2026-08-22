@@ -52,7 +52,6 @@ import {
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { ARCHIVED_CONVERSATION_TAG_KEY } from "#/api/agent-server-adapter";
 import { useArchiveConversation } from "#/hooks/mutation/use-archive-conversation";
-import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -425,55 +424,6 @@ export function ConversationPanel({
       setExpandedPinnedPreview(false);
     }
   }, [pinnedIds.length]);
-
-  // One-shot migration: replay archived conversation IDs from the legacy
-  // localStorage store into server-side tags so archiving becomes cross-device.
-  // localStorage is cleared only after all writes succeed so a network failure
-  // causes a retry on the next mount rather than silently losing archive state.
-  // Re-running is safe: setting archived=true on an already-archived conversation
-  // is idempotent.
-  React.useEffect(() => {
-    const stored = localStorage.getItem("archived-conversations");
-    if (!stored) return;
-
-    let archivesByBackendId: Record<string, string[]> | undefined;
-    try {
-      ({
-        state: { archivesByBackendId },
-      } = JSON.parse(stored));
-    } catch {
-      localStorage.removeItem("archived-conversations");
-      return;
-    }
-
-    const allIds = Object.values(archivesByBackendId ?? {}).flat();
-    if (allIds.length === 0) {
-      localStorage.removeItem("archived-conversations");
-      return;
-    }
-
-    // Batch-fetch to get current tags before merging `archived=true`.
-    AgentServerConversationService.batchGetAppConversations(allIds)
-      .then((fetched) =>
-        Promise.all(
-          fetched
-            .filter((c) => c != null)
-            .map((conversation) =>
-              AgentServerConversationService.replaceConversationTags(
-                conversation.id,
-                {
-                  ...(conversation.tags ?? {}),
-                  [ARCHIVED_CONVERSATION_TAG_KEY]: "true",
-                },
-              ),
-            ),
-        ),
-      )
-      .then(() => {
-        localStorage.removeItem("archived-conversations");
-      })
-      .catch(() => {});
-  }, []);
 
   const scopedConversations = React.useMemo(() => {
     // The pinned section intentionally bypasses the automation filter (same
