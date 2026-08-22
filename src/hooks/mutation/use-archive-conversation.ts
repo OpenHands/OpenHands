@@ -19,7 +19,7 @@ export const useArchiveConversation = () => {
       currentTags,
     }: ArchiveConversationVariables) => {
       const nextTags = buildNextTags(currentTags, archived);
-      return AgentServerConversationService.updateConversationTags(
+      return AgentServerConversationService.replaceConversationTags(
         conversationId,
         nextTags,
       );

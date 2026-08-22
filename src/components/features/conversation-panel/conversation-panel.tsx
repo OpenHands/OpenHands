@@ -460,7 +460,7 @@ export function ConversationPanel({
             ...(conversation.tags ?? {}),
             [ARCHIVED_CONVERSATION_TAG_KEY]: "true",
           };
-          AgentServerConversationService.updateConversationTags(
+          AgentServerConversationService.replaceConversationTags(
             conversation.id,
             mergedTags,
           ).catch(() => {});

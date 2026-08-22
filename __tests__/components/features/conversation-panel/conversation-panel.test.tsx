@@ -727,7 +727,7 @@ describe("ConversationPanel", () => {
     const user = userEvent.setup();
     vi.spyOn(
       AgentServerConversationService,
-      "updateConversationTags",
+      "replaceConversationTags",
     ).mockResolvedValue();
     renderConversationPanel();
 
@@ -779,7 +779,7 @@ describe("ConversationPanel", () => {
     });
     vi.spyOn(
       AgentServerConversationService,
-      "updateConversationTags",
+      "replaceConversationTags",
     ).mockResolvedValue();
     useConversationPanelPreferencesStore.setState({
       showArchivedConversations: true,

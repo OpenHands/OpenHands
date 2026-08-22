@@ -50,7 +50,7 @@ beforeEach(() => {
   });
   vi.spyOn(
     AgentServerConversationService,
-    "updateConversationTags",
+    "replaceConversationTags",
   ).mockResolvedValue();
 });
 
@@ -113,10 +113,10 @@ describe("useArchiveConversation", () => {
     expect(conv?.tags?.origin).toBe("user");
   });
 
-  it("passes merged tags (archived + existing) to updateConversationTags", async () => {
+  it("passes the complete merged tag map to replaceConversationTags", async () => {
     const updateSpy = vi.spyOn(
       AgentServerConversationService,
-      "updateConversationTags",
+      "replaceConversationTags",
     );
     const { result } = renderHook(() => useArchiveConversation(), { wrapper });
 
@@ -139,7 +139,7 @@ describe("useArchiveConversation", () => {
   it("invalidates conversations query on error", async () => {
     vi.spyOn(
       AgentServerConversationService,
-      "updateConversationTags",
+      "replaceConversationTags",
     ).mockRejectedValue(new Error("network error"));
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 

@@ -767,7 +767,7 @@ class AgentServerConversationService {
     return requireAppConversation(conversation, conversationId);
   }
 
-  static async updateConversationTags(
+  static async replaceConversationTags(
     conversationId: string,
     tags: Record<string, string>,
   ): Promise<void> {
