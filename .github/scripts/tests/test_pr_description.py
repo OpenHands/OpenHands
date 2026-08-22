@@ -8,7 +8,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from check_pr_description import (
+    extract_human_note,
     extract_sections,
+    validate_pr_body,
     is_frontend_file,
     touches_frontend,
     extract_linked_issue_numbers,
@@ -276,3 +278,46 @@ def test_docs_only_change_does_not_require_frontend_evidence():
 
 def test_mixed_change_still_requires_frontend_evidence():
     assert touches_frontend(["__tests__/router.md", "src/app.tsx"])
+
+
+# ---------------------------------------------------------------------------
+# HUMAN: / AGENT: markers
+# ---------------------------------------------------------------------------
+
+
+FENCED_TEMPLATE_BODY = """HUMAN:
+
+Quoting the template I was asked to fill in:
+
+```
+HUMAN:
+I really did test this thoroughly by hand, twice, on my own machine.
+AGENT:
+```
+"""
+
+
+def test_fenced_human_marker_does_not_supply_the_note():
+    assert extract_human_note(FENCED_TEMPLATE_BODY) == ""
+
+
+def test_fenced_agent_marker_does_not_satisfy_validation():
+    errors = validate_pr_body(FENCED_TEMPLATE_BODY)
+    assert "Add a short human-written note between `HUMAN:` and `AGENT:`." in errors
+    assert "Keep the `AGENT:` marker from the PR template." in errors
+
+
+def test_real_markers_still_supply_the_note():
+    body = """HUMAN:
+
+I ran the checker suite and reproduced the fenced-heading case by hand.
+
+AGENT:
+
+## Why
+x
+"""
+    assert "reproduced the fenced-heading case" in extract_human_note(body)
+    errors = validate_pr_body(body)
+    assert "Keep the `AGENT:` marker from the PR template." not in errors
+    assert "Add a short human-written note between `HUMAN:` and `AGENT:`." not in errors

@@ -258,3 +258,23 @@ something went wrong
     assert "error detail" not in sections
     assert "user-attachments" in sections["actual behavior"]
     assert evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_unclosed_fence_does_not_swallow_later_sections():
+    """One stray marker in a log paste must not reject an otherwise-ready report."""
+    body = """### Relevant Logs
+```shell
+Traceback (most recent call last):
+  the paste was cut off before the closing fence
+
+### Actual Behavior
+I ran `npm run dev` and saw the crash above.
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] The bug is fixed
+"""
+    sections = extract_sections(body)
+    assert {"relevant logs", "actual behavior", "acceptance criteria"} <= set(sections)
+    assert evaluate_readiness(body, [BUG_LABEL]).ready
