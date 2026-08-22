@@ -6,6 +6,7 @@ import {
   summarizeAutomationRuns,
   type RunSummaryState,
 } from "#/manifests/automation-insights";
+import { automationRunRequestsLimiter } from "./concurrency-limiter";
 import type { Automation } from "#/types/automation";
 
 /**
@@ -40,10 +41,12 @@ export function useAutomationRunSummaries(
         active.orgId,
       ],
       queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          RECENT_RUN_SAMPLE_SIZE,
-          0,
+        automationRunRequestsLimiter.run(() =>
+          AutomationService.getAutomationRuns(
+            automation.id,
+            RECENT_RUN_SAMPLE_SIZE,
+            0,
+          ),
         ),
       staleTime: 60 * 1000,
       enabled: enabled && !!automation.id,

@@ -43,6 +43,11 @@ export const usePaginatedConversations = (limit: number = 20) => {
     // true on every background refetch, which would cause the skeleton to
     // flicker on each poll when the list is empty.
     refetchInterval: 30_000,
+    // Do not keep refetching in hidden/background tabs. Background polling
+    // while the user is away can stack up behind slow automation runs and
+    // make the sidebar conversation list appear hung when the tab is
+    // reactivated.
+    refetchIntervalInBackground: false,
     // A successful fetch proves the backend is reachable. The global
     // QueryCache onSuccess handler reads this to clear any persisted
     // failure state, re-arming the status dot without user intervention.
