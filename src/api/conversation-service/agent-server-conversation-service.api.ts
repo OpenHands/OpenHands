@@ -2,6 +2,7 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
@@ -53,6 +54,7 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
@@ -514,9 +516,13 @@ class AgentServerConversationService {
       payload.tags = { ...existingTags, ...metadataTags };
     }
 
+    const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>(payload);
+    ).createConversation<DirectConversationInfo>({
+      ...payload,
+      ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
+    });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
@@ -586,6 +592,27 @@ class AgentServerConversationService {
     });
 
     return { vscode_url: vscodeUrl };
+  }
+
+  /**
+   * Read the editor's capability state from the agent-server.
+   *
+   * `/api/vscode/status` answers 200 with `enabled: false` when the
+   * deployment set `enable_vscode: false`, which distinguishes "this
+   * deployment offers no editor" from a transport, auth, or server
+   * failure — `/api/vscode/url` answers 503 for the former and so
+   * cannot be told apart from the latter.
+   */
+  static async getVSCodeStatus(
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<VSCodeStatusResponse> {
+    return new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getStatus();
   }
 
   static async resolveConversationWorkingDir(
