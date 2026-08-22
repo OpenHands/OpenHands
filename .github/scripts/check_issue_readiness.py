@@ -39,9 +39,12 @@ BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
 # Issue-form fields render as `### Label` h3 headings. Match case-insensitively
-# and tolerate trailing whitespace/colons. `^###\s+` is specific enough because
-# h1/h2 are not produced by issue forms.
-HEADING_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
+# and tolerate trailing whitespace/colons. `^###[ \t]+` is specific enough because
+# h1/h2 are not produced by issue forms. The class is spaces and tabs rather than
+# `\s` so a heading cannot run past its own line: `find_headings` blanks fenced
+# code, and `\s*$` would then absorb the masked lines into the heading match and
+# drop the section's body.
+HEADING_RE = re.compile(r"(?m)^###[ \t]+(.+?)[ \t]*$")
 
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
