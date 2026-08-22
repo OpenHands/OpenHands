@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  Autocomplete,
+  AutocompleteItem,
+  AutocompleteSection,
+} from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -14,6 +19,10 @@ import {
 } from "#/utils/custom-toast-handlers";
 import { getApiErrorMessage } from "#/utils/api-error-message";
 import { I18nKey } from "#/i18n/declaration";
+import { useSearchProviders } from "#/hooks/query/use-search-providers";
+import { mapProvider } from "#/utils/map-provider";
+import { formControlSettingsFieldClassName } from "#/utils/form-control-classes";
+import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 
 const DEFAULT_PROVIDER = "custom";
 
@@ -43,10 +52,11 @@ export function ProviderConnectionModal({
   const { t } = useTranslation("openhands");
   const createConnection = useCreateProviderConnection();
   const updateConnection = useUpdateProviderConnection();
+  const { data: providers = [] } = useSearchProviders();
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   const [displayName, setDisplayName] = useState("");
-  const [provider, setProvider] = useState(DEFAULT_PROVIDER);
+  const [provider, setProvider] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
 
@@ -55,7 +65,7 @@ export function ProviderConnectionModal({
 
   useEffect(() => {
     setDisplayName(connection?.display_name ?? "");
-    setProvider(connection?.provider ?? DEFAULT_PROVIDER);
+    setProvider(connection?.provider ?? (isCreate ? null : DEFAULT_PROVIDER));
     setBaseUrl(connection?.base_url ?? "");
     setApiKey("");
   }, [connection, isCreate]);
@@ -64,7 +74,15 @@ export function ProviderConnectionModal({
   const trimmedName = displayName.trim();
   const trimmedKey = apiKey.trim();
   // On create the key is required; on edit an empty key means "leave unchanged".
-  const isValid = Boolean(trimmedName) && (!isCreate || Boolean(trimmedKey));
+  const isValid =
+    Boolean(trimmedName) &&
+    Boolean(provider?.trim()) &&
+    (!isCreate || Boolean(trimmedKey));
+
+  const verifiedProviders = providers.filter((candidate) => candidate.verified);
+  const unverifiedProviders = providers.filter(
+    (candidate) => !candidate.verified,
+  );
 
   if (!isOpen) return null;
 
@@ -80,7 +98,7 @@ export function ProviderConnectionModal({
       if (isCreate) {
         const created = await createConnection.mutateAsync({
           display_name: trimmedName,
-          provider: provider.trim() || DEFAULT_PROVIDER,
+          provider: provider?.trim() || DEFAULT_PROVIDER,
           api_key: trimmedKey,
           base_url: trimmedBaseUrl || null,
         });
@@ -95,7 +113,7 @@ export function ProviderConnectionModal({
           id: connection.id,
           request: {
             display_name: trimmedName,
-            provider: provider.trim() || DEFAULT_PROVIDER,
+            provider: provider?.trim() || DEFAULT_PROVIDER,
             base_url: trimmedBaseUrl || null,
             // Omit the key entirely when left blank so the stored key is kept.
             ...(trimmedKey ? { api_key: trimmedKey } : {}),
@@ -163,14 +181,73 @@ export function ProviderConnectionModal({
           onChange={setDisplayName}
           required
         />
-        <SettingsInput
-          testId="provider-connection-provider-input"
-          label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-          type="text"
-          className="w-full"
-          value={provider}
-          onChange={setProvider}
-        />
+        {isCreate ? (
+          <fieldset className="flex flex-col gap-2.5 w-full">
+            <label className="text-sm">
+              {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+            </label>
+            <Autocomplete
+              data-testid="provider-connection-provider-input"
+              isRequired
+              isVirtualized={false}
+              name="provider-connection-provider-input"
+              aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+              isClearable={false}
+              selectedKey={provider}
+              onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
+              classNames={{
+                popoverContent:
+                  "bg-content1 rounded-xl border border-[var(--oh-border)]",
+                selectorButton: heroUiAutocompleteSelectorButtonClassName,
+              }}
+              selectorButtonProps={{ disableRipple: true }}
+              inputProps={{
+                classNames: {
+                  inputWrapper: formControlSettingsFieldClassName,
+                },
+              }}
+            >
+              <AutocompleteSection
+                title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                classNames={{ heading: "text-[var(--oh-muted)]" }}
+              >
+                {verifiedProviders.map((candidate) => (
+                  <AutocompleteItem
+                    data-testid={`provider-item-${candidate.name}`}
+                    key={candidate.name}
+                    textValue={mapProvider(candidate.name)}
+                  >
+                    {mapProvider(candidate.name)}
+                  </AutocompleteItem>
+                ))}
+              </AutocompleteSection>
+              {unverifiedProviders.length > 0 ? (
+                <AutocompleteSection
+                  title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                  classNames={{ heading: "text-[var(--oh-muted)]" }}
+                >
+                  {unverifiedProviders.map((candidate) => (
+                    <AutocompleteItem
+                      key={candidate.name}
+                      textValue={mapProvider(candidate.name)}
+                    >
+                      {mapProvider(candidate.name)}
+                    </AutocompleteItem>
+                  ))}
+                </AutocompleteSection>
+              ) : null}
+            </Autocomplete>
+          </fieldset>
+        ) : (
+          <SettingsInput
+            testId="provider-connection-provider-input"
+            label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
+            type="text"
+            className="w-full"
+            value={provider ?? ""}
+            onChange={setProvider}
+          />
+        )}
         <SettingsInput
           testId="provider-connection-api-key-input"
           label={t(I18nKey.SETTINGS_FORM$API_KEY)}
