@@ -49,7 +49,6 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
-import { ARCHIVED_CONVERSATIONS_STORAGE_KEY } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 import { ARCHIVED_CONVERSATION_TAG_KEY } from "#/api/agent-server-adapter";
 import { useArchiveConversation } from "#/hooks/mutation/use-archive-conversation";
@@ -432,7 +431,7 @@ export function ConversationPanel({
   // Runs once per active backend on mount. Best-effort: errors are swallowed
   // so a failed PATCH doesn't break the panel.
   React.useEffect(() => {
-    const stored = localStorage.getItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+    const stored = localStorage.getItem("archived-conversations");
     if (!stored) return;
 
     let archivesByBackendId: Record<string, string[]> | undefined;
@@ -441,12 +440,12 @@ export function ConversationPanel({
         state: { archivesByBackendId },
       } = JSON.parse(stored));
     } catch {
-      localStorage.removeItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+      localStorage.removeItem("archived-conversations");
       return;
     }
 
     // Clear immediately so a page reload does not retry a partial migration.
-    localStorage.removeItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+    localStorage.removeItem("archived-conversations");
 
     const allIds = Object.values(archivesByBackendId ?? {}).flat();
     if (allIds.length === 0) return;
