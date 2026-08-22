@@ -437,7 +437,9 @@ export function ConversationPanel({
 
     let archivesByBackendId: Record<string, string[]> | undefined;
     try {
-      ({ state: { archivesByBackendId } } = JSON.parse(stored));
+      ({
+        state: { archivesByBackendId },
+      } = JSON.parse(stored));
     } catch {
       localStorage.removeItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
       return;
@@ -465,7 +467,6 @@ export function ConversationPanel({
         });
       })
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const scopedConversations = React.useMemo(() => {
