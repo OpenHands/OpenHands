@@ -174,7 +174,7 @@ export const useTerminal = () => {
       // Render all commands in array
       // This happens when we just switch to Terminal from other tabs
       if (commands.length > 0) {
-        for (let i = 0; i < commands.length; i += 1) {
+        for (let i = lastCommandIndex.current; i < commands.length; i += 1) {
           if (commands[i].type === "input") {
             terminal.current.write("$ ");
           }
