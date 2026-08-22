@@ -767,6 +767,15 @@ class AgentServerConversationService {
     return requireAppConversation(conversation, conversationId);
   }
 
+  static async updateConversationTags(
+    conversationId: string,
+    tags: Record<string, string>,
+  ): Promise<void> {
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, { tags });
+  }
+
   /**
    * Forks a conversation, copying event history up to and including
    * `fromEventId`. Local agent-server only; needs agent-server >= 1.31.0 for

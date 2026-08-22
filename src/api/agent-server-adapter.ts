@@ -449,6 +449,8 @@ export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
 export const AUTOMATION_RUN_ID_TAG_KEY = "automationrunid";
 
+export const ARCHIVED_CONVERSATION_TAG_KEY = "archived";
+
 /**
  * Tag keys stamped on conversations created by automation runs (see the SDK's
  * `RemoteWorkspace.default_conversation_tags`). The presence of any of these
@@ -480,6 +482,7 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   CLIENT_SOURCE_TAG_KEY,
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
+  ARCHIVED_CONVERSATION_TAG_KEY,
   "title",
   "git_provider",
   "repo_name",

@@ -49,8 +49,11 @@ import {
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
-import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
+import { ARCHIVED_CONVERSATIONS_STORAGE_KEY } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { ARCHIVED_CONVERSATION_TAG_KEY } from "#/api/agent-server-adapter";
+import { useArchiveConversation } from "#/hooks/mutation/use-archive-conversation";
+import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -213,21 +216,7 @@ export function ConversationPanel({
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
   );
-  const archivedIds = useArchivedConversationsStore(
-    (state) =>
-      state.archivesByBackendId[activeBackend.id] ??
-      EMPTY_PINNED_CONVERSATION_IDS,
-  );
-  const archiveConversation = useArchivedConversationsStore(
-    (state) => state.archiveConversation,
-  );
-  const archivedIdSet = React.useMemo(
-    () => new Set(archivedIds),
-    [archivedIds],
-  );
-  const removeArchivedConversation = useArchivedConversationsStore(
-    (state) => state.removeArchivedConversation,
-  );
+  const { mutate: archiveConversationMutate } = useArchiveConversation();
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
     setCollapsedGroupIds((prev) => {
@@ -304,6 +293,19 @@ export function ConversationPanel({
       return true;
     });
   }, [data]);
+
+  // Archived conversations are identified by the server-side tag `archived=true`.
+  // Derived from allLoadedConversations so the set updates immediately on
+  // optimistic cache patches after archive/unarchive mutations.
+  const archivedIdSet = React.useMemo(
+    () =>
+      new Set(
+        allLoadedConversations
+          .filter((c) => c.tags?.[ARCHIVED_CONVERSATION_TAG_KEY] === "true")
+          .map((c) => c.id),
+      ),
+    [allLoadedConversations],
+  );
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -424,6 +426,47 @@ export function ConversationPanel({
       setExpandedPinnedPreview(false);
     }
   }, [pinnedIds.length]);
+
+  // One-shot migration: replay archived conversation IDs from the legacy
+  // localStorage store into server-side tags so archiving becomes cross-device.
+  // Runs once per active backend on mount. Best-effort: errors are swallowed
+  // so a failed PATCH doesn't break the panel.
+  React.useEffect(() => {
+    const stored = localStorage.getItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+    if (!stored) return;
+
+    let archivesByBackendId: Record<string, string[]> | undefined;
+    try {
+      ({ state: { archivesByBackendId } } = JSON.parse(stored));
+    } catch {
+      localStorage.removeItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+      return;
+    }
+
+    // Clear immediately so a page reload does not retry a partial migration.
+    localStorage.removeItem(ARCHIVED_CONVERSATIONS_STORAGE_KEY);
+
+    const allIds = Object.values(archivesByBackendId ?? {}).flat();
+    if (allIds.length === 0) return;
+
+    // Batch-fetch to get current tags before merging `archived=true`.
+    AgentServerConversationService.batchGetAppConversations(allIds)
+      .then((fetched) => {
+        fetched.forEach((conversation) => {
+          if (!conversation) return;
+          const mergedTags = {
+            ...(conversation.tags ?? {}),
+            [ARCHIVED_CONVERSATION_TAG_KEY]: "true",
+          };
+          AgentServerConversationService.updateConversationTags(
+            conversation.id,
+            mergedTags,
+          ).catch(() => {});
+        });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const scopedConversations = React.useMemo(() => {
     // The pinned section intentionally bypasses the automation filter (same
@@ -734,9 +777,16 @@ export function ConversationPanel({
   // again in one click, and nothing about the conversation itself changes.
   const handleUnarchiveProject = React.useCallback(
     (conversationId: string) => {
-      removeArchivedConversation(activeBackend.id, conversationId);
+      const conversation = allLoadedConversations.find(
+        (c) => c.id === conversationId,
+      );
+      archiveConversationMutate({
+        conversationId,
+        archived: false,
+        currentTags: conversation?.tags,
+      });
     },
-    [activeBackend.id, removeArchivedConversation],
+    [allLoadedConversations, archiveConversationMutate],
   );
 
   const handleStopConversation = React.useCallback((conversationId: string) => {
@@ -765,7 +815,6 @@ export function ConversationPanel({
         { conversationId },
         {
           onSuccess: () => {
-            removeArchivedConversation(activeBackend.id, conversationId);
             if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
@@ -779,7 +828,14 @@ export function ConversationPanel({
     if (!selectedConversationId) {
       return;
     }
-    archiveConversation(activeBackend.id, selectedConversationId);
+    const conversation = allLoadedConversations.find(
+      (c) => c.id === selectedConversationId,
+    );
+    archiveConversationMutate({
+      conversationId: selectedConversationId,
+      archived: true,
+      currentTags: conversation?.tags,
+    });
     unpinConversation(activeBackend.id, selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
@@ -809,10 +865,6 @@ export function ConversationPanel({
       result.status === "fulfilled" ? [idsToDelete[index]] : [],
     );
     const failedCount = results.length - deletedIds.length;
-
-    for (const conversationId of deletedIds) {
-      removeArchivedConversation(activeBackend.id, conversationId);
-    }
 
     if (
       currentConversationId !== null &&
