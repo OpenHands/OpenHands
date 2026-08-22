@@ -5,7 +5,6 @@ import {
   type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
-  AgentServerClient,
   ConversationClient,
   FileClient,
   ProfilesClient,
@@ -489,19 +488,11 @@ class AgentServerConversationService {
     });
 
     const telemetryDistinctId = await getTelemetryDistinctId();
-    const data = await new AgentServerClient(
+    const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).request<DirectConversationInfo>({
-      method: "POST",
-      path: "/api/conversations",
-      body: payload,
-      ...(telemetryDistinctId
-        ? {
-            headers: {
-              "X-OpenHands-Telemetry-Distinct-Id": telemetryDistinctId,
-            },
-          }
-        : {}),
+    ).createConversation<DirectConversationInfo>({
+      ...payload,
+      ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
     });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();

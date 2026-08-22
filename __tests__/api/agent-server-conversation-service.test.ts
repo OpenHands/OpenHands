@@ -1,5 +1,4 @@
 import {
-  AgentServerClient,
   ConversationClient,
   FileClient,
   ProfilesClient,
@@ -24,8 +23,6 @@ const {
   mockHttpPost,
   mockHttpDelete,
   mockConversationClient,
-  mockAgentServerClient,
-  mockAgentServerRequest,
   mockFileClient,
   mockSettingsClient,
   mockSwitchProfile,
@@ -41,8 +38,6 @@ const {
   mockHttpPost: vi.fn(),
   mockHttpDelete: vi.fn(),
   mockConversationClient: vi.fn(),
-  mockAgentServerClient: vi.fn(),
-  mockAgentServerRequest: vi.fn(),
   mockFileClient: vi.fn(),
   mockSettingsClient: vi.fn(),
   mockSwitchProfile: vi.fn(),
@@ -64,9 +59,6 @@ vi.mock("@openhands/typescript-client/clients", async () => {
   >("@openhands/typescript-client/clients");
   return {
     ...actual,
-    AgentServerClient: vi.fn(function AgentServerClientMock() {
-      return mockAgentServerClient();
-    }),
     ConversationClient: vi.fn(function ConversationClientMock() {
       return mockConversationClient();
     }),
@@ -120,7 +112,6 @@ describe("AgentServerConversationService", () => {
     mockHttpGet.mockReset();
     mockHttpPost.mockReset();
     mockHttpDelete.mockReset();
-    mockAgentServerRequest.mockReset();
     mockGetProfile.mockReset();
     mockActivateProfile.mockReset();
     mockListProfiles.mockReset().mockResolvedValue({
@@ -131,21 +122,11 @@ describe("AgentServerConversationService", () => {
     mockSwitchLLM.mockReset();
     fetchMock.mockReset();
     global.fetch = originalFetch;
-    vi.mocked(AgentServerClient).mockClear();
     vi.mocked(ConversationClient).mockClear();
     vi.mocked(FileClient).mockClear();
     vi.mocked(ProfilesClient).mockClear();
     vi.mocked(SettingsClient).mockClear();
 
-    mockAgentServerRequest.mockImplementation(
-      async (request: { path: string; body: unknown }) => {
-        const response = await mockHttpPost(request.path, request.body);
-        return response.data;
-      },
-    );
-    mockAgentServerClient.mockReturnValue({
-      request: mockAgentServerRequest,
-    });
     mockConversationClient.mockReturnValue({
       createConversation: async (payload: unknown) => {
         const response = await mockHttpPost("/api/conversations", payload);
@@ -296,21 +277,35 @@ describe("AgentServerConversationService", () => {
 
       await AgentServerConversationService.createConversation();
 
-      expect(AgentServerClient).toHaveBeenCalledWith({
-        host: "http://localhost:54928",
-        apiKey: "test-api-key",
-        timeout: 5 * 60 * 1000,
-        workingDir: "/workspace/project/agent-canvas",
-      });
-      expect(mockAgentServerRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          method: "POST",
-          path: "/api/conversations",
-          headers: {
-            "X-OpenHands-Telemetry-Distinct-Id": "ph-canvas-user",
-          },
-        }),
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ user_id: "ph-canvas-user" }),
       );
+    });
+
+    it("omits user_id when Canvas telemetry has no consented identity", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue(null);
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const payload = mockHttpPost.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty("user_id");
     });
 
     it("passes the selected title profile to local conversation starts", async () => {
