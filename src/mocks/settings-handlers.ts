@@ -982,6 +982,7 @@ export const SETTINGS_HANDLERS = [
       git_user_name: null,
       git_user_email: null,
       title_llm_profile: null,
+      title_generation_prompt: null,
       disabled_skills: [],
     };
 

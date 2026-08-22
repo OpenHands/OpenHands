@@ -454,6 +454,7 @@ class AgentServerConversationService {
       settings.title_llm_profile,
       profiles,
     );
+    const prompt = settings.title_generation_prompt?.trim() || undefined;
     const conversationId = uuidv4();
     // @spec WUP-001 — Send an absolute working_dir to the agent-server.
     // The default is `workspace/project/<hex>` (relative); without
@@ -484,6 +485,7 @@ class AgentServerConversationService {
       agentProfileId,
       agentProfileKind,
       titleLlmProfile,
+      prompt,
     });
 
     const data = await new ConversationClient(

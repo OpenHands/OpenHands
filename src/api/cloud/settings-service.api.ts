@@ -41,6 +41,7 @@ type CloudSettingsResponse = {
   git_user_name?: string;
   git_user_email?: string;
   title_llm_profile?: string | null;
+  title_generation_prompt?: string | null;
   user_consents_to_analytics?: boolean | null;
   is_new_user?: boolean;
   remote_runtime_resource_factor?: number | null;

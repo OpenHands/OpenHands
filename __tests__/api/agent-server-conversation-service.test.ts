@@ -250,9 +250,10 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
-    it("passes the selected title profile to local conversation starts", async () => {
+    it("passes title-generation settings to local conversation starts", async () => {
       mockGetSettings.mockResolvedValue({
         title_llm_profile: "Titles",
+        title_generation_prompt: "Summarize {conversation_content}",
         agent_settings: { llm: { model: "gpt-4o" } },
         conversation_settings: {},
       });
@@ -284,7 +285,10 @@ describe("AgentServerConversationService", () => {
 
       expect(mockHttpPost).toHaveBeenCalledWith(
         "/api/conversations",
-        expect.objectContaining({ title_llm_profile: "Titles" }),
+        expect.objectContaining({
+          title_llm_profile: "Titles",
+          prompt: "Summarize {conversation_content}",
+        }),
       );
     });
 
