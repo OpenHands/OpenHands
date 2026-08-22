@@ -428,8 +428,10 @@ export function ConversationPanel({
 
   // One-shot migration: replay archived conversation IDs from the legacy
   // localStorage store into server-side tags so archiving becomes cross-device.
-  // Runs once per active backend on mount. Best-effort: errors are swallowed
-  // so a failed PATCH doesn't break the panel.
+  // localStorage is cleared only after all writes succeed so a network failure
+  // causes a retry on the next mount rather than silently losing archive state.
+  // Re-running is safe: setting archived=true on an already-archived conversation
+  // is idempotent.
   React.useEffect(() => {
     const stored = localStorage.getItem("archived-conversations");
     if (!stored) return;
@@ -444,26 +446,31 @@ export function ConversationPanel({
       return;
     }
 
-    // Clear immediately so a page reload does not retry a partial migration.
-    localStorage.removeItem("archived-conversations");
-
     const allIds = Object.values(archivesByBackendId ?? {}).flat();
-    if (allIds.length === 0) return;
+    if (allIds.length === 0) {
+      localStorage.removeItem("archived-conversations");
+      return;
+    }
 
     // Batch-fetch to get current tags before merging `archived=true`.
     AgentServerConversationService.batchGetAppConversations(allIds)
-      .then((fetched) => {
-        fetched.forEach((conversation) => {
-          if (!conversation) return;
-          const mergedTags = {
-            ...(conversation.tags ?? {}),
-            [ARCHIVED_CONVERSATION_TAG_KEY]: "true",
-          };
-          AgentServerConversationService.replaceConversationTags(
-            conversation.id,
-            mergedTags,
-          ).catch(() => {});
-        });
+      .then((fetched) =>
+        Promise.all(
+          fetched
+            .filter((c) => c != null)
+            .map((conversation) =>
+              AgentServerConversationService.replaceConversationTags(
+                conversation.id,
+                {
+                  ...(conversation.tags ?? {}),
+                  [ARCHIVED_CONVERSATION_TAG_KEY]: "true",
+                },
+              ),
+            ),
+        ),
+      )
+      .then(() => {
+        localStorage.removeItem("archived-conversations");
       })
       .catch(() => {});
   }, []);
