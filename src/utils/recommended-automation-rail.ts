@@ -5,7 +5,6 @@ import {
 import { getFeaturedAutomationIds } from "#/manifests/automation-interface";
 import { SETUP_REGISTRY } from "#/manifests/manifest-sources";
 import type { Automation } from "#/types/automation";
-import { getIntegrationIds } from "#/utils/automation-catalog";
 
 export function getAutomationsByPopularity(
   catalog: RecommendedAutomation[],
@@ -49,10 +48,6 @@ export function isCatalogAutomationAdded(
   return catalogMatchKeys(entry).some((key) => installedKeys.has(key));
 }
 
-function isAvailableCatalogEntry(entry: RecommendedAutomation): boolean {
-  return getIntegrationIds(entry).length > 0;
-}
-
 function isProvenAutomation(entry: RecommendedAutomation): boolean {
   return getFeaturedAutomationIds().includes(entry.id);
 }
@@ -77,10 +72,11 @@ export interface RecommendedRailGroups {
 export function getRecommendedRailGroups(
   installed: readonly Pick<Automation, "name">[],
 ): RecommendedRailGroups {
+  // Every catalog entry is offerable: one that declares no integration needs
+  // nothing connected, and one that names an integration this host cannot
+  // resolve stays visible so the drift is actionable rather than hidden.
   const available = getAutomationsByPopularity(AUTOMATION_CATALOG).filter(
-    (entry) =>
-      isAvailableCatalogEntry(entry) &&
-      !isCatalogAutomationAdded(entry, installed),
+    (entry) => !isCatalogAutomationAdded(entry, installed),
   );
 
   return {

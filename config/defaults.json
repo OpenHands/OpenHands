@@ -2,7 +2,7 @@
   "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
   "versions": {
     "agentServer": "1.42.1",
-    "agentCanvas": "1.14.0",
+    "agentCanvas": "1.15.0",
     "automation": "1.8.0"
   },
   "compatibility": {
@@ -19,14 +19,18 @@
   "ports": {
     "agentServer": 18000,
     "automation": 18001,
-    "proxy": 8000
+    "proxy": 8000,
+    "_vscodeComment": "Port the bundled editor binds to inside the container; agent-server's own default. Only the Docker entrypoint reads this — the npm launchers derive the editor port from the agent-server port so several stacks can run side by side. It is never published: the editor is reached through paths.vscodeBasePath on the proxy port.",
+    "vscode": 8001
   },
   "paths": {
     "stateSubdir": "agent-canvas",
     "conversations": "agent-canvas/conversations",
     "bashEvents": "agent-canvas/bash_events",
     "automationDb": "automation/automations.db",
-    "canvasBasePath": "/canvas"
+    "canvasBasePath": "/canvas",
+    "_vscodeBasePathComment": "Path prefix the bundled editor is served under, on the same origin as the canvas. Passed to agent-server as OH_VSCODE_BASE_PATH (it launches openvscode-server with --server-base-path and advertises the prefix in /api/vscode/url), and registered as an ingress route to the VSCode port. Keeping one value on both sides is what lets a single-origin deployment reach the editor without publishing a second port. Tradeoff: a path prefix routes but does not isolate, so the editor shares the canvas's browser origin and therefore its localStorage — see docs/SELF_HOSTING.md and OpenHands/OpenHands#16492.",
+    "vscodeBasePath": "/vscode"
   },
   "packages": {
     "agentServer": "openhands-agent-server",

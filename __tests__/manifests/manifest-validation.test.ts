@@ -23,7 +23,7 @@ function formWithField(
 describe("validateSetupEntry", () => {
   it("admits a well-formed manifest", () => {
     // Arrange
-    const entry = createSetupEntry();
+    const entry = createSetupEntry({ version: "1.0.0" });
 
     // Act
     const result = validateSetupEntry(entry);
@@ -48,6 +48,23 @@ describe("validateSetupEntry", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  // A catalog may publish an entry ahead of its stable release. The version is
+  // forwarded as provenance, not compared, so a pre-release or build suffix is
+  // a version this host admits rather than a reason to drop the entry.
+  it.each(["1.0.0-beta.1", "1.0.0+build.5", "2.1.0-rc.1+build.5"])(
+    "admits the template version %s",
+    (version) => {
+      // Arrange
+      const entry = createSetupEntry({ version });
+
+      // Act
+      const result = validateSetupEntry(entry);
+
+      // Assert
+      expect(result).toEqual({ valid: true, errors: [] });
+    },
+  );
+
   // Each case is a separate invariant the host enforces on data authored in
   // another repository. A manifest that trips any of them must not render.
   it.each([
@@ -68,6 +85,18 @@ describe("validateSetupEntry", () => {
       // copy, held to the same injection rules as an assisted message.
       "markup inside a direct entry's fallback message",
       { setup: createSetup({ message: "<img src=x onerror=alert(1)>" }) },
+    ],
+    [
+      // A direct entry may seed a fallback conversation, but the message stays
+      // setup context only, so the cap still refuses a runaway one.
+      "a fallback message that exceeds the setup-context cap",
+      { setup: createSetup({ message: "x".repeat(2001) }) },
+    ],
+    [
+      // The version is sent to the service as template provenance, so a
+      // malformed one is refused rather than forwarded.
+      "a template version that is not semver",
+      { version: "v1" },
     ],
     [
       // The host reads one trigger kind to build the request, so a second one
