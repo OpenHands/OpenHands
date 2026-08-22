@@ -2,14 +2,17 @@ import { OpenHandsEvent } from "#/types/agent-server/core";
 
 /**
  * A ConversationStateUpdateEvent reporting `execution_status` directly
- * (the `key: "execution_status"` variant). `timestamp` defaults to "now" for
- * tests that don't care about ordering; pass an explicit ISO string for tests
- * that reconcile events by timestamp.
+ * (the `key: "execution_status"` variant). `timestamp` defaults to "now" as
+ * an ISO string for tests that don't care about ordering; pass an explicit one
+ * for tests that reconcile events by timestamp. The format matters even for
+ * the default: the store compares timestamps with `localeCompare`, so an
+ * epoch-millisecond string ("1770...") sorts *before* every ISO date rather
+ * than after them — a "now" default that silently lands at the front.
  */
 export const makeExecutionStatusUpdate = (
   id: string,
   status: string,
-  timestamp: string = Date.now().toString(),
+  timestamp: string = new Date().toISOString(),
 ): OpenHandsEvent =>
   ({
     id,
@@ -28,7 +31,7 @@ export const makeExecutionStatusUpdate = (
 export const makeFullStateSnapshot = (
   id: string,
   status: string,
-  timestamp: string = Date.now().toString(),
+  timestamp: string = new Date().toISOString(),
 ): OpenHandsEvent =>
   ({
     id,

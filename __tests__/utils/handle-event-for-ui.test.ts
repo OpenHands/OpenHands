@@ -654,6 +654,82 @@ describe("handleEventForUI", () => {
         ]);
       });
 
+      it("places a reasoning-only turn's reply above the message too", () => {
+        // Models that stream `reasoning_content` and no `content` produce no
+        // content deltas, so there is nothing to supersede — but the reply
+        // still has to land where the stream ended. Appending it at the tail
+        // dropped it below a message the user sent while the reasoning bubble
+        // was already on screen.
+        const reasoningDelta: StreamingDeltaEvent = {
+          ...makeStreamingDelta("delta-reasoning", null),
+          reasoning_content: "Considering the request...",
+        };
+
+        const result = replay([
+          mockMessageEvent,
+          reasoningDelta,
+          midStreamUserMessage,
+          mockAgentMessageEvent,
+        ]);
+
+        expect(result).toEqual([
+          mockMessageEvent,
+          reasoningDelta,
+          mockAgentMessageEvent,
+          midStreamUserMessage,
+        ]);
+      });
+
+      it("does not let another sender's delta drag the turn boundary back (#1656)", () => {
+        // The main and planning sockets share this event store. A planning
+        // delta interleaved into the main agent's run must stay transparent to
+        // the main agent's turn-boundary scan: counting it pulled the scan
+        // back past `secondQuestion`, so the reply both stripped the previous
+        // turn's streamed text and rendered above the question it answered.
+        const idleStateSnapshot = {
+          ...(runningStateSnapshot as unknown as Record<string, unknown>),
+          id: "state-idle",
+          value: { execution_status: "idle" },
+        } as unknown as OpenHandsEvent;
+        const previousTurnDelta = makeStreamingDelta(
+          "delta-old",
+          "First answer.",
+        );
+        const planningDelta = {
+          ...makeStreamingDelta("delta-planning", "Planning..."),
+          isFromPlanningAgent: true,
+        } as OpenHandsEvent;
+        const secondQuestion: MessageEvent = {
+          ...mockMessageEvent,
+          id: "second-question",
+          llm_message: {
+            role: "user",
+            content: [{ type: "text", text: "now do the other thing" }],
+          },
+        };
+
+        const result = replay([
+          mockMessageEvent,
+          previousTurnDelta,
+          idleStateSnapshot,
+          planningDelta,
+          secondQuestion,
+          makeStreamingDelta("delta-2", "I'll start working on that. Done."),
+          mockAgentMessageEvent,
+        ]);
+
+        // The previous turn's delta survives, and the reply stays below the
+        // question that prompted it.
+        expect(result).toEqual([
+          mockMessageEvent,
+          previousTurnDelta,
+          idleStateSnapshot,
+          planningDelta,
+          secondQuestion,
+          mockAgentMessageEvent,
+        ]);
+      });
+
       it("reconciles a streamed thought split by the message", () => {
         const thought = "Let me gather information.";
         const action: ActionEvent = {
@@ -670,11 +746,14 @@ describe("handleEventForUI", () => {
           action,
         ]);
 
-        // Streamed thought still stripped even though the message split it (#1534).
+        // Streamed thought still stripped even though the message split it
+        // (#1534), and the action lands where the stream ended rather than at
+        // the tail — the same placement a finalized reply gets, so a
+        // tool-calling step doesn't jump below the mid-stream message (#1899).
         expect(result).toEqual([
           mockMessageEvent,
-          midStreamUserMessage,
           action,
+          midStreamUserMessage,
         ]);
       });
     });

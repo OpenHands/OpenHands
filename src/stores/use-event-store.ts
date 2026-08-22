@@ -128,11 +128,32 @@ const appendEvent = (state: EventState, event: OHEvent): EventState => {
   };
 };
 
-const sortEventState = (state: EventState): EventState => ({
-  ...state,
-  events: [...state.events].sort(compareEventsByTimestamp),
-  uiEvents: [...state.uiEvents].sort(compareEventsByTimestamp),
-});
+/**
+ * Where a display-ordered insert belongs in `uiEvents`.
+ *
+ * Scans from the end and lands *after* the last entry stamped no later than
+ * `timestamp`, rather than before the first entry stamped later. On a sorted
+ * array the two agree; on this one they don't, and only the backward scan is
+ * safe: `uiEvents` deliberately ends with a finalized reply above a
+ * later-stamped mid-stream message (#1899), and a forward scan would wedge
+ * new material into the middle of that pair. Backfilled history still drops
+ * into its historical place, because it sorts before both.
+ */
+const findDisplayInsertIndex = (
+  uiEvents: OHEvent[],
+  timestamp: string | undefined,
+): number => {
+  // Undated events go last, matching `compareEventsByTimestamp`.
+  if (!timestamp) return uiEvents.length;
+
+  for (let index = uiEvents.length - 1; index >= 0; index -= 1) {
+    const other = getEventTimestamp(uiEvents[index]);
+    if (other && other.localeCompare(timestamp) <= 0) {
+      return index + 1;
+    }
+  }
+  return 0;
+};
 
 /**
  * Resorts only `events`, the raw append log: `uiEvents` is display-ordered by
@@ -157,7 +178,29 @@ const applyAddEvent = (state: EventState, event: OHEvent): EventState => {
     return next;
   }
 
-  return sortEvents(next);
+  const sorted = sortEvents(next);
+
+  // `handleEventForUI` appends to the tail. When the event is older than what
+  // the store already holds — a reconnect backlog, or the planning
+  // sub-conversation replaying its whole history with `resend_mode='all'`
+  // after the REST preload seeded newer events — that leaves it rendering at
+  // the bottom of the chat while `events` reports it in its real place. Move
+  // just that one entry; anything else `handleEventForUI` did (merging a
+  // delta, superseding an action, hoisting a finalized reply) is a derivation
+  // decision, not an ordering artefact, and must not be second-guessed here.
+  const appendedAtTail =
+    next.uiEvents.length === state.uiEvents.length + 1 &&
+    next.uiEvents[next.uiEvents.length - 1] === event;
+  if (!appendedAtTail) {
+    return sorted;
+  }
+
+  const body = next.uiEvents.slice(0, -1);
+  const insertAt = findDisplayInsertIndex(body, getEventTimestamp(event));
+  return {
+    ...sorted,
+    uiEvents: [...body.slice(0, insertAt), event, ...body.slice(insertAt)],
+  };
 };
 
 export const useEventStore = create<EventState>()((set) => ({
@@ -172,7 +215,14 @@ export const useEventStore = create<EventState>()((set) => ({
 
       const eventIds = new Set(state.eventIds);
       const events = [...state.events];
-      let uiEvents = [...state.uiEvents];
+      // Derive the incoming page into its *own* display-ordered segment
+      // instead of folding it into `state.uiEvents`. `uiEvents` is derived,
+      // not raw (see `sortEvents`), and the timestamp sort that used to run
+      // here re-ordered the whole array: any older-history page merged by
+      // `useLoadOlderEvents` dropped the finalized reply back below the
+      // mid-stream message, mid-session and with no reload involved.
+      let incomingUiEvents: OHEvent[] = [];
+      let earliestAdded: string | undefined;
       let added = false;
 
       for (const event of incoming) {
@@ -201,7 +251,16 @@ export const useEventStore = create<EventState>()((set) => ({
             events.push(event);
           }
 
-          uiEvents = handleEventForUI(event, uiEvents);
+          const timestamp = getEventTimestamp(event);
+          if (
+            timestamp &&
+            (earliestAdded === undefined ||
+              timestamp.localeCompare(earliestAdded) < 0)
+          ) {
+            earliestAdded = timestamp;
+          }
+
+          incomingUiEvents = handleEventForUI(event, incomingUiEvents);
         }
       }
 
@@ -209,12 +268,23 @@ export const useEventStore = create<EventState>()((set) => ({
         return state;
       }
 
-      return sortEventState({
-        ...state,
-        events,
-        eventIds,
-        uiEvents,
-      });
+      // Splice the new segment in as one block. Both sides are already in
+      // their own correct display order, and inserting event-by-event would
+      // re-sort the segment against itself — undoing any #1899 placement
+      // inside it. Both callers (the initial REST load, and older-history
+      // pagination, which fetches strictly `timestampLt` the oldest known
+      // event) supply a contiguous block that belongs entirely in front of
+      // what the store already holds.
+      const insertAt = findDisplayInsertIndex(state.uiEvents, earliestAdded);
+
+      return {
+        ...sortEvents({ ...state, events, eventIds }),
+        uiEvents: [
+          ...state.uiEvents.slice(0, insertAt),
+          ...incomingUiEvents,
+          ...state.uiEvents.slice(insertAt),
+        ],
+      };
     }),
   clearEvents: () =>
     set(() => ({

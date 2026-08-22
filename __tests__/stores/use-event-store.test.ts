@@ -324,6 +324,82 @@ describe("useEventStore", () => {
     expect(result.current.uiEvents[1]).toEqual(midStream);
   });
 
+  it("keeps the finalized reply above a mid-stream message when older history is paginated in (#1899)", () => {
+    const { result } = renderHook(() => useEventStore());
+    const first = {
+      ...makeStreamingDeltaEvent("delta-1", "hello "),
+      timestamp: "2024-03-01T00:00:01.000Z",
+    };
+    const midStream = makeUserMessageEvent(
+      "user-1",
+      "2024-03-01T00:00:01.500Z",
+    );
+    const second = {
+      ...makeStreamingDeltaEvent("delta-2", "world"),
+      timestamp: "2024-03-01T00:00:02.000Z",
+    };
+    const final = makeAgentMessageEvent(
+      "agent-final",
+      "2024-03-01T00:00:02.500Z",
+      "hello world",
+    );
+
+    act(() => {
+      result.current.addEvent(first);
+      result.current.addEvent(midStream);
+      result.current.addEvent(second);
+      result.current.addEvent(final);
+    });
+
+    expect(result.current.uiEvents).toEqual([final, midStream]);
+
+    // Scrolling up merges an older page through `addEvents` — the same bulk
+    // path `useLoadOlderEvents` uses, during the same live session. It must
+    // land in front of the conversation without re-sorting the derived tail:
+    // a timestamp sort here put `midStream` back above `final`, reproducing
+    // the bug with no reload involved.
+    const older = makeUserMessageEvent("older-1", "2024-02-01T00:00:00.000Z");
+    act(() => {
+      result.current.addEvents([older]);
+    });
+
+    expect(result.current.uiEvents).toEqual([older, final, midStream]);
+  });
+
+  it("positions a backfilled single event in uiEvents instead of leaving it at the tail", () => {
+    // The planning sub-conversation streams its history over the WebSocket
+    // with `resend_mode='all'`, one event at a time through `addEvent`, after
+    // the REST preload has already seeded newer main-conversation events.
+    // `handleEventForUI` appends, so without repositioning the whole replayed
+    // history renders at the bottom of the chat.
+    const { result } = renderHook(() => useEventStore());
+    const recent = makeAgentMessageEvent(
+      "main-recent",
+      "2024-03-01T00:00:05.000Z",
+      "recent reply",
+    );
+    const replayed = makeUserMessageEvent(
+      "planning-old",
+      "2024-03-01T00:00:01.000Z",
+    );
+
+    act(() => {
+      result.current.addEvent(recent);
+      result.current.addEvent(replayed);
+    });
+
+    // No deliberate deviation to protect here, so the derived view agrees
+    // with the raw log.
+    expect(result.current.events.map((event) => event.id)).toEqual([
+      "planning-old",
+      "main-recent",
+    ]);
+    expect(result.current.uiEvents.map((event) => event.id)).toEqual([
+      "planning-old",
+      "main-recent",
+    ]);
+  });
+
   it("should not compact streaming deltas from different senders (#1656)", () => {
     const { result } = renderHook(() => useEventStore());
     const mainDelta = makeStreamingDeltaEvent("delta-1", "main ");

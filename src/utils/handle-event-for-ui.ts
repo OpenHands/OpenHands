@@ -71,7 +71,7 @@ const reportsAgentLeftRunning = (
 // would reintroduce bubble-splitting on ordinary reconnects). Needs its own
 // design work, not a mechanical fix here.
 const endsStreamingRun = (
-  event: OpenHandsEvent,
+  event: OpenHandsEvent & { isFromPlanningAgent?: boolean },
   sender: OpenHandsEvent & { isFromPlanningAgent?: boolean },
 ): boolean => {
   if (isUserMessage(event)) {
@@ -94,7 +94,16 @@ const findTrailingStreamStart = (
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (isStreamingDeltaEvent(event)) {
-      start = index;
+      // Sender-scoped, like `findTrailingStreamLastDeltaIndex`: the main and
+      // planning sockets share this event store, so another sender's delta is
+      // transparent here too (#1656). Without the check it drags `start` back
+      // past a genuine turn boundary, `findLastUserMessageIndex` then reports
+      // the *previous* turn's user message, and the finalized reply both
+      // strips that turn's streamed text and renders above the question the
+      // current turn actually answered.
+      if (isSameStreamingSender(sender, event)) {
+        start = index;
+      }
     } else if (endsStreamingRun(event, sender)) {
       break;
     }
@@ -354,15 +363,30 @@ const finalizeStreamingDeltasInPlace = (
     uiEvents,
     finalEvent,
   );
-  if (contentStreamingDeltas.length === 0) {
-    return null;
-  }
 
   // Render the final event where the stream ended, not at the tail, so it stays
   // above a message the user sent mid-stream instead of jumping below it (#1899).
   // Scoped to `finalEvent`'s sender so an interleaved planning-agent delta
   // doesn't push it past the point where its own stream actually ended (#1656).
   const streamEnd = findTrailingStreamEnd(uiEvents, finalEvent);
+
+  if (contentStreamingDeltas.length === 0) {
+    // Nothing streamed to supersede — but the placement still matters. Models
+    // that stream only `reasoning_content` produce no content deltas at all,
+    // so returning null here appended the reply at the tail and dropped it
+    // below the message the user sent while the reasoning bubble was already
+    // on screen. `streamEnd === uiEvents.length` means nothing trails the run
+    // (or there was no run), which is the genuine "just append" case.
+    if (streamEnd >= uiEvents.length) {
+      return null;
+    }
+    return [
+      ...uiEvents.slice(0, streamEnd),
+      finalEvent,
+      ...uiEvents.slice(streamEnd),
+    ];
+  }
+
   const nextUiEvents = supersedeStreamingContent(
     uiEvents.slice(0, streamEnd),
     contentStreamingDeltas,
@@ -513,12 +537,21 @@ export const handleEventForUI = (
     event.action.kind !== "FinishAction" &&
     event.action.kind !== "ThinkAction"
   ) {
-    const reconciledUiEvents =
-      supersedeStreamedThoughtWithAction(event, newUiEvents) ??
-      supersedeStreamedReasoningWithAction(event, newUiEvents);
-    if (reconciledUiEvents) {
-      reconciledUiEvents.push(event);
-      return reconciledUiEvents;
+    // Place the action where its stream ended rather than at the tail, for the
+    // same reason as `finalizeStreamingDeltasInPlace`: `group-events.ts` hoists
+    // the action's thought into its own message, so appending it below a
+    // mid-stream user message reintroduces exactly the jump this fixes — and
+    // tool-calling steps are the bulk of a run, not an edge case (#1899).
+    // Reconciling within the head keeps the superseded delta indexes valid.
+    const streamEnd = findTrailingStreamEnd(newUiEvents, event);
+    const head = newUiEvents.slice(0, streamEnd);
+    const tail = newUiEvents.slice(streamEnd);
+    const reconciledHead =
+      supersedeStreamedThoughtWithAction(event, head) ??
+      supersedeStreamedReasoningWithAction(event, head);
+    if (reconciledHead) {
+      reconciledHead.push(event);
+      return [...reconciledHead, ...tail];
     }
   }
 
