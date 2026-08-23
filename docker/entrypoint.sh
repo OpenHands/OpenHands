@@ -383,10 +383,12 @@ fi # End of OH_FRONTEND_ONLY skip block
 # ── 4. Start static server (frontend + proxy) ────────────────────────────────
 if [ "${OH_BACKEND_ONLY:-}" = "true" ]; then
 log "Backend-Only Mode: Frontend and Proxy disabled. Keeping backend services alive."
-# Same trap-friendly pattern as the ingress watchdog below: the builtin
-# `wait` is interrupted immediately by SIGTERM/SIGINT so cleanup() fires
-# without delay.
-while true; do sleep 10 & wait $!; done
+# The builtin `wait` is interrupted immediately by trapped SIGTERM/SIGINT,
+# so cleanup() fires without delay; otherwise it returns once every backend
+# has exited, so the container stops rather than idling with nothing running.
+wait "${PIDS[@]}"
+log_error "Backend services exited"
+exit 1
 fi
 
 log "Starting frontend + proxy on port $PORT..."
