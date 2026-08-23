@@ -1,14 +1,11 @@
 import type { ReactNode } from "react";
-import {
-  extensionModuleCardPillClassName,
-  extensionModuleCardPillWrapClassName,
-} from "#/utils/extension-module-card-classes";
+import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { cn } from "#/utils/utils";
 
 export const automationPreviewListClassName =
   "custom-scrollbar-always mx-6 flex min-h-0 flex-1 flex-col divide-y divide-[var(--oh-border)] overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] py-4";
 
-export type AutomationPreviewFieldLayout = "inline" | "stacked";
+type AutomationPreviewFieldLayout = "inline" | "stacked";
 
 interface AutomationPreviewFieldProps {
   label: string;
@@ -74,7 +71,10 @@ export function AutomationPreviewField({
                 key={chip}
                 className={cn(
                   extensionModuleCardPillClassName,
-                  extensionModuleCardPillWrapClassName,
+                  // Pill chrome is nowrap + hug-content. Long chips must be able
+                  // to wrap: max-width wins over content, and min-width must not
+                  // be max-content (that beats max-width and keeps one line).
+                  "inline-block w-max max-w-full min-w-0 shrink-0 rounded-xl whitespace-normal break-words px-2.5 py-1 text-left text-xs leading-4 hyphens-none",
                 )}
               >
                 {chip}

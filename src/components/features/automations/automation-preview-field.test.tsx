@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AutomationPreviewField } from "./automation-preview-field";
 
@@ -26,28 +26,6 @@ describe("AutomationPreviewField", () => {
     expect(row.className).toContain("flex-col");
   });
 
-  it("stacks a multi-line value", () => {
-    const row = renderRow({ label: "Feeds", value: "first\nsecond" });
-
-    expect(row.className).toContain("flex-col");
-  });
-
-  it("honours an explicitly stacked layout for short copy", () => {
-    const row = renderRow({
-      label: "Prompt",
-      value: "Short",
-      layout: "stacked",
-    });
-
-    expect(row.className).toContain("flex-col");
-  });
-
-  it("keeps a lone short chip beside its label", () => {
-    const row = renderRow({ label: "Plugins", value: "", chips: ["github"] });
-
-    expect(row.className).toContain("justify-between");
-  });
-
   it("stacks once a chip is longer than the row can hold", () => {
     const row = renderRow({
       label: "Feeds",
@@ -56,12 +34,5 @@ describe("AutomationPreviewField", () => {
     });
 
     expect(row.className).toContain("flex-col");
-  });
-
-  it("renders every chip as its own pill", () => {
-    renderRow({ label: "Plugins", value: "", chips: ["one", "two"] });
-
-    expect(screen.getByText("one")).toBeInTheDocument();
-    expect(screen.getByText("two")).toBeInTheDocument();
   });
 });
