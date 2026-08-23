@@ -22,50 +22,60 @@ from check_issue_readiness import (
 # Helper builders
 # ---------------------------------------------------------------------------
 
-BUG_BODY_READY = """### Actual Behavior
-I ran `npm run dev` and saw this:
+BUG_BODY_READY = """### Steps to Reproduce
+Run `npm run dev` and click the button.
+
+### Actual Behavior
+The button was misaligned.
 
 ![screenshot](https://github.com/user-attachments/assets/abc123)
 
+### Acceptance Criteria
+- [ ] Button is centered
+"""
+
+BUG_BODY_NO_RUN_METHOD = """### Steps to Reproduce
+Click the button.
+
+### Actual Behavior
 The button was misaligned.
 
-### Expected Behavior
-The button should be centered.
+![screenshot](https://github.com/user-attachments/assets/abc123)
 
-### Acceptance Criteria
-- [ ] Button is centered
-- [ ] No layout shift on resize
 """
 
-BUG_BODY_NO_RUN_METHOD = """### Actual Behavior
+BUG_BODY_NO_SCREENSHOT = """### Steps to Reproduce
+I ran `npm run dev` and clicked the button.
+
+### Actual Behavior
 The button was misaligned.
 
-### Acceptance Criteria
-- [ ] Button is centered
 """
 
-BUG_BODY_NO_SCREENSHOT = """### Actual Behavior
-I ran `npm run dev` and saw the button was misaligned.
+BUG_BODY_NO_ACCEPTANCE = """### Steps to Reproduce
+I ran `npm run dev` and clicked the button.
 
-### Acceptance Criteria
-- [ ] Button is centered
-"""
-
-BUG_BODY_NO_ACCEPTANCE = """### Actual Behavior
-I ran `npm run dev` and saw this:
+### Actual Behavior
+The button was misaligned.
 
 ![screenshot](https://github.com/user-attachments/assets/abc123)
 """
 
-BUG_BODY_EMPTY_ACTUAL = """### Actual Behavior
+BUG_BODY_EMPTY_ACTUAL = """### Steps to Reproduce
+I ran `npm run dev` and clicked the button.
+
+### Actual Behavior
 _No response_
 
 ### Acceptance Criteria
 - [ ] Button is centered
 """
 
-BUG_BODY_AGENT_CANVAS = """### Actual Behavior
+BUG_BODY_AGENT_CANVAS = """### Steps to Reproduce
 I used agent-canvas to reproduce this.
+
+### Actual Behavior
+The button was misaligned.
 
 ![screenshot](https://example.com/screenshot.png)
 
@@ -73,13 +83,25 @@ I used agent-canvas to reproduce this.
 - [ ] Fixed
 """
 
-BUG_BODY_HOSTED_URL = """### Actual Behavior
-Reproduced on app.all-hands.dev/canvas — see video below.
+BUG_BODY_HOSTED_URL = """### Steps to Reproduce
+Reproduced on app.all-hands.dev/canvas.
+
+### Actual Behavior
+The button was misaligned.
 
 <video src="https://example.com/bug.mp4"></video>
 
 ### Acceptance Criteria
 - [ ] Fixed
+"""
+
+BUG_BODY_MISSING_REPRODUCTION = """### Actual Behavior
+The button was misaligned.
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] Button is centered
 """
 
 ENHANCEMENT_BODY_READY = """### Desired Behavior
@@ -142,6 +164,12 @@ def test_bug_not_ready_empty_actual():
     assert not result.ready
     assert any("Actual Behavior" in r for r in result.reasons)
 
+
+
+def test_bug_not_ready_missing_reproduction():
+    result = evaluate_readiness(BUG_BODY_MISSING_REPRODUCTION, [BUG_LABEL])
+    assert not result.ready
+    assert any("Steps to Reproduce" in r for r in result.reasons)
 
 # ---------------------------------------------------------------------------
 # Enhancement readiness
@@ -242,7 +270,10 @@ The template says:
     assert set(sections) == {"notes"}
 
 def test_fenced_heading_does_not_truncate_actual_behavior():
-    body = """### Actual Behavior
+    body = """### Steps to Reproduce
+Run `npm run dev` and reproduce the error.
+
+### Actual Behavior
 I ran `npm run dev` and saw:
 
 ~~~text
@@ -307,7 +338,10 @@ Error: the button overlaps the field
 
 def test_unclosed_fence_does_not_swallow_later_sections():
     """One stray marker in a log paste must not reject an otherwise-ready report."""
-    body = """### Relevant Logs
+    body = """### Steps to Reproduce
+Run `npm run dev` and reproduce the crash.
+
+### Relevant Logs
 ```shell
 Traceback (most recent call last):
   the paste was cut off before the closing fence
