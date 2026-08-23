@@ -37,6 +37,13 @@ category above**, you should approve it. Don’t just say a PR is "worth merging
 "ready to merge" without actually submitting an approval. Your words and actions should
 be consistent.
 
+
+### Issue Acceptance Criteria
+
+Before deciding whether a PR is approvable, carefully read the linked issue description and acceptance criteria. In the review, include a checklist covering every acceptance criterion and mark each item as met or not met, with a brief explanation or evidence where useful.
+
+Meeting all acceptance criteria is necessary but not sufficient for a fully positive review: also evaluate correctness, regressions, security, testing, maintainability, and the other review rules below. If any criterion is not met, use a **COMMENT** review and identify the gap; do not use **REQUEST_CHANGES**.
+
 ### When to APPROVE
 
 Examples of straightforward and low-risk PRs you should approve (non-exhaustive):
