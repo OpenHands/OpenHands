@@ -435,7 +435,10 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
 # Heading normalization
 # ---------------------------------------------------------------------------
 
-BUG_BODY_COLON_HEADINGS = """### Actual Behavior:
+BUG_BODY_COLON_HEADINGS = """### Steps to Reproduce:
+Start the app with `npm run dev` and open the settings page.
+
+### Actual Behavior:
 I ran `npm run dev` and saw this:
 
 ![screenshot](https://github.com/user-attachments/assets/abc123)
@@ -444,7 +447,10 @@ I ran `npm run dev` and saw this:
 - [ ] The button lines up with the field above it.
 """
 
-BUG_BODY_REPEATED_HEADING = """### Actual Behavior
+BUG_BODY_REPEATED_HEADING = """### Steps to Reproduce
+Start the app with `npm run dev` and open the settings page.
+
+### Actual Behavior
 I ran `npm run dev` and saw this:
 
 ![screenshot](https://github.com/user-attachments/assets/abc123)
