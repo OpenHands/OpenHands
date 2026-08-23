@@ -15,6 +15,18 @@ You have permission to **APPROVE** or **COMMENT** on PRs. Do not use REQUEST_CHA
 
 **Mandatory:** Always submit exactly one PR review object before finishing. If you found no actionable issues, post a short **APPROVE** review rather than ending silently without posting a review. If you found actionable issues or concerns, post a **COMMENT** review.
 
+
+## Repository Boundaries
+
+Review each change in the context of the repository that owns the behavior:
+
+- [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) owns Agent Canvas UI, frontend state, backend selection, and local-stack orchestration.
+- [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and canonical server API.
+- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns the browser-compatible typed client and generated/maintained types for that API.
+- [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; the Agent Server/SDK executes dispatched conversations.
+
+The usual flow is `software-agent-sdk` / Agent Server → OpenAPI contract → `typescript-client` → Agent Canvas. When reviewing a cross-repository change, verify that backend behavior and endpoints are implemented in the SDK, client access is implemented in `typescript-client`, frontend integration is implemented in Canvas, and automation lifecycle behavior is implemented in `automation`. Flag duplicated or misplaced logic, and check that linked PRs update the appropriate contract layer in order. If a PR is opened in the wrong repository, say so explicitly in the review and recommend that it may need to be closed and moved to the repository that owns the change rather than merged here.
+
 ### Review decision policy (eval / benchmark risk)
 
 Do **NOT** submit an **APPROVE** review when the PR changes agent behavior or anything

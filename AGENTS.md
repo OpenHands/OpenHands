@@ -40,6 +40,22 @@ Common mis-placements to avoid:
 - **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
 - **Skills / automations / integrations** → belong in `extensions`.
 
+## Cross-Repository Boundaries
+
+The four repositories have distinct ownership boundaries:
+
+| Repository | Owns |
+|---|---|
+| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration. |
+| [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and the canonical server API. |
+| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) | Browser-compatible TypeScript client and generated/maintained types for the Agent Server API. |
+| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, and dispatching. It manages when automations run; the Agent Server/SDK executes them. |
+
+The usual dependency direction is `software-agent-sdk` / Agent Server → OpenAPI contract → `typescript-client` → Agent Canvas. Automation scheduling and dispatching flow from Agent Canvas to `automation`, which starts work on the Agent Server/SDK. Put new server behavior and endpoints in `software-agent-sdk`, client access in `typescript-client`, UI and frontend integration in this repository, and scheduling/webhook lifecycle behavior in `automation`.
+
+All pull requests for this repository must comply with [`.agents/skills/custom-codereview-guide.md`](.agents/skills/custom-codereview-guide.md), in addition to the general contribution requirements and CI checks.
+
+
 ## PR Description Human Check
 
 The `HUMAN:` section in PR descriptions is reserved for human contributors only.
