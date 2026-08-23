@@ -1,30 +1,34 @@
 import { Tooltip } from "@heroui/react";
-import { ExternalLink, Zap } from "lucide-react";
-import { useRef } from "react";
+import { ExternalLink } from "lucide-react";
+import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { buildAutomationMetadataPills } from "#/components/features/automations/build-automation-pills";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
 import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
+import { AutomationRunStats } from "#/components/features/automations/automation-run-insights";
+import { toRunSummaryState } from "#/components/features/automations/to-latest-run-state";
 import { TurnOffConfirmationModal } from "#/components/features/automations/turn-off-confirmation-modal";
+import { getDashboardSpec } from "#/manifests/automation-interface";
+import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { useHomeAutomationActions } from "#/hooks/use-home-automation-actions";
 import { getDemoConversationTitle } from "#/fixtures/home-automations-demo";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { I18nKey } from "#/i18n/declaration";
-import ClockIcon from "#/icons/clock.svg?react";
 import { AutomationRunStatus, type Automation } from "#/types/automation";
-import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { cn } from "#/utils/utils";
+import { automationCardStatusStripClassName } from "#/components/features/automations/automation-view-mode";
+import {
+  extensionModuleCardInteractiveClassName,
+  extensionModuleCardSurfaceClassName,
+} from "#/utils/extension-module-card-classes";
 import { AutomationRunActivitySparkline } from "./automation-run-activity-sparkline";
 import { buildPinnedAutomationMenuItems } from "./build-pinned-automation-menu-items";
 import { HomeAutomationMenu } from "./home-automation-menu";
 import {
-  formatTriggerSourceLabel,
   getLastRunTimestamp,
-  getTriggerEventLabel,
-  getTriggerScheduleLabel,
-  getTriggerSource,
   shortenAutomationErrorDetail,
   shouldShowAutomationErrorHovercard,
 } from "./automation-run-health";
@@ -43,9 +47,9 @@ interface PinnedAutomationCardProps {
 }
 
 /**
- * Expanded pinned-automation card: status badge, trigger meta,
- * loading/empty/error copy, failure detail, and conversation title link.
- * Quick actions + unpin live in the card's three-dot menu.
+ * Home pinned card. Shares the Automations dashboard tile chrome (surface,
+ * header, pills, status strip) and keeps pin-only extras: drag-to-reorder,
+ * conversation title, and unpin.
  */
 export function PinnedAutomationCard({
   automation,
@@ -78,11 +82,12 @@ export function PinnedAutomationCard({
   const isTerminal =
     latestRun?.status === AutomationRunStatus.COMPLETED ||
     latestRun?.status === AutomationRunStatus.FAILED;
-  const isEventTrigger = automation.trigger.type === "event";
-  const TriggerIcon = isEventTrigger ? Zap : ClockIcon;
-  const triggerEventLabel = getTriggerEventLabel(automation);
-  const triggerScheduleLabel = getTriggerScheduleLabel(automation);
-  const triggerSource = getTriggerSource(automation);
+  const scheduleLabel =
+    automation.trigger.schedule_human || automation.trigger.type;
+  const pills = useMemo(
+    () => buildAutomationMetadataPills(automation, scheduleLabel),
+    [automation, scheduleLabel],
+  );
   const errorDetail =
     latestRun?.status === AutomationRunStatus.FAILED
       ? latestRun.error_detail?.trim() || null
@@ -96,6 +101,7 @@ export function PinnedAutomationCard({
     shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
   const disableAnimation = import.meta.env.MODE === "test";
   const cardRef = useRef<HTMLElement>(null);
+  const insights = getDashboardSpec()?.insights;
 
   const menuItems = buildPinnedAutomationMenuItems({
     automation,
@@ -143,7 +149,9 @@ export function PinnedAutomationCard({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group relative flex flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface-raised)] p-4",
+        "group relative flex min-w-0 flex-col overflow-hidden p-4 text-left",
+        extensionModuleCardSurfaceClassName,
+        extensionModuleCardInteractiveClassName,
         isDragging && "opacity-50",
         isDropTarget &&
           dropPosition === "before" &&
@@ -154,92 +162,95 @@ export function PinnedAutomationCard({
       )}
     >
       {/*
-        Full top chrome (padding above the title + title row) is the drag
-        surface. Title is not an <a> so browsers don't steal the gesture;
-        click still opens details. Menu is opted out via data-no-drag.
+        Top padding + title row is the drag surface. Title is not an <a> so
+        browsers don't steal the gesture; click still opens details. The
+        menu is opted out via data-no-drag.
       */}
-      <div
-        draggable
-        data-testid={`pinned-automation-drag-${automation.id}`}
-        aria-label={t(I18nKey.FEATURED_AUTOMATIONS$REORDER_HANDLE, {
-          name: automation.name,
-        })}
-        className="-mx-4 -mt-4 mb-0 flex cursor-grab items-start justify-between gap-3 rounded-t-xl px-4 pb-1 pt-4 active:cursor-grabbing"
-        onDragStart={(event) => {
-          const target = event.target as HTMLElement | null;
-          if (target?.closest("[data-no-drag]")) {
-            event.preventDefault();
-            return;
-          }
-          const { dataTransfer } = event;
-          dataTransfer.effectAllowed = "move";
-          dataTransfer.setData("text/plain", automation.id);
-          if (cardRef.current) {
-            dataTransfer.setDragImage(cardRef.current, 24, 24);
-          }
-          onDragStart(automation.id);
-        }}
-        onDragEnd={onDragEnd}
-      >
-        <span
-          role="link"
-          tabIndex={0}
-          title={t(I18nKey.FEATURED_AUTOMATIONS$VIEW_DETAILS)}
-          className="min-w-0 flex-1 cursor-pointer truncate font-medium text-[var(--oh-foreground)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
-          onClick={() => actions.viewDetails()}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
+      <header className="flex flex-col gap-1.5">
+        <div
+          draggable
+          data-testid={`pinned-automation-drag-${automation.id}`}
+          aria-label={t(I18nKey.FEATURED_AUTOMATIONS$REORDER_HANDLE, {
+            name: automation.name,
+          })}
+          className="-mx-4 -mt-4 flex cursor-grab items-center justify-between gap-3 px-4 pt-4 active:cursor-grabbing"
+          onDragStart={(event) => {
+            const target = event.target as HTMLElement | null;
+            if (target?.closest("[data-no-drag]")) {
               event.preventDefault();
-              actions.viewDetails();
+              return;
             }
+            const { dataTransfer } = event;
+            dataTransfer.effectAllowed = "move";
+            dataTransfer.setData("text/plain", automation.id);
+            if (cardRef.current) {
+              dataTransfer.setDragImage(cardRef.current, 24, 24);
+            }
+            onDragStart(automation.id);
           }}
+          onDragEnd={onDragEnd}
         >
-          {automation.name}
-        </span>
+          <span
+            role="link"
+            tabIndex={0}
+            title={t(I18nKey.FEATURED_AUTOMATIONS$VIEW_DETAILS)}
+            className="h-8 min-w-0 flex-1 cursor-pointer truncate text-sm font-semibold leading-8 text-[var(--oh-foreground)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
+            onClick={() => actions.viewDetails()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                actions.viewDetails();
+              }
+            }}
+          >
+            {automation.name}
+          </span>
 
-        <div data-no-drag className="shrink-0">
-          <HomeAutomationMenu
-            testId={`pinned-automation-menu-${automation.id}`}
-            panelTestId={`pinned-automation-menu-panel-${automation.id}`}
-            ariaLabel={t(I18nKey.FEATURED_AUTOMATIONS$ROW_MENU_LABEL, {
-              name: automation.name,
-            })}
-            triggerClassName="opacity-70 group-hover:opacity-100"
-            items={menuItems}
-          />
+          <div data-no-drag className="flex h-8 shrink-0 items-center">
+            <HomeAutomationMenu
+              testId={`pinned-automation-menu-${automation.id}`}
+              panelTestId={`pinned-automation-menu-panel-${automation.id}`}
+              ariaLabel={t(I18nKey.FEATURED_AUTOMATIONS$ROW_MENU_LABEL, {
+                name: automation.name,
+              })}
+              triggerClassName="opacity-70 group-hover:opacity-100"
+              items={menuItems}
+            />
+          </div>
         </div>
-      </div>
-
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--oh-text-secondary)]">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
-          {triggerEventLabel ? (
-            <span className="truncate">{triggerEventLabel}</span>
-          ) : null}
-          {triggerScheduleLabel ? (
-            <span className="truncate">{triggerScheduleLabel}</span>
-          ) : null}
-          {triggerSource ? (
-            <span
-              className={cn(
-                extensionModuleCardPillClassName,
-                "px-1.5 py-0 text-[var(--oh-text-secondary)]",
-              )}
-            >
-              {formatTriggerSourceLabel(triggerSource)}
-            </span>
-          ) : null}
-        </span>
-        {recentRuns.length > 0 ? (
-          <AutomationRunActivitySparkline
-            automationId={automation.id}
-            runs={recentRuns}
-            testId={`pinned-automation-activity-${automation.id}`}
-          />
+        {automation.prompt ? (
+          <p className="line-clamp-2 text-xs leading-relaxed text-[var(--oh-text-secondary)]">
+            {automation.prompt}
+          </p>
         ) : null}
-      </div>
+      </header>
 
-      <div className="mt-3 flex min-h-9 items-center justify-between gap-2 overflow-hidden rounded-md border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-3 py-2 text-xs">
+      {pills.length > 0 || recentRuns.length > 0 ? (
+        <div
+          className={cn(
+            "mt-3 flex items-center gap-3",
+            pills.length > 0 ? "justify-between" : "justify-end",
+          )}
+        >
+          {pills.length > 0 ? (
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <SkillCardPillRow
+                pills={pills}
+                testId={`pinned-automation-pills-${automation.id}`}
+              />
+            </div>
+          ) : null}
+          {recentRuns.length > 0 ? (
+            <AutomationRunActivitySparkline
+              automationId={automation.id}
+              runs={recentRuns}
+              testId={`pinned-automation-activity-${automation.id}`}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={automationCardStatusStripClassName}>
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {isLoading ? (
             <div
@@ -327,6 +338,15 @@ export function PinnedAutomationCard({
           </span>
         ) : null}
       </div>
+
+      {insights ? (
+        <div className="mt-3">
+          <AutomationRunStats
+            state={toRunSummaryState(runState)}
+            copy={insights.stats}
+          />
+        </div>
+      ) : null}
 
       {actions.editOpen ? (
         <EditAutomationModal

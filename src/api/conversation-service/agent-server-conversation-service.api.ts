@@ -2,6 +2,7 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
@@ -49,6 +50,7 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
@@ -66,6 +68,7 @@ import type {
   AppConversationStartTask,
   MetricsSnapshot,
   RuntimeConversationInfo,
+  RuntimeConversationStats,
   SendMessageRequest,
   SendMessageResponse,
 } from "./agent-server-conversation-service.types";
@@ -133,6 +136,16 @@ function normalizeMetrics(value: unknown): MetricsSnapshot | null {
     max_budget_per_task: numberOrNull(value.max_budget_per_task),
     accumulated_token_usage: normalizeTokenUsage(value.accumulated_token_usage),
   };
+}
+
+// Shallow check only (matches the trust level `getRuntimeConversation` used
+// before this field was threaded through `DirectConversationInfo`): the
+// per-usage-id entries are consumed via `combineUsageMetrics`, which already
+// tolerates missing/malformed fields, so there's no need to validate them here.
+function normalizeStats(value: unknown): RuntimeConversationStats | null {
+  return isRecord(value)
+    ? (value as unknown as RuntimeConversationStats)
+    : null;
 }
 
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
@@ -244,6 +257,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
     metrics: normalizeMetrics(item.metrics),
+    stats: normalizeStats(item.stats),
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
     tags: normalizeTags(item.tags),
@@ -428,6 +442,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        trigger: "gui",
       };
       return createCloudAppConversation(request);
     }
@@ -472,9 +487,13 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
+    const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>(payload);
+    ).createConversation<DirectConversationInfo>({
+      ...payload,
+      ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
+    });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
@@ -550,6 +569,27 @@ class AgentServerConversationService {
     });
 
     return { vscode_url: vscodeUrl };
+  }
+
+  /**
+   * Read the editor's capability state from the agent-server.
+   *
+   * `/api/vscode/status` answers 200 with `enabled: false` when the
+   * deployment set `enable_vscode: false`, which distinguishes "this
+   * deployment offers no editor" from a transport, auth, or server
+   * failure — `/api/vscode/url` answers 503 for the former and so
+   * cannot be told apart from the latter.
+   */
+  static async getVSCodeStatus(
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<VSCodeStatusResponse> {
+    return new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getStatus();
   }
 
   static async resolveConversationWorkingDir(
@@ -657,19 +697,14 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    type RawRuntime = DirectConversationInfo & {
-      stats?: RuntimeConversationInfo["stats"];
-    };
-
     // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
     const response = await new ConversationClient(
       getAgentServerClientOptions({
         conversationUrl,
         sessionApiKey,
       }),
-    ).getConversation<RawRuntime>(conversationId);
+    ).getConversation<DirectConversationInfo>(conversationId);
     const data = requireDirectConversationInfo(response);
-    const stats = isRecord(response) ? response.stats : null;
 
     return {
       id: data.id,
@@ -680,7 +715,7 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
-      stats: isRecord(stats) ? stats : { usage_to_metrics: {} },
+      stats: data.stats ?? { usage_to_metrics: {} },
     };
   }
 

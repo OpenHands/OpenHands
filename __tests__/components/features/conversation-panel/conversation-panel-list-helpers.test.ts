@@ -628,4 +628,90 @@ describe("conversation-panel-list-helpers", () => {
       ).map((c) => c.id),
     ).toEqual(["audit", "unnamed"]);
   });
+
+  it("pre-seeds workspace groups from knownWorkspaces even when no conversations are loaded for them", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+      { id: "/workspace/beta", name: "beta", path: "/workspace/beta" },
+    ];
+    const groups = groupConversations(
+      [],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/workspace/alpha", label: "alpha" },
+      { id: "ws:/workspace/beta", label: "beta" },
+    ]);
+    expect(groups.every((g) => g.conversations.length === 0)).toBe(true);
+  });
+
+  it("merges known workspaces with conversations from paginated pages into one unified group list", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const pageTwoConversation: AppConversation = {
+      ...base,
+      id: "deep",
+      title: "deep",
+      selected_workspace: "/workspace/beta",
+      updated_at: "2024-01-05T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [pageTwoConversation],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const ids = groups.map((g) => g.id);
+    expect(ids).toContain("ws:/workspace/alpha");
+    expect(ids).toContain("ws:/workspace/beta");
+    const alpha = groups.find((g) => g.id === "ws:/workspace/alpha");
+    expect(alpha?.conversations).toHaveLength(0);
+    const beta = groups.find((g) => g.id === "ws:/workspace/beta");
+    expect(beta?.conversations.map((c) => c.id)).toEqual(["deep"]);
+  });
+
+  it("uses the known workspace name for a group whose path is in knownWorkspaces", () => {
+    const knownWorkspaces = [
+      {
+        id: "/workspace/my-project",
+        name: "My Project",
+        path: "/workspace/my-project",
+      },
+    ];
+    const convo: AppConversation = {
+      ...base,
+      id: "c1",
+      title: "c1",
+      selected_workspace: "/workspace/my-project",
+      updated_at: "2024-01-02T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [convo],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const group = groups.find((g) => g.id === "ws:/workspace/my-project");
+    expect(group?.label).toBe("My Project");
+  });
+
+  it("ignores knownWorkspaces for cloud backend grouping", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const groups = groupConversations(
+      [],
+      "cloud",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups).toHaveLength(0);
+  });
 });

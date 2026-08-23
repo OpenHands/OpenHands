@@ -74,9 +74,12 @@ if (typeof requestAnimationFrame === "undefined") {
 // `afterAll` (which runs *before* jsdom teardown) so they settle while
 // `ProgressEvent` is still defined. See `afterAll` below. The getter below
 // stashes the live class as a light defense-in-depth for any callback that
-// fires before teardown completes; it cannot help after teardown (the
-// accessor is deleted there), which is exactly why the `afterAll` drain is
-// the real fix.
+// fires before teardown completes; it cannot help after teardown because
+// Vitest deletes the accessor (part of its `LIVING_KEYS`) during per-file
+// teardown — which is exactly why the `afterAll` drain is the real fix.
+// `configurable: true` is required so Vitest *can* delete the accessor
+// during teardown; `configurable: false` would prevent cleanup and leave
+// a stale getter pointing at a torn-down jsdom environment.
 class MockProgressEvent extends Event {
   readonly lengthComputable: boolean;
 

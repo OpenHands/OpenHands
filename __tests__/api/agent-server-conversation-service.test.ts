@@ -32,6 +32,7 @@ const {
   mockGetProfile,
   mockActivateProfile,
   mockListProfiles,
+  mockGetTelemetryDistinctId,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -46,6 +47,7 @@ const {
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
   mockListProfiles: vi.fn(),
+  mockGetTelemetryDistinctId: vi.fn(),
 }));
 
 const originalFetch = global.fetch;
@@ -98,6 +100,10 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
     getSettings: mockGetSettings,
     getSettingsForConversation: mockGetSettingsForConversation,
   },
+}));
+
+vi.mock("#/services/telemetry", () => ({
+  getTelemetryDistinctId: mockGetTelemetryDistinctId,
 }));
 
 describe("AgentServerConversationService", () => {
@@ -250,6 +256,58 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    it("forwards the Canvas telemetry identity to the local agent server", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue("ph-canvas-user");
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ user_id: "ph-canvas-user" }),
+      );
+    });
+
+    it("omits user_id when Canvas telemetry has no consented identity", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue(null);
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const payload = mockHttpPost.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty("user_id");
+    });
+
     it("passes the selected title profile to local conversation starts", async () => {
       mockGetSettings.mockResolvedValue({
         title_llm_profile: "Titles",
@@ -634,6 +692,50 @@ describe("AgentServerConversationService", () => {
         await AgentServerConversationService.searchConversations(10);
 
       expect(result.items[0]?.sandbox_status).toBe("PAUSED");
+    });
+
+    it("falls back to stats.usage_to_metrics when searchConversations omits metrics (#16480)", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-stats-only",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            stats: {
+              usage_to_metrics: {
+                default: {
+                  model_name: "test-model",
+                  accumulated_cost: 1.25,
+                  max_budget_per_task: null,
+                  accumulated_token_usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    context_window: 8000,
+                    per_turn_token: 150,
+                  },
+                  costs: [],
+                  response_latencies: [],
+                  token_usages: [],
+                },
+              },
+            },
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.metrics?.accumulated_cost).toBe(1.25);
+      expect(
+        result.items[0]?.metrics?.accumulated_token_usage?.prompt_tokens,
+      ).toBe(100);
     });
 
     it("preserves the launched Agent Profile through the wire normalizer", async () => {
@@ -1060,7 +1162,7 @@ describe("AgentServerConversationService", () => {
       global.fetch = originalFetch;
     });
 
-    it("forwards parent_conversation_id, agent_type, and sandbox_id to the cloud createConversation payload", async () => {
+    it("marks Canvas-created cloud conversations with the GUI trigger", async () => {
       // Arrange
       fetchMock.mockResolvedValueOnce(
         mockJsonResponse({
@@ -1092,6 +1194,7 @@ describe("AgentServerConversationService", () => {
         parent_conversation_id: "parent-conv-1",
         agent_type: "plan",
         sandbox_id: "sandbox-9",
+        trigger: "gui",
       });
     });
 

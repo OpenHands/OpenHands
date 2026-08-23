@@ -201,6 +201,19 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
 // Stub the picker modal: pressing it selects one plugin then closes, mirroring
 // the real modal's `onChange` + `onClose` contract. The picker catalog itself
 // is covered by plugin-picker.test.tsx.
+vi.mock("#/components/features/automations/recommended-automations-launcher", () => ({
+  RecommendedAutomationsLauncher: ({
+    variant,
+    className,
+  }: {
+    variant?: string;
+    className?: string;
+  }) =>
+    variant === "rail" ? (
+      <div data-testid="recommended-automations-rail" className={className} />
+    ) : null,
+}));
+
 vi.mock("#/components/features/plugins/plugin-picker-modal", () => ({
   PluginPickerModal: ({
     onChange,
@@ -580,5 +593,13 @@ describe("HomeChatLauncher", () => {
       plugins: [{ source: "github:o/a", ref: null, repo_path: null }],
       metadata: null,
     });
+  });
+
+  it("always renders the recommended automations rail above pinned activity", () => {
+    renderLauncher();
+
+    expect(
+      screen.getByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
   });
 });

@@ -17,6 +17,31 @@ import type {
 } from "#/types/automation-disable-feedback";
 
 /**
+ * Stable semantic identifier for an onboarding link or CTA. Identifies the
+ * destination, never the clicked element or its text.
+ */
+export type OnboardingLinkId =
+  | "configure_llm"
+  | "start_conversation"
+  | "schedule_task"
+  | "customize_agent"
+  | "connect_mcp"
+  | "join_slack"
+  | "open_docs";
+
+/** Controlled destination category for `onboarding_link_clicked`. */
+export type OnboardingLinkDestinationType =
+  | "community"
+  | "integration"
+  | "documentation"
+  | "settings"
+  | "conversation"
+  | "automation";
+
+/** Onboarding surface that presented the link. */
+export type OnboardingLinkSurface = "landing_checklist" | "onboarding_modal";
+
+/**
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
  *
@@ -358,6 +383,22 @@ export const useTracking = () => {
     track("automation_imported", { backend_kind: backendKind });
   };
 
+  const trackGitSyncConfigUpdated = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_config_updated", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncTriggered = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_triggered", { backend_kind: backendKind });
+  };
+
   const trackBackendAdded = ({
     backendKind,
     connectionMethod,
@@ -431,6 +472,31 @@ export const useTracking = () => {
     });
   };
 
+  const trackOnboardingLinkClicked = ({
+    linkId,
+    destinationType,
+    surface,
+    checklistItem,
+    stepId,
+    isExternal,
+  }: {
+    linkId: OnboardingLinkId;
+    destinationType: OnboardingLinkDestinationType;
+    surface: OnboardingLinkSurface;
+    checklistItem?: Exclude<OnboardingLinkId, "open_docs">;
+    stepId?: string;
+    isExternal: boolean;
+  }) => {
+    track("onboarding_link_clicked", {
+      link_id: linkId,
+      destination_type: destinationType,
+      surface,
+      checklist_item: checklistItem,
+      step_id: stepId,
+      is_external: isExternal,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -459,10 +525,13 @@ export const useTracking = () => {
     trackAutomationExported,
     trackAutomationActivityLogExported,
     trackAutomationImported,
+    trackGitSyncConfigUpdated,
+    trackGitSyncTriggered,
     trackBackendAdded,
     trackOnboardingStarted,
     trackOnboardingStepViewed,
     trackOnboardingCompleted,
     trackOnboardingSkipped,
+    trackOnboardingLinkClicked,
   };
 };

@@ -37,6 +37,11 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+// Path prefix the bundled editor is served under. The same value has to reach
+// agent-server (as OH_VSCODE_BASE_PATH, so openvscode-server is launched with
+// --server-base-path and advertises the prefix) and the ingress route table,
+// or the advertised URL and the route that serves it disagree.
+export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -599,6 +604,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} cwd
  * @property {number} backendPort
  * @property {number} vscodePort
+ * @property {string} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -657,6 +663,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
+    vscodeBasePath: VSCODE_BASE_PATH,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -688,13 +695,13 @@ function buildConfigFromPorts(ports, cwd, env) {
 }
 
 /**
- * Build the environment variables object for spawning the agent-server process.
+ * Telemetry-related env vars for the agent-server process.
  *
- * This is exported so downstream consumers (e.g., automation service) can use
- * the same env vars without duplicating the mapping logic.
+ * Split out from `buildAgentServerEnv` so callers that assemble their own
+ * agent-server environment can reuse the same mapping.
  *
- * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
- * @returns {Record<string, string>} Environment variables for agent-server
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Telemetry env vars for agent-server
  */
 export function buildAgentServerTelemetryEnv(env = process.env) {
   const telemetryDisabled =
@@ -739,7 +746,35 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
   return result;
 }
 
-export function buildAgentServerEnv(config, env = process.env) {
+/**
+ * Build the environment variables object for spawning the agent-server process.
+ *
+ * This is exported so downstream consumers (e.g., automation service) can use
+ * the same env vars without duplicating the mapping logic.
+ *
+ * `vscodeBasePath` is an explicit opt-in rather than a field read off `config`,
+ * and that is deliberate. Setting it changes the URL `/api/vscode/url`
+ * advertises: agent-server appends the prefix to the browser origin the
+ * frontend sends, so the editor is only reachable if the same origin also
+ * routes that prefix to the editor port. A launcher that sets it without
+ * registering the route advertises `<origin>/vscode/…`, which serves the
+ * canvas SPA shell instead of the editor.
+ *
+ * Requiring the caller to name it makes the pairing greppable: every call site
+ * that passes `vscodeBasePath` must also register a matching route, and
+ * `__tests__/scripts/vscode-base-path-opt-in.test.ts` asserts that no launcher
+ * opts in without one.
+ *
+ * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>}} [options]
+ * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
+ *   passing the path prefix the caller also routes to `config.vscodePort`.
+ * @param {Record<string, string | undefined>} [options.env] - Source
+ *   environment for the telemetry mapping (defaults to `process.env`).
+ * @returns {Record<string, string>} Environment variables for agent-server
+ */
+export function buildAgentServerEnv(config, options = {}) {
+  const { vscodeBasePath = null, env = process.env } = options;
   return {
     ...buildAgentServerTelemetryEnv(env),
     // Force Python to use UTF-8 for all file I/O and streams.
@@ -759,6 +794,13 @@ export function buildAgentServerEnv(config, env = process.env) {
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
     OH_VSCODE_PORT: String(config.vscodePort),
+    // Serve the editor under a path prefix on the canvas origin rather than on
+    // its own published port. agent-server passes this to openvscode-server as
+    // --server-base-path and includes it in the URL from /api/vscode/url, which
+    // matches the ingress route the caller registers for the same prefix.
+    //
+    // Omitted unless the caller opts in — see the note on this function.
+    ...(vscodeBasePath ? { OH_VSCODE_BASE_PATH: vscodeBasePath } : {}),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
@@ -954,7 +996,12 @@ async function main() {
       cwd: config.cwd,
       env: {
         ...process.env,
-        ...buildAgentServerEnv(config),
+        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+        // URL resolves on the frontend origin the browser is actually on.
+        ...buildAgentServerEnv(config, {
+          vscodeBasePath: config.vscodeBasePath,
+        }),
       },
     },
   );
@@ -1023,6 +1070,12 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
+      // This mode has no static server or ingress in front of Vite, so Vite's
+      // own proxy is the only thing that can serve the editor prefix on the
+      // frontend origin. The editor is a separate process on a port of its
+      // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
+      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front
