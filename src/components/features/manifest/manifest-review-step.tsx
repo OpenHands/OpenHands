@@ -15,11 +15,7 @@ import {
   collectFields,
   fieldValues,
 } from "#/manifests/manifest-local-validation";
-import type {
-  SetupBlock,
-  SetupFieldType,
-  SetupFormValues,
-} from "#/manifests/types";
+import type { SetupBlock, SetupFormValues } from "#/manifests/types";
 
 export interface SetupReviewStepProps {
   setup: SetupBlock;
@@ -84,10 +80,7 @@ export function SetupReviewStep({
   return (
     <dl className={automationPreviewListClassName} data-testid="setup-review">
       {ordered.map((row) => {
-        const Icon = setupPreviewFieldIcon(
-          row.name,
-          row.kind === "name" ? "text" : (row.kind as SetupFieldType),
-        );
+        const Icon = setupPreviewFieldIcon(row.name, row.kind);
         return (
           <AutomationPreviewField
             key={row.name}
@@ -95,11 +88,7 @@ export function SetupReviewStep({
             label={row.label}
             value={row.value}
             chips={previewChipItems(row.name, row.kind, row.parts)}
-            layout={
-              row.value.includes("\n") || row.kind === "prompt"
-                ? "stacked"
-                : "inline"
-            }
+            layout={row.value.includes("\n") ? "stacked" : "inline"}
           />
         );
       })}

@@ -13,6 +13,16 @@ export const extensionModuleCardInteractiveClassName =
 export const extensionModuleCardPillClassName =
   "inline-flex max-w-full shrink-0 items-center whitespace-nowrap rounded-full bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] leading-4 text-tertiary-light";
 
+/**
+ * Overrides layered on {@link extensionModuleCardPillClassName} where a chip
+ * carries a value too long for one line (a feed URL, a plugin id). Pill chrome
+ * is nowrap + hug-content, so wrapping needs all three: `max-width` must beat
+ * content width, `min-width` must not be `max-content` (that beats `max-width`
+ * and keeps one line), and the box must not be a flex row.
+ */
+export const extensionModuleCardPillWrapClassName =
+  "inline-block w-max min-w-0 whitespace-normal break-words rounded-xl px-2.5 py-1 text-left text-xs hyphens-none";
+
 /** Two-column card grids switch back to one column at or below this width (px). */
 export const EXTENSION_MODULE_CARD_GRID_SINGLE_COLUMN_MAX_PX = 599;
 

@@ -206,81 +206,6 @@ export function ImportAutomationModal({
       )
     : [];
 
-  const panel = (
-    <div
-      data-testid="import-automation-modal"
-      data-view={spec ? "preview" : "picker"}
-      className={cn(
-        "relative flex max-h-[85vh] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary",
-        "w-[min(36rem,calc(100vw-2rem))]",
-      )}
-    >
-      <ModalCloseButton
-        onClose={onClose}
-        testId="import-automation-modal-close"
-        disabled={isImporting}
-      />
-      <header className="px-6 pb-4 pt-6">
-        <h2 className={cn("pr-6", modalTitleLgClassName)}>
-          {t(I18nKey.AUTOMATIONS$IMPORT)}
-        </h2>
-        {spec ? (
-          <p className="mt-2 text-sm text-tertiary-light">
-            {t(I18nKey.AUTOMATIONS$IMPORT_PREVIEW_DESCRIPTION)}
-          </p>
-        ) : null}
-      </header>
-
-      {spec ? (
-        <>
-          <dl className={automationPreviewListClassName}>
-            {previewRows.map((row) => (
-              <AutomationPreviewField
-                key={row.name}
-                icon={row.icon}
-                label={row.label}
-                value={row.value}
-                chips={row.chips}
-                layout={row.layout}
-              />
-            ))}
-          </dl>
-
-          <footer className="px-6 py-5">
-            <p className="mb-4 text-sm text-tertiary-light">
-              {t(I18nKey.AUTOMATIONS$IMPORT_DISABLED_NOTICE)}
-            </p>
-            <div className="flex justify-end gap-3">
-              <BrandButton
-                testId="import-automation-cancel"
-                type="button"
-                variant="secondary"
-                onClick={onClose}
-                isDisabled={isImporting}
-              >
-                {t(I18nKey.AUTOMATIONS$CANCEL)}
-              </BrandButton>
-              <BrandButton
-                testId="import-automation-confirm"
-                type="button"
-                variant="primary"
-                onClick={onImport}
-                isDisabled={isImporting}
-                aria-busy={isImporting}
-              >
-                {isImporting
-                  ? t(I18nKey.AUTOMATIONS$IMPORTING)
-                  : t(I18nKey.AUTOMATIONS$IMPORT)}
-              </BrandButton>
-            </div>
-          </footer>
-        </>
-      ) : (
-        <ImportAutomationPicker onFile={onFile} />
-      )}
-    </div>
-  );
-
   return (
     <ModalBackdrop
       onClose={isImporting ? undefined : onClose}
@@ -288,7 +213,75 @@ export function ImportAutomationModal({
       closeOnBackdropClick={!isImporting}
       aria-label={t(I18nKey.AUTOMATIONS$IMPORT)}
     >
-      {panel}
+      <div
+        data-testid="import-automation-modal"
+        data-view={spec ? "preview" : "picker"}
+        className="relative flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
+      >
+        <ModalCloseButton
+          onClose={onClose}
+          testId="import-automation-modal-close"
+          disabled={isImporting}
+        />
+        <header className="px-6 pb-4 pt-6">
+          <h2 className={cn("pr-6", modalTitleLgClassName)}>
+            {t(I18nKey.AUTOMATIONS$IMPORT)}
+          </h2>
+          {spec ? (
+            <p className="mt-2 text-sm text-tertiary-light">
+              {t(I18nKey.AUTOMATIONS$IMPORT_PREVIEW_DESCRIPTION)}
+            </p>
+          ) : null}
+        </header>
+
+        {spec ? (
+          <>
+            <dl className={automationPreviewListClassName}>
+              {previewRows.map((row) => (
+                <AutomationPreviewField
+                  key={row.name}
+                  icon={row.icon}
+                  label={row.label}
+                  value={row.value}
+                  chips={row.chips}
+                  layout={row.layout}
+                />
+              ))}
+            </dl>
+
+            <footer className="px-6 py-5">
+              <p className="mb-4 text-sm text-tertiary-light">
+                {t(I18nKey.AUTOMATIONS$IMPORT_DISABLED_NOTICE)}
+              </p>
+              <div className="flex justify-end gap-3">
+                <BrandButton
+                  testId="import-automation-cancel"
+                  type="button"
+                  variant="secondary"
+                  onClick={onClose}
+                  isDisabled={isImporting}
+                >
+                  {t(I18nKey.AUTOMATIONS$CANCEL)}
+                </BrandButton>
+                <BrandButton
+                  testId="import-automation-confirm"
+                  type="button"
+                  variant="primary"
+                  onClick={onImport}
+                  isDisabled={isImporting}
+                  aria-busy={isImporting}
+                >
+                  {isImporting
+                    ? t(I18nKey.AUTOMATIONS$IMPORTING)
+                    : t(I18nKey.AUTOMATIONS$IMPORT)}
+                </BrandButton>
+              </div>
+            </footer>
+          </>
+        ) : (
+          <ImportAutomationPicker onFile={onFile} />
+        )}
+      </div>
     </ModalBackdrop>
   );
 }
