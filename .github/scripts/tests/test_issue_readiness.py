@@ -314,7 +314,13 @@ Error: the button overlaps the field
 
 
 def test_bug_ready_when_actual_behavior_opens_with_a_fence():
-    """The output is inside the fence, so losing the fence withholds the label."""
+    """End-to-end guard, not a red/green case for this fix.
+
+    It passes with the patterns reverted too, because the screenshot sits after
+    the fence and survives the swallow. Kept because it pins the whole path for a
+    body shaped the way the bug needs, in both line endings; the section content
+    itself is covered red/green by `test_section_opening_with_a_fence_keeps_its_body`.
+    """
     body = """### Steps to Reproduce
 Start the app with `npm run dev`.
 
