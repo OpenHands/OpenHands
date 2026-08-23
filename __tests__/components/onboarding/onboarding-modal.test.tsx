@@ -23,6 +23,7 @@ import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn());
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -38,7 +39,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   // `LlmSettingsScreen` is stubbed, so provide the minimal client it needs.
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
-      getSettings: vi.fn().mockResolvedValue({}),
+      getSettings: getSettingsMock,
     };
   }),
 }));
@@ -214,6 +215,8 @@ beforeEach(() => {
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
   vi.clearAllMocks();
   getServerInfoMock.mockReset();
+  getSettingsMock.mockReset();
+  getSettingsMock.mockResolvedValue({});
   getServerInfoMock.mockImplementation((options?: { host?: string }) => {
     if (options?.host?.startsWith("https://127.0.0.1:8000")) {
       return Promise.reject(new Error("Failed to fetch"));
@@ -646,6 +649,44 @@ describe("OnboardingModal", () => {
     ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
     expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
       "Disconnected",
+    );
+  });
+
+  it("stays on the backend step when the API key is invalid", async () => {
+    window.localStorage.clear();
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+    getSettingsMock.mockRejectedValue(
+      Object.assign(new Error("Unauthorized"), {
+        name: "HttpError",
+        status: 401,
+      }),
+    );
+
+    renderModal();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByTestId("onboarding-backend-host"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-host"),
+      "http://localhost:8000",
+    );
+    await user.clear(screen.getByTestId("onboarding-backend-api-key"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-api-key"),
+      "invalid-key",
+    );
+    await user.click(screen.getByTestId("onboarding-backend-next"));
+
+    expect(
+      await screen.findByTestId("onboarding-backend-error"),
+    ).toHaveTextContent("Invalid API key");
+    expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+      "data-current-step",
+      "0",
     );
   });
 

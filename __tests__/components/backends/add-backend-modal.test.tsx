@@ -14,6 +14,7 @@ import { AddBackendModal } from "#/components/features/backends/add-backend-moda
 import * as telemetry from "#/services/telemetry";
 
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn());
 
 const deviceFlowMocks = vi.hoisted(() => ({
   startDeviceFlow: vi.fn(),
@@ -36,6 +37,11 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   ServerClient: vi.fn(function ServerClientMock() {
     return {
       getServerInfo: getServerInfoMock,
+    };
+  }),
+  SettingsClient: vi.fn(function SettingsClientMock() {
+    return {
+      getSettings: getSettingsMock,
     };
   }),
 }));
@@ -77,7 +83,9 @@ beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
   window.localStorage.clear();
   getServerInfoMock.mockReset();
+  getSettingsMock.mockReset();
   getServerInfoMock.mockResolvedValue({ version: "1.28.0" });
+  getSettingsMock.mockResolvedValue({});
   deviceFlowMocks.startDeviceFlow.mockReset();
   deviceFlowMocks.startDeviceFlow.mockResolvedValue({
     device_code: "device-code",
