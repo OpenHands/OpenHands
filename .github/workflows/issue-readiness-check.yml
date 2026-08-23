@@ -90,6 +90,7 @@ jobs:
               if: >-
                   github.event.action == 'opened'
                   || github.event.action == 'reopened'
+                  || (github.event.action == 'labeled' && github.event.label.name == 'ready-for-dev')
                   || (steps.readiness.outputs.ready == 'true' && !contains(github.event.issue.labels.*.name, 'ready-for-dev'))
                   || (steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev'))
               env:
