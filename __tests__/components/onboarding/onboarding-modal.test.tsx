@@ -23,6 +23,7 @@ import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn());
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -38,7 +39,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   // `LlmSettingsScreen` is stubbed, so provide the minimal client it needs.
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
-      getSettings: vi.fn().mockResolvedValue({}),
+      getSettings: vi.fn(() => getSettingsMock()),
     };
   }),
 }));
@@ -214,12 +215,16 @@ beforeEach(() => {
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
   vi.clearAllMocks();
   getServerInfoMock.mockReset();
+  getSettingsMock.mockReset();
   getServerInfoMock.mockImplementation((options?: { host?: string }) => {
     if (options?.host?.startsWith("https://127.0.0.1:8000")) {
       return Promise.reject(new Error("Failed to fetch"));
     }
     return Promise.resolve({ version: "1.28.0" });
   });
+  // Default: SettingsClient.getSettings() succeeds. Individual tests that
+  // need a 401 for invalid API key validation override this.
+  getSettingsMock.mockResolvedValue({});
   // ChooseAgentStep's Next button now persists the selection via
   // saveSettings before advancing. Stub it so the rest of the flow
   // (which these tests focus on) isn't gated on a real HTTP call.
@@ -646,6 +651,58 @@ describe("OnboardingModal", () => {
     ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
     expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
       "Disconnected",
+    );
+  });
+
+  it("stays on the backend step when the API key is invalid", async () => {
+    // Regression test for #16804: testBackendConnection now calls
+    // SettingsClient.getSettings() which returns 401 for an invalid API
+    // key. The user must stay on the backend step with an error rather
+    // than advancing to the next onboarding step.
+    window.localStorage.clear();
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+
+    // Simulate a 401 from SettingsClient.getSettings() — the SDK throws
+    // an HttpError with name="HttpError" and status=401.
+    const httpError = Object.assign(new Error("Unauthorized"), {
+      name: "HttpError",
+      status: 401,
+    });
+    getSettingsMock.mockRejectedValue(httpError);
+
+    renderModal();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByTestId("onboarding-backend-host"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-host"),
+      "http://localhost:8000",
+    );
+    await user.clear(screen.getByTestId("onboarding-backend-api-key"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-api-key"),
+      "invalid-key",
+    );
+    await user.click(screen.getByTestId("onboarding-backend-next"));
+
+    // Error banner must be visible.
+    expect(
+      await screen.findByTestId("onboarding-backend-error"),
+    ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
+    expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
+      "Invalid API key",
+    );
+    // User must NOT have advanced — the backend step is still active.
+    expect(
+      screen.getByTestId("onboarding-step-check-backend"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("onboarding-modal")).toHaveAttribute(
+      "data-current-step",
+      "0",
     );
   });
 
