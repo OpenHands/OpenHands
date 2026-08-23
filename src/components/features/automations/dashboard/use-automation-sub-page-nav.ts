@@ -30,7 +30,12 @@ export function useAutomationSubPageNav(): AutomationSubPageNav | null {
       .map((item) => ({
         to: item.to,
         label: item.label,
-        Icon: MANIFEST_ICON_BY_SLUG[item.icon],
+        // Templates is a catalog, so the host always shows the library icon
+        // even while the published manifest still names sparkles.
+        Icon:
+          item.page === "templates"
+            ? MANIFEST_ICON_BY_SLUG.library
+            : MANIFEST_ICON_BY_SLUG[item.icon],
         testId: `automations-navigation-${item.page}`,
       })),
   };

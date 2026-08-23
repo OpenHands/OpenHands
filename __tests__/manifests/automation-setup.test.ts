@@ -20,14 +20,16 @@ import { createSetup, createSetupEntry } from "./manifest-test-data";
 
 // The one word of a derived name the host writes rather than reads off the
 // entry is translated, and the derivation runs where no translator can be
-// passed in, so it reads the shared instance. Stubbed to pin the key and the
-// count rather than a rendered sentence.
-vi.mock("#/i18n", () => ({
-  default: {
-    t: (key: string, options: Record<string, unknown>) =>
-      `${key}(${options.total})`,
-  },
+// passed in, so it reads the shared instance. Rendered as `en` does, because
+// the fixtures pin the sentence the service was sent; the spy is what pins the
+// key, so both halves stay covered.
+const { translate } = vi.hoisted(() => ({
+  translate: vi.fn(
+    (_key: string, options: Record<string, unknown>) =>
+      `${options.total} repositories`,
+  ),
 }));
+vi.mock("#/i18n", () => ({ default: { t: translate } }));
 
 // The command a skill publishes in its own frontmatter, which the host looks
 // up rather than storing. Pinned so the assertion does not move when the
@@ -42,8 +44,20 @@ vi.mock("@openhands/extensions/skills", () => ({
       triggers: ["/incident-retro:setup"],
       content: "",
     },
+    {
+      name: "github-repo-monitor",
+      description: "Watch a GitHub repository for mentions.",
+      triggers: ["/github-monitor:poll"],
+      content: "",
+    },
   ],
 }));
+
+/** The command each assisted entry's skill publishes, keyed by the entry it belongs to. */
+const SETUP_COMMANDS: Record<string, string> = {
+  "incident-retrospective-drafter": "/incident-retro:setup",
+  "github-repo-monitor": "/github-monitor:poll",
+};
 
 /**
  * The reference fixtures `OpenHands/extensions` publishes with its catalog.
@@ -193,13 +207,16 @@ describe("the contract fixtures", () => {
     );
 
     // Assert
-    // Every published fixture is a prompt entry created through the preset
-    // endpoint, so the deduped set collapses to that single path.
+    // The fixtures cover both creation paths: a prompt entry through the preset
+    // endpoint, and a bundle entry through the plain create it uploads to first.
     expect({
       create: [...createPaths].sort(),
       preflight: [...preflightPaths],
     }).toEqual({
-      create: [automationCreateEndpoint()],
+      create: [
+        automationCreateEndpoint(requireEntry("github-pr-reviewer")),
+        automationCreateEndpoint(),
+      ].sort(),
       preflight: ["/v1/validate"],
     });
   });
@@ -228,7 +245,7 @@ describe("buildCreatePayload", () => {
 
     // Act
     const payload = buildCreatePayload(entry, {
-      repository: "OpenHands/automation",
+      repositories: ["OpenHands/automation"],
     });
 
     // Assert
@@ -258,7 +275,10 @@ describe("buildCreatePayload", () => {
     });
 
     // Assert
-    expect(payload?.name).toBe(`${entry.name} - SETUP$REPOSITORY_COUNT(2)`);
+    expect(payload?.name).toBe(`${entry.name} - 2 repositories`);
+    expect(translate).toHaveBeenCalledWith("SETUP$REPOSITORY_COUNT", {
+      total: 2,
+    });
   });
 
   it("sends no request body for an entry that hands setup to a conversation", () => {
@@ -270,6 +290,43 @@ describe("buildCreatePayload", () => {
 
     // Assert
     expect(payload).toBeNull();
+  });
+
+  it("attaches template provenance when the entry carries a version", () => {
+    // Arrange
+    const entry = createSetupEntry({ version: "1.0.0" });
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload?.template).toEqual({
+      id: "widget-monitor",
+      version: "1.0.0",
+      config: values,
+    });
+  });
+
+  it("sends the payload unchanged for an entry without a version", () => {
+    // Arrange
+    const entry = createSetupEntry();
+    const values = {
+      repository: "octo/widgets",
+      widgetName: "gadget",
+      schedule: "*/5 * * * *",
+    };
+
+    // Act
+    const payload = buildCreatePayload(entry, values);
+
+    // Assert
+    expect(payload).not.toBeNull();
+    expect(payload).not.toHaveProperty("template");
   });
 });
 
@@ -300,7 +357,7 @@ describe("buildAssistedMessage", () => {
       const seed = buildAssistedMessage(entry, formValues);
 
       // Assert
-      expect(seed).toBe(`/incident-retro:setup\n\n${message}`);
+      expect(seed).toBe(`${SETUP_COMMANDS[automationId]}\n\n${message}`);
     },
   );
 });
@@ -329,23 +386,12 @@ describe("service rejections mapped back to fields", () => {
 });
 
 describe("local validation of fixture form values", () => {
-  it("blocks the unsafe trigger phrase before any request is made", () => {
-    // Arrange — the fixture names the failing field; the code is the host's
-    // own vocabulary, rendered through its translations.
-    const scenario = requireScenario(
-      BUNDLES[1],
-      "quote-in-trigger-phrase-blocked-locally",
-    );
-    const entry = requireEntry("github-repo-monitor");
-
-    // Act
-    const errors = validateFormValues(entry.setup, scenario.formValues ?? {});
-
-    // Assert
-    expect(errors).toEqual({
-      triggerPhrase: { code: "unsafeExpressionLiteral" },
-    });
-  });
+  // The unsafe-trigger-phrase case that used to live here is gone: it belonged
+  // to github-repo-monitor's event trigger, whose JMESPath filter the phrase was
+  // interpolated into. The entry now runs on cron, so no catalog entry declares
+  // the `safeExpressionLiteral` constraint any more and there is no fixture to
+  // pin. The constraint itself is still exercised, on a synthetic setup, by
+  // `manifest-local-validation.test.ts`.
 
   it("passes an entirely blank assisted form, as its fixture records", () => {
     // Arrange
@@ -365,13 +411,15 @@ describe("deriveErrorMap", () => {
     // Act
     const errorMap = deriveErrorMap(requireEntry("github-pr-reviewer"));
 
-    // Assert
+    // Assert — a bundle's answers reach the service through its rendered
+    // config rather than through a prompt, so the paths are the config's.
     expect(errorMap).toEqual({
-      name: ["repository"],
-      prompt: ["triggerLabel", "repository", "reviewTone"],
-      "repos[0].url": ["repository"],
+      name: ["repositories"],
       "trigger.schedule": ["schedule"],
       "trigger.timezone": ["timezone"],
+      "template.config.repos": ["repositories"],
+      "template.config.trigger_label": ["triggerLabel"],
+      "template.config.review_tone": ["reviewTone"],
     });
   });
 });

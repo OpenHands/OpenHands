@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { RenameProfileModal } from "./rename-profile-modal";
 import { DeleteProfileModal } from "./delete-profile-modal";
 import { ProfilesBody } from "./profiles-body";
+import { ProviderConnectionsManager } from "./provider-connections-manager";
 import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
+import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useCanManageOrgProfiles } from "#/hooks/use-can-manage-org-profiles";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -34,6 +37,14 @@ export function LlmProfilesManager({
   // Cloud members are view-only; only owners/admins (and all local users) may
   // add, edit, rename, duplicate, delete, or activate profiles.
   const canManage = useCanManageOrgProfiles();
+  // Provider connections exist only on the local agent-server.
+  const { backend } = useActiveBackend();
+  const isLocal = backend.kind === "local";
+  const {
+    data: connections,
+    isLoading: isLoadingConnections,
+    error: connectionsError,
+  } = useProviderConnections();
   const [profileToRename, setProfileToRename] = useState<ProfileInfo | null>(
     null,
   );
@@ -43,6 +54,20 @@ export function LlmProfilesManager({
 
   const profiles = data?.profiles ?? [];
   const active = data?.active_profile ?? null;
+  const connectionList = useMemo(() => connections ?? [], [connections]);
+
+  const connectionNamesById = useMemo(
+    () => Object.fromEntries(connectionList.map((c) => [c.id, c.display_name])),
+    [connectionList],
+  );
+  const linkedCountById = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const profile of profiles) {
+      const id = profile.provider_connection_id;
+      if (id) counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }, [profiles]);
 
   const handleActivate = async (name: string) => {
     try {
@@ -95,37 +120,49 @@ export function LlmProfilesManager({
 
   return (
     <>
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-white">
-            {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
-          </h2>
-          {onAddProfile && canManage ? (
-            <BrandButton
-              testId="add-llm-profile"
-              type="button"
-              variant="secondary"
-              className="ml-auto"
-              onClick={onAddProfile}
-            >
-              {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
-            </BrandButton>
-          ) : null}
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-medium text-white">
+              {t(I18nKey.SETTINGS$AVAILABLE_PROFILES)}
+            </h2>
+            {onAddProfile && canManage ? (
+              <BrandButton
+                testId="add-llm-profile"
+                type="button"
+                variant="secondary"
+                className="ml-auto"
+                onClick={onAddProfile}
+              >
+                {t(I18nKey.SETTINGS$ADD_LLM_PROFILE)}
+              </BrandButton>
+            ) : null}
+          </div>
+
+          <ProfilesBody
+            isLoading={isLoading}
+            loadError={error ?? null}
+            profiles={profiles}
+            active={active}
+            canManage={canManage}
+            connectionNamesById={connectionNamesById}
+            onActivate={handleActivate}
+            onEdit={handleEdit}
+            onRename={setProfileToRename}
+            onDuplicate={handleDuplicate}
+            onDelete={setProfileToDelete}
+            isActivating={activateProfile.isPending}
+          />
         </div>
 
-        <ProfilesBody
-          isLoading={isLoading}
-          loadError={error ?? null}
-          profiles={profiles}
-          active={active}
-          canManage={canManage}
-          onActivate={handleActivate}
-          onEdit={handleEdit}
-          onRename={setProfileToRename}
-          onDuplicate={handleDuplicate}
-          onDelete={setProfileToDelete}
-          isActivating={activateProfile.isPending}
-        />
+        {isLocal && canManage ? (
+          <ProviderConnectionsManager
+            connections={connectionList}
+            linkedCountById={linkedCountById}
+            isLoading={isLoadingConnections}
+            loadError={connectionsError ?? null}
+          />
+        ) : null}
       </div>
 
       <RenameProfileModal

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useConversationStore } from "#/stores/conversation-store";
+import { setConversationState } from "#/utils/conversation-local-storage";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { mobileTopBarIconButtonClassName } from "#/utils/mobile-top-bar-icon-button-classes";
@@ -19,8 +20,9 @@ interface RightPanelToggleProps {
  *
  * Placed in the chat header so users can always restore the panel,
  * even when it's hidden. The open/closed state lives in the in-memory
- * Zustand store and is intentionally not persisted across full reloads —
- * see the comment in `useConversationStore` for the rationale.
+ * Zustand store; each toggle is also mirrored into the conversation's
+ * localStorage blob (`rightPanelShown`) so other drawer surfaces can
+ * coordinate with it.
  */
 export function RightPanelToggle({ className }: RightPanelToggleProps) {
   const { t } = useTranslation("openhands");
@@ -44,6 +46,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
       if (!conversationId) return;
       setHasRightPanelToggled(true);
       setIsRightPanelShown(true);
+      setConversationState(conversationId, { rightPanelShown: true });
       const { selectedTab } = useConversationStore.getState();
       if (!selectedTab) {
         setSelectedTab("files");
@@ -55,6 +58,9 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
     const newState = !isRightPanelShown;
     setHasRightPanelToggled(newState);
     setIsRightPanelShown(newState);
+    if (conversationId) {
+      setConversationState(conversationId, { rightPanelShown: newState });
+    }
 
     if (newState) {
       const { selectedTab } = useConversationStore.getState();
@@ -82,6 +88,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
         disabled={isArchivedConversation}
         className={cn(
           mobileTopBarIconButtonClassName,
+          "size-7 self-center",
           isArchivedConversation &&
             "cursor-not-allowed opacity-50 hover:bg-transparent hover:text-[var(--oh-muted)]",
           className,
@@ -91,7 +98,7 @@ export function RightPanelToggle({ className }: RightPanelToggleProps) {
         aria-disabled={isArchivedConversation}
         data-testid="right-panel-toggle"
       >
-        <BlockDrawerLeftIcon className="w-5 h-5 -scale-x-100" />
+        <BlockDrawerLeftIcon className="size-5 -scale-x-100" />
       </button>
     </ChatActionTooltip>
   );

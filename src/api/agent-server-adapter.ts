@@ -781,6 +781,10 @@ function buildAgentContext(
     load_public_skills: false,
     load_user_skills: true,
     load_project_skills: true,
+    // The backend also auto-loads user/project skills; the deny-list must
+    // travel with the context so those skills are excluded from the system
+    // prompt too.
+    disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix
       ? { system_message_suffix: runtimeServicesSuffix }
       : {}),

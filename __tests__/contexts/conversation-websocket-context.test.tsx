@@ -10,6 +10,7 @@ import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useWebSocket } from "#/hooks/use-websocket";
 import EventService from "#/api/event-service/event-service.api";
 import {
   getStoredConversationMetadata,
@@ -216,6 +217,83 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
       "session_api_key",
     );
+  });
+
+  it("keeps the events socket up, with its `since` anchor, across background history refetches", async () => {
+    // Arrange: the initial history load resolves; the background refetch stays
+    // in flight so the query sits in `isFetching` while the socket is already
+    // established — the state that used to tear the socket down and leave the
+    // conversation stuck at "Connecting".
+    const historyPage = () => ({
+      items: [createUserMessageEvent("user-msg-conv-refetch")],
+      next_page_id: null,
+    });
+    let resolveRefetch!: (
+      page: Awaited<ReturnType<typeof EventService.searchEvents>>,
+    ) => void;
+    vi.spyOn(EventService, "searchEvents")
+      .mockResolvedValueOnce(historyPage())
+      .mockImplementationOnce(
+        () =>
+          new Promise<Awaited<ReturnType<typeof EventService.searchEvents>>>(
+            (resolve) => {
+              resolveRefetch = resolve;
+            },
+          ),
+      );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-refetch"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    // Every render's main-socket call (the one carrying `resend_mode`),
+    // including any teardown call with an empty URL.
+    const mainCalls = () =>
+      vi
+        .mocked(useWebSocket)
+        .mock.calls.filter(
+          ([, options]) =>
+            options?.queryParams && "resend_mode" in options.queryParams,
+        );
+    const connectedAt = mainCalls().length;
+    const anchor = wsCapture.mainOptions?.queryParams?.after_timestamp;
+    expect(anchor).toBeTruthy();
+
+    // Act: a background refetch starts (as `refetchOnMount: "always"` fires
+    // when returning to a conversation) and stays in flight.
+    act(() => {
+      void queryClient.refetchQueries({ queryKey: ["conversation-history"] });
+    });
+    await waitFor(() =>
+      expect(
+        queryClient.isFetching({ queryKey: ["conversation-history"] }),
+      ).toBe(1),
+    );
+
+    // Assert: since the socket connected, no render tore it down (empty URL)
+    // and none degraded the `since` anchor to a full resend.
+    for (const [url, options] of mainCalls().slice(connectedAt - 1)) {
+      expect(url).toContain("/sockets/events/conv-refetch");
+      expect(options?.queryParams).toMatchObject({
+        resend_mode: "since",
+        after_timestamp: anchor,
+      });
+    }
+
+    // The refetch settling must not churn the socket either.
+    await act(async () => {
+      resolveRefetch(historyPage());
+    });
+    const [urlAfterRefetch] = mainCalls().at(-1)!;
+    expect(urlAfterRefetch).toContain("/sockets/events/conv-refetch");
   });
 
   it("uses the planning sub-conversation session key", async () => {

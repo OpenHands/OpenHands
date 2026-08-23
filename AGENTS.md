@@ -40,6 +40,22 @@ Common mis-placements to avoid:
 - **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
 - **Skills / automations / integrations** → belong in `extensions`.
 
+## Cross-Repository Boundaries
+
+The four repositories have distinct ownership boundaries:
+
+| Repository | Owns |
+|---|---|
+| [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration. |
+| [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and the canonical server API. |
+| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) | Browser-compatible TypeScript client and generated/maintained types for the Agent Server API. |
+| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, and dispatching. It manages when automations run; the Agent Server/SDK executes them. |
+
+The usual dependency direction is `software-agent-sdk` / Agent Server → OpenAPI contract → `typescript-client` → Agent Canvas. Automation scheduling and dispatching flow from Agent Canvas to `automation`, which starts work on the Agent Server/SDK. Put new server behavior and endpoints in `software-agent-sdk`, client access in `typescript-client`, UI and frontend integration in this repository, and scheduling/webhook lifecycle behavior in `automation`.
+
+All pull requests for this repository must comply with [`.agents/skills/custom-codereview-guide.md`](.agents/skills/custom-codereview-guide.md), in addition to the general contribution requirements and CI checks.
+
+
 ## PR Description Human Check
 
 The `HUMAN:` section in PR descriptions is reserved for human contributors only.
@@ -73,6 +89,54 @@ One Canvas-owned PostHog client owns telemetry and app analytics.
 1. Add a typed function to `useTracking` in `src/hooks/use-tracking.ts`
 2. Add the function to the hook's `return` object
 3. Destructure and call it from the component: `const { trackFoo } = useTracking()`
+
+### Event dictionary: onboarding_link_clicked
+
+One stable event for every onboarding link/CTA click. New onboarding links must
+reuse this contract (extend the unions in `use-tracking.ts`), never add one-off
+events per destination.
+
+Properties (all values controlled enums or booleans — never raw destination
+URLs, query params, or link text; `current_url` is the standard app-page common
+property, not a destination):
+- `link_id` (`OnboardingLinkId`): `configure_llm` | `start_conversation` |
+  `schedule_task` | `customize_agent` | `connect_mcp` | `join_slack` |
+  `open_docs`
+- `destination_type` (`OnboardingLinkDestinationType`): `community` |
+  `integration` | `documentation` | `settings` | `conversation` | `automation`
+- `surface` (`OnboardingLinkSurface`): `landing_checklist` |
+  `onboarding_modal` (reserved; no modal links are instrumented yet)
+- `checklist_item` (optional): the owning checklist item's `link_id`; set on
+  every `landing_checklist` emission, including `open_docs` clicks
+- `step_id` (optional): reserved for future onboarding-modal links
+- `is_external` (boolean): whether the destination leaves the app
+
+Instrumented CTAs (sidebar "Getting started" checklist; the row link and its
+preview action CTA intentionally share one `link_id` — same destination):
+
+| Checklist item | Row + preview action | Preview docs link |
+|---|---|---|
+| Add LLM API key | `configure_llm` / `settings` / internal | `open_docs` / `documentation` / external |
+| Start your first chat | `start_conversation` / `conversation` / internal | `open_docs` |
+| Schedule a task | `schedule_task` / `automation` / internal | `open_docs` |
+| Customize your agent | `customize_agent` / `settings` / internal | `open_docs` |
+| Connect an MCP integration | `connect_mcp` / `integration` / internal | `open_docs` |
+| Join the OpenHands Slack | `join_slack` / `community` / external | `open_docs` |
+
+Excluded CTAs (per the one-canonical-capture rule above):
+- Onboarding-modal wizard controls (back/next/skip/close, agent cards) →
+  covered by `onboarding_step_viewed` / `onboarding_completed` /
+  `onboarding_skipped`
+- Modal backend-connect CTAs and the backend form's docs links →
+  `backend_added` with `source: "onboarding"`
+- LLM settings help links inside the embedded settings screen (shared with
+  non-onboarding surfaces) → setup outcome captured by `settings_saved`
+- Recommended-automation cards → `prebuilt_automation_enabled`
+- Checklist expand/collapse toggle and the settings visibility switch → UI
+  state, not destination links
+
+Known limitation: middle-click (`auxclick`) opens are not captured; tracking
+uses React `onClick` only and never prevents default navigation.
 
 ### Env vars
 `VITE_POSTHOG_API_KEY` is the sole build-time PostHog key. Unconfigured source builds use staging; official release workflows set production explicitly. Precompiled consumers use runtime configuration instead.
@@ -504,9 +568,9 @@ When adding code that needs a new string, decide up front which rule it falls un
   - The `--public` flag is supported by both `scripts/dev-with-automation.mjs` (parsed in `parseArgs()`, propagated via `config.isPublic`) and `bin/agent-canvas.mjs` (passed as `isPublic` to `main()`).
   - The 401 detection lives in `src/api/agent-server-compatibility.ts` (`isAgentServerAuthError()`), and the gate is in `src/root.tsx`'s `App` component, between the `AgentServerUnavailableError` check and the `<Outlet />` render.
   - **Key rotation resilience (non-public):** `syncLauncherDefaultLocalBackend()` in `src/api/backend-registry/storage.ts` re-runs at module init: for any stored backend whose id is `"default-local"` and whose host matches (or is loopback-equivalent to) the launcher's default, its `apiKey` is overwritten with the current `makeDefaultLocalBackend().apiKey` (sourced from `VITE_SESSION_API_KEY` or, in the published-binary path, `window.__AGENT_CANVAS_SESSION_API_KEY__`). E2E coverage: `tests/e2e/mock-llm/backends/mock-llm-auth-modes.spec.ts` (fresh-install, key-rotation, and public-mode scenarios).
-- Backend/footer actions that launch modals from inside a dropdown or popover should intercept `onMouseDown` to keep the menu mounted, then perform the actual open on `onClick`. Current examples: `Add backend` / `Manage backends` in `src/components/features/backends/backend-selector.tsx`, plus the mirrored workspace-footer buttons in `src/components/features/conversation-panel/new-conversation-button.tsx`.
+- Backend/footer actions that launch modals from inside a dropdown or popover should intercept `onMouseDown` to keep the menu mounted, then perform the actual open on `onClick`. Current examples: `Add backend` / `Manage backends` in `src/components/features/backends/backend-selector.tsx`, plus the mirrored workspace-footer buttons in `src/components/features/conversation-panel/local-new-conversation-menu.tsx`.
 - `BackendSelector`'s cloud-org switch paths should never rethrow from the dropdown `onChange` handler: unexpected non-Axios failures need a generic error toast instead of an unhandled promise rejection, and the malformed `(cloud backend, null org)` self-heal path should fall back to the bundled backend if `/switch` fails.
-- `NewConversationButton` should support keyboard dismissal (`Escape`) for its inline popover, while still keeping the popover open when its modal children (`FolderBrowserModal`, `ManageWorkspacesModal`) are active.
+- `LocalNewConversationMenu` should support keyboard dismissal (`Escape`) for its inline popover, while still keeping the popover open when its modal children (`FolderBrowserModal`, `ManageWorkspacesModal`) are active.
 
 - README expectation: keep the first section as a concrete, chronological from-scratch quickstart for running this frontend against a real `openhands-agent-server` (clone, install prerequisites, optional `.env`, run `npm run dev`).
 - Windows-specific command syntax (PowerShell) lives in `README.windows.md`. When changing install / Docker sandbox instructions in `README.md`, update `README.windows.md` in the same PR to keep them in sync.
@@ -574,7 +638,7 @@ When adding code that needs a new string, decide up front which rule it falls un
 - Home page workspace UX (local backend):
   - `FolderBrowserModal`'s "Use this folder" button adds **only the currently navigated directory** as a single workspace (named by its basename). It no longer iterates `subdirs` and adds each child as a separate workspace.
   - The `WorkspaceDropdown` sticky footer now exposes both "+ Add Workspace" (opens the folder browser) and "Manage Workspaces" (opens `ManageWorkspacesModal`, which lets users remove individual workspaces via `useWorkspacesStore.removeWorkspace`). The Manage button is hidden when there are no workspaces yet.
-  - The sidebar "+ New Conversation" trigger (`NewConversationButton` in `src/components/features/conversation-panel/`) opens a popover that is a **flat list**, not the home-screen combobox: a leading "No workspace" entry plus one entry per stored workspace, each clicking through to `useCreateConversation` immediately (no separate Launch button). It mirrors the dropdown footer actions/pattern (`+ Add Workspace`, `Manage Workspaces`) locally rather than embedding `WorkspaceDropdown` itself.
+  - The conversation-panel new-thread picker (`ConversationPanelNewThreadPicker` in `src/components/features/conversation-panel/conversation-panel-new-thread-picker.tsx`, mounted from `conversation-panel.tsx`) is a `FolderPlus` icon button in the conversation-list header, not a labelled "+ New Conversation" button, and it branches on `backendKind`. Local backends get `LocalNewConversationMenu`, whose popover is a **flat list**, not the home-screen combobox: a leading "No workspace" entry plus one entry per stored workspace, each clicking through to `useCreateConversation` immediately (no separate Launch button). It mirrors the dropdown footer actions/pattern (`+ Add Workspace`, `Manage Workspaces`) locally rather than embedding `WorkspaceDropdown` itself. Cloud backends get `CloudNewConversationMenu` instead, a searchable repository picker (`useGitRepositories` / `useSearchRepositories`) with no workspace entries and no footer actions. The sidebar rail's "+ New Chat" item is a nav link to `/conversations` (`src/components/features/sidebar/sidebar-rail-body.tsx`), not this popover.
   - `useResolvedWorkspaces()` now returns `isLoading` / `isError` for parent-directory scans; `WorkspaceSelectionForm` should surface that state (status text and disabling the empty dropdown while parent results are still loading) instead of assuming the merged list is immediately ready.
   - `ManageWorkspacesModal` should require a confirmation step before removing either a saved workspace or a workspace parent; parent removals should mention the child-workspace impact, and tests should assert both the confirmation flow and that removing the selected workspace clears the launch selection.
   - In `useWorkspacesStore`, keep `clearWorkspaces()` scoped to literal workspaces only; use explicit helpers like `clearWorkspaceParents()` / `clearAll()` for broader resets so future callers do not accidentally wipe parent registrations.
@@ -640,6 +704,6 @@ When adding code that needs a new string, decide up front which rule it falls un
 
 - Electron desktop app name in dev (macOS) — `npm run desktop` shows the app as "Electron" in the Dock unless `scripts/brand-dev-electron.mjs` (wired as the `predesktop` hook) has run. There are **three independent name sources** and they must all be set; getting one wrong looks like the fix silently not working. (1) `app.name` — Electron-internal, drives the menu bar, About panel and `app.getPath("userData")`. It comes from `productName` in `electron/package.json`, read by Electron's `default_app` in dev and `lib/browser/init` when packaged. Note `default_app` only reads `<arg>/package.json`, so `npm run desktop` must point electron at the `electron/` **directory** — `electron electron/main.mjs` makes it probe `electron/main.mjs/package.json`, miss, and leave `app.name` at the host bundle default. (2) `CFBundleDisplayName` / `CFBundleName` in the running bundle's Info.plist — what `lsappinfo` and `NSRunningApplication.localizedName` report. (3) **The `.app` directory name — this is what the Dock tooltip actually shows.** macOS prefers the bundle's filesystem name over the plist keys; `/Applications/DBeaver.app` displays as "DBeaver" despite `CFBundleName = "DBeaver Community"`. So patching only the plist is NOT enough — the script also renames `node_modules/electron/dist/Electron.app` → `<productName>.app` and rewrites `node_modules/electron/path.txt` to match (`getElectronPath()` in `node_modules/electron/index.js` joins path.txt onto `dist/` and silently re-downloads Electron ~100 MB if it doesn't resolve, so the two must move together). `CFBundleExecutable` is deliberately left as `Electron` — `/Applications/Antigravity.app` ships that exact value and still displays correctly, so it only affects `ps`/Activity Monitor. Editing the plist does not break code signing: Electron's dist is ad-hoc *linker-signed* (`Info.plist=not bound`, `Sealed Resources=none`), so the signature covers only the Mach-O. `npm run build:desktop` is unaffected by the rename — electron-builder packages from `~/Library/Caches/electron/electron-v*.zip`, never from `node_modules/electron/dist`. The packaged app never had the problem: electron-builder emits `<productName>.app` with matching plist keys. Already-running instances keep the name they launched with, so quit and relaunch when verifying.
 
-- Electron desktop `node` / `npm` / `npx` PATH bridging — when the packaged `.app` is launched from Finder/Spotlight on macOS, the OS gives it a minimal PATH (`/usr/bin:/bin`). Homebrew, nvm, asdf installs of Node.js are invisible to spawned subprocesses. Two breakages flow from that: (1) backend launcher scripts that do `spawn("node", ...)` can't find Node; (2) most stdio MCP marketplace entries (Slack, GitHub, Figma, etc.) use `command: "npx"`, and when the agent-server tries to spawn them the missing `npx` makes the spawn fail with ENOENT — the SDK reports it as an `error_kind: "connection"` MCP test failure, which the install modal renders as `MCP$TEST_ERROR_CONNECTION` ("Could not reach the server. Check the URL and server type."), a misleading error since no URL is involved. **First fix attempt — DOES NOT WORK for stdio MCPs:** wrap `node`/`npm`/`npx` with thin shell scripts that run Electron with `ELECTRON_RUN_AS_NODE=1` against the package's CLI JS. That bridges the ENOENT but stdio JSON-RPC servers spawned through the wrapper exit with `McpError: Connection closed` before completing the MCP handshake — Electron-as-Node has subtly different stdin/stdout pipe semantics from a vanilla `node` binary when used as a stdio child of a windowed process. **Working fix:** bundle the real Node.js distribution. `scripts/download-node.mjs` downloads the official `node-v<ver>-<platform>-<arch>` tarball from `https://nodejs.org/dist/v<ver>/` into `resources/node/` (gitignored), prunes `include/`, `share/`, docs, and `node_modules/corepack` to keep the size down (~130 MB on Linux x64, dominated by the Node binary itself). Default pin: `NODE_BUNDLE_VERSION = "22.12.0"` (the repo's `engines.node` floor; every 22.x build shares the Electron 42 ABI); override with `NODE_VERSION=`. `electron-builder.config.mjs` ships `resources/node/` as an extraResource → `<Resources>/node/`. `electron/main.mjs::injectBundledNode()` prepends the platform-appropriate bin dir to `PATH` (POSIX: `<Resources>/node/bin`; Windows: `<Resources>/node/`) so subsequent spawns of `node`/`npm`/`npx` resolve to real binaries with full stdio fidelity. It also `chmod +x`'s the binaries on POSIX because electron-builder doesn't always preserve the bit. `injectBundledNode()` is a no-op when `!app.isPackaged` (dev `npm run desktop` uses the developer's system node). `build:desktop` and `build:desktop:universal` both run `download-node.mjs` after `download-uv.mjs`. If the bundled dir is missing at runtime, `injectBundledNode()` logs a loud `[desktop]` warning instead of silently leaving PATH bare.
+- Electron desktop `node` / `npm` / `npx` PATH bridging — when the packaged `.app` is launched from Finder/Spotlight on macOS, the OS gives it a minimal PATH (`/usr/bin:/bin`). Homebrew, nvm, asdf installs of Node.js are invisible to spawned subprocesses. Two breakages flow from that: (1) backend launcher scripts that do `spawn("node", ...)` can't find Node; (2) most stdio MCP marketplace entries (Slack, GitHub, Figma, etc.) use `command: "npx"`, and when the agent-server tries to spawn them the missing `npx` makes the spawn fail with ENOENT — the SDK reports it as an `error_kind: "connection"` MCP test failure, which the install modal renders as `MCP$TEST_ERROR_CONNECTION` ("Could not reach the server. Check the URL and server type."), a misleading error since no URL is involved. **First fix attempt — DOES NOT WORK for stdio MCPs:** wrap `node`/`npm`/`npx` with thin shell scripts that run Electron with `ELECTRON_RUN_AS_NODE=1` against the package's CLI JS. That bridges the ENOENT but stdio JSON-RPC servers spawned through the wrapper exit with `McpError: Connection closed` before completing the MCP handshake — Electron-as-Node has subtly different stdin/stdout pipe semantics from a vanilla `node` binary when used as a stdio child of a windowed process. **Working fix:** bundle the real Node.js distribution. `scripts/download-node.mjs` downloads the official `node-v<ver>-<platform>-<arch>` tarball from `https://nodejs.org/dist/v<ver>/` into `resources/node/` (gitignored), prunes `include/`, `share/`, docs, and `node_modules/corepack` to keep the size down (~130 MB on Linux x64, dominated by the Node binary itself). Default pin: `NODE_BUNDLE_VERSION = "22.12.0"` (the repo's `engines.node` floor; every 22.x build shares the Electron 42 ABI); override with `NODE_VERSION=`. `electron-builder.config.mjs` ships `resources/node/` as an extraResource → `<Resources>/node/`. `electron/main.mjs::injectBundledNode()` prepends the platform-appropriate bin dir to `PATH` (POSIX: `<Resources>/node/bin`; Windows: `<Resources>/node/`) so subsequent spawns of `node`/`npm`/`npx` resolve to real binaries with full stdio fidelity. It also `chmod +x`'s the binaries on POSIX because electron-builder doesn't always preserve the bit. `injectBundledNode()` is a no-op when `!app.isPackaged` (dev `npm run desktop` uses the developer's system node). `build:desktop` and `build:desktop:universal` both run `download-node.mjs` after `download-uv.mjs`. If the bundled dir is missing at runtime, `injectBundledNode()` logs a loud `[desktop]` warning instead of silently leaving PATH bare. **extraResources will not copy the distribution's root `node_modules`:** `app-builder-lib/src/util/filter.ts::createFilter` returns `false` for any entry whose path relative to the copy root is exactly `node_modules`, *before* the `filter` patterns are consulted, so no `filter` value can opt back in. The Windows Node zip puts npm at `<root>/node_modules/npm` and hits this exactly; POSIX tarballs put it at `<root>/lib/node_modules/npm` and are unaffected — which is why this only broke Windows. Shipped result: a working `node.exe` beside `npm.cmd`/`npx.cmd` shims pointing at a missing `node_modules\npm\bin\npx-cli.js`, so every `npx -y <pkg>` spawn dies with `MODULE_NOT_FOUND` *and* shadows the user's own npm, since the dir is PREPENDED to PATH. The `afterPack` hook (`restoreBundledNodeNpm`) copies that directory into the packed output and then hard-fails the build if `npm-cli.js` still isn't there, mirroring the check `download-node.mjs` already runs on the source tree.
 
 - Cloud conversation resume gating: when a cloud conversation is closed from the UI (`pauseCloudSandbox` is called), the conversation's `conversation_url` is NOT cleared -- it still points to the old sandbox host. `WebSocketProviderWrapper` must suppress the URL (pass `null` to `ConversationWebSocketProvider`) while `sandbox_status === "PAUSED"`, otherwise the WebSocket immediately tries the stale URL before the sandbox wakes. Symmetrically, `useActiveConversation`'s refetch interval must fast-poll (3 s) on both `!conversation_url` AND `sandbox_status === "PAUSED"` -- checking only the missing URL would leave the hook on the 30 s interval while the sandbox is resuming. The resume sequence: navigate -> sandbox PAUSED detected -> `resumeCloudSandbox` called (in `conversation.tsx`) -> fast-poll detects RUNNING -> `conversationUrl` unblocked -> WebSocket connects.
