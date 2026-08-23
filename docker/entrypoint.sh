@@ -52,6 +52,11 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   OPENHANDS_FRONTEND_ONLY – If "true", skip the agent-server and automation
+#                          backends; only the static server (frontend + proxy)
+#                          is started
+#   OPENHANDS_BACKEND_ONLY – If "true", skip the static server (frontend +
+#                          proxy); only the backends are started
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
@@ -283,6 +288,15 @@ cleanup() {
 }
 trap cleanup EXIT SIGINT SIGTERM
 
+if [ "${OPENHANDS_FRONTEND_ONLY:-}" = "true" ] && [ "${OPENHANDS_BACKEND_ONLY:-}" = "true" ]; then
+  log_error "OPENHANDS_FRONTEND_ONLY and OPENHANDS_BACKEND_ONLY cannot both be true."
+  exit 1
+fi
+
+if [ "${OPENHANDS_FRONTEND_ONLY:-}" = "true" ]; then
+log "Frontend-Only Mode: Skipping Agent Server, Automation, and Port Checks."
+else
+
 # ── 1. Start Agent Server ────────────────────────────────────────────────────
 log "Starting agent-server on port $AGENT_SERVER_PORT..."
 
@@ -364,8 +378,23 @@ wait_for_port "$AUTOMATION_PORT" "Automation Server" 60 &
 WAIT_PID2=$!
 wait "$WAIT_PID1" "$WAIT_PID2"
 
+fi # End of OPENHANDS_FRONTEND_ONLY skip block
+
 # ── 4. Start static server (frontend + proxy) ────────────────────────────────
+if [ "${OPENHANDS_BACKEND_ONLY:-}" = "true" ]; then
+log "Backend-Only Mode: Frontend and Proxy disabled. Keeping backend services alive."
+# Same trap-friendly pattern as the ingress watchdog below: the builtin
+# `wait` is interrupted immediately by SIGTERM/SIGINT so cleanup() fires
+# without delay.
+while true; do sleep 10 & wait $!; done
+fi
+
 log "Starting frontend + proxy on port $PORT..."
+
+# AUTOMATION_BASE_URL is normally exported in section 2; re-derive the same
+# default here so frontend-only mode (which skips that section) still works
+# under `set -u`.
+export AUTOMATION_BASE_URL="${AUTOMATION_BASE_URL:-http://127.0.0.1:${PORT}}"
 
 # Describe the local runtime services so the frontend can populate the agent's
 # <RUNTIME_SERVICES> system-prompt block (without it the agent does not know how
