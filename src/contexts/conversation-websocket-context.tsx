@@ -623,19 +623,19 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle cache invalidation for ActionEvent
-          if (isActionEvent(event)) {
-            const currentConversationId =
-              conversationId || "test-conversation-id"; // TODO: Get from context
+          // Handle cache invalidation for ActionEvent. The main socket only
+          // opens when `conversationId` exists (see `wsUrl`), so this guard is
+          // structural: a real id is always available here and no fake id is
+          // ever written into a cache key.
+          if (conversationId && isActionEvent(event)) {
             handleActionEventCacheInvalidation(
               event,
-              currentConversationId,
+              conversationId,
               queryClient,
             );
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             if (isFullStateConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value.execution_status);
@@ -854,20 +854,21 @@ export function ConversationWebSocketProvider({
             }
           }
 
-          // Handle cache invalidation for ActionEvent
-          if (isActionEvent(event)) {
-            const planningAgentConversation = subConversations?.[0];
-            const currentConversationId =
-              planningAgentConversation?.id || "test-conversation-id"; // TODO: Get from context
+          // Handle cache invalidation for ActionEvent. The planning socket
+          // only opens when a sub-conversation with an id exists (see
+          // `planningAgentWsUrl`), so this guard is structural: the real
+          // sub-conversation id keys the cache, never a fabricated one.
+          const planningAgentConversation = subConversations?.[0];
+          const planningConversationId = planningAgentConversation?.id;
+          if (planningConversationId && isActionEvent(event)) {
             handleActionEventCacheInvalidation(
               event,
-              currentConversationId,
+              planningConversationId,
               queryClient,
             );
           }
 
           // Handle conversation state updates
-          // TODO: Tests
           if (isConversationStateUpdateEvent(event)) {
             if (isFullStateConversationStateUpdateEvent(event)) {
               setExecutionStatus(event.value.execution_status);

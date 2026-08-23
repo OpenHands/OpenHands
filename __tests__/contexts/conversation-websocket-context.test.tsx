@@ -9,6 +9,8 @@ import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-
 import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
+import { useConversationStateStore } from "#/stores/conversation-state-store";
+import { useGoalStore } from "#/stores/goal-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
 import { useWebSocket } from "#/hooks/use-websocket";
 import EventService from "#/api/event-service/event-service.api";
@@ -127,6 +129,8 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     useMetricsStore.getState().resetMetrics();
     useCommandStore.setState({ commands: [] });
     useErrorMessageStore.getState().removeErrorMessage();
+    useConversationStateStore.getState().reset();
+    useGoalStore.setState({ statusByConversation: {} });
 
     vi.mocked(useUserConversation).mockReturnValue({
       data: { conversation_url: "http://localhost/api", session_api_key: null },
@@ -906,6 +910,246 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       expect(useOptimisticUserMessageStore.getState().pendingMessages).toEqual(
         [],
       ),
+    );
+  });
+
+  const makeFullStateUpdate = (executionStatus: string) => ({
+    id: "state-full-1",
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "full_state",
+    value: { execution_status: executionStatus },
+  });
+
+  const makeAgentStatusUpdate = (executionStatus: string) => ({
+    id: "state-status-1",
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "execution_status",
+    value: executionStatus,
+  });
+
+  const makeStatsUpdate = (accumulatedCost: number) => ({
+    id: "state-stats-1",
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "stats",
+    value: {
+      usage_to_metrics: {
+        default: {
+          model_name: "test-model",
+          accumulated_cost: accumulatedCost,
+          max_budget_per_task: null,
+          accumulated_token_usage: null,
+          costs: [],
+          response_latencies: [],
+          token_usages: [],
+        },
+      },
+    },
+  });
+
+  const makeGoalUpdate = () => ({
+    id: "state-goal-1",
+    timestamp: new Date().toISOString(),
+    source: "environment",
+    kind: "ConversationStateUpdateEvent",
+    key: "goal",
+    value: {
+      active: true,
+      status: "running",
+      iteration: 1,
+      max_iterations: 3,
+      objective: "Check the build",
+      verdict: null,
+    },
+  });
+
+  const makeFileEditorAction = (id: string) => ({
+    ...makeBashActionForInvalidation(id),
+    action: {
+      kind: "StrReplaceEditorAction",
+      command: "view",
+      path: "/workspace/project/a.txt",
+    },
+    tool_name: "file_editor",
+  });
+
+  const makeBashActionForInvalidation = (id: string) => ({
+    id,
+    timestamp: new Date().toISOString(),
+    source: "agent",
+    thought: [],
+    thinking_blocks: [],
+    action: {
+      kind: "ExecuteBashAction",
+      command: "echo hi",
+      is_input: false,
+      timeout: null,
+      reset: false,
+    },
+    tool_name: "execute_bash",
+    tool_call_id: `call-${id}`,
+    tool_call: {
+      id: `call-${id}`,
+      type: "function",
+      function: {
+        name: "execute_bash",
+        arguments: JSON.stringify({ command: "echo hi" }),
+      },
+    },
+    llm_response_id: `resp-${id}`,
+    security_risk: "UNKNOWN",
+  });
+
+  it("mirrors conversation-state-update events into the status, metrics, and goal stores (main socket)", async () => {
+    renderProviderWithUrl("conv-state");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeFullStateUpdate("running")),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStatsUpdate(0.42)),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeGoalUpdate()),
+      });
+    });
+
+    expect(
+      useConversationStateStore.getState().execution_status,
+    ).toBe("running");
+    expect(useMetricsStore.getState().cost).toBe(0.42);
+    expect(useGoalStore.getState().statusByConversation["conv-state"]).toEqual(
+      expect.objectContaining({ status: "running", iteration: 1 }),
+    );
+  });
+
+  it("applies agent-status state updates from the planning socket", async () => {
+    const planningConversation: AppConversation = {
+      id: "planning-state",
+      created_by_user_id: null,
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      title: "Planner",
+      trigger: null,
+      pr_number: [],
+      llm_model: null,
+      metrics: null,
+      created_at: "2026-07-28T00:00:00Z",
+      updated_at: "2026-07-28T00:00:00Z",
+      execution_status: null,
+      conversation_url:
+        "http://planner.example/api/conversations/planning-state",
+      session_api_key: null,
+      sandbox_id: null,
+      sub_conversation_ids: [],
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-planning-state"
+          conversationUrl="http://main.example/api/conversations/conv-planning-state"
+          subConversationIds={[planningConversation.id]}
+          subConversations={[planningConversation]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+
+    act(() => {
+      wsCapture.planningOnMessage!({
+        data: JSON.stringify(makeAgentStatusUpdate("finished")),
+      });
+    });
+
+    expect(useConversationStateStore.getState().execution_status).toBe(
+      "finished",
+    );
+  });
+
+  it("invalidates file-change caches with the real main conversation id on ActionEvents", async () => {
+    renderProviderWithUrl("conv-cache");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeFileEditorAction("action-cache-1")),
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ["file_changes", "conv-cache"],
+      }),
+      { cancelRefetch: false },
+    );
+    expect(JSON.stringify(invalidateSpy.mock.calls)).not.toContain(
+      "test-conversation-id",
+    );
+  });
+
+  it("invalidates file-change caches with the planning sub-conversation id on ActionEvents", async () => {
+    const planningConversation: AppConversation = {
+      id: "planning-cache",
+      created_by_user_id: null,
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+      title: "Planner",
+      trigger: null,
+      pr_number: [],
+      llm_model: null,
+      metrics: null,
+      created_at: "2026-07-28T00:00:00Z",
+      updated_at: "2026-07-28T00:00:00Z",
+      execution_status: null,
+      conversation_url:
+        "http://planner.example/api/conversations/planning-cache",
+      session_api_key: null,
+      sandbox_id: null,
+      sub_conversation_ids: [],
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-planning-cache"
+          conversationUrl="http://main.example/api/conversations/conv-planning-cache"
+          subConversationIds={[planningConversation.id]}
+          subConversations={[planningConversation]}
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    act(() => {
+      wsCapture.planningOnMessage!({
+        data: JSON.stringify(makeBashActionForInvalidation("action-plan-1")),
+      });
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queryKey: ["file_changes", "planning-cache"],
+      }),
+      { cancelRefetch: false },
+    );
+    expect(JSON.stringify(invalidateSpy.mock.calls)).not.toContain(
+      "test-conversation-id",
     );
   });
 });
