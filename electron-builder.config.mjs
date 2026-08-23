@@ -46,11 +46,14 @@
  * extraResources so Electron can inject it into PATH on startup.
  *
  * The bundled Node.js distribution (resources/node/) lands in
- * <Resources>/node/ via extraResources. Electron prepends its bin dir to
- * PATH at startup so backend scripts (`node scripts/ingress.mjs` etc.) and
- * stdio MCP servers spawned via `npx -y …` (Slack, GitHub, Figma, etc.)
- * can find a working node/npm/npx — the OS gives a Finder-launched .app
- * a minimal PATH (/usr/bin:/bin) that has none of those.
+ * <Resources>/node/ via extraResources — except for its root-level
+ * node_modules (npm itself), which electron-builder refuses to copy and the
+ * afterPack hook restores; see restoreBundledNodeNpm below.
+ *
+ * Electron prepends its bin dir to PATH at startup so backend scripts (`node
+ * scripts/ingress.mjs` etc.) and stdio MCP servers spawned via `npx -y …`
+ * (Slack, GitHub, Figma, etc.) can find a working node/npm/npx — the OS gives
+ * a Finder-launched .app a minimal PATH (/usr/bin:/bin) that has none of those.
  */
 
 import { cp, rm } from "node:fs/promises";
@@ -80,30 +83,38 @@ const rootPackageJson = JSON.parse(
 );
 
 /**
+ * Resolve the packaged app's Resources directory.
+ *
+ * On macOS it lives inside the `.app` bundle; on Linux/Windows it's a flat
+ * `resources/` subdirectory. We resolve both shapes from `context.appOutDir`
+ * + the productFilename.
+ */
+function packagedResourcesDir(context) {
+  const platform = context.electronPlatformName;
+  const productFilename = context.packager.appInfo.productFilename;
+  return platform === "darwin" || platform === "mas"
+    ? join(context.appOutDir, `${productFilename}.app`, "Contents", "Resources")
+    : join(context.appOutDir, "resources");
+}
+
+/**
+ * afterPack entry point. Invoked by electron-builder once per platform target
+ * after the unpacked directory has been populated but before installer-format
+ * packaging (DMG, NSIS, deb).
+ */
+async function afterPack(context) {
+  await stripBundledNodeModules(context);
+  await restoreBundledNodeNpm(context);
+}
+
+/**
  * Strip the auto-bundled node_modules from the packaged app, then restore
  * the small runtime closure of RUNTIME_PACKAGES.
  *
- * See the NODE_MODULES NOTE in the file header for the why. This is invoked
- * by electron-builder once per platform target after the unpacked directory
- * has been populated but before installer-format packaging (DMG, NSIS, deb).
- *
- * On macOS the app dir is inside a `.app` bundle; on Linux/Windows it's a
- * flat resources/ subdirectory. We resolve both shapes from
- * `context.appOutDir` + the productFilename.
+ * See the NODE_MODULES NOTE in the file header for the why.
  */
 async function stripBundledNodeModules(context) {
-  const platform = context.electronPlatformName;
-  const productFilename = context.packager.appInfo.productFilename;
-  const appDir =
-    platform === "darwin" || platform === "mas"
-      ? join(
-          context.appOutDir,
-          `${productFilename}.app`,
-          "Contents",
-          "Resources",
-          "app",
-        )
-      : join(context.appOutDir, "resources", "app");
+  const appDir = join(packagedResourcesDir(context), "app");
 
   const nm = join(appDir, "node_modules");
   if (existsSync(nm)) {
@@ -174,6 +185,72 @@ async function restoreRuntimeNodeModules(appDir) {
   );
 }
 
+/**
+ * Restore the bundled Node distribution's root-level `node_modules` (npm
+ * itself), which electron-builder silently refuses to copy, then verify the
+ * packed result.
+ *
+ * WHY THIS IS NEEDED — app-builder-lib's copy filter drops a `node_modules`
+ * directory sitting at the ROOT of a `from` dir, before any `filter` pattern
+ * is consulted (packages/app-builder-lib/src/util/filter.ts):
+ *
+ *     // filter the root node_modules, but not a subnode_modules
+ *     if (relative === "node_modules") {
+ *       return false
+ *     }
+ *
+ * That check is reached for extraResources too — `copyFiles()` builds the
+ * copy filter with the same `createFilter()`. Our extraResources entry copies
+ * `resources/node/` → `<Resources>/node/`, and the Windows Node zip puts npm
+ * at `<root>/node_modules/npm`, i.e. exactly `node_modules` relative to the
+ * copy root. So it is skipped, and no `filter` value can opt back in.
+ *
+ * POSIX tarballs put npm at `<root>/lib/node_modules/npm`, which is not the
+ * root entry and copies fine — which is why this only ever broke Windows and
+ * went unnoticed on macOS.
+ *
+ * Symptom when it goes wrong: `<Resources>/node/` ships a working `node.exe`
+ * next to `npm.cmd` / `npx.cmd` shims that exec
+ * `%~dp0\node_modules\npm\bin\npx-cli.js` — a file that isn't there. Every
+ * `npx -y <pkg>` spawn (stdio MCP servers, ACP servers) then dies with
+ * MODULE_NOT_FOUND, and because injectBundledNode() PREPENDS this directory
+ * to PATH it also shadows the user's own working npm installation.
+ */
+async function restoreBundledNodeNpm(context) {
+  const isWin = context.electronPlatformName === "win32";
+  const nodeDir = join(packagedResourcesDir(context), "node");
+
+  // No bundled Node at all — `npm run download-node` was skipped. That is a
+  // different (and already loudly reported) situation; main.mjs warns at
+  // startup. Don't turn it into a build failure here.
+  if (!existsSync(nodeDir)) return;
+
+  const srcNodeModules = join(repoRoot, "resources", "node", "node_modules");
+  const destNodeModules = join(nodeDir, "node_modules");
+  if (!existsSync(destNodeModules) && existsSync(srcNodeModules)) {
+    await cp(srcNodeModules, destNodeModules, { recursive: true });
+    const rel = relative(process.cwd(), destNodeModules);
+    // eslint-disable-next-line no-console -- electron-builder build log
+    console.log(
+      `[electron-builder] restored bundled Node node_modules: ${rel}`,
+    );
+  }
+
+  // Mirror the check scripts/download-node.mjs runs on the source tree, but
+  // against the packed output — the last point where a broken npm is still a
+  // build failure instead of a broken install.
+  const npmCli = isWin
+    ? join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
+    : join(nodeDir, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  if (!existsSync(npmCli)) {
+    throw new Error(
+      `[electron-builder] packaged Node is missing npm-cli.js at ${npmCli} — ` +
+        "npm/npx would fail with MODULE_NOT_FOUND in the installed app. " +
+        "Run `npm run download-node` and rebuild.",
+    );
+  }
+}
+
 function getDirSizeBytes(dir) {
   // Synchronous walk so we can run it before the rm without async juggling
   // in the hook. The directory we're sizing is always small enough (<1 GB)
@@ -235,8 +312,10 @@ const config = {
   // Skip native-module rebuild — the app has no native deps.
   npmRebuild: false,
 
-  // Strip auto-bundled node_modules (see NODE_MODULES NOTE at top of file).
-  afterPack: stripBundledNodeModules,
+  // Strip auto-bundled node_modules (see NODE_MODULES NOTE at top of file),
+  // then restore the bundled Node distribution's own npm (see
+  // restoreBundledNodeNpm).
+  afterPack,
 
   // Files included in the packaged app.
   // Paths with `from` are relative to directories.app (electron/).
@@ -352,6 +431,10 @@ const config = {
     ],
     category: "Development",
     // Icon auto-discovered from directories.buildResources/icon.png.
+    // fpm-backed targets (deb) require a maintainer with an email address;
+    // electron/package.json carries no author, so set it here. Without this
+    // the deb step fails with "Please specify author 'email'".
+    maintainer: "All-Hands AI <contact@all-hands.dev>",
   },
 };
 
