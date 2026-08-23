@@ -212,9 +212,12 @@ export function createProxyHandlers({
     ws: true,
     changeOrigin: true,
     xfwd: true,
-    timeout,
+    // httpxy attaches a new callback for every request when `timeout` is set.
+    // Own the downstream deadline below so keep-alive sockets retain one listener.
+    timeout: 0,
     proxyTimeout,
   });
+  const timedDownstreamSockets = new WeakSet();
   const metrics = {
     activeHttpRequests: 0,
     activeWebSockets: 0,
@@ -237,6 +240,12 @@ export function createProxyHandlers({
   });
 
   function proxyHttp(req, res, target) {
+    if (timeout > 0 && !timedDownstreamSockets.has(req.socket)) {
+      const socket = req.socket;
+      timedDownstreamSockets.add(socket);
+      socket.setTimeout(timeout, () => socket.destroy());
+    }
+
     metrics.activeHttpRequests += 1;
     metrics.totalHttpRequests += 1;
     const finish = once(() => {
