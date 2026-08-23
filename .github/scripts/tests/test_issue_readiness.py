@@ -314,9 +314,9 @@ Error: the button overlaps the field
 
 
 def test_bug_ready_when_actual_behavior_opens_with_a_fence():
-    """The run method is inside the fence, so losing the fence withholds the label."""
+    """The output is inside the fence, so losing the fence withholds the label."""
     body = """### Steps to Reproduce
-Run the dev server.
+Start the app with `npm run dev`.
 
 ### Actual Behavior
 ```
