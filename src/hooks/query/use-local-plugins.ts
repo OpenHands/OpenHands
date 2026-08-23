@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import PluginsService, { type LocalPlugin } from "#/api/plugins-service";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { PLUGINS_QUERY_KEYS } from "./query-keys";
 
 /**
@@ -8,10 +9,12 @@ import { PLUGINS_QUERY_KEYS } from "./query-keys";
  * cloud backend yields an empty list. Rendered as the read-only "Local" group on
  * the Plugins page. Mirrors `usePlugins`.
  */
-export const useLocalPlugins = () =>
-  useQuery<LocalPlugin[]>({
-    queryKey: PLUGINS_QUERY_KEYS.local,
+export const useLocalPlugins = () => {
+  const active = useActiveBackend();
+  return useQuery<LocalPlugin[]>({
+    queryKey: [...PLUGINS_QUERY_KEYS.local, active.backend.id, active.orgId],
     queryFn: () => PluginsService.getLocalPlugins(),
     staleTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
   });
+};

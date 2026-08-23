@@ -52,6 +52,8 @@ export const PLUGINS_QUERY_KEYS = {
   installed: ["plugins-installed"] as const,
   /** Locally-discovered ambient plugins (used by `use-local-plugins`). */
   local: ["plugins-local"] as const,
+  /** A file displayed from a plugin installed on the active backend. */
+  fileContent: ["plugin-file-content"] as const,
 } as const;
 
 export const SETUP_QUERY_KEYS = {

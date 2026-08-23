@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import PluginsService, { type PluginFileContent } from "#/api/plugins-service";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import { PLUGINS_QUERY_KEYS } from "./query-keys";
 
 /**
  * Query hook for one plugin file's content, shown in the plugin detail
@@ -9,9 +11,16 @@ import PluginsService, { type PluginFileContent } from "#/api/plugins-service";
 export const usePluginFileContent = (
   basePath: string | null,
   relativePath: string | null,
-) =>
-  useQuery<PluginFileContent>({
-    queryKey: ["plugin-file-content", basePath, relativePath],
+) => {
+  const active = useActiveBackend();
+  return useQuery<PluginFileContent>({
+    queryKey: [
+      ...PLUGINS_QUERY_KEYS.fileContent,
+      active.backend.id,
+      active.orgId,
+      basePath,
+      relativePath,
+    ],
     queryFn: () => {
       if (!basePath || !relativePath) throw new Error("No file selected");
       return PluginsService.getPluginFileContent(basePath, relativePath);
@@ -21,3 +30,4 @@ export const usePluginFileContent = (
     staleTime: 1000 * 60 * 10, // 10 minutes
     refetchOnWindowFocus: false,
   });
+};
