@@ -13,6 +13,31 @@ import {
 import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
 
 /**
+ * Stable semantic identifier for an onboarding link or CTA. Identifies the
+ * destination, never the clicked element or its text.
+ */
+export type OnboardingLinkId =
+  | "configure_llm"
+  | "start_conversation"
+  | "schedule_task"
+  | "customize_agent"
+  | "connect_mcp"
+  | "join_slack"
+  | "open_docs";
+
+/** Controlled destination category for `onboarding_link_clicked`. */
+export type OnboardingLinkDestinationType =
+  | "community"
+  | "integration"
+  | "documentation"
+  | "settings"
+  | "conversation"
+  | "automation";
+
+/** Onboarding surface that presented the link. */
+export type OnboardingLinkSurface = "landing_checklist" | "onboarding_modal";
+
+/**
  * Hook that provides tracking functions with automatic data collection
  * from available hooks (settings, etc.)
  *
@@ -82,7 +107,7 @@ export const useTracking = () => {
     hasParentConversation: boolean;
     entryPoint?: string;
   }) => {
-    track("conversation_created", {
+    track("conversation_start_requested", {
       conversation_id: conversationId,
       task_id: taskId,
       is_start_task: conversationId.startsWith("task-"),
@@ -128,6 +153,54 @@ export const useTracking = () => {
       automation_id: automationId,
       automation_name: automationName,
       automation_category: automationCategory,
+    });
+  };
+
+  /**
+   * The setup funnel: opened → validated → created, or failed.
+   *
+   * A manifest declares no analytics of its own, so the stages are the same for
+   * every entry and only the id it carries varies.
+   */
+  const trackAutomationSetupOpened = ({
+    automationId,
+  }: {
+    automationId: string;
+  }) => {
+    track("automation_setup_opened", { automation_id: automationId });
+  };
+
+  const trackAutomationSetupValidated = ({
+    automationId,
+  }: {
+    automationId: string;
+  }) => {
+    track("automation_setup_validated", { automation_id: automationId });
+  };
+
+  const trackAutomationSetupCreated = ({
+    automationId,
+    setupMode,
+  }: {
+    automationId: string;
+    setupMode: string;
+  }) => {
+    track("automation_setup_created", {
+      automation_id: automationId,
+      setup_mode: setupMode,
+    });
+  };
+
+  const trackAutomationSetupFailed = ({
+    automationId,
+    setupMode,
+  }: {
+    automationId: string;
+    setupMode: string;
+  }) => {
+    track("automation_setup_failed", {
+      automation_id: automationId,
+      setup_mode: setupMode,
     });
   };
 
@@ -253,12 +326,41 @@ export const useTracking = () => {
     track("automation_exported", { backend_kind: backendKind });
   };
 
+  const trackAutomationActivityLogExported = ({
+    backendKind,
+    format,
+  }: {
+    backendKind: BackendKind;
+    format: "json" | "csv";
+  }) => {
+    track("automation_activity_log_exported", {
+      backend_kind: backendKind,
+      format,
+    });
+  };
+
   const trackAutomationImported = ({
     backendKind,
   }: {
     backendKind: BackendKind;
   }) => {
     track("automation_imported", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncConfigUpdated = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_config_updated", { backend_kind: backendKind });
+  };
+
+  const trackGitSyncTriggered = ({
+    backendKind,
+  }: {
+    backendKind: BackendKind;
+  }) => {
+    track("git_sync_triggered", { backend_kind: backendKind });
   };
 
   const trackBackendAdded = ({
@@ -334,6 +436,31 @@ export const useTracking = () => {
     });
   };
 
+  const trackOnboardingLinkClicked = ({
+    linkId,
+    destinationType,
+    surface,
+    checklistItem,
+    stepId,
+    isExternal,
+  }: {
+    linkId: OnboardingLinkId;
+    destinationType: OnboardingLinkDestinationType;
+    surface: OnboardingLinkSurface;
+    checklistItem?: Exclude<OnboardingLinkId, "open_docs">;
+    stepId?: string;
+    isExternal: boolean;
+  }) => {
+    track("onboarding_link_clicked", {
+      link_id: linkId,
+      destination_type: destinationType,
+      surface,
+      checklist_item: checklistItem,
+      step_id: stepId,
+      is_external: isExternal,
+    });
+  };
+
   return {
     trackLoginButtonClick,
     trackConversationCreated,
@@ -342,6 +469,10 @@ export const useTracking = () => {
     trackCreatePrButtonClick,
     trackUserSignupCompleted,
     trackPrebuiltAutomationEnabled,
+    trackAutomationSetupOpened,
+    trackAutomationSetupValidated,
+    trackAutomationSetupCreated,
+    trackAutomationSetupFailed,
     trackInitialQuerySubmitted,
     trackUserMessageSent,
     trackDownloadVsCodeButtonClicked,
@@ -355,11 +486,15 @@ export const useTracking = () => {
     trackAutomationDisableButton,
     trackAutomationEdited,
     trackAutomationExported,
+    trackAutomationActivityLogExported,
     trackAutomationImported,
+    trackGitSyncConfigUpdated,
+    trackGitSyncTriggered,
     trackBackendAdded,
     trackOnboardingStarted,
     trackOnboardingStepViewed,
     trackOnboardingCompleted,
     trackOnboardingSkipped,
+    trackOnboardingLinkClicked,
   };
 };

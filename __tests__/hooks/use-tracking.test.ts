@@ -69,7 +69,7 @@ describe("useTracking", () => {
   });
 
   describe("trackConversationCreated", () => {
-    it("captures conversation_created with full metadata for a repository, task-start conversation", () => {
+    it("captures conversation_start_requested with full metadata for a repository, task-start conversation", () => {
       getTracking().trackConversationCreated({
         conversationId: "task-abc123",
         taskId: "abc123",
@@ -81,7 +81,7 @@ describe("useTracking", () => {
         entryPoint: "sidebar_cloud_menu",
       });
 
-      expect(captureMock).toHaveBeenCalledWith("conversation_created", {
+      expect(captureMock).toHaveBeenCalledWith("conversation_start_requested", {
         conversation_id: "task-abc123",
         task_id: "abc123",
         // task-prefixed conversation_id => cloud sandbox still provisioning
@@ -98,7 +98,7 @@ describe("useTracking", () => {
       });
     });
 
-    it("captures conversation_created for a local workspace start with no repository", () => {
+    it("captures conversation_start_requested for a local workspace start with no repository", () => {
       getTracking().trackConversationCreated({
         conversationId: "conv-1",
         taskId: "conv-1",
@@ -110,7 +110,7 @@ describe("useTracking", () => {
         entryPoint: "sidebar_local_menu",
       });
 
-      expect(captureMock).toHaveBeenCalledWith("conversation_created", {
+      expect(captureMock).toHaveBeenCalledWith("conversation_start_requested", {
         conversation_id: "conv-1",
         task_id: "conv-1",
         // real conversation_id => ready immediately (local)
@@ -140,7 +140,7 @@ describe("useTracking", () => {
       });
 
       expect(captureMock).toHaveBeenCalledWith(
-        "conversation_created",
+        "conversation_start_requested",
         expect.objectContaining({
           agent_type: "plan",
           has_parent_conversation: true,
@@ -180,7 +180,7 @@ describe("useTracking", () => {
         }),
       );
       expect(captureMock).toHaveBeenCalledWith(
-        "conversation_created",
+        "conversation_start_requested",
         expect.not.objectContaining({
           agent_server_version: "1.36.2",
           automation_sdk_version: "1.36.3",
@@ -416,6 +416,28 @@ describe("useTracking", () => {
         agent_server_version: "1.36.1",
         automation_sdk_version: "unknown",
         backend_version: "1.36.1",
+      });
+    });
+  });
+
+  describe("trackOnboardingLinkClicked", () => {
+    it("captures onboarding_link_clicked with the typed link contract and commonProperties", () => {
+      getTracking().trackOnboardingLinkClicked({
+        linkId: "join_slack",
+        destinationType: "community",
+        surface: "landing_checklist",
+        checklistItem: "join_slack",
+        isExternal: true,
+      });
+
+      expect(captureMock).toHaveBeenCalledWith("onboarding_link_clicked", {
+        link_id: "join_slack",
+        destination_type: "community",
+        surface: "landing_checklist",
+        checklist_item: "join_slack",
+        step_id: undefined,
+        is_external: true,
+        ...COMMON,
       });
     });
   });

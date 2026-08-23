@@ -50,6 +50,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "new",
       type: "agentskills",
+      source: null,
       content: "Creates a new conversation using the same runtime",
       triggers: ["/new"],
     },
@@ -59,6 +60,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "btw",
       type: "agentskills",
+      source: null,
       content: "Ask the agent a side question without derailing the main task",
       triggers: [BTW_COMMAND],
     },
@@ -68,6 +70,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "model",
       type: "agentskills",
+      source: null,
       content:
         "List saved LLM profiles, or switch the conversation LLM profile with /model <name>",
       triggers: [MODEL_COMMAND],
@@ -78,6 +81,7 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     skill: {
       name: "goal",
       type: "agentskills",
+      source: null,
       content:
         "Drive the agent toward an objective until a judge says it's done — /goal <objective> or /goal --max <n> <objective>",
       triggers: [GOAL_COMMAND],

@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
@@ -92,6 +93,15 @@ export function ConversationTabs({
       label: t(I18nKey.COMMON$FILES),
     },
     {
+      tabValue: "commits",
+      isActive: isTabActive("commits"),
+      icon: LuFileDiff,
+      onClick: () => selectTab("commits"),
+      tooltipContent: t(I18nKey.DIFF_VIEWER$COMMITS),
+      tooltipAriaLabel: t(I18nKey.DIFF_VIEWER$COMMITS),
+      label: t(I18nKey.DIFF_VIEWER$COMMITS),
+    },
+    {
       tabValue: "planner",
       isActive: isTabActive("planner"),
       icon: ListTodo,
@@ -119,11 +129,20 @@ export function ConversationTabs({
       tooltipAriaLabel: t(I18nKey.COMMON$BROWSER),
       label: t(I18nKey.COMMON$BROWSER),
     },
+    {
+      tabValue: "usage",
+      isActive: isTabActive("usage"),
+      icon: Gauge,
+      onClick: () => selectTab("usage"),
+      tooltipContent: t(I18nKey.COMMON$USAGE),
+      tooltipAriaLabel: t(I18nKey.COMMON$USAGE),
+      label: t(I18nKey.COMMON$USAGE),
+    },
   ];
 
   if (hasTaskList) {
-    // Insert after `files` so the leftmost slot stays Files.
-    tabs.splice(1, 0, {
+    // Insert after the file-related tabs.
+    tabs.splice(2, 0, {
       tabValue: "tasklist",
       isActive: isTabActive("tasklist"),
       icon: DoubleCheckIcon,
@@ -214,6 +233,12 @@ export function ConversationTabs({
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(measure);
     ro.observe(rowInner);
+    // The editor button's presence is resolved asynchronously (the hook probes
+    // /api/vscode/status), and it sits inside an `ml-auto shrink-0` wrapper, so
+    // it appearing or disappearing does not change `rowInner`'s own box and
+    // would not otherwise re-measure. Its width is folded into the fit
+    // calculation above, so a stale value permanently costs an inline tab.
+    ro.observe(vscodeEl);
     return () => ro.disconnect();
   }, [
     unpinnedSignature,
@@ -336,16 +361,10 @@ export function ConversationTabs({
               </div>
             </div>
           </div>
-          {/* Keep the ref'd wrapper mounted on local backends too — the
-              overflow measurement effect above bails if it's missing. */}
-          <div
-            ref={vscodeButtonRef}
-            className={cn(
-              "ml-auto shrink-0",
-              backend.kind === "cloud" && "pr-1",
-            )}
-          >
-            {backend.kind === "cloud" && <DrawerVSCodeLink />}
+          {/* The ref'd wrapper must stay mounted — the overflow measurement
+              effect above bails if it's missing. */}
+          <div ref={vscodeButtonRef} className="ml-auto shrink-0 pr-1">
+            <DrawerVSCodeLink />
           </div>
         </div>
       </div>

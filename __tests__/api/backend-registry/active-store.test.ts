@@ -9,11 +9,25 @@ import {
   subscribeActiveBackend,
 } from "#/api/backend-registry/active-store";
 import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
+import {
+  __resetHealthStoreForTests,
+  recordBackendFailure,
+} from "#/api/backend-registry/health-store";
+import {
+  ACTIVE_BACKEND_STORAGE_KEY,
+  BACKENDS_STORAGE_KEY,
+} from "#/api/backend-registry/storage";
+import {
+  BACKEND_QUERY_PARAM,
+  ORG_QUERY_PARAM,
+} from "#/api/backend-registry/url-selection";
 import type { Backend } from "#/api/backend-registry/types";
 
 beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
+  __resetHealthStoreForTests();
   __resetActiveStoreForTests();
 });
 
@@ -21,6 +35,7 @@ afterEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   vi.unstubAllEnvs();
+  __resetHealthStoreForTests();
   __resetActiveStoreForTests();
 });
 
@@ -39,6 +54,20 @@ const localBackend: Backend = {
   apiKey: "k",
   kind: "local",
 };
+
+const secondLocalBackend: Backend = {
+  id: "local-2",
+  name: "Local 2",
+  host: "http://localhost:9001",
+  apiKey: "k2",
+  kind: "local",
+};
+
+function markBackendUnhealthy(id: string): void {
+  for (let i = 0; i < MAX_CONSECUTIVE_FAILURES; i += 1) {
+    recordBackendFailure(id, new Error("connection failed"));
+  }
+}
 
 describe("active-store", () => {
   it("uses the no-backend sentinel when no backend details are available", () => {
@@ -81,6 +110,41 @@ describe("active-store", () => {
     expect(getActiveBackend().orgId).toBeNull();
   });
 
+  it("falls back to a healthy local backend when a cloud backend is registered first", () => {
+    setRegisteredBackends([cloudBackend, localBackend]);
+    setActiveSelection(null);
+
+    expect(getActiveBackend().backend).toEqual(localBackend);
+  });
+
+  it("skips an unhealthy local backend in favor of a healthy one further down", () => {
+    markBackendUnhealthy(localBackend.id);
+    setRegisteredBackends([localBackend, secondLocalBackend]);
+    setActiveSelection(null);
+
+    expect(getActiveBackend().backend).toEqual(secondLocalBackend);
+  });
+
+  it("still selects a local backend when every local backend is unhealthy", () => {
+    markBackendUnhealthy(localBackend.id);
+    markBackendUnhealthy(secondLocalBackend.id);
+    setRegisteredBackends([cloudBackend, localBackend, secondLocalBackend]);
+    setActiveSelection(null);
+
+    const { backend } = getActiveBackend();
+    expect(backend.kind).toBe("local");
+    expect(backend.id).not.toBe(NO_BACKEND_ID);
+    // Deterministic: first local backend in insertion order.
+    expect(backend).toEqual(localBackend);
+  });
+
+  it("selects a single healthy local backend at the first registry position", () => {
+    setRegisteredBackends([localBackend]);
+    setActiveSelection(null);
+
+    expect(getActiveBackend().backend).toEqual(localBackend);
+  });
+
   it("falls back to the first registered backend when the registry has no local entry", () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection(null);
@@ -102,6 +166,15 @@ describe("active-store", () => {
     expect(getEffectiveLocalBackend()).toBeNull();
   });
 
+  it("keeps an explicit cloud selection even when a healthy local backend exists", () => {
+    setRegisteredBackends([localBackend, cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+
+    const { backend, orgId } = getActiveBackend();
+    expect(backend).toEqual(cloudBackend);
+    expect(orgId).toBe("org-2");
+  });
+
   it("notifies subscribers when selection changes", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeActiveBackend(listener);
@@ -115,5 +188,76 @@ describe("active-store", () => {
     listener.mockClear();
     setActiveSelection(null);
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("backend pinned in the URL", () => {
+  function seedRegistry(backends: Backend[], selection: string) {
+    window.localStorage.setItem(BACKENDS_STORAGE_KEY, JSON.stringify(backends));
+    window.localStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: selection, orgId: null }),
+    );
+  }
+
+  function bootAt(search: string) {
+    window.history.replaceState({}, "", `/conversations/abc${search}`);
+    __resetActiveStoreForTests();
+  }
+
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("boots on the backend named in the URL instead of the stored one", () => {
+    seedRegistry([localBackend, secondLocalBackend], localBackend.id);
+
+    bootAt(`?${BACKEND_QUERY_PARAM}=${secondLocalBackend.id}`);
+
+    expect(getActiveBackend().backend).toEqual(secondLocalBackend);
+  });
+
+  it("persists the pinned selection so later in-tab navigation keeps it", () => {
+    seedRegistry([localBackend, secondLocalBackend], localBackend.id);
+
+    bootAt(`?${BACKEND_QUERY_PARAM}=${secondLocalBackend.id}`);
+
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(ACTIVE_BACKEND_STORAGE_KEY) ?? "null",
+      ),
+    ).toEqual({ backendId: secondLocalBackend.id, orgId: null });
+  });
+
+  it("carries the org id for a cloud backend", () => {
+    seedRegistry([localBackend, cloudBackend], localBackend.id);
+
+    bootAt(
+      `?${BACKEND_QUERY_PARAM}=${cloudBackend.id}&${ORG_QUERY_PARAM}=org-9`,
+    );
+
+    const { backend, orgId } = getActiveBackend();
+    expect(backend).toEqual(cloudBackend);
+    expect(orgId).toBe("org-9");
+  });
+
+  it("falls back to the stored selection when the URL names an unknown backend", () => {
+    seedRegistry([localBackend, secondLocalBackend], secondLocalBackend.id);
+
+    bootAt(`?${BACKEND_QUERY_PARAM}=removed-backend`);
+
+    expect(getActiveBackend().backend).toEqual(secondLocalBackend);
+  });
+
+  it("prefers the URL over a tab-scoped sessionStorage selection", () => {
+    seedRegistry([localBackend, secondLocalBackend], localBackend.id);
+    window.sessionStorage.setItem(
+      ACTIVE_BACKEND_STORAGE_KEY,
+      JSON.stringify({ backendId: localBackend.id, orgId: null }),
+    );
+
+    bootAt(`?${BACKEND_QUERY_PARAM}=${secondLocalBackend.id}`);
+
+    expect(getActiveBackend().backend).toEqual(secondLocalBackend);
   });
 });

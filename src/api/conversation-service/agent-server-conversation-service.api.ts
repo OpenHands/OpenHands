@@ -2,6 +2,7 @@ import {
   ConversationSortOrder,
   type ForkConversationRequest,
   type LLMConfig,
+  type VSCodeStatusResponse,
 } from "@openhands/typescript-client";
 import {
   ConversationClient,
@@ -49,6 +50,7 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
@@ -66,6 +68,7 @@ import type {
   AppConversationStartTask,
   MetricsSnapshot,
   RuntimeConversationInfo,
+  RuntimeConversationStats,
   SendMessageRequest,
   SendMessageResponse,
 } from "./agent-server-conversation-service.types";
@@ -133,6 +136,16 @@ function normalizeMetrics(value: unknown): MetricsSnapshot | null {
     max_budget_per_task: numberOrNull(value.max_budget_per_task),
     accumulated_token_usage: normalizeTokenUsage(value.accumulated_token_usage),
   };
+}
+
+// Shallow check only (matches the trust level `getRuntimeConversation` used
+// before this field was threaded through `DirectConversationInfo`): the
+// per-usage-id entries are consumed via `combineUsageMetrics`, which already
+// tolerates missing/malformed fields, so there's no need to validate them here.
+function normalizeStats(value: unknown): RuntimeConversationStats | null {
+  return isRecord(value)
+    ? (value as unknown as RuntimeConversationStats)
+    : null;
 }
 
 function normalizeAgent(value: unknown): DirectConversationInfo["agent"] {
@@ -244,6 +257,7 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     execution_status: stringOrNull(item.execution_status),
     sandbox_status: stringOrNull(item.sandbox_status),
     metrics: normalizeMetrics(item.metrics),
+    stats: normalizeStats(item.stats),
     agent: normalizeAgent(item.agent),
     workspace: normalizeWorkspace(item.workspace),
     tags: normalizeTags(item.tags),
@@ -319,6 +333,27 @@ function requireAppConversation(
   return conversation;
 }
 
+/**
+ * Options for {@link AgentServerConversationService.createConversation}.
+ */
+export interface CreateConversationOptions {
+  initialUserMsg?: string;
+  conversationInstructions?: string;
+  plugins?: PluginSpec[];
+  metadata?: ConversationMetadata | null;
+  workingDirOverride?: string;
+  workspaceMode?: WorkspaceMode;
+  parentConversationId?: string;
+  agentType?: "default" | "plan";
+  sandboxId?: string;
+  // Launch from a saved AgentProfile (resolved server-side) instead of the
+  // current encrypted agent_settings (#3727). Supported on both local and the
+  // cloud app-server (OpenHands #15060): local threads it through the
+  // encrypted-settings builder; cloud sends it as a flat request field.
+  agentProfileId?: string;
+  agentProfileKind?: AgentKind;
+}
+
 class AgentServerConversationService {
   static async sendMessage(
     conversationId: string,
@@ -367,22 +402,22 @@ class AgentServerConversationService {
   }
 
   static async createConversation(
-    initialUserMsg?: string,
-    conversationInstructions?: string,
-    plugins?: PluginSpec[],
-    metadata?: ConversationMetadata | null,
-    workingDirOverride?: string,
-    workspaceMode?: WorkspaceMode,
-    parentConversationId?: string,
-    agentType?: "default" | "plan",
-    sandboxId?: string,
-    // Launch from a saved AgentProfile (resolved server-side) instead of the
-    // current encrypted agent_settings (#3727). Supported on both local and the
-    // cloud app-server (OpenHands #15060): local threads it through the
-    // encrypted-settings builder; cloud sends it as a flat request field.
-    agentProfileId?: string,
-    agentProfileKind?: AgentKind,
+    options: CreateConversationOptions = {},
   ): Promise<AppConversationStartTask> {
+    const {
+      initialUserMsg,
+      conversationInstructions,
+      plugins,
+      metadata,
+      workingDirOverride,
+      workspaceMode,
+      parentConversationId,
+      agentType,
+      sandboxId,
+      agentProfileId,
+      agentProfileKind,
+    } = options;
+
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud path mirrors OpenHands' frontend: build a flat
       // AppConversationStartRequest, POST /api/v1/app-conversations
@@ -407,6 +442,7 @@ class AgentServerConversationService {
         agent_type: agentType,
         sandbox_id: sandboxId ?? null,
         agent_profile_id: agentProfileId ?? null,
+        trigger: "gui",
       };
       return createCloudAppConversation(request);
     }
@@ -439,6 +475,11 @@ class AgentServerConversationService {
       conversationInstructions,
       plugins,
       conversationId,
+      // The agent-server rejects a parent in a different workspace, so callers
+      // launching a child must pass the parent's own `working_dir` as
+      // `workingDirOverride` (see `resolveConversationWorkingDir`). Servers
+      // older than 1.37.1 ignore the field and create an unlinked conversation.
+      parentConversationId,
       workingDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
@@ -446,9 +487,13 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
+    const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>(payload);
+    ).createConversation<DirectConversationInfo>({
+      ...payload,
+      ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
+    });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
@@ -524,6 +569,27 @@ class AgentServerConversationService {
     });
 
     return { vscode_url: vscodeUrl };
+  }
+
+  /**
+   * Read the editor's capability state from the agent-server.
+   *
+   * `/api/vscode/status` answers 200 with `enabled: false` when the
+   * deployment set `enable_vscode: false`, which distinguishes "this
+   * deployment offers no editor" from a transport, auth, or server
+   * failure — `/api/vscode/url` answers 503 for the former and so
+   * cannot be told apart from the latter.
+   */
+  static async getVSCodeStatus(
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<VSCodeStatusResponse> {
+    return new VSCodeClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getStatus();
   }
 
   static async resolveConversationWorkingDir(
@@ -631,34 +697,14 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<RuntimeConversationInfo> {
-    const active = getActiveBackend().backend;
-
-    type RawRuntime = DirectConversationInfo & {
-      stats?: RuntimeConversationInfo["stats"];
-    };
-
-    // Cloud mode: route through the cloud-proxy to the runtime sandbox at
-    // the conversation's runtime URL — same pattern as getVSCodeUrl. Local
-    // mode forwards conversationUrl so the host explicitly resolves to the
-    // conversation's runtime instead of falling back to the active backend.
-    const response =
-      active.kind === "cloud" && conversationUrl
-        ? await callCloudProxy<RawRuntime>({
-            backend: active,
-            method: "GET",
-            hostOverride: buildHttpBaseUrl(conversationUrl),
-            path: `/api/conversations/${conversationId}`,
-            authMode: "session-api-key",
-            sessionApiKey,
-          })
-        : await new ConversationClient(
-            getAgentServerClientOptions({
-              conversationUrl,
-              sessionApiKey,
-            }),
-          ).getConversation<RawRuntime>(conversationId);
+    // Fetch directly from the per-conversation runtime agent-server at conversationUrl.
+    const response = await new ConversationClient(
+      getAgentServerClientOptions({
+        conversationUrl,
+        sessionApiKey,
+      }),
+    ).getConversation<DirectConversationInfo>(conversationId);
     const data = requireDirectConversationInfo(response);
-    const stats = isRecord(response) ? response.stats : null;
 
     return {
       id: data.id,
@@ -669,8 +715,38 @@ class AgentServerConversationService {
       created_at: data.created_at,
       updated_at: data.updated_at,
       status: toRuntimeStatus(data.execution_status),
-      stats: isRecord(stats) ? stats : { usage_to_metrics: {} },
+      stats: data.stats ?? { usage_to_metrics: {} },
     };
+  }
+
+  /**
+   * Force condensation ("compact") of the conversation history via
+   * `POST /api/conversations/{id}/condense`. Routed the same way as
+   * {@link sendMessage}: through the cloud proxy at the conversation's own
+   * runtime host for cloud backends, directly against that runtime otherwise.
+   */
+  static async condenseConversation(
+    conversationId: string,
+    conversationUrl: string | null | undefined,
+    sessionApiKey?: string | null,
+  ): Promise<void> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud" && conversationUrl) {
+      await callCloudProxy({
+        backend: active,
+        method: "POST",
+        hostOverride: buildHttpBaseUrl(conversationUrl),
+        path: `/api/conversations/${conversationId}/condense`,
+        authMode: "session-api-key",
+        sessionApiKey,
+      });
+      return;
+    }
+
+    await new ConversationClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).condenseConversation(conversationId);
   }
 
   static async searchConversations(

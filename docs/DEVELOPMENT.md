@@ -8,6 +8,18 @@ This document is for contributors working on `agent-canvas` itself.
 `uvx`, Vite dev server with live reload, and an ingress proxy) — all without
 Docker.
 
+## Repository boundaries
+
+This repository contains the Agent Canvas frontend and local-stack orchestration. Use the sibling repositories for their owned layers:
+
+- [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
+- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
+
+When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
+
+
 For a static frontend build (better for slow networks, remote access, tunnels):
 
 ```sh
@@ -83,9 +95,8 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 ### Multiple local backends (shared persistence)
 
 To run a second standalone agent-server alongside `npm run dev` while sharing
-its conversation history and encrypted secrets, see
-[docs/multi-backend-setup.md](./docs/multi-backend-setup.md). The
-`npm run dev:extra-backend` helper launches an extra server on `:18002` that
+its conversation history and encrypted secrets, you can use the
+`npm run dev:extra-backend` helper. It launches an extra server on `:18002` that
 reuses the bundled instance's state dir.
 
 ### Frontend against an existing backend
@@ -121,6 +132,33 @@ Useful targeted verification for the isolated dev launcher:
 ```sh
 npm run test -- __tests__/api/agent-server-config.test.ts __tests__/scripts/dev-safe.test.ts
 ```
+
+### Mutation testing
+
+Stryker checks whether the Vitest suite detects deliberate changes to the
+first-party TypeScript source under `src/`. The default configuration excludes
+tests, declarations, generated files, fixtures, mocks, and development seeds.
+
+```sh
+# Full mutation run (expensive for the whole frontend)
+npm run test:mutation
+
+# Reuse results from the previous run
+npm run test:mutation:incremental
+
+# Mutate only production files changed from the local main branch
+npm run test:mutation:diff
+
+# Compare with another base ref, such as the latest remote main
+npm run test:mutation:diff -- origin/main
+```
+
+The HTML report is written to `reports/mutation.html`. Mutation scores are
+report-only initially; establish a stable baseline before adding a failing
+threshold.
+
+Stryker does not cover the small Python surface in this repository; mutating it
+would need a Python test harness and Python-specific mutation tool.
 
 ## CSS isolation and host-app customization
 

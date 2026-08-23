@@ -10,7 +10,7 @@ const NPM_LATEST_VERSION_URL =
   "https://registry.npmjs.org/@openhands/agent-canvas/latest";
 
 export const AGENT_CANVAS_RELEASE_NOTES_URL =
-  "https://github.com/OpenHands/agent-canvas/releases";
+  "https://github.com/OpenHands/OpenHands/releases";
 
 /** Literal shell commands — intentionally not localized. */
 export const AGENT_CANVAS_UPDATE_COMMANDS = {

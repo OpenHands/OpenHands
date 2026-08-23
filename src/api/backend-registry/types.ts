@@ -8,6 +8,8 @@ export interface Backend {
   apiKey: string;
   kind: BackendKind;
   authMode?: BackendAuthMode;
+  /** Changes whenever connection credentials change, invalidating keyed data. */
+  connectionRevision?: number;
 }
 
 export interface BackendSelection {

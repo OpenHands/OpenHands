@@ -52,7 +52,7 @@ const userMessage: MessageEvent = {
     role: "user",
     content: [{ type: "text", text: "Please diagnose **the failure**." }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -64,7 +64,7 @@ const assistantMessage: MessageEvent = {
     role: "assistant",
     content: [{ type: "text", text: "The service is healthy now." }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 };
 
@@ -174,6 +174,7 @@ describe("conversation transcript export", () => {
     const errorEvent: AgentErrorEvent = {
       id: "error-1",
       timestamp,
+      kind: "AgentErrorEvent",
       source: "agent",
       tool_name: "terminal",
       tool_call_id: "tool-error",

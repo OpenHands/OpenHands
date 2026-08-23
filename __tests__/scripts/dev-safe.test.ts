@@ -20,6 +20,8 @@ import {
   buildSafeDevConfigAsync,
   buildNpmScriptCommand,
   buildAgentServerCommand,
+  buildAgentServerEnv,
+  buildAgentServerTelemetryEnv,
   buildRuntimeServicesInfo,
   formatMissingUvxGuidance,
   formatMissingFrontendDependenciesGuidance,
@@ -381,6 +383,82 @@ describe("formatMissingUvxGuidance", () => {
   });
 });
 
+describe("buildAgentServerTelemetryEnv", () => {
+  it("configures PostHog telemetry by default without seeding consent", () => {
+    expect(buildAgentServerTelemetryEnv({})).toEqual({
+      OH_TELEMETRY_EXPORTER: "posthog",
+      OH_TELEMETRY_POSTHOG_API_KEY:
+        "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
+      OH_TELEMETRY_POSTHOG_HOST: "https://us.i.posthog.com",
+    });
+  });
+
+  it("prefers explicit agent-server telemetry settings", () => {
+    expect(
+      buildAgentServerTelemetryEnv({
+        OH_TELEMETRY_EXPORTER: "http",
+        OH_TELEMETRY_CONSENT: "denied",
+        OH_TELEMETRY_POSTHOG_API_KEY: "phc_agent",
+        OH_TELEMETRY_POSTHOG_HOST: "https://agent.example",
+        VITE_POSTHOG_API_KEY: "phc_frontend",
+        VITE_POSTHOG_HOST: "https://frontend.example",
+      }),
+    ).toEqual({
+      OH_TELEMETRY_EXPORTER: "http",
+      OH_TELEMETRY_CONSENT: "denied",
+      OH_TELEMETRY_POSTHOG_API_KEY: "phc_agent",
+      OH_TELEMETRY_POSTHOG_HOST: "https://agent.example",
+    });
+  });
+
+  it("uses frontend telemetry settings when agent-server settings are absent", () => {
+    expect(
+      buildAgentServerTelemetryEnv({
+        VITE_POSTHOG_API_KEY: "phc_frontend",
+        VITE_POSTHOG_HOST: "https://frontend.example",
+      }),
+    ).toEqual({
+      OH_TELEMETRY_EXPORTER: "posthog",
+      OH_TELEMETRY_POSTHOG_API_KEY: "phc_frontend",
+      OH_TELEMETRY_POSTHOG_HOST: "https://frontend.example",
+    });
+  });
+
+  it("maps frontend do-not-track to the agent-server kill switch", () => {
+    expect(buildAgentServerTelemetryEnv({ VITE_DO_NOT_TRACK: "1" })).toEqual({
+      DO_NOT_TRACK: "1",
+    });
+  });
+
+  it("includes telemetry defaults in the full agent-server environment", () => {
+    const env = buildAgentServerEnv(
+      {
+        cwd: "/tmp/cwd",
+        backendPort: 18000,
+        tmuxTmpDir: "/tmp/tmux",
+        stateDir: "/tmp/state",
+        conversationsPath: "/tmp/conversations",
+        workspacesPath: "/tmp/workspaces",
+        bashEventsDir: "/tmp/bash-events",
+        vscodePort: 19000,
+        vscodeBasePath: "/vscode",
+        secretKey: "secret",
+        sessionApiKey: "session",
+        backendBaseUrl: "http://127.0.0.1:18000",
+        backendHost: "127.0.0.1:18000",
+        workingDir: "/tmp/workspaces",
+        canvasToolsDir: "/tmp/tools",
+      },
+      { env: {} },
+    );
+
+    expect(env).toMatchObject({
+      OH_TELEMETRY_EXPORTER: "posthog",
+      OH_SESSION_API_KEYS_0: "session",
+    });
+  });
+});
+
 describe("buildAgentServerCommand", () => {
   it("uses released PyPI version by default with all packages pinned", () => {
     const cmd = buildAgentServerCommand({});
@@ -389,18 +467,20 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.38.0",
+      "openhands-agent-server==1.42.1",
       "--with",
-      "openhands-sdk==1.38.0",
+      "openhands-sdk==1.42.1",
       "--with",
-      "openhands-tools==1.38.0",
+      "openhands-tools==1.42.1",
       "--with",
-      "openhands-workspace==1.38.0",
+      "openhands-workspace==1.42.1",
       "--with",
       "agent-client-protocol<0.11",
+      "--with",
+      "posthog>=6,<7",
       "agent-server",
     ]);
-    expect(cmd.source).toBe("PyPI (1.38.0, default)");
+    expect(cmd.source).toBe("PyPI (1.42.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -420,6 +500,8 @@ describe("buildAgentServerCommand", () => {
       "openhands-workspace==1.18.0",
       "--with",
       "agent-client-protocol<0.11",
+      "--with",
+      "posthog>=6,<7",
       "agent-server",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
@@ -441,6 +523,8 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-tools",
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-workspace",
+      "--with",
+      "posthog>=6,<7",
       "agent-server",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
@@ -460,6 +544,8 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-tools",
       "--with",
       "git+https://github.com/OpenHands/software-agent-sdk@abc1234#subdirectory=openhands-workspace",
+      "--with",
+      "posthog>=6,<7",
       "agent-server",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
@@ -494,6 +580,8 @@ describe("buildAgentServerCommand", () => {
       path.join(sdk, "openhands-tools"),
       "--with-editable",
       path.join(sdk, "openhands-workspace"),
+      "--with",
+      "posthog>=6,<7",
       "agent-server",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
