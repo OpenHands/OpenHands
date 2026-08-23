@@ -34,6 +34,7 @@ import {
   readCloudConversationFile,
   searchCloudConversations,
   updateCloudConversationPublicFlag,
+  updateCloudConversationTitle,
 } from "../cloud/conversation-service.api";
 import {
   DirectConversationInfo,
@@ -783,6 +784,10 @@ class AgentServerConversationService {
     conversationId: string,
     title: string,
   ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return updateCloudConversationTitle(conversationId, title);
+    }
+
     await new ConversationClient(
       getAgentServerClientOptions(),
     ).updateConversation(conversationId, {

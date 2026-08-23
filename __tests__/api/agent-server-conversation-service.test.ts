@@ -1224,5 +1224,31 @@ describe("AgentServerConversationService", () => {
         `${cloudBackend.host}/api/v1/app-conversations/conv-cloud-1/file?file_path=%2Fworkspace%2Fproject%2F.agents_tmp%2FPLAN.md`,
       );
     });
+
+    it("renames a cloud conversation title via PATCH without touching the local agent-server", async () => {
+      // Arrange
+      fetchMock.mockResolvedValueOnce(
+        mockJsonResponse({ id: "conv-cloud-1", title: "Renamed" }),
+      );
+
+      // Act
+      const result =
+        await AgentServerConversationService.updateConversationTitle(
+          "conv-cloud-1",
+          "Renamed",
+        );
+
+      // Assert
+      expect(result).toMatchObject({ id: "conv-cloud-1", title: "Renamed" });
+      const [url, init] = getFetchCall(fetchMock);
+      expect(url).toBe(
+        `${cloudBackend.host}/api/v1/app-conversations/conv-cloud-1`,
+      );
+      expect(init).toMatchObject({
+        method: "PATCH",
+        headers: { Authorization: "Bearer bearer-token" },
+      });
+      expect(getJsonBody(init)).toEqual({ title: "Renamed" });
+    });
   });
 });

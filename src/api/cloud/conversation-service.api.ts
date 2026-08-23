@@ -221,6 +221,26 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Update a cloud v1 app-conversation's title. Mirrors the local
+ * `AgentServerConversationService.updateConversationTitle` interface:
+ * `PATCH /api/v1/app-conversations/{id}` with `{ title }`, returning the
+ * updated conversation.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  const data = await callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+  return data;
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops

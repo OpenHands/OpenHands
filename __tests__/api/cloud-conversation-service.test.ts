@@ -11,6 +11,7 @@ import {
   createCloudAppConversation,
   pickCloudBackendForLaunch,
   searchCloudConversations,
+  updateCloudConversationTitle,
 } from "#/api/cloud/conversation-service.api";
 import { AGENT_CANVAS_CLIENT_HEADERS } from "#/api/client-source";
 
@@ -173,6 +174,29 @@ describe("cloud conversation-service overlay", () => {
 
     expect(result).toEqual([]);
     expect(mockCallCloudProxy).not.toHaveBeenCalled();
+  });
+
+  it("renames a Cloud conversation title via PATCH", async () => {
+    const updated = {
+      id: "conv-1",
+      title: "Renamed",
+      selected_repository: null,
+      selected_branch: null,
+      git_provider: null,
+    };
+    mockCallCloudProxy.mockResolvedValueOnce(updated);
+
+    const result = await updateCloudConversationTitle("conv-1", "Renamed");
+
+    expect(mockCallCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "PATCH",
+        path: "/api/v1/app-conversations/conv-1",
+        body: { title: "Renamed" },
+      }),
+    );
+    expect(result).toEqual(updated);
   });
 
   it("only fills server-side nulls — server-populated fields are preserved", async () => {
