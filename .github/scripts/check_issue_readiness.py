@@ -6,7 +6,11 @@ The criteria are type-specific:
   least one supported run method (`agent-canvas`, `npm run`, or
   `app.all-hands.dev/canvas`), the Actual Behavior section must embed a
   screenshot or video, and there must be a non-empty Acceptance Criteria
-  section with at least one checklist item.
+  section with at least one checklist item. A bug with no rendered surface —
+  in a build script, a workflow, or any other path with no Agent Canvas
+  session to record — satisfies the first two instead by fencing its
+  reproduction command in Steps to Reproduce and showing that command's
+  output, in Actual Behavior or in the form's Relevant Logs field.
 
 - Enhancements (labeled `enhancement`): the body must contain non-empty
   Desired Behavior and Acceptance Criteria sections, the latter with at least
@@ -57,6 +61,16 @@ RUN_METHOD_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"npm\s+run", re.IGNORECASE),
     re.compile(r"app\.all-hands\.dev/canvas", re.IGNORECASE),
 )
+
+# Fenced code block, split by fence character because CommonMark treats their info
+# strings differently: a backtick fence's may not contain a backtick, a tilde's may.
+# An opener is indented by at most three *spaces* — a tab makes it indented code, not
+# a fence. A closer repeats the opening character at least as many times and is
+# followed by nothing but spaces or tabs; a marker with trailing text is still content.
+# Keeping all of that exact is what makes these agree with what the reporter sees
+# rendered, which is the only reason to require a fence at all.
+BACKTICK_FENCE_RE = re.compile(r"(?m)^ {0,3}(`{3,})[^`\n]*\n[\s\S]*?^ {0,3}\1`*[ \t]*$")
+TILDE_FENCE_RE = re.compile(r"(?m)^ {0,3}(~{3,})[^\n]*\n[\s\S]*?^ {0,3}\1~*[ \t]*$")
 
 # Markdown image: ![alt](url)
 MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
@@ -151,28 +165,54 @@ def has_checklist_item(text: str) -> bool:
     return bool(CHECKLIST_ITEM_RE.search(text))
 
 
+def has_fenced_block(text: str) -> bool:
+    """Whether `text` contains a code block GitHub would actually render as fenced."""
+    return bool(BACKTICK_FENCE_RE.search(text) or TILDE_FENCE_RE.search(text))
+
+
+def shown_by_reproduction_command(reproduction: str, actual: str, logs: str) -> bool:
+    """Whether the report shows the bug as a command and the output it produced.
+
+    The evidence a bug with no rendered surface can actually supply. The command
+    must be fenced in Steps to Reproduce, which is the half worth being strict
+    about: it is what lets someone else run it. The output may be fenced in Actual
+    Behavior or pasted into Relevant Logs, which the bug form renders as `shell`
+    and fences on the reporter's behalf. Requiring the command keeps a lone
+    snippet from qualifying on its own.
+    """
+    if not has_fenced_block(reproduction):
+        return False
+    return has_fenced_block(actual) or bool(logs)
+
+
 def check_bug(sections: dict[str, str]) -> ReadinessResult:
     result = ReadinessResult(ready=True)
 
     reproduction = visible_text(find_section(sections, "steps to reproduce", "reproduction"))
+    actual = visible_text(find_section(sections, "actual behavior", "actual"))
+    logs = visible_text(find_section(sections, "relevant logs", "logs"))
+    by_command = shown_by_reproduction_command(reproduction, actual, logs)
+
     if not reproduction:
         result.add(
             "Fill in the `### Steps to Reproduce` section showing how you reproduced "
-            "the bug in a live Agent Canvas session."
+            "the bug in a live Agent Canvas session, or the command that reproduces it."
         )
-    elif not references_run_method(reproduction):
+    elif not by_command and not references_run_method(reproduction):
         result.add(
             "The Steps to Reproduce section must reference a supported run method: "
-            "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`."
+            "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`. If the bug has no "
+            "Agent Canvas surface, give the reproduction command in a fenced block instead, "
+            "with its output in Actual Behavior or Relevant Logs."
         )
 
-    actual = visible_text(find_section(sections, "actual behavior", "actual"))
     if not actual:
         result.add("Fill in the `### Actual Behavior` section describing the observed bug.")
-    elif not has_screenshot_or_video(actual):
+    elif not by_command and not has_screenshot_or_video(actual):
         result.add(
             "The Actual Behavior section must include a screenshot or video of "
-            "the bug (drag a file into the field or paste a link)."
+            "the bug (drag a file into the field or paste a link), or the output of "
+            "the fenced reproduction command."
         )
 
     acceptance = visible_text(find_section(sections, "acceptance criteria", "acceptance"))

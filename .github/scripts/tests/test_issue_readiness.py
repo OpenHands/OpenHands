@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from check_issue_readiness import (
     evaluate_readiness,
+    shown_by_reproduction_command,
     extract_sections,
     has_screenshot_or_video,
     references_run_method,
@@ -430,3 +431,84 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
     assert len(data["reasons"]) == 0
 
 
+# ---------------------------------------------------------------------------
+# Bugs with no rendered surface
+# ---------------------------------------------------------------------------
+
+NON_UI_BUG = """### Steps to Reproduce
+Against a body whose Acceptance Criteria section is present:
+
+```bash
+python3 .github/scripts/check_issue_readiness.py --body-file /tmp/body.md
+```
+
+### Actual Behavior
+The checker asks for the section the body already has:
+
+```
+ready: False
+ - Fill in the `### Acceptance Criteria` section with testable checklist items.
+```
+
+### Acceptance Criteria
+- [ ] The section that is present is not reported as missing
+"""
+
+
+def test_fenced_command_and_output_stand_in_for_canvas_evidence():
+    """A CI-script bug has no Agent Canvas session to record and no screen to shoot."""
+    result = evaluate_readiness(NON_UI_BUG, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_output_may_live_in_relevant_logs():
+    """The bug form renders Relevant Logs as `shell`, so it arrives already fenced."""
+    body = NON_UI_BUG[: NON_UI_BUG.index("### Actual Behavior")] + (
+        "### Actual Behavior\nThe section that is present is reported as missing.\n\n"
+        "### Relevant Logs\nready: False\n\n"
+        "### Acceptance Criteria\n- [ ] The section that is present is not reported as missing\n"
+    )
+    assert "### Relevant Logs" in body
+    assert evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_a_command_with_no_output_is_not_enough():
+    """Otherwise a bare snippet qualifies and the report shows nothing."""
+    body = """### Steps to Reproduce
+Against a body whose Acceptance Criteria section is present:
+
+```bash
+python3 .github/scripts/check_issue_readiness.py --body-file /tmp/body.md
+```
+
+### Actual Behavior
+It reports a section that is present as missing.
+
+### Acceptance Criteria
+- [ ] Fixed
+"""
+    assert not evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_output_without_a_fenced_command_still_needs_a_run_method():
+    """The command is the half that makes the report reproducible by someone else."""
+    body = """### Steps to Reproduce
+Run the checker against a body whose Acceptance Criteria section is present.
+
+### Actual Behavior
+The checker rejects it:
+
+```
+ready: False
+```
+
+### Acceptance Criteria
+- [ ] Fixed
+"""
+    assert not evaluate_readiness(body, [BUG_LABEL]).ready
+
+
+def test_shown_by_reproduction_command_requires_the_command():
+    assert not shown_by_reproduction_command("", "```\nout\n```", "")
+    assert not shown_by_reproduction_command("```\ncmd\n```", "", "")
+    assert shown_by_reproduction_command("```\ncmd\n```", "", "out")
