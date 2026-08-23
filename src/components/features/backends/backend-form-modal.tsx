@@ -2,7 +2,10 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
-import { ServerClient } from "@openhands/typescript-client/clients";
+import {
+  ServerClient,
+  SettingsClient,
+} from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import {
@@ -15,7 +18,10 @@ import { SettingsInput } from "#/components/features/settings/settings-input";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
-import { useBackendsHealth } from "#/hooks/query/use-backends-health";
+import {
+  INVALID_BACKEND_API_KEY_ERROR,
+  useBackendsHealth,
+} from "#/hooks/query/use-backends-health";
 import { useTracking } from "#/hooks/use-tracking";
 import type { CloudConnectionSource } from "#/services/cloud-funnel-analytics";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
@@ -24,6 +30,7 @@ import { isOpenHandsCloudHost } from "#/api/device-flow-client";
 import {
   assertAgentServerVersionIsSupported,
   getDisplayAgentServerVersion,
+  isSdkHttpStatusError,
 } from "#/api/agent-server-compatibility";
 import ChevronDownSmallIcon from "#/icons/chevron-down-small.svg?react";
 import { I18nKey } from "#/i18n/declaration";
@@ -183,15 +190,23 @@ async function testBackendConnection(
   // Cloud backends authenticate via OAuth; preflight GET is not applicable.
   if (backend.kind !== "local") return { agentServerVersion: null };
 
-  const serverInfo = await new ServerClient(
-    getAgentServerClientOptions({
-      host: backend.host,
-      sessionApiKey: backend.apiKey || null,
-      timeout: 5000,
-    }),
-  ).getServerInfo();
-  assertAgentServerVersionIsSupported(serverInfo);
-  return { agentServerVersion: getDisplayAgentServerVersion(serverInfo) };
+  const clientOptions = getAgentServerClientOptions({
+    host: backend.host,
+    sessionApiKey: backend.apiKey || null,
+    timeout: 5000,
+  });
+
+  try {
+    await new SettingsClient(clientOptions).getSettings();
+    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
+    assertAgentServerVersionIsSupported(serverInfo);
+    return { agentServerVersion: getDisplayAgentServerVersion(serverInfo) };
+  } catch (error) {
+    if (isSdkHttpStatusError(error, 401)) {
+      throw new Error(INVALID_BACKEND_API_KEY_ERROR);
+    }
+    throw error;
+  }
 }
 
 /**
