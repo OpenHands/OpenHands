@@ -23,7 +23,8 @@ Review each change in the context of the repository that owns the behavior:
 - [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) owns Agent Canvas UI, frontend state, backend selection, and local-stack orchestration.
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and canonical server API.
 - [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns the browser-compatible typed client and generated/maintained types for that API.
-- [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; the Agent Server/SDK executes dispatched conversations.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; the Agent Server/SDK executes dispatched conversations.
 
 The usual flow is `software-agent-sdk` / Agent Server → OpenAPI contract → `typescript-client` → Agent Canvas. When reviewing a cross-repository change, verify that backend behavior and endpoints are implemented in the SDK, client access is implemented in `typescript-client`, frontend integration is implemented in Canvas, and automation lifecycle behavior is implemented in `automation`. Flag duplicated or misplaced logic, and check that linked PRs update the appropriate contract layer in order. If a PR is opened in the wrong repository, say so explicitly in the review and recommend that it may need to be closed and moved to the repository that owns the change rather than merged here.
 
