@@ -12,7 +12,7 @@ export function HomeHeaderTitle() {
       </Typography.H1>
       <p
         data-testid="home-header-subtitle"
-        className="max-w-[600px] text-center text-[var(--oh-text-tertiary)]"
+        className="text-center text-[var(--oh-text-tertiary)]"
       >
         {t(I18nKey.HOME$ENGINEERING_TASKS_SUBHEADER)}
       </p>
