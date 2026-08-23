@@ -315,6 +315,13 @@ export function EventMessage({
   if (!isActionEvent(event) && !isObservationEvent(event)) {
     const messageEvent = event as MessageEvent;
 
+    // Render the SDK's empty-response corrective nudge as a distinct
+    // informational note (italic + muted + info icon) instead of an
+    // ordinary user bubble.
+    if (isCorrectiveNudge(messageEvent)) {
+      return <CorrectiveNudgeMessage event={messageEvent} />;
+    }
+
     // Check if this is a user message that should display a Skill Ready event
     if (isUserMessageEvent(event) && shouldShowSkillReadyEvent(messageEvent)) {
       return renderUserMessageWithSkillReady(
