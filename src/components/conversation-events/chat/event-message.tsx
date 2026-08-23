@@ -34,7 +34,9 @@ import { GenericEventMessageWrapper } from "./event-message-components/generic-e
 import { ThoughtEventMessage } from "./event-message-components/thought-event-message";
 import { CollapsibleThinking } from "./event-message-components/collapsible-thinking";
 import { HookExecutionEventMessage } from "./event-message-components/hook-execution-event-message";
+import { CorrectiveNudgeMessage } from "./event-message-components/corrective-nudge-message";
 import { createSkillReadyEvent } from "./event-content-helpers/create-skill-ready-event";
+import { isCorrectiveNudge } from "./event-content-helpers/should-render-event";
 import { shouldShowPlanPreview } from "./hooks/use-plan-preview-events";
 import { getReasoningContent, splitInlineThink } from "./event-thought-helpers";
 
