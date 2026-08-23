@@ -100,22 +100,11 @@ docker run -it --rm \
 ```
 
 > [!NOTE]
-> **Linux (Docker Engine) only:** the container runs as uid 10001 (openhands) —
+> **Linux (Docker Engine):** the container runs as uid 10001 (`openhands`) —
 > bind-mounted host dirs must be writable by that uid, or the agent-server and
-> automation crash at startup. Run this **before** `docker run`:
->
-> ```sh
-> chmod -R a+rwX "$HOME/.openhands" "$PROJECTS_PATH"
-> ```
->
-> Docker Desktop (macOS/Windows) handles bind-mount permissions transparently, so
-> no `chmod` is needed there.
-
-> [!TIP]
-> The image's `openhands` user is **uid 10001**. Instead of `chmod`-ing the host
-> dirs, you can run the container as your own user so the bind mounts are
-> writable automatically (all persistent state lives under the mounted
-> `.openhands` dir, so this is safe in practice):
+> automation crash at startup. The easiest fix is to run the container as your
+> own user, so the bind mounts are writable automatically (all persistent state
+> lives under the mounted `.openhands` dir, so this is safe in practice):
 >
 > ```sh
 > docker run -it --rm \
@@ -132,6 +121,18 @@ docker run -it --rm \
 > no `/etc/passwd` entry inside the container, so `$HOME` would not resolve to
 > `/home/openhands` — without pinning it, state would silently detach from the
 > bind mount.
+>
+> Alternatively, grant write access on the host — scoped to directories only,
+> because a recursive `chmod -R` would also strip the `600` permission of the
+> persisted secret files (`secret-key.txt`, `api-key.txt`) and make them
+> world-readable:
+>
+> ```sh
+> find "$HOME/.openhands" "$PROJECTS_PATH" -type d -exec chmod a+rwX {} +
+> ```
+>
+> Docker Desktop (macOS/Windows) handles bind-mount permissions transparently,
+> so none of this is needed there.
 
 **Windows (PowerShell / Windows Terminal):** See [README.windows.md](./README.windows.md) for the equivalent commands.
 

@@ -78,8 +78,8 @@ for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_
     log_error "Persistence directory is not writable: $dir"
     log_error "The container runs as uid $(id -u); the bind-mounted host dir"
     log_error "must be writable by that uid. Fix with either:"
-    log_error "  1) chmod -R a+rwX ~/.openhands   # run ON THE HOST, not in the container"
-    log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
+    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\" (add -e HOME=/home/openhands)"
+    log_error "  2) find ~/.openhands -type d -exec chmod a+rwX {} +  # host shell; dirs only"
     exit 1
   fi
   rm -f "$dir/.write-test"
@@ -95,8 +95,8 @@ if [ -d /projects ]; then
     log_error "Workspace directory is not writable: /projects"
     log_error "The container runs as uid $(id -u); the bind-mounted host dir"
     log_error "must be writable by that uid. Fix with either:"
-    log_error "  1) chmod -R a+rwX ~/projects   # run ON THE HOST, not in the container"
-    log_error "  2) docker run ... --user \"\$(id -u):\$(id -g)\""
+    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\""
+    log_error "  2) find ~/projects -type d -exec chmod a+rwX {} +  # host shell; dirs only"
     exit 1
   fi
   rm -f /projects/.write-test
