@@ -5,6 +5,7 @@ import { CustomChatInput } from "#/components/features/chat/custom-chat-input";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useLocalWorkspaces } from "#/hooks/query/use-local-workspaces";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useModelInterceptor } from "#/hooks/chat/use-model-interceptor";
 import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { HOME_PROMPT_DRAFT_KEY } from "#/hooks/chat/use-draft-persistence";
@@ -68,6 +69,7 @@ export function HomeChatLauncher() {
     useConversationStore();
   const { handleUpload } = useChatAttachmentUpload();
   const { error: workspacesError } = useLocalWorkspaces({ enabled: isLocal });
+  const { data: settings } = useSettings();
   const workspacesUnsupportedMessage = isLocal
     ? getWorkspacesUnsupportedMessage(workspacesError, t)
     : null;
@@ -278,7 +280,9 @@ export function HomeChatLauncher() {
             setPendingRepository(null);
             setPendingBranch(null);
             setPendingProvider(null);
-            setWorkspaceMode("local_repo");
+            setWorkspaceMode(
+              settings?.use_worktree_by_default ? "new_worktree" : "local_repo",
+            );
           }}
         />
       ) : (

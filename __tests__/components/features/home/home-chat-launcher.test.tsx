@@ -6,7 +6,9 @@ import toast from "react-hot-toast";
 
 import { HomeChatLauncher } from "#/components/features/home/home-chat-launcher";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import SettingsService from "#/api/settings-service/settings-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -194,6 +196,11 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
       >
         New Worktree
       </button>
+      <button
+        type="button"
+        data-testid="stub-workspace-mode-local-repo"
+        onClick={() => onWorkspaceModeChange("local_repo")}
+      />
     </div>
   ),
 }));
@@ -201,18 +208,21 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
 // Stub the picker modal: pressing it selects one plugin then closes, mirroring
 // the real modal's `onChange` + `onClose` contract. The picker catalog itself
 // is covered by plugin-picker.test.tsx.
-vi.mock("#/components/features/automations/recommended-automations-launcher", () => ({
-  RecommendedAutomationsLauncher: ({
-    variant,
-    className,
-  }: {
-    variant?: string;
-    className?: string;
-  }) =>
-    variant === "rail" ? (
-      <div data-testid="recommended-automations-rail" className={className} />
-    ) : null,
-}));
+vi.mock(
+  "#/components/features/automations/recommended-automations-launcher",
+  () => ({
+    RecommendedAutomationsLauncher: ({
+      variant,
+      className,
+    }: {
+      variant?: string;
+      className?: string;
+    }) =>
+      variant === "rail" ? (
+        <div data-testid="recommended-automations-rail" className={className} />
+      ) : null,
+  }),
+);
 
 vi.mock("#/components/features/plugins/plugin-picker-modal", () => ({
   PluginPickerModal: ({
@@ -419,6 +429,77 @@ describe("HomeChatLauncher", () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith("/conversations/conv-wt"),
     );
+  });
+
+  it("uses the saved worktree preference for a selected workspace", async () => {
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        use_worktree_by_default: true,
+      });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-default-wt" }),
+      );
+
+    renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "new_worktree",
+    });
+  });
+
+  it("allows the saved worktree preference to be overridden per conversation", async () => {
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        use_worktree_by_default: true,
+      });
+    const createSpy = vi
+      .spyOn(AgentServerConversationService, "createConversation")
+      .mockResolvedValue(
+        makeConversationResponse({ app_conversation_id: "conv-shared" }),
+      );
+
+    renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
+    expect(createSpy).toHaveBeenCalledWith({
+      initialUserMsg: "hello world",
+      metadata: null,
+      workingDirOverride: "/p/app",
+      workspaceMode: "local_repo",
+    });
   });
 
   it("disables the local workspace launcher when the agent server is too old", async () => {

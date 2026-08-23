@@ -113,7 +113,7 @@ export function ActiveBackendProvider({
       // (`useSettings`, `usePaginatedConversations`,
       // `useGitRepositories`, `useAppInstallations`,
       // `useCloudCurrentUserId`, `useGitUser`, …) include the active
-      // backend's `id` and `orgId` in their query keys, so React Query
+      // backend identity in their query keys, so React Query
       // treats a backend/org switch as a brand-new query and fetches
       // automatically — once, with no duplicate waves.
     },

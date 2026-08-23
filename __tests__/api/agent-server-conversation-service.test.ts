@@ -514,6 +514,63 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(true);
     });
 
+    it("uses the saved worktree default for a selected workspace", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+        use_worktree_by_default: true,
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { worktree: boolean };
+      expect(payload.worktree).toBe(true);
+    });
+
+    it("honors an explicit local-repo mode over the saved worktree default", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+        use_worktree_by_default: true,
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "local_repo",
+      });
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as { worktree: boolean };
+      expect(payload.worktree).toBe(false);
+    });
+
     it("links a local conversation to its parent", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },

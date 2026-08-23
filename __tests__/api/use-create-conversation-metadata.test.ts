@@ -18,6 +18,7 @@ const {
   mockUseLlmProfiles,
   mockListInstalledPlugins,
   mockGetTelemetryDistinctId,
+  mockTrackConversationCreated,
 } = vi.hoisted(() => ({
   mockHttpPost: vi.fn(),
   mockConversationClient: vi.fn(),
@@ -27,6 +28,7 @@ const {
   mockUseLlmProfiles: vi.fn(),
   mockListInstalledPlugins: vi.fn(),
   mockGetTelemetryDistinctId: vi.fn(),
+  mockTrackConversationCreated: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -69,7 +71,9 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
 }));
 
 vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({ trackConversationCreated: vi.fn() }),
+  useTracking: () => ({
+    trackConversationCreated: mockTrackConversationCreated,
+  }),
 }));
 
 vi.mock("#/services/telemetry", () => ({
@@ -105,6 +109,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
     // assertions are unaffected. Plugin-specific tests override this.
     mockListInstalledPlugins.mockResolvedValue([]);
     mockGetTelemetryDistinctId.mockReset().mockResolvedValue(null);
+    mockTrackConversationCreated.mockReset();
     mockHttpPost.mockReset();
     mockGetSettings.mockReset();
     mockGetSettingsForConversation.mockReset();
@@ -184,6 +189,29 @@ describe("useCreateConversation persists selected repository metadata", () => {
       selected_workspace: "/home/me/code/some-project",
       workspace_mode: "local_repo",
     });
+  });
+
+  it("tracks the saved worktree default as the effective workspace mode", async () => {
+    mockGetSettings.mockResolvedValue({
+      agent_settings: { llm: { model: "gpt-4o" } },
+      conversation_settings: {},
+      use_worktree_by_default: true,
+    });
+    const { result } = renderHook(() => useCreateConversation(), { wrapper });
+
+    result.current.mutate({
+      query: "work in isolation",
+      workingDir: "/home/me/code/some-project",
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(getStoredConversationMetadata("conv-new")?.workspace_mode).toBe(
+      "new_worktree",
+    );
+    expect(mockTrackConversationCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceMode: "new_worktree" }),
+    );
   });
 
   it("does not write metadata when neither a repository nor a workspace is attached", async () => {

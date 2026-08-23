@@ -139,6 +139,8 @@ export const useSettings = (scope: SettingsScope = "personal") => {
     queryKey: [
       ...SETTINGS_QUERY_KEYS.byScope(scope),
       active.backend.id,
+      active.backend.host,
+      active.backend.connectionRevision ?? 0,
       active.orgId,
     ],
     queryFn: () => getSettingsQueryFn(scope),

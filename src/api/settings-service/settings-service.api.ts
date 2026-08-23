@@ -26,6 +26,7 @@ export const APP_PREFERENCE_FIELDS = [
   "language",
   "user_consents_to_analytics",
   "enable_sound_notifications",
+  "use_worktree_by_default",
   "git_user_name",
   "git_user_email",
   "title_llm_profile",
@@ -160,24 +161,55 @@ async function withRetry<T>(
  * The cache is invalidated on save operations.
  */
 let settingsCache: {
+  /** Active backend identity for every cached entry. */
+  scopeKey: string | null;
   /** Settings with redacted secrets for display */
   redacted: SettingsApiResponse | null;
+  redactedTimestamp: number;
   /** Settings with encrypted secrets for conversation start */
   encrypted: SettingsApiResponse | null;
-  /** Timestamp when the cache was last populated */
-  timestamp: number;
+  encryptedTimestamp: number;
 } = {
+  scopeKey: null,
   redacted: null,
+  redactedTimestamp: 0,
   encrypted: null,
-  timestamp: 0,
+  encryptedTimestamp: 0,
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const isCacheValid = () => Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
+const getSettingsCacheScopeKey = () => {
+  const { backend, orgId } = getActiveBackend();
+  return JSON.stringify([
+    backend.id,
+    backend.host,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ]);
+};
+
+const emptySettingsCache = (scopeKey: string | null = null) => ({
+  scopeKey,
+  redacted: null,
+  redactedTimestamp: 0,
+  encrypted: null,
+  encryptedTimestamp: 0,
+});
+
+const ensureSettingsCacheScope = (): string => {
+  const scopeKey = getSettingsCacheScopeKey();
+  if (settingsCache.scopeKey !== scopeKey) {
+    settingsCache = emptySettingsCache(scopeKey);
+  }
+  return scopeKey;
+};
+
+const isCacheEntryValid = (timestamp: number) =>
+  Date.now() - timestamp < CACHE_TTL_MS;
 
 const clearCache = () => {
-  settingsCache = { redacted: null, encrypted: null, timestamp: 0 };
+  settingsCache = emptySettingsCache();
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -430,10 +462,9 @@ class SettingsService {
   static async fetchSettingsFromApi(
     exposeSecrets?: ExposeSecretsMode,
   ): Promise<SettingsApiResponse> {
+    const client = new SettingsClient(getAgentServerClientOptions());
     return withRetry(() =>
-      new SettingsClient(getAgentServerClientOptions()).getSettings({
-        exposeSecrets,
-      }),
+      client.getSettings({ exposeSecrets }),
     ) as Promise<SettingsApiResponse>;
   }
 
@@ -458,15 +489,23 @@ class SettingsService {
       }
     }
 
-    // Check cache first
-    if (isCacheValid() && settingsCache.redacted) {
+    const scopeKey = ensureSettingsCacheScope();
+    if (
+      isCacheEntryValid(settingsCache.redactedTimestamp) &&
+      settingsCache.redacted
+    ) {
       return syncDerivedSettings(transformApiResponse(settingsCache.redacted));
     }
 
     try {
       const response = await this.fetchSettingsFromApi();
-      settingsCache.redacted = response;
-      settingsCache.timestamp = Date.now();
+      if (
+        settingsCache.scopeKey === scopeKey &&
+        getSettingsCacheScopeKey() === scopeKey
+      ) {
+        settingsCache.redacted = response;
+        settingsCache.redactedTimestamp = Date.now();
+      }
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
@@ -488,8 +527,11 @@ class SettingsService {
     conversationSettings: Record<string, SettingsValue>;
     secretsEncrypted: boolean;
   }> {
-    // Check cache first
-    if (isCacheValid() && settingsCache.encrypted) {
+    const scopeKey = ensureSettingsCacheScope();
+    if (
+      isCacheEntryValid(settingsCache.encryptedTimestamp) &&
+      settingsCache.encrypted
+    ) {
       return {
         agentSettings: settingsCache.encrypted.agent_settings,
         conversationSettings: settingsCache.encrypted.conversation_settings,
@@ -500,9 +542,12 @@ class SettingsService {
     // Fetch encrypted settings - this MUST succeed for conversations to work.
     // Do not fall back to redacted settings as that would cause auth failures.
     const response = await this.fetchSettingsFromApi("encrypted");
-    settingsCache.encrypted = response;
-    if (!settingsCache.timestamp) {
-      settingsCache.timestamp = Date.now();
+    if (
+      settingsCache.scopeKey === scopeKey &&
+      getSettingsCacheScopeKey() === scopeKey
+    ) {
+      settingsCache.encrypted = response;
+      settingsCache.encryptedTimestamp = Date.now();
     }
     return {
       agentSettings: response.agent_settings,
@@ -608,11 +653,10 @@ class SettingsService {
     settings: Partial<Settings> & Record<string, unknown>,
   ): Promise<boolean> {
     // Split app-level user-preference fields (language, git identity, sound
-    // notifications, analytics consent, disabled_skills) off and route them
-    // through `misc_settings_diff.app_preferences` (local) or as flat
-    // top-level keys (cloud). The local agent-server stores them under
-    // `PersistedSettings.misc_settings.app_preferences`; the cloud accepts
-    // them as flat keys on `POST /api/v1/settings`.
+    // notifications, analytics consent, worktree default, disabled_skills)
+    // from agent/conversation settings. Local stores all of them under
+    // `PersistedSettings.misc_settings.app_preferences`; Cloud receives only
+    // its supported preferences as flat keys on `POST /api/v1/settings`.
     const { extracted: appPreferences, rest } = extractAppPreferences(
       settings as Record<string, unknown>,
     );
@@ -645,10 +689,14 @@ class SettingsService {
 
     const isCloud = getActiveBackend().backend.kind === "cloud";
     if (isCloud) {
+      const cloudAppPreferences = { ...appPreferences };
+      delete cloudAppPreferences.use_worktree_by_default;
+      const hasCloudAppPreferences =
+        Object.keys(cloudAppPreferences).length > 0;
       const hasCloudWork =
         !!payload.agent_settings_diff ||
         !!payload.conversation_settings_diff ||
-        hasAppPreferences;
+        hasCloudAppPreferences;
       if (!hasCloudWork) {
         return true;
       }
@@ -669,11 +717,11 @@ class SettingsService {
         cloudPayload.conversation_settings_diff =
           payload.conversation_settings_diff;
       }
-      if (hasAppPreferences) {
+      if (hasCloudAppPreferences) {
         // The cloud `POST /api/v1/settings` takes app-preference fields as
         // flat top-level keys (not under `app_preferences_diff`).
         // `saveCloudSettings` re-flattens them onto the request body.
-        cloudPayload.app_preferences = appPreferences;
+        cloudPayload.app_preferences = cloudAppPreferences;
       }
       await withRetry(() => saveCloudSettings(cloudPayload));
     } else {
@@ -686,11 +734,8 @@ class SettingsService {
       if (!hasLocalDiffs) {
         return true;
       }
-      await withRetry(() =>
-        new SettingsClient(getAgentServerClientOptions()).updateSettings(
-          payload,
-        ),
-      );
+      const client = new SettingsClient(getAgentServerClientOptions());
+      await withRetry(() => client.updateSettings(payload));
     }
 
     // Invalidate cache after successful save
