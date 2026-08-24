@@ -161,8 +161,11 @@ export function ConversationPanel({
   const toggleTagFacet = useConversationPanelPreferencesStore(
     (state) => state.toggleTagFacet,
   );
-  const clearTagFacets = useConversationPanelPreferencesStore(
-    (state) => state.clearTagFacets,
+  const toggleAutomationName = useConversationPanelPreferencesStore(
+    (state) => state.toggleAutomationName,
+  );
+  const clearFilterSelections = useConversationPanelPreferencesStore(
+    (state) => state.clearFilterSelections,
   );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
@@ -321,7 +324,7 @@ export function ConversationPanel({
   }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
 
   // Facets derive from the unfiltered list so the automation-name rows in the
-  // filter menu don't vanish while a narrowing selection is active.
+  // advanced-options modal don't vanish while a narrowing selection is active.
   const automationNameFacets = React.useMemo(
     () => collectAutomationNameFacets(conversations),
     [conversations],
@@ -384,7 +387,7 @@ export function ConversationPanel({
   );
 
   // Tag facets likewise derive from the unfiltered list so the tag rows in
-  // the filter menu don't vanish while a narrowing selection is active.
+  // the layouts menu don't vanish while a narrowing selection is active.
   const tagFacets = React.useMemo(
     () => collectTagFacets(conversations),
     [conversations],
@@ -1093,6 +1096,7 @@ export function ConversationPanel({
                 menuRef={filterMenuRef}
                 backendKind={activeBackend.kind}
                 tagFacets={tagFacets}
+                automationNameFacets={automationNameFacets}
                 totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
               />
@@ -1107,7 +1111,9 @@ export function ConversationPanel({
         <ConversationActiveTagFilters
           selectedFacets={selectedTagFacets}
           onToggleFacet={toggleTagFacet}
-          onClearAll={clearTagFacets}
+          selectedAutomationNames={selectedAutomationNames}
+          onToggleAutomationName={toggleAutomationName}
+          onClearAll={clearFilterSelections}
         />
       )}
 

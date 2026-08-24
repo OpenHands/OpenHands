@@ -29,11 +29,19 @@ import { BrandButton } from "#/components/features/settings/brand-button";
 import { MenuHeading } from "./menu-heading";
 import { MenuSeparator } from "./menu-separator";
 import { MenuRow } from "./menu-row";
+import { UNNAMED_AUTOMATION_FACET } from "./conversation-panel-list-helpers";
 
 export interface AdvancedConversationOptionsModalProps {
   open: boolean;
   onClose: () => void;
   backendKind: BackendKind;
+  /**
+   * Distinct automation names among the loaded conversations. Rendered as
+   * selectable rows under the Automations section in `only-automations`
+   * mode — the only control for `selectedAutomationNames`, which is
+   * persisted and narrows the list on its own.
+   */
+  automationNameFacets: readonly string[];
 }
 
 /**
@@ -46,6 +54,7 @@ export function AdvancedConversationOptionsModal({
   open,
   onClose,
   backendKind,
+  automationNameFacets,
 }: AdvancedConversationOptionsModalProps) {
   const { t } = useTranslation("openhands");
   const preferences = useConversationPanelPreferencesStore();
@@ -184,6 +193,26 @@ export function AdvancedConversationOptionsModal({
               preferences.setAutomationFilterMode("only-automations")
             }
           />
+          {/* Name rows only make sense while the list is scoped to
+              automations — and `setAutomationFilterMode` clears the selection
+              on the way out, so a hidden row can never keep narrowing. */}
+          {preferences.automationFilterMode === "only-automations"
+            ? automationNameFacets.map((facet) => (
+                <MenuRow
+                  key={facet}
+                  icon={Tag}
+                  label={
+                    facet === UNNAMED_AUTOMATION_FACET
+                      ? t(I18nKey.CONVERSATION_PANEL$AUTOMATION_UNNAMED)
+                      : facet
+                  }
+                  selected={preferences.selectedAutomationNames.includes(facet)}
+                  variant="toggle"
+                  testId={`automation-name-row-${facet}`}
+                  onClick={() => preferences.toggleAutomationName(facet)}
+                />
+              ))
+            : null}
 
           <MenuSeparator />
           <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$METADATA)}</MenuHeading>

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
 import { ConversationLayoutsMenu } from "#/components/features/conversation-panel/conversation-layouts-menu";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
+import { UNNAMED_AUTOMATION_FACET } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 
 beforeEach(() => {
   useConversationPanelPreferencesStore.setState({
@@ -23,7 +24,10 @@ beforeEach(() => {
   });
 });
 
-const renderMenu = (tagFacets: readonly string[] = []) =>
+const renderMenu = (
+  tagFacets: readonly string[] = [],
+  automationNameFacets: readonly string[] = [],
+) =>
   renderWithProviders(
     <ConversationLayoutsMenu
       menuOpen
@@ -31,6 +35,7 @@ const renderMenu = (tagFacets: readonly string[] = []) =>
       menuRef={{ current: null }}
       backendKind="local"
       tagFacets={tagFacets}
+      automationNameFacets={automationNameFacets}
       totalConversationsCount={1}
       onRequestDeleteAll={() => {}}
     />,
@@ -79,14 +84,14 @@ describe("ConversationLayoutsMenu", () => {
     await user.click(screen.getByTestId("advanced-options-row"));
     await user.click(screen.getByTestId("toggle-tag-filters"));
 
-    expect(await screen.findByTestId("tag-filters-section")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("tag-filters-section"),
+    ).toBeInTheDocument();
   });
 
   it("shows No visible tags when enabled with no facets, and toggles facets when present", async () => {
     const user = userEvent.setup();
-    useConversationPanelPreferencesStore
-      .getState()
-      .setTagFiltersEnabled(true);
+    useConversationPanelPreferencesStore.getState().setTagFiltersEnabled(true);
 
     const { unmount } = renderMenu();
     await user.click(screen.getByTestId("tag-filters-section"));
@@ -127,5 +132,52 @@ describe("ConversationLayoutsMenu", () => {
     expect(
       screen.queryByTestId("advanced-conversation-options-modal"),
     ).not.toBeInTheDocument();
+  });
+
+  it("exposes the automation-name facet rows once the scope is only-automations", async () => {
+    // These rows are the only control for `selectedAutomationNames`, which is
+    // persisted and narrows the list on its own — without them a stale
+    // selection hides conversations with no way back.
+    const user = userEvent.setup();
+    renderMenu([], ["Nightly Audit", "PR Review Bot"]);
+
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await screen.findByTestId("advanced-conversation-options-modal");
+
+    // Hidden while the list is not scoped to automations...
+    expect(
+      screen.queryByTestId("automation-name-row-Nightly Audit"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("automation-filter-only"));
+
+    // ...and selectable once it is.
+    await user.click(
+      await screen.findByTestId("automation-name-row-Nightly Audit"),
+    );
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual(["Nightly Audit"]);
+
+    // Toggling it back off leaves the scope alone.
+    await user.click(screen.getByTestId("automation-name-row-Nightly Audit"));
+    const next = useConversationPanelPreferencesStore.getState();
+    expect(next.selectedAutomationNames).toEqual([]);
+    expect(next.automationFilterMode).toBe("only-automations");
+  });
+
+  it("labels the unnamed-automation bucket instead of leaking its sentinel", async () => {
+    const user = userEvent.setup();
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "only-automations",
+    });
+    renderMenu([], [UNNAMED_AUTOMATION_FACET]);
+
+    await user.click(screen.getByTestId("advanced-options-row"));
+
+    const row = await screen.findByTestId(
+      `automation-name-row-${UNNAMED_AUTOMATION_FACET}`,
+    );
+    expect(row).not.toHaveTextContent(UNNAMED_AUTOMATION_FACET);
   });
 });

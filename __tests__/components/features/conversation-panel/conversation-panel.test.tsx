@@ -526,6 +526,59 @@ describe("ConversationPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps a persisted automation-name filter both reachable and visible", async () => {
+    // `selectedAutomationNames` is persisted and narrows the list on its own,
+    // so it needs a control that can see and undo it — otherwise a reload
+    // hides conversations with nothing on screen to say why.
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Nightly Run",
+          tags: { automationid: "a-1", automationname: "Nightly Audit" },
+        }),
+        createMockConversation({
+          id: "2",
+          title: "Weekly Run",
+          tags: { automationid: "a-2", automationname: "Weekly Sweep" },
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+
+    // The name rows live in the advanced-options modal, under the scope.
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await user.click(screen.getByTestId("automation-filter-only"));
+    await user.click(
+      await screen.findByTestId("automation-name-row-Nightly Audit"),
+    );
+    await user.click(screen.getByTestId("advanced-options-close"));
+
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+    expect(screen.queryByText("Weekly Run")).not.toBeInTheDocument();
+
+    // With every menu closed, the strip is the only thing naming the
+    // narrowing — and the way back out.
+    const chip = await screen.findByTestId(
+      "active-automation-filter-Nightly Audit",
+    );
+    expect(chip).toHaveTextContent("Nightly Audit");
+
+    await user.click(chip);
+    expect(await screen.findByText("Weekly Run")).toBeInTheDocument();
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual([]);
+  });
+
   it("clears every trace of tags from the cards when the Tag chips preference is off", async () => {
     vi.spyOn(
       AgentServerConversationService,

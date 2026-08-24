@@ -9,11 +9,16 @@ import {
 
 /**
  * User-toggleable display preferences for the sidebar conversation list
- * filter menu. These are intentionally persisted to localStorage (via the
- * same `zustand/persist` pattern used by `home-store` and `workspaces-store`)
- * so the menu state survives full reloads.
+ * (the layouts menu and the advanced-options modal behind it). These are
+ * intentionally persisted to localStorage (via the same `zustand/persist`
+ * pattern used by `home-store` and `workspaces-store`) so the menu state
+ * survives full reloads.
  *
- * To add a new preference exposed by the filter menu:
+ * Every persisted narrowing field must have a control that can see and undo
+ * it, or a reload silently hides conversations with nothing on screen to say
+ * why — see `ConversationActiveTagFilters`.
+ *
+ * To add a new preference exposed by those menus:
  *   1. Add a field here with a sensible default in `initialState`.
  *   2. Add matching `setX`/`toggleX` actions below.
  *   3. Read/write through the store in `conversation-panel.tsx`.
@@ -78,21 +83,15 @@ interface ConversationPanelPreferencesActions {
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
   toggleAutomationName: (name: string) => void;
   /**
-   * Bar-facing toggle: selecting a name implies `only-automations` mode;
-   * removing the last selected name returns the mode to `all`. The popup's
-   * mode rows use `setAutomationFilterMode`, which clears the selection when
-   * the mode leaves `only-automations` — the two surfaces cannot disagree.
+   * Clears both facet selections (tags and automation names) — the two
+   * narrowings the active-filter strip renders as chips.
+   *
+   * Deliberately leaves `automationFilterMode` alone: the strip shows no chip
+   * for the mode, and it must not silently switch a surface it doesn't show.
+   * The mode keeps its own rows in the advanced-options modal.
    */
-  toggleAutomationNameAndMode: (name: string) => void;
-  /** Clears both filter selections and returns automation mode to `all`. */
   clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
-  /**
-   * Clears the tag selection only. Distinct from `clearFilterSelections`,
-   * which also resets the automation filter — the active-tag-filter strip
-   * must not silently switch a surface it doesn't show.
-   */
-  clearTagFacets: () => void;
   setTagFiltersEnabled: (value: boolean) => void;
   toggleTagFiltersEnabled: () => void;
   /** Applies a layout preset's partial bundle in one set(). */
@@ -190,25 +189,10 @@ export const useConversationPanelPreferencesStore =
                 )
               : [...state.selectedAutomationNames, name],
           })),
-        toggleAutomationNameAndMode: (name) =>
-          set((state) => {
-            const selectedAutomationNames =
-              state.selectedAutomationNames.includes(name)
-                ? state.selectedAutomationNames.filter(
-                    (existing) => existing !== name,
-                  )
-                : [...state.selectedAutomationNames, name];
-            return {
-              selectedAutomationNames,
-              automationFilterMode:
-                selectedAutomationNames.length > 0 ? "only-automations" : "all",
-            };
-          }),
         clearFilterSelections: () =>
           set(() => ({
             selectedTagFacets: [],
             selectedAutomationNames: [],
-            automationFilterMode: "all",
           })),
         toggleTagFacet: (facet) =>
           set((state) => ({
@@ -216,7 +200,6 @@ export const useConversationPanelPreferencesStore =
               ? state.selectedTagFacets.filter((existing) => existing !== facet)
               : [...state.selectedTagFacets, facet],
           })),
-        clearTagFacets: () => set(() => ({ selectedTagFacets: [] })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
 

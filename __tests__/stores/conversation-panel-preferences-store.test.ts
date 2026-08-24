@@ -99,9 +99,7 @@ describe("conversation-panel-preferences store", () => {
     );
     expect(persisted.state.tagFiltersEnabled).toBe(true);
 
-    useConversationPanelPreferencesStore
-      .getState()
-      .setTagFiltersEnabled(false);
+    useConversationPanelPreferencesStore.getState().setTagFiltersEnabled(false);
     expect(
       useConversationPanelPreferencesStore.getState().tagFiltersEnabled,
     ).toBe(false);
@@ -175,26 +173,48 @@ describe("conversation-panel-preferences store", () => {
     });
   });
 
-  it("couples name selection and mode so the bar and popup cannot disagree", () => {
+  it("clears both facet selections without touching the automation scope", () => {
+    // The active-filter strip renders a chip per facet selection but none for
+    // the automation mode, so Clear all must not silently switch a surface it
+    // does not show.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "only-automations",
+      selectedAutomationNames: ["Nightly Audit"],
+      selectedTagFacets: ["project=vault"],
+    });
+
+    useConversationPanelPreferencesStore.getState().clearFilterSelections();
+
+    const next = useConversationPanelPreferencesStore.getState();
+    expect({
+      selectedTagFacets: next.selectedTagFacets,
+      selectedAutomationNames: next.selectedAutomationNames,
+      automationFilterMode: next.automationFilterMode,
+    }).toEqual({
+      selectedTagFacets: [],
+      selectedAutomationNames: [],
+      automationFilterMode: "only-automations",
+    });
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      automationFilterMode: "all",
+    });
+  });
+
+  it("clears a selected automation name when the mode leaves only-automations", () => {
+    // Self-healing: a hidden name row must never keep narrowing the list.
     const store = useConversationPanelPreferencesStore.getState();
+    store.setAutomationFilterMode("only-automations");
+    store.toggleAutomationName("Nightly Audit");
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual(["Nightly Audit"]);
 
-    // Selecting a name via the bar toggle implies only-automations mode.
-    store.toggleAutomationNameAndMode("Nightly Audit");
-    let next = useConversationPanelPreferencesStore.getState();
-    expect(next.automationFilterMode).toBe("only-automations");
-    expect(next.selectedAutomationNames).toEqual(["Nightly Audit"]);
-
-    // Removing the last selected name returns the mode to all.
-    store.toggleAutomationNameAndMode("Nightly Audit");
-    next = useConversationPanelPreferencesStore.getState();
-    expect(next.automationFilterMode).toBe("all");
-    expect(next.selectedAutomationNames).toEqual([]);
-
-    // Leaving only-automations mode clears the selection (self-healing).
-    store.toggleAutomationNameAndMode("PR Review Bot");
     store.setAutomationFilterMode("hide-automations");
-    next = useConversationPanelPreferencesStore.getState();
-    expect(next.selectedAutomationNames).toEqual([]);
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual([]);
 
     // Restore defaults so later tests in this file see a pristine store.
     useConversationPanelPreferencesStore.setState({

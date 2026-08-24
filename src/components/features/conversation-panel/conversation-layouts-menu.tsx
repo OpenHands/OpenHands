@@ -102,6 +102,8 @@ export interface ConversationLayoutsMenuProps {
   backendKind: BackendKind;
   /** Distinct user-facing `key=value` facets among the loaded conversations. */
   tagFacets: readonly string[];
+  /** Distinct automation names; the advanced modal owns their facet rows. */
+  automationNameFacets: readonly string[];
   totalConversationsCount: number;
   onRequestDeleteAll: () => void;
 }
@@ -112,6 +114,7 @@ export function ConversationLayoutsMenu({
   menuRef,
   backendKind,
   tagFacets,
+  automationNameFacets,
   totalConversationsCount,
   onRequestDeleteAll,
 }: ConversationLayoutsMenuProps) {
@@ -297,6 +300,7 @@ export function ConversationLayoutsMenu({
         open={advancedOpen}
         onClose={() => setAdvancedOpen(false)}
         backendKind={backendKind}
+        automationNameFacets={automationNameFacets}
       />
     </div>
   );
