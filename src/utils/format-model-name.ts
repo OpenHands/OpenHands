@@ -8,6 +8,17 @@ export const FREE_OPENHANDS_MODELS = {
 } as const;
 
 export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
+
+/**
+ * Whether a model id routes through the OpenHands provider (the `openhands/`
+ * prefix). On cloud the OpenHands provider is backed by a server-minted LLM
+ * key rather than a user-supplied one, so callers use this to hide the inline
+ * API key / base URL inputs and strip those fields from the save payload.
+ */
+export const isOpenHandsProviderModel = (
+  model: string | null | undefined,
+): boolean => Boolean(model?.startsWith("openhands/"));
+
 export const FREE_OPENHANDS_MODEL_NOTE = `Free OpenHands models: ${FREE_OPENHANDS_MODEL_IDS.join(
   ", ",
 )}. Other provider endpoints with similar model names may require separate billing.`;
