@@ -450,14 +450,28 @@ export function LlmSettingsScreen({
                     <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
                   ) : null}
 
-                  {isLinkedToConnection
-                    ? null
-                    : renderApiKeyInput(
+                  {isLinkedToConnection ? null : (
+                    <>
+                      <SettingsInput
+                        testId="base-url-input"
+                        label={t(I18nKey.SETTINGS$BASE_URL)}
+                        type="text"
+                        className="w-full"
+                        value={baseUrlValue}
+                        // eslint-disable-next-line i18next/no-literal-string -- example value, not translatable
+                        placeholder="https://api.openai.com"
+                        onChange={(value) => onChange("llm.base_url", value)}
+                        isDisabled={isDisabled}
+                      />
+
+                      {renderApiKeyInput(
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-input",
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-help-anchor",
                       )}
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -577,7 +591,14 @@ export function LlmSettingsScreen({
           llm.auth_type = LLM_AUTH_TYPE_API_KEY;
           llm.subscription_vendor = null;
         }
-        if (context.view === "basic" && llm.model !== undefined) {
+        // Base URL is now editable in the Basic view. Keep the legacy behavior
+        // of resetting an untouched hidden value when the model changes, while
+        // honoring an explicit URL edit (including clearing it).
+        if (
+          context.view === "basic" &&
+          llm.model !== undefined &&
+          !context.dirty["llm.base_url"]
+        ) {
           llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         }
       }

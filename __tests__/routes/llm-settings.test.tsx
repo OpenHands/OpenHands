@@ -149,6 +149,43 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
   });
 
+  it("shows and saves a custom base URL from the Basic view", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "azure/gpt-35-turbo",
+        llm_base_url: "",
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model: "azure/gpt-35-turbo",
+            api_key: null,
+            base_url: "",
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-form-basic");
+    const baseUrlInput = screen.getByTestId("base-url-input");
+    expect(baseUrlInput).toBeInTheDocument();
+
+    fireEvent.change(baseUrlInput, {
+      target: { value: "https://azure.example.com/openai" },
+    });
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llmPayload.base_url).toBe("https://azure.example.com/openai");
+  });
+
   it("does not clear an existing base URL on Basic save without a model change", async () => {
     const saveSettingsSpy = vi
       .spyOn(SettingsService, "saveSettings")
