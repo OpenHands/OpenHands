@@ -17,6 +17,7 @@ const {
   mockGetSettingsForConversation,
   mockUseLlmProfiles,
   mockListInstalledPlugins,
+  mockGetTelemetryDistinctId,
 } = vi.hoisted(() => ({
   mockHttpPost: vi.fn(),
   mockConversationClient: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockGetSettingsForConversation: vi.fn(),
   mockUseLlmProfiles: vi.fn(),
   mockListInstalledPlugins: vi.fn(),
+  mockGetTelemetryDistinctId: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -70,6 +72,10 @@ vi.mock("#/hooks/use-tracking", () => ({
   useTracking: () => ({ trackConversationCreated: vi.fn() }),
 }));
 
+vi.mock("#/services/telemetry", () => ({
+  getTelemetryDistinctId: mockGetTelemetryDistinctId,
+}));
+
 vi.mock("#/hooks/query/use-llm-profiles", () => ({
   useLlmProfiles: () => mockUseLlmProfiles(),
 }));
@@ -98,6 +104,7 @@ describe("useCreateConversation persists selected repository metadata", () => {
     // Default: no installed plugins, so the existing repo/workspace/profile
     // assertions are unaffected. Plugin-specific tests override this.
     mockListInstalledPlugins.mockResolvedValue([]);
+    mockGetTelemetryDistinctId.mockReset().mockResolvedValue(null);
     mockHttpPost.mockReset();
     mockGetSettings.mockReset();
     mockGetSettingsForConversation.mockReset();
