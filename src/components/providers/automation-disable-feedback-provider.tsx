@@ -10,6 +10,30 @@ const AutomationDisableFeedbackPrompt = React.lazy(() =>
   ),
 );
 
+interface AutomationDisableFeedbackErrorBoundaryProps
+  extends React.PropsWithChildren {
+  onError: () => void;
+}
+
+class AutomationDisableFeedbackErrorBoundary extends React.Component<
+  AutomationDisableFeedbackErrorBoundaryProps,
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 export function AutomationDisableFeedbackProvider({
   children,
 }: React.PropsWithChildren) {
@@ -36,12 +60,14 @@ export function AutomationDisableFeedbackProvider({
     <AutomationDisableFeedbackContextProvider value={contextValue}>
       {children}
       {pendingFeedback ? (
-        <React.Suspense fallback={null}>
-          <AutomationDisableFeedbackPrompt
-            context={pendingFeedback}
-            onClose={dismissFeedback}
-          />
-        </React.Suspense>
+        <AutomationDisableFeedbackErrorBoundary onError={dismissFeedback}>
+          <React.Suspense fallback={null}>
+            <AutomationDisableFeedbackPrompt
+              context={pendingFeedback}
+              onClose={dismissFeedback}
+            />
+          </React.Suspense>
+        </AutomationDisableFeedbackErrorBoundary>
       ) : null}
     </AutomationDisableFeedbackContextProvider>
   );
