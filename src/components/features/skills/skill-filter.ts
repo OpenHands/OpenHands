@@ -89,8 +89,8 @@ function labelledValues<TValue extends string>(
   return order.map((value) => ({ value, labelKey: labelKeys[value] }));
 }
 
-/** Enablement is a caller concern — the two lists behind it are not this module's to resolve — so the state facet reads it through a predicate. */
-export type SkillEnabledPredicate = (skill: SkillInfo) => boolean;
+/** Resolving the two lists behind enablement is the caller's job, not this module's. */
+type SkillEnabledPredicate = (skill: SkillInfo) => boolean;
 
 /** A new facet group is declared here and nowhere else: `selected` / `withSelected` are what keep every operation below driven by this table alone. */
 interface GroupDef {

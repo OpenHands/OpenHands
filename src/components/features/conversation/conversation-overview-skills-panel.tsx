@@ -95,9 +95,6 @@ export function ConversationOverviewSkillsPanel({
     [scopedSkills, isEnabled, filter],
   );
 
-  const handleToggle = (skillName: string, enabled: boolean) =>
-    setEnabled(skillName, enabled);
-
   if (skillsLoading || settingsLoading) {
     return (
       <div
@@ -181,7 +178,7 @@ export function ConversationOverviewSkillsPanel({
                 skill={skill}
                 enabled={isEnabled(skill)}
                 onOpen={() => setSelectedSkill(skill)}
-                onToggle={(enabled) => handleToggle(skill.name, enabled)}
+                onToggle={(enabled) => setEnabled(skill.name, enabled)}
               />
             ))}
           </div>
@@ -192,7 +189,7 @@ export function ConversationOverviewSkillsPanel({
         <SkillDetailModal
           skill={selectedSkill}
           enabled={isEnabled(selectedSkill)}
-          onToggle={(enabled) => handleToggle(selectedSkill.name, enabled)}
+          onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
           onClose={() => setSelectedSkill(null)}
         />
       ) : null}

@@ -124,9 +124,6 @@ function SkillsSettingsScreen() {
   const handleClearFacets = () =>
     handleFilterChange(clearSkillFilterFacets(filter));
 
-  const handleToggle = (skillName: string, enabled: boolean) =>
-    setEnabled(skillName, enabled);
-
   return (
     <div
       data-testid="skills-settings-screen"
@@ -247,7 +244,7 @@ function SkillsSettingsScreen() {
                             enabled={isEnabled(skill)}
                             onOpen={() => setSelectedSkill(skill)}
                             onToggle={(enabled) =>
-                              handleToggle(skill.name, enabled)
+                              setEnabled(skill.name, enabled)
                             }
                           />
                         ))}
@@ -274,7 +271,7 @@ function SkillsSettingsScreen() {
           <SkillDetailModal
             skill={selectedSkill}
             enabled={isEnabled(selectedSkill)}
-            onToggle={(enabled) => handleToggle(selectedSkill.name, enabled)}
+            onToggle={(enabled) => setEnabled(selectedSkill.name, enabled)}
             onClose={() => setSelectedSkill(null)}
           />
         )}

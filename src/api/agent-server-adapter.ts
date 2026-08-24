@@ -27,8 +27,8 @@ import {
 } from "./conversation-service/agent-server-conversation-service.types";
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import {
-  findInvokedCatalogSkills,
-  resolveEnabledCatalogSkillSet,
+  buildSkillEnablementFilter,
+  findInvokedCatalogSkill,
   toSkillEnablement,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
@@ -756,7 +756,7 @@ function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
-  invokedCatalogSkills: readonly string[] = [],
+  invokedCatalogSkill?: string,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -769,27 +769,21 @@ function buildAgentContext(
     : [];
   const disabledSkills = enablement.disabledSkills ?? [];
   const disabledSkillNames = new Set(disabledSkills);
-  const enabledCatalogSkills = resolveEnabledCatalogSkillSet(enablement);
-  const invokedSkillNames = new Set(invokedCatalogSkills);
-  const notDenied = (skill: { name?: unknown }) =>
-    typeof skill.name !== "string" || !disabledSkillNames.has(skill.name);
+  const isSkillEnabled = buildSkillEnablementFilter(enablement);
 
-  // The bundled catalog is allow-listed: it is a build-time snapshot of the
-  // whole `@openhands/extensions` set, so shipping all of it puts ~60 skill
-  // bodies and trigger sets into every system prompt (OpenHands#16302).
-  // Skills the agent context already carries keep the deny-list: they are
-  // user-authored, and one the user just wrote must not need an opt-in.
-  //
-  // A skill the opening message invokes by name overrides both lists for this
-  // conversation only. Naming a command is a stronger signal than either
-  // stored preference, and honouring the lists here would mean an automation
-  // card that silently does nothing.
+  // The bundled catalog is allow-listed, not deny-listed: it is a build-time
+  // snapshot of ~60 skills, so a deny-list puts every future addition into
+  // every system prompt (OpenHands#16302). Skills the agent context already
+  // carries are user-authored and stay opt-out. A skill the opening message
+  // invokes by name overrides both, for this conversation only.
   const mergedSkills = [
-    ...existingSkills.filter(notDenied),
+    ...existingSkills.filter(
+      (skill) =>
+        typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
+    ),
     ...buildBundledSkills().filter(
       (skill) =>
-        invokedSkillNames.has(skill.name) ||
-        (enabledCatalogSkills.has(skill.name) && notDenied(skill)),
+        skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
     ),
   ];
 
@@ -810,8 +804,8 @@ function buildAgentContext(
     load_project_skills: true,
     // The backend also auto-loads user/project skills; the deny-list must
     // travel with the context so those skills are excluded from the system
-    // prompt too. Catalog skills are not among them — `load_public_skills` is
-    // false — so the allow-list has no server-side counterpart to send.
+    // prompt too. The allow-list has no counterpart to send: the backend
+    // loads no catalog skills of its own (`load_public_skills` is false).
     disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix
       ? { system_message_suffix: runtimeServicesSuffix }
@@ -858,7 +852,7 @@ function buildConfiguredAcpAgentSettings(
       agentSettings,
       runtimeServicesInfo,
       toSkillEnablement(settings),
-      findInvokedCatalogSkills(query),
+      findInvokedCatalogSkill(query),
     ),
   };
 
@@ -976,7 +970,7 @@ function buildConfiguredOpenHandsAgentSettings(
       agentSettings,
       runtimeServicesInfo,
       toSkillEnablement(settings),
-      findInvokedCatalogSkills(query),
+      findInvokedCatalogSkill(query),
     ),
     tools: getAgentTools(agentSettings),
   };

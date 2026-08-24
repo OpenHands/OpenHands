@@ -47,9 +47,6 @@ export function buildSkillPills(
     },
   ];
 
-  // The catalog's curated default for a new workspace. Shown as a friendly
-  // "Recommended" rather than the field's own name (`defaultEnabled`), which
-  // describes the effect and reads as jargon on a card.
   if (isRecommendedSkill(skill.name)) {
     pills.push({
       id: "recommended",

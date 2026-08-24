@@ -8,63 +8,86 @@ import type { SkillInfo } from "#/types/settings";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import {
+  buildSkillEnablementFilter,
+  CATALOG_SKILL_NAMES,
   isCatalogSkill,
   resolveEnabledCatalogSkills,
-  toSkillEnablement,
+  type SkillEnablement,
 } from "#/utils/skill-enablement";
 
 export interface SkillEnablementController {
-  /** Whether a skill will be loaded into new conversations. */
   isEnabled: (skill: SkillInfo) => boolean;
   setEnabled: (skillName: string, enabled: boolean) => void;
+}
+
+/** Stable form of both lists, so an unchanged set can skip the save. */
+function snapshot(enablement: SkillEnablement): string {
+  return JSON.stringify([
+    [...resolveEnabledCatalogSkills(enablement)].sort(),
+    [...(enablement.disabledSkills ?? [])].sort(),
+  ]);
+}
+
+/** Same array reference when the membership already matches, to skip a save. */
+function withMembership(
+  list: string[],
+  name: string,
+  present: boolean,
+): string[] {
+  if (list.includes(name) === present) return list;
+  return present ? [...list, name] : list.filter((entry) => entry !== name);
 }
 
 /**
  * Shared toggle state for every surface that switches skills on and off.
  *
- * The two lists it writes are not symmetric — see `SkillEnablement` — so both
- * the Customize page and the conversation drawer have to agree on which list a
- * given skill belongs to. Keeping that decision here is what stops one surface
- * from writing a preference the other cannot see.
- *
- * Cloud backends stay on the plain deny-list: cloud creates conversations from
- * its own server-side catalog and never reads `enabled_skills`, so showing
- * most of the catalog switched off there would misreport what the agent loads.
+ * Which of the two lists a skill belongs to is decided here alone, so one
+ * surface cannot write a preference another cannot see.
  */
 export function useSkillEnablement(): SkillEnablementController {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
+  // Cloud creates conversations from its own server-side catalog and never
+  // reads `enabled_skills`, so the catalog stays deny-list governed there.
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { mutate: saveSettings } = useSaveSettings();
 
-  const [enabledCatalogSet, setEnabledCatalogSet] = React.useState<Set<string>>(
-    () => new Set(),
-  );
-  const [disabledSet, setDisabledSet] = React.useState<Set<string>>(
-    () => new Set(),
-  );
-  const [hasHydratedInitialSettings, setHasHydratedInitialSettings] =
-    React.useState(false);
+  const [enablement, setEnablement] = React.useState<SkillEnablement>({});
+  const savedRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     if (settingsLoading || !settings) return;
-    setEnabledCatalogSet(
-      new Set(resolveEnabledCatalogSkills(toSkillEnablement(settings))),
-    );
-    setDisabledSet(new Set(settings.disabled_skills ?? []));
-    setHasHydratedInitialSettings(true);
-  }, [settingsLoading, settings?.enabled_skills, settings?.disabled_skills]);
+    const hydrated: SkillEnablement = {
+      enabledSkills: usesCatalogAllowList
+        ? settings.enabled_skills
+        : [...CATALOG_SKILL_NAMES],
+      disabledSkills: settings.disabled_skills ?? [],
+    };
+    savedRef.current = snapshot(hydrated);
+    setEnablement(hydrated);
+  }, [
+    settingsLoading,
+    settings?.enabled_skills,
+    settings?.disabled_skills,
+    usesCatalogAllowList,
+  ]);
 
   React.useEffect(() => {
-    if (!hasHydratedInitialSettings) return;
+    // Writing the hydrated value straight back would race the one-shot
+    // migration and could narrow a workspace it had just preserved.
+    const next = snapshot(enablement);
+    if (savedRef.current === null || savedRef.current === next) return;
+    savedRef.current = next;
+
+    const disabledSkills = enablement.disabledSkills ?? [];
     saveSettings(
       usesCatalogAllowList
         ? {
-            enabled_skills: Array.from(enabledCatalogSet),
-            disabled_skills: Array.from(disabledSet),
+            enabled_skills: resolveEnabledCatalogSkills(enablement),
+            disabled_skills: disabledSkills,
           }
-        : { disabled_skills: Array.from(disabledSet) },
+        : { disabled_skills: disabledSkills },
       {
         onError: (error) => {
           displayErrorToast(
@@ -73,52 +96,33 @@ export function useSkillEnablement(): SkillEnablementController {
         },
       },
     );
-  }, [
-    enabledCatalogSet,
-    disabledSet,
-    hasHydratedInitialSettings,
-    usesCatalogAllowList,
-    saveSettings,
-    t,
-  ]);
+  }, [enablement, usesCatalogAllowList, saveSettings, t]);
 
-  const isEnabled = React.useCallback(
-    (skill: SkillInfo) => {
-      if (disabledSet.has(skill.name)) return false;
-      if (!usesCatalogAllowList || !isCatalogSkill(skill.name)) return true;
-      return enabledCatalogSet.has(skill.name);
-    },
-    [disabledSet, enabledCatalogSet, usesCatalogAllowList],
-  );
+  const isEnabled = React.useMemo(() => {
+    const enabled = buildSkillEnablementFilter(enablement);
+    return (skill: SkillInfo) => enabled(skill.name);
+  }, [enablement]);
 
   const setEnabled = React.useCallback(
     (skillName: string, enabled: boolean) => {
-      if (usesCatalogAllowList && isCatalogSkill(skillName)) {
-        setEnabledCatalogSet((previous) => {
-          const next = new Set(previous);
-          if (enabled) {
-            next.add(skillName);
-          } else {
-            next.delete(skillName);
-          }
-          return next;
-        });
-      }
-
-      // A catalog skill switched back on also has to leave the deny-list: an
-      // unmigrated workspace can still hold its name there, and that entry
-      // would otherwise veto the allow-list.
-      setDisabledSet((previous) => {
-        const shouldDeny =
-          !enabled && !(usesCatalogAllowList && isCatalogSkill(skillName));
-        if (shouldDeny === previous.has(skillName)) return previous;
-        const next = new Set(previous);
-        if (shouldDeny) {
-          next.add(skillName);
-        } else {
-          next.delete(skillName);
-        }
-        return next;
+      setEnablement((previous) => {
+        const allowListed = usesCatalogAllowList && isCatalogSkill(skillName);
+        return {
+          enabledSkills: allowListed
+            ? withMembership(
+                resolveEnabledCatalogSkills(previous),
+                skillName,
+                enabled,
+              )
+            : previous.enabledSkills,
+          // A catalog skill switched back on also leaves the deny-list, where
+          // an unmigrated workspace may still hold it.
+          disabledSkills: withMembership(
+            previous.disabledSkills ?? [],
+            skillName,
+            !enabled && !allowListed,
+          ),
+        };
       });
     },
     [usesCatalogAllowList],

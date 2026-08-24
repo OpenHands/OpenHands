@@ -4,10 +4,10 @@ import {
   SKILLS_CATALOG,
 } from "@openhands/extensions/skills";
 import {
-  findInvokedCatalogSkills,
+  buildSkillEnablementFilter,
+  findInvokedCatalogSkill,
   isCatalogSkill,
   isRecommendedSkill,
-  isSkillEnabled,
   migrateSkillEnablement,
   resolveEnabledCatalogSkills,
   toSkillEnablement,
@@ -51,24 +51,30 @@ describe("resolveEnabledCatalogSkills", () => {
   });
 });
 
-describe("isSkillEnabled", () => {
+describe("buildSkillEnablementFilter", () => {
   it("keeps user- and project-authored skills on unless denied", () => {
-    expect(isSkillEnabled(LOCAL, { enabledSkills: [] })).toBe(true);
-    expect(isSkillEnabled(LOCAL, { disabledSkills: [LOCAL] })).toBe(false);
+    expect(buildSkillEnablementFilter({ enabledSkills: [] })(LOCAL)).toBe(true);
+    expect(buildSkillEnablementFilter({ disabledSkills: [LOCAL] })(LOCAL)).toBe(
+      false,
+    );
   });
 
   it("requires a catalog skill to be on the allow-list", () => {
-    expect(isSkillEnabled(OPTIONAL, {})).toBe(false);
-    expect(isSkillEnabled(RECOMMENDED, {})).toBe(true);
-    expect(isSkillEnabled(OPTIONAL, { enabledSkills: [OPTIONAL] })).toBe(true);
+    expect(buildSkillEnablementFilter({})(OPTIONAL)).toBe(false);
+    expect(buildSkillEnablementFilter({})(RECOMMENDED)).toBe(true);
+    expect(
+      buildSkillEnablementFilter({ enabledSkills: [OPTIONAL] })(OPTIONAL),
+    ).toBe(true);
   });
 
   it("lets an unmigrated deny-list veto a default-enabled skill", () => {
     // Until the migration runs, an existing "I turned this off" lives in the
     // deny-list alone; the allow-list fallback must not switch it back on.
-    expect(isSkillEnabled(RECOMMENDED, { disabledSkills: [RECOMMENDED] })).toBe(
-      false,
-    );
+    expect(
+      buildSkillEnablementFilter({ disabledSkills: [RECOMMENDED] })(
+        RECOMMENDED,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -125,33 +131,31 @@ describe("toSkillEnablement", () => {
   });
 });
 
-describe("findInvokedCatalogSkills", () => {
+describe("findInvokedCatalogSkill", () => {
   it("resolves a skill's own slash command, which is what automation cards send", () => {
-    expect(findInvokedCatalogSkills("/standup-digest:setup")).toEqual([
+    expect(findInvokedCatalogSkill("/standup-digest:setup")).toBe(
       "slack-standup-digest",
-    ]);
-    expect(findInvokedCatalogSkills("/codereview please look at src/")).toEqual(
-      ["code-review"],
+    );
+    expect(findInvokedCatalogSkill("/codereview please look at src/")).toBe(
+      "code-review",
     );
   });
 
   it("resolves `/<skill-name>`, which the Use skill button inserts", () => {
-    expect(findInvokedCatalogSkills(`/${OPTIONAL} MyClass.java`)).toEqual([
-      OPTIONAL,
-    ]);
+    expect(findInvokedCatalogSkill(`/${OPTIONAL} MyClass.java`)).toBe(OPTIONAL);
   });
 
   it("only counts the leading token", () => {
     // Matching a `/word` anywhere in prose would re-admit most of the catalog.
     expect(
-      findInvokedCatalogSkills("what would /standup-digest:setup do?"),
-    ).toEqual([]);
+      findInvokedCatalogSkill("what would /standup-digest:setup do?"),
+    ).toBeUndefined();
   });
 
   it("ignores an empty, absent, or unknown command", () => {
-    expect(findInvokedCatalogSkills(undefined)).toEqual([]);
-    expect(findInvokedCatalogSkills("   ")).toEqual([]);
-    expect(findInvokedCatalogSkills("just a message")).toEqual([]);
-    expect(findInvokedCatalogSkills("/not-a-real-skill")).toEqual([]);
+    expect(findInvokedCatalogSkill(undefined)).toBeUndefined();
+    expect(findInvokedCatalogSkill("   ")).toBeUndefined();
+    expect(findInvokedCatalogSkill("just a message")).toBeUndefined();
+    expect(findInvokedCatalogSkill("/not-a-real-skill")).toBeUndefined();
   });
 });

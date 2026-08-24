@@ -9,17 +9,12 @@ import {
 } from "#/utils/skill-enablement";
 
 /**
- * Convert a workspace from the old "every catalog skill on, minus a deny-list"
- * default to an explicit `enabled_skills` allow-list, once, on first load.
+ * Move a workspace to an explicit `enabled_skills` allow-list, once.
  *
- * It runs at the app root rather than on the Customize page because the
- * conversion has to happen for users who never open that page: until it does,
- * `resolveEnabledCatalogSkills` falls back to the curated default, which would
- * silently drop catalog skills an existing workspace had switched on.
- *
- * Local backends only. Cloud creates conversations through its own server-side
- * catalog and never reads `enabled_skills`, so writing one there would persist
- * a preference nothing acts on.
+ * It runs at the app root, not on the Customize page: until it has run the
+ * resolver falls back to the curated default, which would silently drop
+ * catalog skills an existing workspace had switched on. Local only — cloud
+ * never reads the field.
  */
 export function useMigrateEnabledSkills(): void {
   const { backend } = useActiveBackend();
@@ -39,15 +34,10 @@ export function useMigrateEnabledSkills(): void {
     if (!isLocal || isLoading || isError || !settings) return;
     if (migratedBackendRef.current === backend.id) return;
 
-    const migrated = migrateSkillEnablement(toSkillEnablement(settings));
-    if (!migrated) {
-      migratedBackendRef.current = backend.id;
-      return;
-    }
-
     migratedBackendRef.current = backend.id;
-    // A failure here is silent on purpose: the resolver's fallback keeps the
-    // session working, and the next app load retries.
-    saveSettings(migrated);
+    const migrated = migrateSkillEnablement(toSkillEnablement(settings));
+    // Silent on failure: the resolver's fallback keeps the session working and
+    // the next app load retries.
+    if (migrated) saveSettings(migrated);
   }, [isLocal, isLoading, isError, settings, backend.id, saveSettings]);
 }

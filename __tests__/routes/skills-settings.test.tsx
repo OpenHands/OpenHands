@@ -542,6 +542,28 @@ Full skill body.`,
     ).toHaveAttribute("aria-checked", "false");
   });
 
+  it("writes nothing back when the user toggles nothing", async () => {
+    // Persisting the hydrated state on mount would race the one-shot migration
+    // and could narrow a workspace it had just preserved.
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+    await waitFor(() =>
+      expect(screen.getByTestId("skills-result-summary")).toBeInTheDocument(),
+    );
+
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
   it("saves a catalog toggle to enabled_skills rather than the deny-list", async () => {
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([

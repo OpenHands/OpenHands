@@ -3,126 +3,90 @@ import {
   SKILLS_CATALOG,
 } from "@openhands/extensions/skills";
 
-/**
- * Every skill name in the bundled `@openhands/extensions` catalog.
- *
- * Membership is what routes a skill to the allow-list rather than the
- * deny-list, so it has to match what `buildBundledSkills()` actually ships:
- * both read the same build-time snapshot.
- */
-export const CATALOG_SKILL_NAMES: ReadonlySet<string> = new Set(
-  SKILLS_CATALOG.map((entry) => entry.name),
+/** Every skill bundled from `@openhands/extensions`, in catalog order. */
+export const CATALOG_SKILL_NAMES: readonly string[] = SKILLS_CATALOG.map(
+  (entry) => entry.name,
 );
 
-/** Catalog skills whose `defaultEnabled` flag is set — the curated default. */
-export const RECOMMENDED_SKILL_NAMES: ReadonlySet<string> = new Set(
-  DEFAULT_ENABLED_SKILL_NAMES,
-);
+const CATALOG_SKILL_NAME_SET = new Set(CATALOG_SKILL_NAMES);
+const RECOMMENDED_SKILL_NAME_SET = new Set(DEFAULT_ENABLED_SKILL_NAMES);
 
 export function isCatalogSkill(name: string): boolean {
-  return CATALOG_SKILL_NAMES.has(name);
+  return CATALOG_SKILL_NAME_SET.has(name);
 }
 
 export function isRecommendedSkill(name: string): boolean {
-  return RECOMMENDED_SKILL_NAMES.has(name);
+  return RECOMMENDED_SKILL_NAME_SET.has(name);
 }
 
 /**
- * The two lists that decide which skills a new conversation starts with.
+ * The two persisted lists. They cover different populations: `enabledSkills`
+ * allow-lists the bundled catalog, whose every future addition would otherwise
+ * be on for everyone (#16302), while `disabledSkills` keeps denying user- and
+ * project-authored skills, which should be on the moment they appear.
  *
- * They cover disjoint populations on purpose:
- *
- * - `enabledSkills` is an **allow-list over the bundled catalog**. The catalog
- *   is a build-time snapshot of ~60 skills, so a deny-list there means every
- *   future addition is on by default for everyone — the behaviour reported in
- *   OpenHands#16302. `undefined` is the "never migrated" sentinel and must
- *   survive settings hydration; see {@link migrateSkillEnablement}.
- * - `disabledSkills` stays a **deny-list over user- and project-authored
- *   skills**. Those are discovered at runtime from `.agents/skills/`, and a
- *   skill the user wrote themselves should be on the moment it appears.
+ * `undefined` means "never migrated" and must survive settings hydration.
  */
 export interface SkillEnablement {
   enabledSkills?: string[];
   disabledSkills?: string[];
 }
 
-/**
- * The catalog allow-list to apply, falling back to the curated default for a
- * workspace that has never persisted one.
- */
 export function resolveEnabledCatalogSkills(
   enablement: SkillEnablement,
 ): string[] {
   return enablement.enabledSkills ?? [...DEFAULT_ENABLED_SKILL_NAMES];
 }
 
-export function resolveEnabledCatalogSkillSet(
-  enablement: SkillEnablement,
-): Set<string> {
-  return new Set(resolveEnabledCatalogSkills(enablement));
-}
-
 /**
- * Whether a single skill is active for new conversations.
+ * The one rule for "will this skill be loaded", resolved once per caller so
+ * per-skill checks stay cheap.
  *
- * The deny-list is still honoured for catalog skills, which only matters
- * before the migration has run: until then a pre-existing "I turned this off"
- * lives in `disabledSkills` alone, and the allow-list fallback would otherwise
- * silently switch it back on.
+ * The deny-list still wins over the allow-list, which only matters before the
+ * migration runs: until then a pre-existing "I turned this off" lives in the
+ * deny-list alone.
  */
-export function isSkillEnabled(
-  name: string,
+export function buildSkillEnablementFilter(
   enablement: SkillEnablement,
-): boolean {
-  const disabled = enablement.disabledSkills ?? [];
-  if (disabled.includes(name)) return false;
-  if (!isCatalogSkill(name)) return true;
-  return resolveEnabledCatalogSkillSet(enablement).has(name);
+): (skillName: string) => boolean {
+  const enabled = new Set(resolveEnabledCatalogSkills(enablement));
+  const disabled = new Set(enablement.disabledSkills ?? []);
+
+  return (skillName) => {
+    if (disabled.has(skillName)) return false;
+    return !isCatalogSkill(skillName) || enabled.has(skillName);
+  };
 }
 
 /**
- * One-shot conversion of a workspace from "all catalog skills on, minus a
- * deny-list" to an explicit allow-list.
+ * One-shot conversion from "all catalog skills on, minus a deny-list" to an
+ * explicit allow-list; `undefined` once already migrated.
  *
- * Returns `undefined` once the workspace is already migrated.
- *
- * A fresh workspace is migrated too, even though the resolver's fallback
- * already gives it the same set: persisting an *explicit* list is what stops a
- * later catalog addition marked `defaultEnabled` from switching itself on in a
- * workspace that has already been initialised.
+ * A fresh workspace is migrated too, even though the resolver's fallback would
+ * give it the same set: persisting an explicit list is what stops a later
+ * `defaultEnabled` catalog addition from switching itself on.
  */
 export function migrateSkillEnablement(
   enablement: SkillEnablement,
 ): { enabled_skills: string[]; disabled_skills: string[] } | undefined {
   if (enablement.enabledSkills !== undefined) return undefined;
 
-  const disabled = enablement.disabledSkills ?? [];
-  // A deny-list naming a catalog skill is the only positive evidence that this
-  // workspace predates the allow-list and had the old "everything on" default.
-  // A deny-list holding local skill names alone says nothing about catalog
-  // preferences, so it is treated as a fresh workspace.
-  const isExistingWorkspace = disabled.some(isCatalogSkill);
-
-  const enabled = isExistingWorkspace
-    ? SKILLS_CATALOG.map((entry) => entry.name).filter(
-        (name) => !disabled.includes(name),
-      )
-    : [...DEFAULT_ENABLED_SKILL_NAMES];
+  const disabled = new Set(enablement.disabledSkills ?? []);
+  // A deny-list naming a catalog skill is the only evidence that this
+  // workspace predates the allow-list; one holding local names alone says
+  // nothing about the catalog.
+  const isExistingWorkspace = [...disabled].some(isCatalogSkill);
 
   return {
-    enabled_skills: enabled,
-    // Catalog names have moved to the allow-list; leaving them here too would
-    // let a stale deny entry veto a skill the user later switches back on.
-    disabled_skills: disabled.filter((name) => !isCatalogSkill(name)),
+    enabled_skills: isExistingWorkspace
+      ? CATALOG_SKILL_NAMES.filter((name) => !disabled.has(name))
+      : [...DEFAULT_ENABLED_SKILL_NAMES],
+    // Catalog names move to the allow-list; a leftover deny entry would veto
+    // a skill the user later switches back on.
+    disabled_skills: [...disabled].filter((name) => !isCatalogSkill(name)),
   };
 }
 
-/**
- * Lift the two persisted lists off a settings record.
- *
- * Structurally typed rather than tied to `Settings` so this module stays free
- * of the settings graph and remains a pure, cheaply testable unit.
- */
 export function toSkillEnablement(settings: {
   enabled_skills?: string[];
   disabled_skills?: string[];
@@ -133,45 +97,28 @@ export function toSkillEnablement(settings: {
   };
 }
 
-/**
- * Slash command → catalog skill.
- *
- * Both forms a user can type are indexed: the commands a skill declares in its
- * own `triggers` (an automation card's launch prompt is one of these — see
- * `findAutomationCommand`), and `/<skill-name>`, which is what the skill
- * detail modal's "Use skill" button inserts.
- */
-const CATALOG_SKILL_BY_SLASH_COMMAND: ReadonlyMap<string, string> = new Map(
-  SKILLS_CATALOG.flatMap((entry) => {
-    const commands = [
+// Both forms a user can send: the commands a skill declares in its own
+// `triggers` (what an automation card fills in — see `findAutomationCommand`),
+// and `/<skill-name>`, which the detail modal's "Use skill" button inserts.
+const CATALOG_SKILL_BY_SLASH_COMMAND = new Map(
+  SKILLS_CATALOG.flatMap((entry) =>
+    [
       `/${entry.name}`,
       ...(entry.triggers ?? []).filter((trigger) => trigger.startsWith("/")),
-    ];
-    return commands.map(
-      (command) => [command.toLowerCase(), entry.name] as const,
-    );
-  }),
+    ].map((command) => [command.toLowerCase(), entry.name] as const),
+  ),
 );
 
 /**
  * The catalog skill a message invokes by name, if any.
  *
- * Typing `/standup-digest:setup` — or clicking the automation card that fills
- * it in — is an explicit request for that skill, so it is loaded for that
- * conversation whatever the stored lists say, and without changing them. The
- * alternative is the worst possible outcome: 18 of the catalog's 24 slash
- * commands are owned by skills that are off by default, so the command would
- * reach the agent as a bare string with none of its instructions, and the card
- * would look like it did nothing.
- *
- * Only the leading token counts. Matching a `/word` anywhere in prose would
- * re-admit most of the catalog through the back door, which is the behaviour
- * the allow-list exists to remove.
+ * 18 of the catalog's 24 slash commands belong to skills that are off by
+ * default, so without this an automation card would send its command with none
+ * of the instructions behind it. Only the leading token counts: matching a
+ * `/word` anywhere in prose would re-admit most of the catalog.
  */
-export function findInvokedCatalogSkills(query?: string): string[] {
+export function findInvokedCatalogSkill(query?: string): string | undefined {
   const firstToken = query?.trim().split(/\s+/, 1)[0];
-  if (!firstToken?.startsWith("/")) return [];
-
-  const skill = CATALOG_SKILL_BY_SLASH_COMMAND.get(firstToken.toLowerCase());
-  return skill ? [skill] : [];
+  if (!firstToken?.startsWith("/")) return undefined;
+  return CATALOG_SKILL_BY_SLASH_COMMAND.get(firstToken.toLowerCase());
 }
