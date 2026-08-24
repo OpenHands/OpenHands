@@ -15,7 +15,7 @@ import { AgentKind, Provider } from "#/types/settings";
 import type { ConversationRuntimeContext } from "#/api/conversation-file-upload.api";
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import {
-  buildConversationWorkingDir,
+  buildConversationWorkingDirForBackend,
   getAgentServerWorkingDir,
 } from "../agent-server-config";
 import { resolveAbsoluteAgentServerPath } from "../agent-server-home";
@@ -50,6 +50,7 @@ import {
   NoBackendAvailableError,
 } from "../agent-server-client-options";
 import SettingsService from "../settings-service/settings-service.api";
+import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
@@ -461,9 +462,28 @@ class AgentServerConversationService {
     // to `/workspace/...` (read-only on macOS and fresh containers). When
     // the user picks an explicit workspace, `workingDirOverride` is
     // already absolute (it comes from `search_subdirs`).
-    const workingDir = await resolveAbsoluteAgentServerPath(
-      workingDirOverride ?? buildConversationWorkingDir(conversationId),
-    );
+    //
+    // Pick the base working dir per-backend:
+    //   1. explicit user workspace pick → use it as-is;
+    //   2. no pick, backend that served this frontend → the baked default
+    //      (honors a launcher-baked absolute `VITE_WORKING_DIR`);
+    //   3. no pick, any other backend → the backend-relative default.
+    // A baked absolute dir is a path on the host that served this frontend,
+    // so it is only valid on that backend. Using it for a different backend
+    // (e.g. a remote sandbox) makes the agent-server mkdir an unwritable path
+    // and the conversation fails at the first prompt (e.g. `Permission
+    // denied: '/Users'`). The relative default is anchored per-backend by
+    // `resolveAbsoluteAgentServerPath()` via `/api/file/home`. The gate keys
+    // on the active backend's host (not its id): the seeded `default-local`
+    // entry is mutable, so a user can edit it to point at a remote host while
+    // its id stays `default-local`.
+    const baseWorkingDir =
+      workingDirOverride ??
+      buildConversationWorkingDirForBackend(
+        conversationId,
+        getActiveBackend().backend.host,
+      );
+    const workingDir = await resolveAbsoluteAgentServerPath(baseWorkingDir);
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
 
@@ -486,9 +506,13 @@ class AgentServerConversationService {
       titleLlmProfile,
     });
 
+    const telemetryDistinctId = await getTelemetryDistinctId();
     const data = await new ConversationClient(
       getAgentServerClientOptions({ timeout: CREATE_CONVERSATION_TIMEOUT_MS }),
-    ).createConversation<DirectConversationInfo>(payload);
+    ).createConversation<DirectConversationInfo>({
+      ...payload,
+      ...(telemetryDistinctId ? { user_id: telemetryDistinctId } : {}),
+    });
     const localBackend = getEffectiveLocalBackend();
     if (!localBackend) throw new NoBackendAvailableError();
 
