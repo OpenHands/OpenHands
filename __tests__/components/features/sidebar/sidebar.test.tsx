@@ -191,13 +191,6 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
   ),
 }));
 
-vi.mock(
-  "#/components/features/conversation-panel/new-conversation-button",
-  () => ({
-    NewConversationButton: () => <div data-testid="new-conversation-button" />,
-  }),
-);
-
 vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
   SidebarConversationList: () => (
     <div data-testid="sidebar-conversation-list" />

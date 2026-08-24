@@ -3,10 +3,11 @@ name: Issue Readiness Check
 
 # Manages the `ready-for-dev` label based on type-specific readiness criteria.
 #
-# Bug reports (label `bug`): the Actual Behavior section must reference a
+# Bug reports (label `bug`): the Steps to Reproduce section must reference a
 # supported run method (`agent-canvas`, `npm run`, or
-# `app.all-hands.dev/canvas`) and embed a screenshot or video, plus an
-# Acceptance Criteria section with at least one checklist item.
+# `app.all-hands.dev/canvas`), the Actual Behavior section must embed a
+# screenshot or video, plus an Acceptance Criteria section with at least one
+# checklist item.
 #
 # Enhancements (label `enhancement`): the body must contain Desired Behavior and
 # Acceptance Criteria sections, the latter with at least one checklist item.
@@ -48,7 +49,7 @@ jobs:
                   GITHUB_EVENT_PATH: ${{ github.event_path }}
               run: |
                   set -euo pipefail
-                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json
+                  python .github/scripts/check_issue_readiness.py --json > /tmp/result.json || true
                   echo "ready=$(jq -r '.ready' /tmp/result.json)" >> "$GITHUB_OUTPUT"
                   # Write reasons to a file so the comment step can read them
                   # without shell-escaping multiline text.
@@ -89,6 +90,7 @@ jobs:
               if: >-
                   github.event.action == 'opened'
                   || github.event.action == 'reopened'
+                  || (github.event.action == 'labeled' && github.event.label.name == 'ready-for-dev')
                   || (steps.readiness.outputs.ready == 'true' && !contains(github.event.issue.labels.*.name, 'ready-for-dev'))
                   || (steps.readiness.outputs.ready != 'true' && contains(github.event.issue.labels.*.name, 'ready-for-dev'))
               env:
