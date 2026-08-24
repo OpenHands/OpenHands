@@ -20,7 +20,7 @@ import {
 const RECENT_RUN_SAMPLE_SIZE = 20;
 
 /**
- * Poll interval while any sampled run is non-terminal, matching
+ * Poll interval while the newest run is non-terminal, matching
  * `useLatestAutomationRuns`: one request per listed automation, so a slower
  * cadence than the detail page's 3s. Without it the dashboard's phase and its
  * age freeze at whatever the first fetch saw, and a healthy run moving
@@ -69,8 +69,14 @@ export function useAutomationRunSummaries(
       refetchInterval: (query: {
         state: { data?: AutomationRunsResponse };
       }) => {
-        const runs = query.state.data?.runs;
-        return runs?.some(isInFlight) ? IN_FLIGHT_POLL_INTERVAL_MS : false;
+        // The newest run only, which is the one the dashboard renders.
+        // `.some()` over the whole sample keeps polling forever when an
+        // older run was left non-terminal by a crashed dispatcher, and
+        // every one of those requests changes nothing on screen.
+        const latest = query.state.data?.runs?.[0];
+        return latest && isInFlight(latest)
+          ? IN_FLIGHT_POLL_INTERVAL_MS
+          : false;
       },
     })),
     combine: (results) => {

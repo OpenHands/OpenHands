@@ -152,9 +152,13 @@ export function useRunPhase({
  * key. The age sits outside the clipped text so a long label can never push it
  * out of sight — it is the part that stays legible when everything else is cut.
  *
- * The trigger is focusable and carries the whole phase as its accessible name:
- * a hover tooltip is the only route to a clipped label, and on its own that
- * route exists for a mouse and for nothing else.
+ * The text stays in the accessibility tree rather than hiding behind an
+ * accessible name on a focusable wrapper. Every surface nests this inside a
+ * link — the activity log's `<a>`, the cards' `role="link"` — where a tab
+ * stop is invalid interactive nesting, and Enter on it bubbled to the card
+ * and navigated the user away from the text they were trying to read.
+ * Truncation is CSS only, so the full label is already in the DOM and reads
+ * in full; the tooltip is the sighted mouse user's route to it.
  */
 export function RunPhase({
   status,
@@ -184,18 +188,9 @@ export function RunPhase({
           "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl",
       }}
     >
-      <span
-        // A span rather than a button: there is no action here, only text
-        // that does not fit — but a tooltip opens on hover or focus and
-        // nothing else, so the trigger still needs a tab stop.
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
-        tabIndex={0}
-        aria-label={age ? `${text} · ${age}` : text}
-        className="flex min-w-0 cursor-default items-center gap-1 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oh-focus)]"
-      >
+      <span className="flex min-w-0 cursor-default items-center gap-1">
         <span
           data-testid="run-phase"
-          aria-hidden="true"
           className={cn(
             "min-w-0 truncate text-xs text-muted",
             wide ? "max-w-[28rem]" : "max-w-[12rem]",
@@ -206,7 +201,6 @@ export function RunPhase({
         {age ? (
           <span
             data-testid="run-phase-age"
-            aria-hidden="true"
             className="shrink-0 whitespace-nowrap text-xs text-muted"
           >
             · {age}

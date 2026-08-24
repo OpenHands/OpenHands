@@ -101,4 +101,30 @@ describe("useAutomationRunSummaries — keeping an in-flight card current", () =
 
     expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
   });
+
+  it("stops when the newest run finished, despite an older stuck run", async () => {
+    // A crashed dispatcher leaves an old run non-terminal forever. The card
+    // renders `runs[0]` and nothing else, so polling on *any* sampled run
+    // pins this automation to a permanent refetch that never changes the
+    // screen — one wasted request every 15s, per automation, indefinitely.
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        makeRun(AutomationRunStatus.COMPLETED),
+        { ...makeRun(AutomationRunStatus.RUNNING), id: "run-stuck" },
+      ],
+      total: 2,
+    });
+
+    renderHook(() => useAutomationRunSummaries(automations), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() =>
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1),
+    );
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+  });
 });

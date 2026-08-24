@@ -317,10 +317,11 @@ describe("RunPhase — how long the run has been in this phase", () => {
 });
 
 describe("RunPhase — reachable without a mouse", () => {
-  it("names the whole phase, age included, on a focusable trigger", () => {
-    // The clipped text is recoverable only through the hover tooltip, so
-    // without a tab stop and an accessible name a 200-character label is
-    // unreachable by keyboard and by screen reader.
+  it("leaves the whole phase, age included, in the accessibility tree", () => {
+    // Truncation is CSS only, so a 200-character label is readable in full
+    // by a screen reader as long as nothing hides it — and nothing may hide
+    // it behind a tab stop, because every surface nests the phase inside a
+    // link, where a focusable descendant is invalid and swallows Enter.
     const label = "x".repeat(200);
 
     render(
@@ -332,8 +333,14 @@ describe("RunPhase — reachable without a mouse", () => {
       />,
     );
 
-    const trigger = screen.getByLabelText(`${label} · il y a 7min`);
-    expect(trigger).toHaveAttribute("tabindex", "0");
-    expect(trigger).toContainElement(screen.getByTestId("run-phase"));
+    const text = screen.getByTestId("run-phase");
+    const age = screen.getByTestId("run-phase-age");
+    expect(text).toHaveTextContent(label);
+    expect(age).toHaveTextContent("il y a 7min");
+    expect(text).not.toHaveAttribute("aria-hidden");
+    expect(age).not.toHaveAttribute("aria-hidden");
+    // No focusable ancestor: the phase must never be its own tab stop
+    // inside the link every surface wraps it in.
+    expect(text.closest("[tabindex]")).toBeNull();
   });
 });

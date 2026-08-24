@@ -143,6 +143,38 @@ describe("automation-activity-log-export", () => {
   );
 
   it.each([
+    ["an empty", ""],
+    ["a whitespace-only", "   "],
+  ])(
+    "falls back to the label when phase_code is %s string",
+    (_label, phase_code) => {
+      // The service stores a whitespace-only field as sent — it rejects only
+      // a phase blank on *both* — so a blank code arrives alongside a real
+      // label. Nullish-coalescing exports the blank and loses the label,
+      // which is the empty cell the fallback exists to prevent.
+      const run = sampleRun({
+        phase_code,
+        phase_label: "Running QA checks on PR #4821",
+      });
+
+      const row = mapAutomationRunToExportRow(run, automation);
+
+      expect(row.phase).toBe("Running QA checks on PR #4821");
+    },
+  );
+
+  it("trims a padded phase before exporting it", () => {
+    // Arrange
+    const run = sampleRun({ phase_code: "  queued  ", phase_label: null });
+
+    // Act
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    // Assert
+    expect(row.phase).toBe("queued");
+  });
+
+  it.each([
     ["completed", AutomationRunStatus.COMPLETED],
     ["cancelled", AutomationRunStatus.CANCELLED],
   ])(
