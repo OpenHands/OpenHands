@@ -77,6 +77,7 @@ export function SetupAcpSecretsStep({
     secretExists,
     hasValueFor,
     conflicts,
+    credentialsConfigured,
     consumesFileCredentials,
     save,
     isSaving,
@@ -170,6 +171,7 @@ export function SetupAcpSecretsStep({
       <AcpAuthStatusBanner
         status={authStatus}
         isChecking={isCheckingAuth}
+        credentialsConfigured={credentialsConfigured}
         providerName={providerName}
         testIdPrefix="onboarding-acp-auth"
       />

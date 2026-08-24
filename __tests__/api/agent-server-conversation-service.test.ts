@@ -32,6 +32,7 @@ const {
   mockGetProfile,
   mockActivateProfile,
   mockListProfiles,
+  mockGetTelemetryDistinctId,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -46,6 +47,7 @@ const {
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
   mockListProfiles: vi.fn(),
+  mockGetTelemetryDistinctId: vi.fn(),
 }));
 
 const originalFetch = global.fetch;
@@ -84,7 +86,7 @@ vi.mock("#/api/agent-server-config", () => ({
   getAgentServerBaseUrl: vi.fn(() => "http://localhost:54928"),
   getAgentServerSessionApiKey: vi.fn(() => "test-api-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
-  buildConversationWorkingDir: vi.fn(
+  buildConversationWorkingDirForBackend: vi.fn(
     (id: string) => `/state/workspaces/${id.replace(/-/g, "")}`,
   ),
   getAgentServerHeaders: vi.fn(() => ({ "X-Session-API-Key": "test-api-key" })),
@@ -98,6 +100,10 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
     getSettings: mockGetSettings,
     getSettingsForConversation: mockGetSettingsForConversation,
   },
+}));
+
+vi.mock("#/services/telemetry", () => ({
+  getTelemetryDistinctId: mockGetTelemetryDistinctId,
 }));
 
 describe("AgentServerConversationService", () => {
@@ -250,6 +256,58 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    it("forwards the Canvas telemetry identity to the local agent server", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue("ph-canvas-user");
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ user_id: "ph-canvas-user" }),
+      );
+    });
+
+    it("omits user_id when Canvas telemetry has no consented identity", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue(null);
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const payload = mockHttpPost.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty("user_id");
+    });
+
     it("passes the selected title profile to local conversation starts", async () => {
       mockGetSettings.mockResolvedValue({
         title_llm_profile: "Titles",
@@ -352,7 +410,7 @@ describe("AgentServerConversationService", () => {
     // home dir so the worktree and later file uploads agree on a writable
     // absolute path.
     it("resolves relative default working dirs against /api/file/home", async () => {
-      const { buildConversationWorkingDir: mockedBuilder } =
+      const { buildConversationWorkingDirForBackend: mockedBuilder } =
         await import("#/api/agent-server-config");
       vi.mocked(mockedBuilder).mockImplementationOnce(
         (id: string) => `workspace/project/${id.replace(/-/g, "")}`,
