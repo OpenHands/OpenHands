@@ -128,7 +128,7 @@ describe("buildStartConversationRequest", () => {
     expect(payload.secrets_encrypted).toBeUndefined();
   });
 
-  it("excludes disabled skills from OpenHands conversation context", () => {
+  it("ships only allow-listed catalog skills to a OpenHands conversation context", () => {
     const settings = makeSettings({
       agent_kind: "openhands",
       llm: {
@@ -147,10 +147,18 @@ describe("buildStartConversationRequest", () => {
     const payload = buildStartConversationRequest({ settings });
     const skillNames = getAgentContextSkillNames(payload);
 
+    // `agent-memory` is default-enabled, so this asserts the deny-list still
+    // wins over the allow-list — the case that matters before the one-shot
+    // migration has run.
     expect(skillNames).not.toContain("agent-memory");
     expect(skillNames).not.toContain("disabled-custom");
+    // Skills already on the agent context are user-authored and stay opt-out.
     expect(skillNames).toContain("enabled-custom");
-    expect(skillNames).toContain("add-javadoc");
+    // No `enabled_skills` on the settings means the curated default applies:
+    // `add-skill` is flagged `defaultEnabled` in the catalog, `add-javadoc` is
+    // not, and shipping every catalog skill is what OpenHands#16302 reported.
+    expect(skillNames).toContain("add-skill");
+    expect(skillNames).not.toContain("add-javadoc");
 
     expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
       "agent-memory",
@@ -158,7 +166,7 @@ describe("buildStartConversationRequest", () => {
     ]);
   });
 
-  it("excludes disabled skills from ACP conversation context", () => {
+  it("ships only allow-listed catalog skills to a ACP conversation context", () => {
     const settings = makeSettings({
       agent_kind: "acp",
       acp_server: "codex",
@@ -176,10 +184,18 @@ describe("buildStartConversationRequest", () => {
     const payload = buildStartConversationRequest({ settings });
     const skillNames = getAgentContextSkillNames(payload);
 
+    // `agent-memory` is default-enabled, so this asserts the deny-list still
+    // wins over the allow-list — the case that matters before the one-shot
+    // migration has run.
     expect(skillNames).not.toContain("agent-memory");
     expect(skillNames).not.toContain("disabled-custom");
+    // Skills already on the agent context are user-authored and stay opt-out.
     expect(skillNames).toContain("enabled-custom");
-    expect(skillNames).toContain("add-javadoc");
+    // No `enabled_skills` on the settings means the curated default applies:
+    // `add-skill` is flagged `defaultEnabled` in the catalog, `add-javadoc` is
+    // not, and shipping every catalog skill is what OpenHands#16302 reported.
+    expect(skillNames).toContain("add-skill");
+    expect(skillNames).not.toContain("add-javadoc");
 
     expect(payload.agent_settings?.agent_context?.disabled_skills).toEqual([
       "agent-memory",

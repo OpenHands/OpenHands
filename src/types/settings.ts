@@ -139,7 +139,20 @@ export type Settings = {
   search_api_key?: string;
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
+  /**
+   * Deny-list over user- and project-authored skills. It no longer governs the
+   * bundled catalog — see `enabled_skills`.
+   */
   disabled_skills?: string[];
+  /**
+   * Allow-list over the bundled `@openhands/extensions` catalog.
+   *
+   * `undefined` means "this workspace has never been migrated off the old
+   * all-on default" and must survive settings hydration untouched: it is the
+   * only signal `migrateSkillEnablement` has. Deliberately absent from
+   * `DEFAULT_SETTINGS` for that reason.
+   */
+  enabled_skills?: string[];
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;
