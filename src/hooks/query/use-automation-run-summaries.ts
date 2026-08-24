@@ -7,6 +7,7 @@ import {
   type RunSummaryState,
 } from "#/manifests/automation-insights";
 import type { Automation } from "#/types/automation";
+import { ConcurrencyLimiter, automationRunRequestsLimiter } from "#/hooks/query/concurrency-limiter";
 
 /**
  * The newest runs sampled per automation. Matches the detail page's default
@@ -40,10 +41,12 @@ export function useAutomationRunSummaries(
         active.orgId,
       ],
       queryFn: () =>
-        AutomationService.getAutomationRuns(
-          automation.id,
-          RECENT_RUN_SAMPLE_SIZE,
-          0,
+        automationRunRequestsLimiter.run(() =>
+          AutomationService.getAutomationRuns(
+            automation.id,
+            RECENT_RUN_SAMPLE_SIZE,
+            0,
+          ),
         ),
       staleTime: 60 * 1000,
       enabled: enabled && !!automation.id,
