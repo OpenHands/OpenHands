@@ -9,7 +9,11 @@ import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
 import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { LlmSettingsScreen } from "#/routes/llm-settings";
+import {
+  LlmSettingsScreen,
+  LLM_PROVIDER_CONNECTION_KEY,
+} from "#/routes/llm-settings";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
@@ -105,6 +109,10 @@ export function LlmSettingsLocalView() {
   const agentSchemaRef = useRef(agentSchema);
   agentSchemaRef.current = agentSchema;
 
+  // Provider connections are a local agent-server feature.
+  const { backend } = useActiveBackend();
+  const isLocal = backend.kind === "local";
+
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
   const [editingProfile, setEditingProfile] = useState<EditingProfile | null>(
@@ -198,6 +206,13 @@ export function LlmSettingsLocalView() {
             OPENAI_SUBSCRIPTION_VENDOR;
         }
 
+        // Seed the provider-connection link explicitly (it is excluded from the
+        // schema-driven inputs), so an unchanged profile keeps its connection.
+        initialValues[LLM_PROVIDER_CONNECTION_KEY] =
+          typeof config.provider_connection_id === "string"
+            ? config.provider_connection_id
+            : "";
+
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
         setViewMode("edit");
@@ -272,14 +287,31 @@ export function LlmSettingsLocalView() {
     const llmConfig: Record<string, unknown> = { ...baseConfig, ...dirtyLlm };
     const authType = resolveLlmAuthType(llmConfig.auth_type);
 
+    // A profile linked to a provider connection sources its credential from the
+    // connection, so it never carries an inline api_key / base_url. The form
+    // value is the source of truth: empty (or absent) means "not linked".
+    const connectionId = isLocal
+      ? String(saveControl.values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
+      : "";
+
     if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
       llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
       llmConfig.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
+      llmConfig.provider_connection_id = null;
+      delete llmConfig.api_key;
+      delete llmConfig.base_url;
+    } else if (connectionId) {
+      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
+      llmConfig.subscription_vendor = null;
+      llmConfig.provider_connection_id = connectionId;
       delete llmConfig.api_key;
       delete llmConfig.base_url;
     } else {
       llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
       llmConfig.subscription_vendor = null;
+      // Clear any prior link so unlinking sticks (only relevant on local; on
+      // cloud the field stays untouched below).
+      if (isLocal) llmConfig.provider_connection_id = null;
 
       // The Basic tab does not render base_url directly. Drop a stale hidden URL
       // when switching ordinary providers, but retain SSYCloud's preset URL: its
@@ -331,14 +363,20 @@ export function LlmSettingsLocalView() {
     setIsSaving(true);
     setIsValidating(true);
     try {
-      const preflight = await ProfilesService.validateProfile(trimmedName, {
-        llm: llmConfig as SaveProfileRequest["llm"],
-        include_secrets: true,
-      });
-      if (preflight && !preflight.valid) {
-        const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
-        displayErrorToast(errorMsg);
-        return;
+      // Pre-flight validation fires a minimal completion to catch a
+      // misconfigured profile before saving it. Skip it for connection-linked
+      // profiles: their credential lives on the provider connection, not
+      // inline, so there is nothing on this profile to pre-flight here.
+      if (!connectionId) {
+        const preflight = await ProfilesService.validateProfile(trimmedName, {
+          llm: llmConfig as SaveProfileRequest["llm"],
+          include_secrets: true,
+        });
+        if (preflight && !preflight.valid) {
+          const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
+          displayErrorToast(errorMsg);
+          return;
+        }
       }
 
       setIsValidating(false);
@@ -379,6 +417,7 @@ export function LlmSettingsLocalView() {
   }, [
     saveControl,
     isNameValid,
+    isLocal,
     profileName,
     viewMode,
     editingProfile,
@@ -456,10 +495,12 @@ export function LlmSettingsLocalView() {
                 "llm.model": DEFAULT_SETTINGS.llm_model,
                 "llm.api_key": "",
                 "llm.base_url": "",
+                [LLM_PROVIDER_CONNECTION_KEY]: "",
                 [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
                 [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
               }
         }
+        showProviderConnection={isLocal}
         onSaveControlChange={handleSaveControlChange}
       />
 

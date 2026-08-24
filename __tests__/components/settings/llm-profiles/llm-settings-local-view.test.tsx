@@ -17,6 +17,7 @@ import { SSYCLOUD_BASE_URL } from "#/constants/ssycloud";
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
+    LLM_PROVIDER_CONNECTION_KEY: "llm.provider_connection_id",
     LlmSettingsScreen: ({
       initialValueOverrides,
       onSaveControlChange,
@@ -662,6 +663,30 @@ describe("LlmSettingsLocalView", () => {
         await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
       },
     );
+
+    it("skips pre-flight validation for a connection-linked profile", async () => {
+      // A linked profile carries no inline key — its credential lives on the
+      // provider connection — so there is nothing on this profile to pre-flight.
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "anthropic/claude-sonnet-4",
+          provider_connection_id: "conn1",
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValue({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+    });
   });
 
   describe("Basic tab save", () => {

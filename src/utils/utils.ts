@@ -388,6 +388,11 @@ export const constructBranchUrl = (
 
 // Git Action Prompts
 
+const GIT_COMMIT_PROMPT =
+  "Please review the current changes and create a git commit with a concise, descriptive message.";
+
+export const getGitCommitPrompt = (): string => GIT_COMMIT_PROMPT;
+
 /**
  * Generate a git pull prompt
  * @returns The git pull prompt

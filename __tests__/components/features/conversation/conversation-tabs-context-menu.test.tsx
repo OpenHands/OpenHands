@@ -62,10 +62,17 @@ describe("ConversationTabsContextMenu", () => {
   it("should render all default tabs when open", () => {
     render(<ConversationTabsContextMenu isOpen={true} onClose={vi.fn()} />);
 
-    const expectedTabs = ["COMMON$FILES", "COMMON$TERMINAL", "COMMON$BROWSER"];
+    const expectedTabs = [
+      "COMMON$FILES",
+      "DIFF_VIEWER$COMMITS",
+      "COMMON$TERMINAL",
+      "COMMON$BROWSER",
+    ];
     for (const tab of expectedTabs) {
       expect(screen.getByText(tab)).toBeInTheDocument();
     }
+
+    expect(screen.queryByText("FILES$DIFF_VIEW")).not.toBeInTheDocument();
 
     // Planner is cloud-only; on the default (local) backend it is hidden.
     expect(screen.queryByText("COMMON$PLANNER")).not.toBeInTheDocument();
@@ -132,13 +139,14 @@ describe("ConversationTabsContextMenu", () => {
 
     const storeState = useConversationStore.getState();
     expect(storeState.hasRightPanelToggled).toBe(true);
-    expect(storeState.selectedTab).toBe("terminal");
+    // Next pinned tab after Files is Commits.
+    expect(storeState.selectedTab).toBe("commits");
 
     const storedState = JSON.parse(
       localStorage.getItem(`conversation-state-${CONVERSATION_ID}`)!,
     );
     expect(storedState.unpinnedTabs).toContain("files");
-    expect(storedState.selectedTab).toBe("terminal");
+    expect(storedState.selectedTab).toBe("commits");
   });
 
   it("should not close the right panel when unpinning a non-active tab", async () => {
