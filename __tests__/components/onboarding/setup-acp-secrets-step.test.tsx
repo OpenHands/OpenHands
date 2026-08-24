@@ -25,6 +25,15 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
+// applyAgentProfile persistence is exercised in its own hook test; here we
+// stub it so we can assert what the step passes it without a real mutation.
+const applyAgentProfileMock = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+vi.mock("#/hooks/mutation/use-apply-onboarding-agent-profile", () => ({
+  useApplyOnboardingAgentProfile: () => applyAgentProfileMock,
+}));
+
 function renderStep(
   providerKey: OnboardingAgentId = "claude-code",
   isActive = true,
@@ -77,6 +86,7 @@ beforeEach(() => {
     isChecking: false,
     isSupported: false,
   });
+  applyAgentProfileMock.mockClear().mockResolvedValue(undefined);
   vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
   vi.spyOn(SecretsService, "createSecret").mockResolvedValue();
 });
@@ -487,6 +497,43 @@ describe("SetupAcpSecretsStep", () => {
     expect(
       screen.getByTestId("acp-credential-conflict-warning"),
     ).toBeInTheDocument();
+  });
+
+  it("seeds the onboarding Claude Code profile with dontAsk session mode", async () => {
+    // Claude Code's ACP provider defaults to bypassPermissions, which its
+    // subprocess rejects outright — the profile applied at onboarding must
+    // carry dontAsk so the very first conversation can start.
+    const { user } = renderStep("claude-code");
+
+    await user.type(
+      screen.getByTestId("onboarding-acp-secret-ANTHROPIC_API_KEY"),
+      "sk-ant-123",
+    );
+    await user.click(screen.getByTestId("onboarding-acp-secrets-next"));
+
+    await waitFor(() =>
+      expect(applyAgentProfileMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acp_server: "claude-code",
+          acp_session_mode: "dontAsk",
+        }),
+      ),
+    );
+  });
+
+  it("does not set a session mode for a non-Claude-Code onboarding profile", async () => {
+    const { user } = renderStep("codex");
+
+    await user.type(
+      screen.getByTestId("onboarding-acp-secret-OPENAI_API_KEY"),
+      "sk-codex-123",
+    );
+    await user.click(screen.getByTestId("onboarding-acp-secrets-next"));
+
+    await waitFor(() => expect(applyAgentProfileMock).toHaveBeenCalled());
+    expect(applyAgentProfileMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ acp_session_mode: expect.anything() }),
+    );
   });
 });
 

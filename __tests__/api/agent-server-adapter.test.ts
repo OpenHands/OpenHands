@@ -1774,3 +1774,103 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.condenser).toBeUndefined();
   });
 });
+
+describe("buildStartConversationRequest — Claude Code dontAsk override", () => {
+  // Claude Code's ACP provider defaults to bypassPermissions when no session
+  // mode is set, which the subprocess rejects outright ("bypassPermissions
+  // error") when its own config disables that mode — the conversation never
+  // starts. Forcing dontAsk on every Claude Code launch path avoids it.
+
+  it("forces dontAsk on the inline agent_settings payload when unset", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+          acp_model: "claude-opus-4-5",
+        },
+      },
+    }) as { agent_settings: { acp_session_mode?: string } };
+
+    expect(payload.agent_settings.acp_session_mode).toBe("dontAsk");
+  });
+
+  it("overrides a stale non-dontAsk session mode saved on Claude Code settings", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+          acp_session_mode: "bypassPermissions",
+        },
+      },
+    }) as { agent_settings: { acp_session_mode?: string } };
+
+    expect(payload.agent_settings.acp_session_mode).toBe("dontAsk");
+  });
+
+  it("leaves other ACP providers' session mode untouched", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "codex",
+          acp_command: [],
+        },
+      },
+    }) as { agent_settings: { acp_session_mode?: string } };
+
+    expect(payload.agent_settings.acp_session_mode).toBeUndefined();
+  });
+
+  it("stamps the top-level acp_session_mode for an inline Claude Code launch", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: [],
+        },
+      },
+    }) as { acp_session_mode?: string };
+
+    expect(payload.acp_session_mode).toBe("dontAsk");
+  });
+
+  it("stamps the top-level acp_session_mode for a Claude Code agent-profile launch", () => {
+    // Profile launches omit agent_settings entirely (mutually exclusive with
+    // agent_profile_id), so the override has to land as a top-level field
+    // the server applies when rebuilding the agent from the profile — a
+    // pre-existing profile predating this fix wouldn't carry it otherwise.
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      agentProfileId: "profile-claude-code",
+      agentProfileKind: "acp",
+      agentProfileAcpServer: "claude-code",
+    }) as { acp_session_mode?: string; agent_settings?: unknown };
+
+    expect(payload.agent_settings).toBeUndefined();
+    expect(payload.acp_session_mode).toBe("dontAsk");
+  });
+
+  it("does not stamp acp_session_mode for a non-Claude-Code agent-profile launch", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      agentProfileId: "profile-codex",
+      agentProfileKind: "acp",
+      agentProfileAcpServer: "codex",
+    }) as { acp_session_mode?: string };
+
+    expect(payload.acp_session_mode).toBeUndefined();
+  });
+});
