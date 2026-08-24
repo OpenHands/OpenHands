@@ -7,6 +7,7 @@ import {
   computeVisibleTagChipCount,
   formatConversationTagTooltip,
   getConversationTagLabel,
+  isConversationTraceTag,
   truncateTagChipValue,
 } from "./conversation-tag-display";
 import {
@@ -73,6 +74,91 @@ function TagChipContent({
       <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
       <span className="truncate leading-4">{truncateTagChipValue(value)}</span>
     </>
+  );
+}
+
+/**
+ * A `traceurl` tag renders as an outbound link chip: the localized "Trace"
+ * label (not the long URL) shown on a chip that opens the trace in a new tab.
+ * Swallows the event so the wrapping conversation NavigationLink never fires —
+ * only the trace tab opens.
+ */
+function TraceTagChip({
+  tag,
+  iconTestId,
+  chipTestId,
+}: {
+  tag: [string, string];
+  iconTestId?: string;
+  chipTestId?: string;
+}) {
+  const { t } = useTranslation("openhands");
+  const [key, value] = tag;
+  const openTrace = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(value, "_blank", "noopener,noreferrer");
+  };
+  return (
+    <a
+      href={value}
+      target="_blank"
+      rel="noreferrer"
+      data-testid={chipTestId}
+      title={formatConversationTagTooltip(key, value, t)}
+      className={cn(
+        CONVERSATION_CARD_META_CHIP_CLASSNAME,
+        "hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--foreground)]",
+      )}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={openTrace}
+    >
+      <TagIconSlot
+        icon={getConversationTagIcon(key, value)}
+        keyName={key}
+        testId={iconTestId}
+      />
+      <span className="truncate leading-4">
+        {getConversationTagLabel(key, t)}
+      </span>
+    </a>
+  );
+}
+
+/**
+ * One tag chip: an outbound link for `traceurl`, a plain chip otherwise. The
+ * off-screen measure row renders the same chips, so `chipTestId` / `iconTestId`
+ * are only passed by the visible row — tagging both would duplicate test ids.
+ */
+function TagChip({
+  tag,
+  iconTestId,
+  chipTestId,
+}: {
+  tag: [string, string];
+  iconTestId?: string;
+  chipTestId?: string;
+}) {
+  const { t } = useTranslation("openhands");
+  if (isConversationTraceTag(tag[0])) {
+    return (
+      <TraceTagChip tag={tag} iconTestId={iconTestId} chipTestId={chipTestId} />
+    );
+  }
+  const [key, value] = tag;
+  return (
+    <span
+      data-testid={chipTestId}
+      title={formatConversationTagTooltip(key, value, t)}
+      className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
+    >
+      <TagChipContent
+        icon={getConversationTagIcon(key, value)}
+        keyName={key}
+        value={value}
+        iconTestId={iconTestId}
+      />
+    </span>
   );
 }
 
@@ -225,14 +311,8 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         aria-hidden
         className="pointer-events-none fixed top-0 -left-[10000px] z-[-1] flex flex-nowrap items-center gap-1 opacity-0"
       >
-        {tags.map(([key, value]) => (
-          <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>
-            <TagChipContent
-              icon={getConversationTagIcon(key, value)}
-              keyName={key}
-              value={value}
-            />
-          </span>
+        {tags.map((tag) => (
+          <TagChip key={tag[0]} tag={tag} />
         ))}
       </div>
 
@@ -241,20 +321,13 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         data-testid="conversation-card-tag-row"
         className="flex w-full min-w-0 max-w-full flex-nowrap items-center gap-1 overflow-hidden"
       >
-        {visibleTags.map(([key, value]) => (
-          <span
-            key={key}
-            data-testid="conversation-card-tag-chip"
-            title={formatConversationTagTooltip(key, value, t)}
-            className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
-          >
-            <TagChipContent
-              icon={getConversationTagIcon(key, value)}
-              keyName={key}
-              value={value}
-              iconTestId="conversation-card-tag-chip-icon"
-            />
-          </span>
+        {visibleTags.map((tag) => (
+          <TagChip
+            key={tag[0]}
+            tag={tag}
+            iconTestId="conversation-card-tag-chip-icon"
+            chipTestId="conversation-card-tag-chip"
+          />
         ))}
         {hiddenCount > 0 ? (
           <button
@@ -319,12 +392,30 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
                       {getConversationTagLabel(key, t)}
                     </span>
                   </dt>
-                  <dd
-                    className="m-0 whitespace-normal break-words text-left leading-4 text-[var(--foreground)]"
-                    title={value}
-                  >
-                    {value}
-                  </dd>
+                  {isConversationTraceTag(key) ? (
+                    <dd className="m-0 min-w-0">
+                      <a
+                        href={value}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="whitespace-normal break-words leading-4 text-[var(--oh-link)] underline decoration-dotted underline-offset-2"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          window.open(value, "_blank", "noopener,noreferrer");
+                        }}
+                      >
+                        {value}
+                      </a>
+                    </dd>
+                  ) : (
+                    <dd
+                      className="m-0 whitespace-normal break-words text-left leading-4 text-[var(--foreground)]"
+                      title={value}
+                    >
+                      {value}
+                    </dd>
+                  )}
                 </div>
               ))}
             </dl>

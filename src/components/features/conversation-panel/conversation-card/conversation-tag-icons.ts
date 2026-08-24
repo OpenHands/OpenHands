@@ -9,6 +9,7 @@ import {
   Folder,
   FolderGit2,
   FolderKey,
+  ExternalLink,
   GitBranch,
   GitPullRequest,
   Globe2,
@@ -110,6 +111,7 @@ const KEY_ICONS: Record<string, ConversationTagIcon> = {
   work_wsid: FolderKey,
   wsid: FolderKey,
   workspace_id: FolderKey,
+  traceurl: ExternalLink,
 };
 
 /**

@@ -3,7 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "test-utils";
+import { I18nKey } from "#/i18n/declaration";
 import { ConversationTagChips } from "#/components/features/conversation-panel/conversation-card/conversation-tag-chips";
+
+// The global setup mocks `useTranslation` to return the key; give the trace
+// label its real en value so the chip-rendering test asserts the label.
+vi.mock("react-i18next", async (importOriginal) => {
+  const original = await importOriginal<typeof import("react-i18next")>();
+  return {
+    ...original,
+    useTranslation: () => ({
+      t: (key: string) =>
+        key === I18nKey.CONVERSATION$TAG_TRACE ? "Trace" : key,
+      i18n: { language: "en" },
+      ready: true,
+    }),
+  };
+});
 
 describe("ConversationTagChips", () => {
   const observedCallbacks: ResizeObserverCallback[] = [];
@@ -265,5 +281,62 @@ describe("ConversationTagChips", () => {
     expect(
       screen.queryByTestId("conversation-card-tag-overflow-popover"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders a traceurl tag as an outbound link without activating the card", async () => {
+    const user = userEvent.setup();
+    const onNavigate = vi.fn((event: React.MouseEvent) => {
+      event.preventDefault();
+    });
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    renderWithProviders(
+      // Conversation cards sit inside NavigationLink anchors; clicking the
+      // trace chip must open the trace tab, never navigate the conversation.
+      <a href="/conversations/demo" onClick={onNavigate}>
+        <ConversationTagChips
+          tags={[["traceurl", "http://lmnr/project/p1/traces/t_abc"]]}
+        />
+      </a>,
+    );
+
+    stubWidths(200, 40);
+
+    const chip = await waitFor(() =>
+      screen.getByTestId("conversation-card-tag-chip"),
+    );
+    expect(chip.tagName).toBe("A");
+    expect(chip).toHaveAttribute("href", "http://lmnr/project/p1/traces/t_abc");
+    expect(chip).toHaveAttribute("target", "_blank");
+    // Label, not the raw URL, is the chip text.
+    expect(chip).toHaveTextContent("Trace");
+    expect(chip).toHaveAttribute(
+      "title",
+      "Trace: http://lmnr/project/p1/traces/t_abc",
+    );
+
+    await user.click(chip);
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "http://lmnr/project/p1/traces/t_abc",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not treat URL-looking values on other keys as links", async () => {
+    renderWithProviders(
+      <ConversationTagChips tags={[["owner", "http://example.com/alice"]]} />,
+    );
+
+    stubWidths(200, 40);
+
+    const chip = await waitFor(() =>
+      screen.getByTestId("conversation-card-tag-chip"),
+    );
+    expect(chip.tagName).toBe("SPAN");
+    expect(chip).not.toHaveAttribute("href");
+    expect(chip.textContent).toContain("http://");
   });
 });

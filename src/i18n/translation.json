@@ -38487,6 +38487,23 @@
     "tr": "Çalışma alanı kimliği",
     "uk": "ID робочого простору"
   },
+  "CONVERSATION$TAG_TRACE": {
+    "en": "Trace",
+    "ja": "トレース",
+    "zh-CN": "追踪",
+    "zh-TW": "追蹤",
+    "ko-KR": "추적",
+    "no": "Spor",
+    "ar": "التتبّع",
+    "de": "Trace",
+    "fr": "Trace",
+    "it": "Traccia",
+    "pt": "Rastreamento",
+    "es": "Traza",
+    "ca": "Traça",
+    "tr": "İz",
+    "uk": "Трейс"
+  },
   "SETTINGS$VERSION_NPM_RECOMMENDED": {
     "en": "npm",
     "ja": "npm",

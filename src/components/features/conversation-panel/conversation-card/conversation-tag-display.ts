@@ -26,7 +26,14 @@ export type ConversationTagLabelKind =
   | "app_mode"
   | "work_tools"
   | "work_wsid"
+  | "trace"
   | "other";
+
+/**
+ * Tag key whose value is a URL the chip renders as an outbound link (e.g. the
+ * factory chassis stamps ``traceurl`` with a Laminar trace URL after a run).
+ */
+export const TRACE_TAG_KEY = "traceurl";
 
 /**
  * Map a server tag key to a hovercard label kind. ``archiveworkspacepath`` is
@@ -68,9 +75,20 @@ export function getConversationTagLabelKind(
     case "wsid":
     case "workspace_id":
       return "work_wsid";
+    case TRACE_TAG_KEY:
+      return "trace";
     default:
       return "other";
   }
+}
+
+/**
+ * True when a tag key should render as an outbound link chip (its value is a
+ * URL). Currently only the factory trace stamp — deliberately key-driven, so a
+ * free-form tag whose value happens to look like a URL is not treated as one.
+ */
+export function isConversationTraceTag(key: string): boolean {
+  return key.trim().toLowerCase() === TRACE_TAG_KEY;
 }
 
 /**
@@ -110,6 +128,8 @@ export function getConversationTagLabel(
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_TOOLS);
     case "work_wsid":
       return t(I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_WSID);
+    case "trace":
+      return t(I18nKey.CONVERSATION$TAG_TRACE);
     default:
       return humanizeConversationTagKey(key);
   }

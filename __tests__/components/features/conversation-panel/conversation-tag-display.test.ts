@@ -5,6 +5,7 @@ import {
   getConversationTagLabel,
   getConversationTagLabelKind,
   humanizeConversationTagKey,
+  isConversationTraceTag,
   TAG_CHIP_GAP_PX,
   TAG_CHIP_OVERFLOW_WIDTH_PX,
   TAG_CHIP_VALUE_MAX_LENGTH,
@@ -156,9 +157,24 @@ describe("getConversationTagLabelKind", () => {
     ["Appmode", "app_mode"],
     ["worktools", "work_tools"],
     ["Workwsid", "work_wsid"],
+    ["traceurl", "trace"],
     ["owner", "other"],
   ] as const)("maps %s → %s", (key, kind) => {
     expect(getConversationTagLabelKind(key)).toBe(kind);
+  });
+});
+
+describe("isConversationTraceTag", () => {
+  it("matches the trace stamp case-insensitively", () => {
+    expect(isConversationTraceTag("traceurl")).toBe(true);
+    expect(isConversationTraceTag("TraceUrl")).toBe(true);
+    expect(isConversationTraceTag(" traceurl ")).toBe(true);
+  });
+
+  it("rejects other keys, even URL-looking values", () => {
+    expect(isConversationTraceTag("url")).toBe(false);
+    expect(isConversationTraceTag("trace")).toBe(false);
+    expect(isConversationTraceTag("owner")).toBe(false);
   });
 });
 
@@ -179,6 +195,8 @@ describe("getConversationTagLabel", () => {
         return "Work tools";
       case I18nKey.CONVERSATION_PANEL$PREVIEW_WORK_WSID:
         return "Workspace ID";
+      case I18nKey.CONVERSATION$TAG_TRACE:
+        return "Trace";
       default:
         return String(key);
     }
@@ -195,6 +213,10 @@ describe("getConversationTagLabel", () => {
     expect(getConversationTagLabel("Workwsid", t)).toBe("Workspace ID");
     expect(formatConversationTagTooltip("selected_branch", "main", t)).toBe(
       "Branch: main",
+    );
+    expect(getConversationTagLabel("traceurl", t)).toBe("Trace");
+    expect(formatConversationTagTooltip("traceurl", "http://lmnr/…", t)).toBe(
+      "Trace: http://lmnr/…",
     );
   });
 
