@@ -277,6 +277,25 @@ describe("SetupAcpSecretsStep", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the 'credentials configured' banner when a credential is stored but the probe can't confirm a login", async () => {
+    acpAuthStatusMock.mockReturnValue({
+      status: "unknown",
+      isChecking: false,
+      isSupported: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([
+      { name: "ANTHROPIC_API_KEY" },
+    ]);
+    renderStep("claude-code");
+
+    expect(
+      await screen.findByTestId("onboarding-acp-auth-configured"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("onboarding-acp-auth-detected"),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders the Codex subscription blob as a multiline textarea", () => {
     renderStep("codex");
 

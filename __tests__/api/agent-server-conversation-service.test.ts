@@ -88,7 +88,7 @@ vi.mock("#/api/agent-server-config", () => ({
   getAgentServerBaseUrl: vi.fn(() => "http://localhost:54928"),
   getAgentServerSessionApiKey: vi.fn(() => "test-api-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
-  buildConversationWorkingDir: vi.fn(
+  buildConversationWorkingDirForBackend: vi.fn(
     (id: string) => `/state/workspaces/${id.replace(/-/g, "")}`,
   ),
   getAgentServerHeaders: vi.fn(() => ({ "X-Session-API-Key": "test-api-key" })),
@@ -427,7 +427,7 @@ describe("AgentServerConversationService", () => {
     // home dir so the worktree and later file uploads agree on a writable
     // absolute path.
     it("resolves relative default working dirs against /api/file/home", async () => {
-      const { buildConversationWorkingDir: mockedBuilder } =
+      const { buildConversationWorkingDirForBackend: mockedBuilder } =
         await import("#/api/agent-server-config");
       vi.mocked(mockedBuilder).mockImplementationOnce(
         (id: string) => `workspace/project/${id.replace(/-/g, "")}`,

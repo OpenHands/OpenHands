@@ -8,7 +8,10 @@ import {
   ObservationEvent,
   SecurityRisk,
 } from "#/types/agent-server/core";
-import { ExecuteBashAction } from "#/types/agent-server/core/base/action";
+import {
+  ExecuteBashAction,
+  FileEditorAction,
+} from "#/types/agent-server/core/base/action";
 import { ExecuteBashObservation } from "#/types/agent-server/core/base/observation";
 
 const makeBashAction = (
@@ -227,5 +230,52 @@ describe("EventGroup", () => {
     expect(toggle).toHaveAttribute("aria-label", "EVENT_GROUP$EXPAND");
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
     expect(screen.queryByTestId("child")).not.toBeInTheDocument();
+  });
+
+  it("keeps grouped file-action titles non-interactive inside the toggle", () => {
+    const fileAction: ActionEvent<FileEditorAction> = {
+      id: "a-file",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: "FileEditorAction",
+        command: "str_replace",
+        path: "src/app.ts",
+        file_text: null,
+        old_str: "a",
+        new_str: "b",
+        insert_line: null,
+        view_range: null,
+      },
+      tool_name: "file_editor",
+      tool_call_id: "call_a-file",
+      tool_call: {
+        id: "call_a-file",
+        type: "function",
+        function: {
+          name: "file_editor",
+          arguments: JSON.stringify({
+            command: "str_replace",
+            path: "src/app.ts",
+          }),
+        },
+      },
+      llm_response_id: "response_a-file",
+      security_risk: SecurityRisk.UNKNOWN,
+    };
+
+    renderWithProviders(
+      <EventGroup events={[fileAction]}>
+        <div>child</div>
+      </EventGroup>,
+    );
+
+    const toggle = screen.getByTestId("event-group-toggle");
+    expect(
+      toggle.querySelector('[data-testid="path-component-link"]'),
+    ).toBeNull();
+    expect(toggle.querySelectorAll("button")).toHaveLength(0);
   });
 });
