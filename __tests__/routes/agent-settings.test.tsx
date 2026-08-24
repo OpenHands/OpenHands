@@ -16,6 +16,14 @@ vi.mock("#/hooks/query/use-acp-auth-status", () => ({
   useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
+// The profile editor gates the LLM-switching toggle on the backend's *profile*
+// model, which gained the field later than the settings schema did. Stub the
+// probe so both sides of that gate are reachable without a live server.
+const profileSupportsSwitchLlmToolMock = vi.hoisted(() => vi.fn(() => true));
+vi.mock("#/api/agent-profiles-service/profile-field-support", () => ({
+  agentProfileSupportsSwitchLlmTool: () => profileSupportsSwitchLlmToolMock(),
+}));
+
 // Observe save toasts so we can assert the single Save shows one confirmation,
 // not one per persisted thing (agent spec + credentials).
 const toastMocks = vi.hoisted(() => ({
@@ -38,8 +46,10 @@ function buildSettings(overrides: Partial<Settings> = {}): Settings {
   };
 }
 
-function renderAgentSettingsScreen() {
-  return render(<AgentSettingsScreen />, {
+function renderAgentSettingsScreen(
+  props: React.ComponentProps<typeof AgentSettingsScreen> = {},
+) {
+  return render(<AgentSettingsScreen {...props} />, {
     wrapper: ({ children }) => (
       <MemoryRouter>
         <QueryClientProvider
@@ -70,6 +80,7 @@ describe("AgentSettingsScreen", () => {
     toastMocks.success.mockClear();
     toastMocks.error.mockClear();
     toastMocks.warning.mockClear();
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
   });
 
   it("renders the agent type selector defaulting to OpenHands with sub-agents toggle", async () => {
@@ -149,8 +160,157 @@ describe("AgentSettingsScreen", () => {
     expect(call.agent_settings_diff).toEqual({
       agent_kind: "openhands",
       enable_sub_agents: true,
+      enable_switch_llm_tool: true,
       tool_concurrency_limit: 1,
     });
+  });
+
+  it("renders the LLM-switching toggle on the OpenHands path and saves it when toggled off", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          enable_switch_llm_tool: true,
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    // The toggle renders (schema exposes the field) and starts on.
+    const toggle = screen.getByTestId("agent-settings-enable-switch-llm-tool");
+    expect(toggle).toBeChecked();
+
+    // Toggle it off via the enclosing label, then save.
+    const label = toggle.closest("label")!;
+    await user.click(label);
+    expect(toggle).not.toBeChecked();
+
+    await user.click(screen.getByTestId("agent-save-button"));
+
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+    const call = save.mock.calls[0]?.[0] as {
+      agent_settings_diff?: Record<string, unknown>;
+    };
+    expect(call.agent_settings_diff).toEqual({
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: false,
+      tool_concurrency_limit: 1,
+    });
+  });
+
+  it("hides the LLM-switching toggle when the schema predates the field", async () => {
+    const schema = MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema;
+    const schemaWithoutField = schema && {
+      ...schema,
+      sections: schema.sections.map((section) => ({
+        ...section,
+        fields: section.fields.filter(
+          (field) => field.key !== "enable_switch_llm_tool",
+        ),
+      })),
+    };
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schemaWithoutField,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    // Older agent-servers without the field hide the toggle cleanly...
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).not.toBeInTheDocument();
+    // ...while the other OpenHands controls still render.
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the LLM-switching toggle in the profile editor when the profile model predates the field", async () => {
+    // agent-server 1.29.0–1.30.x advertises the field in the settings schema
+    // while `OpenHandsAgentProfile` still rejects it. Rendering the toggle
+    // there would offer a control whose save the server refuses outright.
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.queryByTestId("agent-settings-enable-switch-llm-tool"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("agent-settings-enable-sub-agents"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the LLM-switching toggle in the profile editor once the profile model carries the field", async () => {
+    profileSupportsSwitchLlmToolMock.mockReturnValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen({
+      embedded: true,
+      agentSettingsOverride: { agent_kind: "openhands" },
+    });
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the LLM-switching toggle in non-embedded mode even when the profile model predates the field", async () => {
+    // Non-embedded, the form writes `agent_settings`, which has accepted the
+    // key since 1.22.0. The profile-model gap must not reach back and hide it.
+    // (That mode has no route today — #1571 turned /settings/agent into a
+    // redirect — but the gate should stay scoped to what it actually knows.)
+    profileSupportsSwitchLlmToolMock.mockReturnValue(false);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+        },
+      }),
+    );
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+
+    expect(
+      screen.getByTestId("agent-settings-enable-switch-llm-tool"),
+    ).toBeInTheDocument();
   });
 
   it("saves tool_concurrency_limit when changed on the OpenHands path", async () => {
@@ -498,6 +658,7 @@ describe("AgentSettingsScreen", () => {
     expect(call.agent_settings_diff).toEqual({
       agent_kind: "openhands",
       enable_sub_agents: false,
+      enable_switch_llm_tool: true,
       tool_concurrency_limit: 1,
     });
   });

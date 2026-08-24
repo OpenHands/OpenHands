@@ -3,6 +3,7 @@ import { SECRETS_HANDLERS } from "./secrets-handlers";
 import {
   AGENT_PROFILES_HANDLERS,
   resetMockAgentProfiles,
+  seedMockAgentProfiles,
 } from "./agent-profiles-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "./git-repository-handlers";
 import {
@@ -46,4 +47,8 @@ export {
   resetMockWorkspaces,
 };
 
-export { AGENT_PROFILES_HANDLERS, resetMockAgentProfiles };
+export {
+  AGENT_PROFILES_HANDLERS,
+  resetMockAgentProfiles,
+  seedMockAgentProfiles,
+};

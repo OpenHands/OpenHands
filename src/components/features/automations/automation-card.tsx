@@ -22,6 +22,7 @@ import {
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { toLatestRunState } from "./to-latest-run-state";
+import { RunPhase, shouldShowRunPhase } from "./detail/run-phase";
 import { RunStatusBadge } from "./detail/run-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import type { RunSummaryState } from "#/manifests/automation-insights";
@@ -101,6 +102,7 @@ export function AutomationCard({
     errorDetail != null &&
     shortErrorDetail != null &&
     shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
+  const showPhase = shouldShowRunPhase(latestRun?.status);
   const disableAnimation = import.meta.env.MODE === "test";
 
   return (
@@ -208,6 +210,15 @@ export function AutomationCard({
             {latestRun ? (
               <>
                 <RunStatusBadge status={latestRun.status} iconOnly showLabel />
+
+                {showPhase ? (
+                  <RunPhase
+                    status={latestRun.status}
+                    code={latestRun.phase_code}
+                    label={latestRun.phase_label}
+                    updatedAt={latestRun.phase_updated_at}
+                  />
+                ) : null}
 
                 {shortErrorDetail ? (
                   showErrorHovercard && errorDetail ? (
