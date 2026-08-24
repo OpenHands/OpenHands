@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  type AutomationFilterMode,
   type ConversationSortField,
   type OrganizeMode,
   type ThreadScope,
@@ -21,6 +22,7 @@ import {
  */
 interface ConversationPanelPreferencesState {
   showOlderConversations: boolean;
+  showArchivedConversations: boolean;
   showRepoBranchMetadata: boolean;
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
@@ -28,12 +30,16 @@ interface ConversationPanelPreferencesState {
   organizeMode: OrganizeMode;
   conversationSort: ConversationSortField;
   threadScope: ThreadScope;
+  automationFilterMode: AutomationFilterMode;
+  selectedAutomationNames: string[];
   groupFolderOrder: string[];
 }
 
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
   toggleShowOlderConversations: () => void;
+  setShowArchivedConversations: (value: boolean) => void;
+  toggleShowArchivedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
   toggleShowRepoBranchMetadata: () => void;
   setShowLlmProfiles: (value: boolean) => void;
@@ -45,6 +51,8 @@ interface ConversationPanelPreferencesActions {
   setOrganizeMode: (value: OrganizeMode) => void;
   setConversationSort: (value: ConversationSortField) => void;
   setThreadScope: (value: ThreadScope) => void;
+  setAutomationFilterMode: (value: AutomationFilterMode) => void;
+  toggleAutomationName: (name: string) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
 }
 
@@ -53,13 +61,16 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
 
 const initialState: ConversationPanelPreferencesState = {
   showOlderConversations: true,
+  showArchivedConversations: false,
   showRepoBranchMetadata: false,
-  showLlmProfiles: true,
-  showTagsMetadata: true,
+  showLlmProfiles: false,
+  showTagsMetadata: false,
   showHoverMetadata: true,
   organizeMode: "chronological",
   conversationSort: "updated",
   threadScope: "all",
+  automationFilterMode: "all",
+  selectedAutomationNames: [],
   groupFolderOrder: [],
 };
 
@@ -74,6 +85,13 @@ export const useConversationPanelPreferencesStore =
         toggleShowOlderConversations: () =>
           set((state) => ({
             showOlderConversations: !state.showOlderConversations,
+          })),
+
+        setShowArchivedConversations: (value) =>
+          set(() => ({ showArchivedConversations: value })),
+        toggleShowArchivedConversations: () =>
+          set((state) => ({
+            showArchivedConversations: !state.showArchivedConversations,
           })),
 
         setShowRepoBranchMetadata: (value) =>
@@ -107,6 +125,18 @@ export const useConversationPanelPreferencesStore =
         setConversationSort: (value) =>
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
+        setAutomationFilterMode: (value) =>
+          set(() => ({ automationFilterMode: value })),
+        toggleAutomationName: (name) =>
+          set((state) => ({
+            selectedAutomationNames: state.selectedAutomationNames.includes(
+              name,
+            )
+              ? state.selectedAutomationNames.filter(
+                  (existing) => existing !== name,
+                )
+              : [...state.selectedAutomationNames, name],
+          })),
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
       }),
@@ -116,6 +146,7 @@ export const useConversationPanelPreferencesStore =
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,
+          showArchivedConversations: state.showArchivedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,
           showTagsMetadata: state.showTagsMetadata,
@@ -123,6 +154,8 @@ export const useConversationPanelPreferencesStore =
           organizeMode: state.organizeMode,
           conversationSort: state.conversationSort,
           threadScope: state.threadScope,
+          automationFilterMode: state.automationFilterMode,
+          selectedAutomationNames: state.selectedAutomationNames,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

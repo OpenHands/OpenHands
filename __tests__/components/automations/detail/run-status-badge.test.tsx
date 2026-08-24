@@ -22,7 +22,7 @@ describe("RunStatusBadge", () => {
     [AutomationRunStatus.COMPLETED, "run-status-icon-completed"],
     [AutomationRunStatus.FAILED, "run-status-icon-failed"],
     [AutomationRunStatus.PENDING, "run-status-icon-pending"],
-    [AutomationRunStatus.RUNNING, "run-status-icon-pending"],
+    [AutomationRunStatus.RUNNING, "run-status-icon-running"],
     [AutomationRunStatus.CANCELLED, "run-status-icon-pending"],
     [AutomationRunStatus.SKIPPED, "run-status-icon-pending"],
   ])(
@@ -39,6 +39,43 @@ describe("RunStatusBadge", () => {
 
     render(<RunStatusBadge status={unknownStatus} />);
 
+    expect(screen.getByTestId("run-status-icon-pending")).toBeInTheDocument();
+  });
+
+  it("renders an icon-only mark with the status label as aria-label", () => {
+    render(
+      <RunStatusBadge status={AutomationRunStatus.COMPLETED} iconOnly />,
+    );
+
+    expect(screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL)).toBeNull();
+    expect(screen.getByTestId("run-status-badge-icon")).toHaveAttribute(
+      "aria-label",
+      I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL,
+    );
+    expect(screen.getByTestId("run-status-icon-completed")).toBeInTheDocument();
+  });
+
+  it("renders compact pills without an outline and with tighter left padding", () => {
+    render(<RunStatusBadge status={AutomationRunStatus.FAILED} compact />);
+
+    const badge = screen.getByText(I18nKey.AUTOMATIONS$DETAIL$FAILED);
+    expect(badge.className).not.toContain("border");
+    expect(badge).toHaveClass("pl-1");
+    expect(badge).toHaveClass("pr-1.5");
+  });
+
+  it("renders the status word next to the icon when showLabel is set", () => {
+    render(
+      <RunStatusBadge
+        status={AutomationRunStatus.PENDING}
+        iconOnly
+        showLabel
+      />,
+    );
+
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$PENDING),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("run-status-icon-pending")).toBeInTheDocument();
   });
 });

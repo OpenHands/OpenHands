@@ -58,6 +58,7 @@ interface ContextMenuProps {
   children: React.ReactNode;
   className?: React.HTMLAttributes<HTMLUListElement>["className"];
   style?: React.CSSProperties;
+  onKeyDown?: React.KeyboardEventHandler<HTMLUListElement>;
   theme?: VariantProps<typeof contextMenuVariants>["theme"];
   size?: VariantProps<typeof contextMenuVariants>["size"];
   layout?: VariantProps<typeof contextMenuVariants>["layout"];
@@ -71,6 +72,7 @@ export function ContextMenu({
   children,
   className,
   style,
+  onKeyDown,
   ref,
   theme,
   size,
@@ -80,11 +82,14 @@ export function ContextMenu({
   alignment,
 }: ContextMenuProps) {
   return (
+    // Keyboard navigation is opt-in via `onKeyDown` (home automation kebab).
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- popup list hosts Escape/arrow handlers when provided
     <ul
       data-testid={testId}
       data-position={position}
       ref={ref}
       style={style}
+      onKeyDown={onKeyDown}
       className={cn(
         contextMenuVariants({
           theme,

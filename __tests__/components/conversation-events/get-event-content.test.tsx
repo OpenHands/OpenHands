@@ -4,6 +4,10 @@ import {
   CANVAS_UI_CLIENT_ACTION_KIND,
   CANVAS_UI_CLIENT_TOOL_NAME,
 } from "#/constants/canvas-ui";
+import {
+  LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
+  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+} from "#/constants/child-conversation";
 import { getEventContent } from "#/components/conversation-events/chat";
 import {
   ActionEvent,
@@ -165,6 +169,38 @@ describe("getEventContent", () => {
     render(<div>{details}</div>);
     expect(screen.getByText("/workspace/README.md")).toBeInTheDocument();
   });
+
+  it.each([
+    ["create", "OBSERVATION_MESSAGE$WRITE"],
+    ["str_replace", "OBSERVATION_MESSAGE$EDIT"],
+  ])(
+    "titles a %s file-editor observation with %s",
+    (command, expectedTitleKey) => {
+      const fileEditorObservation: ObservationEvent = {
+        id: "obs-2",
+        timestamp: new Date().toISOString(),
+        source: "environment",
+        tool_name: "file_editor",
+        tool_call_id: "tool-2",
+        action_id: "action-2",
+        observation: {
+          kind: "FileEditorObservation",
+          command: command as "create" | "str_replace",
+          output: "",
+          path: "/workspace/canvas.md",
+          prev_exist: command !== "create",
+          old_content: null,
+          new_content: "# Canvas",
+          error: null,
+        },
+      };
+
+      const { title } = getEventContent(fileEditorObservation);
+
+      render(<span>{title}</span>);
+      expect(screen.getByText(expectedTitleKey)).toBeInTheDocument();
+    },
+  );
 
   it("shows action kind for action-like events missing tool_name/tool_call_id", () => {
     // Simulate an event that has an action object but fails the strict isActionEvent() guard
@@ -391,5 +427,60 @@ describe("getEventContent", () => {
     expect(details).toBe(
       "UI command 'open_tab' dispatched to the Agent Canvas frontend.",
     );
+  });
+
+  // Without the explicit mapping the default branch would surface the SDK's
+  // generated discriminator ("CLIENTACTION_LAUNCH_CHILD_CONVERSATION") to users.
+  it("titles the launch-child-conversation tool call and its acknowledgement", () => {
+    const launchAction: ActionEvent = {
+      id: "action-launch",
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      thought: [],
+      thinking_blocks: [],
+      action: {
+        kind: LAUNCH_CHILD_CONVERSATION_ACTION_KIND,
+        target: "local",
+        task: "Add a regression test for the parser",
+      },
+      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_call_id: "tool-launch",
+      tool_call: {
+        id: "tool-launch",
+        type: "function",
+        function: {
+          name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+          arguments: '{"target":"local","task":"Add a regression test"}',
+        },
+      },
+      llm_response_id: "response-launch",
+      security_risk: SecurityRisk.LOW,
+      summary: "",
+    };
+    const launchObservation: ObservationEvent = {
+      id: "obs-launch",
+      timestamp: new Date().toISOString(),
+      source: "environment",
+      tool_name: LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+      tool_call_id: "tool-launch",
+      action_id: "action-launch",
+      observation: {
+        kind: "ClientToolObservation",
+        content: [{ type: "text", text: "Tool call dispatched to client." }],
+        is_error: false,
+      },
+    };
+
+    render(<span>{getEventContent(launchAction).title}</span>);
+    expect(
+      screen.getByText("ACTION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+    ).toBeInTheDocument();
+
+    render(
+      <span>{getEventContent(launchObservation, launchAction).title}</span>,
+    );
+    expect(
+      screen.getByText("OBSERVATION_MESSAGE$LAUNCH_CHILD_CONVERSATION"),
+    ).toBeInTheDocument();
   });
 });

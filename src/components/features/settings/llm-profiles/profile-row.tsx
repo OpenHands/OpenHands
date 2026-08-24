@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
@@ -6,6 +7,7 @@ import { I18nKey } from "#/i18n/declaration";
 import { EllipsisButton } from "#/components/features/conversation-panel/ellipsis-button";
 import { BrandBadge } from "#/components/shared/badge";
 import { cn } from "#/utils/utils";
+import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
@@ -38,6 +40,7 @@ export function ProfileRow({
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const displayModel = formatModelNameForDisplay(profile.model);
 
   return (
     <div
@@ -51,12 +54,12 @@ export function ProfileRow({
         >
           {profile.name}
         </span>
-        {profile.model ? (
+        {displayModel ? (
           <span
             className="min-w-0 max-w-full truncate text-sm text-[var(--oh-muted)]"
-            title={profile.model}
+            title={profile.model ?? undefined}
           >
-            {profile.model}
+            {displayModel}
           </span>
         ) : null}
         {isActive && (
@@ -69,6 +72,16 @@ export function ProfileRow({
                 default `llm_profile_ref` seeded into new agent profiles. */}
             {t(I18nKey.SETTINGS$PROFILE_DEFAULT)}
           </BrandBadge>
+        )}
+        {profile.provider_connection_broken && (
+          <span
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--oh-warning,#f59e0b)] px-2 py-0.5 text-xs font-medium text-black"
+            title={t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION_TOOLTIP)}
+            data-testid="profile-broken-connection-badge"
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            {t(I18nKey.SETTINGS$PROFILE_BROKEN_CONNECTION)}
+          </span>
         )}
       </div>
       {canManage && (

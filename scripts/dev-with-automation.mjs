@@ -46,7 +46,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -252,6 +252,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Git ref for automation (overrides default version)
   OH_AUTOMATION_VERSION       Specific PyPI version for automation (default: ${DEFAULT_AUTOMATION_VERSION})
+  OH_AUTOMATION_LOCAL_PATH    Absolute path to a local automation checkout (overridden only by --automation-git-ref)
   OH_AGENT_SERVER_LOCAL_PATH  Absolute path to a local software-agent-sdk checkout (highest precedence)
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK (overrides default version)
   OH_AGENT_SERVER_VERSION     Specific PyPI version for agent-server
@@ -271,9 +272,33 @@ ACCESS POINTS:
 }
 
 /**
+ * Fail fast on an unusable OH_AUTOMATION_LOCAL_PATH instead of letting
+ * `uv run --project <bad path>` exit on its own -- that leaves the rest of the
+ * stack up and the automations UI just reporting "backend unavailable", with
+ * nothing pointing at the env var. Mirrors validateLocalAgentServerPath.
+ */
+function validateLocalAutomationPath(localPath) {
+  if (!isAbsolute(localPath)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH must be an absolute path, got: ${localPath}`,
+    );
+  }
+  if (!existsSync(localPath)) {
+    throw new Error(`OH_AUTOMATION_LOCAL_PATH does not exist: ${localPath}`);
+  }
+  const projectFile = join(localPath, "pyproject.toml");
+  if (!existsSync(projectFile)) {
+    throw new Error(
+      `OH_AUTOMATION_LOCAL_PATH is not a Python project (no pyproject.toml): ${projectFile}`,
+    );
+  }
+}
+
+/**
  * Build the uvx command for running automation backend.
  *
  * Environment variables (highest precedence first):
+ * - OH_AUTOMATION_LOCAL_PATH: Absolute path to a local checkout
  * - OH_AUTOMATION_GIT_REF: Git commit SHA or branch name
  * - OH_AUTOMATION_VERSION: Specific PyPI version (e.g., "1.0.0a1")
  *
@@ -282,12 +307,32 @@ ACCESS POINTS:
  * git branch or commit instead.
  */
 function buildAutomationCommand(env = process.env) {
+  const localPath = env.OH_AUTOMATION_LOCAL_PATH;
   const gitRef = env.OH_AUTOMATION_GIT_REF;
   const version = env.OH_AUTOMATION_VERSION;
   const repoUrl = env.OH_AUTOMATION_REPO || DEFAULT_AUTOMATION_REPO;
 
   const uvxArgs = [];
   let source = "";
+
+  if (localPath) {
+    // Run straight from a local checkout via `uv run --project`, so
+    // uncommitted working-tree changes are picked up. Outranks the other
+    // automation env vars, mirroring OH_AGENT_SERVER_LOCAL_PATH for the
+    // agent-server SDK; buildConfig drops it when --automation-git-ref asks
+    // for a specific ref.
+    return {
+      command: "uv",
+      args: [
+        "run",
+        "--project",
+        localPath,
+        "uvicorn",
+        "openhands.automation.app:app",
+      ],
+      source: `local (${localPath})`,
+    };
+  }
 
   if (gitRef) {
     // Use git ref - refresh to ensure latest commit is fetched
@@ -331,6 +376,17 @@ async function buildConfig(args, env = process.env) {
   // Apply args to env for buildAutomationCommand
   if (args.automationGitRef) {
     env.OH_AUTOMATION_GIT_REF = args.automationGitRef;
+    // An explicit flag outranks an ambient env var. Otherwise someone with
+    // OH_AUTOMATION_LOCAL_PATH exported in their shell profile would run their
+    // own working tree while believing they were reproducing against the ref
+    // they just passed.
+    if (env.OH_AUTOMATION_LOCAL_PATH) {
+      logStep(
+        "automation",
+        `--automation-git-ref ${args.automationGitRef} overrides OH_AUTOMATION_LOCAL_PATH (${env.OH_AUTOMATION_LOCAL_PATH})`,
+      );
+      delete env.OH_AUTOMATION_LOCAL_PATH;
+    }
   }
   if (args.automationRepo) {
     env.OH_AUTOMATION_REPO = args.automationRepo;
@@ -429,6 +485,10 @@ async function buildConfig(args, env = process.env) {
     autoBackendPort: preferredAutomationPort,
     vitePort: preferredVitePort,
     vscodePort,
+    // Prefix the editor is served under on the ingress origin. Carried on the
+    // config so the route table and the agent-server env are built from one
+    // value (see getLocalServiceRoutes / buildAgentServerEnv).
+    vscodeBasePath: safeConfig.vscodeBasePath,
 
     // Paths
     canvasPath: projectRoot,
@@ -679,6 +739,13 @@ const AGENT_SERVER_ROUTE_PREFIXES = [
   "/openapi.json",
 ];
 
+// This launcher starts the agent-server with `--host 127.0.0.1`, but localhost
+// can resolve to ::1 first (notably on Windows), so every request this process
+// or the automation backend makes to it must address IPv4 explicitly.
+function getAgentServerBaseUrl(config) {
+  return `http://127.0.0.1:${config.agentServerPort}`;
+}
+
 function getLocalServiceRoutes(config) {
   const routes = [];
 
@@ -692,7 +759,21 @@ function getLocalServiceRoutes(config) {
 
   if (config.launchAgentServer) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
-      routes.push([prefix, `http://127.0.0.1:${config.agentServerPort}`]);
+      routes.push([prefix, getAgentServerBaseUrl(config)]);
+    }
+
+    // The editor is a separate process on its own port, but it is reached
+    // through the same origin as the canvas so no second port has to be
+    // published. The prefix is deliberately preserved rather than stripped:
+    // agent-server launches openvscode-server with `--server-base-path`, so
+    // the editor generates its own HTTP and WebSocket URLs beneath the prefix
+    // and only answers there. `createRouter` matches the longest prefix and
+    // the proxy forwards the original path, so both are already handled.
+    if (config.vscodeBasePath) {
+      routes.push([
+        config.vscodeBasePath,
+        `http://127.0.0.1:${config.vscodePort}`,
+      ]);
     }
   }
 
@@ -701,6 +782,32 @@ function getLocalServiceRoutes(config) {
 
 function buildRouteArgs(routes) {
   return routes.flatMap(([prefix, url]) => ["--route", `${prefix}=${url}`]);
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--no-referrer-prefix` args.
+ *
+ * agent-server hands the editor a connection token derived from its session
+ * key and advertises it in the URL's query string, so the workbench document
+ * must not leak a Referer to the subresources it loads.
+ */
+function getNoReferrerPrefixArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--no-referrer-prefix", config.vscodeBasePath];
+}
+
+/**
+ * The editor prefix, if this mode serves it, as `--vscode-base-path` args.
+ *
+ * Gated on exactly the same condition as the editor route in
+ * `getLocalServiceRoutes`, because they answer the same question: an origin
+ * advertises the editor if and only if it routes it. static-server enforces
+ * that pairing at startup, so a future edit that breaks it fails loudly rather
+ * than shipping a control that opens the SPA.
+ */
+function getVSCodeAdvertiseArgs(config) {
+  if (!config.launchAgentServer || !config.vscodeBasePath) return [];
+  return ["--vscode-base-path", config.vscodeBasePath];
 }
 
 /**
@@ -717,6 +824,12 @@ function getRejectPrefixes(config) {
     for (const prefix of AGENT_SERVER_ROUTE_PREFIXES) {
       prefixes.push(prefix);
     }
+    // No agent-server means no editor behind this prefix either. Reject it
+    // rather than SPA-fallbacking to index.html, which would answer an editor
+    // request with the canvas shell.
+    if (config.vscodeBasePath) {
+      prefixes.push(config.vscodeBasePath);
+    }
   }
   return prefixes;
 }
@@ -730,17 +843,34 @@ function getFrontendBackend(config) {
 }
 
 function buildViteBackendEnv(config, env = process.env) {
-  const backendBaseUrl = config.launchAgentServer
-    ? `http://127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_BASE_URL ?? "http://127.0.0.1:8000");
+  // VITE_BACKEND_HOST tells the Vite dev-server proxy (vite.config.ts) where
+  // to forward /api, /sockets, etc.  It is NOT read by the frontend at
+  // runtime, so it is safe to keep as an absolute address.
+  //
+  // VITE_BACKEND_BASE_URL is intentionally left unset so the frontend falls
+  // back to window.location.origin (same-origin) at runtime — matching the
+  // behaviour of dev:static / agent-canvas and keeping the dev server
+  // portable across localhost, LAN hosts, SSH tunnels, and ngrok.
   const backendHost = config.launchAgentServer
     ? `127.0.0.1:${config.ingressPort}`
-    : (env.VITE_BACKEND_HOST ?? new URL(backendBaseUrl).host);
+    : (env.VITE_BACKEND_HOST ??
+      env.VITE_BACKEND_BASE_URL?.replace(/^https?:\/\//, "") ??
+      "127.0.0.1:8000");
 
-  return {
-    VITE_BACKEND_HOST: backendHost,
-    VITE_BACKEND_BASE_URL: backendBaseUrl,
-  };
+  const env_out = { VITE_BACKEND_HOST: backendHost };
+
+  // If the user supplied VITE_BACKEND_BASE_URL with an https:// scheme and
+  // did not explicitly set VITE_USE_TLS, propagate the HTTPS intent so the
+  // Vite proxy forwards over TLS instead of plain HTTP.
+  if (
+    !config.launchAgentServer &&
+    env.VITE_BACKEND_BASE_URL?.startsWith("https://") &&
+    env.VITE_USE_TLS === undefined
+  ) {
+    env_out.VITE_USE_TLS = "true";
+  }
+
+  return env_out;
 }
 
 function buildAgentServerAutomationEnv(config) {
@@ -792,7 +922,12 @@ function startAgentServer(config) {
   });
 
   const agentServerEnv = {
-    ...buildAgentServerEnv(safeConfig),
+    // Opt into prefix-mode: `getLocalServiceRoutes` registers the matching
+    // route on both the static server and the ingress, so the prefix this
+    // advertises resolves to the editor port on the canvas origin.
+    ...buildAgentServerEnv(safeConfig, {
+      vscodeBasePath: config.vscodeBasePath,
+    }),
     ...buildAgentServerAutomationEnv(config),
     OPENHANDS_REMOTE_WS_READY_REQUIRED:
       process.env.OPENHANDS_REMOTE_WS_READY_REQUIRED || "false",
@@ -858,10 +993,10 @@ function startAutomationBackend(config) {
         //
         // Priority:
         //   1. AUTOMATION_AGENT_SERVER_URL explicitly set in the user's env
-        //   2. `localhost:<agentServerPort>`
+        //   2. `127.0.0.1:<agentServerPort>`
         AUTOMATION_AGENT_SERVER_URL:
           process.env.AUTOMATION_AGENT_SERVER_URL ||
-          `http://localhost:${config.agentServerPort}`,
+          getAgentServerBaseUrl(config),
         // The URL exported into the in-sandbox bash chain as
         // `AGENT_SERVER_URL` (read by main.py / setup.sh to call back into
         // the agent-server).
@@ -981,6 +1116,7 @@ function startIngress(config) {
         ? ["--runtime-services-info", runtimeServicesInfo]
         : []),
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      ...getNoReferrerPrefixArgs(config),
       ...(frontendBackend ? ["--default", frontendBackend] : []),
     ],
     {
@@ -1028,6 +1164,23 @@ function startVite(config) {
     viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
   }
 
+  // Vite serves the HTML for this mode's browser origin, so this is where the
+  // editor-capability advertisement has to be baked. The ingress in front of it
+  // routes the prefix but is a pure proxy — it injects nothing into the
+  // document, so it cannot tell the frontend what it serves.
+  //
+  // Both variables or neither: `vite.config.ts` only registers the editor proxy
+  // when it has a target as well as a prefix, and this stack has two supported
+  // browser origins — the ingress and Vite's own port, which is why the latter
+  // is in AUTOMATION_CORS_ORIGINS. On the ingress the prefix is routed by the
+  // ingress itself; on the Vite origin only this proxy can serve it. Baking the
+  // prefix alone would advertise an editor on the Vite origin whose URL then
+  // falls through to the SPA — the dead button this gating exists to prevent.
+  if (config.launchAgentServer && config.vscodeBasePath) {
+    viteEnv.VITE_VSCODE_BASE_PATH = config.vscodeBasePath;
+    viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
+  }
+
   // In local mode, bake the session key into the frontend so the user
   // never has to paste it. In public mode, omit the key and set
   // VITE_AUTH_REQUIRED so the frontend shows the API key entry screen
@@ -1068,7 +1221,7 @@ async function seedAutomationSecret(config, options = {}) {
 
   logService("secrets", `Seeding ${secretName} into agent-server...`, c.dim);
 
-  const url = `http://localhost:${config.agentServerPort}/api/settings/secrets`;
+  const url = `${getAgentServerBaseUrl(config)}/api/settings/secrets`;
   const body = JSON.stringify({
     name: secretName,
     value: config.sessionApiKey,
@@ -1330,6 +1483,21 @@ async function main(options = {}) {
     }
   }
 
+  // Same for the automation checkout -- skipped when --automation-git-ref was
+  // passed, since buildConfig drops the env var in favor of the explicit flag.
+  if (
+    !args.frontendOnly &&
+    !args.automationGitRef &&
+    process.env.OH_AUTOMATION_LOCAL_PATH
+  ) {
+    try {
+      validateLocalAutomationPath(process.env.OH_AUTOMATION_LOCAL_PATH);
+    } catch (error) {
+      logError(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
+
   // Build config with dynamic port allocation
   const config = await buildConfig(args);
   if (viteWorkingDir) config.viteWorkingDir = viteWorkingDir;
@@ -1388,7 +1556,7 @@ async function main(options = {}) {
 
     agentServerReady = await waitForService(
       "agent-server",
-      `http://localhost:${config.agentServerPort}/server_info`,
+      `${getAgentServerBaseUrl(config)}/server_info`,
       agentServerReadyTimeoutMs,
     );
   }
@@ -1476,6 +1644,11 @@ function startStaticFrontend(config, staticDir) {
         : []),
       // Proxy routes only to services that this launch mode started.
       ...buildRouteArgs(getLocalServiceRoutes(config)),
+      // Only the static server injects into the document, so only it can tell
+      // the frontend this origin serves the editor. The ingress routes the same
+      // prefix but proxies the HTML through untouched.
+      ...getVSCodeAdvertiseArgs(config),
+      ...getNoReferrerPrefixArgs(config),
       // Reject known API prefixes that have no backend — returns 503
       // instead of SPA-fallbacking to index.html.
       ...buildRejectPrefixArgs(getRejectPrefixes(config)),
@@ -1498,12 +1671,17 @@ export {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
+  getNoReferrerPrefixArgs,
+  getRejectPrefixes,
+  getVSCodeAdvertiseArgs,
   main,
   registerShutdownHook,
   spawnService,
   commandExists,
+  validateLocalAutomationPath,
   logService,
   logStep,
   logSuccess,
