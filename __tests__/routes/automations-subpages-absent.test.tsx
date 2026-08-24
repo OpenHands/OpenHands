@@ -105,7 +105,7 @@ describe("an interface manifest that declares no sub-page surface", () => {
     expect({
       nav: screen.queryByTestId("automations-navbar-desktop"),
       tile: screen.queryByTestId("overview-tile-automations"),
-      statusFilter: screen.queryByTestId("automations-filter-status"),
+      statusFilter: screen.queryByTestId("automations-filters"),
       launcher: await screen.findByTestId("recommended-automations-section"),
     }).toMatchObject({ nav: null, tile: null, statusFilter: null });
   });

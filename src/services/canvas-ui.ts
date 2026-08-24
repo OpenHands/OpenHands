@@ -5,7 +5,6 @@ import {
 } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
-import { setConversationState } from "#/utils/conversation-local-storage";
 import { toFilesTabPath } from "#/utils/path-utils";
 
 const VALID_TABS: ReadonlySet<ConversationTab> = new Set<ConversationTab>([
@@ -66,11 +65,7 @@ export function handleCanvasUIAction(
       const path = toFilesTabPath(action.path, workingDir);
       if (!path) return;
 
-      useFilesTabStore.getState().revealFile(path, conversationId);
-      if (conversationId) {
-        // Leave Diff so the selected file content is visible.
-        setConversationState(conversationId, { filesTabDiffView: false });
-      }
+      useFilesTabStore.getState().setSelectedPath(path, conversationId);
       return;
     }
     case "open_tab":

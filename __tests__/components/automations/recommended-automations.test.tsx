@@ -24,6 +24,7 @@ import {
   type NavigationContextValue,
 } from "#/context/navigation-context";
 import type { Backend } from "#/api/backend-registry/types";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
 import {
   RecommendedAutomationsSection,
@@ -103,14 +104,20 @@ const navigationValue: NavigationContextValue = {
   navigate: mockNavigate,
 };
 
-function renderLauncher({ withBackendProvider = false } = {}) {
+function renderLauncher({
+  withBackendProvider = false,
+  variant = "catalog",
+}: {
+  withBackendProvider?: boolean;
+  variant?: "catalog" | "rail";
+} = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   const launcher = (
     <NavigationProvider value={navigationValue}>
-      <RecommendedAutomationsLauncher />
+      <RecommendedAutomationsLauncher variant={variant} />
     </NavigationProvider>
   );
 
@@ -199,8 +206,11 @@ describe("recommended automations", () => {
 
     expect(cardIds).toEqual([
       "github-pr-reviewer",
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
+      "github-repo-monitor",
       "slack-standup-digest",
       "linear-triage-assistant",
       "jira-issue-to-pr",
@@ -222,7 +232,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("3")).toBeInTheDocument();
+    expect(within(provenHeading).getByText("5")).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -230,7 +240,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("7")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -309,6 +319,24 @@ describe("recommended automations", () => {
     ).toHaveAttribute("data-layout", "quadrants");
   });
 
+  it("shows the declared glyph instead of a logo stack when an entry names one", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // `news-digest` connects to nothing, so there are no logos to stack; it
+    // names its own glyph, and the badge must render that rather than the
+    // generic placeholder a bare empty stack would give.
+    const badge = screen.getByTestId("recommended-automation-icon-news-digest");
+    expect(badge).not.toHaveAttribute("data-layout");
+    expect(badge.querySelector("svg")).toBeInTheDocument();
+    expect(badge.querySelector("img")).not.toBeInTheDocument();
+  });
+
   it("renders missing MCP connect copy as a pill on the same row", () => {
     const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
       HTMLElement.prototype,
@@ -369,7 +397,41 @@ describe("recommended automations", () => {
     }
   });
 
+  /**
+   * Puts a non-MCP-installable requirement back on `jira-issue-to-pr`.
+   *
+   * It declared the HTTP-only `jira` until @openhands/extensions 0.17.0 swapped it
+   * for the MCP `atlassian-rovo`, and no catalog automation declares a non-MCP
+   * integration any more. The cases below are about what a card does with one, so
+   * the requirement is restored for their duration rather than the assertions
+   * rewritten around a property the catalog stopped having. Mirrors the
+   * mutate-and-restore already used for the unknown-ID case.
+   *
+   * @returns the restore function, which the caller must run in a `finally`.
+   */
+  function requireNonMcpIntegration(): () => void {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "jira-issue-to-pr",
+    )!;
+    const mutable = automation as RecommendedAutomation & {
+      requires: { integrations: Record<string, { message?: string }> };
+    };
+    const original = mutable.requires.integrations;
+    const { "atlassian-rovo": rovo, ...rest } = original;
+    // Keyed first, so the pill order and the install queue start where they did.
+    mutable.requires.integrations = {
+      jira: {
+        message: rovo?.message ?? "Reads the project for issues.",
+      },
+      ...rest,
+    };
+    return () => {
+      mutable.requires.integrations = original;
+    };
+  }
+
   it("keeps a non-MCP-installable integration visible on its card instead of dropping it", () => {
+    const restoreRequirement = requireNonMcpIntegration();
     // SkillCardPillRow folds pills behind "+N more" when it measures zero
     // widths in jsdom; give it room so every pill renders.
     const offsetWidthDescriptor = Object.getOwnPropertyDescriptor(
@@ -428,6 +490,7 @@ describe("recommended automations", () => {
         "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT:1",
       );
     } finally {
+      restoreRequirement();
       if (offsetWidthDescriptor) {
         Object.defineProperty(
           HTMLElement.prototype,
@@ -497,17 +560,23 @@ describe("recommended automations", () => {
   });
 
   it("queues installs only for MCP-installable required integrations", async () => {
-    renderLauncher();
+    const restoreRequirement = requireNonMcpIntegration();
 
-    fireEvent.click(
-      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
-    );
+    try {
+      renderLauncher();
 
-    // jira cannot go through the local MCP install flow, so the queue starts
-    // directly at github rather than failing or skipping the automation.
-    const modal = await screen.findByTestId("mcp-install-modal");
-    expect(modal).toHaveAttribute("data-marketplace-id", "github");
-    expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+      );
+
+      // jira cannot go through the local MCP install flow, so the queue starts
+      // directly at github rather than failing or skipping the automation.
+      const modal = await screen.findByTestId("mcp-install-modal");
+      expect(modal).toHaveAttribute("data-marketplace-id", "github");
+      expect(mockCreateConversationMutate).not.toHaveBeenCalled();
+    } finally {
+      restoreRequirement();
+    }
   });
 
   it("shows a decorative plus badge on each card without toggle behavior", () => {
@@ -824,6 +893,54 @@ describe("recommended automations", () => {
     expect(
       screen.queryByTestId("recommended-automations-section"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the compact rail instead of the catalog section", async () => {
+    // Earlier cases call `vi.unstubAllGlobals()`, which also removes the
+    // setup file's ResizeObserver stub the rail's fade tracking needs.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+
+        unobserve() {}
+
+        disconnect() {}
+      },
+    );
+    vi.spyOn(AutomationService, "getAutomations").mockResolvedValue({
+      automations: [
+        {
+          id: "installed-1",
+          name: "GitHub Code Review Agent",
+          trigger: { type: "cron", schedule: "0 9 * * *" },
+          enabled: true,
+          prompt: "Review PRs",
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+      total: 1,
+    });
+
+    renderLauncher({ variant: "rail" });
+
+    expect(
+      await screen.findByTestId("recommended-automations-rail"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automations-section"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(
+        "recommended-automation-rail-card-github-pr-reviewer",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("launches the recommendation after the missing MCP is installed", async () => {

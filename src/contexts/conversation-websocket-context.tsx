@@ -280,17 +280,14 @@ export function ConversationWebSocketProvider({
   // user scrolls to the top of the chat. The WebSocket connection waits for
   // this query so it can subscribe with `resend_mode='since'` and avoid
   // re-streaming everything REST already returned.
-  const {
-    data: preloadedHistory,
-    isPending: isPreloadingHistory,
-    isFetching: isFetchingHistory,
-    isError: isPreloadHistoryError,
-  } = useConversationHistory(conversationId);
+  const { data: preloadedHistory, isPending: isPreloadingHistory } =
+    useConversationHistory(conversationId);
 
   // Skeleton only on the genuine first load (no cached data yet). On return the
   // cached page is present, so `isPending` is false and we render the
   // last-known discussion immediately while the tail refetch runs in the
-  // background — see the socket gate below, which waits on `isFetching`.
+  // background — the socket gate below also keys on `isPending`, so that
+  // refetch never drops a live socket.
   const isLoadingHistoryMain = !!conversationId && isPreloadingHistory;
 
   // Clear the (global, not conversation-scoped) event store when the active
@@ -362,48 +359,45 @@ export function ConversationWebSocketProvider({
   /**
    * Timestamp of the latest event we already have from REST. Used as
    * `after_timestamp` when opening the WebSocket so the server only resends
-   * events strictly after this point. `null` until the REST query settles
-   * (we hold the WS connection open until then to avoid an `all` resend).
+   * events strictly after this point. `null` until the first REST page lands
+   * (the WS connection is gated on that — see `wsUrl` below). During
+   * background refetches `preloadedHistory` keeps the last-known page, so the
+   * anchor holds steady instead of flipping to null; reconnects read the
+   * freshest value from the options ref at connect time.
    */
   const initialAfterTimestamp = useMemo<string | null>(() => {
-    // Wait for the history query to settle — including the refetch fired when
-    // returning to a conversation — so we anchor `since` to the freshest event
-    // we have rather than a stale cached tail.
-    if (isFetchingHistory) return null;
     const events = preloadedHistory?.events ?? [];
     const latest = events[events.length - 1];
     if (!latest || !("timestamp" in latest) || !latest.timestamp) return null;
     return latest.timestamp;
-  }, [preloadedHistory, isFetchingHistory]);
+  }, [preloadedHistory]);
 
   // Build WebSocket URL from props.
   //
-  // We deliberately wait for the history fetch to settle before opening the
-  // socket so the WS subscription can use `resend_mode='since'` with a
-  // meaningful `after_timestamp`. This gate is on `isFetching`, not just the
-  // first-load `isPending`, so the refetch fired when returning to a
-  // conversation also completes first: the socket bakes `after_timestamp` into
-  // its URL at connect time and will NOT re-subscribe when the value changes
-  // later (see use-websocket — options live in a ref, reconnect keys on the URL
-  // only). Connecting mid-fetch would therefore pin `since` to the stale cached
-  // tail and replay the entire backlog over the socket. Without any gate the WS
-  // would instead fall back to `resend_mode='all'`. If the REST query errored we
-  // fall through and connect with `resend_mode='all'` so the user still sees
-  // live events.
+  // We deliberately wait for the FIRST history load (`isPending`: no data for
+  // this query key yet) before opening the socket, so the WS subscription can
+  // use `resend_mode='since'` with a meaningful `after_timestamp` instead of
+  // falling back to `resend_mode='all'`. The gate is intentionally NOT on
+  // `isFetching`: background refetches (e.g. the `refetchOnMount` fired when
+  // returning to a conversation) must never tear a live socket down — on a
+  // flaky link that caused a refetch → teardown → reconnect → refetch loop
+  // that kept the conversation stuck at "Connecting" for minutes. Connecting
+  // during a background refetch anchors `since` to the cached tail; the
+  // overlap with the refetched page is deduped by the event store and the
+  // `isDuplicateEvent` guards in the message handlers. A query-key reset
+  // (backend swap / new session key) makes `isPending` true again, so a
+  // genuine reset still re-gates. If the initial load errors, `isPending`
+  // flips false and we fall through to connect with `resend_mode='all'` so
+  // the user still sees live events.
   const wsUrl = useMemo(() => {
     if (!conversationId || !conversationUrl) {
       return null;
     }
-    if (isFetchingHistory && !isPreloadHistoryError) {
+    if (isPreloadingHistory) {
       return null;
     }
     return buildWebSocketUrl(conversationId, conversationUrl);
-  }, [
-    conversationId,
-    conversationUrl,
-    isFetchingHistory,
-    isPreloadHistoryError,
-  ]);
+  }, [conversationId, conversationUrl, isPreloadingHistory]);
 
   const planningAgentWsUrl = useMemo(() => {
     if (!subConversations?.length) {

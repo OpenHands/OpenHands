@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { setConversationState } from "#/utils/conversation-local-storage";
 
 interface FilesTabState {
   selectedPath: string | null;
@@ -8,13 +9,70 @@ interface FilesTabState {
   // tagged with its conversation and the files tab ignores a path owned by a
   // different conversation.
   selectedConversationId: string | null;
-  /** Bumped to force Files tab out of Diff/Commits into file content. */
-  contentViewNonce: number;
+  /**
+   * Ordered list of files the user or agent has opened in the current
+   * conversation. The quick-row tab strip renders only these paths.
+   */
+  openPaths: string[];
   setSelectedPath: (
     path: string | null,
     conversationId?: string | null,
   ) => void;
-  revealFile: (path: string, conversationId?: string | null) => void;
+  /** Remove a path from the open-tab strip; selects a neighbor when needed. */
+  closeOpenPath: (path: string) => void;
+  /**
+   * Replace in-memory open-tab state for a conversation (used when mounting
+   * / switching conversations so a refresh can restore localStorage).
+   * Does not write back to localStorage.
+   */
+  hydrateForConversation: (
+    conversationId: string,
+    openPaths: string[],
+    selectedPath: string | null,
+  ) => void;
+}
+
+function withOpenedPath(
+  openPaths: string[],
+  path: string,
+  sameConversation: boolean,
+): string[] {
+  if (!sameConversation) return [path];
+  if (openPaths.includes(path)) return openPaths;
+  return [...openPaths, path];
+}
+
+function selectNeighborAfterClose(
+  openPaths: string[],
+  closedPath: string,
+  selectedPath: string | null,
+): string | null {
+  if (selectedPath !== closedPath) return selectedPath;
+  const closedIndex = openPaths.indexOf(closedPath);
+  const remaining = openPaths.filter((path) => path !== closedPath);
+  if (remaining.length === 0) return null;
+  // Prefer the tab that slides into the closed slot (right neighbor), else left.
+  return remaining[Math.min(closedIndex, remaining.length - 1)] ?? null;
+}
+
+function resolveSelectedPath(
+  openPaths: string[],
+  selectedPath: string | null,
+): string | null {
+  if (selectedPath && openPaths.includes(selectedPath)) return selectedPath;
+  return null;
+}
+
+function persistOpenState(
+  conversationId: string | null | undefined,
+  openPaths: string[],
+  selectedPath: string | null,
+) {
+  if (!conversationId) return;
+  setConversationState(conversationId, {
+    filesTabOpenPaths: openPaths,
+    filesTabSelectedPath: selectedPath,
+  });
 }
 
 // Hoisted out of files-tab.tsx local state so non-React callers (e.g. the
@@ -22,13 +80,61 @@ interface FilesTabState {
 export const useFilesTabStore = create<FilesTabState>((set) => ({
   selectedPath: null,
   selectedConversationId: null,
-  contentViewNonce: 0,
+  openPaths: [],
   setSelectedPath: (selectedPath, conversationId = null) =>
-    set({ selectedPath, selectedConversationId: conversationId }),
-  revealFile: (selectedPath, conversationId = null) =>
-    set((state) => ({
-      selectedPath,
+    set((state) => {
+      if (selectedPath === null) {
+        const switchedConversation =
+          conversationId !== state.selectedConversationId;
+        const next = {
+          selectedPath: null as string | null,
+          selectedConversationId: conversationId,
+          // Drop open tabs when the active conversation changes so paths
+          // from conversation A never appear as tabs in conversation B.
+          // Callers that switch conversations should prefer
+          // `hydrateForConversation` so persisted tabs can be restored.
+          openPaths: switchedConversation ? [] : state.openPaths,
+        };
+        persistOpenState(conversationId, next.openPaths, next.selectedPath);
+        return next;
+      }
+
+      const sameConversation = state.selectedConversationId === conversationId;
+      const next = {
+        selectedPath,
+        selectedConversationId: conversationId,
+        openPaths: withOpenedPath(
+          state.openPaths,
+          selectedPath,
+          sameConversation,
+        ),
+      };
+      persistOpenState(conversationId, next.openPaths, next.selectedPath);
+      return next;
+    }),
+  closeOpenPath: (path) =>
+    set((state) => {
+      if (!state.openPaths.includes(path)) return state;
+      const selectedPath = selectNeighborAfterClose(
+        state.openPaths,
+        path,
+        state.selectedPath,
+      );
+      const next = {
+        openPaths: state.openPaths.filter((openPath) => openPath !== path),
+        selectedPath,
+      };
+      persistOpenState(
+        state.selectedConversationId,
+        next.openPaths,
+        next.selectedPath,
+      );
+      return next;
+    }),
+  hydrateForConversation: (conversationId, openPaths, selectedPath) =>
+    set({
       selectedConversationId: conversationId,
-      contentViewNonce: state.contentViewNonce + 1,
-    })),
+      openPaths,
+      selectedPath: resolveSelectedPath(openPaths, selectedPath),
+    }),
 }));

@@ -36,7 +36,7 @@ describe("assistant chat Markdown path linking", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
-      contentViewNonce: 0,
+      openPaths: [],
     });
   });
 

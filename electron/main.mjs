@@ -186,6 +186,26 @@ function injectBundledNode() {
     return;
   }
 
+  // node.exe alone is not enough. npm / npx are wrapper scripts that exec
+  // npm's JS entry points out of the distribution's own node_modules, and
+  // that directory is the one piece electron-builder drops on Windows (see
+  // restoreBundledNodeNpm in electron-builder.config.mjs). Since we PREPEND
+  // this dir to PATH, a half-copied bundle doesn't just fail to help — it
+  // shadows the user's working npm with shims that die on MODULE_NOT_FOUND.
+  // Warn loudly, but still inject: `node` itself works and the backend
+  // launcher scripts need it.
+  const npmCli = isWin
+    ? join(nodeRoot, "node_modules", "npm", "bin", "npm-cli.js")
+    : join(nodeRoot, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  if (!existsSync(npmCli)) {
+    console.warn(
+      `[desktop] Bundled npm is incomplete — ${npmCli} is missing. ` +
+        "`npx`-launched subprocesses (stdio MCP servers, ACP servers) will " +
+        "fail with MODULE_NOT_FOUND, and this bundle shadows any npm already " +
+        "on PATH. Rebuild with `npm run download-node`.",
+    );
+  }
+
   // electron-builder doesn't always preserve the +x bit on POSIX. node, npm,
   // and npx need to be executable for shell PATH lookup to consider them.
   if (!isWin) {

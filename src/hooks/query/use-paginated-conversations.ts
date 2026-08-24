@@ -34,12 +34,15 @@ export const usePaginatedConversations = (limit: number = 20) => {
     enabled: !!userIsAuthenticated && hasBackend,
     getNextPageParam: (lastPage: AppConversationPage) => lastPage.next_page_id,
     initialPageParam: undefined as string | undefined,
-    // Poll every 10s so titles, execution status, and timestamps stay fresh
-    // without requiring the user to refresh. Consumers must gate initial-load
-    // UI (e.g. skeletons) on `isLoading`, not `isFetching` — `isFetching`
-    // flips back to true on every background refetch, which would cause the
-    // skeleton to flicker every 10s when the list is empty.
-    refetchInterval: 10_000,
+    // Poll every 30s so titles, execution status, and timestamps stay fresh
+    // without requiring the user to refresh. Each response carries the full
+    // conversation objects, so on slow links a tighter interval degrades into
+    // a continuous download that starves the rest of the app (including the
+    // events WebSocket handshake). Consumers must gate initial-load UI (e.g.
+    // skeletons) on `isLoading`, not `isFetching` — `isFetching` flips back to
+    // true on every background refetch, which would cause the skeleton to
+    // flicker on each poll when the list is empty.
+    refetchInterval: 30_000,
     // A successful fetch proves the backend is reachable. The global
     // QueryCache onSuccess handler reads this to clear any persisted
     // failure state, re-arming the status dot without user intervention.

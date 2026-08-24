@@ -26,7 +26,7 @@ describe("fileEditorVisualizer", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
-      contentViewNonce: 0,
+      openPaths: [],
     });
   });
 

@@ -201,7 +201,7 @@ export function findMatchingJobComments(comments, options) {
   return comments.filter((comment) => isMatchingJobComment(comment, options));
 }
 
-export async function replaceJobComment({
+export async function upsertJobComment({
   repo,
   issueNumber,
   token,
@@ -210,24 +210,41 @@ export async function replaceJobComment({
   legacyTitle = "",
 }) {
   const comments = await listIssueComments(repo, issueNumber, token);
-  const existing = findMatchingJobComments(comments, { marker, legacyTitle });
+  const [existing, ...duplicates] = findMatchingJobComments(comments, {
+    marker,
+    legacyTitle,
+  });
+  const commentBody = buildCommentBody(body, marker);
 
-  for (const comment of existing) {
+  // Edit the oldest report in place so the comment keeps its position in the
+  // thread and does not notify subscribers on every run. Anything beyond it is
+  // a leftover duplicate from an earlier run.
+  for (const duplicate of duplicates) {
     await githubRequest(
       "DELETE",
-      `/repos/${repo}/issues/comments/${comment.id}`,
+      `/repos/${repo}/issues/comments/${duplicate.id}`,
       token,
     );
+  }
+
+  if (existing) {
+    const updated = await githubRequest(
+      "PATCH",
+      `/repos/${repo}/issues/comments/${existing.id}`,
+      token,
+      { body: commentBody },
+    );
+    return { updated: true, deleted: duplicates.length, comment: updated };
   }
 
   const created = await githubRequest(
     "POST",
     `/repos/${repo}/issues/${issueNumber}/comments`,
     token,
-    { body: buildCommentBody(body, marker) },
+    { body: commentBody },
   );
 
-  return { deleted: existing.length, created };
+  return { updated: false, deleted: duplicates.length, comment: created };
 }
 
 async function main() {
@@ -258,7 +275,7 @@ async function main() {
   );
   const body = readFileSync(bodyFile, "utf8");
 
-  const result = await replaceJobComment({
+  const result = await upsertJobComment({
     repo,
     issueNumber: validatedIssueNumber,
     token,
@@ -267,11 +284,14 @@ async function main() {
     legacyTitle: args.legacy_title ?? "",
   });
 
-  console.log(
-    `Deleted ${result.deleted} existing PR comment${
-      result.deleted === 1 ? "" : "s"
-    }; created PR comment ${result.created.id}.`,
-  );
+  const action = result.updated ? "Updated" : "Created";
+  const cleanup =
+    result.deleted === 0
+      ? ""
+      : ` Deleted ${result.deleted} duplicate PR comment${
+          result.deleted === 1 ? "" : "s"
+        }.`;
+  console.log(`${action} PR comment ${result.comment.id}.${cleanup}`);
 }
 
 if (

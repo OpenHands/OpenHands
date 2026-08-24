@@ -17,6 +17,7 @@ import { useSetupAction } from "#/manifests/manifest-actions";
 import {
   buildCreatePayload,
   deriveErrorMap,
+  missingCreateEndpoints,
 } from "#/manifests/automation-setup";
 import {
   collectFields,
@@ -37,6 +38,7 @@ import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
 import type {
   SetupEntry,
+  SetupFormValue,
   SetupFormValues,
   SetupMode,
   SetupRequestBody,
@@ -139,7 +141,18 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     trackAutomationSetupOpened({ automationId: entry.id });
   }, [entry.id, trackAutomationSetupOpened]);
 
-  const isUnsupported = capabilities.supported === false;
+  // An entry the published interface cannot create is refused here rather than
+  // at the moment of creating: a bundle needs two endpoints a manifest from
+  // before bundles does not declare, and no answer the user gives supplies
+  // them. Named alongside the deployment's own unmet requirements, because
+  // "which one" is the only thing that makes either diagnosable.
+  const missingEndpoints = useMemo(
+    () => missingCreateEndpoints(entry),
+    [entry],
+  );
+  const isUnsupported =
+    capabilities.supported === false || missingEndpoints.length > 0;
+  const unmet = [...capabilities.unmet, ...missingEndpoints];
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
     prerequisites.warningIntegrations.length > 0;
@@ -148,7 +161,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
 
-  const setFieldValue = (name: string, value: string) => {
+  const setFieldValue = (name: string, value: SetupFormValue) => {
     valuesRef.current = { ...valuesRef.current, [name]: value };
     setValues(valuesRef.current);
     setLocalErrors(({ [name]: _removed, ...rest }) => rest);
@@ -287,12 +300,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   translated. Without them the block is undiagnosable: the
                   deployment answered, and the host would be discarding the
                   one thing it learned. */}
-              {capabilities.unmet.length > 0 && (
+              {unmet.length > 0 && (
                 <p
                   data-testid="setup-unmet-requirements"
                   className="text-sm text-[var(--oh-muted)]"
                 >
-                  {capabilities.unmet.join(", ")}
+                  {unmet.join(", ")}
                 </p>
               )}
             </div>

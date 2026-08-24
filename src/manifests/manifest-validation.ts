@@ -16,12 +16,33 @@
  * partial UI, because everything downstream treats its content as instructions.
  */
 
-import { SETUP_PLACEHOLDER_NAMESPACES, SETUP_VERSION } from "./types";
+import {
+  BUNDLE_CONFIG_FILENAME,
+  SETUP_PLACEHOLDER_NAMESPACES,
+  SETUP_VERSION,
+} from "./types";
 
 const ENTRY_ID_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const FIELD_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 /** Copy must never be able to inject markup into the host. */
 const MARKUP_PATTERN = /<[A-Za-z/!]/;
+/**
+ * A template version, declared as `version` by a prompt entry and as
+ * `setup.bundle.version` by a bundle one. Sent to the service as template
+ * provenance, so it is checked at admission. Full semver, as the spec at
+ * semver.org states it: a catalog entry published with a pre-release or build
+ * suffix is still a version this host may forward, and refusing one would drop
+ * the entry from the registry outright.
+ */
+const TEMPLATE_VERSION_PATTERN =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
+// The characters a command of plain words and paths is made of. No shell
+// metacharacters, which the service rejects anyway and a bundle has no reason
+// to need; where those words may point is `isPlainCommand`'s to say.
+const BUNDLE_COMMAND_PATTERN = /^[A-Za-z0-9 ._/-]+$/;
+const BUNDLE_PATH_PATTERN = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+const BUNDLE_SOURCE_PATTERN =
+  /^(skills|automations)\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 /** Every `{{` must open a known namespace and close immediately. */
 const UNKNOWN_PLACEHOLDER_PATTERN = new RegExp(
   `\\{\\{(?!(?:${SETUP_PLACEHOLDER_NAMESPACES.join("|")})\\.[A-Za-z0-9_.]+\\}\\})`,
@@ -117,6 +138,45 @@ class SetupChecker {
   }
 }
 
+/**
+ * A relative path that stays inside the archive it names.
+ *
+ * The character class alone is not enough: `.` and `..` are made of allowed
+ * characters, so a segment check is what actually keeps a packed file from
+ * climbing out of the directory it is extracted into.
+ */
+function isRelativePath(value: unknown, pattern: RegExp): value is string {
+  return (
+    typeof value === "string" &&
+    pattern.test(value) &&
+    !value.split("/").some((segment) => segment === "." || segment === "..")
+  );
+}
+
+/**
+ * A command whose every word stays inside the archive it is run in.
+ *
+ * The character class is not what keeps it there: `/` and `.` are allowed
+ * characters, so `/bin/sh setup.sh` and `python3 ../../etc/x.py` are made of
+ * them and each names something outside the extracted directory. The segment
+ * rule packed paths are held to is what refuses those, and requiring a word at
+ * all is what refuses an entrypoint of nothing but spaces.
+ */
+function isPlainCommand(value: unknown): value is string {
+  if (typeof value !== "string" || !BUNDLE_COMMAND_PATTERN.test(value)) {
+    return false;
+  }
+  const words = value.split(" ").filter((word) => word.length > 0);
+  return (
+    words.length > 0 &&
+    words.every(
+      (word) =>
+        !word.startsWith("/") &&
+        !word.split("/").some((segment) => segment === ".."),
+    )
+  );
+}
+
 function checkRequires(check: SetupChecker, requires: unknown): void {
   if (!isRecord(requires)) {
     check.fail("requires", "must be an object");
@@ -124,8 +184,11 @@ function checkRequires(check: SetupChecker, requires: unknown): void {
   }
 
   const { integrations, features } = requires;
-  if (!isRecord(integrations) || Object.keys(integrations).length === 0) {
-    check.fail("requires.integrations", "must be a non-empty object");
+  // Empty is meaningful rather than malformed: an automation that needs no
+  // credential connects to nothing, and the key stays required so that saying
+  // so is a deliberate statement instead of an omission.
+  if (!isRecord(integrations)) {
+    check.fail("requires.integrations", "must be an object");
   } else {
     Object.entries(integrations).forEach(([id, requirement]) => {
       const path = `requires.integrations.${id}`;
@@ -207,6 +270,18 @@ function checkField(check: SetupChecker, field: unknown, path: string): void {
   }
   if (type === "repo-picker" && provider === undefined) {
     check.fail(`${path}.provider`, "is required for a repository field");
+  }
+  // The host branches on this key to decide whether a field's value is a list,
+  // so a field declaring it anywhere else would be seeded with a list and
+  // rendered as a string.
+  if (
+    field.multiple !== undefined &&
+    (field.multiple !== true || type !== "repo-picker")
+  ) {
+    check.fail(
+      `${path}.multiple`,
+      "may only be true, and only on a repository field",
+    );
   }
 
   if (options !== undefined) {
@@ -321,6 +396,115 @@ function checkMessage(check: SetupChecker, message: unknown): void {
   }
 }
 
+/**
+ * The script tarball a direct entry may ship.
+ *
+ * The strings here are commands and paths this host acts on, so they are held
+ * to a closed character set rather than the placeholder rules copy uses: an
+ * entrypoint with a shell metacharacter, or a packed path that escapes the
+ * archive, is refused here rather than by the service.
+ */
+function checkBundle(check: SetupChecker, bundle: unknown): void {
+  if (!isRecord(bundle)) {
+    check.fail("setup.bundle", "must be an object");
+    return;
+  }
+
+  if (
+    typeof bundle.version !== "string" ||
+    !TEMPLATE_VERSION_PATTERN.test(bundle.version)
+  ) {
+    check.fail("setup.bundle.version", "must be a semantic version");
+  }
+  if (!isPlainCommand(bundle.entrypoint)) {
+    check.fail(
+      "setup.bundle.entrypoint",
+      "must be a plain command that stays inside the archive",
+    );
+  }
+  if (
+    bundle.setupScript !== undefined &&
+    !isRelativePath(bundle.setupScript, BUNDLE_PATH_PATTERN)
+  ) {
+    check.fail("setup.bundle.setupScript", "must be a relative path");
+  }
+  if (bundle.timeout !== undefined && !isInteger(bundle.timeout, 1)) {
+    check.fail("setup.bundle.timeout", "must be a positive integer");
+  }
+
+  if (!isRecord(bundle.files) || Object.keys(bundle.files).length === 0) {
+    check.fail("setup.bundle.files", "must be a non-empty object");
+  } else {
+    Object.entries(bundle.files).forEach(([packedPath, source]) => {
+      if (!isRelativePath(packedPath, BUNDLE_PATH_PATTERN)) {
+        check.fail(`setup.bundle.files.${packedPath}`, "is not a packed path");
+      }
+      // The rendered config is packed under this name too, and a tar carrying
+      // the name twice leaves which one the script reads to whichever
+      // extractor unpacks it.
+      if (packedPath === BUNDLE_CONFIG_FILENAME) {
+        check.fail(
+          `setup.bundle.files.${packedPath}`,
+          "is the name the rendered config is packed under",
+        );
+      }
+      if (!isRelativePath(source, BUNDLE_SOURCE_PATTERN)) {
+        check.fail(
+          `setup.bundle.files.${packedPath}`,
+          "must name a file under skills/ or automations/",
+        );
+      }
+    });
+
+    // A setup script the archive does not carry is a create request the
+    // service accepts and the first run fails on, and it is also the only
+    // thing packed executable - naming an unpacked file makes that rule
+    // unreachable.
+    if (
+      typeof bundle.setupScript === "string" &&
+      !(bundle.setupScript in bundle.files)
+    ) {
+      check.fail("setup.bundle.setupScript", "must name a packed file");
+    }
+  }
+
+  if (!isRecord(bundle.config) || Object.keys(bundle.config).length === 0) {
+    check.fail("setup.bundle.config", "must be a non-empty object");
+  } else {
+    checkBundleConfig(check, bundle.config, "setup.bundle.config");
+  }
+}
+
+/** Every string leaf of the config is a payload value: placeholders, no markup rule. */
+function checkBundleConfig(
+  check: SetupChecker,
+  node: unknown,
+  path: string,
+): void {
+  if (typeof node === "string") {
+    check.templateValue(node, path);
+    return;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((item, index) =>
+      checkBundleConfig(check, item, `${path}[${index}]`),
+    );
+    return;
+  }
+  if (isRecord(node)) {
+    Object.entries(node).forEach(([key, value]) =>
+      checkBundleConfig(check, value, `${path}.${key}`),
+    );
+    return;
+  }
+  if (node !== null && typeof node !== "number" && typeof node !== "boolean") {
+    check.fail(
+      path,
+      "must be a string, number, boolean, null, array or object",
+    );
+  }
+}
+
 function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   if (!isOneOf(setup.mode, SETUP_MODES)) {
     check.fail("setup.mode", "is not a supported mode");
@@ -328,7 +512,21 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
   }
 
   if (setup.mode === "direct") {
-    check.templateValue(setup.prompt, "setup.prompt");
+    // A direct entry produces one of two things: a prompt, or a script bundle
+    // the host packs and uploads. Both would be ambiguous, neither is nothing
+    // to create.
+    const hasPrompt = setup.prompt !== undefined;
+    const hasBundle = setup.bundle !== undefined;
+    if (hasPrompt === hasBundle) {
+      check.fail(
+        "setup",
+        "must declare exactly one of prompt or bundle for direct setup",
+      );
+    } else if (hasBundle) {
+      checkBundle(check, setup.bundle);
+    } else {
+      check.templateValue(setup.prompt, "setup.prompt");
+    }
     // A direct entry may carry a fallback-conversation seed for deployments
     // that cannot run the direct path, held to the same rules as an assisted
     // message.
@@ -360,6 +558,7 @@ function checkMode(check: SetupChecker, setup: Rec, kinds: string[]): void {
 
   checkMessage(check, setup.message);
   check.absent(setup, "prompt", "setup", "is only allowed for direct setup");
+  check.absent(setup, "bundle", "setup", "is only allowed for direct setup");
   check.absent(setup, "filter", "setup", "is only allowed for direct setup");
 }
 
@@ -400,6 +599,13 @@ export function validateSetupEntry(candidate: unknown): SetupValidationResult {
   }
   check.copy(candidate.name, "name");
   check.copy(candidate.description, "description");
+  if (
+    candidate.version !== undefined &&
+    (typeof candidate.version !== "string" ||
+      !TEMPLATE_VERSION_PATTERN.test(candidate.version))
+  ) {
+    check.fail("version", "must be a semantic version");
+  }
   if (
     candidate.skill !== undefined &&
     (typeof candidate.skill !== "string" ||

@@ -34,7 +34,7 @@ export default function AutomationTemplates() {
         <h1 className="text-xl font-semibold text-content">{spec.title}</h1>
         <p className="mt-1 text-sm text-muted">{spec.description}</p>
       </div>
-      <div className="flex max-w-xl items-stretch">
+      <div className="w-full">
         <SearchInput value={searchQuery} onChange={setSearchQuery} />
       </div>
       <RecommendedAutomationsLauncher query={searchQuery} />

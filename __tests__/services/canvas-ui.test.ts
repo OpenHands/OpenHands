@@ -29,7 +29,7 @@ describe("handleCanvasUIAction", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
-      contentViewNonce: 0,
+      openPaths: [],
     });
   });
 
@@ -44,7 +44,7 @@ describe("handleCanvasUIAction", () => {
     expect(conv.isRightPanelShown).toBe(true);
     expect(useFilesTabStore.getState().selectedPath).toBe("docs/intro.html");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
-    expect(useFilesTabStore.getState().contentViewNonce).toBeGreaterThan(0);
+    expect(useFilesTabStore.getState().openPaths).toEqual(["docs/intro.html"]);
   });
 
   it("show_preview selects the files tab and the requested path", () => {
@@ -142,7 +142,7 @@ describe("openWorkspaceFile", () => {
     useFilesTabStore.setState({
       selectedPath: null,
       selectedConversationId: null,
-      contentViewNonce: 0,
+      openPaths: [],
     });
   });
 
@@ -158,7 +158,7 @@ describe("openWorkspaceFile", () => {
     expect(useConversationStore.getState().isRightPanelShown).toBe(true);
     expect(useFilesTabStore.getState().selectedPath).toBe("test.md");
     expect(useFilesTabStore.getState().selectedConversationId).toBe("conv-1");
-    expect(useFilesTabStore.getState().contentViewNonce).toBeGreaterThan(0);
+    expect(useFilesTabStore.getState().openPaths).toEqual(["test.md"]);
   });
 });
 
