@@ -47,6 +47,16 @@ function buildMixedSkills(): SkillInfo[] {
   ];
 }
 
+/**
+ * The filter helpers take enablement as a predicate — resolving the allow-list
+ * and deny-list behind it is the caller's job — so these tests express the
+ * cases they care about as a deny-set.
+ */
+function enabledExcept(...names: string[]) {
+  const denied = new Set(names);
+  return (skill: SkillInfo) => !denied.has(skill.name);
+}
+
 function stateWith(
   overrides: Partial<SkillFilterState> = {},
 ): SkillFilterState {
@@ -57,7 +67,7 @@ describe("parseSkillFilterState", () => {
   it("reads every facet plus the query", () => {
     const state = parseSkillFilterState(
       new URLSearchParams(
-        "q=deno&source=personal&source=public&category=environment&type=repo&state=disabled",
+        "q=deno&source=personal&source=public&category=environment&type=repo&state=disabled&recommendation=recommended",
       ),
     );
 
@@ -66,6 +76,7 @@ describe("parseSkillFilterState", () => {
     expect([...state.categories]).toEqual(["environment"]);
     expect([...state.types]).toEqual(["repo"]);
     expect([...state.states]).toEqual(["disabled"]);
+    expect([...state.recommendations]).toEqual(["recommended"]);
   });
 
   it.each([
@@ -73,6 +84,7 @@ describe("parseSkillFilterState", () => {
     ["category", "category=code-hostig"],
     ["type", "type=bogus"],
     ["state", "state=maybe"],
+    ["recommendation", "recommendation=maybe"],
   ])("drops unknown %s values instead of erroring", (_label, search) => {
     const state = parseSkillFilterState(new URLSearchParams(search));
     expect(countActiveFilters(state)).toBe(0);
@@ -97,12 +109,12 @@ describe("parseSkillFilterState", () => {
 
 describe("applySkillFilters", () => {
   const skills = buildMixedSkills();
-  const disabled = new Set(["prd"]);
+  const isEnabled = enabledExcept("prd");
 
   it("ORs values within a group", () => {
     const result = applySkillFilters(
       skills,
-      disabled,
+      isEnabled,
       stateWith({ categories: new Set(["environment", "writing"]) }),
     );
     expect(result.map((s) => s.name)).toEqual(["deno", "prd"]);
@@ -111,7 +123,7 @@ describe("applySkillFilters", () => {
   it("ANDs across groups", () => {
     const result = applySkillFilters(
       skills,
-      disabled,
+      isEnabled,
       stateWith({
         categories: new Set(["environment", "writing"]),
         states: new Set(["disabled"]),
@@ -123,7 +135,7 @@ describe("applySkillFilters", () => {
   it("treats a category-less skill as other", () => {
     const result = applySkillFilters(
       skills,
-      disabled,
+      isEnabled,
       stateWith({ categories: new Set(["other"]) }),
     );
     expect(result.map((s) => s.name)).toEqual(["house-rules"]);
@@ -133,12 +145,12 @@ describe("applySkillFilters", () => {
     expect(
       applySkillFilters(
         skills,
-        disabled,
+        isEnabled,
         stateWith({ query: "Requirements" }),
       ).map((s) => s.name),
     ).toEqual(["prd"]);
     expect(
-      applySkillFilters(skills, disabled, stateWith({ query: "deno" })).map(
+      applySkillFilters(skills, isEnabled, stateWith({ query: "deno" })).map(
         (s) => s.name,
       ),
     ).toEqual(["deno"]);
@@ -146,7 +158,7 @@ describe("applySkillFilters", () => {
 
   it("returns everything when no facet is selected", () => {
     expect(
-      applySkillFilters(skills, disabled, EMPTY_SKILL_FILTER_STATE),
+      applySkillFilters(skills, isEnabled, EMPTY_SKILL_FILTER_STATE),
     ).toHaveLength(3);
   });
 });
@@ -160,7 +172,7 @@ describe("buildSkillFacetGroups", () => {
 
     const groups = buildSkillFacetGroups(
       publicOnly,
-      new Set(),
+      enabledExcept(),
       EMPTY_SKILL_FILTER_STATE,
     );
 
@@ -178,7 +190,7 @@ describe("buildSkillFacetGroups", () => {
 
     const groups = buildSkillFacetGroups(
       publicOnly,
-      new Set(),
+      enabledExcept(),
       stateWith({ sources: new Set(["project"]) }),
     );
 
@@ -193,7 +205,7 @@ describe("buildSkillFacetGroups", () => {
   it("shows groups once a second value exists", () => {
     const groups = buildSkillFacetGroups(
       buildMixedSkills(),
-      new Set(["prd"]),
+      enabledExcept("prd"),
       EMPTY_SKILL_FILTER_STATE,
     );
 
@@ -208,7 +220,7 @@ describe("buildSkillFacetGroups", () => {
   it("labels rows with i18n keys rather than translated text", () => {
     const groups = buildSkillFacetGroups(
       buildMixedSkills(),
-      new Set(["prd"]),
+      enabledExcept("prd"),
       EMPTY_SKILL_FILTER_STATE,
     );
     const category = groups.find((g) => g.id === "category")!;
@@ -227,7 +239,7 @@ describe("buildSkillFacetGroups", () => {
   it("counts rows against other groups but not the group's own selection", () => {
     const groups = buildSkillFacetGroups(
       buildMixedSkills(),
-      new Set(["prd"]),
+      enabledExcept("prd"),
       stateWith({ states: new Set(["enabled"]) }),
     );
 
@@ -246,11 +258,11 @@ describe("buildSkillFacetGroups", () => {
 
   it("keeps a different group's visibility stable while one facet narrows", () => {
     const skills = buildMixedSkills();
-    const disabled = new Set(["prd"]);
+    const isEnabled = enabledExcept("prd");
 
     const narrowed = buildSkillFacetGroups(
       skills,
-      disabled,
+      isEnabled,
       stateWith({ categories: new Set(["environment"]) }),
     );
 
@@ -262,27 +274,61 @@ describe("buildSkillFacetGroups", () => {
 
   it("keeps group visibility stable while a search query narrows results", () => {
     const skills = buildMixedSkills();
-    const disabled = new Set(["prd"]);
+    const isEnabled = enabledExcept("prd");
     const unfiltered = buildSkillFacetGroups(
       skills,
-      disabled,
+      isEnabled,
       EMPTY_SKILL_FILTER_STATE,
     );
 
     // "Requirements" matches only `prd`, so a query-filtered denominator would collapse every group to one value.
     const narrowed = buildSkillFacetGroups(
       skills,
-      disabled,
+      isEnabled,
       stateWith({ query: "Requirements" }),
     );
 
     expect(narrowed.map((g) => g.id)).toEqual(unfiltered.map((g) => g.id));
   });
 
+  it("adds a recommendation group once the catalog flags one of the skills", () => {
+    // `add-skill` carries `defaultEnabled` in the bundled catalog; `deno` does
+    // not, which is what gives the group two discriminating values.
+    const groups = buildSkillFacetGroups(
+      [buildSkill({ name: "add-skill" }), buildSkill({ name: "deno" })],
+      enabledExcept(),
+      EMPTY_SKILL_FILTER_STATE,
+    );
+
+    const recommendation = groups.find((g) => g.id === "recommendation")!;
+    expect(recommendation.labelKey).toBe(
+      I18nKey.SETTINGS$SKILLS_FACET_RECOMMENDATION,
+    );
+    expect(recommendation.rows.map((r) => [r.value, r.count])).toEqual([
+      ["recommended", 1],
+      ["other", 1],
+    ]);
+  });
+
+  it("filters down to the catalog's recommended skills", () => {
+    const skills = [
+      buildSkill({ name: "add-skill" }),
+      buildSkill({ name: "deno" }),
+    ];
+
+    expect(
+      applySkillFilters(
+        skills,
+        enabledExcept(),
+        stateWith({ recommendations: new Set(["recommended"]) }),
+      ).map((s) => s.name),
+    ).toEqual(["add-skill"]);
+  });
+
   it("disables a zero-count row unless it is checked", () => {
     const groups = buildSkillFacetGroups(
       buildMixedSkills(),
-      new Set(["prd"]),
+      enabledExcept("prd"),
       stateWith({ states: new Set(["enabled"]) }),
     );
     const rows = groups.find((g) => g.id === "category")!.rows;
