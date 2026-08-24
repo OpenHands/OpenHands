@@ -37,6 +37,11 @@ const SHARED_DEFAULTS = JSON.parse(
 );
 
 const DEFAULT_BACKEND_PORT = SHARED_DEFAULTS.ports.agentServer;
+// Path prefix the bundled editor is served under. The same value has to reach
+// agent-server (as OH_VSCODE_BASE_PATH, so openvscode-server is launched with
+// --server-base-path and advertises the prefix) and the ingress route table,
+// or the advertised URL and the route that serves it disagree.
+export const VSCODE_BASE_PATH = SHARED_DEFAULTS.paths.vscodeBasePath;
 const DEFAULT_VITE_PORT = 3001;
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_AGENT_SERVER_PACKAGE = SHARED_DEFAULTS.packages.agentServer;
@@ -53,6 +58,11 @@ const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
   SHARED_DEFAULTS.constraints?.agentClientProtocol;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
+  SHARED_DEFAULTS.telemetry.posthogApiKey;
+const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
+  SHARED_DEFAULTS.telemetry.posthogHost;
+const AGENT_SERVER_POSTHOG_CONSTRAINT = "posthog>=6,<7";
 const FRONTEND_REQUIRED_BINS = ["cross-env", "react-router"];
 
 /**
@@ -401,7 +411,7 @@ export function validateFrontendDependencies(
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
- * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.40.1")
+ * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.42.1")
  *
  * If none are set, defaults to the released version specified by
  * DEFAULT_AGENT_SERVER_VERSION. Set OH_AGENT_SERVER_GIT_REF to use a
@@ -434,6 +444,8 @@ export function buildAgentServerCommand(env = process.env) {
       path.join(localPath, "openhands-tools"),
       "--with-editable",
       path.join(localPath, "openhands-workspace"),
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `local (${localPath})`;
@@ -458,6 +470,8 @@ export function buildAgentServerCommand(env = process.env) {
       `${baseGitUrl}#subdirectory=openhands-tools`,
       "--with",
       `${baseGitUrl}#subdirectory=openhands-workspace`,
+      "--with",
+      AGENT_SERVER_POSTHOG_CONSTRAINT,
       "agent-server",
     );
     source = `git (${gitRef})`;
@@ -478,6 +492,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -496,6 +511,7 @@ export function buildAgentServerCommand(env = process.env) {
     if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
       uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
     }
+    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
@@ -588,6 +604,7 @@ export async function buildSafeDevConfigAsync(
  * @property {string} cwd
  * @property {number} backendPort
  * @property {number} vscodePort
+ * @property {string} vscodeBasePath
  * @property {string} stateDir
  * @property {string} tmuxTmpDir
  * @property {string} conversationsPath
@@ -646,6 +663,7 @@ function buildConfigFromPorts(ports, cwd, env) {
     cwd,
     backendPort,
     vscodePort,
+    vscodeBasePath: VSCODE_BASE_PATH,
     stateDir,
     // tmux socket directory. Defaults to <stateDir>/tmux (under
     // ~/.openhands/agent-canvas), matching where the rest of dev state lives
@@ -677,16 +695,88 @@ function buildConfigFromPorts(ports, cwd, env) {
 }
 
 /**
+ * Telemetry-related env vars for the agent-server process.
+ *
+ * Split out from `buildAgentServerEnv` so callers that assemble their own
+ * agent-server environment can reuse the same mapping.
+ *
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Telemetry env vars for agent-server
+ */
+export function buildAgentServerTelemetryEnv(env = process.env) {
+  const telemetryDisabled =
+    env.VITE_DO_NOT_TRACK === "1" || env.DO_NOT_TRACK === "1";
+  const result = {};
+
+  for (const key of [
+    "OH_TELEMETRY_EXPORTER",
+    "OH_TELEMETRY_POSTHOG_API_KEY",
+    "OH_TELEMETRY_POSTHOG_HOST",
+    "OH_TELEMETRY_HTTP_ENDPOINT",
+    "OH_TELEMETRY_HTTP_TOKEN",
+    "OH_TELEMETRY_CONSENT",
+    "OH_TELEMETRY_CONSENT_MODE",
+    "OH_TELEMETRY_SALT",
+  ]) {
+    if (env[key]) result[key] = env[key];
+  }
+
+  if (telemetryDisabled) {
+    result.DO_NOT_TRACK = "1";
+  }
+
+  const apiKey =
+    env.OH_TELEMETRY_POSTHOG_API_KEY ||
+    env.VITE_POSTHOG_API_KEY ||
+    (telemetryDisabled ? "" : DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY);
+  const exporter = env.OH_TELEMETRY_EXPORTER || (apiKey ? "posthog" : "");
+
+  if (exporter) {
+    result.OH_TELEMETRY_EXPORTER = exporter;
+  }
+
+  if (exporter === "posthog" && apiKey) {
+    result.OH_TELEMETRY_POSTHOG_API_KEY = apiKey;
+    result.OH_TELEMETRY_POSTHOG_HOST =
+      env.OH_TELEMETRY_POSTHOG_HOST ||
+      env.VITE_POSTHOG_HOST ||
+      DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST;
+  }
+
+  return result;
+}
+
+/**
  * Build the environment variables object for spawning the agent-server process.
  *
  * This is exported so downstream consumers (e.g., automation service) can use
  * the same env vars without duplicating the mapping logic.
  *
+ * `vscodeBasePath` is an explicit opt-in rather than a field read off `config`,
+ * and that is deliberate. Setting it changes the URL `/api/vscode/url`
+ * advertises: agent-server appends the prefix to the browser origin the
+ * frontend sends, so the editor is only reachable if the same origin also
+ * routes that prefix to the editor port. A launcher that sets it without
+ * registering the route advertises `<origin>/vscode/…`, which serves the
+ * canvas SPA shell instead of the editor.
+ *
+ * Requiring the caller to name it makes the pairing greppable: every call site
+ * that passes `vscodeBasePath` must also register a matching route, and
+ * `__tests__/scripts/vscode-base-path-opt-in.test.ts` asserts that no launcher
+ * opts in without one.
+ *
  * @param {ReturnType<typeof buildSafeDevConfig>} config - Config from buildSafeDevConfig
+ * @param {{vscodeBasePath?: string | null, env?: Record<string, string | undefined>}} [options]
+ * @param {string | null} [options.vscodeBasePath] - Opt into prefix-mode by
+ *   passing the path prefix the caller also routes to `config.vscodePort`.
+ * @param {Record<string, string | undefined>} [options.env] - Source
+ *   environment for the telemetry mapping (defaults to `process.env`).
  * @returns {Record<string, string>} Environment variables for agent-server
  */
-export function buildAgentServerEnv(config) {
+export function buildAgentServerEnv(config, options = {}) {
+  const { vscodeBasePath = null, env = process.env } = options;
   return {
+    ...buildAgentServerTelemetryEnv(env),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
@@ -704,6 +794,13 @@ export function buildAgentServerEnv(config) {
     OH_CONVERSATIONS_PATH: config.conversationsPath,
     OH_BASH_EVENTS_DIR: config.bashEventsDir,
     OH_VSCODE_PORT: String(config.vscodePort),
+    // Serve the editor under a path prefix on the canvas origin rather than on
+    // its own published port. agent-server passes this to openvscode-server as
+    // --server-base-path and includes it in the URL from /api/vscode/url, which
+    // matches the ingress route the caller registers for the same prefix.
+    //
+    // Omitted unless the caller opts in — see the note on this function.
+    ...(vscodeBasePath ? { OH_VSCODE_BASE_PATH: vscodeBasePath } : {}),
     OH_SECRET_KEY: config.secretKey,
     // Use OH_SESSION_API_KEYS_0 for agent-server V1 config format
     OH_SESSION_API_KEYS_0: config.sessionApiKey,
@@ -899,7 +996,12 @@ async function main() {
       cwd: config.cwd,
       env: {
         ...process.env,
-        ...buildAgentServerEnv(config),
+        // Opt into prefix-mode: the Vite dev server proxies the same prefix to
+        // `config.vscodePort` (see VITE_VSCODE_TARGET below), so the advertised
+        // URL resolves on the frontend origin the browser is actually on.
+        ...buildAgentServerEnv(config, {
+          vscodeBasePath: config.vscodeBasePath,
+        }),
       },
     },
   );
@@ -931,6 +1033,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // Services are spawned detached, so a SIGHUP that kills this launcher (terminal
+  // or multiplexer death) would otherwise leave the whole tree running. Forward
+  // SIGTERM rather than SIGHUP: uvicorn only handles SIGINT/SIGTERM, so a
+  // forwarded SIGHUP would terminate the agent-server by default action instead
+  // of shutting it down gracefully.
+  process.on("SIGHUP", () => shutdown("SIGTERM"));
 
   const backendErrored = new Promise((_, reject) => {
     backend.once("error", (error) => reject(error));
@@ -968,6 +1076,12 @@ async function main() {
       VITE_WORKING_DIR: config.workingDir,
       // Pass session API key so frontend can authenticate with agent-server
       VITE_SESSION_API_KEY: config.sessionApiKey,
+      // This mode has no static server or ingress in front of Vite, so Vite's
+      // own proxy is the only thing that can serve the editor prefix on the
+      // frontend origin. The editor is a separate process on a port of its
+      // own, so it needs its own proxy target rather than VITE_BACKEND_HOST.
+      VITE_VSCODE_BASE_PATH: config.vscodeBasePath,
+      VITE_VSCODE_TARGET: `http://127.0.0.1:${config.vscodePort}`,
       // dev:minimal deliberately does NOT supply runtime-services info (the
       // frontend here talks straight to the agent-server over
       // VITE_BACKEND_BASE_URL — there is no ingress or static-server in front

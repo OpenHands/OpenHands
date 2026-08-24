@@ -1,22 +1,34 @@
+import { http, HttpResponse } from "msw";
 import type {
   AgentProfile,
   AgentProfileSaveInput,
   AgentProfileSummary,
 } from "@openhands/typescript-client";
-import { http, HttpResponse } from "msw";
 
 /**
- * MSW handlers for the `/api/agent-profiles` endpoints.
+ * In-memory agent-profile store for the mock agent-server API. Keyed by name
+ * (agent-server uses name-based lookups, not IDs).
  *
- * Settings → Agent *is* the agent-profile library (#1571), and the embedded
- * editor behind it is the only surface that renders `AgentSettingsScreen`.
- * Without these handlers the page shows "Failed to load profiles" under
- * `npm run dev:mock`, so the whole agent-settings form is unreachable there.
+ * Two consumers depend on it:
  *
- * State is per-page-load and deliberately in-memory: create, edit, rename and
- * delete all round-trip so the editor's save path (a whole-profile overwrite)
- * can be exercised, but nothing persists across a refresh.
+ * - Settings → Agent *is* the agent-profile library (#1571), and the embedded
+ *   editor behind it is the only surface that renders `AgentSettingsScreen`.
+ *   Without a seeded store the page shows "Failed to load profiles" under
+ *   `npm run dev:mock`, so the whole agent-settings form is unreachable there.
+ * - `useCreateConversation` no longer downgrades silently when the profile
+ *   list fails (#16523): in non-mocked tests `listProfiles` would hit the real
+ *   network, reject, and surface as a hard failure.
+ *
+ * State is per-module-load and deliberately in-memory: create, edit, rename
+ * and delete all round-trip so the editor's save path (a whole-profile
+ * overwrite) can be exercised, but nothing persists across a refresh.
+ *
+ * Imported as a live module so consumers can seed entries and reset between
+ * tests without re-registering handlers.
  */
+const profiles = new Map<string, AgentProfile>();
+
+let activeProfileId: string | null = null;
 
 const DEFAULT_VERIFICATION = {
   critic_enabled: false,
@@ -48,33 +60,57 @@ function makeOpenHandsProfile(
   } as AgentProfile;
 }
 
-const MOCK_AGENT_PROFILES = new Map<string, AgentProfile>();
-let activeAgentProfileId: string | null = null;
+/** Stable id of the seeded `default` profile (the active one after a seed). */
+export const MOCK_DEFAULT_AGENT_PROFILE_ID =
+  "3f1c1b7e-0000-4000-8000-000000000001";
 
-function seed() {
-  MOCK_AGENT_PROFILES.clear();
-  for (const profile of [
-    makeOpenHandsProfile({
-      id: "3f1c1b7e-0000-4000-8000-000000000001",
-      name: "default",
-    }),
-    makeOpenHandsProfile({
-      id: "3f1c1b7e-0000-4000-8000-000000000002",
-      name: "research",
-      enable_sub_agents: true,
-      tool_concurrency_limit: 4,
-    }),
-  ]) {
-    MOCK_AGENT_PROFILES.set(profile.name, profile);
-  }
-  activeAgentProfileId = "3f1c1b7e-0000-4000-8000-000000000001";
+const SEEDED_PROFILES: readonly AgentProfile[] = [
+  makeOpenHandsProfile({
+    id: MOCK_DEFAULT_AGENT_PROFILE_ID,
+    name: "default",
+  }),
+  makeOpenHandsProfile({
+    id: "3f1c1b7e-0000-4000-8000-000000000002",
+    name: "research",
+    enable_sub_agents: true,
+    tool_concurrency_limit: 4,
+  }),
+];
+
+// Monotonic so ids minted after a delete never collide with a live profile.
+let nextProfileSeq = SEEDED_PROFILES.length + 1;
+
+function newProfileId(): string {
+  const suffix = String(nextProfileSeq).padStart(12, "0");
+  nextProfileSeq += 1;
+  return `3f1c1b7e-0000-4000-8000-${suffix}`;
 }
-seed();
 
-function toSummary(profile: AgentProfile): AgentProfileSummary {
+/** Reset the in-memory store to empty (no profiles, no active pointer). */
+export function resetMockAgentProfiles(): void {
+  profiles.clear();
+  activeProfileId = null;
+  nextProfileSeq = SEEDED_PROFILES.length + 1;
+}
+
+/**
+ * Restore the seeded store: a `default` profile (active, mirroring what the
+ * agent-server seeds on first run) plus a `research` profile so the library
+ * has something to switch between.
+ */
+export function seedMockAgentProfiles(): void {
+  resetMockAgentProfiles();
+  for (const profile of SEEDED_PROFILES) {
+    profiles.set(profile.name, { ...profile });
+  }
+  activeProfileId = MOCK_DEFAULT_AGENT_PROFILE_ID;
+}
+seedMockAgentProfiles();
+
+function toSummary(name: string, profile: AgentProfile): AgentProfileSummary {
   return {
     id: profile.id,
-    name: profile.name,
+    name,
     agent_kind: profile.agent_kind,
     revision: profile.revision,
     llm_profile_ref:
@@ -83,87 +119,127 @@ function toSummary(profile: AgentProfile): AgentProfileSummary {
   };
 }
 
-function newProfileId() {
-  const suffix = String(MOCK_AGENT_PROFILES.size + 1).padStart(12, "0");
-  return `3f1c1b7e-0000-4000-8000-${suffix}`;
+function notFound(name: string) {
+  return HttpResponse.json(
+    { detail: `Agent profile '${name}' not found` },
+    { status: 404 },
+  );
 }
 
+/**
+ * Mock handlers for the agent-server `/api/agent-profiles` endpoints (the same
+ * contract consumed by `AgentProfilesService` and the cloud proxy).
+ *
+ * Routes mirror `agent_profiles_router.py` in the agent-server. MSW anchors its
+ * path matcher, so the list route never claims the `:name` routes below and no
+ * extra path guarding is needed.
+ */
 export const AGENT_PROFILES_HANDLERS = [
-  http.get("*/api/agent-profiles", async () =>
-    HttpResponse.json({
-      profiles: [...MOCK_AGENT_PROFILES.values()].map(toSummary),
-      active_agent_profile_id: activeAgentProfileId,
-    }),
-  ),
+  // GET /api/agent-profiles - List all profiles + the active id.
+  http.get("*/api/agent-profiles", async () => {
+    const summaries = Array.from(profiles.entries()).map(([name, profile]) =>
+      toSummary(name, profile),
+    );
+    return HttpResponse.json({
+      profiles: summaries,
+      active_agent_profile_id: activeProfileId,
+    });
+  }),
 
+  // GET /api/agent-profiles/:name - Fetch a single profile.
   http.get("*/api/agent-profiles/:name", async ({ params }) => {
-    const name = String(params.name);
-    const profile = MOCK_AGENT_PROFILES.get(name);
-    if (!profile) {
-      return HttpResponse.json(
-        { detail: "Profile not found" },
-        { status: 404 },
-      );
+    const { name } = params;
+    if (typeof name !== "string") {
+      return HttpResponse.json({ detail: "Invalid name" }, { status: 400 });
     }
+    const profile = profiles.get(name);
+    if (!profile) return notFound(name);
     return HttpResponse.json({ name, profile });
   }),
 
+  // POST /api/agent-profiles/:name/rename - Rename a profile.
   http.post(
     "*/api/agent-profiles/:name/rename",
     async ({ params, request }) => {
-      const name = String(params.name);
-      const profile = MOCK_AGENT_PROFILES.get(name);
-      if (!profile) {
+      const { name } = params;
+      if (typeof name !== "string") {
+        return HttpResponse.json({ detail: "Invalid name" }, { status: 400 });
+      }
+      const body = (await request.json()) as { new_name?: string } | null;
+      const newName = body?.new_name;
+      if (!newName) {
         return HttpResponse.json(
-          { detail: "Profile not found" },
-          { status: 404 },
+          { detail: "new_name is required" },
+          { status: 422 },
         );
       }
-      const { new_name: newName } = (await request.json()) as {
-        new_name: string;
-      };
-      if (MOCK_AGENT_PROFILES.has(newName)) {
+      const profile = profiles.get(name);
+      if (!profile) return notFound(name);
+      if (newName !== name && profiles.has(newName)) {
         return HttpResponse.json(
-          { detail: "Name already taken" },
+          { detail: `Agent profile '${newName}' already exists` },
           { status: 409 },
         );
       }
-      MOCK_AGENT_PROFILES.delete(name);
-      // Rename preserves the stable id and the active pointer with it.
-      MOCK_AGENT_PROFILES.set(newName, { ...profile, name: newName });
-      return HttpResponse.json({ name: newName, message: "Profile renamed" });
+      profiles.delete(name);
+      // Rename preserves the stable id, and the active pointer with it.
+      profiles.set(newName, { ...profile, name: newName });
+      return HttpResponse.json({
+        name: newName,
+        message: "Agent profile renamed.",
+      });
     },
   ),
 
+  // POST /api/agent-profiles/:id/activate - Activate by stable UUID (pointer-only).
   http.post("*/api/agent-profiles/:id/activate", async ({ params }) => {
-    const id = String(params.id);
-    activeAgentProfileId = id;
+    const { id } = params;
+    if (typeof id !== "string") {
+      return HttpResponse.json({ detail: "Invalid id" }, { status: 400 });
+    }
+    const profile = Array.from(profiles.values()).find((p) => p.id === id);
+    if (!profile) return notFound(id);
+    activeProfileId = id;
     return HttpResponse.json({
       id,
-      message: "Profile activated",
+      message: "Agent profile activated.",
       agent_settings_applied: false,
     });
   }),
 
+  // POST /api/agent-profiles/:name - Create or overwrite a profile (upsert).
   http.post("*/api/agent-profiles/:name", async ({ params, request }) => {
-    const name = String(params.name);
-    const input = (await request.json()) as AgentProfileSaveInput;
-    const existing = MOCK_AGENT_PROFILES.get(name);
+    const { name } = params;
+    if (typeof name !== "string") {
+      return HttpResponse.json({ detail: "Invalid name" }, { status: 400 });
+    }
+    const body = (await request.json()) as AgentProfileSaveInput;
+    const existing = profiles.get(name);
     // Upsert with server-managed identity: the id survives an overwrite and
     // the revision counter moves, matching `save_profile_preserving_identity`.
-    MOCK_AGENT_PROFILES.set(name, {
-      ...(input as AgentProfile),
+    // A caller-supplied id is honoured only on create, so tests can seed a
+    // profile with a known id and activate it.
+    profiles.set(name, {
+      ...(body as AgentProfile),
       name,
-      id: existing?.id ?? newProfileId(),
+      id: existing?.id ?? body.id ?? newProfileId(),
       revision: (existing?.revision ?? 0) + 1,
     });
-    return HttpResponse.json({ name, message: "Profile saved" });
+    return HttpResponse.json({ name, message: "Agent profile saved." });
   }),
 
+  // DELETE /api/agent-profiles/:name - Delete by name (idempotent).
   http.delete("*/api/agent-profiles/:name", async ({ params }) => {
-    const name = String(params.name);
-    // Delete is idempotent server-side — a missing name still resolves 200.
-    MOCK_AGENT_PROFILES.delete(name);
-    return HttpResponse.json({ name, message: "Profile deleted" });
+    const { name } = params;
+    if (typeof name !== "string") {
+      return HttpResponse.json({ detail: "Invalid name" }, { status: 400 });
+    }
+    // Deleting the active profile clears the pointer rather than leaving it
+    // dangling; a missing name still resolves 200, as on the server.
+    if (activeProfileId === profiles.get(name)?.id) {
+      activeProfileId = null;
+    }
+    profiles.delete(name);
+    return HttpResponse.json({ name, message: "Agent profile deleted." });
   }),
 ];

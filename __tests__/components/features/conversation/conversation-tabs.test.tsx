@@ -20,7 +20,7 @@ const REAL_CONVERSATION_ID = "conv-abc123";
 let mockConversationId = TASK_CONVERSATION_ID;
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
+  useOptionalConversationId: () => ({ conversationId: mockConversationId }),
   useConversationId: () => ({ conversationId: mockConversationId }),
 }));
 
@@ -58,7 +58,9 @@ vi.mock("#/hooks/query/use-unified-vscode-url", () => ({
   useUnifiedVSCodeUrl: () => ({
     data: { url: "http://localhost:8001", error: null },
     isLoading: false,
-    refetch: vi.fn().mockResolvedValue({ data: { url: "http://localhost:8001" } }),
+    refetch: vi
+      .fn()
+      .mockResolvedValue({ data: { url: "http://localhost:8001" } }),
   }),
 }));
 
@@ -82,6 +84,8 @@ const seedConversationState = (
     JSON.stringify({
       selectedTab: "files",
       unpinnedTabs: [],
+      unpinnedOverviewSections: [],
+      unpinnedOverviewGitParts: [],
       conversationMode: "code",
       subConversationTaskId: null,
       draftMessage: null,
@@ -102,6 +106,7 @@ function seedActiveBackend(backend: Backend): void {
 const setActiveTabState = (tab: "files" | "planner") => {
   seedConversationState(REAL_CONVERSATION_ID, {
     selectedTab: tab,
+    rightPanelShown: true,
   });
   useConversationStore.setState({
     selectedTab: tab,
@@ -160,9 +165,7 @@ describe("ConversationTabs localStorage behavior", () => {
       const parsed = JSON.parse(storedState!);
       expect(parsed).toHaveProperty("selectedTab");
       expect(parsed).toHaveProperty("unpinnedTabs");
-      // The right-drawer open state is session-only and must never
-      // be persisted into the consolidated conversation-state blob.
-      expect(parsed).not.toHaveProperty("rightPanelShown");
+      expect(parsed.rightPanelShown).toBe(true);
     });
   });
 
@@ -186,16 +189,15 @@ describe("ConversationTabs localStorage behavior", () => {
       const terminalTab = screen.getByTestId("conversation-tab-terminal");
       await user.click(terminalTab);
 
-      // Assert: Panel should be open and terminal tab selected (in-memory only).
+      // Assert: Panel should be open and terminal tab selected.
       expect(useConversationStore.getState().selectedTab).toBe("terminal");
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(true);
 
-      // Tab selection persists to localStorage; drawer-open state does not.
       const storedState = JSON.parse(
         localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
       expect(storedState.selectedTab).toBe("terminal");
-      expect(storedState).not.toHaveProperty("rightPanelShown");
+      expect(storedState.rightPanelShown).toBe(true);
     });
 
     it("should close panel when clicking the same active tab", async () => {
@@ -203,6 +205,10 @@ describe("ConversationTabs localStorage behavior", () => {
       const user = userEvent.setup();
 
       // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
       useConversationStore.setState({
         selectedTab: "files",
         isRightPanelShown: true,
@@ -217,17 +223,13 @@ describe("ConversationTabs localStorage behavior", () => {
       const editorTab = screen.getByTestId("conversation-tab-files");
       await user.click(editorTab);
 
-      // Assert: Panel should be closed (in-memory only).
+      // Assert: Panel should be closed and persisted.
       expect(useConversationStore.getState().hasRightPanelToggled).toBe(false);
 
-      // localStorage must NOT carry the drawer-open state — that's
-      // session-only by design.
-      const raw = localStorage.getItem(
-        `conversation-state-${REAL_CONVERSATION_ID}`,
+      const storedState = JSON.parse(
+        localStorage.getItem(`conversation-state-${REAL_CONVERSATION_ID}`)!,
       );
-      if (raw !== null) {
-        expect(JSON.parse(raw)).not.toHaveProperty("rightPanelShown");
-      }
+      expect(storedState.rightPanelShown).toBe(false);
     });
 
     it("should switch to different tab when clicking another tab while panel is open", async () => {
@@ -235,6 +237,10 @@ describe("ConversationTabs localStorage behavior", () => {
       const user = userEvent.setup();
 
       // Arrange: Panel is open with editor tab selected
+      seedConversationState(REAL_CONVERSATION_ID, {
+        selectedTab: "files",
+        rightPanelShown: true,
+      });
       useConversationStore.setState({
         selectedTab: "files",
         isRightPanelShown: true,
@@ -289,7 +295,7 @@ describe("ConversationTabs localStorage behavior", () => {
       expect(refreshButtons).toHaveLength(0);
     });
 
-    it("places the Files tab leftmost in the tab bar", () => {
+    it("places the Files tab leftmost, followed by Commits", () => {
       setActiveTabState("files");
 
       render(<ConversationTabs />, {
@@ -300,8 +306,13 @@ describe("ConversationTabs localStorage behavior", () => {
         document.querySelectorAll('[data-testid^="conversation-tab-"]'),
       );
       const testIds = tabs.map((t) => t.getAttribute("data-testid"));
-      // Files must be the first tab rendered in the bar.
+      // Files must be the first tab; Commits sits beside it as the git view.
       expect(testIds[0]).toBe("conversation-tab-files");
+      expect(testIds).toContain("conversation-tab-commits");
+      expect(testIds).not.toContain("conversation-tab-changes");
+      expect(testIds.indexOf("conversation-tab-files")).toBeLessThan(
+        testIds.indexOf("conversation-tab-commits"),
+      );
     });
 
     it("keeps Files leftmost even when the task list tab is present", () => {
@@ -335,6 +346,7 @@ describe("ConversationTabs localStorage behavior", () => {
       seedConversationState(REAL_CONVERSATION_ID, {
         selectedTab: "planner",
         unpinnedTabs: ["planner"],
+        rightPanelShown: true,
       });
       useConversationStore.setState({
         selectedTab: "planner",
@@ -365,6 +377,7 @@ describe("ConversationTabs localStorage behavior", () => {
       seedConversationState(REAL_CONVERSATION_ID, {
         selectedTab: "files",
         unpinnedTabs: ["planner"],
+        rightPanelShown: true,
       });
       useConversationStore.setState({
         selectedTab: "files",
@@ -510,7 +523,7 @@ describe("ConversationTabs localStorage behavior", () => {
       mockConversationId = REAL_CONVERSATION_ID;
     });
 
-    it("should hide the vscode link when the active backend is local", () => {
+    it("should show the vscode link when the active backend is local", () => {
       // Arrange
       seedActiveBackend({
         id: "local-test",
@@ -525,10 +538,10 @@ describe("ConversationTabs localStorage behavior", () => {
         wrapper: createWrapper(REAL_CONVERSATION_ID),
       });
 
-      // Assert
-      expect(
-        screen.queryByTestId("drawer-vscode-link"),
-      ).not.toBeInTheDocument();
+      // Assert — self-hosted backends serve VSCode too; the URL comes from
+      // the agent server's /api/vscode/url via useUnifiedVSCodeUrl's local
+      // branch, rather than from cloud `exposed_urls`.
+      expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
     });
 
     it("should show the vscode link when the active backend is cloud", () => {
@@ -548,6 +561,52 @@ describe("ConversationTabs localStorage behavior", () => {
 
       // Assert
       expect(screen.getByTestId("drawer-vscode-link")).toBeInTheDocument();
+    });
+
+    it("re-measures the tab row when the vscode button's own width changes", () => {
+      // The button's width is folded into how many tabs fit inline, and its
+      // presence is now resolved asynchronously (the hook probes
+      // /api/vscode/status). It sits inside an `ml-auto shrink-0` wrapper, so
+      // it appearing or disappearing leaves the row's own box unchanged —
+      // observing only the row would leave the fit computed against a button
+      // that is no longer on screen, permanently costing an inline tab.
+      const observed: Element[] = [];
+      class RecordingResizeObserver {
+        observe = (el: Element) => {
+          observed.push(el);
+        };
+
+        unobserve = vi.fn();
+
+        disconnect = vi.fn();
+      }
+      // Swap only this global back afterwards: vi.unstubAllGlobals() would
+      // also drop the localStorage/ResizeObserver stubs vitest.setup.ts
+      // installs in beforeAll, breaking every later test in the file.
+      const originalResizeObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver =
+        RecordingResizeObserver as unknown as typeof ResizeObserver;
+
+      try {
+        seedActiveBackend({
+          id: "local-test",
+          name: "Local Test",
+          host: "http://localhost:8000",
+          apiKey: "",
+          kind: "local",
+        });
+
+        render(<ConversationTabs />, {
+          wrapper: createWrapper(REAL_CONVERSATION_ID),
+        });
+
+        const vscodeWrapper =
+          screen.getByTestId("drawer-vscode-link").parentElement;
+        expect(vscodeWrapper).not.toBeNull();
+        expect(observed).toContain(vscodeWrapper);
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
     });
   });
 

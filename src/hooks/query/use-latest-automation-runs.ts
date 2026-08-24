@@ -26,6 +26,8 @@ export interface LatestAutomationRunState {
   latestRun: AutomationRun | null;
   /** Newest-first recent runs for the activity sparkline (may be empty). */
   recentRuns: AutomationRun[];
+  /** Lifetime run count from the runs response, when known. */
+  total?: number;
   isLoading: boolean;
   isError: boolean;
 }
@@ -85,6 +87,7 @@ export function useLatestAutomationRuns(
     runStates.set(automation.id, {
       latestRun: recentRuns[0] ?? null,
       recentRuns,
+      total: result?.data?.total,
       isLoading: result?.isPending ?? true,
       isError: result?.isError ?? false,
     });

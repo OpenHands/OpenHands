@@ -100,7 +100,10 @@ const renderMenu = ({
 describe("LocalNewConversationMenu", () => {
   beforeEach(() => {
     mockSearchSubdirectories.mockReset();
-    mockSearchSubdirectories.mockResolvedValue({ items: [], next_page_id: null });
+    mockSearchSubdirectories.mockResolvedValue({
+      items: [],
+      next_page_id: null,
+    });
   });
 
   afterEach(() => {
@@ -178,16 +181,10 @@ describe("LocalNewConversationMenu", () => {
 
     // Assert
     await waitFor(() => {
-      expect(createSpy).toHaveBeenCalledWith(
-        undefined,
-        undefined,
-        undefined,
-        null,
-        "/workspace/project/repo1",
-        undefined,
-        undefined,
-        undefined,
-      );
+      expect(createSpy).toHaveBeenCalledWith({
+        metadata: null,
+        workingDirOverride: "/workspace/project/repo1",
+      });
     });
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith("/conversations/conv-123");

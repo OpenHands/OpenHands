@@ -51,16 +51,21 @@ vi.mock("#/hooks/query/use-settings", () => ({
   getErrorStatus: () => undefined,
 }));
 
-vi.mock("#/contexts/active-backend-context", () => ({
-  useActiveBackendContext: () => ({
-    backends: [{ id: "local", name: "Local", kind: "local" }],
-    active: {
-      backend: { id: "local", name: "Local", kind: "local" },
-      orgId: null,
-    },
-    setActive: vi.fn(),
-  }),
-}));
+vi.mock("#/contexts/active-backend-context", () => {
+  const active = {
+    backend: { id: "local", name: "Local", kind: "local" },
+    orgId: null,
+  };
+
+  return {
+    useActiveBackendContext: () => ({
+      backends: [active.backend],
+      active,
+      setActive: vi.fn(),
+    }),
+    useActiveBackend: () => active,
+  };
+});
 
 vi.mock("#/hooks/query/use-backends-health", () => ({
   useBackendsHealth: () => ({
@@ -82,6 +87,12 @@ vi.mock("#/components/features/sidebar/user-actions", () => ({
 
 vi.mock("#/components/features/conversation-panel/conversation-panel", () => ({
   ConversationPanel: () => null,
+}));
+
+vi.mock("#/components/features/sidebar/sidebar-onboarding-checklist", () => ({
+  SidebarOnboardingChecklist: () => (
+    <div data-testid="sidebar-onboarding-checklist" />
+  ),
 }));
 
 vi.mock(
@@ -179,13 +190,6 @@ vi.mock("#/components/features/backends/manage-backends-modal", () => ({
     </div>
   ),
 }));
-
-vi.mock(
-  "#/components/features/conversation-panel/new-conversation-button",
-  () => ({
-    NewConversationButton: () => <div data-testid="new-conversation-button" />,
-  }),
-);
 
 vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
   SidebarConversationList: () => (
@@ -456,6 +460,23 @@ describe("Sidebar", () => {
       window.removeEventListener("mousedown", windowMouseDown);
       window.removeEventListener("mouseup", windowMouseUp);
     }
+  });
+
+  it("renders the Getting Started checklist above the bottom backend bar", () => {
+    renderSidebar("/conversations");
+
+    const automations = screen.getByTestId("sidebar-automations-link");
+    const checklist = screen.getByTestId("sidebar-onboarding-checklist");
+    const backendBar = screen.getByTestId("backend-selector");
+
+    expect(
+      automations.compareDocumentPosition(checklist) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      checklist.compareDocumentPosition(backendBar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders icons for every top-level nav item so they remain meaningful in the collapsed rail", () => {

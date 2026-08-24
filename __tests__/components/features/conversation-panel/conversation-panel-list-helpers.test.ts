@@ -4,6 +4,7 @@ import {
   applyGroupFolderOrder,
   collectAutomationNameFacets,
   getGroupConversationPreview,
+  getGroupDiscoveryConversationIds,
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
@@ -257,6 +258,83 @@ describe("conversation-panel-list-helpers", () => {
       withActiveBeyondPreview.visibleConversations.map((c) => c.id),
     ).toEqual(["c-0", "c-1", "c-2", "c-3", "c-5"]);
     expect(GROUP_CONVERSATIONS_PREVIEW_LIMIT).toBe(5);
+  });
+
+  it("freezes discovery preview ids per folder and force-includes the active conversation", () => {
+    // Later pages may still contain rows for already-visible folders; those
+    // stay out of the collapsed discovery set so global Load more does not
+    // mutate an exposed folder's preview. The active conversation is still
+    // force-included even when it lands on a non-discovery page.
+    const items = [
+      {
+        ...base,
+        id: "none-1",
+        title: "None 1",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "none-2",
+        title: "None 2",
+        selected_workspace: null,
+      },
+      {
+        ...base,
+        id: "alpha-1",
+        title: "Alpha 1",
+        selected_workspace: "/workspace/alpha",
+      },
+    ] as AppConversation[];
+    const pageByConversationId = new Map([
+      ["none-1", 0],
+      ["none-2", 1],
+      ["alpha-1", 1],
+    ]);
+
+    expect([
+      ...getGroupDiscoveryConversationIds(
+        items,
+        pageByConversationId,
+        "local",
+      ),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
+        forceIncludeConversationId: "none-2",
+      }),
+    ]).toEqual(["none-1", "alpha-1", "none-2"]);
+
+    const grouped = groupConversations(items, "local", "updated", {
+      emptyWorkspace: "No workspace",
+      emptyRepository: "No repository",
+    });
+    const noneGroup = grouped.find((group) => group.id === "__none_workspace");
+    expect(noneGroup?.conversations.map((c) => c.id)).toEqual([
+      "none-1",
+      "none-2",
+    ]);
+
+    const discoveryIds = getGroupDiscoveryConversationIds(
+      items,
+      pageByConversationId,
+      "local",
+    );
+    const collapsed = getGroupConversationPreview(noneGroup!.conversations, {
+      expanded: false,
+      discoveryConversationIds: discoveryIds,
+    });
+    expect(collapsed.visibleConversations.map((c) => c.id)).toEqual(["none-1"]);
+    expect(collapsed.isPreviewTruncated).toBe(true);
+
+    const expanded = getGroupConversationPreview(noneGroup!.conversations, {
+      expanded: true,
+      discoveryConversationIds: discoveryIds,
+    });
+    expect(expanded.visibleConversations.map((c) => c.id)).toEqual([
+      "none-1",
+      "none-2",
+    ]);
   });
 
   it("resolvePinnedConversations preserves pin order and drops missing ids", () => {
@@ -549,5 +627,91 @@ describe("conversation-panel-list-helpers", () => {
         automationFilterFacets,
       ).map((c) => c.id),
     ).toEqual(["audit", "unnamed"]);
+  });
+
+  it("pre-seeds workspace groups from knownWorkspaces even when no conversations are loaded for them", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+      { id: "/workspace/beta", name: "beta", path: "/workspace/beta" },
+    ];
+    const groups = groupConversations(
+      [],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/workspace/alpha", label: "alpha" },
+      { id: "ws:/workspace/beta", label: "beta" },
+    ]);
+    expect(groups.every((g) => g.conversations.length === 0)).toBe(true);
+  });
+
+  it("merges known workspaces with conversations from paginated pages into one unified group list", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const pageTwoConversation: AppConversation = {
+      ...base,
+      id: "deep",
+      title: "deep",
+      selected_workspace: "/workspace/beta",
+      updated_at: "2024-01-05T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [pageTwoConversation],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const ids = groups.map((g) => g.id);
+    expect(ids).toContain("ws:/workspace/alpha");
+    expect(ids).toContain("ws:/workspace/beta");
+    const alpha = groups.find((g) => g.id === "ws:/workspace/alpha");
+    expect(alpha?.conversations).toHaveLength(0);
+    const beta = groups.find((g) => g.id === "ws:/workspace/beta");
+    expect(beta?.conversations.map((c) => c.id)).toEqual(["deep"]);
+  });
+
+  it("uses the known workspace name for a group whose path is in knownWorkspaces", () => {
+    const knownWorkspaces = [
+      {
+        id: "/workspace/my-project",
+        name: "My Project",
+        path: "/workspace/my-project",
+      },
+    ];
+    const convo: AppConversation = {
+      ...base,
+      id: "c1",
+      title: "c1",
+      selected_workspace: "/workspace/my-project",
+      updated_at: "2024-01-02T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [convo],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    const group = groups.find((g) => g.id === "ws:/workspace/my-project");
+    expect(group?.label).toBe("My Project");
+  });
+
+  it("ignores knownWorkspaces for cloud backend grouping", () => {
+    const knownWorkspaces = [
+      { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+    ];
+    const groups = groupConversations(
+      [],
+      "cloud",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups).toHaveLength(0);
   });
 });

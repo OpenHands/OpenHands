@@ -312,6 +312,54 @@ describe("ConversationCard", () => {
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
+  it("keeps the ellipsis clickable without hover via touch-first reveal classes", () => {
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen={false}
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const ellipsisButton = screen.getByTestId("ellipsis-button");
+    const actionOverlay = ellipsisButton.parentElement;
+
+    expect(actionOverlay).toHaveClass("pointer-events-auto");
+    expect(actionOverlay?.className).toContain(
+      "[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none",
+    );
+  });
+
+  it("closes the context menu when clicking outside", async () => {
+    const user = userEvent.setup();
+    const onContextMenuToggle = vi.fn();
+
+    renderWithProviders(
+      <div>
+        <div data-testid="outside">Outside</div>
+        <ConversationCard
+          onDelete={onDelete}
+          onChangeTitle={onChangeTitle}
+          title="Conversation 1"
+          selectedRepository={null}
+          lastUpdatedAt="2021-10-01T12:00:00Z"
+          contextMenuOpen
+          onContextMenuToggle={onContextMenuToggle}
+        />
+      </div>,
+    );
+
+    expect(screen.getByTestId("context-menu")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("outside"));
+
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
   it("should call onDelete when the delete button is clicked", async () => {
     const user = userEvent.setup();
     const onContextMenuToggle = vi.fn();
@@ -333,6 +381,30 @@ describe("ConversationCard", () => {
     await user.click(deleteButton);
 
     expect(onDelete).toHaveBeenCalled();
+    expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("should call onArchive when the archive button is clicked", async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    const onContextMenuToggle = vi.fn();
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onArchive={onArchive}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        contextMenuOpen
+        onContextMenuToggle={onContextMenuToggle}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("archive-button"));
+
+    expect(onArchive).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
   });
 
@@ -897,7 +969,7 @@ describe("ConversationCard", () => {
 
     it("shows the provider's picker label for a known model ID", () => {
       // When ``llm_model`` is a registry-known ID, the chip renders the
-      // human label ("Claude Opus 4.8 (1M)") instead of the raw ID — matching
+      // human label ("Claude Opus (1M)") instead of the raw ID — matching
       // what the Settings → Agent picker shows for the same value.
       renderWithProviders(
         <ConversationCard
@@ -912,10 +984,10 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("Claude Opus 4.8 (1M)");
+      expect(chip).toHaveTextContent("Claude Opus (1M)");
       expect(chip).toHaveAttribute(
         "title",
-        "Claude Code · Claude Opus 4.8 (1M)",
+        "Claude Code · Claude Opus (1M)",
       );
     });
 

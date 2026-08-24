@@ -22,6 +22,7 @@ const makeItem = (
   skill: {
     name,
     type: "agentskills" as const,
+    source: null,
     content,
     triggers: [command],
   },

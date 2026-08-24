@@ -34,6 +34,8 @@ function renderFilterMenu(
     automationNameFacets: [],
     showOlderConversations: false,
     toggleShowOlderConversations: vi.fn(),
+    showArchivedConversations: false,
+    toggleShowArchivedConversations: vi.fn(),
     showRepoBranchMetadata: false,
     toggleShowRepoBranchMetadata: vi.fn(),
     showLlmProfiles: false,
