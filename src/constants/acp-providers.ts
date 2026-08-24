@@ -1,5 +1,6 @@
 import { getAcpProvider as getClientAcpProvider } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
+import { parseAcpModelId } from "#/utils/acp-model-id";
 
 export type ACPProviderIcon =
   | "claude-code"
@@ -118,6 +119,12 @@ export interface ACPModelOption {
   id: string;
   /** Human-readable label shown in Settings -> Agent. */
   label: string;
+  /**
+   * Optional longer description. Populated for live-session models (see
+   * ``AppConversation.acp_live_models``) and models.dev catalog extras;
+   * absent for the hand-curated registry entries above.
+   */
+  description?: string;
 }
 
 // Canvas-only UI metadata per built-in provider, keyed by the ACP registry
@@ -439,14 +446,48 @@ export function resolveAcpProviderIcon(
 }
 
 /**
+ * i18n key for each effort level {@link getAcpEffortLevels} can return,
+ * including the UI-only ``"default"`` sentinel {@link composeAcpModelId}
+ * treats as "no suffix" (acp-model-id.ts). Shared by every surface that
+ * renders effort levels as picker text — Settings → Agent's effort dropdown
+ * (agent-canvas M4) and the chat-input pill's mid-session effort switcher
+ * (agent-canvas M5) — so the two labels can't drift apart.
+ *
+ * A live ACP session can report an effort value with no entry here (a level
+ * Canvas's static mirror hasn't caught up to yet); callers should render the
+ * raw value in that case rather than guessing at a key.
+ */
+export const ACP_EFFORT_LEVEL_I18N_KEYS: Readonly<Record<string, I18nKey>> = {
+  default: I18nKey.SETTINGS$AGENT_EFFORT_DEFAULT,
+  low: I18nKey.SETTINGS$AGENT_EFFORT_LOW,
+  medium: I18nKey.SETTINGS$AGENT_EFFORT_MEDIUM,
+  high: I18nKey.SETTINGS$AGENT_EFFORT_HIGH,
+  xhigh: I18nKey.SETTINGS$AGENT_EFFORT_XHIGH,
+  max: I18nKey.SETTINGS$AGENT_EFFORT_MAX,
+};
+
+/**
  * Resolve a raw ``acp_model`` ID to the human-readable label the provider's
  * picker shows for it (e.g. ``"claude-opus-4-7"`` → ``"Claude Opus 4.7"``).
  *
- * Falls back to the raw ID when the provider is unknown or the ID isn't one
- * of its registered {@link ACPModelOption}s — so a user's custom override
- * still renders something meaningful rather than nothing. Returns ``null``
- * only when there is no model to show, letting the conversation chip decide
- * to display the provider name instead.
+ * A composite ``"<base>/<effort>"`` id (claude-code / codex — see
+ * {@link parseAcpModelId}) is split first via ``serverKey``, which this
+ * function already receives, so the split is exactly as safe as every
+ * other consumer's (no separate "union of all known effort sets" fallback
+ * needed) — only claude-code/codex ids with a suffix that's actually one of
+ * *that server's* effort levels are ever split; everything else (gemini-cli,
+ * custom, an unknown server, or an unrecognized suffix) passes through
+ * whole. The base is looked up in the registry as before; a split effort is
+ * appended as ``"<label> · <effort>"`` (e.g. ``"Claude Sonnet 4.6 · high"``)
+ * — the raw level, not translated: this is a plain utility with no i18n
+ * context, and it already renders registry labels (e.g. "Claude Opus 4.7")
+ * untranslated, so an untranslated effort suffix stays consistent with that.
+ *
+ * Falls back to the raw base when the provider is unknown or the base isn't
+ * one of its registered {@link ACPModelOption}s — so a user's custom
+ * override still renders something meaningful rather than nothing. Returns
+ * ``null`` only when there is no model to show, letting the conversation
+ * chip decide to display the provider name instead.
  */
 export function labelForAcpModel(
   serverKey: string | null | undefined,
@@ -454,8 +495,10 @@ export function labelForAcpModel(
 ): string | null {
   if (!modelId) return null;
   const provider = getAcpProvider(serverKey);
-  const match = provider?.available_models?.find((m) => m.id === modelId);
-  return match?.label ?? modelId;
+  const { base, effort } = parseAcpModelId(modelId, serverKey);
+  const match = provider?.available_models?.find((m) => m.id === base);
+  const baseLabel = match?.label ?? base;
+  return effort ? `${baseLabel} · ${effort}` : baseLabel;
 }
 
 /**

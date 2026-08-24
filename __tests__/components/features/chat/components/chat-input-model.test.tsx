@@ -2,6 +2,21 @@ import React from "react";
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderWithProviders } from "test-utils";
+import { fetchModelsDevCatalog } from "#/api/models-dev-catalog";
+import { useAcpCustomModelsStore } from "#/stores/acp-custom-models-store";
+
+// Never resolves: keeps the models.dev catalog request pending for the
+// life of every test here (none of them assert on catalog behavior — that's
+// use-acp-model-choices.test.tsx's job), so the picker's contents stay
+// deterministic (curated + live + custom only) without a real network call.
+vi.mock("#/api/models-dev-catalog", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/api/models-dev-catalog")>();
+  return {
+    ...actual,
+    fetchModelsDevCatalog: vi.fn(() => new Promise(() => {})),
+  };
+});
 
 const useActiveConversationMock = vi.fn();
 const useSettingsMock = vi.fn();
@@ -42,6 +57,8 @@ describe("ChatInputModel", () => {
     // fallback): live ACP model switching is local-only.
     useActiveBackendMock.mockReturnValue({ backend: { kind: "local" } });
     switchAcpModelMutate.mockReset();
+    vi.mocked(fetchModelsDevCatalog).mockClear();
+    useAcpCustomModelsStore.setState({ customModelsByProfileId: {} });
   });
 
   it("renders the active conversation's llm_model when present", () => {
@@ -339,5 +356,262 @@ describe("ChatInputModel", () => {
       "href",
       "/settings/agents",
     );
+  });
+
+  it("renders a live session model as a selectable row alongside the curated list", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet",
+        acp_live_models: [{ id: "session-only", label: "Session-Only Model" }],
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-session-only"),
+    ).toHaveTextContent("Session-Only Model");
+    // The curated list is still offered alongside the live-only model.
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the base entry selected for a composite '<base>/<effort>' session model", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet/high",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+    // The composite id itself never appears as a row (choices are always
+    // bare base ids) — its base "sonnet" is the one marked current.
+    expect(
+      screen.queryByTestId("chat-input-acp-model-option-sonnet/high"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("chat-input-acp-model-option-sonnet"),
+    ).toHaveClass("bg-[var(--oh-interactive-hover)]");
+  });
+
+  it("does not re-switch when selecting the already-current base of a composite session model", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet/high",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-sonnet"));
+
+    // Clicking the row already highlighted as current (via the base-id
+    // fallback) is a no-op — it must not switch to a bare id that's already
+    // effectively selected.
+    expect(switchAcpModelMutate).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId("chat-input-llm-model-popover"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switching to a different base model from a composite session model preserves the current effort (M5)", () => {
+    useActiveConversationMock.mockReturnValue({
+      data: {
+        conversation_id: "test-conversation-id",
+        agent_kind: "acp",
+        acp_server: "claude-code",
+        llm_model: "sonnet/high",
+      },
+    });
+
+    renderWithProviders(<ChatInputModel />);
+    fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+    fireEvent.click(screen.getByTestId("chat-input-acp-model-option-opus[1m]"));
+
+    // The current "high" effort rides along onto the newly picked base via
+    // composeAcpModelId — upgraded from M3's "drop it" behavior.
+    expect(switchAcpModelMutate).toHaveBeenCalledWith({
+      conversationId: "test-conversation-id",
+      model: "opus[1m]/high",
+    });
+  });
+
+  describe("M5: effort switching", () => {
+    it("renders an effort section for a claude-code conversation, with the current effort checked", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm_model: "sonnet/high",
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-default"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-low"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-max"),
+      ).toBeInTheDocument();
+      // The running effort ("high") is the one marked selected.
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-high"),
+      ).toHaveClass("bg-[var(--oh-interactive-hover)]");
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-default"),
+      ).not.toHaveClass("bg-[var(--oh-interactive-hover)]");
+    });
+
+    it("hides the effort section for a server with no recognized effort levels (gemini-cli)", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "gemini-cli",
+          llm_model: "gemini-2.5-pro",
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+      // Model rows are still offered...
+      expect(
+        screen.getByTestId("chat-input-acp-model-option-gemini-2.5-pro"),
+      ).toBeInTheDocument();
+      // ...but there is no effort section for this server.
+      expect(
+        screen.queryByTestId("chat-input-acp-effort-option-default"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("hides the effort section for a custom server with no live-reported efforts", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "custom",
+          llm_model: "my-model",
+          acp_live_models: [{ id: "my-model", label: "my-model" }],
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+      expect(
+        screen.getByTestId("chat-input-acp-model-option-my-model"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("chat-input-acp-effort-option-default"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows a live-reported effort section for a custom server that reports available efforts", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "custom",
+          llm_model: "my-model",
+          acp_live_models: [{ id: "my-model", label: "my-model" }],
+          acp_available_efforts: ["default", "turbo"],
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+
+      expect(
+        screen.getByTestId("chat-input-acp-effort-option-default"),
+      ).toBeInTheDocument();
+      // "turbo" has no i18n key mirrored in Canvas's static map — the raw
+      // value renders instead of guessing at a translation.
+      const turboRow = screen.getByTestId("chat-input-acp-effort-option-turbo");
+      expect(turboRow).toBeInTheDocument();
+      expect(turboRow).toHaveTextContent("turbo");
+    });
+
+    it("live-switches the effort when a row is selected in an active ACP conversation", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm_model: "sonnet",
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+      fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-high"));
+
+      expect(switchAcpModelMutate).toHaveBeenCalledWith({
+        conversationId: "test-conversation-id",
+        model: "sonnet/high",
+      });
+      // Popover closes after a selection, same as a model pick.
+      expect(
+        screen.queryByTestId("chat-input-llm-model-popover"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("does not re-switch when selecting the already-current effort", () => {
+      useActiveConversationMock.mockReturnValue({
+        data: {
+          conversation_id: "test-conversation-id",
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          llm_model: "sonnet/high",
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+      fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-high"));
+
+      expect(switchAcpModelMutate).not.toHaveBeenCalled();
+    });
+
+    it("persists the effort choice as the default (conversationId null) in the home ACP case", () => {
+      useActiveConversationMock.mockReturnValue({ data: undefined });
+      useSettingsMock.mockReturnValue({
+        data: {
+          agent_settings: {
+            agent_kind: "acp",
+            acp_server: "claude-code",
+            acp_model: "sonnet",
+          },
+        },
+      });
+
+      renderWithProviders(<ChatInputModel />);
+      fireEvent.click(screen.getByTestId("chat-input-llm-model"));
+      fireEvent.click(screen.getByTestId("chat-input-acp-effort-option-max"));
+
+      expect(switchAcpModelMutate).toHaveBeenCalledWith({
+        conversationId: null,
+        model: "sonnet/max",
+      });
+    });
   });
 });

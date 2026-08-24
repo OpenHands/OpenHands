@@ -8,6 +8,7 @@ import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
   resolveEffectiveAcpModel,
+  type ACPModelOption,
 } from "#/constants/acp-providers";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 import {
@@ -92,6 +93,31 @@ export interface DirectConversationInfo {
   } | null;
   current_model_id?: string | null;
   current_model_name?: string | null;
+  /**
+   * Models the ACP session currently reports for this conversation — the
+   * SDK's ``ACPAgent.available_models`` surfaced on the wire as
+   * ``ConversationInfo.available_models`` (``{model_id, name?, description?}[]``).
+   * ``undefined`` for non-ACP conversations and for agent-servers too old to
+   * surface the field; ``requireDirectConversationInfo`` parses the raw wire
+   * value defensively (dropping malformed entries) before it reaches here.
+   * Read by {@link toAppConversation} to build ``AppConversation.acp_live_models``,
+   * which feeds the in-chat model pill (``useChatInputModelState``).
+   */
+  available_models?: Array<{
+    model_id: string;
+    name?: string;
+    description?: string;
+  }>;
+  /**
+   * Reasoning-effort fields that may ride alongside ``available_models`` /
+   * ``current_model_id`` on a future agent-server. Not consumed by any UI
+   * yet (M4/M5) — typed and parsed defensively now purely because the wire
+   * parse sits right next to the model fields above; ``undefined`` on every
+   * agent-server as of the pinned ``@openhands/typescript-client``, which
+   * doesn't type these fields on ``ConversationInfo`` yet.
+   */
+  current_effort?: string | null;
+  available_efforts?: string[];
   workspace?: {
     working_dir?: string | null;
   } | null;
@@ -314,6 +340,30 @@ export function getDefaultConversationTitle(conversationId: string): string {
   return `Conversation ${conversationId.slice(0, 5)}`;
 }
 
+/**
+ * Map the wire-parsed ``available_models`` entries onto the
+ * {@link ACPModelOption} shape the model picker consumes — labeling each
+ * entry from ``name`` when present, falling back to the raw ``model_id``
+ * (mirrors the SDK doc's own guidance: "surfaced verbatim ... clients ...
+ * resolve current_model_id to a display label themselves"). Returns
+ * ``undefined`` (not ``[]``) when the session reported no field at all, so
+ * callers can distinguish "no live session data" from "session reports zero
+ * models".
+ */
+function mapAcpLiveModels(
+  models: DirectConversationInfo["available_models"],
+): ACPModelOption[] | undefined {
+  if (!models) return undefined;
+  return models.map((model) => {
+    const name = model.name?.trim();
+    return {
+      id: model.model_id,
+      label: name ? name : model.model_id,
+      description: model.description,
+    };
+  });
+}
+
 export function toAppConversation(
   info: DirectConversationInfo,
 ): AppConversation {
@@ -348,6 +398,13 @@ export function toAppConversation(
     pr_number: [],
     agent_kind: isAcp ? "acp" : "openhands",
     acp_server: acpServer,
+    // Live-session ACP fields (agent-canvas M3): only meaningful for ACP
+    // conversations, same gating as ``acpServer`` above.
+    acp_live_models: isAcp
+      ? mapAcpLiveModels(info.available_models)
+      : undefined,
+    acp_current_effort: isAcp ? (info.current_effort ?? null) : null,
+    acp_available_efforts: isAcp ? info.available_efforts : undefined,
     tags: info.tags ?? null,
     launched_agent_profile: info.launched_agent_profile ?? null,
     // Chip path: omit ``providerDefault`` so that when no concrete model

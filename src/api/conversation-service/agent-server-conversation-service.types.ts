@@ -2,6 +2,7 @@ import { ConversationTrigger } from "../open-hands.types";
 import { Provider } from "#/types/settings";
 import { SuggestedTask } from "#/utils/types";
 import { ExecutionStatus } from "#/types/agent-server/core";
+import type { ACPModelOption } from "#/constants/acp-providers";
 
 /**
  * Lifecycle state of a cloud sandbox. Mirrors OpenHands' V1SandboxStatus.
@@ -163,6 +164,24 @@ export interface AppConversation {
    * "ACP" chip when the key is unknown or null.
    */
   acp_server?: string | null;
+  /**
+   * Models the ACP session for THIS conversation currently reports —
+   * distinct from the built-in provider's static curated list in
+   * ``ACP_PROVIDERS``, which is fixed at build time. ``undefined`` for
+   * non-ACP conversations and for agent-servers too old to surface
+   * ``ConversationInfo.available_models``. Feeds the in-chat model pill via
+   * ``useChatInputModelState`` / ``buildAcpModelChoices``'s ``liveModels``
+   * input (agent-canvas M3).
+   */
+  acp_live_models?: ACPModelOption[];
+  /**
+   * Effort level the ACP session is currently running, and the effort
+   * levels it reports as selectable for the current base model. Not
+   * consumed by any UI yet — typed now because the wire parse for it lives
+   * right next to ``acp_live_models``/``llm_model`` (M4/M5 will read these).
+   */
+  acp_current_effort?: string | null;
+  acp_available_efforts?: string[];
   /**
    * Server-side key-value tags from the agent-server's
    * ``ConversationInfo.tags`` (settable at creation and via

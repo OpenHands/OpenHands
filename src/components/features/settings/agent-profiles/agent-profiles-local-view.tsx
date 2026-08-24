@@ -306,6 +306,10 @@ export function AgentProfilesLocalView() {
         embedded
         agentSettingsOverride={override}
         onSaveControlChange={setSaveControl}
+        // Undefined in the create flow (no id minted yet) — the ACP model
+        // picker's custom-override remembering is then a no-op, same as
+        // before M2. See `useAcpCustomModelsStore`.
+        profileId={editingProfile?.id}
       />
 
       {/* OpenHands profiles reference an LLM profile (required). */}

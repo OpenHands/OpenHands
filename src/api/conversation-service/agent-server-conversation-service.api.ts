@@ -199,6 +199,47 @@ function normalizeTags(value: unknown): Record<string, string> | null {
   return tags;
 }
 
+/**
+ * Defensive parse of the wire ``available_models`` array
+ * (``{model_id, name?, description?}[]``): drops any entry that isn't an
+ * object or whose ``model_id`` isn't a non-empty string, and coerces
+ * ``name``/``description`` to ``undefined`` unless they're strings.
+ * ``undefined`` (not ``[]``) when the field is absent/not an array at all —
+ * older agent-servers omit it entirely — so callers can tell "no live
+ * session data" apart from "session reports zero models".
+ */
+function normalizeAvailableModels(
+  value: unknown,
+): DirectConversationInfo["available_models"] {
+  if (!Array.isArray(value)) return undefined;
+  const models: NonNullable<DirectConversationInfo["available_models"]> = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) continue;
+    const modelId = entry.model_id;
+    if (typeof modelId !== "string" || !modelId.trim()) continue;
+    models.push({
+      model_id: modelId,
+      name: typeof entry.name === "string" ? entry.name : undefined,
+      description:
+        typeof entry.description === "string" ? entry.description : undefined,
+    });
+  }
+  return models;
+}
+
+/**
+ * Defensive parse of a wire string array (``available_efforts``): drops
+ * non-string / blank entries. ``undefined`` when the field isn't an array
+ * at all.
+ */
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter(
+    (entry): entry is string =>
+      typeof entry === "string" && entry.trim().length > 0,
+  );
+}
+
 function normalizeLaunchedAgentProfile(
   value: unknown,
 ): DirectConversationInfo["launched_agent_profile"] {
@@ -270,6 +311,9 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    available_models: normalizeAvailableModels(item.available_models),
+    current_effort: stringOrNull(item.current_effort),
+    available_efforts: normalizeStringArray(item.available_efforts),
   };
 }
 

@@ -64,6 +64,11 @@ export const APP_UPDATE_QUERY_KEYS = {
   latestVersion: ["agent-canvas-latest-version"] as const,
 } as const;
 
+export const MODELS_DEV_CATALOG_QUERY_KEYS = {
+  /** The full trimmed models.dev catalog (all providers). */
+  all: ["models-dev-catalog"] as const,
+} as const;
+
 /** Cache configuration shared across all config-related queries */
 export const CONFIG_CACHE_OPTIONS = {
   staleTime: 1000 * 60 * 5, // 5 minutes

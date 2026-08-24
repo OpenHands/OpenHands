@@ -861,6 +861,105 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.llm_model).toBe("Claude Opus 4.7");
     });
 
+    it("parses available_models on the wire into acp_live_models, dropping malformed entries", async () => {
+      // Direct adapter tests (toAppConversation) pass already-typed
+      // DirectConversationInfo objects and so can't catch the
+      // wire-format normalizer (requireDirectConversationInfo) failing to
+      // sanitize a malformed `available_models` payload — exercised here
+      // through the full HTTP -> AppConversation path.
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp-available-models-wire",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "ACPAgent",
+              acp_model: "claude-opus-4-7",
+              llm: { model: "acp-managed" },
+            },
+            tags: { acpserver: "claude-code" },
+            available_models: [
+              { model_id: "sonnet", name: "Claude Sonnet 4.6" },
+              { model_id: "" }, // blank id — dropped
+              { model_id: "   " }, // whitespace-only id — dropped
+              { name: "no model_id at all" }, // missing id — dropped
+              "not an object", // not a record — dropped
+              null, // not a record — dropped
+              { model_id: "opus[1m]", name: 42 }, // non-string name → falls back to id
+            ],
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp-available-models-wire",
+        ]);
+
+      expect(conversation?.acp_live_models).toEqual([
+        { id: "sonnet", label: "Claude Sonnet 4.6", description: undefined },
+        { id: "opus[1m]", label: "opus[1m]", description: undefined },
+      ]);
+    });
+
+    it("is undefined when the wire omits available_models entirely (older agent-server)", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp-no-available-models",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "ACPAgent",
+              acp_model: "claude-opus-4-7",
+              llm: { model: "acp-managed" },
+            },
+            tags: { acpserver: "claude-code" },
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp-no-available-models",
+        ]);
+
+      expect(conversation?.acp_live_models).toBeUndefined();
+    });
+
+    it("parses available_efforts on the wire, dropping non-string entries", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-acp-efforts-wire",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            agent: {
+              kind: "ACPAgent",
+              acp_model: "claude-opus-4-7",
+              llm: { model: "acp-managed" },
+            },
+            tags: { acpserver: "claude-code" },
+            current_effort: "high",
+            available_efforts: ["low", "medium", "high", 42, null, "  "],
+          },
+        ],
+      });
+
+      const [conversation] =
+        await AgentServerConversationService.batchGetAppConversations([
+          "conv-acp-efforts-wire",
+        ]);
+
+      expect(conversation?.acp_current_effort).toBe("high");
+      expect(conversation?.acp_available_efforts).toEqual([
+        "low",
+        "medium",
+        "high",
+      ]);
+    });
+
     it("sources acp_server from the agent when the acpserver tag is absent", async () => {
       // Profile launches don't stamp the ``acpserver`` tag client-side, so the
       // provider identity must survive from ``agent.acp_server`` (SDK #3692)

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -1208,6 +1208,78 @@ describe("toAppConversation", () => {
     });
     expect(result.agent_kind).toBe("openhands");
     expect(result.acp_server).toBeNull();
+  });
+
+  describe("M3: live session model fields (acp_live_models / acp_current_effort / acp_available_efforts)", () => {
+    it("maps available_models to {id, label, description}, labeling from name over model_id", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+        available_models: [
+          { model_id: "default", name: "Default (recommended)" },
+          { model_id: "opus[1m]" }, // no name → label falls back to model_id
+          {
+            model_id: "sonnet",
+            name: "Claude Sonnet 4.6",
+            description: "Balanced speed and intelligence",
+          },
+        ],
+      });
+
+      expect(result.acp_live_models).toEqual([
+        {
+          id: "default",
+          label: "Default (recommended)",
+          description: undefined,
+        },
+        { id: "opus[1m]", label: "opus[1m]", description: undefined },
+        {
+          id: "sonnet",
+          label: "Claude Sonnet 4.6",
+          description: "Balanced speed and intelligence",
+        },
+      ]);
+    });
+
+    it("is undefined (not []) for an ACP conversation whose wire payload omits available_models", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+      });
+      expect(result.acp_live_models).toBeUndefined();
+    });
+
+    it("does not surface acp_live_models for a non-ACP conversation even if the wire carries it", () => {
+      // Defensive gating mirrors acp_server's own isAcp guard — a stray/
+      // misrouted field on an OpenHands conversation shouldn't leak through.
+      const result = toAppConversation({
+        ...baseInfo,
+        agent: { kind: "Agent", llm: { model: "claude-sonnet-4-6" } },
+        available_models: [{ model_id: "sonnet", name: "Claude Sonnet 4.6" }],
+      });
+      expect(result.agent_kind).toBe("openhands");
+      expect(result.acp_live_models).toBeUndefined();
+    });
+
+    it("threads current_effort/available_efforts for an ACP conversation", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+        current_effort: "high",
+        available_efforts: ["low", "medium", "high"],
+      });
+      expect(result.acp_current_effort).toBe("high");
+      expect(result.acp_available_efforts).toEqual(["low", "medium", "high"]);
+    });
+
+    it("leaves acp_current_effort null and acp_available_efforts undefined when the wire omits them", () => {
+      const result = toAppConversation({
+        ...baseInfo,
+        agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+      });
+      expect(result.acp_current_effort).toBeNull();
+      expect(result.acp_available_efforts).toBeUndefined();
+    });
   });
 });
 
