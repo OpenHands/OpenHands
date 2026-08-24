@@ -2,10 +2,11 @@
 
 The criteria are type-specific:
 
-- Bug reports (labeled `bug`): the Actual Behavior section must reference at
+- Bug reports (labeled `bug`): the Steps to Reproduce section must reference at
   least one supported run method (`agent-canvas`, `npm run`, or
-  `app.all-hands.dev/canvas`) *and* embed a screenshot or video, plus a
-  non-empty Acceptance Criteria section with at least one checklist item.
+  `app.all-hands.dev/canvas`), the Actual Behavior section must embed a
+  screenshot or video, and there must be a non-empty Acceptance Criteria
+  section with at least one checklist item.
 
 - Enhancements (labeled `enhancement`): the body must contain non-empty
   Desired Behavior and Acceptance Criteria sections, the latter with at least
@@ -32,6 +33,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from markdown_sections import find_headings
 
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
@@ -107,7 +110,7 @@ def extract_sections(body: str) -> dict[str, str]:
     form) may still use `###` headings; if they don't, the map is empty and the
     caller falls back to whole-body checks.
     """
-    matches = list(HEADING_RE.finditer(body))
+    matches = find_headings(body, HEADING_RE)
     sections: dict[str, str] = {}
     for index, match in enumerate(matches):
         start = match.end()
@@ -151,23 +154,26 @@ def has_checklist_item(text: str) -> bool:
 def check_bug(sections: dict[str, str]) -> ReadinessResult:
     result = ReadinessResult(ready=True)
 
-    actual = visible_text(find_section(sections, "actual behavior", "actual"))
-    if not actual:
+    reproduction = visible_text(find_section(sections, "steps to reproduce", "reproduction"))
+    if not reproduction:
         result.add(
-            "Fill in the `### Actual Behavior` section showing how you reproduced "
+            "Fill in the `### Steps to Reproduce` section showing how you reproduced "
             "the bug in a live Agent Canvas session."
         )
-    else:
-        if not references_run_method(actual):
-            result.add(
-                "The Actual Behavior section must reference a supported run method: "
-                "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`."
-            )
-        if not has_screenshot_or_video(actual):
-            result.add(
-                "The Actual Behavior section must include a screenshot or video of "
-                "the bug (drag a file into the field or paste a link)."
-            )
+    elif not references_run_method(reproduction):
+        result.add(
+            "The Steps to Reproduce section must reference a supported run method: "
+            "`agent-canvas`, `npm run`, or `app.all-hands.dev/canvas`."
+        )
+
+    actual = visible_text(find_section(sections, "actual behavior", "actual"))
+    if not actual:
+        result.add("Fill in the `### Actual Behavior` section describing the observed bug.")
+    elif not has_screenshot_or_video(actual):
+        result.add(
+            "The Actual Behavior section must include a screenshot or video of "
+            "the bug (drag a file into the field or paste a link)."
+        )
 
     acceptance = visible_text(find_section(sections, "acceptance criteria", "acceptance"))
     if not acceptance:

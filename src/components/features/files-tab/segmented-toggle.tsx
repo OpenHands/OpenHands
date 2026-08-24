@@ -13,12 +13,14 @@ interface SegmentedToggleProps<T extends string> {
   onChange: (value: T) => void;
   ariaLabel: string;
   testId?: string;
+  className?: string;
+  /** Stretch the control and give each option an equal share of the width. */
+  equalWidth?: boolean;
 }
 
 /**
  * Lightweight 2-state segmented control used for the files-tab toggles
- * ("Diff view" on/off, "Rich"/"Plain"). Kept local because the existing
- * shared switch components are heavier than what we need here.
+ * ("Rich"/"Plain") and a few other compact two-way choices.
  */
 export function SegmentedToggle<T extends string>({
   value,
@@ -26,13 +28,19 @@ export function SegmentedToggle<T extends string>({
   onChange,
   ariaLabel,
   testId,
+  className,
+  equalWidth = false,
 }: SegmentedToggleProps<T>) {
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
       data-testid={testId}
-      className="inline-flex items-center rounded-md bg-[var(--oh-surface-raised)] p-0.5 text-xs"
+      className={cn(
+        equalWidth ? "flex w-full" : "inline-flex",
+        "items-center rounded-md bg-[var(--oh-surface-raised)] p-0.5 text-xs",
+        className,
+      )}
     >
       {options.map((option) => {
         const isActive = option.value === value;
@@ -47,17 +55,14 @@ export function SegmentedToggle<T extends string>({
             }
             onClick={() => onChange(option.value)}
             className={cn(
-              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded cursor-pointer transition-colors",
+              "inline-flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors",
+              equalWidth && "flex-1 justify-center text-center",
               isActive
                 ? "bg-[var(--oh-interactive-hover)] text-white"
                 : "text-[var(--oh-muted)] hover:text-white",
             )}
           >
-            {option.icon ? (
-              <span className="inline-flex size-3.5 shrink-0 items-center justify-center [&_svg]:size-3.5">
-                {option.icon}
-              </span>
-            ) : null}
+            {option.icon}
             {option.label}
           </button>
         );

@@ -12,6 +12,9 @@ import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
+import ProviderConnectionsService, {
+  type ProviderConnection,
+} from "#/api/provider-connections-service/provider-connections-service.api";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -335,6 +338,99 @@ describe("LlmSettingsScreen", () => {
       { timeout: 2500 },
     );
     expect(pollLogin.mock.calls[0]?.[0]).toBe("device-code");
+  });
+});
+
+describe("LlmSettingsScreen - provider connection selector", () => {
+  const connection: ProviderConnection = {
+    id: "conn-1",
+    display_name: "My OpenAI",
+    provider: "openai",
+    base_url: null,
+    created_at: 1,
+    updated_at: 2,
+    api_key_set: true,
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: true }),
+    );
+  });
+
+  it("hides the selector on cloud even when a connection is linked", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    const listSpy = vi
+      .spyOn(ProviderConnectionsService, "list")
+      .mockResolvedValue([connection]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      // showProviderConnection omitted → cloud path
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.queryByTestId("llm-provider-connection-input"),
+    ).not.toBeInTheDocument();
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it("hides the API key / base URL inputs when linked to a connection", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-provider-connection-input");
+    expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  it("still renders the selector for an orphaned link when no connections load", async () => {
+    // Regression: a profile linked to a since-deleted connection would hide the
+    // API key / base URL inputs while also hiding the selector, leaving no way
+    // to recover the credential or unlink.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-gone",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      await screen.findByTestId("llm-provider-connection-input"),
+    ).toBeInTheDocument();
   });
 });
 

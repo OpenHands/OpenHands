@@ -6,6 +6,7 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
@@ -16,6 +17,7 @@ import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
+import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import {
   displayErrorToast,
@@ -278,6 +280,7 @@ export function ConversationPanel({
     isFetchingNextPage,
     fetchNextPage,
   } = usePaginatedConversations();
+  const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
@@ -341,6 +344,46 @@ export function ConversationPanel({
     () => collectAutomationNameFacets(conversations),
     [conversations],
   );
+
+  const allWorkspacesForGrouping = React.useMemo<
+    readonly LocalWorkspace[]
+  >(() => {
+    if (
+      compact ||
+      organizeMode !== "grouped" ||
+      activeBackend.kind !== "local"
+    ) {
+      return [];
+    }
+    const normalize = (p: string) => p.trim().replace(/\/+$/, "");
+    const byPath = new Map<string, LocalWorkspace>();
+    for (const ws of knownWorkspaces) {
+      const key = normalize(ws.path);
+      if (key) {
+        byPath.set(key, ws);
+      }
+    }
+    for (const c of conversations) {
+      const normalized = c.selected_workspace
+        ? normalize(c.selected_workspace)
+        : "";
+      if (normalized && !byPath.has(normalized)) {
+        const label = normalized.split("/").filter(Boolean).pop() ?? normalized;
+        byPath.set(normalized, {
+          id: normalized,
+          name: label,
+          path: normalized,
+        });
+      }
+    }
+    return Array.from(byPath.values());
+  }, [
+    activeBackend.kind,
+    compact,
+    conversations,
+    knownWorkspaces,
+    organizeMode,
+  ]);
 
   const automationFilteredConversations = React.useMemo(
     () =>
@@ -455,12 +498,14 @@ export function ConversationPanel({
       activeBackend.kind,
       conversationSort,
       groupLabels,
+      allWorkspacesForGrouping,
     );
   }, [
     activeBackend.kind,
     conversationSort,
     groupLabels,
     groupedSourceConversations,
+    allWorkspacesForGrouping,
   ]);
 
   const groupDiscoveryConversationIds = React.useMemo(() => {
@@ -957,13 +1002,19 @@ export function ConversationPanel({
   const showInitialSkeleton = isLoading || !isFetched;
   const showPinnedSection =
     !compact && !showInitialSkeleton && pinnedConversations.length > 0;
+  const hasVisibleGroups =
+    organizeMode === "grouped" &&
+    !compact &&
+    orderedConversationGroups != null &&
+    orderedConversationGroups.length > 0;
   const showEmptyState =
     isFetched &&
     !isLoading &&
     !compact &&
     listIsEffectivelyEmpty &&
     !showPinnedSection &&
-    !startTasks?.length;
+    !startTasks?.length &&
+    !hasVisibleGroups;
 
   const showConversationHeader = !compact;
 

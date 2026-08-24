@@ -3,6 +3,8 @@ import {
   SKILLS_CATALOG,
   type SkillCatalogEntry,
 } from "@openhands/extensions/skills";
+import type { LucideIcon } from "lucide-react";
+import { MANIFEST_ICON_BY_SLUG } from "#/components/features/manifest/manifest-icons";
 
 /**
  * Reading a published automation catalog entry.
@@ -17,6 +19,27 @@ import {
 const SKILL_BY_NAME = new Map<string, SkillCatalogEntry>(
   SKILLS_CATALOG.map((skill) => [skill.name, skill]),
 );
+
+/**
+ * The glyph a card shows in place of its integration logos, or null when it
+ * has none to show and the logos speak for it.
+ *
+ * An entry naming the service it talks to is recognised by that service's
+ * logo; one whose identity is the work itself declares a slug instead. The
+ * lookup is a guard as much as a mapping — the catalog is published elsewhere,
+ * so a slug this host has no artwork for falls back rather than rendering
+ * nothing.
+ */
+export function getAutomationIcon(
+  automation: RecommendedAutomation,
+): LucideIcon | null {
+  const slug = automation.icon;
+  if (!slug) return null;
+  return (
+    (MANIFEST_ICON_BY_SLUG as Record<string, LucideIcon | undefined>)[slug] ??
+    null
+  );
+}
 
 /** Every integration the entry declares, in declaration order. */
 export function getIntegrationIds(automation: RecommendedAutomation): string[] {

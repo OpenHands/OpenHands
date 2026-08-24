@@ -28,7 +28,10 @@ import {
 } from "#/api/backend-registry/health-store";
 import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
 
-const REFRESH_INTERVAL_MS = 10000;
+// 30s: each tick costs two sequential requests per backend (settings +
+// server_info), which on slow links measurably competes with conversation
+// traffic for the browser's per-origin HTTP/1.1 connection pool.
+const REFRESH_INTERVAL_MS = 30000;
 const PROBE_TIMEOUT_MS = 4000;
 export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 export const MISSING_BACKEND_API_KEY_ERROR = "API key required";
@@ -142,10 +145,10 @@ const PROBE_RETRY_DELAY_MS = 300;
  *
  * The connectivity indicator (and the onboarding "backend connected" banner)
  * only flips green once a probe succeeds. With `retry: false` at the query
- * level and a REFRESH_INTERVAL_MS (10s) poll, a single transient first-probe
+ * level and a REFRESH_INTERVAL_MS (30s) poll, a single transient first-probe
  * miss — the agent-server still warming up right after navigation, a momentary
- * proxy 5xx, a dropped connection — would otherwise leave the banner stuck for
- * a full 10s until the next scheduled refetch. That is the root cause of the
+ * proxy 5xx, a dropped connection — would otherwise leave the banner stuck
+ * until the next scheduled refetch. That is the root cause of the
  * flaky onboarding e2e "backend health probe should report connected" timeout.
  *
  * Retrying here, inside the query function rather than via React Query's

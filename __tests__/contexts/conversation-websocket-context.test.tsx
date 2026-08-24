@@ -10,6 +10,7 @@ import { useBrowserStore } from "#/stores/browser-store";
 import { useCommandStore } from "#/stores/command-store";
 import { useErrorMessageStore } from "#/stores/error-message-store";
 import { useUserConversation } from "#/hooks/query/use-user-conversation";
+import { useWebSocket } from "#/hooks/use-websocket";
 import EventService from "#/api/event-service/event-service.api";
 import {
   getStoredConversationMetadata,
@@ -17,6 +18,7 @@ import {
 } from "#/api/conversation-metadata-store";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import type { MessageEvent } from "#/types/agent-server/core";
+import { isStreamingDeltaEvent } from "#/types/agent-server/type-guards";
 
 type CapturedWebSocketOptions = {
   onMessage?: (event: { data: string }) => void;
@@ -27,10 +29,15 @@ type CapturedWebSocketOptions = {
 const wsCapture = vi.hoisted(() => ({
   mainOnMessage: null as null | ((event: { data: string }) => void),
   mainOptions: null as CapturedWebSocketOptions | null,
+  planningOnMessage: null as null | ((event: { data: string }) => void),
   calls: [] as Array<{
     url: string;
     options?: CapturedWebSocketOptions;
   }>,
+}));
+
+const errorHandlerMocks = vi.hoisted(() => ({
+  trackError: vi.fn(),
 }));
 
 // Keep the units under test real (the provider, `useConversationHistory`, the
@@ -50,11 +57,22 @@ vi.mock("#/hooks/use-websocket", () => ({
       wsCapture.mainOnMessage = options.onMessage;
       wsCapture.mainOptions = options;
     }
+    if (
+      url &&
+      options?.onMessage &&
+      options.queryParams &&
+      "resend_all" in options.queryParams
+    ) {
+      wsCapture.planningOnMessage = options.onMessage;
+    }
     return { socket: null, reconnect: vi.fn() };
   }),
 }));
 vi.mock("#/hooks/query/use-user-conversation", () => ({
   useUserConversation: vi.fn(),
+}));
+vi.mock("#/utils/error-handler", () => ({
+  trackError: errorHandlerMocks.trackError,
 }));
 
 const AGENT_REPLY_ID = "evt-agent-reply";
@@ -67,7 +85,7 @@ const makeAgentReply = (): MessageEvent => ({
   timestamp: new Date(Date.now() + 1000).toISOString(),
   source: "agent",
   llm_message: { role: "assistant", content: [{ type: "text", text: "Hi!" }] },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 });
 
@@ -91,6 +109,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
   beforeEach(() => {
     wsCapture.mainOnMessage = null;
     wsCapture.mainOptions = null;
+    wsCapture.planningOnMessage = null;
     wsCapture.calls.length = 0;
     window.localStorage.clear();
     queryClient = new QueryClient({
@@ -198,6 +217,83 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(wsCapture.mainOptions?.queryParams).not.toHaveProperty(
       "session_api_key",
     );
+  });
+
+  it("keeps the events socket up, with its `since` anchor, across background history refetches", async () => {
+    // Arrange: the initial history load resolves; the background refetch stays
+    // in flight so the query sits in `isFetching` while the socket is already
+    // established — the state that used to tear the socket down and leave the
+    // conversation stuck at "Connecting".
+    const historyPage = () => ({
+      items: [createUserMessageEvent("user-msg-conv-refetch")],
+      next_page_id: null,
+    });
+    let resolveRefetch!: (
+      page: Awaited<ReturnType<typeof EventService.searchEvents>>,
+    ) => void;
+    vi.spyOn(EventService, "searchEvents")
+      .mockResolvedValueOnce(historyPage())
+      .mockImplementationOnce(
+        () =>
+          new Promise<Awaited<ReturnType<typeof EventService.searchEvents>>>(
+            (resolve) => {
+              resolveRefetch = resolve;
+            },
+          ),
+      );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-refetch"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(wsCapture.mainOptions).not.toBeNull());
+
+    // Every render's main-socket call (the one carrying `resend_mode`),
+    // including any teardown call with an empty URL.
+    const mainCalls = () =>
+      vi
+        .mocked(useWebSocket)
+        .mock.calls.filter(
+          ([, options]) =>
+            options?.queryParams && "resend_mode" in options.queryParams,
+        );
+    const connectedAt = mainCalls().length;
+    const anchor = wsCapture.mainOptions?.queryParams?.after_timestamp;
+    expect(anchor).toBeTruthy();
+
+    // Act: a background refetch starts (as `refetchOnMount: "always"` fires
+    // when returning to a conversation) and stays in flight.
+    act(() => {
+      void queryClient.refetchQueries({ queryKey: ["conversation-history"] });
+    });
+    await waitFor(() =>
+      expect(
+        queryClient.isFetching({ queryKey: ["conversation-history"] }),
+      ).toBe(1),
+    );
+
+    // Assert: since the socket connected, no render tore it down (empty URL)
+    // and none degraded the `since` anchor to a full resend.
+    for (const [url, options] of mainCalls().slice(connectedAt - 1)) {
+      expect(url).toContain("/sockets/events/conv-refetch");
+      expect(options?.queryParams).toMatchObject({
+        resend_mode: "since",
+        after_timestamp: anchor,
+      });
+    }
+
+    // The refetch settling must not churn the socket either.
+    await act(async () => {
+      resolveRefetch(historyPage());
+    });
+    const [urlAfterRefetch] = mainCalls().at(-1)!;
+    expect(urlAfterRefetch).toContain("/sockets/events/conv-refetch");
   });
 
   it("uses the planning sub-conversation session key", async () => {
@@ -356,13 +452,42 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       },
     });
 
-    const makeConversationError = (id: string, detail: string) => ({
+    const makeConversationError = (
+      id: string,
+      detail: string,
+      classification?: {
+        kind: "auth";
+        retryable: boolean;
+        user_action: "settings";
+      },
+    ) => ({
       id,
       timestamp: new Date().toISOString(),
       source: "environment",
       kind: "ConversationErrorEvent",
       detail,
       code: "SomeError",
+      ...(classification ? { classification } : {}),
+    });
+
+    const makeAgentError = (
+      id: string,
+      classification?: {
+        kind: "auth";
+        retryable: boolean;
+        user_action: "settings";
+      },
+    ) => ({
+      id,
+      timestamp: new Date().toISOString(),
+      source: "agent",
+      message_id: `msg-${id}`,
+      message_seq: 1,
+      error: "Agent failed",
+      error_type: "AgentError",
+      tool_name: "generic",
+      tool_call_id: `call-${id}`,
+      ...(classification ? { classification } : {}),
     });
 
     const renderCaptured = async () => {
@@ -420,6 +545,115 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
       // It must stay dismissed.
       deliver(errorEvent);
       expect(useErrorMessageStore.getState().errorMessage).toBeNull();
+    });
+
+    it("forwards error classifications to the banner store and telemetry", async () => {
+      await renderCaptured();
+      const classification = {
+        kind: "auth" as const,
+        retryable: false,
+        user_action: "settings" as const,
+      };
+
+      deliver(
+        makeConversationError(
+          "conv-error-2",
+          "Authentication failed",
+          classification,
+        ),
+      );
+
+      expect(useErrorMessageStore.getState().errorClassification).toEqual(
+        classification,
+      );
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "conversation",
+        metadata: {
+          eventId: "conv-error-2",
+          errorCode: "SomeError",
+        },
+        classification,
+      });
+    });
+
+    it("forwards AgentErrorEvent classifications to telemetry (main agent)", async () => {
+      await renderCaptured();
+      const classification = {
+        kind: "auth" as const,
+        retryable: false,
+        user_action: "settings" as const,
+      };
+
+      deliver(makeAgentError("agent-err-1", classification));
+
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "agent",
+        metadata: {
+          eventId: "agent-err-1",
+          toolName: "generic",
+          toolCallId: "call-agent-err-1",
+        },
+        classification,
+      });
+    });
+
+    it("forwards AgentErrorEvent classifications to telemetry (planning agent)", async () => {
+      const planningConversation: AppConversation = {
+        id: "planning-err",
+        created_by_user_id: null,
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        title: "Planner",
+        trigger: null,
+        pr_number: [],
+        llm_model: null,
+        metrics: null,
+        created_at: "2026-07-28T00:00:00Z",
+        updated_at: "2026-07-28T00:00:00Z",
+        execution_status: null,
+        conversation_url:
+          "http://planner.example/api/conversations/planning-err",
+        session_api_key: null,
+        sandbox_id: null,
+        sub_conversation_ids: [],
+      };
+      const classification = {
+        kind: "auth" as const,
+        retryable: true,
+        user_action: "settings" as const,
+      };
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-err"
+            conversationUrl="http://main.example/api/conversations/conv-err"
+            subConversationIds={[planningConversation.id]}
+            subConversations={[planningConversation]}
+          >
+            <div />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      // Wait for the planning sub-conversation WebSocket to be established.
+      await waitFor(() => expect(wsCapture.planningOnMessage).not.toBeNull());
+
+      act(() => {
+        wsCapture.planningOnMessage!({
+          data: JSON.stringify(makeAgentError("agent-err-2", classification)),
+        });
+      });
+
+      expect(errorHandlerMocks.trackError).toHaveBeenCalledWith({
+        source: "planning_agent",
+        metadata: {
+          eventId: "agent-err-2",
+          toolName: "generic",
+          toolCallId: "call-agent-err-2",
+        },
+        classification,
+      });
     });
   });
 
@@ -523,6 +757,125 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     // ...and the re-seed deduped against the existing user message rather than
     // appending a second copy — exactly two events, no double-insertion.
     expect(eventIds()).toHaveLength(2);
+  });
+
+  const makeStreamingDelta = (id: string, content: string) => ({
+    id,
+    timestamp: new Date().toISOString(),
+    source: "agent",
+    kind: "StreamingDeltaEvent",
+    content,
+    reasoning_content: null,
+  });
+
+  const makeAgentMessage = (id: string, text: string): MessageEvent => ({
+    id,
+    timestamp: new Date(Date.now() + 1000).toISOString(),
+    source: "agent",
+    llm_message: { role: "assistant", content: [{ type: "text", text }] },
+    activated_skills: [],
+    extended_content: [],
+  });
+
+  const renderProviderWithUrl = (conversationId: string) =>
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId={conversationId}
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+
+  it("buffers streaming deltas, then flushes them (reconciled) when the final message arrives", async () => {
+    renderProviderWithUrl("conv-stream");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-stream"]));
+
+    // Deltas arrive: they are buffered by the batcher, NOT committed per token.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("d1", "I'll help")),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("d2", " with that.")),
+      });
+    });
+    expect(eventIds()).toEqual(["user-msg-conv-stream"]);
+
+    // The final agent message is a non-delta event: the handler flushes the
+    // buffered deltas first, so the message reconciles the streamed text in
+    // place instead of racing ahead of it.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(
+          makeAgentMessage("agent-final", "I'll help with that. Done."),
+        ),
+      });
+    });
+
+    const { uiEvents, eventIds: ids } = useEventStore.getState();
+    // One reconciled agent bubble: the canonical final message supersedes the
+    // flushed deltas, so the streamed text renders once and is never duplicated.
+    expect(uiEvents).toHaveLength(2);
+    const bubble = uiEvents[1] as MessageEvent;
+    expect(bubble.id).toBe("agent-final");
+    expect(bubble.llm_message.content).toEqual([
+      { type: "text", text: "I'll help with that. Done." },
+    ]);
+    expect(uiEvents.some((event) => isStreamingDeltaEvent(event))).toBe(false);
+    // eventIds tracks the two durable events, never the deltas.
+    expect(ids.size).toBe(2);
+  });
+
+  it("discards buffered deltas from the previous conversation on switch", async () => {
+    const { rerender } = renderProviderWithUrl("conv-a");
+    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-a"]));
+
+    // Buffer deltas for A, then switch to B before they flush.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("a1", "STALE")),
+      });
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ConversationWebSocketProvider
+          conversationId="conv-b"
+          conversationUrl="http://localhost/api"
+        >
+          <div />
+        </ConversationWebSocketProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(eventIds()).toEqual(["user-msg-conv-b"]));
+
+    // B streams and finalizes. If the switch had NOT reset the batcher, A's
+    // "STALE" delta would still be buffered and merge into B's stream here.
+    act(() => {
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeStreamingDelta("b1", "fresh")),
+      });
+      wsCapture.mainOnMessage!({
+        data: JSON.stringify(makeAgentMessage("agent-b", "fresh.")),
+      });
+    });
+
+    const { uiEvents, events } = useEventStore.getState();
+    expect(uiEvents).toHaveLength(2);
+    expect((uiEvents[1] as MessageEvent).llm_message.content).toEqual([
+      { type: "text", text: "fresh." },
+    ]);
+    // The committed delta carries B's text only — had A's buffer survived the
+    // switch it would have merged in ahead of it as "STALEfresh".
+    const committedDeltas = events.filter((event) =>
+      isStreamingDeltaEvent(event),
+    );
+    expect(committedDeltas.map((delta) => delta.content)).toEqual(["fresh"]);
+    expect(JSON.stringify(events)).not.toContain("STALE");
   });
 
   it("consumes the optimistic pending bubble when the echoed user message arrives via REST preload", async () => {
