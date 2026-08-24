@@ -4,7 +4,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveSettings } from "#/hooks/mutation/use-save-settings";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
-import type { SkillInfo } from "#/types/settings";
+import type { Settings, SkillInfo } from "#/types/settings";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import {
@@ -14,6 +14,41 @@ import {
   resolveEnabledCatalogSkills,
   type SkillEnablement,
 } from "#/utils/skill-enablement";
+
+/**
+ * Settings → the two lists. Cloud creates conversations from its own
+ * server-side catalog and never reads `enabled_skills`, so the catalog stays
+ * deny-list governed there.
+ */
+function readSkillEnablement(
+  settings: Settings | undefined,
+  usesCatalogAllowList: boolean,
+): SkillEnablement {
+  return {
+    enabledSkills: usesCatalogAllowList
+      ? settings?.enabled_skills
+      : [...CATALOG_SKILL_NAMES],
+    disabledSkills: settings?.disabled_skills ?? [],
+  };
+}
+
+/** Read-only view of the rule, for surfaces that list skills without toggling. */
+export function useSkillEnabledFilter(): (skill: SkillInfo) => boolean {
+  const { backend } = useActiveBackend();
+  const { data: settings } = useSettings();
+  const usesCatalogAllowList = backend.kind !== "cloud";
+
+  return React.useMemo(() => {
+    const isEnabled = buildSkillEnablementFilter(
+      readSkillEnablement(settings, usesCatalogAllowList),
+    );
+    return (skill: SkillInfo) => isEnabled(skill.name);
+  }, [
+    settings?.enabled_skills,
+    settings?.disabled_skills,
+    usesCatalogAllowList,
+  ]);
+}
 
 export interface SkillEnablementController {
   isEnabled: (skill: SkillInfo) => boolean;
@@ -47,8 +82,6 @@ function withMembership(
 export function useSkillEnablement(): SkillEnablementController {
   const { t } = useTranslation("openhands");
   const { backend } = useActiveBackend();
-  // Cloud creates conversations from its own server-side catalog and never
-  // reads `enabled_skills`, so the catalog stays deny-list governed there.
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { mutate: saveSettings } = useSaveSettings();
@@ -58,12 +91,7 @@ export function useSkillEnablement(): SkillEnablementController {
 
   React.useEffect(() => {
     if (settingsLoading || !settings) return;
-    const hydrated: SkillEnablement = {
-      enabledSkills: usesCatalogAllowList
-        ? settings.enabled_skills
-        : [...CATALOG_SKILL_NAMES],
-      disabledSkills: settings.disabled_skills ?? [],
-    };
+    const hydrated = readSkillEnablement(settings, usesCatalogAllowList);
     savedRef.current = snapshot(hydrated);
     setEnablement(hydrated);
   }, [
