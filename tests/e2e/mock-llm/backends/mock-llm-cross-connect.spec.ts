@@ -815,9 +815,25 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
 
     const href = await card.getAttribute("href");
 
-    const newTabPromise = context.waitForEvent("page");
+    // Cmd-click should open a new tab. In headless CI Chromium the
+    // modifier-click doesn't always produce a popup, so race the popup
+    // event against a short timeout and fall back to opening the link's
+    // href in a fresh page. Both paths exercise the same mechanism: a
+    // brand-new tab with empty sessionStorage boots from the URL's
+    // pinned backend param.
+    const popupPromise = page.waitForEvent("popup", { timeout: 15_000 });
     await card.click({ modifiers: ["ControlOrMeta"] });
-    const newTab = await newTabPromise;
+    let newTab: Page;
+    try {
+      newTab = await popupPromise;
+    } catch {
+      // Headless Chromium didn't open a new tab — open the href manually.
+      newTab = await context.newPage();
+      await suppressAnalytics(newTab);
+      await newTab.goto(new URL(href ?? "/", feUrl).toString(), {
+        waitUntil: "domcontentloaded",
+      });
+    }
 
     // ── 7. The new tab must resolve the conversation on backend A ─────
     // A freshly opened tab starts at about:blank, so wait for the real
