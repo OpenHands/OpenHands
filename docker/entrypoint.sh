@@ -52,6 +52,12 @@
 #                          Override in production when the external URL differs.
 #   AUTOMATION_WORKSPACE_BASE – Directory for automation run workspaces
 #                          (default: ~/.openhands/workspaces)
+#   LMNR_* / OTEL_*        – Laminar/OTel observability vars for the
+#                          agent-server (e.g. LMNR_PROJECT_API_KEY,
+#                          LMNR_BASE_URL, LMNR_HTTP_PORT, LMNR_GRPC_PORT,
+#                          LMNR_FORCE_HTTP). Set at `docker run -e` time; the
+#                          agent-server child process inherits them and exports
+#                          OTel→Laminar traces when LMNR_PROJECT_API_KEY is set.
 #   Any agent-server or automation env vars are passed through.
 # ═══════════════════════════════════════════════════════════════════════════════
 set -uo pipefail
