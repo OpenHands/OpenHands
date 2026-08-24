@@ -131,13 +131,16 @@ from the agent-server port (`backend + 1000`); minimal-mode editor is
 | Extra backend          | `npm run dev:extra-backend`                                      | Agent-server `18002` and editor `18003`; shares state with the default stack                                                        | None                                                                |
 
 The packaged frontend-only, backend-only, and static modes use the full
-launcher's ingress when one is started. The direct Vite modes do not start an
-ingress. For `npm run dev:frontend`, point the frontend at an existing backend
-with `VITE_BACKEND_HOST` (default `127.0.0.1:8000`) or
-`VITE_BACKEND_BASE_URL`; these settings are distinct from the packaged
-frontend-only launcher. If a mode uses a different backend port, update the
-corresponding frontend/backend URL instead of assuming that `8000` is still the
-target.
+launcher’s ingress when one is started. `agent-canvas --frontend-only` serves
+packaged static assets, while `npm run dev -- --frontend-only` starts Vite; both
+start no agent-server or automation backend and therefore expect an existing
+backend. The direct Vite modes do not start an ingress. For
+`npm run dev:frontend`, point the frontend at an existing backend with
+`VITE_BACKEND_HOST` (default `127.0.0.1:8000`) or `VITE_BACKEND_BASE_URL`; the
+same backend URL controls apply to `npm run dev -- --frontend-only`. These
+settings are distinct from the packaged frontend-only launcher. If a mode uses
+a different backend port, update the corresponding frontend/backend URL instead
+of assuming that `8000` is still the target.
 
 ### Diagnose a port collision without deleting state
 
