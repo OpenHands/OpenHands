@@ -48,6 +48,13 @@ Unix domain sockets (some devcontainers, NFS/CIFS homes), set the standard
 `TMUX_TMPDIR` env var to a local path such as `/tmp` and the dev stack will use
 it instead.
 
+A hard kill can leave `owner_lease.json` files in conversation directories for
+up to the lease TTL, so a fast restart may temporarily hide conversations even
+though their files remain. `npm run dev:static` checks that no agent-server is
+live and then removes only stale lease metadata before starting; full, minimal,
+and extra-backend modes do not perform that cleanup automatically. Do not
+remove conversation or state directories as a port-collision recovery step.
+
 ### Environment Variables
 
 | Variable                         | Description                                    | Default                                    |
@@ -145,8 +152,10 @@ of assuming that `8000` is still the target.
 ### Diagnose a port collision without deleting state
 
 First stop the launcher from its owning terminal with `Ctrl-C`. If a child
-process remains, identify the listener before stopping anything. Do not kill
-all `node`, `python`, or `uvx` processes: another OpenHands stack may own them.
+process remains, identify the listener before stopping anything. A port
+collision causes the launcher to fail rather than terminate the existing
+listener; recovery below is manual. Do not kill all `node`, `python`, or `uvx`
+processes: another OpenHands stack may own them.
 
 On macOS, use `lsof`; on Linux, use `ss` (or `lsof` if it is installed):
 
