@@ -87,7 +87,7 @@ Access at `http://localhost:3001/`
 
 ### Agent server version selection
 
-By default, the latest released version from PyPI is used. You can override this (highest precedence first):
+By default, the configured pinned released version from PyPI is used. You can override this (highest precedence first):
 
 ```sh
 # Run against a local software-agent-sdk checkout.
@@ -110,6 +110,16 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 - `OH_CANVAS_SAFE_STATE_DIR` — conversation/workspace state directory; launcher-managed stacks use its `workspaces` child by default
 - `OH_SECRET_KEY_PATH` / `OH_SESSION_API_KEY_PATH` — move persisted encryption/session keys when isolating stacks
 - `VITE_WORKING_DIR` — repo root used for new conversations; launcher-managed stacks default to `<stateDir>/workspaces`
+- `OH_AUTOMATION_LOCAL_PATH` — local automation checkout; highest automation-source precedence
+- `OH_AUTOMATION_GIT_REF` — automation repository branch or commit; outranks `OH_AUTOMATION_VERSION`
+- `OH_AUTOMATION_VERSION` — pinned automation package version from PyPI
+- `OH_AUTOMATION_REPO` — alternate automation repository URL when `OH_AUTOMATION_GIT_REF` is used
+- `AUTOMATION_KV_SECRET` — explicit automation KV signing/encryption secret; defaults to the session API key
+
+For automation source selection, the precedence is local checkout, then git ref,
+then PyPI version, then the configured pinned PyPI release. The launcher loads
+`.env` for its npm scripts, so do not leave shared key or KV-secret values there
+when isolating two stacks.
 
 ## Port allocation and collision recovery
 
@@ -198,9 +208,12 @@ separately established that the process is stuck and the state is backed up.
 Changing ports alone does not isolate state. Use a different **parent root** for
 the second stack so its parent-relative persistence and full-launcher automation
 database are separate, and override both persisted key paths. Do not export one
-shared `OH_SECRET_KEY` or `LOCAL_BACKEND_API_KEY` for both stacks; clear those
-variables or provide different values per stack so the key-path overrides can
-take effect.
+shared `OH_SECRET_KEY` or `LOCAL_BACKEND_API_KEY` for both stacks, and do not
+share `AUTOMATION_KV_SECRET`; clear those variables or provide different values
+per stack so the key-path overrides and automation signing/encryption remain
+isolated. Because the npm scripts load `.env`, this recipe also assumes those
+values are absent from `.env`; remove shared entries or replace them with
+stack-specific values before launching.
 
 ```sh
 # Terminal 1: defaults
@@ -208,7 +221,7 @@ npm run dev
 
 # Terminal 2: separate parent root, ports, persistence, database, and keys
 STACK_ROOT="$HOME/.openhands-stack-2"
-env -u OH_SECRET_KEY -u LOCAL_BACKEND_API_KEY \
+env -u OH_SECRET_KEY -u LOCAL_BACKEND_API_KEY -u AUTOMATION_KV_SECRET \
 PORT=8100 \
 OH_CANVAS_SAFE_BACKEND_PORT=18100 \
 OH_CANVAS_SAFE_AUTOMATION_PORT=18101 \
@@ -225,6 +238,7 @@ PowerShell, set the same variables before launching:
 ```powershell
 Remove-Item Env:OH_SECRET_KEY -ErrorAction SilentlyContinue
 Remove-Item Env:LOCAL_BACKEND_API_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:AUTOMATION_KV_SECRET -ErrorAction SilentlyContinue
 $env:STACK_ROOT = "$HOME\.openhands-stack-2"
 $env:PORT = '8100'
 $env:OH_CANVAS_SAFE_BACKEND_PORT = '18100'
