@@ -9,7 +9,7 @@ import {
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
-export type OrganizeMode = "grouped" | "chronological";
+export type OrganizeMode = "grouped" | "chronological" | "tree";
 export type AutomationFilterMode =
   | "all"
   | "hide-automations"
@@ -17,6 +17,88 @@ export type AutomationFilterMode =
 
 /** Max conversations shown under a workspace/repo folder before "View more". */
 export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;
+
+/**
+ * A node in the parent-child conversation tree. `children` are the loaded
+ * conversations whose id appears in this conversation's
+ * `sub_conversation_ids` (the `launch_child_conversation` / planning-agent
+ * linkage). `depth` drives the 2-space per-layer indentation; `hasChildren`
+ * drives whether a collapse/expand toggle is offered at this layer.
+ */
+export interface ConversationNode {
+  conversation: AppConversation;
+  children: ConversationNode[];
+  depth: number;
+  hasChildren: boolean;
+}
+
+/**
+ * Builds the parent-child conversation forest from a flat list.
+ *
+ * Parents are located by scanning every loaded conversation's
+ * `sub_conversation_ids` — a conversation that appears in some other loaded
+ * conversation's child list is itself a child. Roots are loaded conversations
+ * that are never referenced as a child. A child whose parent is not on the
+ * loaded page (pagination) or is filtered out is promoted to a root so it
+ * stays reachable. Cycles are broken by an ancestry guard.
+ */
+export function buildConversationForest(
+  conversations: readonly AppConversation[],
+): ConversationNode[] {
+  if (conversations.length === 0) {
+    return [];
+  }
+  const byId = new Map(conversations.map((c) => [c.id, c]));
+  const parentByChild = new Map<string, string>();
+  for (const c of conversations) {
+    for (const childId of c.sub_conversation_ids ?? []) {
+      if (byId.has(childId) && !parentByChild.has(childId)) {
+        parentByChild.set(childId, c.id);
+      }
+    }
+  }
+
+  const roots = conversations
+    .map((c) => c.id)
+    .filter((id) => !parentByChild.has(id));
+
+  const forest: ConversationNode[] = [];
+  const emit = (
+    id: string,
+    depth: number,
+    ancestry: ReadonlySet<string>,
+  ): ConversationNode | null => {
+    if (ancestry.has(id)) {
+      return null;
+    }
+    const conversation = byId.get(id);
+    if (!conversation) {
+      return null;
+    }
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(id);
+    const children = (conversation.sub_conversation_ids ?? [])
+      .filter(
+        (childId) => byId.has(childId) && parentByChild.get(childId) === id,
+      )
+      .map((childId) => emit(childId, depth + 1, nextAncestry))
+      .filter((node): node is ConversationNode => node != null);
+    return {
+      conversation,
+      children,
+      depth,
+      hasChildren: children.length > 0,
+    };
+  };
+
+  for (const rootId of roots) {
+    const node = emit(rootId, 0, new Set());
+    if (node) {
+      forest.push(node);
+    }
+  }
+  return forest;
+}
 
 interface GroupConversationPreviewOptions {
   limit?: number;

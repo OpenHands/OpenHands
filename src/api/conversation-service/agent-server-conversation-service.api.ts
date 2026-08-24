@@ -270,6 +270,12 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     // omit these — adapter handles ``undefined`` / ``null`` gracefully.
     current_model_id: stringOrNull(item.current_model_id),
     current_model_name: stringOrNull(item.current_model_name),
+    sub_conversation_ids: Array.isArray(item.sub_conversation_ids)
+      ? item.sub_conversation_ids.filter(
+          (child): child is string => typeof child === "string",
+        )
+      : undefined,
+    parent_conversation_id: stringOrNull(item.parent_conversation_id),
   };
 }
 

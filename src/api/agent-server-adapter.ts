@@ -108,6 +108,10 @@ export interface DirectConversationInfo {
     agent_profile_id: string;
     revision: number;
   } | null;
+  /** Child conversation ids linked via `parent_conversation_id` on creation. */
+  sub_conversation_ids?: string[];
+  /** The parent conversation this conversation was launched from, if any. */
+  parent_conversation_id?: string | null;
 }
 
 const DEFAULT_TOOL_NAMES = ["terminal", "file_editor", "task_tracker"];
@@ -397,7 +401,7 @@ export function toAppConversation(
       working_dir: info.workspace?.working_dir ?? getAgentServerWorkingDir(),
     },
     public: false,
-    sub_conversation_ids: [],
+    sub_conversation_ids: info.sub_conversation_ids ?? [],
   };
 }
 

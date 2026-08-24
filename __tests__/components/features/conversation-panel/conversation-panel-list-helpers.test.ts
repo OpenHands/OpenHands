@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  buildConversationForest,
   collectAutomationNameFacets,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
@@ -292,17 +293,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -713,5 +715,70 @@ describe("conversation-panel-list-helpers", () => {
       knownWorkspaces,
     );
     expect(groups).toHaveLength(0);
+  });
+});
+
+describe("buildConversationForest", () => {
+  const conversation = (
+    id: string,
+    childIds: string[] = [],
+  ): AppConversation => ({
+    ...base,
+    id,
+    title: `conv-${id}`,
+    workspace: null,
+    sub_conversation_ids: childIds,
+  });
+
+  it("groups children under their parent with the expected depth", () => {
+    const forest = buildConversationForest([
+      conversation("a", ["b", "c"]),
+      conversation("b"),
+      conversation("c"),
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["a"]);
+    expect(forest[0].depth).toBe(0);
+    expect(forest[0].hasChildren).toBe(true);
+    expect(forest[0].children.map((n) => n.conversation.id)).toEqual([
+      "b",
+      "c",
+    ]);
+    expect(forest[0].children.map((n) => n.depth)).toEqual([1, 1]);
+  });
+
+  it("nests multiple levels with increasing indentation depth", () => {
+    const forest = buildConversationForest([
+      conversation("a", ["b"]),
+      conversation("b", ["c"]),
+      conversation("c"),
+    ]);
+    expect(forest[0].children[0].children[0].depth).toBe(2);
+    expect(forest[0].children[0].children[0].conversation.id).toBe("c");
+  });
+
+  it("promotes an orphan child (missing parent) to a root", () => {
+    const forest = buildConversationForest([conversation("child")]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["child"]);
+    expect(forest[0].depth).toBe(0);
+  });
+
+  it("breaks cycles so a conversation is not its own descendant", () => {
+    const forest = buildConversationForest([
+      conversation("a", ["b"]),
+      conversation("b", ["b"]),
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["a"]);
+    const b = forest[0].children[0];
+    expect(b.conversation.id).toBe("b");
+    expect(b.hasChildren).toBe(false);
+  });
+
+  it("does not attach children that are not in the loaded list", () => {
+    const forest = buildConversationForest([conversation("a", ["ghost"])]);
+    expect(forest[0].hasChildren).toBe(false);
+  });
+
+  it("returns an empty forest for an empty list", () => {
+    expect(buildConversationForest([])).toEqual([]);
   });
 });

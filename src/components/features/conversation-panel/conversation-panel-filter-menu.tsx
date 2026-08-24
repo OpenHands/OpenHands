@@ -11,6 +11,7 @@ import {
   Folder,
   GitBranch,
   ListFilter,
+  ListTree,
   MessageCircle,
   MousePointerClick,
   Star,
@@ -228,6 +229,15 @@ export function ConversationPanelFilterMenu({
             selected={organizeMode === "chronological"}
             onClick={() => {
               setOrganizeMode("chronological");
+              setFilterMenuOpen(false);
+            }}
+          />
+          <MenuRow
+            icon={ListTree}
+            label={t(I18nKey.CONVERSATION_PANEL$BY_TREE)}
+            selected={organizeMode === "tree"}
+            onClick={() => {
+              setOrganizeMode("tree");
               setFilterMenuOpen(false);
             }}
           />

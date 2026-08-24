@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -917,6 +917,17 @@ describe("toAppConversation", () => {
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
+
+  it("preserves sub_conversation_ids (parent-child tree view) and defaults to []", () => {
+    const withChildren = toAppConversation({
+      ...baseInfo,
+      sub_conversation_ids: ["child-1", "child-2"],
+    });
+    expect(withChildren.sub_conversation_ids).toEqual(["child-1", "child-2"]);
+
+    const without = toAppConversation({ ...baseInfo });
+    expect(without.sub_conversation_ids).toEqual([]);
+  });
 
   it("combines stats.usage_to_metrics into metrics when the backend doesn't set metrics directly (#16480)", () => {
     const result = toAppConversation({

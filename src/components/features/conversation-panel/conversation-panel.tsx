@@ -36,10 +36,12 @@ import { cn } from "#/utils/utils";
 import { ConversationPanelFilterMenu } from "./conversation-panel-filter-menu";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
+import { ConversationTree } from "./conversation-tree";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  buildConversationForest,
   collectAutomationNameFacets,
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
@@ -196,6 +198,8 @@ export function ConversationPanel({
   const [collapsedGroupIds, setCollapsedGroupIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [collapsedConversationIds, setCollapsedConversationIds] =
+    React.useState<ReadonlySet<string>>(() => new Set());
   const [expandedGroupPreviewIds, setExpandedGroupPreviewIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -240,6 +244,21 @@ export function ConversationPanel({
       return next;
     });
   }, []);
+
+  const toggleConversationCollapsed = React.useCallback(
+    (conversationId: string) => {
+      setCollapsedConversationIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(conversationId)) {
+          next.delete(conversationId);
+        } else {
+          next.add(conversationId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const toggleGroupPreviewExpanded = React.useCallback((groupId: string) => {
     setExpandedGroupPreviewIds((prev) => {
@@ -461,6 +480,15 @@ export function ConversationPanel({
       : recentScoped;
     return sortConversationsByField(visible, conversationSort);
   }, [recentScoped, olderScoped, showOlderConversations, conversationSort]);
+
+  // Parent-child tree view: build the forest from the sorted visible set so a
+  // parent renders above its children following chrono/sort order.
+  const conversationForest = React.useMemo(() => {
+    if (organizeMode !== "tree" || compact) {
+      return [];
+    }
+    return buildConversationForest(sortedVisibleConversations);
+  }, [organizeMode, compact, sortedVisibleConversations]);
 
   const groupLabels = React.useMemo(
     () => ({
@@ -1177,6 +1205,17 @@ export function ConversationPanel({
               renderConversationCard(conversation),
             )}
           </div>
+        ) : null}
+
+        {!showInitialSkeleton && !compact && organizeMode === "tree" ? (
+          <ConversationTree
+            nodes={conversationForest}
+            collapsedIds={collapsedConversationIds}
+            onToggleCollapsed={toggleConversationCollapsed}
+            renderConversationCard={(conversation) =>
+              renderConversationCard(conversation)
+            }
+          />
         ) : null}
 
         {/* Explicit "Load more" trigger. Only shown when more pages exist

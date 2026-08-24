@@ -670,6 +670,39 @@ describe("AgentServerConversationService", () => {
       expect(conversation?.sandbox_status).toBe("PAUSED");
     });
 
+    it("preserves sub_conversation_ids through the wire normalizer so the panel can build the parent-child tree", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "parent-1",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            sub_conversation_ids: ["child-1", "child-2"],
+          },
+          {
+            id: "child-1",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            parent_conversation_id: "parent-1",
+            sub_conversation_ids: [],
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.sub_conversation_ids).toEqual([
+        "child-1",
+        "child-2",
+      ]);
+      expect(result.items[1]?.sub_conversation_ids).toEqual([]);
+    });
+
     it("preserves sandbox_status from searchConversations response", async () => {
       const searchSpy = vi.fn().mockResolvedValue({
         items: [
