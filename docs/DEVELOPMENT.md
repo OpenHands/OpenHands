@@ -17,8 +17,7 @@ This repository contains the Agent Canvas frontend and local-stack orchestration
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
-When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
-
+When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. Version pins, local-stack overrides, and PR ordering are in [Cross-repository version compatibility](#cross-repository-version-compatibility). See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
 
 For a static frontend build (better for slow networks, remote access, tunnels):
 
@@ -48,11 +47,15 @@ it instead.
 
 ### Environment Variables
 
-| Variable                  | Description                    | Default |
-| ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
+| Variable                     | Description                            | Default                        |
+| ---------------------------- | -------------------------------------- | ------------------------------ |
+| `PORT`                       | Ingress port                           | `8000`                         |
+| `OH_AGENT_SERVER_LOCAL_PATH` | Absolute `software-agent-sdk` checkout | unset                          |
+| `OH_AGENT_SERVER_GIT_REF`    | Git ref for agent-server               | unset (`config/defaults.json`) |
+| `OH_AGENT_SERVER_VERSION`    | PyPI version for agent-server          | unset (`config/defaults.json`) |
+| `OH_AUTOMATION_LOCAL_PATH`   | Absolute `automation` checkout         | unset                          |
+| `OH_AUTOMATION_GIT_REF`      | Git ref for automation backend         | unset (`config/defaults.json`) |
+| `OH_AUTOMATION_VERSION`      | PyPI version for automation            | unset (`config/defaults.json`) |
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -65,23 +68,145 @@ npm run dev:minimal
 This runs only agent-server + Vite (no automation backend or ingress).
 Access at `http://localhost:3001/`
 
-### Agent server version selection
+### Cross-repository version compatibility
 
-By default, the latest released version from PyPI is used. You can override this (highest precedence first):
+The default local stack for this checkout is the **pins recorded below**, not
+an open-ended matrix of sibling `main` branches. Connecting to another Agent
+Server is allowed down to `compatibility.minimumAgentServer`. Mixing an
+unpinned Git backend with the committed TypeScript client (or the reverse) is
+unsupported and often looks like a product bug.
+
+Owning repositories:
+
+- [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) (this repo) — Agent Canvas
+- [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) — Python SDK and Agent Server
+- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) — `@openhands/typescript-client`
+- [`OpenHands/automation`](https://github.com/OpenHands/automation) — scheduling, webhooks, run history
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) — `@openhands/extensions` skills and integrations
+
+#### Source of truth
+
+| Surface                                    | Supported version lives in                                                    |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| Bundled Agent Server / SDK PyPI pin        | [`config/defaults.json`](../config/defaults.json) `versions.agentServer`      |
+| Bundled automation PyPI pin                | `config/defaults.json` `versions.automation`                                  |
+| Oldest Agent Server this frontend accepts  | `config/defaults.json` `compatibility.minimumAgentServer`                     |
+| `@openhands/typescript-client`             | [`package.json`](../package.json) (exact npm pin)                             |
+| `@openhands/extensions`                    | `package.json` (exact npm pin)                                                |
+| Released automation ↔ SDK dependency match | [`scripts/check-sdk-version-sync.mjs`](../scripts/check-sdk-version-sync.mjs) |
+
+`config/defaults.json` is the source of truth for the Python backend pins used
+by the npm and Docker install paths. `agent-canvas --info` prints the same
+Agent Server and automation pins plus the minimum compatible Agent Server.
+
+Those files describe **this revision**. They are not a historical compatibility
+matrix. They do not promise that Git `main` of every sibling repository works
+together, or that independently chosen PyPI/npm numbers with the same major
+version are interchangeable.
+
+Runtime enforcement for a connected Agent Server is
+`assertAgentServerVersionIsSupported()` in
+[`src/api/agent-server-compatibility.ts`](../src/api/agent-server-compatibility.ts).
+Some UI features have additional floors inside `@openhands/typescript-client`.
+Meeting `compatibility.minimumAgentServer` does not mean every Canvas feature
+is available on that backend.
+
+The TypeScript client records the Agent Server contract it was generated from
+in that repository (see its README, "Agent Server API contract"). That client
+contract pin is independent of Canvas `versions.agentServer`.
+
+#### Released package, Git ref, and local path
+
+`npm run dev`, `npm run dev:static`, and the `agent-canvas` binary select
+**Python** backends with the following precedence (highest first).
+`npm run dev:minimal` uses the same Agent Server selection and does not start
+automation. Leaving an override unset means "use the pin above", not Git
+`main`.
+
+**Agent Server** ([`software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk)):
+
+1. `OH_AGENT_SERVER_LOCAL_PATH` — absolute path to a checkout that contains
+   `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and
+   `openhands-workspace`. The agent-server package is rebuilt from local
+   source on each start (`uvx --reinstall`); the other workspace packages are
+   installed editable.
+2. `OH_AGENT_SERVER_GIT_REF` — branch, tag, or commit. All four workspace
+   packages are installed from that same ref so inter-package APIs stay in
+   sync. The launcher passes `uvx --reinstall` so a cached PyPI wheel with
+   the same version string is not reused.
+3. `OH_AGENT_SERVER_VERSION` — a specific PyPI version of those four packages.
+4. Default: `versions.agentServer` from `config/defaults.json`.
 
 ```sh
-# Run against a local software-agent-sdk checkout.
 OH_AGENT_SERVER_LOCAL_PATH=/abs/path/to/software-agent-sdk npm run dev
-
-# Use a git branch or commit (takes precedence over version)
-OH_AGENT_SERVER_GIT_REF=main npm run dev
-OH_AGENT_SERVER_GIT_REF=abc1234 npm run dev
-
-# Use a specific PyPI version
-OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
+OH_AGENT_SERVER_GIT_REF=<branch-or-sha> npm run dev
+OH_AGENT_SERVER_VERSION=<versions.agentServer> npm run dev
 ```
 
-`OH_AGENT_SERVER_LOCAL_PATH` must be an absolute path to a `software-agent-sdk` checkout containing the `openhands-agent-server`, `openhands-sdk`, `openhands-tools`, and `openhands-workspace` workspace packages. The agent-server itself is rebuilt from local source on each start (`uvx --reinstall`); the other workspace packages are installed editable, so their source changes take effect without a rebuild.
+**Automation** ([`automation`](https://github.com/OpenHands/automation)):
+
+1. `OH_AUTOMATION_LOCAL_PATH` — absolute path to a checkout with
+   `pyproject.toml`. `--automation-ref` on the launcher outranks this local
+   path.
+2. `OH_AUTOMATION_GIT_REF` (or `--automation-ref`) — branch, tag, or commit.
+   `OH_AUTOMATION_REPO` only applies when a git ref is selected.
+3. `OH_AUTOMATION_VERSION` — a specific PyPI version of `openhands-automation`.
+4. Default: `versions.automation` from `config/defaults.json`.
+
+Released `openhands-automation` is checked against `versions.agentServer`.
+CI runs `scripts/check-sdk-version-sync.mjs` on the **published** automation
+package, not on a local checkout or Git `main`.
+
+**TypeScript client and extensions:** Canvas does not provide Git-ref or
+local-path launcher variables for `@openhands/typescript-client` or
+`@openhands/extensions`. Both are exact npm pins in `package.json`. Public
+skills are loaded from `@openhands/extensions` at **build time**; the Agent
+Server no longer clones the extensions repo or honors `EXTENSIONS_REF`.
+
+Contributor notes require a **published** TypeScript client before Canvas
+bumps that pin. Do not point this repository at an unpublished commit SHA.
+
+Iterate on unreleased client or extensions work in those repositories, then
+bump the Canvas pin after the package exists on the registry.
+
+#### Cross-repository change checklist
+
+1. Confirm ownership using [Repository boundaries](#repository-boundaries).
+2. Read `config/defaults.json` and `package.json` for the pins this Canvas
+   revision expects.
+3. If the Agent Server API changes, land it in `software-agent-sdk` first.
+   For local Canvas testing, use `OH_AGENT_SERVER_LOCAL_PATH` or
+   `OH_AGENT_SERVER_GIT_REF`; keep the TypeScript client pin until the client
+   is published.
+4. Mirror the contract in `typescript-client` (OpenAPI and handwritten
+   clients). Publish that package, then bump `@openhands/typescript-client`
+   here.
+5. If automation must run against the new SDK, release `openhands-automation`
+   with matching SDK dependencies, then update `versions.automation` so
+   `scripts/check-sdk-version-sync.mjs` still passes.
+6. If public skills or integrations change, publish `@openhands/extensions`
+   and then bump that dependency.
+7. If a Canvas PR needs an unreleased Agent Server, link the
+   `OpenHands/software-agent-sdk` **pull request** (not only an issue) in the
+   Canvas PR body so
+   [mock-LLM Docker e2e](../.github/workflows/mock-llm-docker-e2e.yml) can
+   install that git ref.
+8. Do not merge Canvas UI that requires a contract the pinned client does not
+   yet expose.
+
+#### Breaking contract sequencing
+
+Usual direction: Agent Server / SDK → OpenAPI contract → `typescript-client` →
+Agent Canvas. Automation scheduling flows Canvas → `automation` → Agent
+Server / SDK.
+
+REST deprecation and the removal runway are owned by
+`software-agent-sdk` (`openhands-agent-server/AGENTS.md`). Canvas must not
+skip the client release step or consume an unpublished client SHA.
+
+Event wire types follow the same order: SDK Pydantic model, then TypeScript
+client, then Canvas consumption of the client type. See the
+[custom code-review guide](../.agents/skills/custom-codereview-guide.md).
 
 ### Other useful overrides
 
