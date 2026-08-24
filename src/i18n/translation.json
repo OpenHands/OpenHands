@@ -11798,7 +11798,7 @@
     "ca": "OpenHands LLM Key"
   },
   "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX": {
-    "en": " Section of OpenHands Cloud.",
+    "en": " section of OpenHands Cloud.",
     "ja": "セクションで確認できます。",
     "zh-CN": "部分中找到您的 OpenHands Provider LLM Key。",
     "zh-TW": "區塊中找到您的 OpenHands Provider LLM Key。",
