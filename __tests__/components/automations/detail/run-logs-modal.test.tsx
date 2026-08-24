@@ -285,6 +285,200 @@ describe("RunLogsModal", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("shows run details when status_detail is present without a bash command", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-1",
+      status: AutomationRunStatus.RUNNING,
+      conversation_id: null,
+      bash_command_id: null,
+      error_detail: null,
+      status_detail: {
+        phase: "verification",
+        kind: "api_rate_limited",
+        detail: "Sandbox API returned HTTP 429",
+        status_code: 429,
+        transient: true,
+        count: 2,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: null,
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId={null}
+        bashCommandId={null}
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: I18nKey.AUTOMATIONS$DETAIL$RUN_DETAILS_TITLE,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Temporary API rate limit (HTTP 429).",
+    );
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Sandbox API returned HTTP 429",
+    );
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Api Rate Limited")).toBeInTheDocument();
+    expect(screen.getByText("Transient")).toBeInTheDocument();
+    expect(screen.getByText("Yes")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA),
+    ).toBeInTheDocument();
+    expect(screen.getByText("HTTP status")).toBeInTheDocument();
+    expect(screen.getByText("429")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$LOGS_NO_COMMAND),
+    ).toBeInTheDocument();
+  });
+
+  it("shows both terminal error_detail and status_detail metadata", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-2",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail: "Command failed",
+      status_detail: {
+        phase: "callback",
+        detail: "Completion callback reported failure",
+        source: "automation_script",
+        metadata: { exit_code: 1 },
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Command failed",
+    );
+    expect(screen.getByTestId("run-status-details")).toHaveTextContent(
+      "Completion callback reported failure",
+    );
+    expect(screen.getByText("Automation Script")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUN_STATUS_DETAIL_METADATA),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Exit Code")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+  });
+
+  it("surfaces structured SDK callback reasons before generic execution status", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const run: AutomationRun = {
+      id: "run-detail-llm-auth",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail:
+        "litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: sk-dummy********value.",
+      status_detail: {
+        phase: "callback",
+        kind: "execution_error",
+        source: "sdk_callback",
+        formatted_detail:
+          "litellm.AuthenticationError: AuthenticationError: OpenAIException - Incorrect API key provided: sk-dummy********value. You can find your API key at https://platform.openai.com/account/api-keys.",
+        transient: false,
+        count: 1,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    const details = screen.getByTestId("run-status-details");
+    expect(details).toHaveTextContent(
+      "LLM authentication failed: incorrect API key provided.",
+    );
+    expect(details).not.toHaveTextContent("Execution failed.");
+    expect(screen.getByText("Phase")).toBeInTheDocument();
+    expect(screen.getByText("Callback")).toBeInTheDocument();
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Execution Error")).toBeInTheDocument();
+    expect(screen.getByText("Transient")).toBeInTheDocument();
+    expect(screen.getByText("No")).toBeInTheDocument();
+  });
+
+  it("summarizes execution failures without duplicating output when log tabs exist", () => {
+    useBashCommandLogsMock.mockReturnValue(makeHookResult());
+    const detail = `exit_code=1
+stderr: qa failure stderr
+Traceback (most recent call last):
+  File "/tmp/main.py", line 6, in <module>
+    raise RuntimeError("qa intentional failure")
+RuntimeError: qa intentional failure
+
+stdout: qa failure stdout`;
+    const run: AutomationRun = {
+      id: "run-detail-3",
+      status: AutomationRunStatus.FAILED,
+      conversation_id: "conv-1",
+      bash_command_id: "cmd-1",
+      error_detail: detail,
+      status_detail: {
+        phase: "execution",
+        kind: "execution_error",
+        detail,
+        source: "agent_server",
+        operation: "verify_run",
+        code: "1",
+        transient: false,
+        count: 1,
+      },
+      started_at: "2026-01-01T10:00:00Z",
+      completed_at: "2026-01-01T10:02:00Z",
+    };
+
+    render(
+      <RunLogsModal
+        isOpen
+        conversationId="conv-1"
+        bashCommandId="cmd-1"
+        onClose={() => {}}
+        run={run}
+      />,
+    );
+
+    const details = screen.getByTestId("run-status-details");
+    expect(details).toHaveTextContent("Execution failed with exit code 1.");
+    expect(screen.queryByText("Error output")).not.toBeInTheDocument();
+    expect(screen.queryByText(/qa failure stderr/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/RuntimeError: qa intentional failure/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("qa failure stdout")).not.toBeInTheDocument();
+    expect(screen.getByText("Code")).toBeInTheDocument();
+    expect(screen.getByText("No")).toBeInTheDocument();
+  });
 });
 
 describe("RunLogsModal — Debug with OpenHands button", () => {
