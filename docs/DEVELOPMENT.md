@@ -119,12 +119,12 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 - `OH_AUTOMATION_REPO` — alternate automation repository URL when an automation git ref is used
 - `AUTOMATION_KV_SECRET` — explicit automation KV signing/encryption secret for the full automation launcher; defaults there to the session API key and is not injected by static mode
 
-For automation source selection, `--automation-ref` and `--automation-repo`
-CLI options take precedence over environment variables. Among environment
-variables, the precedence is local checkout, then git ref, then PyPI version,
-then the configured pinned PyPI release. The launcher loads `.env` for its npm
-scripts, so do not leave shared key or KV-secret values there when isolating
-two stacks.
+For automation source selection, `--automation-ref` overrides a local checkout
+and `--automation-repo` changes the repository URL only when a git ref is
+selected. Among environment variables, the precedence is local checkout, then
+git ref, then PyPI version, then the configured pinned PyPI release. The
+launcher loads `.env` for its npm scripts, so do not leave shared key or
+KV-secret values there when isolating two stacks.
 
 ## Port allocation and collision recovery
 
