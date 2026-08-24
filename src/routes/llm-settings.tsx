@@ -315,7 +315,11 @@ export function LlmSettingsScreen({
         />
       );
 
-      const renderApiKeyInput = (testId: string, helpTestId: string) => (
+      const renderApiKeyInput = (
+        testId: string,
+        helpTestId: string,
+        openHandsHelpTestId: string,
+      ) => (
         <>
           <SettingsInput
             testId={testId}
@@ -332,12 +336,19 @@ export function LlmSettingsScreen({
             }
           />
 
-          <HelpLink
-            testId={helpTestId}
-            text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-            linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-            href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
-          />
+          {/* The OpenHands provider's key lives in the OpenHands Cloud "API
+              Keys" tab, so point users there instead of the generic docs page
+              that covers both LLM and regular API keys. */}
+          {showOpenHandsApiKeyHelp ? (
+            <OpenHandsApiKeyHelp testId={openHandsHelpTestId} />
+          ) : (
+            <HelpLink
+              testId={helpTestId}
+              text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
+              linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
+              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+            />
+          )}
         </>
       );
 
@@ -457,12 +468,6 @@ export function LlmSettingsScreen({
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {showOpenHandsApiKeyHelp &&
-                  !isLinkedToConnection &&
-                  !hideInlineCredentials ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
-                  ) : null}
-
                   {isLinkedToConnection || hideInlineCredentials
                     ? null
                     : renderApiKeyInput(
@@ -470,6 +475,8 @@ export function LlmSettingsScreen({
                         "llm-api-key-input",
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-help-anchor",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "openhands-api-key-help",
                       )}
                 </>
               )}
@@ -501,9 +508,6 @@ export function LlmSettingsScreen({
                       {isFreeOpenHandsModel(modelValue) ? (
                         <OpenHandsFreeModelsNote />
                       ) : null}
-                      {hideInlineCredentials ? null : (
-                        <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
-                      )}
                     </>
                   ) : null}
 
@@ -530,6 +534,8 @@ export function LlmSettingsScreen({
                         "llm-api-key-input",
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-help-anchor-advanced",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "openhands-api-key-help-2",
                       )}
                 </>
               )}
