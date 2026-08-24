@@ -51,10 +51,13 @@ it instead.
 
 A hard kill can leave `owner_lease.json` files in conversation directories for
 up to the lease TTL, so a fast restart may temporarily hide conversations even
-though their files remain. `npm run dev:static` checks that no agent-server is
-live and then removes only stale lease metadata before starting; full, minimal,
-and extra-backend modes do not perform that cleanup automatically. Do not
-remove conversation or state directories as a port-collision recovery step.
+though their files remain. `npm run dev:static` checks only whether its
+configured agent-server port accepts a connection, then removes every
+`owner_lease.json` below the state directory; it does not verify lease age or
+owner. Do not run that cleanup against a state directory shared with a live
+extra backend, because it can remove active lease metadata. Full, minimal, and
+extra-backend modes do not perform this cleanup automatically. Do not remove
+conversation or state directories as a port-collision recovery step.
 
 ### Environment Variables
 
@@ -110,16 +113,18 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 - `OH_CANVAS_SAFE_STATE_DIR` — conversation/workspace state directory; launcher-managed stacks use its `workspaces` child by default
 - `OH_SECRET_KEY_PATH` / `OH_SESSION_API_KEY_PATH` — move persisted encryption/session keys when isolating stacks
 - `VITE_WORKING_DIR` — repo root used for new conversations; launcher-managed stacks default to `<stateDir>/workspaces`
-- `OH_AUTOMATION_LOCAL_PATH` — local automation checkout; highest automation-source precedence
+- `OH_AUTOMATION_LOCAL_PATH` — absolute local automation checkout; highest automation-source environment precedence
 - `OH_AUTOMATION_GIT_REF` — automation repository branch or commit; outranks `OH_AUTOMATION_VERSION`
 - `OH_AUTOMATION_VERSION` — pinned automation package version from PyPI
-- `OH_AUTOMATION_REPO` — alternate automation repository URL when `OH_AUTOMATION_GIT_REF` is used
-- `AUTOMATION_KV_SECRET` — explicit automation KV signing/encryption secret; defaults to the session API key
+- `OH_AUTOMATION_REPO` — alternate automation repository URL when an automation git ref is used
+- `AUTOMATION_KV_SECRET` — explicit automation KV signing/encryption secret for the full automation launcher; defaults there to the session API key and is not injected by static mode
 
-For automation source selection, the precedence is local checkout, then git ref,
-then PyPI version, then the configured pinned PyPI release. The launcher loads
-`.env` for its npm scripts, so do not leave shared key or KV-secret values there
-when isolating two stacks.
+For automation source selection, `--automation-ref` and `--automation-repo`
+CLI options take precedence over environment variables. Among environment
+variables, the precedence is local checkout, then git ref, then PyPI version,
+then the configured pinned PyPI release. The launcher loads `.env` for its npm
+scripts, so do not leave shared key or KV-secret values there when isolating
+two stacks.
 
 ## Port allocation and collision recovery
 
@@ -262,7 +267,9 @@ remove either root.
 To run a second standalone agent-server alongside `npm run dev` while sharing
 its conversation history and encrypted secrets, you can use the
 `npm run dev:extra-backend` helper. It launches an extra server on `:18002` that
-reuses the bundled instance's state dir.
+reuses the bundled instance's state dir. Do not run `npm run dev:static` against
+that shared state directory while either backend is live; static lease cleanup
+can remove active `owner_lease.json` files owned by the other backend.
 
 ### Frontend against an existing backend
 
@@ -276,9 +283,10 @@ npm run dev:frontend
 launcher logic that generates or persists development keys. The direct Vite
 workflow expects the backend at `127.0.0.1:8000` by default. Set
 `VITE_BACKEND_HOST` or `VITE_BACKEND_BASE_URL` when the existing backend uses a
-different address, and configure any required backend/session authentication
-through that backend's supported settings. Do not assume that
-`LOCAL_BACKEND_API_KEY` is mapped or persisted by this direct Vite command.
+different address. If that backend requires session authentication, set
+`VITE_SESSION_API_KEY` to its session key and configure the backend's supported
+settings. Do not assume that `LOCAL_BACKEND_API_KEY` is mapped or persisted by
+this direct Vite command.
 
 ### Mock mode
 
@@ -361,15 +369,15 @@ If you want Tailwind layout utilities on the inner themed container, pass `conte
 
 You can create a `.env` file in the project directory with these variables based on `.env.sample`.
 
-| Variable                    | Description                                                                               | Default Value          |
-| --------------------------- | ----------------------------------------------------------------------------------------- | ---------------------- |
-| `VITE_BACKEND_BASE_URL`     | Full base URL for the agent server used by direct browser requests                        | current browser origin |
-| `VITE_BACKEND_HOST`         | Backend host used by the Vite dev proxy                                                   | `127.0.0.1:8000`       |
-| `VITE_SESSION_API_KEY`      | (Internal) Session API key injected by the launcher — set `LOCAL_BACKEND_API_KEY` instead | -                      |
-| `VITE_WORKING_DIR`          | Workspace path sent when starting new conversations                                       | `workspace/project`    |
-| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads                    | `true`                 |
-| `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                     | `/`                    |
-| `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                       | `false`                |
-| `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                   | `false`                |
-| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                      | `3001`                 |
-| `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                            | `false`                |
+| Variable                    | Description                                                                                   | Default Value          |
+| --------------------------- | --------------------------------------------------------------------------------------------- | ---------------------- |
+| `VITE_BACKEND_BASE_URL`     | Full base URL for the agent server used by direct browser requests                            | current browser origin |
+| `VITE_BACKEND_HOST`         | Backend host used by the Vite dev proxy                                                       | `127.0.0.1:8000`       |
+| `VITE_SESSION_API_KEY`      | Session API key for direct Vite requests; launcher-managed modes may inject their session key | unset                  |
+| `VITE_WORKING_DIR`          | Workspace path sent when starting new conversations                                           | `workspace/project`    |
+| `VITE_ENABLE_BROWSER_TOOLS` | Set to `false` to omit `BrowserToolSet` from new conversation payloads                        | `true`                 |
+| `VITE_BASE_PATH`            | Build/serve the SPA under a subpath such as `/canvas`                                         | `/`                    |
+| `VITE_MOCK_API`             | Enable/disable API mocking with MSW                                                           | `false`                |
+| `VITE_USE_TLS`              | Use HTTPS/WSS for the Vite proxy target                                                       | `false`                |
+| `VITE_FRONTEND_PORT`        | Port to run the frontend application                                                          | `3001`                 |
+| `VITE_INSECURE_SKIP_VERIFY` | Skip TLS certificate verification for proxied backend requests                                | `false`                |
