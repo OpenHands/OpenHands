@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -12,6 +19,7 @@ import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
+import { SSYCLOUD_API_KEY_URL, SSYCLOUD_BASE_URL } from "#/constants/ssycloud";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -144,6 +152,109 @@ describe("LlmSettingsScreen", () => {
 
     expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
     expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
+  });
+
+  it("shows a saved SSYCloud profile without exposing its stored API key", async () => {
+    const model = "openai/deepseek/deepseek-v4-flash";
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: model,
+        llm_base_url: SSYCLOUD_BASE_URL,
+        llm_api_key_set: true,
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          llm: {
+            model,
+            api_key: null,
+            base_url: SSYCLOUD_BASE_URL,
+          },
+        },
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await waitFor(() => {
+      expect(screen.getByLabelText("LLM$PROVIDER")).toHaveValue("SSYCloud");
+      expect(screen.getByLabelText("LLM$MODEL")).toHaveValue(
+        "deepseek/deepseek-v4-flash",
+      );
+    });
+
+    expect(screen.getByTestId("llm-api-key-input")).toHaveValue("");
+    expect(screen.getByTestId("set-indicator")).toBeInTheDocument();
+    expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("llm-api-key-help-anchor")).getByRole("link"),
+    ).toHaveAttribute("href", SSYCLOUD_API_KEY_URL);
+  });
+
+  it("keeps SSYCloud selected while choosing and saving a discovered model", async () => {
+    const user = userEvent.setup();
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "",
+        llm_api_key_set: false,
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await user.click(screen.getByTestId("llm-provider-input"));
+    await user.click(await screen.findByText("SSYCloud"));
+    await user.type(screen.getByTestId("llm-api-key-input"), "test-key");
+
+    const modelInput = screen.getByTestId("llm-model-input");
+    await waitFor(() => expect(modelInput).toBeEnabled(), { timeout: 2000 });
+    await user.click(modelInput);
+    await user.click(
+      await screen.findByText("deepseek/deepseek-v4-flash", undefined, {
+        timeout: 2000,
+      }),
+    );
+
+    expect(screen.getByTestId("llm-provider-input")).toHaveValue("SSYCloud");
+    expect(modelInput).toHaveValue("deepseek/deepseek-v4-flash");
+
+    await user.click(screen.getByTestId("save-button"));
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llmPayload).toMatchObject({
+      model: "openai/deepseek/deepseek-v4-flash",
+      base_url: SSYCLOUD_BASE_URL,
+      api_key: "test-key",
+    });
+  });
+
+  it("does not reuse another provider's API key for SSYCloud model discovery", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        llm_model: "openai/gpt-4o",
+        llm_base_url: "",
+        llm_api_key_set: false,
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    await user.type(
+      screen.getByTestId("llm-api-key-input"),
+      "other-provider-key",
+    );
+    await user.click(screen.getByTestId("llm-provider-input"));
+    await user.click(await screen.findByText("SSYCloud"));
+
+    expect(screen.getByTestId("llm-model-input")).toBeDisabled();
   });
 
   it("does not clear an existing base URL on Basic save without a model change", async () => {

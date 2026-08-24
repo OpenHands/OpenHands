@@ -37,6 +37,15 @@ import {
   FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
 } from "#/utils/format-model-name";
+import {
+  isSSYCloudBaseUrl,
+  SSYCLOUD_API_KEY_URL,
+  SSYCLOUD_BASE_URL,
+  SSYCLOUD_PROVIDER_ID,
+  toSSYCloudRuntimeModel,
+  toSSYCloudSelectorModel,
+} from "#/constants/ssycloud";
+import type { ProviderModelCredentials } from "#/hooks/query/use-provider-models";
 
 const LLM_EXCLUDED_KEYS = new Set([
   "llm.model",
@@ -75,6 +84,8 @@ const normalizeBaseUrl = (baseUrl: string) => {
 };
 
 const isProviderDefaultBaseUrl = (model: string, baseUrl: string) => {
+  if (isSSYCloudBaseUrl(baseUrl)) return true;
+
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const { provider } = extractModelAndProvider(model);
 
@@ -169,6 +180,13 @@ export function LlmSettingsScreen({
     (isSubscriptionModelsLoading || isSubscriptionModelsFetching);
   const lastApiKeyModelRef = React.useRef<string | null>(null);
   const lastSubscriptionModelRef = React.useRef<string | null>(null);
+  const [modelDiscoveryCredentials, setModelDiscoveryCredentials] =
+    React.useState<ProviderModelCredentials>({ apiKey: "" });
+  const initialOverridesSignature = JSON.stringify(initialValueOverrides ?? {});
+
+  React.useEffect(() => {
+    setModelDiscoveryCredentials({ apiKey: "" });
+  }, [scope, initialOverridesSignature]);
 
   React.useEffect(() => {
     if (initialAuthType === LLM_AUTH_TYPE_SUBSCRIPTION) {
@@ -221,6 +239,10 @@ export function LlmSettingsScreen({
 
       const apiKeyValue =
         typeof values["llm.api_key"] === "string" ? values["llm.api_key"] : "";
+      const isSSYCloudSelection = isSSYCloudBaseUrl(baseUrlValue);
+      const selectorModelValue = isSSYCloudSelection
+        ? toSSYCloudSelectorModel(modelValue)
+        : modelValue;
       // For embedded profile forms (create/edit) the global
       // `llm_api_key_set` flag is misleading: a brand-new profile would show a
       // "key set" indicator just because some other profile has a key. Reflect
@@ -239,7 +261,15 @@ export function LlmSettingsScreen({
             value={apiKeyValue}
             // eslint-disable-next-line i18next/no-literal-string -- masked-key sentinel, not translatable
             placeholder={apiKeyIsSet ? "<hidden>" : ""}
-            onChange={(value) => onChange("llm.api_key", value)}
+            onChange={(value) => {
+              // Only a key entered while SSYCloud is selected may be used for
+              // its browser-side model discovery request. Never carry a key
+              // entered for another provider across that trust boundary.
+              setModelDiscoveryCredentials({
+                apiKey: isSSYCloudSelection ? value : "",
+              });
+              onChange("llm.api_key", value);
+            }}
             isDisabled={isDisabled}
             startContent={
               apiKeyIsSet ? <KeyStatusIcon isSet={apiKeyIsSet} /> : undefined
@@ -250,7 +280,11 @@ export function LlmSettingsScreen({
             testId={helpTestId}
             text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
             linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-            href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+            href={
+              isSSYCloudSelection
+                ? SSYCLOUD_API_KEY_URL
+                : "https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+            }
           />
         </>
       );
@@ -358,13 +392,42 @@ export function LlmSettingsScreen({
               ) : (
                 <>
                   <ModelSelector
-                    currentModel={modelValue || undefined}
+                    currentModel={selectorModelValue || undefined}
                     onChange={(provider, model) => {
+                      if (model === null) {
+                        // Provider changes require explicit credential entry.
+                        // This prevents a key from the previous provider from
+                        // being sent to SSYCloud's browser-facing /models API.
+                        setModelDiscoveryCredentials({ apiKey: "" });
+                      }
+
+                      if (provider === SSYCLOUD_PROVIDER_ID) {
+                        onChange("llm.base_url", SSYCLOUD_BASE_URL);
+                        onChange(
+                          "llm.model",
+                          model ? toSSYCloudRuntimeModel(model) : "",
+                        );
+                        return;
+                      }
+
+                      if (isSSYCloudSelection) {
+                        onChange(
+                          "llm.base_url",
+                          String(
+                            getSchemaFieldDefaultValue(
+                              schema,
+                              "llm.base_url",
+                            ) ?? "",
+                          ),
+                        );
+                      }
+
                       const nextModel = buildModelId(provider, model);
                       if (nextModel) {
                         onChange("llm.model", nextModel);
                       }
                     }}
+                    modelDiscoveryCredentials={modelDiscoveryCredentials}
                     wrapperClassName="!flex-col !gap-6"
                     isDisabled={isDisabled}
                   />
@@ -442,6 +505,8 @@ export function LlmSettingsScreen({
       defaultModel,
       embedded,
       isWaitingForSubscriptionModels,
+      modelDiscoveryCredentials,
+      schema,
       settings?.llm_api_key_set,
       subscriptionModels,
       t,
@@ -491,7 +556,10 @@ export function LlmSettingsScreen({
           llm.subscription_vendor = null;
         }
         if (context.view === "basic" && llm.model !== undefined) {
-          llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
+          const selectedBaseUrl = String(context.values["llm.base_url"] ?? "");
+          llm.base_url = isSSYCloudBaseUrl(selectedBaseUrl)
+            ? SSYCLOUD_BASE_URL
+            : getSchemaFieldDefaultValue(schema, "llm.base_url");
         }
       }
 

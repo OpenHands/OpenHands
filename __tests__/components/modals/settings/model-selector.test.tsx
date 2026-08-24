@@ -10,6 +10,7 @@ import type {
 
 const mockProviders: LLMProvider[] = [
   { name: "openai", verified: true },
+  { name: "ssycloud", verified: true },
   { name: "azure", verified: false },
   { name: "vertex_ai", verified: false },
 ];
@@ -18,6 +19,13 @@ const mockModelsByProvider: Record<string, LLMModel[]> = {
   openai: [
     { provider: "openai", name: "gpt-4o", verified: true },
     { provider: "openai", name: "gpt-4o-mini", verified: true },
+  ],
+  ssycloud: [
+    {
+      provider: "ssycloud",
+      name: "deepseek/deepseek-v4-flash",
+      verified: false,
+    },
   ],
   azure: [
     { provider: "azure", name: "ada", verified: false },
@@ -93,6 +101,29 @@ describe("ModelSelector", () => {
     expect(modelSelector).not.toBeDisabled();
   });
 
+  it("requires a new API key before browsing SSYCloud models", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector />);
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("SSYCloud"));
+
+    expect(screen.getByLabelText("LLM Model")).toBeDisabled();
+  });
+
+  it("shows live SSYCloud models when discovery credentials are present", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <ModelSelector modelDiscoveryCredentials={{ apiKey: "test-key" }} />,
+    );
+
+    await user.click(screen.getByLabelText("LLM Provider"));
+    await user.click(screen.getByText("SSYCloud"));
+    await user.click(screen.getByLabelText("LLM Model"));
+
+    expect(screen.getByText("deepseek/deepseek-v4-flash")).toBeInTheDocument();
+  });
+
   it("should display the model selector", async () => {
     const user = userEvent.setup();
     renderWithQuery(<ModelSelector />);
@@ -146,5 +177,4 @@ describe("ModelSelector", () => {
     expect(providerInput.getAttribute("placeholder") ?? "").toBe("");
     expect(modelInput.getAttribute("placeholder") ?? "").toBe("");
   });
-
 });

@@ -1,4 +1,9 @@
 // These are provider names, not user-facing text
+import {
+  SSYCLOUD_DISPLAY_NAME,
+  SSYCLOUD_PROVIDER_ID,
+} from "#/constants/ssycloud";
+
 export const MAP_PROVIDER = {
   openai: "OpenAI",
   azure: "Azure",
@@ -27,6 +32,7 @@ export const MAP_PROVIDER = {
   lemonade: "Lemonade",
   clarifai: "Clarifai",
   moonshot: "Moonshot",
+  [SSYCLOUD_PROVIDER_ID]: SSYCLOUD_DISPLAY_NAME,
 };
 
 export const mapProvider = (provider: string) =>

@@ -12,6 +12,7 @@ import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import { SSYCLOUD_BASE_URL } from "#/constants/ssycloud";
 
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
@@ -44,7 +45,7 @@ vi.mock("#/routes/llm-settings", async () => {
       const [apiKey] = React.useState(
         String(initialValuesRef.current["llm.api_key"] ?? ""),
       );
-      const [baseUrl] = React.useState(
+      const [baseUrl, setBaseUrl] = React.useState(
         String(initialValuesRef.current["llm.base_url"] ?? ""),
       );
       const [temperature, setTemperature] = React.useState("0.2");
@@ -93,11 +94,18 @@ vi.mock("#/routes/llm-settings", async () => {
             All
           </button>
           {view === "basic" ? (
-            <input
-              data-testid="mock-basic-model-input"
-              value={model}
-              onChange={(event) => setModel(event.currentTarget.value)}
-            />
+            <>
+              <input
+                data-testid="mock-basic-model-input"
+                value={model}
+                onChange={(event) => setModel(event.currentTarget.value)}
+              />
+              <input
+                data-testid="mock-basic-base-url-input"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.currentTarget.value)}
+              />
+            </>
           ) : null}
           {view === "all" ? (
             <input
@@ -657,6 +665,32 @@ describe("LlmSettingsLocalView", () => {
   });
 
   describe("Basic tab save", () => {
+    it("persists the SSYCloud base_url when creating a profile", async () => {
+      const user = userEvent.setup();
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+      const nameInput = screen.getByTestId("profile-name-input");
+      await user.clear(nameInput);
+      await user.type(nameInput, "ssy");
+
+      const modelInput = screen.getByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/ali/qwen3.5-plus");
+      await user.type(
+        screen.getByTestId("mock-basic-base-url-input"),
+        SSYCLOUD_BASE_URL,
+      );
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.model).toBe("openai/ali/qwen3.5-plus");
+      expect(savedLlm.base_url).toBe(SSYCLOUD_BASE_URL);
+    });
+
     it("preserves hidden base_url for OpenHands models without a model change", async () => {
       // Arrange — a profile has an actual advanced base_url value. Switching to
       // Basic hides it, but saving without changing the model must not wipe it.
@@ -771,6 +805,39 @@ describe("LlmSettingsLocalView", () => {
       const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
       expect(savedLlm.model).toBe("openhands/claude-sonnet-4-20250514");
       expect(savedLlm).not.toHaveProperty("base_url");
+    });
+
+    it("preserves the SSYCloud base_url when its Basic model changes", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "openai/ali/qwen3.5-plus",
+          api_key: "gAAAA_encrypted_key",
+          base_url: SSYCLOUD_BASE_URL,
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValueOnce({ success: true });
+
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() => {
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        );
+      });
+      const modelInput = await screen.findByTestId("mock-basic-model-input");
+      await user.clear(modelInput);
+      await user.type(modelInput, "openai/deepseek/deepseek-v4-flash");
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      const savedLlm = mockSaveMutateAsync.mock.calls[0][0].request.llm;
+      expect(savedLlm.model).toBe("openai/deepseek/deepseek-v4-flash");
+      expect(savedLlm.base_url).toBe(SSYCLOUD_BASE_URL);
     });
   });
 

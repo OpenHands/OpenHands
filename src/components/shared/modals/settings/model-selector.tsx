@@ -15,7 +15,11 @@ import { heroUiAutocompleteSelectorButtonClassName } from "#/ui/combobox-caret";
 import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
-import { useProviderModels } from "#/hooks/query/use-provider-models";
+import {
+  type ProviderModelCredentials,
+  useProviderModels,
+} from "#/hooks/query/use-provider-models";
+import { SSYCLOUD_PROVIDER_ID } from "#/constants/ssycloud";
 import {
   FREE_MODEL_BADGE_LABEL,
   FREE_OPENHANDS_MODEL_NOTE,
@@ -47,6 +51,7 @@ interface ModelSelectorProps {
   ) => void;
   wrapperClassName?: string;
   labelClassName?: string;
+  modelDiscoveryCredentials?: ProviderModelCredentials;
 }
 
 export function ModelSelector({
@@ -56,6 +61,7 @@ export function ModelSelector({
   onDefaultValuesChanged,
   wrapperClassName,
   labelClassName,
+  modelDiscoveryCredentials,
 }: ModelSelectorProps) {
   const [, setLitellmId] = React.useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
@@ -68,7 +74,25 @@ export function ModelSelector({
     data: providerModels = [],
     isLoading: isLoadingModels,
     error: modelsError,
-  } = useProviderModels(selectedProvider);
+  } = useProviderModels(selectedProvider, modelDiscoveryCredentials);
+
+  const modelsWithCurrentSelection = React.useMemo(() => {
+    if (
+      selectedProvider !== SSYCLOUD_PROVIDER_ID ||
+      !selectedModel ||
+      providerModels.some((model) => model.name === selectedModel)
+    ) {
+      return providerModels;
+    }
+
+    // Saved API keys are intentionally not exposed to the browser. Keep the
+    // persisted SSYCloud model visible while the user decides whether to enter
+    // a new key to refresh the live model catalog.
+    return [
+      { provider: SSYCLOUD_PROVIDER_ID, name: selectedModel, verified: false },
+      ...providerModels,
+    ];
+  }, [providerModels, selectedModel, selectedProvider]);
 
   const verifiedProviders = React.useMemo(
     () => providers.filter((p) => p.verified),
@@ -80,12 +104,12 @@ export function ModelSelector({
   );
 
   const verifiedModels = React.useMemo(
-    () => providerModels.filter((m) => m.verified),
-    [providerModels],
+    () => modelsWithCurrentSelection.filter((m) => m.verified),
+    [modelsWithCurrentSelection],
   );
   const unverifiedModels = React.useMemo(
-    () => providerModels.filter((m) => !m.verified),
-    [providerModels],
+    () => modelsWithCurrentSelection.filter((m) => !m.verified),
+    [modelsWithCurrentSelection],
   );
 
   React.useEffect(() => {
@@ -126,6 +150,9 @@ export function ModelSelector({
       ? `${selectedProvider}/${selectedModel}`
       : null;
   const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+  const isWaitingForSSYCloudApiKey =
+    selectedProvider === SSYCLOUD_PROVIDER_ID &&
+    !modelDiscoveryCredentials?.apiKey.trim();
   const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
   const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
 
@@ -249,7 +276,9 @@ export function ModelSelector({
             onSelectionChange={(e) => {
               if (e?.toString()) handleChangeModel(e.toString());
             }}
-            isDisabled={isDisabled || !selectedProvider}
+            isDisabled={
+              isDisabled || !selectedProvider || isWaitingForSSYCloudApiKey
+            }
             selectedKey={selectedModel}
             defaultSelectedKey={selectedModel ?? undefined}
             classNames={{

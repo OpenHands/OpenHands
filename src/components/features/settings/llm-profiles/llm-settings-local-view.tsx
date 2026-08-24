@@ -45,6 +45,7 @@ import {
 import { BackNavButton } from "#/components/shared/buttons/back-nav-button";
 import { Typography } from "#/ui/typography";
 import { useSettingsSectionHeader } from "#/contexts/settings-section-header-context";
+import { isSSYCloudBaseUrl } from "#/constants/ssycloud";
 
 type ViewMode = "list" | "create" | "edit";
 
@@ -280,10 +281,16 @@ export function LlmSettingsLocalView() {
       llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
       llmConfig.subscription_vendor = null;
 
-      // The Basic tab has no base_url field. Preserve an existing hidden value
-      // when the model did not actually change; if the user chooses a new model,
-      // drop the old base URL so provider defaults can apply to that model.
-      if (didChangeModelInBasic) {
+      // The Basic tab does not render base_url directly. Drop a stale hidden URL
+      // when switching ordinary providers, but retain SSYCloud's preset URL: its
+      // runtime model intentionally uses the generic `openai/` compatibility
+      // prefix and cannot be routed correctly without that URL.
+      if (
+        didChangeModelInBasic &&
+        !isSSYCloudBaseUrl(
+          typeof llmConfig.base_url === "string" ? llmConfig.base_url : "",
+        )
+      ) {
         delete llmConfig.base_url;
       }
 

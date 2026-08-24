@@ -11,6 +11,7 @@ import {
   OPENAI_SUBSCRIPTION_STATUS_PATH,
   OPENAI_SUBSCRIPTION_VENDOR,
 } from "#/constants/llm-subscription";
+import { SSYCLOUD_MODELS_URL } from "#/constants/ssycloud";
 
 /** Simple recursive merge — objects merge, scalars overwrite. */
 function deepMerge(
@@ -653,6 +654,31 @@ const MOCK_AGENT_SERVER_VERSION = "1.29.3";
 // when VITE_BACKEND_BASE_URL is configured.
 
 export const SETTINGS_HANDLERS = [
+  http.get(SSYCLOUD_MODELS_URL, async ({ request }) => {
+    const authorization = request.headers.get("Authorization");
+    if (!authorization?.startsWith("Bearer ")) {
+      return HttpResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    return HttpResponse.json({
+      object: "list",
+      data: [
+        {
+          id: "deepseek/deepseek-v4-flash",
+          object: "model",
+          owned_by: "deepseek",
+          support_apis: ["/v1/chat/completions"],
+        },
+        {
+          id: "openai/gpt-5.2",
+          object: "model",
+          owned_by: "openai",
+          support_apis: ["/v1/chat/completions", "/v1/responses"],
+        },
+      ],
+    });
+  }),
+
   http.get("*/server_info", async () =>
     HttpResponse.json({
       uptime: 0,

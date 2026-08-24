@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { ProfileRow } from "#/components/features/settings/llm-profiles/profile-row";
 import { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
+import { SSYCLOUD_BASE_URL } from "#/constants/ssycloud";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -50,6 +51,24 @@ describe("ProfileRow", () => {
     render(<ProfileRow {...defaultProps} />);
 
     expect(screen.getByText("openai/gpt-4")).toBeInTheDocument();
+  });
+
+  it("shows SSYCloud instead of its internal OpenAI-compatible prefix", () => {
+    render(
+      <ProfileRow
+        {...defaultProps}
+        profile={{
+          ...mockProfile,
+          model: "openai/ali/qwen3.5-plus",
+          base_url: SSYCLOUD_BASE_URL,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("SSYCloud · ali/qwen3.5-plus")).toHaveAttribute(
+      "title",
+      "openai/ali/qwen3.5-plus",
+    );
   });
 
   it("labels a free OpenHands route without changing the raw title", () => {

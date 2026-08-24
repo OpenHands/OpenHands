@@ -8,6 +8,11 @@ import { BrandBadge } from "#/components/shared/badge";
 import { cn } from "#/utils/utils";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import {
+  fromSSYCloudRuntimeModel,
+  isSSYCloudBaseUrl,
+  SSYCLOUD_DISPLAY_NAME,
+} from "#/constants/ssycloud";
+import {
   settingsListIconActionButtonClassName,
   settingsListRowClassName,
 } from "#/utils/settings-list-classes";
@@ -39,7 +44,10 @@ export function ProfileRow({
   const { t } = useTranslation("openhands");
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const displayModel = formatModelNameForDisplay(profile.model);
+  const displayModel =
+    profile.model && isSSYCloudBaseUrl(profile.base_url)
+      ? `${SSYCLOUD_DISPLAY_NAME} · ${fromSSYCloudRuntimeModel(profile.model)}`
+      : formatModelNameForDisplay(profile.model);
 
   return (
     <div

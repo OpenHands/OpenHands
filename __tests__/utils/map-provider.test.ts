@@ -26,4 +26,5 @@ test("mapProvider", () => {
   expect(mapProvider("openrouter")).toBe("OpenRouter");
   expect(mapProvider("clarifai")).toBe("Clarifai");
   expect(mapProvider("moonshot")).toBe("Moonshot");
+  expect(mapProvider("ssycloud")).toBe("SSYCloud");
 });
