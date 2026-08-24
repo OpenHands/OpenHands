@@ -87,28 +87,31 @@ async function listAutomations(
   );
 }
 
-/**
- * Poll the automation backend directly until an automation with AUTOMATION_NAME
- * appears. Uses the same endpoint as the create curl command, so there is no
- * cross-system propagation lag that could cause a race.
- */
+/** Poll the main conversation for the automation ID returned by the create command. */
 async function waitForCreatedAutomationId(
   request: import("@playwright/test").APIRequestContext,
+  conversationId: string,
   timeoutMs = 60_000,
 ) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const data = await listAutomations(request).catch(() => null);
-    if (data) {
-      const automations: { name: string; id: string }[] =
-        data.automations ?? data.items ?? [];
-      const found = automations.find((a) => a.name === AUTOMATION_NAME);
-      if (found) return found.id;
+    const response = await request.get(
+      `${BACKEND_URL}/api/conversations/${encodeURIComponent(conversationId)}/events/search`,
+      {
+        headers: { "X-Session-API-Key": SESSION_API_KEY },
+        params: { limit: "100", sort_order: "TIMESTAMP_DESC" },
+      },
+    );
+    if (response.ok()) {
+      const body = (await response.json()) as { items?: unknown[] };
+      const text = JSON.stringify(body.items ?? []);
+      const match = text.match(/automation_id\\?":\\?"([0-9a-f-]{36})/i);
+      if (match) return match[1];
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw new Error(
-    `Automation "${AUTOMATION_NAME}" not found after ${timeoutMs}ms`,
+    `Created automation ID was not reported after ${timeoutMs}ms`,
   );
 }
 
@@ -433,7 +436,10 @@ test.describe("mock-LLM automation lifecycle", () => {
     // ── Verify: automation was created in the real automation backend ──
 
     await test.step("verify automation was created", async () => {
-      createdAutomationId = await waitForCreatedAutomationId(request);
+      createdAutomationId = await waitForCreatedAutomationId(
+        request,
+        conversationId,
+      );
       const created = await getAutomation(request, createdAutomationId);
       automationIds.add(created.id);
       expect(created.name).toBe(AUTOMATION_NAME);
