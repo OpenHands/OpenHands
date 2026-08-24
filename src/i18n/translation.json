@@ -11611,7 +11611,7 @@
     "ca": "L'analitzador de seguretat s'utilitzarà conjuntament amb el mode de confirmació. Per defecte, utilitza el risc d'acció predit per LLM per determinar si cal demanar confirmació a l'usuari. Si el risc és ALT, demanarà confirmació a l'usuari per defecte."
   },
   "SETTINGS$DONT_KNOW_API_KEY": {
-    "en": "Don't know your API key?",
+    "en": "Don't know your LLM API Key?",
     "ja": "APIキーがわかりませんか？",
     "zh-CN": "不知道您的API密钥？",
     "zh-TW": "不知道您的API密鑰？",
