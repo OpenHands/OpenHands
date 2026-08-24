@@ -50,6 +50,7 @@ import {
   resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
+  type ConversationNode,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
@@ -490,6 +491,25 @@ export function ConversationPanel({
     return buildConversationForest(sortedVisibleConversations);
   }, [organizeMode, compact, sortedVisibleConversations]);
 
+  // Conversations that are a parent in the parent-child forest (they have
+  // children). Clicking one opens the run-graph view instead of the normal
+  // conversation view, in every organize mode. Built from the full loaded set
+  // (not just the visible sorted window) so a parent is recognized even when
+  // its children would render below the "Show older" fold.
+  const parentConversationIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    const collect = (nodes: ConversationNode[]) => {
+      for (const node of nodes) {
+        if (node.hasChildren) {
+          ids.add(node.conversation.id);
+        }
+        collect(node.children);
+      }
+    };
+    collect(buildConversationForest([...recentScoped, ...olderScoped]));
+    return ids;
+  }, [recentScoped, olderScoped]);
+
   const groupLabels = React.useMemo(
     () => ({
       emptyWorkspace: t(I18nKey.CONVERSATION_PANEL$NO_WORKSPACE),
@@ -928,7 +948,11 @@ export function ConversationPanel({
           }
         >
           <NavigationLink
-            to={backendScopedPath(`/conversations/${conversation.id}`)}
+            to={backendScopedPath(
+              parentConversationIds.has(conversation.id)
+                ? `/conversations/${conversation.id}/graph`
+                : `/conversations/${conversation.id}`,
+            )}
             onClick={onClose}
             className={cn(
               "block rounded-md transition-colors",
@@ -1011,6 +1035,7 @@ export function ConversationPanel({
       handleUnarchiveProject,
       onClose,
       openContextMenuId,
+      parentConversationIds,
       pinnedIds,
       showRepoBranchMetadata,
       showLlmProfiles,

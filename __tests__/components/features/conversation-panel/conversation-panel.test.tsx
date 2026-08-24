@@ -171,6 +171,36 @@ describe("ConversationPanel", () => {
     expect(href).toBe(`/conversations/1?backend=${SEEDED_DEFAULT_BACKEND_ID}`);
   });
 
+  it("opens the run graph for a parent conversation and its view for a child", async () => {
+    const parent = createMockConversation({
+      id: "parent-1",
+      title: "Parent run",
+      sub_conversation_ids: ["child-1"],
+    });
+    const child = createMockConversation({
+      id: "child-1",
+      title: "Child stream",
+    });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({ items: [parent, child], next_page_id: null });
+
+    renderConversationPanel();
+
+    await screen.findByText("Parent run");
+    const hrefs = (await screen.findAllByTestId("conversation-card")).map(
+      (card) => card.closest("a")?.getAttribute("href"),
+    );
+
+    expect(hrefs).toContain(
+      `/conversations/parent-1/graph?backend=${SEEDED_DEFAULT_BACKEND_ID}`,
+    );
+    expect(hrefs).toContain(
+      `/conversations/child-1?backend=${SEEDED_DEFAULT_BACKEND_ID}`,
+    );
+  });
+
   it("should render the conversations", async () => {
     renderConversationPanel();
     const cards = await screen.findAllByTestId("conversation-card");
