@@ -27,6 +27,7 @@ import {
 } from "./conversation-service/agent-server-conversation-service.types";
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
 import {
+  findInvokedCatalogSkills,
   resolveEnabledCatalogSkillSet,
   toSkillEnablement,
   type SkillEnablement,
@@ -755,6 +756,7 @@ function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
   enablement: SkillEnablement = {},
+  invokedCatalogSkills: readonly string[] = [],
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -768,6 +770,7 @@ function buildAgentContext(
   const disabledSkills = enablement.disabledSkills ?? [];
   const disabledSkillNames = new Set(disabledSkills);
   const enabledCatalogSkills = resolveEnabledCatalogSkillSet(enablement);
+  const invokedSkillNames = new Set(invokedCatalogSkills);
   const notDenied = (skill: { name?: unknown }) =>
     typeof skill.name !== "string" || !disabledSkillNames.has(skill.name);
 
@@ -776,10 +779,17 @@ function buildAgentContext(
   // bodies and trigger sets into every system prompt (OpenHands#16302).
   // Skills the agent context already carries keep the deny-list: they are
   // user-authored, and one the user just wrote must not need an opt-in.
+  //
+  // A skill the opening message invokes by name overrides both lists for this
+  // conversation only. Naming a command is a stronger signal than either
+  // stored preference, and honouring the lists here would mean an automation
+  // card that silently does nothing.
   const mergedSkills = [
     ...existingSkills.filter(notDenied),
     ...buildBundledSkills().filter(
-      (skill) => enabledCatalogSkills.has(skill.name) && notDenied(skill),
+      (skill) =>
+        invokedSkillNames.has(skill.name) ||
+        (enabledCatalogSkills.has(skill.name) && notDenied(skill)),
     ),
   ];
 
@@ -839,6 +849,7 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
 function buildConfiguredAcpAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
@@ -847,6 +858,7 @@ function buildConfiguredAcpAgentSettings(
       agentSettings,
       runtimeServicesInfo,
       toSkillEnablement(settings),
+      findInvokedCatalogSkills(query),
     ),
   };
 
@@ -905,6 +917,7 @@ function buildConfiguredAcpAgentSettings(
 function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = toRecord(agentSettings.llm);
@@ -963,6 +976,7 @@ function buildConfiguredOpenHandsAgentSettings(
       agentSettings,
       runtimeServicesInfo,
       toSkillEnablement(settings),
+      findInvokedCatalogSkills(query),
     ),
     tools: getAgentTools(agentSettings),
   };
@@ -971,10 +985,15 @@ function buildConfiguredOpenHandsAgentSettings(
 function buildConfiguredAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo)
-    : buildConfiguredOpenHandsAgentSettings(settings, runtimeServicesInfo);
+    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo, query)
+    : buildConfiguredOpenHandsAgentSettings(
+        settings,
+        runtimeServicesInfo,
+        query,
+      );
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -1085,6 +1104,7 @@ export function buildStartConversationRequest(
   const agentSettings = buildConfiguredAgentSettings(
     sourceAgentSettings,
     options.runtimeServicesInfo,
+    options.query,
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)

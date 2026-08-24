@@ -4,6 +4,7 @@ import {
   SKILLS_CATALOG,
 } from "@openhands/extensions/skills";
 import {
+  findInvokedCatalogSkills,
   isCatalogSkill,
   isRecommendedSkill,
   isSkillEnabled,
@@ -121,5 +122,36 @@ describe("toSkillEnablement", () => {
       enabledSkills: undefined,
       disabledSkills: [LOCAL],
     });
+  });
+});
+
+describe("findInvokedCatalogSkills", () => {
+  it("resolves a skill's own slash command, which is what automation cards send", () => {
+    expect(findInvokedCatalogSkills("/standup-digest:setup")).toEqual([
+      "slack-standup-digest",
+    ]);
+    expect(findInvokedCatalogSkills("/codereview please look at src/")).toEqual(
+      ["code-review"],
+    );
+  });
+
+  it("resolves `/<skill-name>`, which the Use skill button inserts", () => {
+    expect(findInvokedCatalogSkills(`/${OPTIONAL} MyClass.java`)).toEqual([
+      OPTIONAL,
+    ]);
+  });
+
+  it("only counts the leading token", () => {
+    // Matching a `/word` anywhere in prose would re-admit most of the catalog.
+    expect(
+      findInvokedCatalogSkills("what would /standup-digest:setup do?"),
+    ).toEqual([]);
+  });
+
+  it("ignores an empty, absent, or unknown command", () => {
+    expect(findInvokedCatalogSkills(undefined)).toEqual([]);
+    expect(findInvokedCatalogSkills("   ")).toEqual([]);
+    expect(findInvokedCatalogSkills("just a message")).toEqual([]);
+    expect(findInvokedCatalogSkills("/not-a-real-skill")).toEqual([]);
   });
 });

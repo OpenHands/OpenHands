@@ -202,6 +202,59 @@ describe("buildStartConversationRequest", () => {
       "disabled-custom",
     ]);
   });
+
+  it("loads a catalog skill the opening slash command invokes", () => {
+    // An automation card fills the chat input with the skill's own command
+    // (`findAutomationCommand`), and 18 of the catalog's 24 slash commands
+    // belong to skills that are off by default — without this the card would
+    // silently do nothing.
+    const settings = makeSettings({
+      agent_kind: "openhands",
+      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
+    });
+
+    const payload = buildStartConversationRequest({
+      settings,
+      query: "/standup-digest:setup",
+    });
+
+    expect(getAgentContextSkillNames(payload)).toContain(
+      "slack-standup-digest",
+    );
+  });
+
+  it("does not admit a skill named mid-sentence rather than invoked", () => {
+    const settings = makeSettings({
+      agent_kind: "openhands",
+      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
+    });
+
+    const payload = buildStartConversationRequest({
+      settings,
+      query: "tell me what /standup-digest:setup would do",
+    });
+
+    expect(getAgentContextSkillNames(payload)).not.toContain(
+      "slack-standup-digest",
+    );
+  });
+
+  it("lets an invoked skill override a stored deny entry for that conversation", () => {
+    const settings = makeSettings({
+      agent_kind: "openhands",
+      llm: { model: "litellm_proxy/openai/gpt-5.5", api_key: "sk-test" },
+    });
+    settings.disabled_skills = ["slack-standup-digest"];
+
+    const payload = buildStartConversationRequest({
+      settings,
+      query: "/standup-digest:setup",
+    });
+
+    expect(getAgentContextSkillNames(payload)).toContain(
+      "slack-standup-digest",
+    );
+  });
 });
 
 describe("buildStartConversationRequest — agentProfileId path", () => {
