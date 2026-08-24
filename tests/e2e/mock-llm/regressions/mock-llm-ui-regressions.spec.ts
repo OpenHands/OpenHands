@@ -15,7 +15,16 @@ import type { ActionEvent, MessageEvent } from "#/types/agent-server/core";
 import { SecurityRisk } from "#/types/agent-server/core";
 import type { FinishAction } from "#/types/agent-server/core/base/action";
 import type { CriticResult } from "#/types/agent-server/core/base/critic";
-import { seedLocalStorage, routeSessionApiKey } from "../utils/mock-llm-helpers";
+import { tmpdir } from "node:os";
+import {
+  seedLocalStorage,
+  routeSessionApiKey,
+  setChatInput,
+  waitForPath,
+  ensureMockLLMProfile,
+  BACKEND_URL,
+  SESSION_API_KEY,
+} from "../utils/mock-llm-helpers";
 
 test.describe.configure({ mode: "serial" });
 
@@ -353,6 +362,40 @@ async function triggerOlderEventLoad(page: Page) {
   });
 }
 
+// ─── conversation seeding ────────────────────────────────────────────
+
+/**
+ * Create a conversation straight through the API. `POST /api/conversations`
+ * provisions the conversation without contacting the model, so this needs no
+ * credentials and produces a sidebar row to navigate to.
+ */
+async function seedConversation(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/conversations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Session-API-Key": SESSION_API_KEY,
+    },
+    body: JSON.stringify({
+      workspace: { kind: "LocalWorkspace", working_dir: tmpdir() },
+      agent_settings: {
+        llm: {
+          model: "openai/mock-test-model",
+          api_key: "mock-api-key-for-testing",
+          base_url: "http://127.0.0.1:9/v1",
+        },
+      },
+    }),
+  });
+
+  expect(response.ok, `failed to seed conversation: ${response.status}`).toBe(
+    true,
+  );
+
+  const { id } = (await response.json()) as { id: string };
+  return id;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Tests
 // ═══════════════════════════════════════════════════════════════════════
@@ -643,5 +686,68 @@ test.describe("UI regressions", () => {
     const dropdown = page.getByTestId("workspace-dropdown");
     await expect(dropdown).toBeEnabled({ timeout: 15_000 });
     await expect(dropdown).toHaveValue("");
+  });
+
+  // ── #15701: "Creating conversation…" toast stuck on screen ────────
+
+  test("creating-conversation toast does not outlive the home page", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+
+    // Without a configured LLM the launcher disables sending outright, so the
+    // submit below would never fire.
+    await ensureMockLLMProfile(page);
+
+    await routeSessionApiKey(page);
+
+    // A conversation to navigate to. It has to exist up front: the sidebar
+    // list is refreshed by the create mutation's `onSuccess`, which never runs
+    // while that mutation is stalled below.
+    const seededId = await seedConversation();
+
+    // Stall the installed-plugins lookup. The create mutation awaits it
+    // *after* the conversation has been created, so this puts the app in
+    // exactly the reported state — the conversation exists, but the mutation
+    // hasn't resolved and the loading toast is still up. A flaky or
+    // slow-to-answer backend produces the same window on its own.
+    await page.route("**/api/plugins/installed**", async (route, request) => {
+      if (request.method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 60_000);
+      });
+      await route.abort();
+    });
+
+    await page.goto("/conversations", { waitUntil: "domcontentloaded" });
+
+    const sidebarLink = page
+      .getByTestId("conversation-panel")
+      .locator(`a[href*="${seededId}"]`)
+      .first();
+    await expect(sidebarLink).toBeVisible({ timeout: 30_000 });
+
+    await setChatInput(page, "stuck toast regression");
+    await page.getByTestId("submit-button").click();
+
+    const creatingToast = page.getByText("Creating conversation…", {
+      exact: true,
+    });
+    await expect(creatingToast).toBeVisible({ timeout: 30_000 });
+
+    // Client-side navigation off the home page, which unmounts the launcher
+    // while the create mutation is still pending. It has to be a link click
+    // rather than page.goto: a full page load drops the toast on its own and
+    // would pass with or without the fix.
+    await sidebarLink.click();
+    await waitForPath(page, new RegExp(`/conversations/${seededId}`));
+
+    // Assert on removal from the DOM rather than visibility — a dismissed
+    // toast keeps its node for the exit animation, and an animated-out node
+    // still reports a box to Playwright.
+    await expect(creatingToast).toHaveCount(0, { timeout: 15_000 });
   });
 });
