@@ -549,11 +549,19 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
     expect(openHandsHelp).toHaveTextContent(
       "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX",
     );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$SEE_HERE_FOR_MORE_DETAILS",
+    );
     expect(openHandsHelp).not.toHaveTextContent("SETTINGS$NAV_API_KEYS");
-    const helpLink = within(openHandsHelp).getByRole("link");
-    expect(helpLink).toHaveAttribute(
+    const helpLinks = within(openHandsHelp).getAllByRole("link");
+    expect(helpLinks).toHaveLength(2);
+    expect(helpLinks[0]).toHaveAttribute(
       "href",
       "https://app.all-hands.dev/settings/api-keys",
+    );
+    expect(helpLinks[1]).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
     );
   });
 

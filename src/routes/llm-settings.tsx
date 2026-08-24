@@ -114,6 +114,9 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       linkText={t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_LINK)}
       href="https://app.all-hands.dev/settings/api-keys"
       suffix={` ${t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX)}`}
+      suffixLinkText={t(I18nKey.SETTINGS$SEE_HERE_FOR_MORE_DETAILS)}
+      suffixLinkHref="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+      trailing="."
     />
   );
 }
