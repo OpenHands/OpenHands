@@ -749,33 +749,31 @@ describe("ConversationCard", () => {
   describe("Tag chips", () => {
     // Tag chips surface the agent-server's server-side conversation tags
     // (e.g. ``origin=slack`` stamped by an automation) and are gated by the
-    // conversation panel's "Tags" toggle (``showTags``). Chip labels are
-    // value-only; the full ``key: value`` lives in the chip tooltip.
-    it("renders non-reserved tags as value-only chips when showTags is on", () => {
+    // conversation panel's "Tags" toggle (``showTags``). Chips show a friendly
+    // ``key: value`` pair, with the full pair retained in the tooltip.
+    it("renders friendly key/value chips in priority and alphabetical order", () => {
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
           selectedRepository={null}
           lastUpdatedAt="2021-10-01T12:00:00Z"
           showTags
-          tags={{ origin: "slack", owner: "alice" }}
+          tags={{ origin: "slack", owner: "alice", artifacts: "1" }}
         />,
       );
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       // ``origin`` is a priority key, so it leads; remaining keys sort A–Z.
-      expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("slack");
-      expect(chips[0].getAttribute("title")).toMatch(/: slack$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
-      expect(chips[1]).toHaveTextContent("alice");
-      expect(chips[1]).toHaveAttribute("title", "Owner: alice");
+      expect(chips).toHaveLength(3);
+      expect(chips[0]).toHaveTextContent("Origin: slack");
+      expect(chips[0]).toHaveAttribute("title", "Origin: slack");
+      expect(chips[1]).toHaveTextContent("Artifacts: 1");
+      expect(chips[1]).toHaveAttribute("title", "Artifacts: 1");
+      expect(chips[2]).toHaveTextContent("Owner: alice");
+      expect(chips[2]).toHaveAttribute("title", "Owner: alice");
       expect(
-        within(chips[0]).getByTestId("conversation-card-tag-chip-icon"),
-      ).toHaveAttribute("data-tag-key", "origin");
-      expect(
-        within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
-      ).toHaveAttribute("data-tag-key", "owner");
+        screen.queryByTestId("conversation-card-tag-chip-icon"),
+      ).not.toBeInTheDocument();
     });
 
     it("filters reserved tag keys out of the chip row", () => {
@@ -801,16 +799,15 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(1);
-      expect(chips[0]).toHaveTextContent("review");
-      expect(chips[0].getAttribute("title")).toMatch(/: review$/);
-      expect(chips[0].getAttribute("title")).not.toContain("origin");
+      expect(chips[0]).toHaveTextContent("Origin: review");
+      expect(chips[0]).toHaveAttribute("title", "Origin: review");
     });
 
     it("keeps the automation name/trigger chips but hides the automation id chips", () => {
       // The automation id/run-id tags are raw UUIDs consumed by the panel's
       // automation filter — chip noise — while the human-meaningful name and
-      // trigger stay visible. Like every tag chip they render value-only,
-      // with the humanized ``key: value`` pair in the tooltip.
+      // trigger stay visible. Like every tag chip they render the humanized
+      // ``key: value`` pair in both the compact row and tooltip.
       renderWithProviders(
         <ConversationCard
           title="Conversation 1"
@@ -828,12 +825,12 @@ describe("ConversationCard", () => {
 
       const chips = screen.getAllByTestId("conversation-card-tag-chip");
       expect(chips).toHaveLength(2);
-      expect(chips[0]).toHaveTextContent("Nightly Audit");
+      expect(chips[0]).toHaveTextContent("Automationname: Nightly Audit");
       expect(chips[0]).toHaveAttribute(
         "title",
         "Automationname: Nightly Audit",
       );
-      expect(chips[1]).toHaveTextContent("cron");
+      expect(chips[1]).toHaveTextContent("Automationtrigger: cron");
       expect(chips[1]).toHaveAttribute("title", "Automationtrigger: cron");
     });
 
@@ -881,7 +878,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-tag-chip");
-      expect(chip).toHaveTextContent("abcdefghijklm…");
+      expect(chip).toHaveTextContent("Token: abcdefghijklm…");
       expect(chip).toHaveAttribute("title", `Token: ${longValue}`);
     });
 
