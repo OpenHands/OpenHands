@@ -11763,23 +11763,6 @@
     "uk": "Ключі API дозволяють вам програмно автентифікуватися за допомогою API OpenHands. Зберігайте свої ключі API в безпеці; будь-хто, хто має ваш ключ API, може отримати доступ до вашого облікового запису. Для отримання додаткової інформації про використання API, перегляньте нашу <a>документацію API</a>.",
     "ca": "Les claus d'API us permeten autenticar-vos amb l'API d'OpenHands de manera programàtica. Manteniu les vostres claus d'API segures; qualsevol persona amb la vostra clau d'API pot accedir al vostre compte. Per obtenir més informació sobre com fer servir l'API, consulteu la nostra <a>documentació de l'API</a>."
   },
-  "SETTINGS$OPENHANDS_API_KEY_HELP": {
-    "en": "You can find your OpenHands Provider LLM Key in the <a>API Keys</a> tab of OpenHands Cloud.",
-    "ja": "OpenHands Provider LLM Key はOpenHands Cloudの<a>APIキー</a>タブで確認できます。",
-    "zh-CN": "您可以在OpenHands Cloud的<a>API密钥</a>标签页中找到您的 OpenHands Provider LLM Key。",
-    "zh-TW": "您可以在OpenHands Cloud的<a>API密鑰</a>標籤頁中找到您的 OpenHands Provider LLM Key。",
-    "ko-KR": "OpenHands Provider LLM Key는 OpenHands Cloud의 <a>API 키</a> 탭에서 찾을 수 있습니다.",
-    "no": "Du kan finne din OpenHands Provider LLM Key i <a>API-nøkler</a>-fanen i OpenHands Cloud.",
-    "it": "Puoi trovare la tua OpenHands Provider LLM Key nella scheda <a>Chiavi API</a> di OpenHands Cloud.",
-    "pt": "Você pode encontrar sua OpenHands Provider LLM Key na guia <a>Chaves de API</a> do OpenHands Cloud.",
-    "es": "Puede encontrar su OpenHands Provider LLM Key en la pestaña <a>Claves API</a> de OpenHands Cloud.",
-    "ar": "يمكنك العثور على OpenHands Provider LLM Key في علامة التبويب <a>مفاتيح API</a> في OpenHands Cloud.",
-    "fr": "Vous pouvez trouver votre OpenHands Provider LLM Key dans l'onglet <a>Clés API</a> d'OpenHands Cloud.",
-    "tr": "OpenHands Provider LLM Key'inizi OpenHands Cloud'un <a>API Anahtarları</a> sekmesinde bulabilirsiniz.",
-    "de": "Sie finden Ihren OpenHands Provider LLM Key im Tab <a>API-Schlüssel</a> von OpenHands Cloud.",
-    "uk": "Ви можете знайти свій OpenHands Provider LLM Key у вкладці <a>Ключі API</a> OpenHands Cloud.",
-    "ca": "Podeu trobar la vostra OpenHands Provider LLM Key a la pestanya <a>Claus d'API</a> d'OpenHands Cloud."
-  },
   "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT": {
     "en": "You can find your OpenHands Provider LLM Key in the",
     "ja": "OpenHands Provider LLM Key は",

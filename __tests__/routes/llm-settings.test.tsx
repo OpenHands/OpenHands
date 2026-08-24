@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -529,7 +535,26 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
 
     // Local mode still collects an inline key for the OpenHands provider.
     expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
-    expect(screen.getByTestId("openhands-api-key-help")).toBeInTheDocument();
+    const openHandsHelp = screen.getByTestId("openhands-api-key-help");
+    expect(openHandsHelp).toBeInTheDocument();
+    // The OpenHands provider help uses the split TEXT/LINK/SUFFIX keys (not
+    // the stale single-string "API Keys tab" key) and links to OpenHands
+    // Cloud's API Keys page, where the OpenHands LLM Key section lives.
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_LINK",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX",
+    );
+    expect(openHandsHelp).not.toHaveTextContent("SETTINGS$NAV_API_KEYS");
+    const helpLink = within(openHandsHelp).getByRole("link");
+    expect(helpLink).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings/api-keys",
+    );
   });
 
   it("still shows the API key input for a non-OpenHands provider on cloud", async () => {
