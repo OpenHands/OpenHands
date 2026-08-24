@@ -200,10 +200,61 @@ export function getAgentServerWorkingDir(): string {
   return DEFAULT_WORKING_DIR;
 }
 
-export function buildConversationWorkingDir(conversationId: string): string {
-  const base = getAgentServerWorkingDir().replace(/\/+$/, "");
+function buildWorkingDir(base: string, conversationId: string): string {
+  const trimmed = base.replace(/\/+$/, "");
   const hex = conversationId.replace(/-/g, "");
-  return `${base}/${hex}`;
+  return `${trimmed}/${hex}`;
+}
+
+export function buildConversationWorkingDir(conversationId: string): string {
+  return buildWorkingDir(getAgentServerWorkingDir(), conversationId);
+}
+
+/**
+ * Conversation working dir under the backend-relative default
+ * (`workspace/project/<hex>`), deliberately ignoring any baked absolute
+ * `VITE_WORKING_DIR`. `resolveAbsoluteAgentServerPath()` anchors this to the
+ * active backend's own home via `GET /api/file/home`, so it resolves to a
+ * writable path on whichever backend actually runs the conversation.
+ */
+export function buildRelativeConversationWorkingDir(
+  conversationId: string,
+): string {
+  return buildWorkingDir(DEFAULT_WORKING_DIR, conversationId);
+}
+
+/**
+ * Whether `backendHost` is the same host that served this frontend.
+ *
+ * A launcher-baked `VITE_WORKING_DIR` is an absolute path on the serving
+ * host's filesystem, so it is only valid on that exact backend. The seeded
+ * `default-local` entry starts life pointing at the served origin, but its
+ * `host` is mutable — the user can edit it to a remote backend while its id
+ * stays `default-local`. Matching on the host (not the stable id) keeps the
+ * real invariant: the baked path is only safe for the host it was baked for.
+ */
+export function isServedOriginHost(
+  backendHost: string | null | undefined,
+): boolean {
+  const served = normalizeBaseUrl(getAgentServerBaseUrl());
+  const candidate = normalizeBaseUrl(backendHost);
+  if (!served || !candidate) return false;
+  return served === candidate;
+}
+
+/**
+ * Base working dir for a new conversation on the backend at `backendHost`.
+ * The baked (possibly absolute) default is used only for the served-origin
+ * backend; every other backend gets the relative default, anchored to its
+ * own home by `resolveAbsoluteAgentServerPath()`.
+ */
+export function buildConversationWorkingDirForBackend(
+  conversationId: string,
+  backendHost: string | null | undefined,
+): string {
+  return isServedOriginHost(backendHost)
+    ? buildConversationWorkingDir(conversationId)
+    : buildRelativeConversationWorkingDir(conversationId);
 }
 
 export function getAgentServerHeaders(): Record<string, string> {
