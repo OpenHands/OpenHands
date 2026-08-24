@@ -138,19 +138,19 @@ export function FileContentViewer({ path, viewMode }: FileContentViewerProps) {
   }
 
   if (kind === "pdf") {
-    // PDFs can carry embedded JavaScript (AcroForm, OpenAction…). Even
-    // though `staticUrl` lives on the agent server origin, the PDF
-    // viewer's scripting capability isn't worth the risk for a file
-    // preview, so we sandbox the iframe. `allow-same-origin` lets the
-    // browser's built-in PDF viewer load the underlying bytes without
-    // tripping cross-origin restrictions; we omit `allow-scripts`
-    // because no PDF preview we care about needs to run JS in the
-    // parent's origin.
+    // Deliberately NOT sandboxed: Chromium refuses to instantiate its
+    // built-in PDF viewer inside any sandboxed frame (the `sandbox`
+    // attribute disables plugins unconditionally — no token re-enables
+    // them), rendering "This page has been blocked by Chrome" instead of
+    // the document. Unsandboxed is safe here: the fileserver declares
+    // `Content-Type: application/pdf`, which browsers never sniff into
+    // HTML, so the frame can only host the PDF viewer — and PDF-embedded
+    // JS (AcroForm, OpenAction…) runs in the viewer's own sandboxed
+    // engine with no access to this page's DOM.
     return (
       <iframe
         title={path}
         src={bustedStaticUrl}
-        sandbox="allow-same-origin"
         data-testid="file-content-viewer-iframe"
         className="h-full w-full bg-white"
       />

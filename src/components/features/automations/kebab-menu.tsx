@@ -5,6 +5,7 @@ import KebabVerticalIcon from "#/icons/kebab-vertical.svg?react";
 import { ContextMenuListItem } from "#/components/features/context-menu/context-menu-list-item";
 import { I18nKey } from "#/i18n/declaration";
 import { ContextMenu } from "#/ui/context-menu";
+import { cn } from "#/utils/utils";
 import { automationIconActionButtonClassName } from "./automation-action-button-classes";
 import { KebabMenuItemContent } from "./kebab-menu-item-content";
 
@@ -17,9 +18,10 @@ export interface KebabMenuItem {
 
 interface KebabMenuProps {
   items: KebabMenuItem[];
+  triggerClassName?: string;
 }
 
-export function KebabMenu({ items }: KebabMenuProps) {
+export function KebabMenu({ items, triggerClassName }: KebabMenuProps) {
   const { t } = useTranslation("openhands");
   const [open, setOpen] = useState(false);
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>();
@@ -109,7 +111,7 @@ export function KebabMenu({ items }: KebabMenuProps) {
           e.stopPropagation();
           setOpen((current) => !current);
         }}
-        className={automationIconActionButtonClassName}
+        className={cn(automationIconActionButtonClassName, triggerClassName)}
         aria-label={t(I18nKey.AUTOMATIONS$ACTIONS_MENU)}
         aria-expanded={open}
         aria-haspopup="menu"

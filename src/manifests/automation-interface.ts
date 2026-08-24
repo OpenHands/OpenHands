@@ -1,19 +1,19 @@
 /**
  * The automation interface seam.
  *
- * Every automation-specific datum the host's surfaces render — routes,
- * navigation and page copy, the settable attributes, the import/export
- * envelope, endpoint paths, the featured and responder id lists — is served
- * from here.
- * The published interface manifest supplies it when the pinned
- * `@openhands/extensions` ships one and it passes admission; otherwise the
- * host's own defaults do, which reproduce today's behavior exactly. Copy
- * defaults are null, meaning "render the host's own translation".
+ * Every automation-specific datum the host's surfaces render — navigation and
+ * page copy, the settable attributes, the import/export envelope, endpoint
+ * paths, the featured and responder id lists, the sub-page surface — is served
+ * from the interface manifest the pinned `@openhands/extensions` publishes.
+ * The host holds none of it. When the package publishes no manifest, or the
+ * published one fails admission, there is nothing to serve: the nav entries do
+ * not render and the routes 404. `hasAutomationInterface()` is that gate, and
+ * every accessor that needs the manifest is reachable only from behind it.
  *
- * The sub-page surface (navigation, overview tiles, filters, sort, run
- * insights, templates page) is the exception: the host holds no definitions
- * of its own, so its accessors return null until an admitted manifest
- * declares it, and the sub-pages simply do not render.
+ * Routes are the exception, and they are not a definition: `src/routes.ts`
+ * mounts them, so the host states them here and admission checks a manifest's
+ * routes against them. That check is what keeps a published deep link
+ * resolving to the page it named.
  */
 
 import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
@@ -42,114 +42,13 @@ const MOUNTED_ROUTES = {
   templates: "/automations/templates",
 } satisfies InterfaceRoutes;
 
-const DEFAULT_ENDPOINTS: InterfaceManifest["endpoints"] = {
-  list: "/v1",
-  detail: "/v1/{id}",
-  dispatch: "/v1/{id}/dispatch",
-  runs: "/v1/{id}/runs",
-  tarball: "/v1/{id}/tarball",
-  health: "/health",
-  capabilities: "/v1/capabilities",
-  validate: "/v1/validate",
-  createPrompt: "/v1/preset/prompt",
-  createPlugin: "/v1/preset/plugin",
-};
-
-const DEFAULT_IMPORT_EXPORT: InterfaceImportExport = {
-  fileKind: "automation",
-  fileVersion: 1,
-  filenameSuffix: ".automation.json",
-  importDefaults: {
-    repoProvider: "github",
-    placeholderEventSource: "agent-canvas-import",
-  },
-};
-
-const DEFAULT_DOCS_URL =
-  "https://docs.openhands.dev/openhands/usage/automations/overview";
-
 /**
- * Proven automations featured above the Beta group. NOT derived from
- * popularityRank (slack-standup-digest@94 outranks slack-channel-monitor@92
- * yet is Beta).
+ * File-format section for portable `.automation.json` export/import. A docs
+ * pointer for the host's import picker, not interface data — the manifest's
+ * `importExport` block has no docs field.
  */
-const DEFAULT_FEATURED_AUTOMATION_IDS: readonly string[] = [
-  "github-pr-reviewer",
-  "github-repo-monitor",
-  "slack-channel-monitor",
-];
-
-/**
- * Integrations whose automations are treated as event responders that poll
- * continuously, and so get the deployment-choice dialog.
- */
-const DEFAULT_RESPONDER_INTEGRATION_IDS: readonly string[] = [
-  "github",
-  "slack",
-];
-
-export interface AttributeSpec {
-  present: boolean;
-  /** Null means "render the host's own translation". */
-  label: string | null;
-  help: string | null;
-  required: boolean;
-  min: number | null;
-  max: number | null;
-}
-
-const ABSENT_ATTRIBUTE: AttributeSpec = {
-  present: false,
-  label: null,
-  help: null,
-  required: false,
-  min: null,
-  max: null,
-};
-
-/** Today's edit dialog, restated as specs so absence of a manifest changes nothing. */
-const DEFAULT_ATTRIBUTES: Record<AutomationAttributeName, AttributeSpec> = {
-  name: {
-    present: true,
-    label: null,
-    help: null,
-    required: true,
-    min: null,
-    max: null,
-  },
-  prompt: {
-    present: true,
-    label: null,
-    help: null,
-    required: false,
-    min: null,
-    max: null,
-  },
-  model: {
-    present: true,
-    label: null,
-    help: null,
-    required: false,
-    min: null,
-    max: null,
-  },
-  timeout: {
-    present: true,
-    label: null,
-    help: null,
-    required: false,
-    min: 1,
-    max: null,
-  },
-  schedule: {
-    present: true,
-    label: null,
-    help: null,
-    required: false,
-    min: null,
-    max: null,
-  },
-};
+export const AUTOMATION_FILE_FORMAT_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/managing-automations#exported-file-format";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -172,7 +71,7 @@ function admitInterfaceManifest(candidate: unknown): InterfaceManifest | null {
   });
   if (!result.valid) {
     // Mirrors the setup registry: a rejected manifest is skipped loudly, and
-    // the host's defaults stand.
+    // the surfaces it would have described stay unrendered.
     console.warn(
       "Rejected the automation interface manifest:",
       result.errors.join("; "),
@@ -184,28 +83,55 @@ function admitInterfaceManifest(candidate: unknown): InterfaceManifest | null {
 
 const ADMITTED = admitInterfaceManifest(AUTOMATION_INTERFACE_CANDIDATE);
 
+/**
+ * Whether this deployment has an automation interface at all. The nav entries
+ * and the route loaders ask before rendering; nothing else has to.
+ */
+export function hasAutomationInterface(): boolean {
+  return ADMITTED !== null;
+}
+
+/**
+ * The admitted manifest, for the accessors that cannot answer without one.
+ * Reaching one of those without a manifest means a surface rendered past its
+ * gate — a wiring mistake, not a state to render.
+ */
+function requireInterface(): InterfaceManifest {
+  if (!ADMITTED) {
+    throw new Error(
+      "No automation interface manifest is admitted, so this surface should not have rendered.",
+    );
+  }
+  return ADMITTED;
+}
+
 function substituteRouteParam(pattern: string, id: string): string {
   return pattern.replace(":automationId", encodeURIComponent(id));
 }
 
 export function automationListPath(): string {
-  return (ADMITTED?.routes ?? MOUNTED_ROUTES).list;
+  return MOUNTED_ROUTES.list;
 }
 
 export function automationSetupPath(id: string): string {
-  return substituteRouteParam((ADMITTED?.routes ?? MOUNTED_ROUTES).setup, id);
+  return substituteRouteParam(MOUNTED_ROUTES.setup, id);
 }
 
 export function automationDetailPath(id: string): string {
-  return substituteRouteParam((ADMITTED?.routes ?? MOUNTED_ROUTES).detail, id);
+  return substituteRouteParam(MOUNTED_ROUTES.detail, id);
 }
 
 export function automationTemplatesPath(): string {
-  return ADMITTED?.routes.templates ?? MOUNTED_ROUTES.templates;
+  return MOUNTED_ROUTES.templates;
 }
 
+/**
+ * A declared endpoint path. Empty for one the manifest may omit - the two a
+ * bundle needs were added after the block shipped - so a caller that needs one
+ * says so rather than reading a host-held default that does not exist.
+ */
 export function getAutomationEndpoint(name: InterfaceEndpointName): string {
-  return (ADMITTED?.endpoints ?? DEFAULT_ENDPOINTS)[name];
+  return requireInterface().endpoints[name] ?? "";
 }
 
 /** An id-parameterized endpoint with `{id}` substituted, encoded. */
@@ -217,45 +143,52 @@ export function getAutomationIdEndpoint(
 }
 
 export interface InterfaceCopy {
-  sidebarLabel: string | null;
-  commandMenuTitle: string | null;
-  commandMenuDescription: string | null;
-  commandMenuKeywords: string | null;
-  listTitle: string | null;
-  listSubtitle: string | null;
-  detailBackLabel: string | null;
-  editTitle: string | null;
+  sidebarLabel: string;
+  commandMenuTitle: string;
+  commandMenuDescription: string;
+  commandMenuKeywords: string;
+  listTitle: string;
+  listSubtitle: string;
+  detailBackLabel: string;
+  editTitle: string;
 }
 
-const HOST_COPY: InterfaceCopy = {
-  sidebarLabel: null,
-  commandMenuTitle: null,
-  commandMenuDescription: null,
-  commandMenuKeywords: null,
-  listTitle: null,
-  listSubtitle: null,
-  detailBackLabel: null,
-  editTitle: null,
-};
-
 export function getInterfaceCopy(): InterfaceCopy {
-  if (!ADMITTED) return HOST_COPY;
+  const manifest = requireInterface();
   return {
-    sidebarLabel: ADMITTED.navigation.sidebar.label,
-    commandMenuTitle: ADMITTED.navigation.commandMenu.title,
-    commandMenuDescription: ADMITTED.navigation.commandMenu.description,
-    commandMenuKeywords: ADMITTED.navigation.commandMenu.keywords,
-    listTitle: ADMITTED.pages.list.title,
-    listSubtitle: ADMITTED.pages.list.subtitle,
-    detailBackLabel: ADMITTED.pages.detail.backLabel,
-    editTitle: ADMITTED.pages.edit.title,
+    sidebarLabel: manifest.navigation.sidebar.label,
+    commandMenuTitle: manifest.navigation.commandMenu.title,
+    commandMenuDescription: manifest.navigation.commandMenu.description,
+    commandMenuKeywords: manifest.navigation.commandMenu.keywords,
+    listTitle: manifest.pages.list.title,
+    listSubtitle: manifest.pages.list.subtitle,
+    detailBackLabel: manifest.pages.detail.backLabel,
+    editTitle: manifest.pages.edit.title,
   };
 }
 
-export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
-  if (!ADMITTED) return DEFAULT_ATTRIBUTES[name];
+export interface AttributeSpec {
+  present: boolean;
+  label: string;
+  /** Null when the manifest states no help text for the attribute. */
+  help: string | null;
+  required: boolean;
+  min: number | null;
+  max: number | null;
+}
 
-  const attribute = ADMITTED.attributes[name];
+/** An attribute the manifest does not declare is not offered at all. */
+const ABSENT_ATTRIBUTE: AttributeSpec = {
+  present: false,
+  label: "",
+  help: null,
+  required: false,
+  min: null,
+  max: null,
+};
+
+export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
+  const attribute = requireInterface().attributes[name];
   if (!attribute) return ABSENT_ATTRIBUTE;
   return {
     present: true,
@@ -268,24 +201,24 @@ export function getAttributeSpec(name: AutomationAttributeName): AttributeSpec {
 }
 
 export function getImportExportSpec(): InterfaceImportExport {
-  return ADMITTED?.importExport ?? DEFAULT_IMPORT_EXPORT;
+  return requireInterface().importExport;
 }
 
 export function getAutomationsDocsUrl(): string {
-  return ADMITTED?.docsUrl ?? DEFAULT_DOCS_URL;
+  return requireInterface().docsUrl;
 }
 
 export function getFeaturedAutomationIds(): readonly string[] {
-  return ADMITTED?.featuredAutomationIds ?? DEFAULT_FEATURED_AUTOMATION_IDS;
+  return requireInterface().featuredAutomationIds;
 }
 
 export function getResponderIntegrationIds(): readonly string[] {
-  return ADMITTED?.responderIntegrationIds ?? DEFAULT_RESPONDER_INTEGRATION_IDS;
+  return requireInterface().responderIntegrationIds;
 }
 
 export interface SubPageNavSpec {
   page: InterfaceSubPageId;
-  /** The page's route, resolved through the manifest. */
+  /** The page's route, resolved through the host's route table. */
   to: string;
   label: string;
   icon: InterfaceIconSlug;
@@ -293,7 +226,7 @@ export interface SubPageNavSpec {
 
 /**
  * The sub-page navigation, or null when the manifest does not declare the
- * sub-page surface. No manifest, no sub-pages — there is no host default.
+ * sub-page surface.
  */
 export function getSubPagesSpec(): SubPageNavSpec[] | null {
   const subPages = ADMITTED?.navigation.subPages;

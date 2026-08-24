@@ -22,49 +22,39 @@ afterEach(() => {
 });
 
 describe("the automation interface seam", () => {
-  it("serves the host defaults when the package publishes no manifest", async () => {
+  it("has no interface at all when the package publishes no manifest", async () => {
     // Arrange — the pinned package predates the interface export.
     const seam = await loadSeam(undefined);
 
-    // Act & Assert — copy defers to host i18n; every other datum is the
-    // host's own literal, byte-identical to pre-seam behavior.
+    // Act & Assert — the gate is closed, and the accessors behind it refuse
+    // rather than invent copy the host does not own. Routes are the host's
+    // own registrations, so they answer either way.
+    expect(seam.hasAutomationInterface()).toBe(false);
+    expect(() => seam.getInterfaceCopy()).toThrow(
+      /No automation interface manifest is admitted/,
+    );
+    expect(() => seam.getAutomationEndpoint("createPrompt")).toThrow();
+    expect(() => seam.getAttributeSpec("timeout")).toThrow();
+    expect(() => seam.getImportExportSpec()).toThrow();
+    expect(() => seam.getFeaturedAutomationIds()).toThrow();
     expect({
-      listTitle: seam.getInterfaceCopy().listTitle,
-      sidebarLabel: seam.getInterfaceCopy().sidebarLabel,
       listPath: seam.automationListPath(),
       setupPath: seam.automationSetupPath("github-pr-reviewer"),
       detailPath: seam.automationDetailPath("a/b"),
-      createEndpoint: seam.getAutomationEndpoint("createPrompt"),
-      dispatchEndpoint: seam.getAutomationIdEndpoint("dispatch", "id-1"),
-      timeoutMax: seam.getAttributeSpec("timeout").max,
-      filenameSuffix: seam.getImportExportSpec().filenameSuffix,
-      featured: [...seam.getFeaturedAutomationIds()],
-      responders: [...seam.getResponderIntegrationIds()],
     }).toEqual({
-      listTitle: null,
-      sidebarLabel: null,
       listPath: "/automations",
       setupPath: "/automations/new/github-pr-reviewer",
       detailPath: "/automations/a%2Fb",
-      createEndpoint: "/v1/preset/prompt",
-      dispatchEndpoint: "/v1/id-1/dispatch",
-      timeoutMax: null,
-      filenameSuffix: ".automation.json",
-      featured: [
-        "github-pr-reviewer",
-        "github-repo-monitor",
-        "slack-channel-monitor",
-      ],
-      responders: ["github", "slack"],
     });
   });
 
-  it("serves an admitted manifest's data instead of the defaults", async () => {
+  it("serves an admitted manifest's data", async () => {
     // Arrange
     const seam = await loadSeam(createInterfaceManifest());
 
     // Act & Assert — copy, attribute specs, the import/export envelope, and
     // the id lists all come from the manifest.
+    expect(seam.hasAutomationInterface()).toBe(true);
     expect({
       listTitle: seam.getInterfaceCopy().listTitle,
       sidebarLabel: seam.getInterfaceCopy().sidebarLabel,
@@ -169,21 +159,19 @@ describe("the automation interface seam", () => {
     });
   });
 
-  it("falls back to the defaults, loudly, when a manifest fails admission", async () => {
+  it("stays unavailable, loudly, when a manifest fails admission", async () => {
     // Arrange
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const seam = await loadSeam(
       createInterfaceManifest({ version: "2.0" as "1.0" }),
     );
 
-    // Act
-    const copy = seam.getInterfaceCopy();
-
-    // Assert — nothing from the rejected manifest leaks through, and the
-    // rejection is reported rather than silent.
+    // Assert — a rejected manifest leaves the surface closed, exactly as an
+    // absent one does, and the rejection is reported rather than silent.
     expect({
-      listTitle: copy.listTitle,
+      available: seam.hasAutomationInterface(),
       warned: warn.mock.calls.length,
-    }).toEqual({ listTitle: null, warned: 1 });
+    }).toEqual({ available: false, warned: 1 });
+    expect(() => seam.getInterfaceCopy()).toThrow();
   });
 });

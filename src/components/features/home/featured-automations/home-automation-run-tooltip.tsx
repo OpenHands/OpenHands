@@ -4,7 +4,15 @@ import { useTranslation } from "react-i18next";
 import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automation-runs";
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
-import { AutomationRunStatus, type Automation } from "#/types/automation";
+import {
+  shouldShowRunPhase,
+  useRunPhase,
+} from "#/components/features/automations/detail/run-phase";
+import {
+  AutomationRunStatus,
+  type Automation,
+  type AutomationRun,
+} from "#/types/automation";
 import { formatRelativeTime } from "#/utils/format-relative-time";
 import { AutomationHealthIndicator } from "./automation-health-indicator";
 import {
@@ -35,6 +43,37 @@ function PreviewRow({
         {children}
       </span>
     </div>
+  );
+}
+
+/**
+ * The run's phase and how long it has held it. The row that opens this
+ * hovercard has to clip a long phase; here there is room to wrap, so this is
+ * where the whole thing is readable — and the age is what says whether the
+ * run is moving through phases or sitting in one. Only the layout differs
+ * from the row's: what the phase says, and whether its age is meaningful,
+ * comes from the same hook the row uses.
+ */
+function PhaseRow({ run }: { run: AutomationRun | null }) {
+  const { t } = useTranslation("openhands");
+  const phase = useRunPhase({
+    status: run?.status,
+    code: run?.phase_code,
+    label: run?.phase_label,
+    updatedAt: run?.phase_updated_at,
+  });
+
+  if (!run || !shouldShowRunPhase(run.status) || !phase) return null;
+
+  const { text, age } = phase;
+
+  return (
+    <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
+      <span data-testid="run-phase-row">
+        {text}
+        {age ? <span className="text-muted"> · {age}</span> : null}
+      </span>
+    </PreviewRow>
   );
 }
 
@@ -78,6 +117,8 @@ export function HomeAutomationRunTooltip({
             <span>{t(getRunStatusLabelKey(runState))}</span>
           </span>
         </PreviewRow>
+
+        <PhaseRow run={latestRun} />
 
         {timestamp ? (
           <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$LAST_RUN)}>
