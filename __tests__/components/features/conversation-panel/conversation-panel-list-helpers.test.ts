@@ -11,6 +11,7 @@ import {
   isAutomationConversation,
   parseConversationTimeMs,
   moveGroupFolderOrder,
+  resolveFactoryRunParentId,
   resolvePinnedConversations,
   sortConversationsByField,
   UNNAMED_AUTOMATION_FACET,
@@ -730,6 +731,23 @@ describe("buildConversationForest", () => {
     sub_conversation_ids: childIds,
   });
 
+  const factoryConversation = (
+    id: string,
+    runId: string,
+    workstreamId: string,
+  ): AppConversation => ({
+    ...base,
+    id,
+    title: `conv-${id}`,
+    workspace: null,
+    sub_conversation_ids: [],
+    tags: {
+      factory: "1",
+      runid: runId,
+      workstreamid: workstreamId,
+    },
+  });
+
   it("groups children under their parent with the expected depth", () => {
     const forest = buildConversationForest([
       conversation("a", ["b", "c"]),
@@ -780,5 +798,164 @@ describe("buildConversationForest", () => {
 
   it("returns an empty forest for an empty list", () => {
     expect(buildConversationForest([])).toEqual([]);
+  });
+
+  it("links factory workstreams under their run's plan conversation", () => {
+    const forest = buildConversationForest([
+      factoryConversation("ws-export", "compose-6", "todo-export"),
+      factoryConversation("plan", "compose-6", "plan"),
+      factoryConversation("ws-stats", "compose-6", "todo-stats"),
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["plan"]);
+    expect(forest[0].depth).toBe(0);
+    expect(forest[0].hasChildren).toBe(true);
+    expect(forest[0].children.map((n) => n.conversation.id).sort()).toEqual([
+      "ws-export",
+      "ws-stats",
+    ]);
+    expect(forest[0].children.map((n) => n.depth)).toEqual([1, 1]);
+  });
+
+  it("does not link factory workstreams whose plan is not loaded", () => {
+    const forest = buildConversationForest([
+      factoryConversation("ws-export", "run-1", "todo-export"),
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["ws-export"]);
+    expect(forest[0].hasChildren).toBe(false);
+  });
+
+  it("does not link factory conversations with no runid or that are the plan", () => {
+    const plan = factoryConversation("plan", "compose-7", "plan");
+    // A factory workstream whose plan is not loaded (different run) stays a
+    // root, and so does a conversation missing the factory marker.
+    const orphan = {
+      ...base,
+      id: "orphan",
+      title: "conv-orphan",
+      workspace: null,
+      sub_conversation_ids: [],
+      tags: { factory: "1", runid: "compose-8", workstreamid: "build-1" },
+    };
+    const untagged = {
+      ...base,
+      id: "untagged",
+      title: "conv-untagged",
+      workspace: null,
+      sub_conversation_ids: [],
+      tags: { runid: "compose-7", workstreamid: "build-1" },
+    };
+    // `plan` is itself the plan marker; `orphan`/`untagged` never resolve a
+    // parent, so all three are independent roots.
+    const forest = buildConversationForest([plan, orphan, untagged]);
+    expect(forest.map((n) => n.conversation.id)).toEqual([
+      "plan",
+      "orphan",
+      "untagged",
+    ]);
+    expect(forest.every((n) => n.hasChildren === false)).toBe(true);
+  });
+
+  it("links a child through its parent_conversation_id even before sub_conversation_ids update", () => {
+    const forest = buildConversationForest([
+      {
+        ...base,
+        id: "parent",
+        title: "conv-parent",
+        workspace: null,
+        sub_conversation_ids: [],
+      },
+      {
+        ...base,
+        id: "child",
+        title: "conv-child",
+        workspace: null,
+        sub_conversation_ids: [],
+        parent_conversation_id: "parent",
+      },
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual(["parent"]);
+    expect(forest[0].children.map((n) => n.conversation.id)).toEqual(["child"]);
+  });
+
+  it("prefers the native parent link over the factory run tag", () => {
+    const forest = buildConversationForest([
+      factoryConversation("plan-a", "run-9", "plan"),
+      {
+        ...base,
+        id: "native-parent",
+        title: "conv-native-parent",
+        workspace: null,
+        sub_conversation_ids: ["ws"],
+      },
+      {
+        ...base,
+        id: "ws",
+        title: "conv-ws",
+        workspace: null,
+        sub_conversation_ids: [],
+        // A factory workstream that also carries a native parent link must
+        // stay under its native parent, not jump to the factory plan.
+        parent_conversation_id: "native-parent",
+        tags: { factory: "1", runid: "run-9", workstreamid: "build-1" },
+      },
+    ]);
+    expect(forest.map((n) => n.conversation.id)).toEqual([
+      "plan-a",
+      "native-parent",
+    ]);
+    const nativeParent = forest.find(
+      (n) => n.conversation.id === "native-parent",
+    );
+    expect(nativeParent?.children.map((n) => n.conversation.id)).toEqual([
+      "ws",
+    ]);
+  });
+});
+
+describe("resolveFactoryRunParentId", () => {
+  const byId = (items: AppConversation[]) =>
+    new Map(items.map((c) => [c.id, c]));
+
+  it("resolves the run's plan conversation for a workstream", () => {
+    const plan = {
+      ...base,
+      id: "plan",
+      title: "conv-plan",
+      workspace: null,
+      sub_conversation_ids: [],
+      tags: { factory: "1", runid: "compose-6", workstreamid: "plan" },
+    };
+    const ws = {
+      ...base,
+      id: "ws",
+      title: "conv-ws",
+      workspace: null,
+      sub_conversation_ids: [],
+      tags: { factory: "1", runid: "compose-6", workstreamid: "todo-export" },
+    };
+    expect(resolveFactoryRunParentId(ws, byId([plan, ws]))).toBe("plan");
+    expect(resolveFactoryRunParentId(plan, byId([plan, ws]))).toBeUndefined();
+  });
+
+  it("returns undefined when tags are absent or the marker is not set", () => {
+    const plain = {
+      ...base,
+      id: "p",
+      title: "conv-p",
+      workspace: null,
+      sub_conversation_ids: [],
+    };
+    const noFactory = {
+      ...base,
+      id: "f",
+      title: "conv-f",
+      workspace: null,
+      sub_conversation_ids: [],
+      tags: { runid: "r", workstreamid: "build-1" },
+    };
+    expect(resolveFactoryRunParentId(plain, byId([plain]))).toBeUndefined();
+    expect(
+      resolveFactoryRunParentId(noFactory, byId([noFactory])),
+    ).toBeUndefined();
   });
 });

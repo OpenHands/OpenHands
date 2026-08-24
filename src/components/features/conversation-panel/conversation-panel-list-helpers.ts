@@ -5,6 +5,10 @@ import type { Provider } from "#/types/settings";
 import {
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_TAG_KEYS,
+  FACTORY_PLAN_WORKSTREAM_ID,
+  FACTORY_RUN_ID_TAG_KEY,
+  FACTORY_RUN_TAG_KEY,
+  FACTORY_WORKSTREAM_ID_TAG_KEY,
 } from "#/api/agent-server-adapter";
 
 export type ConversationSortField = "created" | "updated";
@@ -35,12 +39,23 @@ export interface ConversationNode {
 /**
  * Builds the parent-child conversation forest from a flat list.
  *
- * Parents are located by scanning every loaded conversation's
- * `sub_conversation_ids` — a conversation that appears in some other loaded
- * conversation's child list is itself a child. Roots are loaded conversations
- * that are never referenced as a child. A child whose parent is not on the
- * loaded page (pagination) or is filtered out is promoted to a root so it
- * stays reachable. Cycles are broken by an ancestry guard.
+ * Parents are located from three sources, in precedence order:
+ * 1. the conversation's own `parent_conversation_id` (the authoritative
+ *    child→parent link),
+ * 2. every loaded conversation's `sub_conversation_ids` (the parent→child
+ *    view of the same native link), and
+ * 3. the factory chassis run tags — a workstream conversation whose
+ *    `factory`/`runid`/`workstreamid` tags match another loaded
+ *    conversation's `runid` + `workstreamid: "plan"` is treated as that plan
+ *    conversation's child. The agent-server cannot link these natively (the
+ *    server rejects a child whose workspace differs from its parent's, and
+ *    factory workstreams run in their own worktrees), so the tags are the
+ *    only relationship the server exposes.
+ *
+ * Roots are loaded conversations that are never referenced as a child. A
+ * child whose parent is not on the loaded page (pagination) or is filtered
+ * out is promoted to a root so it stays reachable. Cycles are broken by an
+ * ancestry guard.
  */
 export function buildConversationForest(
   conversations: readonly AppConversation[],
@@ -50,11 +65,25 @@ export function buildConversationForest(
   }
   const byId = new Map(conversations.map((c) => [c.id, c]));
   const parentByChild = new Map<string, string>();
+  const setParent = (childId: string, parentId: string) => {
+    if (!parentByChild.has(childId) && byId.has(childId)) {
+      parentByChild.set(childId, parentId);
+    }
+  };
+  for (const c of conversations) {
+    if (c.parent_conversation_id) {
+      setParent(c.id, c.parent_conversation_id);
+    }
+  }
   for (const c of conversations) {
     for (const childId of c.sub_conversation_ids ?? []) {
-      if (byId.has(childId) && !parentByChild.has(childId)) {
-        parentByChild.set(childId, c.id);
-      }
+      setParent(childId, c.id);
+    }
+  }
+  for (const c of conversations) {
+    const parentId = resolveFactoryRunParentId(c, byId);
+    if (parentId) {
+      setParent(c.id, parentId);
     }
   }
 
@@ -77,11 +106,9 @@ export function buildConversationForest(
     }
     const nextAncestry = new Set(ancestry);
     nextAncestry.add(id);
-    const children = (conversation.sub_conversation_ids ?? [])
-      .filter(
-        (childId) => byId.has(childId) && parentByChild.get(childId) === id,
-      )
-      .map((childId) => emit(childId, depth + 1, nextAncestry))
+    const children = Array.from(parentByChild.entries())
+      .filter(([childId, parentId]) => parentId === id && byId.has(childId))
+      .map(([childId]) => emit(childId, depth + 1, nextAncestry))
       .filter((node): node is ConversationNode => node != null);
     return {
       conversation,
@@ -98,6 +125,45 @@ export function buildConversationForest(
     }
   }
   return forest;
+}
+
+/**
+ * Resolves the factory-run parent for a workstream conversation, if one is
+ * loaded. Returns the id of the plan conversation (same `runid`,
+ * `workstreamid: "plan"`), or `undefined` when the conversation is itself the
+ * plan, is not a factory conversation, or its plan is not in the loaded set
+ * (the orphan-promotion guard then keeps the workstream reachable as a root).
+ */
+export function resolveFactoryRunParentId(
+  conversation: AppConversation,
+  byId: ReadonlyMap<string, AppConversation>,
+): string | undefined {
+  const tags = conversation.tags;
+  if (!tags) {
+    return undefined;
+  }
+  if (tags[FACTORY_RUN_TAG_KEY] !== "1") {
+    return undefined;
+  }
+  const runId = tags[FACTORY_RUN_ID_TAG_KEY];
+  const workstreamId = tags[FACTORY_WORKSTREAM_ID_TAG_KEY];
+  if (!runId || !workstreamId || workstreamId === FACTORY_PLAN_WORKSTREAM_ID) {
+    return undefined;
+  }
+  for (const other of byId.values()) {
+    if (other.id === conversation.id) {
+      continue;
+    }
+    const otherTags = other.tags;
+    if (
+      otherTags?.[FACTORY_RUN_TAG_KEY] === "1" &&
+      otherTags[FACTORY_RUN_ID_TAG_KEY] === runId &&
+      otherTags[FACTORY_WORKSTREAM_ID_TAG_KEY] === FACTORY_PLAN_WORKSTREAM_ID
+    ) {
+      return other.id;
+    }
+  }
+  return undefined;
 }
 
 interface GroupConversationPreviewOptions {

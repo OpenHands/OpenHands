@@ -212,6 +212,14 @@ export interface AppConversation {
   active_profile?: string | null;
   public?: boolean;
   sub_conversation_ids: string[];
+  /**
+   * The conversation this one was launched from (the planning-agent / child
+   * launch linkage). Mirrors the agent-server's `parent_conversation_id` on
+   * the search response; absent for conversations with no parent. The tree
+   * view treats it as the authoritative child→parent link, alongside the
+   * parent-side `sub_conversation_ids`.
+   */
+  parent_conversation_id?: string | null;
 }
 
 export interface AppConversationPage {

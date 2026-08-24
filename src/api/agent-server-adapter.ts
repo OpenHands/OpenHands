@@ -402,6 +402,7 @@ export function toAppConversation(
     },
     public: false,
     sub_conversation_ids: info.sub_conversation_ids ?? [],
+    parent_conversation_id: info.parent_conversation_id ?? null,
   };
 }
 
@@ -464,6 +465,21 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
 ];
+
+/**
+ * Tag keys stamped on conversations by the factory chassis
+ * (openhands-factory-ctl's `build_start_payload`). Every conversation in a
+ * factory run carries the same `runid`; the run's plan conversation is the one
+ * whose `workstreamid` equals {@link FACTORY_PLAN_WORKSTREAM_ID}. The tree view
+ * uses these to link a run's workstreams under its plan conversation even
+ * though the agent-server cannot set a real `parent_conversation_id` between
+ * them (the workstreams run in their own worktrees, and the server rejects a
+ * child whose workspace differs from its parent's).
+ */
+export const FACTORY_RUN_TAG_KEY = "factory";
+export const FACTORY_RUN_ID_TAG_KEY = "runid";
+export const FACTORY_WORKSTREAM_ID_TAG_KEY = "workstreamid";
+export const FACTORY_PLAN_WORKSTREAM_ID = "plan";
 
 /**
  * Conversation tag keys that must not appear as generic chips / hovercard
