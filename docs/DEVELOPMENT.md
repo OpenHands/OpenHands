@@ -14,7 +14,6 @@ This repository contains the Agent Canvas frontend and local-stack orchestration
 
 - [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
 - [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
-- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
 - [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
 
 When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
@@ -39,11 +38,13 @@ installation on `127.0.0.1:18000` and points the frontend at it. Most launcher
 state is persisted below `OH_CANVAS_SAFE_STATE_DIR`, which defaults to
 `~/.openhands/agent-canvas`: conversations, workspaces, bash events, and tmux
 sockets survive an interrupted launcher. The default API and secret key files
-are separate fixed paths under `~/.openhands/agent-canvas`, while the launcher
-sets `OH_PERSISTENCE_DIR` and the automation database relative to the parent of
-the chosen state directory. Therefore `OH_CANVAS_SAFE_STATE_DIR` alone is not a
-complete isolation boundary; use the isolation recipe below when running two
-full stacks concurrently. If `$HOME` is on a filesystem that does not support
+are separate fixed paths under `~/.openhands/agent-canvas`. For the full
+`npm run dev` launcher, `OH_PERSISTENCE_DIR` and its automation database are
+relative to the parent of the chosen state directory; `npm run dev:static`
+stores its automation database at `<stateDir>/automations.db` instead.
+Therefore `OH_CANVAS_SAFE_STATE_DIR` alone is not a complete isolation
+boundary; use the isolation recipe below when running two full stacks
+concurrently. If `$HOME` is on a filesystem that does not support
 Unix domain sockets (some devcontainers, NFS/CIFS homes), set the standard
 `TMUX_TMPDIR` env var to a local path such as `/tmp` and the dev stack will use
 it instead.
@@ -195,10 +196,11 @@ separately established that the process is stuck and the state is backed up.
 ### Start two port-separated, file-isolated full stacks
 
 Changing ports alone does not isolate state. Use a different **parent root** for
-the second stack so its parent-relative persistence and automation database are
-separate, and override both persisted key paths. Do not export one shared
-`LOCAL_BACKEND_API_KEY` for both stacks; provide a different value per stack or
-leave it unset so each key-path override is used.
+the second stack so its parent-relative persistence and full-launcher automation
+database are separate, and override both persisted key paths. Do not export one
+shared `OH_SECRET_KEY` or `LOCAL_BACKEND_API_KEY` for both stacks; clear those
+variables or provide different values per stack so the key-path overrides can
+take effect.
 
 ```sh
 # Terminal 1: defaults
@@ -206,6 +208,7 @@ npm run dev
 
 # Terminal 2: separate parent root, ports, persistence, database, and keys
 STACK_ROOT="$HOME/.openhands-stack-2"
+env -u OH_SECRET_KEY -u LOCAL_BACKEND_API_KEY \
 PORT=8100 \
 OH_CANVAS_SAFE_BACKEND_PORT=18100 \
 OH_CANVAS_SAFE_AUTOMATION_PORT=18101 \
@@ -220,6 +223,8 @@ The second stack is available at `http://localhost:8100/`. In Windows
 PowerShell, set the same variables before launching:
 
 ```powershell
+Remove-Item Env:OH_SECRET_KEY -ErrorAction SilentlyContinue
+Remove-Item Env:LOCAL_BACKEND_API_KEY -ErrorAction SilentlyContinue
 $env:STACK_ROOT = "$HOME\.openhands-stack-2"
 $env:PORT = '8100'
 $env:OH_CANVAS_SAFE_BACKEND_PORT = '18100'
@@ -253,9 +258,13 @@ Use this only if you intentionally started `agent-server` yourself or want the f
 npm run dev:frontend
 ```
 
-The frontend-only workflow expects the backend at `127.0.0.1:8000` by default.
-
-If you set `LOCAL_BACKEND_API_KEY`, it is used as the API key for the agent-server (mapped internally to `OH_SESSION_API_KEYS_0`). The launcher auto-generates and persists a key when `LOCAL_BACKEND_API_KEY` is not set.
+`npm run dev:frontend` only starts React Router/Vite; it does not invoke the
+launcher logic that generates or persists development keys. The direct Vite
+workflow expects the backend at `127.0.0.1:8000` by default. Set
+`VITE_BACKEND_HOST` or `VITE_BACKEND_BASE_URL` when the existing backend uses a
+different address, and configure any required backend/session authentication
+through that backend's supported settings. Do not assume that
+`LOCAL_BACKEND_API_KEY` is mapped or persisted by this direct Vite command.
 
 ### Mock mode
 
