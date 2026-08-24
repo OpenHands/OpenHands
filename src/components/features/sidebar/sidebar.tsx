@@ -190,6 +190,7 @@ export function Sidebar() {
     showCollapsedExpandButton,
     isExtensionsActive,
     currentPath,
+    activeBackend: active.backend,
     activeBackendHealth,
     collapsedBackendPopoverOpen,
     setCollapsedBackendPopoverOpen,
