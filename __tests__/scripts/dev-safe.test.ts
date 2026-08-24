@@ -21,6 +21,7 @@ import {
   buildNpmScriptCommand,
   buildAgentServerCommand,
   buildAgentServerEnv,
+  buildAgentServerObservabilityEnv,
   buildAgentServerTelemetryEnv,
   buildRuntimeServicesInfo,
   formatMissingUvxGuidance,
@@ -454,6 +455,61 @@ describe("buildAgentServerTelemetryEnv", () => {
 
     expect(env).toMatchObject({
       OH_TELEMETRY_EXPORTER: "posthog",
+      OH_SESSION_API_KEYS_0: "session",
+    });
+  });
+});
+
+describe("buildAgentServerObservabilityEnv", () => {
+  it("passes through Laminar and generic OTel env vars when set", () => {
+    expect(
+      buildAgentServerObservabilityEnv({
+        LMNR_PROJECT_API_KEY: "lmnr_key",
+        LMNR_BASE_URL: "http://localhost:8001",
+        LMNR_HTTP_PORT: "8001",
+        LMNR_GRPC_PORT: "8002",
+        LMNR_FORCE_HTTP: "true",
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://collector:4317/v1/traces",
+      }),
+    ).toEqual({
+      LMNR_PROJECT_API_KEY: "lmnr_key",
+      LMNR_BASE_URL: "http://localhost:8001",
+      LMNR_HTTP_PORT: "8001",
+      LMNR_GRPC_PORT: "8002",
+      LMNR_FORCE_HTTP: "true",
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://collector:4317/v1/traces",
+    });
+  });
+
+  it("emits nothing when no observability vars are set", () => {
+    expect(buildAgentServerObservabilityEnv({ FOO: "bar" })).toEqual({});
+  });
+
+  it("includes observability passthrough in the full agent-server environment", () => {
+    const env = buildAgentServerEnv(
+      {
+        cwd: "/tmp/cwd",
+        backendPort: 18000,
+        tmuxTmpDir: "/tmp/tmux",
+        stateDir: "/tmp/state",
+        conversationsPath: "/tmp/conversations",
+        workspacesPath: "/tmp/workspaces",
+        bashEventsDir: "/tmp/bash-events",
+        vscodePort: 19000,
+        vscodeBasePath: "/vscode",
+        secretKey: "secret",
+        sessionApiKey: "session",
+        backendBaseUrl: "http://127.0.0.1:18000",
+        backendHost: "127.0.0.1:18000",
+        workingDir: "/tmp/workspaces",
+        canvasToolsDir: "/tmp/tools",
+      },
+      { env: { LMNR_PROJECT_API_KEY: "lmnr_key", LMNR_FORCE_HTTP: "true" } },
+    );
+
+    expect(env).toMatchObject({
+      LMNR_PROJECT_API_KEY: "lmnr_key",
+      LMNR_FORCE_HTTP: "true",
       OH_SESSION_API_KEYS_0: "session",
     });
   });

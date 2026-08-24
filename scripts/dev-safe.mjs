@@ -747,6 +747,49 @@ export function buildAgentServerTelemetryEnv(env = process.env) {
 }
 
 /**
+ * Laminar/OTel observability env vars for the agent-server process.
+ *
+ * openhands-sdk ships a Laminar/OTel bridge
+ * (`openhands/sdk/observability/laminar.py`) that is OFF unless one of these
+ * env vars is set. Split out from `buildAgentServerEnv` so callers that
+ * assemble their own agent-server environment can reuse the same mapping.
+ *
+ * Pure passthrough (no default seeding): if the launcher's own env carries a
+ * `LMNR_*` / `OTEL_*` value it is forwarded to the agent-server process, so a
+ * `.env` / shell export "just works". Keys mirror the SDK bridge triggers and
+ * overrides plus the generic OTel exporter knobs.
+ *
+ * @param {Record<string, string | undefined>} [env] - Source environment.
+ * @returns {Record<string, string>} Laminar/OTel env vars for agent-server
+ */
+export function buildAgentServerObservabilityEnv(env = process.env) {
+  const result = {};
+
+  for (const key of [
+    // Laminar bridge (openhands-sdk observability/laminar.py + lmnr SDK):
+    "LMNR_PROJECT_API_KEY",
+    "LMNR_BASE_URL",
+    "LMNR_HTTP_PORT",
+    "LMNR_GRPC_PORT",
+    "LMNR_FORCE_HTTP",
+    "LMNR_FRONTEND_URL",
+    "LMNR_TRACE_METADATA",
+    "LMNR_DEBUG",
+    // Generic OTel exporter knobs for non-Laminar backends:
+    "OTEL_ENDPOINT",
+    "OTEL_EXPORTER",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL",
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS",
+  ]) {
+    if (env[key]) result[key] = env[key];
+  }
+
+  return result;
+}
+
+/**
  * Build the environment variables object for spawning the agent-server process.
  *
  * This is exported so downstream consumers (e.g., automation service) can use
@@ -777,6 +820,7 @@ export function buildAgentServerEnv(config, options = {}) {
   const { vscodeBasePath = null, env = process.env } = options;
   return {
     ...buildAgentServerTelemetryEnv(env),
+    ...buildAgentServerObservabilityEnv(env),
     // Force Python to use UTF-8 for all file I/O and streams.
     //
     // On Windows, Python defaults to the system ANSI codepage (e.g. cp1252).
