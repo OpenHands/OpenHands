@@ -4,6 +4,10 @@ import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { buildAutomationMetadataPills } from "#/components/features/automations/build-automation-pills";
 import { EditAutomationModal } from "#/components/features/automations/detail/edit-automation-modal";
+import {
+  RunPhase,
+  shouldShowRunPhase,
+} from "#/components/features/automations/detail/run-phase";
 import { RunStatusBadge } from "#/components/features/automations/detail/run-status-badge";
 import { AutomationRunStats } from "#/components/features/automations/automation-run-insights";
 import { toRunSummaryState } from "#/components/features/automations/to-latest-run-state";
@@ -88,6 +92,7 @@ export function PinnedAutomationCard({
     () => buildAutomationMetadataPills(automation, scheduleLabel),
     [automation, scheduleLabel],
   );
+  const showPhase = shouldShowRunPhase(latestRun?.status);
   const errorDetail =
     latestRun?.status === AutomationRunStatus.FAILED
       ? latestRun.error_detail?.trim() || null
@@ -283,6 +288,15 @@ export function PinnedAutomationCard({
                     !conversationTitle)
                 }
               />
+
+              {showPhase ? (
+                <RunPhase
+                  status={latestRun.status}
+                  code={latestRun.phase_code}
+                  label={latestRun.phase_label}
+                  updatedAt={latestRun.phase_updated_at}
+                />
+              ) : null}
 
               {shortErrorDetail ? (
                 showErrorHovercard && errorDetail ? (

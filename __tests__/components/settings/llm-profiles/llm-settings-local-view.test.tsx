@@ -13,6 +13,20 @@ import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-pr
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import { SSYCLOUD_BASE_URL } from "#/constants/ssycloud";
+import * as activeBackendContext from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
+
+const mockCloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Cloud Backend",
+  host: "https://app.all-hands.dev",
+  apiKey: "test-key",
+  kind: "cloud",
+};
+
+vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
+  useCanManageOrgProfiles: () => true,
+}));
 
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
@@ -956,5 +970,65 @@ describe("shouldReapplyProfileAfterSave", () => {
         savedName: "gpt-4-profile",
       }),
     ).toBe(false);
+  });
+});
+
+describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
+  const mockSaveMutateAsync = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
+      createMockLlmProfilesReturn({
+        data: { profiles: [], active_profile: null },
+      }),
+    );
+    vi.mocked(useActivateLlmProfileHook.useActivateLlmProfile).mockReturnValue(
+      createMockMutationReturn<
+        ReturnType<typeof useActivateLlmProfileHook.useActivateLlmProfile>
+      >(vi.fn()),
+    );
+    vi.mocked(useSaveLlmProfileHook.useSaveLlmProfile).mockReturnValue(
+      createMockMutationReturn<
+        ReturnType<typeof useSaveLlmProfileHook.useSaveLlmProfile>
+      >(mockSaveMutateAsync),
+    );
+    // Cloud backend: the OpenHands provider is backed by a server-minted key.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    // Pre-flight validation is a no-op on cloud (returns null), mirroring the
+    // real cloud path; the api_key stripping is what we assert here.
+    vi.mocked(ProfilesService.validateProfile).mockResolvedValue(null);
+    mockSaveMutateAsync.mockResolvedValue({ success: true });
+  });
+
+  it("strips api_key and base_url when saving an OpenHands provider profile", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    await user.click(screen.getByTestId("add-llm-profile"));
+
+    // The mocked LlmSettingsScreen seeds an openai model by default; switch to
+    // an OpenHands provider model and enter an api_key the save must drop.
+    const modelInput = screen.getByTestId("mock-basic-model-input");
+    await user.clear(modelInput);
+    await user.type(modelInput, "openhands/kimi-k3");
+
+    // Give the profile an explicit name so the save payload is deterministic.
+    const nameInput = screen.getByTestId("profile-name-input");
+    await user.clear(nameInput);
+    await user.type(nameInput, "openhands-profile");
+
+    await user.click(screen.getByTestId("save-profile-btn"));
+
+    await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+    const request = mockSaveMutateAsync.mock.calls[0][0].request as {
+      llm: Record<string, unknown>;
+    };
+    expect(request.llm.model).toBe("openhands/kimi-k3");
+    expect(request.llm).not.toHaveProperty("api_key");
+    expect(request.llm).not.toHaveProperty("base_url");
   });
 });
