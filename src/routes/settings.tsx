@@ -1,7 +1,14 @@
-import { useMemo, useState } from "react";
-import { Outlet, redirect, useLocation, useMatches } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Outlet,
+  redirect,
+  useLocation,
+  useMatches,
+  useNavigate,
+} from "react-router";
 import { useTranslation } from "react-i18next";
 import { Route } from "./+types/settings";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import OptionService from "#/api/option-service/option-service.api";
 import { queryClient } from "#/query-client-config";
 import { SettingsLayout } from "#/components/features/settings";
@@ -40,11 +47,20 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
 
 function SettingsScreen() {
   const { t } = useTranslation("openhands");
+  const navigate = useNavigate();
   const location = useLocation();
   const matches = useMatches();
   const navItems = useSettingsNavItems();
   const isMobile = useBreakpoint(768);
   const [hideSectionHeader, setHideSectionHeader] = useState(false);
+  const { backend } = useActiveBackend();
+
+  // Cloud backends host settings at app.all-hands.dev/settings; redirect away.
+  useEffect(() => {
+    if (backend.kind === "cloud") {
+      navigate("/conversations", { replace: true });
+    }
+  }, [backend.kind, navigate]);
 
   const { currentSectionTitle, currentSectionSubtitle } = useMemo(() => {
     const currentRenderedItem = navItems.find(

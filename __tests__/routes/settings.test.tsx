@@ -5,7 +5,11 @@ import { createRoutesStub } from "react-router";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { readStoredBackends } from "#/api/backend-registry/storage";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -182,4 +186,107 @@ describe("settings route", () => {
       expect(settingsSpy).not.toHaveBeenCalled();
     },
   );
+
+  describe("cloud backend redirect", () => {
+    it("redirects /settings to /conversations when the active backend is cloud", async () => {
+      window.localStorage.setItem(
+        "openhands-backends",
+        JSON.stringify([
+          {
+            id: "cloud-backend",
+            name: "Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "key",
+            kind: "cloud",
+          },
+        ]),
+      );
+      window.localStorage.setItem(
+        "openhands-active-backend",
+        JSON.stringify({ backendId: "cloud-backend", orgId: null }),
+      );
+      // Re-read backends into the module-level store so the context picks up
+      // the seeded cloud backend.
+      setRegisteredBackends(readStoredBackends());
+
+      const RouterStub = createRoutesStub([
+        {
+          path: "/settings",
+          Component: SettingsScreen,
+        },
+        {
+          path: "/conversations",
+          Component: () => <div data-testid="conversations-page" />,
+        },
+      ]);
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={["/settings"]} />
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(
+        await screen.findByTestId("conversations-page"),
+      ).toBeInTheDocument();
+    });
+
+    it("renders /settings normally when the active backend is local", () => {
+      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+        feature_flags: {
+          hide_llm_settings: false,
+          hide_users_page: false,
+        },
+        providers_configured: [],
+        maintenance_start_time: null,
+        recaptcha_site_key: null,
+        faulty_models: [],
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      });
+
+      window.localStorage.setItem(
+        "openhands-backends",
+        JSON.stringify([
+          {
+            id: "local-backend",
+            name: "Local",
+            host: "http://localhost:9000",
+            apiKey: "key",
+            kind: "local",
+          },
+        ]),
+      );
+      window.localStorage.setItem(
+        "openhands-active-backend",
+        JSON.stringify({ backendId: "local-backend", orgId: null }),
+      );
+      setRegisteredBackends(readStoredBackends());
+
+      const RouterStub = createRoutesStub([
+        {
+          path: "/settings",
+          Component: SettingsScreen,
+          children: [
+            {
+              path: "/settings/llm",
+              Component: () => <div data-testid="llm-settings-screen" />,
+            },
+          ],
+        },
+      ]);
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <ActiveBackendProvider>
+            <RouterStub initialEntries={["/settings/llm"]} />
+          </ActiveBackendProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+    });
+  });
 });
