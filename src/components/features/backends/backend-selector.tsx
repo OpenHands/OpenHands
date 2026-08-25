@@ -204,23 +204,29 @@ export function BackendSelector({
 
   const someCloudLoading = Object.values(cloudOrgs).some((c) => c.isLoading);
 
-  // Self-heal a malformed `(cloudBackendId, null)` selection.
+  // Self-heal a missing or stale org selection.
   //
   // Once a cloud backend's orgs resolve, the dropdown only renders
   // per-org rows for it — the `(backendId, null)` row disappears, so
   // selecting that shape would drift from what the dropdown can render
-  // (UI says "Local", APIs hit cloud). When we detect the drift, snap
-  // the selection onto Cloud's current org first, then fall back to the
+  // (UI says "Local", APIs hit cloud). Likewise, a stored orgId from an
+  // org the user has since left causes every cloud request to carry
+  // `X-Org-Id: <stale-id>`, which the cloud rejects with 403 "User is
+  // not a member of the requested organization". In both cases, snap the
+  // selection onto Cloud's current org first, then fall back to the
   // personal workspace (or, lacking a /me result, the first org). The
   // selection is recorded locally only; the cloud request scope follows
   // from the X-Org-Id header sent by `callCloudProxy`, so the cloud UI's
   // org choice is never mutated as a side effect.
   React.useEffect(() => {
-    if (noBackendSelected || active.backend.kind !== "cloud" || active.orgId)
-      return;
+    if (noBackendSelected || active.backend.kind !== "cloud") return;
     const { backend } = active;
     const entry = cloudOrgs[backend.id];
-    if (!entry || entry.orgs.length === 0) return;
+    if (!entry || entry.isLoading || entry.orgs.length === 0) return;
+
+    // Bail out only when the stored orgId is valid (still in the user's
+    // org list). A missing or stale orgId both need the same correction.
+    if (active.orgId && entry.orgs.some((o) => o.id === active.orgId)) return;
 
     const currentOrg = entry.currentOrgId
       ? entry.orgs.find((o) => o.id === entry.currentOrgId)

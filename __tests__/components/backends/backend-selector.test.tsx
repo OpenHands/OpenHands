@@ -428,6 +428,40 @@ describe("BackendSelector", () => {
     });
   });
 
+  it("self-heals stale orgId → corrects to Cloud's current org", async () => {
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [{ id: "org-current", name: "Current Org" }],
+      currentOrgId: "org-current",
+    });
+    vi.mocked(getCloudOrganizationMe).mockResolvedValue({
+      orgId: "org-current",
+      userId: "some-user",
+      role: null,
+    });
+
+    let cloudId = "";
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+          // Simulate a stale orgId from an org the user has since left.
+          ctx.setActive(cloudId, "org-stale-left-org");
+        }}
+      >
+        <BackendSelector />
+      </TestSeed>,
+    );
+
+    // After orgs resolve, the stale orgId is not in the user's org list,
+    // so the selector corrects it to the cloud's current org.
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem("openhands-active-backend") ?? "null",
+      );
+      expect(stored).toEqual({ backendId: cloudId, orgId: "org-current" });
+    });
+  });
+
   it("switches the active backend when an option is selected", async () => {
     renderWithProviders(
       <TestSeed
