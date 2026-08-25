@@ -1,7 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup } from "framer-motion";
-import { Gauge, Globe, ListTodo, SquareChevronRight } from "lucide-react";
+import {
+  Gauge,
+  Globe,
+  ListTodo,
+  MonitorPlay,
+  SquareChevronRight,
+} from "lucide-react";
 import { LuFileDiff } from "react-icons/lu";
 import DocumentIcon from "#/icons/document.svg?react";
 import DoubleCheckIcon from "#/icons/double-check.svg?react";
@@ -109,6 +115,15 @@ export function ConversationTabs({
       tooltipContent: t(I18nKey.COMMON$PLANNER),
       tooltipAriaLabel: t(I18nKey.COMMON$PLANNER),
       label: t(I18nKey.COMMON$PLANNER),
+    },
+    {
+      tabValue: "preview",
+      isActive: isTabActive("preview"),
+      icon: MonitorPlay,
+      onClick: () => selectTab("preview"),
+      tooltipContent: t(I18nKey.CONVERSATION_PANEL$LIVE_PREVIEW),
+      tooltipAriaLabel: t(I18nKey.CONVERSATION_PANEL$LIVE_PREVIEW),
+      label: t(I18nKey.CONVERSATION_PANEL$LIVE_PREVIEW),
     },
     {
       tabValue: "terminal",
