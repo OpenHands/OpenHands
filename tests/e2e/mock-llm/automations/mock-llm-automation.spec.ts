@@ -319,7 +319,7 @@ test.describe("mock-LLM automation lifecycle", () => {
       `&& printf 'AUTOMATION_DISPATCHED\\n'`,
     ].join(" ");
 
-    // ⚠️  Padding response (index 0):
+    // ⚠️  Padding responses (indices 0-1):
     // Public skills are bundled from @openhands/extensions at build time.
     // The agent-server's skill-activation pipeline makes one internal LLM
     // call to decide which skills to inject before the agent loop starts.
@@ -328,43 +328,52 @@ test.describe("mock-LLM automation lifecycle", () => {
     // The conversation test does NOT need padding because its prompt
     // ("run this bash command") does not match any skill trigger.
     //
-    // If the padding ever becomes misaligned (e.g. the agent-server stops
-    // making this call or starts making two), step 2's
-    // waitForNonUserMessageText(AUTOMATION_REPLY_TOKEN) will time out
-    // quickly, making the failure obvious. See AGENTS.md → "Padding
+    // The internal call and the agent loop's first call race at
+    // conversation start (observed arriving in the same millisecond), so
+    // either one may pop the first trajectory response. Empty responses
+    // are safe for BOTH consumers — internal calls ignore the content and
+    // the agent loop self-corrects via a corrective nudge — while the
+    // tool_call/text responses must reach the agent loop in order. Two
+    // padding responses therefore make both arrival orders work: whoever
+    // pops first takes an empty, the internal call takes the other empty,
+    // and the agent loop still reaches the create/dispatch/token sequence.
+    // With a single padding response, an agent-loop-first order shifts the
+    // queue: the internal call steals the create tool_call, the automation
+    // is never created, and step 2 times out. See AGENTS.md → "Padding
     // response for internal LLM call" for more context.
     //
-    // After the main conversation finishes (responses 0-3), the dispatched
-    // automation run spawns a NEW conversation on the same agent-server.
-    // That conversation also calls the mock LLM. We append extra text
-    // responses (4-6) so the run's conversation can finish normally, the
-    // script fires its completion callback, and the run reaches COMPLETED.
+    // After the main conversation finishes, the dispatched automation run
+    // spawns a NEW conversation on the same agent-server. That conversation
+    // also calls the mock LLM. We append extra text responses so the run's
+    // conversation can finish normally, the script fires its completion
+    // callback, and the run reaches COMPLETED.
     await registerTrajectory(request, "automation-lifecycle", [
-      // ── Main conversation (responses 0-3) ──
-      { text: "" }, // 0: consumed by skill-activation LLM call (see above)
+      // ── Main conversation ──
+      { text: "" }, // padding: consumed by the internal skill-activation call
+      { text: "" }, // padding: covers the agent loop when it wins the race
       {
-        // 1: create the automation via curl
+        // create the automation via curl
         tool_call: {
           name: "terminal",
           arguments: { command: createCmd },
         },
       },
       {
-        // 2: dispatch a run via curl
+        // dispatch a run via curl
         tool_call: {
           name: "terminal",
           arguments: { command: dispatchCmd },
         },
       },
-      { text: AUTOMATION_REPLY_TOKEN }, // 3: finish main conversation
+      { text: AUTOMATION_REPLY_TOKEN }, // finish main conversation
 
-      // ── Automation run's conversation (responses 4+) ──
+      // ── Automation run's conversation ──
       // The run starts a fresh conversation with the automation prompt.
       // Provide enough responses for any internal LLM calls + the agent's
       // turn so the conversation finishes and the completion callback fires.
-      { text: "" }, // 4: possible internal/condenser call
-      { text: "Done. Hello world echoed successfully." }, // 5: agent reply
-      { text: "" }, // 6: safety buffer for any follow-up internal call
+      { text: "" }, // possible internal/condenser call
+      { text: "Done. Hello world echoed successfully." }, // agent reply
+      { text: "" }, // safety buffer for any follow-up internal call
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
@@ -455,8 +464,8 @@ test.describe("mock-LLM automation lifecycle", () => {
       automationIds.add(automation.id);
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
-      // responses (indices 4-6) for the automation run's spawned conversation
-      // so it can finish and fire the completion callback.
+      // responses for the automation run's spawned conversation so it can
+      // finish and fire the completion callback.
       const run = await waitForRunStatus(
         request,
         automation.id,
