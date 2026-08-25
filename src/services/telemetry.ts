@@ -24,11 +24,10 @@
  * Users can disable all telemetry (including install tracking) via:
  * - Setting VITE_DO_NOT_TRACK=1 environment variable
  * - Browser's Do Not Track setting
- * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime. This lets
- *   a self-hosted deployment of the precompiled bundle (e.g. OHE serving the
- *   canvas under /canvas) opt out without VITE_DO_NOT_TRACK baked into the
- *   image. The static server injects it from AGENT_CANVAS_DISABLE_TELEMETRY=1
- *   (or the equivalent --disable-telemetry flag).
+ * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime, which the
+ *   static server does from AGENT_CANVAS_DISABLE_TELEMETRY=1 (or the equivalent
+ *   --disable-telemetry flag) so a precompiled bundle can opt out without
+ *   VITE_DO_NOT_TRACK baked into the image.
  */
 
 import type { BootstrapConfig, CaptureResult, PostHog } from "posthog-js";
@@ -291,9 +290,7 @@ function isDoNotTrackEnabled(): boolean {
     return true;
   }
 
-  // Check the runtime-injected window global. The static server sets this from
-  // its --disable-telemetry flag so a precompiled bundle can opt out without
-  // VITE_DO_NOT_TRACK baked into the image.
+  // Runtime-injected window global (see file header).
   if (
     typeof window !== "undefined" &&
     (window as unknown as Record<string, unknown>)

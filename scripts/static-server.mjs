@@ -97,10 +97,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
-    // Env var is the deployment-friendly source: an image that predates this
-    // option simply ignores an unknown env var (telemetry stays at its current
-    // default) instead of crash-looping the way an unknown CLI flag would. The
-    // --disable-telemetry flag below can also turn it on.
+    // Also settable via the --disable-telemetry flag below.
     disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
 
@@ -263,10 +260,7 @@ OPTIONS:
                                frontend at runtime, without VITE_DO_NOT_TRACK
                                baked in. Injects
                                window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
-                               Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1,
-                               which deployments should prefer: an image that
-                               predates this option ignores the env var instead
-                               of failing on an unknown flag.
+                               Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -348,10 +342,8 @@ ROUTING:
  * - `disableTelemetry`: sets `window.__AGENT_CANVAS_DO_NOT_TRACK__ = true` so a
  *   published bundle disables all telemetry (including the anonymous install
  *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
- *   `isDoNotTrackEnabled()` in `#/services/telemetry`. This is how a self-hosted
- *   deployment (e.g. OHE serving the canvas under /canvas) opts out of the
- *   shared image's default-on telemetry. Enabled by AGENT_CANVAS_DISABLE_TELEMETRY=1
- *   (preferred for deployments — forward-compatible) or the --disable-telemetry flag.
+ *   `isDoNotTrackEnabled()` in `#/services/telemetry`. Enabled by
+ *   AGENT_CANVAS_DISABLE_TELEMETRY=1 or the --disable-telemetry flag.
  */
 function makeConfigInjectionScript(
   sessionApiKey,
