@@ -150,8 +150,23 @@ export function createShutdownHookRegistry(onError) {
 }
 
 /**
+ * Process-wide latch for stale-DB recovery.
+ *
+ * The latch MUST outlive a single watcher instance. Recovery deletes the
+ * DB then respawns the backend, and that spawn installs a *new* watcher.
+ * If the latch lived on the old instance, the new watcher would recover
+ * again, and `npm run dev` would restart forever.
+ */
+let recoveryAttempted = false;
+
+/** Test-only: reset the process-wide latch between cases. */
+export function resetAutomationMigrationLatch() {
+  recoveryAttempted = false;
+}
+
+/**
  * Watch a spawned automation backend for a stale SQLite migration failure
- * and recover once by deleting the stale DB and restarting.
+ * and recover once by deleting the stale DB.
  *
  * The failure happens when openhands-automation is updated to a version
  * with a restructured Alembic revision chain: the old DB references a
@@ -161,24 +176,24 @@ export function createShutdownHookRegistry(onError) {
  * Both dev launchers (dev-static and dev-with-automation) need exactly
  * this behaviour; keeping it here means they cannot drift apart.
  *
- * Recovery is single-shot by design. If the restart also fails with a
- * migration error — broken upstream package, read-only filesystem,
+ * Recovery is single-shot for the whole process. If the restarted backend
+ * fails the same way — broken upstream package, read-only filesystem,
  * changed error wording — we log loudly and give up rather than loop.
  * An unbounded respawn cycle would wedge `npm run dev` and mask the real
  * breakage from the developer.
  *
+ * Callers put the restart *inside* `onRecover`, after the delete. Do not
+ * also restart on a bare exit-code-3 handler: that would respawn even
+ * when the log pattern never appeared, and it would bypass this latch.
+ *
  * Params are injectable so tests can drive the whole lifecycle with fake
- * streams and timers.
+ * streams.
  */
 export function watchAutomationMigration(
   proc,
   { dbPath, onRecover, log, pattern = "Can't locate revision identified by" },
 ) {
   let detected = false;
-  // Single-shot latch, scoped to THIS watcher instance. One recovery
-  // attempt per launcher run: if the restarted backend fails the same way
-  // again we log loudly and give up rather than respawn forever.
-  let attempted = false;
 
   const checkForMigrationError = (data) => {
     if (!detected && data.toString().includes(pattern)) {
@@ -201,12 +216,11 @@ export function watchAutomationMigration(
       return;
     }
 
-    // Single-shot latch: one recovery attempt per launcher run, ever.
-    if (attempted) {
+    if (recoveryAttempted) {
       log?.("Migration error again after recovery — giving up.", "error");
       return;
     }
-    attempted = true;
+    recoveryAttempted = true;
 
     log?.(`Migration error detected — removing stale DB at ${dbPath}...`, "warn");
     try {

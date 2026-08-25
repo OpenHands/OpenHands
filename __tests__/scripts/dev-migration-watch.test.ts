@@ -3,11 +3,12 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { watchAutomationMigration } from "../../scripts/dev-process-utils.mjs";
-
-type LogKind = "warn" | "ok" | "error";
+import {
+  resetAutomationMigrationLatch,
+  watchAutomationMigration,
+} from "../../scripts/dev-process-utils.mjs";
 
 interface FakeProc extends EventEmitter {
   stdout: EventEmitter;
@@ -22,10 +23,19 @@ function makeFakeProc(): FakeProc {
   return proc;
 }
 
+function fireMigrationExit(proc: FakeProc) {
+  proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
+  proc.emit("exit", 3);
+}
+
 const MIGRATION_LOG_LINE =
   'alembic.runtime.migration: Can\'t locate revision identified by "abc123"';
 
 describe("watchAutomationMigration", () => {
+  beforeEach(() => {
+    resetAutomationMigrationLatch();
+  });
+
   it("recovers (deletes the DB) when the migration error and exit code 3 line up", () => {
     const proc = makeFakeProc();
     let recovered = false;
@@ -37,8 +47,7 @@ describe("watchAutomationMigration", () => {
       log: () => {},
     });
 
-    proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
-    proc.emit("exit", 3);
+    fireMigrationExit(proc);
 
     expect(recovered).toBe(true);
   });
@@ -90,12 +99,42 @@ describe("watchAutomationMigration", () => {
     });
 
     // First failure: recovery runs.
-    proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
-    proc.emit("exit", 3);
+    fireMigrationExit(proc);
 
-    // Second failure (restart failed too): no second recovery, we give up.
-    proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
-    proc.emit("exit", 3);
+    // Second failure on the same process: no second recovery, we give up.
+    fireMigrationExit(proc);
+
+    expect(recoverCount).toBe(1);
+    expect(logs.some((m) => m.includes("giving up"))).toBe(true);
+  });
+
+  it("does not recover again on a new watcher after a restart", () => {
+    // This is the real failure mode: recovery respawns the backend, which
+    // installs a *new* watcher. A per-instance latch would miss this and
+    // loop forever.
+    const first = makeFakeProc();
+    let recoverCount = 0;
+    const logs: string[] = [];
+
+    watchAutomationMigration(first, {
+      dbPath: "/tmp/fake-automations.db",
+      onRecover: () => {
+        recoverCount += 1;
+      },
+      log: (message: string) => logs.push(message),
+    });
+    fireMigrationExit(first);
+    expect(recoverCount).toBe(1);
+
+    const second = makeFakeProc();
+    watchAutomationMigration(second, {
+      dbPath: "/tmp/fake-automations.db",
+      onRecover: () => {
+        recoverCount += 1;
+      },
+      log: (message: string) => logs.push(message),
+    });
+    fireMigrationExit(second);
 
     expect(recoverCount).toBe(1);
     expect(logs.some((m) => m.includes("giving up"))).toBe(true);
@@ -112,9 +151,7 @@ describe("watchAutomationMigration", () => {
       log: (message: string) => logs.push(message),
     });
 
-    proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
-
-    expect(() => proc.emit("exit", 3)).not.toThrow();
+    expect(() => fireMigrationExit(proc)).not.toThrow();
     expect(
       logs.some((m) => m.includes("Failed to remove stale automations.db")),
     ).toBe(true);
@@ -124,6 +161,10 @@ describe("watchAutomationMigration", () => {
 // Real-filesystem integration: prove onRecover wiring deletes an actual file.
 describe("watchAutomationMigration integration", () => {
   let dir: string;
+
+  beforeEach(() => {
+    resetAutomationMigrationLatch();
+  });
 
   afterEach(() => {
     if (dir && existsSync(dir)) {
@@ -143,8 +184,7 @@ describe("watchAutomationMigration integration", () => {
       log: () => {},
     });
 
-    proc.stdout.emit("data", Buffer.from(MIGRATION_LOG_LINE));
-    proc.emit("exit", 3);
+    fireMigrationExit(proc);
     expect(existsSync(dbPath)).toBe(false);
 
     // Second failure must not attempt anything further.

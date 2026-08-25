@@ -409,19 +409,14 @@ function startAutomationBackend(config) {
   // dev-with-automation.mjs — single shared implementation).
   watchAutomationMigration(proc, {
     dbPath: autoDbPath,
-    onRecover: () => unlinkSync(autoDbPath),
+    onRecover: () => {
+      unlinkSync(autoDbPath);
+      startAutomationBackend(config);
+    },
     log: (message, kind) => {
       const colors = { warn: c.yellow, ok: c.green, error: c.red };
       logService("automation", message, colors[kind] ?? c.dim);
     },
-  });
-
-  // Restart the backend after the watcher deletes the stale DB. The
-  // watcher's latch guarantees this happens at most once per run.
-  proc.on("exit", (code) => {
-    if (code === 3) {
-      startAutomationBackend(config);
-    }
   });
 }
 
