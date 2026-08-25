@@ -11,7 +11,10 @@ import {
   groupConversations,
   GROUP_CONVERSATIONS_PREVIEW_LIMIT,
   isAutomationConversation,
+  isOlderConversationCutoff,
   parseConversationTimeMs,
+  partitionByCutoff,
+  OLDER_CONVERSATION_CUTOFF_MS,
   moveGroupFolderOrder,
   resolvePinnedConversations,
   sortConversationsByField,
@@ -818,5 +821,59 @@ describe("conversation-panel-list-helpers", () => {
         tagFilterFacets,
       ).map((c) => c.id),
     ).toEqual(["untagged", "slack", "alice", "both"]);
+  });
+});
+
+describe("partitionByCutoff", () => {
+  const now = Date.parse("2026-08-25T12:00:00.000Z");
+
+  it("puts conversations older than the cutoff in the older bucket", () => {
+    const items = [
+      { updated_at: "2026-08-25T11:30:00.000Z" },
+      { updated_at: "2026-08-25T10:00:00.000Z" },
+    ];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T11:30:00.000Z",
+    ]);
+    expect(older.map((item) => item.updated_at)).toEqual([
+      "2026-08-25T10:00:00.000Z",
+    ]);
+  });
+
+  it("keeps a 2-hour-old conversation recent when the cutoff is 1 day", () => {
+    const items = [{ updated_at: "2026-08-25T10:00:00.000Z" }];
+
+    const { recent, older } = partitionByCutoff(
+      items,
+      OLDER_CONVERSATION_CUTOFF_MS["1d"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("leaves missing timestamps in recent so they are not hidden", () => {
+    const { recent, older } = partitionByCutoff(
+      [{ updated_at: "" }],
+      OLDER_CONVERSATION_CUTOFF_MS["1h"],
+      now,
+    );
+
+    expect(recent).toHaveLength(1);
+    expect(older).toHaveLength(0);
+  });
+
+  it("accepts only the known cutoff ids", () => {
+    expect(isOlderConversationCutoff("1h")).toBe(true);
+    expect(isOlderConversationCutoff("1d")).toBe(true);
+    expect(isOlderConversationCutoff("2h")).toBe(false);
   });
 });

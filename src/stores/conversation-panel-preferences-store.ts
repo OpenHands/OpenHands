@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  isOlderConversationCutoff,
   type AutomationFilterMode,
   type ConversationSortField,
+  type OlderConversationCutoff,
   type OrganizeMode,
   type ThreadScope,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
@@ -27,6 +29,11 @@ import {
  */
 interface ConversationPanelPreferencesState {
   showOlderConversations: boolean;
+  /**
+   * Age threshold used when `showOlderConversations` is false. Conversations
+   * last updated before this interval are hidden.
+   */
+  olderConversationCutoff: OlderConversationCutoff;
   showArchivedConversations: boolean;
   showRepoBranchMetadata: boolean;
   showLlmProfiles: boolean;
@@ -67,6 +74,7 @@ export type LayoutSettingsSlice = Pick<
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
   toggleShowOlderConversations: () => void;
+  setOlderConversationCutoff: (value: OlderConversationCutoff) => void;
   setShowArchivedConversations: (value: boolean) => void;
   toggleShowArchivedConversations: () => void;
   setShowRepoBranchMetadata: (value: boolean) => void;
@@ -104,6 +112,7 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
 
 const initialState: ConversationPanelPreferencesState = {
   showOlderConversations: true,
+  olderConversationCutoff: "1h",
   showArchivedConversations: false,
   showRepoBranchMetadata: false,
   showLlmProfiles: false,
@@ -130,6 +139,12 @@ export const useConversationPanelPreferencesStore =
         toggleShowOlderConversations: () =>
           set((state) => ({
             showOlderConversations: !state.showOlderConversations,
+          })),
+        setOlderConversationCutoff: (value) =>
+          set(() => ({
+            olderConversationCutoff: isOlderConversationCutoff(value)
+              ? value
+              : "1h",
           })),
 
         setShowArchivedConversations: (value) =>
@@ -215,6 +230,11 @@ export const useConversationPanelPreferencesStore =
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,
+          olderConversationCutoff: isOlderConversationCutoff(
+            state.olderConversationCutoff,
+          )
+            ? state.olderConversationCutoff
+            : "1h",
           showArchivedConversations: state.showArchivedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,

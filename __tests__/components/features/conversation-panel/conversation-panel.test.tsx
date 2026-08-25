@@ -1913,14 +1913,14 @@ describe("ConversationPanel", () => {
 
       await openAdvancedOptions(user);
       let toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveAttribute("aria-checked", "true");
+      expect(toggle).toHaveAttribute("aria-checked", "false");
       await user.click(toggle);
 
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(1);
 
       toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveAttribute("aria-checked", "false");
+      expect(toggle).toHaveAttribute("aria-checked", "true");
       await user.click(toggle);
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);

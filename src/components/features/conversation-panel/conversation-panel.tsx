@@ -49,7 +49,10 @@ import {
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
   groupConversations,
+  isOlderConversationCutoff,
   MAX_PAGES_PER_LOAD_MORE_CLICK,
+  OLDER_CONVERSATION_CUTOFF_MS,
+  partitionByCutoff,
   resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
@@ -70,30 +73,6 @@ interface ConversationPanelProps {
 const noop = () => {};
 
 const EMPTY_PINNED_CONVERSATION_IDS: readonly string[] = [];
-
-const ONE_HOUR_MS = 60 * 60 * 1000;
-
-const partitionByCutoff = <T extends { updated_at: string }>(
-  items: readonly T[],
-): { recent: T[]; older: T[] } => {
-  // The cutoff is intentionally relative to "now" each time the list is
-  // recomputed, so conversations naturally age into the older bucket as the
-  // conversations query refreshes.
-  const cutoff = Date.now() - ONE_HOUR_MS;
-  const recent: T[] = [];
-  const older: T[] = [];
-  for (const item of items) {
-    const updatedAt = item.updated_at ? Date.parse(item.updated_at) : NaN;
-    // Missing or unparseable timestamps stay in the "recent" bucket so we
-    // do not accidentally hide them behind the older-conversations toggle.
-    if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
-      older.push(item);
-    } else {
-      recent.push(item);
-    }
-  }
-  return { recent, older };
-};
 
 export function ConversationPanel({
   onClose,
@@ -124,6 +103,9 @@ export function ConversationPanel({
     React.useState(false);
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
+  );
+  const olderConversationCutoff = useConversationPanelPreferencesStore(
+    (state) => state.olderConversationCutoff,
   );
   const showArchivedConversations = useConversationPanelPreferencesStore(
     (state) => state.showArchivedConversations,
@@ -449,10 +431,15 @@ export function ConversationPanel({
     return filterOutPinnedConversations(scopeFiltered, pinnedIds);
   }, [tagFilteredConversations, compact, pinnedIds, threadScope]);
 
-  const { recent: recentScoped, older: olderScoped } = React.useMemo(
-    () => partitionByCutoff(scopedConversations),
-    [scopedConversations],
-  );
+  const { recent: recentScoped, older: olderScoped } = React.useMemo(() => {
+    const cutoff = isOlderConversationCutoff(olderConversationCutoff)
+      ? olderConversationCutoff
+      : "1h";
+    return partitionByCutoff(
+      scopedConversations,
+      OLDER_CONVERSATION_CUTOFF_MS[cutoff],
+    );
+  }, [olderConversationCutoff, scopedConversations]);
 
   // Sort the full visible set as one list. The recent/older partition is
   // still computed (it gates the "Show older" toggle and "Load more"

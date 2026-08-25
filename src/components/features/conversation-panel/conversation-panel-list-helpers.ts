@@ -15,6 +15,57 @@ export type AutomationFilterMode =
   | "all"
   | "hide-automations"
   | "only-automations";
+export type OlderConversationCutoff = "1h" | "1d" | "7d" | "30d";
+
+export const OLDER_CONVERSATION_CUTOFFS = [
+  "1h",
+  "1d",
+  "7d",
+  "30d",
+] as const satisfies readonly OlderConversationCutoff[];
+
+export const OLDER_CONVERSATION_CUTOFF_MS: Record<
+  OlderConversationCutoff,
+  number
+> = {
+  "1h": 60 * 60 * 1000,
+  "1d": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+export function isOlderConversationCutoff(
+  value: unknown,
+): value is OlderConversationCutoff {
+  return (
+    typeof value === "string" &&
+    (OLDER_CONVERSATION_CUTOFFS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Splits conversations by last update relative to `nowMs`. Missing or
+ * unparseable timestamps stay in `recent` so they are never hidden by the
+ * hide-older toggle.
+ */
+export function partitionByCutoff<T extends { updated_at: string }>(
+  items: readonly T[],
+  cutoffMs: number,
+  nowMs: number = Date.now(),
+): { recent: T[]; older: T[] } {
+  const cutoff = nowMs - cutoffMs;
+  const recent: T[] = [];
+  const older: T[] = [];
+  for (const item of items) {
+    const updatedAt = item.updated_at ? Date.parse(item.updated_at) : NaN;
+    if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+      older.push(item);
+    } else {
+      recent.push(item);
+    }
+  }
+  return { recent, older };
+}
 
 /** Max conversations shown under a workspace/repo folder before "View more". */
 export const GROUP_CONVERSATIONS_PREVIEW_LIMIT = 5;

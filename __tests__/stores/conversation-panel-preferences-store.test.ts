@@ -11,6 +11,7 @@ describe("conversation-panel-preferences store", () => {
   it("defaults to showing older conversations, chronological list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
+    expect(state.olderConversationCutoff).toBe("1h");
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
     expect(state.showTagsMetadata).toBe(false);
@@ -52,6 +53,21 @@ describe("conversation-panel-preferences store", () => {
     expect(persisted.state.showRepoBranchMetadata).toBe(true);
   });
 
+  it("sets the older-conversation cutoff and persists it", () => {
+    useConversationPanelPreferencesStore
+      .getState()
+      .setOlderConversationCutoff("1d");
+
+    expect(
+      useConversationPanelPreferencesStore.getState().olderConversationCutoff,
+    ).toBe("1d");
+
+    const persisted = JSON.parse(
+      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
+    );
+    expect(persisted.state.olderConversationCutoff).toBe("1d");
+  });
+
   it("supports explicit setters for both preferences", () => {
     useConversationPanelPreferencesStore
       .getState()
@@ -77,6 +93,7 @@ describe("conversation-panel-preferences store", () => {
       "automationFilterMode",
       "conversationSort",
       "groupFolderOrder",
+      "olderConversationCutoff",
       "organizeMode",
       "selectedAutomationNames",
       "selectedTagFacets",

@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import {
   Clock3,
   Folder,
-  MessageCircle,
-  PanelTop,
+  ListFilter,
+  Shrink,
   SlidersHorizontal,
   Star,
   Tag,
@@ -68,7 +68,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
   },
   {
     id: "minimal",
-    icon: MessageCircle,
+    icon: Shrink,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_MINIMAL,
     settings: {
       organizeMode: "chronological",
@@ -189,10 +189,9 @@ export function ConversationLayoutsMenu({
           dropdownInstantColorClassName,
         )}
       >
-        <PanelTop
-          className="lucide lucide-panel-top shrink-0"
-          width={14}
-          height={14}
+        <ListFilter
+          className="shrink-0"
+          size={14}
           strokeWidth={2}
           aria-hidden
         />

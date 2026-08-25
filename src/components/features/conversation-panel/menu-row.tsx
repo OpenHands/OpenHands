@@ -5,6 +5,7 @@ import {
   dropdownMenuRowClassName,
   dropdownMenuRowIconClassName,
 } from "#/utils/dropdown-classes";
+import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 
 export function MenuRow({
   icon: Icon,
@@ -59,7 +60,8 @@ export function MenuRow({
         className={cn(
           "h-3.5 w-3.5",
           dropdownMenuRowIconClassName,
-          destructive && "text-danger",
+          destructive &&
+            "text-danger group-hover:text-danger group-focus-visible:text-danger",
         )}
         aria-hidden
       />
@@ -72,22 +74,11 @@ export function MenuRow({
         ) : null}
       </span>
       {selected === undefined ? null : variant === "toggle" ? (
-        <span
-          aria-hidden
-          className={cn(
-            "ml-auto flex h-3.5 w-6 shrink-0 items-center rounded-full px-0.5",
-            selected ? "bg-white" : "bg-[var(--oh-border)]",
-          )}
-        >
-          <span
-            className={cn(
-              "h-2.5 w-2.5 rounded-full",
-              selected
-                ? "translate-x-2.5 bg-black"
-                : "translate-x-0 bg-[var(--oh-muted)]",
-            )}
-          />
-        </span>
+        <ToggleSwitchVisual
+          enabled={Boolean(selected)}
+          size="sm"
+          className="ml-auto"
+        />
       ) : selected ? (
         <Check
           className="ml-auto h-3.5 w-3.5 shrink-0 text-white"
