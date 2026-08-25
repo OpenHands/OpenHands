@@ -294,9 +294,7 @@ export function ConversationPanel({
     });
   }, [data]);
 
-  // Pins live in each conversation's server-side `pinned` tag, so they follow
-  // the user across devices. Derived from the unfiltered loaded pages so an
-  // archived-but-still-pinned row keeps its pin.
+  // Unfiltered loaded pages, so an archived-but-still-pinned row keeps its pin.
   const { pinnedIds, togglePin, unpinConversation } = usePinnedConversations(
     allLoadedConversations,
   );

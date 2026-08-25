@@ -9,43 +9,30 @@ import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store
 const EMPTY_PINNED_IDS: readonly string[] = [];
 
 export interface UsePinnedConversationsResult {
-  /** Pinned conversation ids, most recently pinned first. */
   pinnedIds: readonly string[];
   togglePin: (conversationId: string) => void;
   unpinConversation: (conversationId: string) => void;
 }
 
-/**
- * Reads the `pinned` tag off the conversations the sidebar already fetched,
- * newest pin first (tag values are ISO-8601 instants, which sort
- * lexicographically). Conversations the backend no longer returns simply drop
- * out — deleting a conversation takes its tags with it, so there is nothing to
- * prune.
- */
+/** Tag values are ISO-8601 instants, so a descending sort is newest pin first. */
 function derivePinnedIdsFromTags(
   conversations: readonly AppConversation[],
 ): readonly string[] {
-  const pinned: Array<{ id: string; pinnedAt: string }> = [];
-  for (const conversation of conversations) {
-    const pinnedAt = conversation.tags?.[PINNED_TAG_KEY];
-    if (typeof pinnedAt === "string" && pinnedAt.length > 0) {
-      pinned.push({ id: conversation.id, pinnedAt });
-    }
-  }
-  return pinned
+  return conversations
+    .flatMap((conversation) => {
+      const pinnedAt = conversation.tags?.[PINNED_TAG_KEY];
+      return typeof pinnedAt === "string" && pinnedAt.length > 0
+        ? [{ id: conversation.id, pinnedAt }]
+        : [];
+    })
     .sort((a, b) => b.pinnedAt.localeCompare(a.pinnedAt))
     .map((entry) => entry.id);
 }
 
 /**
- * Pin state for the conversation panel.
- *
- * Agent-server backends keep pins in the conversation's server-side `pinned`
- * tag, so they follow the user across devices and browsers. The cloud
- * app-server does not round-trip `tags` yet, so cloud backends stay on the
- * browser-local store — see OSS-10028 / the linked cloud follow-up.
- *
- * Callers pass the conversations they already render; no extra fetch happens.
+ * Pin state derived from the `pinned` tag on `conversations` (the list the
+ * caller already renders), so pins follow the user across devices. Cloud
+ * backends stay on the local store — the app-server has no `tags` yet.
  */
 export function usePinnedConversations(
   conversations: readonly AppConversation[],
@@ -86,35 +73,32 @@ export function usePinnedConversations(
     [conversations, supportsTags],
   );
 
-  // One-shot replay of pins made before this migration: stamp the tag on the
-  // conversations that still exist, then drop the local entries so the server
-  // stays the single source of truth. Runs per backend, and only once the
-  // conversation list has actually loaded (an empty list would look like
-  // "none of these still exist" and silently discard every pin).
-  const migratedBackendIds = React.useRef<Set<string>>(new Set());
+  // Replays pins made before this migration. Only conversations on the loaded
+  // pages can be replayed, so a local pin is dropped once its write succeeds —
+  // never before, and never for one pagination has not reached yet. Stamps hang
+  // off a fixed anchor so a pin replayed from a later page keeps its old rank.
+  const attempted = React.useRef<Set<string>>(new Set());
+  const anchor = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (!supportsTags) return;
-    if (localPinnedIds.length === 0) return;
-    if (conversations.length === 0) return;
-    if (migratedBackendIds.current.has(backendId)) return;
-    migratedBackendIds.current.add(backendId);
+    if (!supportsTags || localPinnedIds.length === 0) return;
 
+    const base = (anchor.current ??= Date.now());
     const known = new Set(conversations.map((conversation) => conversation.id));
-    const alreadyTagged = new Set(taggedPinnedIds);
-    // Oldest local pin first, so replayed timestamps preserve the original
-    // "most recently pinned first" order.
-    const replayed = [...localPinnedIds].reverse();
-    replayed.forEach((conversationId, index) => {
-      if (known.has(conversationId) && !alreadyTagged.has(conversationId)) {
-        writePinnedTag({
-          conversationId,
-          pinnedAt: new Date(Date.now() + index).toISOString(),
-        });
+    const tagged = new Set(taggedPinnedIds);
+
+    localPinnedIds.forEach((conversationId, rank) => {
+      const key = `${backendId}:${conversationId}`;
+      if (!known.has(conversationId) || attempted.current.has(key)) return;
+      attempted.current.add(key);
+      if (tagged.has(conversationId)) {
+        localUnpin(backendId, conversationId);
+        return;
       }
+      writePinnedTag(
+        { conversationId, pinnedAt: new Date(base - rank).toISOString() },
+        { onSuccess: () => localUnpin(backendId, conversationId) },
+      );
     });
-    localPinnedIds.forEach((conversationId) =>
-      localUnpin(backendId, conversationId),
-    );
   }, [
     backendId,
     conversations,
@@ -131,10 +115,11 @@ export function usePinnedConversations(
         localTogglePin(backendId, conversationId);
         return;
       }
-      const isPinned = taggedPinnedIds.includes(conversationId);
       writePinnedTag({
         conversationId,
-        pinnedAt: isPinned ? null : new Date().toISOString(),
+        pinnedAt: taggedPinnedIds.includes(conversationId)
+          ? null
+          : new Date().toISOString(),
       });
     },
     [backendId, localTogglePin, supportsTags, taggedPinnedIds, writePinnedTag],

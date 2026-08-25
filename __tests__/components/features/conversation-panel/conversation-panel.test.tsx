@@ -124,12 +124,7 @@ describe("ConversationPanel", () => {
     createMockConversation({ id: "3", title: "Conversation 3" }),
   ];
 
-  /**
-   * Serves conversations the way an agent-server backend does: a pin is a
-   * `pinned` tag on the conversation, and a tag PATCH is read-merge-write.
-   * `pinnedIds` are stamped in ascending order, so the last one pinned sorts
-   * to the top of the pinned section.
-   */
+  /** Pins as the backend stores them: a `pinned` tag, PATCHed read-merge-write. */
   const seedConversationsWithPins = (
     conversations: AppConversation[],
     pinnedIds: readonly string[],
@@ -176,13 +171,6 @@ describe("ConversationPanel", () => {
         });
         return { ...conversation, tags };
       });
-      const updated = items.find(
-        (conversation) => conversation.id === conversationId,
-      );
-      if (!updated) {
-        throw new Error(`unknown conversation ${conversationId}`);
-      }
-      return updated;
     });
   };
 

@@ -29,8 +29,11 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   }: {
     mutationFn: (variables: unknown) => Promise<unknown>;
   }) => ({
-    mutate: (variables: unknown) => {
-      void mutationFn(variables);
+    mutate: (variables: unknown, options?: { onSuccess?: () => void }) => {
+      mutationFn(variables).then(
+        () => options?.onSuccess?.(),
+        () => {},
+      );
     },
   }),
 }));
@@ -128,9 +131,9 @@ describe("usePinnedConversations", () => {
     );
   });
 
-  it("does not replay local pins for conversations the backend no longer has", async () => {
+  it("keeps a local pin whose conversation pagination has not reached yet", async () => {
     usePinnedConversationsStore.setState({
-      pinsByBackendId: { [BACKEND_ID]: ["gone", "a"] },
+      pinsByBackendId: { [BACKEND_ID]: ["on-a-later-page", "a"] },
     });
 
     renderHook(() => usePinnedConversations([conversation("a")]));
@@ -139,6 +142,28 @@ describe("usePinnedConversations", () => {
       expect(mergeConversationTagsMock).toHaveBeenCalledTimes(1),
     );
     expect(mergeConversationTagsMock.mock.calls[0][0]).toBe("a");
+    // Dropping it here would lose the pin before it ever reached the backend.
+    await waitFor(() =>
+      expect(
+        usePinnedConversationsStore.getState().pinsByBackendId[BACKEND_ID],
+      ).toEqual(["on-a-later-page"]),
+    );
+  });
+
+  it("keeps the local pin when the tag write fails", async () => {
+    mergeConversationTagsMock.mockRejectedValue(new Error("patch failed"));
+    usePinnedConversationsStore.setState({
+      pinsByBackendId: { [BACKEND_ID]: ["a"] },
+    });
+
+    renderHook(() => usePinnedConversations([conversation("a")]));
+
+    await waitFor(() =>
+      expect(mergeConversationTagsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      usePinnedConversationsStore.getState().pinsByBackendId[BACKEND_ID],
+    ).toEqual(["a"]);
   });
 
   it("waits for the conversation list before migrating, so no pin is discarded", () => {
