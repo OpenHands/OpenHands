@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -431,6 +437,148 @@ describe("LlmSettingsScreen - provider connection selector", () => {
     expect(
       await screen.findByTestId("llm-provider-connection-input"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openhands/kimi-k3", llm_api_key_set: true }),
+    );
+  });
+
+  it("hides the inline API key and base URL inputs for an OpenHands provider model", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+    // The free-models note is still surfaced so the user understands the model.
+    expect(
+      screen.getByTestId("openhands-free-models-note"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the OpenHands API key help link on cloud (the key is server-minted)", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(
+      screen.queryByTestId("openhands-api-key-help"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("openhands-api-key-help-2"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("strips api_key and base_url from the saved settings payload", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    renderLlmSettingsScreen({
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "should-not-be-sent",
+        "llm.base_url": "https://should-not-be-sent.example/v1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llmPayload.model).toBe("openhands/kimi-k3");
+    expect(llmPayload).not.toHaveProperty("api_key");
+    expect(llmPayload).not.toHaveProperty("base_url");
+  });
+
+  it("still shows the API key input for the OpenHands provider on a local backend", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    // Local mode still collects an inline key for the OpenHands provider.
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+    const openHandsHelp = screen.getByTestId("openhands-api-key-help");
+    expect(openHandsHelp).toBeInTheDocument();
+    // The OpenHands provider help uses the split TEXT/LINK/SUFFIX keys (not
+    // the stale single-string "API Keys tab" key) and links to OpenHands
+    // Cloud's API Keys page, where the OpenHands LLM Key section lives.
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_LINK",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$SEE_HERE_FOR_MORE_DETAILS",
+    );
+    expect(openHandsHelp).not.toHaveTextContent("SETTINGS$NAV_API_KEYS");
+    const helpLinks = within(openHandsHelp).getAllByRole("link");
+    expect(helpLinks).toHaveLength(2);
+    expect(helpLinks[0]).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings/api-keys",
+    );
+    expect(helpLinks[1]).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
+    );
+  });
+
+  it("still shows the API key input for a non-OpenHands provider on cloud", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
 });
 
