@@ -35,9 +35,6 @@ vi.mock("#/components/features/sidebar/sidebar-conversation-list", () => ({
 vi.mock("#/components/features/backends/backend-selector", () => ({
   BackendSelector: () => <div data-testid="backend-selector" />,
 }));
-vi.mock("#/components/features/command-menu/command-menu-trigger", () => ({
-  CommandMenuTrigger: () => <div data-testid="command-menu-trigger" />,
-}));
 vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
   OpenHandsLogoButton: () => <div data-testid="logo-button" />,
 }));

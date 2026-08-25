@@ -245,12 +245,32 @@ export const CONVERSATION_HANDLERS = [
   http.get("*/api/conversations/search", async ({ request }) => {
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "20");
-    const items = Array.from(CONVERSATIONS.values())
+    const pageId = url.searchParams.get("page_id");
+    const titleContains = url.searchParams.get("title__contains")?.trim();
+    const titleFilter = titleContains?.toLowerCase();
+    const sorted = Array.from(CONVERSATIONS.values())
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .slice(0, limit)
-      .map(createConversationResponse);
+      .map(createConversationResponse)
+      .filter((conversation) => {
+        if (!titleFilter) {
+          return true;
+        }
+        return (conversation.title ?? "").toLowerCase().includes(titleFilter);
+      });
 
-    return HttpResponse.json({ items, next_page_id: null });
+    let startIndex = 0;
+    if (pageId) {
+      const pageStartIndex = sorted.findIndex(
+        (conversation) => conversation.id === pageId,
+      );
+      startIndex = pageStartIndex >= 0 ? pageStartIndex + 1 : 0;
+    }
+
+    const items = sorted.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < sorted.length;
+    const next_page_id = hasMore ? (items[items.length - 1]?.id ?? null) : null;
+
+    return HttpResponse.json({ items, next_page_id });
   }),
 
   http.get("*/api/conversations", async ({ request }) => {
@@ -404,8 +424,19 @@ export const CONVERSATION_HANDLERS = [
     }
 
     if (upstreamUrl.pathname === "/api/v1/app-conversations/search") {
+      const titleContains = upstreamUrl.searchParams
+        .get("title__contains")
+        ?.trim()
+        .toLowerCase();
+      const items =
+        !titleContains ||
+        (CLOUD_PAGINATION_CONVERSATION.title ?? "")
+          .toLowerCase()
+          .includes(titleContains)
+          ? [CLOUD_PAGINATION_CONVERSATION]
+          : [];
       return HttpResponse.json({
-        items: [CLOUD_PAGINATION_CONVERSATION],
+        items,
         next_page_id: null,
       });
     }

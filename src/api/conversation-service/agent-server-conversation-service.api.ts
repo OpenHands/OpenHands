@@ -66,6 +66,7 @@ import type {
   AppConversationPage,
   AppConversationStartRequest,
   AppConversationStartTask,
+  ConversationSearchParams,
   MetricsSnapshot,
   RuntimeConversationInfo,
   RuntimeConversationStats,
@@ -769,20 +770,28 @@ class AgentServerConversationService {
   }
 
   static async searchConversations(
-    limit: number = 20,
-    pageId?: string,
+    params: ConversationSearchParams = {},
   ): Promise<AppConversationPage> {
+    const limit = params.limit ?? 20;
+    const pageId = params.pageId;
+    const titleContains = params.titleContains?.trim();
+
     if (getActiveBackend().backend.kind === "cloud") {
-      return searchCloudConversations(limit, pageId);
+      return searchCloudConversations({ limit, pageId, titleContains });
+    }
+
+    const request: Record<string, unknown> = {
+      limit,
+      page_id: pageId,
+      sort_order: ConversationSortOrder.UPDATED_AT_DESC,
+    };
+    if (titleContains) {
+      request.title__contains = titleContains;
     }
 
     const data = await new ConversationClient(
       getAgentServerClientOptions(),
-    ).searchConversations({
-      limit,
-      page_id: pageId,
-      sort_order: ConversationSortOrder.UPDATED_AT_DESC,
-    });
+    ).searchConversations(request);
 
     return toConversationPage(requireConversationSearchPage(data));
   }

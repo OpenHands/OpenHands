@@ -85,14 +85,21 @@ export function pickCloudBackendForLaunch(): Backend | null {
  * the cloud endpoint `/api/v1/app-conversations/search`.
  */
 export async function searchCloudConversations(
-  limit: number = 20,
-  pageId?: string,
+  params: {
+    limit?: number;
+    pageId?: string;
+    titleContains?: string;
+  } = {},
 ): Promise<AppConversationPage> {
   const backend = getActiveCloudBackend();
-  const params = new URLSearchParams();
-  params.set("limit", String(limit));
-  if (pageId) params.set("page_id", pageId);
-  params.set("sort_order", "UPDATED_AT_DESC");
+  const limit = params.limit ?? 20;
+  const urlParams = new URLSearchParams();
+  urlParams.set("limit", String(limit));
+  if (params.pageId) urlParams.set("page_id", params.pageId);
+  urlParams.set("sort_order", "UPDATED_AT_DESC");
+  if (params.titleContains) {
+    urlParams.set("title__contains", params.titleContains);
+  }
 
   const data = await callCloudProxy<{
     items: AppConversation[];
@@ -100,7 +107,7 @@ export async function searchCloudConversations(
   }>({
     backend,
     method: "GET",
-    path: `/api/v1/app-conversations/search?${params.toString()}`,
+    path: `/api/v1/app-conversations/search?${urlParams.toString()}`,
   });
 
   return {

@@ -37,6 +37,7 @@ import { ConversationPanelFilterMenu } from "./conversation-panel-filter-menu";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
+import { ConversationPanelSearchButton } from "./conversation-panel-search-toggle";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
@@ -1041,9 +1042,7 @@ export function ConversationPanel({
               {t(I18nKey.SIDEBAR$CONVERSATIONS)}
             </span>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              <ConversationPanelNewThreadPicker
-                backendKind={activeBackend.kind}
-              />
+              <ConversationPanelSearchButton />
               <ConversationPanelFilterMenu
                 filterMenuOpen={filterMenuOpen}
                 setFilterMenuOpen={setFilterMenuOpen}
@@ -1076,6 +1075,9 @@ export function ConversationPanel({
                 toggleShowHoverMetadata={toggleShowHoverMetadata}
                 totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
+              />
+              <ConversationPanelNewThreadPicker
+                backendKind={activeBackend.kind}
               />
             </div>
           </div>

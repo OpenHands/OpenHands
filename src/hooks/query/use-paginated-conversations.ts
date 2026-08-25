@@ -24,10 +24,10 @@ export const usePaginatedConversations = (limit: number = 20) => {
       active.orgId,
     ],
     queryFn: async ({ pageParam }) => {
-      const result = await AgentServerConversationService.searchConversations(
+      const result = await AgentServerConversationService.searchConversations({
         limit,
-        pageParam,
-      );
+        pageId: pageParam,
+      });
 
       return result;
     },
