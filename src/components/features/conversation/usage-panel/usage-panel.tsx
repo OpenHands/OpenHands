@@ -74,10 +74,7 @@ export function UsagePanel() {
             </span>
           )}
           {usage !== null && <UsageSection usage={usage} />}
-          <CostSection
-            cost={metrics.cost}
-            maxBudgetPerTask={metrics.max_budget_per_task}
-          />
+          <CostSection cost={metrics.cost} />
         </div>
       </div>
 
