@@ -69,6 +69,7 @@ import {
   isProcessRunning,
   resolveWindowsCommand,
   signalProcessTree,
+  watchAutomationMigration,
 } from "./dev-process-utils.mjs";
 import { fileLog, stripAnsi } from "./logger.mjs";
 
@@ -1065,42 +1066,25 @@ function startAutomationBackend(config) {
     },
   );
 
-  // Detect stale SQLite migration failures (happens when openhands-automation
-  // is updated to a version with a restructured Alembic revision chain, and
-  // the old DB references a revision the new chain doesn't know about).
-  // Recovery: delete the stale DB and restart once.
-  let detectedMigrationError = false;
-  const MIGRATION_ERROR_PATTERN = "Can't locate revision identified by";
+  // Detect stale SQLite migration failures and recover once via the
+  // shared watcher in dev-process-utils.mjs (single shared implementation
+  // with dev-static.mjs). The latch inside the watcher guarantees at most
+  // one recovery attempt per run, so a persistently broken backend can
+  // never wedge this launcher in a restart loop.
+  watchAutomationMigration(proc, {
+    dbPath: autoDbPath,
+    onRecover: () => unlinkSync(autoDbPath),
+    log: (message, kind) => {
+      const colors = { warn: c.yellow, ok: c.green, error: c.red };
+      logService("automation", message, colors[kind] ?? c.dim);
+      fileLog(kind === "error" ? "error" : "info", message);
+    },
+  });
 
-  const checkForMigrationError = (data) => {
-    if (!detectedMigrationError && data.toString().includes(MIGRATION_ERROR_PATTERN)) {
-      detectedMigrationError = true;
-    }
-  };
-
-  proc.stdout.on("data", checkForMigrationError);
-  proc.stderr.on("data", checkForMigrationError);
-
+  // Restart the backend after the watcher deletes the stale DB.
   proc.on("exit", (code) => {
-    if (code === 3 && detectedMigrationError) {
-      logService(
-        "automation",
-        `Migration error — removing stale DB at ${autoDbPath} and restarting...`,
-        c.yellow,
-      );
-      try {
-        unlinkSync(autoDbPath);
-        logService(
-          "automation",
-          `Deleted stale automations.db, restarting...`,
-          c.green,
-        );
-        startAutomationBackend(config);
-      } catch (err) {
-        logError(
-          `Failed to remove stale automations.db: ${err.message}`,
-        );
-      }
+    if (code === 3) {
+      startAutomationBackend(config);
     }
   });
 }

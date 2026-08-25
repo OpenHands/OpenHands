@@ -57,6 +57,7 @@ import {
   isProcessRunning,
   resolveWindowsCommand,
   signalProcessTree,
+  watchAutomationMigration,
 } from "./dev-process-utils.mjs";
 import {
   buildAgentServerAutomationEnv,
@@ -403,40 +404,23 @@ function startAutomationBackend(config) {
     },
   );
 
-  // Detect stale SQLite migration failures (identical recovery as
-  // dev-with-automation.mjs).
-  let detectedMigrationError = false;
-  const MIGRATION_ERROR_PATTERN = "Can't locate revision identified by";
+  // Detect stale SQLite migration failures and recover once via the
+  // shared watcher in dev-process-utils.mjs (same behaviour as
+  // dev-with-automation.mjs — single shared implementation).
+  watchAutomationMigration(proc, {
+    dbPath: autoDbPath,
+    onRecover: () => unlinkSync(autoDbPath),
+    log: (message, kind) => {
+      const colors = { warn: c.yellow, ok: c.green, error: c.red };
+      logService("automation", message, colors[kind] ?? c.dim);
+    },
+  });
 
-  const checkForMigrationError = (data) => {
-    if (!detectedMigrationError && data.toString().includes(MIGRATION_ERROR_PATTERN)) {
-      detectedMigrationError = true;
-    }
-  };
-
-  proc.stdout.on("data", checkForMigrationError);
-  proc.stderr.on("data", checkForMigrationError);
-
+  // Restart the backend after the watcher deletes the stale DB. The
+  // watcher's latch guarantees this happens at most once per run.
   proc.on("exit", (code) => {
-    if (code === 3 && detectedMigrationError) {
-      logService(
-        "automation",
-        `Migration error — removing stale DB at ${autoDbPath} and restarting...`,
-        c.yellow,
-      );
-      try {
-        unlinkSync(autoDbPath);
-        logService(
-          "automation",
-          `Deleted stale automations.db, restarting...`,
-          c.green,
-        );
-        startAutomationBackend(config);
-      } catch (err) {
-        logError(
-          `Failed to remove stale automations.db: ${err.message}`,
-        );
-      }
+    if (code === 3) {
+      startAutomationBackend(config);
     }
   });
 }

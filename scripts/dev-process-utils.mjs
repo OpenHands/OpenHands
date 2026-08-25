@@ -148,3 +148,72 @@ export function createShutdownHookRegistry(onError) {
     },
   };
 }
+
+/**
+ * Watch a spawned automation backend for a stale SQLite migration failure
+ * and recover once by deleting the stale DB and restarting.
+ *
+ * The failure happens when openhands-automation is updated to a version
+ * with a restructured Alembic revision chain: the old DB references a
+ * revision the new chain doesn't know about, and the backend exits with
+ * Alembic's "Can't locate revision identified by" error.
+ *
+ * Both dev launchers (dev-static and dev-with-automation) need exactly
+ * this behaviour; keeping it here means they cannot drift apart.
+ *
+ * Recovery is single-shot by design. If the restart also fails with a
+ * migration error — broken upstream package, read-only filesystem,
+ * changed error wording — we log loudly and give up rather than loop.
+ * An unbounded respawn cycle would wedge `npm run dev` and mask the real
+ * breakage from the developer.
+ *
+ * Params are injectable so tests can drive the whole lifecycle with fake
+ * streams and timers.
+ */
+export function watchAutomationMigration(
+  proc,
+  { dbPath, onRecover, log, pattern = "Can't locate revision identified by" },
+) {
+  let detected = false;
+  // Single-shot latch, scoped to THIS watcher instance. One recovery
+  // attempt per launcher run: if the restarted backend fails the same way
+  // again we log loudly and give up rather than respawn forever.
+  let attempted = false;
+
+  const checkForMigrationError = (data) => {
+    if (!detected && data.toString().includes(pattern)) {
+      detected = true;
+    }
+  };
+
+  proc.stdout?.on("data", checkForMigrationError);
+  proc.stderr?.on("data", checkForMigrationError);
+
+  proc.on("exit", (code) => {
+    if (!detected) {
+      return;
+    }
+
+    // Exit code 3 is how the automation backend currently surfaces an
+    // unrecoverable startup error. We still require the log pattern so a
+    // coincidental exit 3 from another cause never deletes the DB.
+    if (code !== 3) {
+      return;
+    }
+
+    // Single-shot latch: one recovery attempt per launcher run, ever.
+    if (attempted) {
+      log?.("Migration error again after recovery — giving up.", "error");
+      return;
+    }
+    attempted = true;
+
+    log?.(`Migration error detected — removing stale DB at ${dbPath}...`, "warn");
+    try {
+      onRecover();
+      log?.("Deleted stale automations.db, restarting...", "ok");
+    } catch (err) {
+      log?.(`Failed to remove stale automations.db: ${err.message}`, "error");
+    }
+  });
+}
