@@ -38640,6 +38640,23 @@
     "tr": "Canlı önizleme",
     "uk": "Попередній перегляд наживо"
   },
+  "CONVERSATION_PANEL$PREVIEW_WAITING_SERVER": {
+    "en": "Waiting for the app server…",
+    "ja": "アプリサーバーを待機中…",
+    "zh-CN": "正在等待应用服务器…",
+    "zh-TW": "正在等待應用程式伺服器…",
+    "ko-KR": "앱 서버를 기다리는 중…",
+    "no": "Venter på appserveren…",
+    "ar": "في انتظار خادم التطبيق…",
+    "de": "Warten auf den App-Server…",
+    "fr": "En attente du serveur de l’application…",
+    "it": "In attesa del server dell’app…",
+    "pt": "Aguardando o servidor do app…",
+    "es": "Esperando al servidor de la aplicación…",
+    "ca": "Esperant el servidor de l’aplicació…",
+    "tr": "Uygulama sunucusu bekleniyor…",
+    "uk": "Очікування сервера застосунку…"
+  },
   "CONVERSATION_PANEL$PREVIEW_TITLE": {
     "en": "Live Preview",
     "ja": "ライブプレビュー",

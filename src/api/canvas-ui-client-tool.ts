@@ -77,7 +77,7 @@ export const CANVAS_UI_CLIENT_TOOL: ClientToolSpec = {
       path: {
         type: "string",
         description:
-          "Workspace-relative file path. Required for navigate_to_file and show_preview; ignored otherwise.",
+          "Workspace-relative entrypoint path. Required for navigate_to_file and show_preview; optional for open_tab with tab=preview; ignored otherwise.",
       },
       tab: {
         type: "string",

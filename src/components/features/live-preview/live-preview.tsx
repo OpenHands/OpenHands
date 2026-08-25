@@ -16,6 +16,7 @@ import {
   useWorkspaceSession,
 } from "#/hooks/query/use-workspace-session";
 import { useWorkspaceFiles } from "#/hooks/query/use-workspace-files";
+import { useForwardedPreviewUrl } from "#/hooks/query/use-forwarded-preview-url";
 import {
   useWorkspaceMutationCounter,
   withWorkspaceCacheBuster,
@@ -53,6 +54,7 @@ export function LivePreview() {
   const runtimeIsReady = useRuntimeIsReady();
   const workspaceSession = useWorkspaceSession();
   const workspaceFiles = useWorkspaceFiles();
+  const forwardedPreview = useForwardedPreviewUrl();
   const mutationCounter = useWorkspaceMutationCounter((state) => state.count);
   const bumpMutationCounter = useWorkspaceMutationCounter(
     (state) => state.bump,
@@ -71,12 +73,19 @@ export function LivePreview() {
   );
 
   const previewUrl = useMemo(() => {
+    if (forwardedPreview.url) {
+      return withWorkspaceCacheBuster(
+        forwardedPreview.url,
+        mutationCounter + manualRefresh,
+      );
+    }
     if (!workspaceSession.data?.baseUrl || !entrypoint) return null;
     return withWorkspaceCacheBuster(
       joinWorkspaceUrl(workspaceSession.data.baseUrl, entrypoint),
       mutationCounter + manualRefresh,
     );
   }, [
+    forwardedPreview.url,
     workspaceSession.data?.baseUrl,
     entrypoint,
     mutationCounter,
@@ -110,7 +119,11 @@ export function LivePreview() {
     );
   }
 
-  if (workspaceSession.isError || workspaceFiles.isLoading) {
+  if (
+    (!forwardedPreview.url && workspaceSession.isError) ||
+    (!forwardedPreview.url && workspaceFiles.isLoading) ||
+    forwardedPreview.isError
+  ) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--oh-surface)] p-8 text-center text-[var(--oh-muted)]">
         <WifiOff className="h-6 w-6" aria-hidden />
@@ -121,7 +134,18 @@ export function LivePreview() {
     );
   }
 
-  if (!entrypoint || !previewUrl) {
+  if (forwardedPreview.isLoading && !previewUrl) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--oh-surface)] p-8 text-center text-[var(--oh-muted)]">
+        <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
+        <p className="text-sm">
+          {t(I18nKey.CONVERSATION_PANEL$PREVIEW_WAITING_SERVER)}
+        </p>
+      </div>
+    );
+  }
+
+  if ((!entrypoint && !forwardedPreview.url) || !previewUrl) {
     return (
       <div className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-4 bg-[var(--oh-surface)] p-8 text-center text-[var(--oh-muted)]">
         <Rocket className="h-7 w-7" aria-hidden />
@@ -142,9 +166,11 @@ export function LivePreview() {
       <div className="flex min-h-10 shrink-0 items-center gap-2 border-b border-[var(--oh-border)] px-3">
         <span
           className="min-w-0 flex-1 truncate text-xs text-[var(--oh-muted)]"
-          title={entrypoint}
+          title={entrypoint ?? previewUrl}
         >
-          {entrypoint}
+          {forwardedPreview.isForwarded
+            ? t(I18nKey.CONVERSATION_PANEL$LIVE_PREVIEW)
+            : entrypoint}
         </span>
         <span
           className={cn(
