@@ -58,6 +58,7 @@ import {
   setStoredConversationMetadata,
   type WorkspaceMode,
 } from "../conversation-metadata-store";
+import AgentProfilesService from "#/api/agent-profiles-service/agent-profiles-service.api";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
 import type {
   GetHooksResponse,
@@ -447,13 +448,21 @@ class AgentServerConversationService {
       return createCloudAppConversation(request);
     }
 
-    const [settings, profiles] = await Promise.all([
+    const [settings, profiles, agentProfile] = await Promise.all([
       SettingsService.getSettings(),
       ProfilesService.listProfiles().catch(() => undefined),
+      agentProfileId
+        ? AgentProfilesService.getProfile(agentProfileId).catch(() => undefined)
+        : undefined,
     ]);
+    // Only the `openhands` variant of the union pins an LLM profile.
+    const agentProfileBody = agentProfile?.profile;
     const titleLlmProfile = resolveTitleLlmProfile(
       settings.title_llm_profile,
       profiles,
+      agentProfileBody?.agent_kind === "openhands"
+        ? agentProfileBody.llm_profile_ref
+        : undefined,
     );
     const conversationId = uuidv4();
     // @spec WUP-001 — Send an absolute working_dir to the agent-server.
