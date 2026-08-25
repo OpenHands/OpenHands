@@ -212,15 +212,6 @@ export function AdvancedConversationOptionsModal({
               onClick={preferences.toggleShowArchivedConversations}
             />
             <HideOlderConversationsRow />
-            <MenuRow
-              icon={Tag}
-              label={t(I18nKey.CONVERSATION_PANEL$TAG_FILTERS)}
-              selected={preferences.tagFiltersEnabled}
-              variant="toggle"
-              testId="toggle-tag-filters"
-              onClick={preferences.toggleTagFiltersEnabled}
-            />
-
             <MenuSeparator />
             <MenuHeading>
               {t(I18nKey.CONVERSATION_PANEL$AUTOMATIONS)}

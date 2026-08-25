@@ -229,37 +229,33 @@ export function ConversationLayoutsMenu({
             />
           ))}
 
-          {preferences.tagFiltersEnabled ? (
-            <>
-              <MenuSeparator />
-              <MenuRow
-                icon={Tag}
-                label={t(I18nKey.CONVERSATION_PANEL$TAG_FILTERS)}
-                testId="tag-filters-section"
-                onClick={() => setTagSectionExpanded(!tagSectionExpanded)}
-              />
-              {tagSectionExpanded ? (
-                tagFacets.length > 0 ? (
-                  tagFacets.map((facet) => (
-                    <MenuRow
-                      key={facet}
-                      icon={Tag}
-                      label={formatTagFacetLabel(facet)}
-                      selected={preferences.selectedTagFacets.includes(facet)}
-                      testId={`tag-facet-row-${facet}`}
-                      onClick={() => preferences.toggleTagFacet(facet)}
-                    />
-                  ))
-                ) : (
-                  <p
-                    data-testid="tag-filters-empty"
-                    className="px-2 py-1 text-[11px] text-[var(--oh-muted)]/70"
-                  >
-                    {t(I18nKey.CONVERSATION_PANEL$NO_VISIBLE_TAGS)}
-                  </p>
-                )
-              ) : null}
-            </>
+          <MenuSeparator />
+          <MenuRow
+            icon={Tag}
+            label={t(I18nKey.CONVERSATION_PANEL$TAG_FILTERS)}
+            testId="tag-filters-section"
+            onClick={() => setTagSectionExpanded(!tagSectionExpanded)}
+          />
+          {tagSectionExpanded ? (
+            tagFacets.length > 0 ? (
+              tagFacets.map((facet) => (
+                <MenuRow
+                  key={facet}
+                  icon={Tag}
+                  label={formatTagFacetLabel(facet)}
+                  selected={preferences.selectedTagFacets.includes(facet)}
+                  testId={`tag-facet-row-${facet}`}
+                  onClick={() => preferences.toggleTagFacet(facet)}
+                />
+              ))
+            ) : (
+              <p
+                data-testid="tag-filters-empty"
+                className="px-2 py-1 text-[11px] text-[var(--oh-muted)]/70"
+              >
+                {t(I18nKey.CONVERSATION_PANEL$NO_VISIBLE_TAGS)}
+              </p>
+            )
           ) : null}
 
           <MenuSeparator />

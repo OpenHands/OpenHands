@@ -14,7 +14,7 @@ describe("conversation-panel-preferences store", () => {
     expect(state.olderConversationCutoff).toBe("1h");
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
-    expect(state.showTagsMetadata).toBe(false);
+    expect(state.showTagsMetadata).toBe(true);
     expect(state.organizeMode).toBe("chronological");
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
@@ -103,23 +103,8 @@ describe("conversation-panel-preferences store", () => {
       "showOlderConversations",
       "showRepoBranchMetadata",
       "showTagsMetadata",
-      "tagFiltersEnabled",
       "threadScope",
     ]);
-  });
-
-  it("toggles the Tag Filters gate and persists it to localStorage", () => {
-    useConversationPanelPreferencesStore.getState().toggleTagFiltersEnabled();
-
-    const persisted = JSON.parse(
-      window.localStorage.getItem(STORAGE_KEY) ?? "{}",
-    );
-    expect(persisted.state.tagFiltersEnabled).toBe(true);
-
-    useConversationPanelPreferencesStore.getState().setTagFiltersEnabled(false);
-    expect(
-      useConversationPanelPreferencesStore.getState().tagFiltersEnabled,
-    ).toBe(false);
   });
 
   it("applies a layout preset's partial bundle in one action", () => {

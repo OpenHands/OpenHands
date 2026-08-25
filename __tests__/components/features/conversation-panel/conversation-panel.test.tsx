@@ -154,7 +154,6 @@ describe("ConversationPanel", () => {
       selectedAutomationNames: [],
       selectedTagFacets: [],
       showTagsMetadata: false,
-      tagFiltersEnabled: false,
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -451,12 +450,9 @@ describe("ConversationPanel", () => {
       next_page_id: null,
     });
 
-    useConversationPanelPreferencesStore.setState({ tagFiltersEnabled: true });
-
     renderConversationPanel();
 
-    // The layouts menu exposes the Tag Filters section once enabled; selecting
-    // a facet narrows the list via the same store the bar used.
+    // Selecting a facet in the layouts menu narrows the list.
     await user.click(screen.getByTestId("conversation-layouts-toggle"));
     await user.click(screen.getByTestId("tag-filters-section"));
     await user.click(screen.getByTestId("tag-facet-row-project=vault"));
@@ -496,8 +492,6 @@ describe("ConversationPanel", () => {
       ],
       next_page_id: null,
     });
-
-    useConversationPanelPreferencesStore.setState({ tagFiltersEnabled: true });
 
     renderConversationPanel();
 

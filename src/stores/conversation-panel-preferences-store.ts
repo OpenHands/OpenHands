@@ -45,12 +45,6 @@ interface ConversationPanelPreferencesState {
   automationFilterMode: AutomationFilterMode;
   selectedAutomationNames: string[];
   selectedTagFacets: string[];
-  /**
-   * Whether the layouts menu exposes the Tag Filters section. Off by
-   * default: tag filtering is opt-in surface area, matching the Advanced
-   * options "Tag Filters" toggle that gates it.
-   */
-  tagFiltersEnabled: boolean;
   groupFolderOrder: string[];
 }
 
@@ -100,8 +94,6 @@ interface ConversationPanelPreferencesActions {
    */
   clearFilterSelections: () => void;
   toggleTagFacet: (facet: string) => void;
-  setTagFiltersEnabled: (value: boolean) => void;
-  toggleTagFiltersEnabled: () => void;
   /** Applies a layout preset's partial bundle in one set(). */
   applyLayoutSettings: (settings: Partial<LayoutSettingsSlice>) => void;
   setGroupFolderOrder: (order: readonly string[]) => void;
@@ -116,7 +108,7 @@ const initialState: ConversationPanelPreferencesState = {
   showArchivedConversations: false,
   showRepoBranchMetadata: false,
   showLlmProfiles: false,
-  showTagsMetadata: false,
+  showTagsMetadata: true,
   showHoverMetadata: true,
   organizeMode: "chronological",
   conversationSort: "updated",
@@ -124,7 +116,6 @@ const initialState: ConversationPanelPreferencesState = {
   automationFilterMode: "all",
   selectedAutomationNames: [],
   selectedTagFacets: [],
-  tagFiltersEnabled: false,
   groupFolderOrder: [],
 };
 
@@ -218,10 +209,6 @@ export const useConversationPanelPreferencesStore =
         setGroupFolderOrder: (order) =>
           set(() => ({ groupFolderOrder: [...order] })),
 
-        setTagFiltersEnabled: (value) =>
-          set(() => ({ tagFiltersEnabled: value })),
-        toggleTagFiltersEnabled: () =>
-          set((state) => ({ tagFiltersEnabled: !state.tagFiltersEnabled })),
         applyLayoutSettings: (settings) => set(() => ({ ...settings })),
       }),
       {
@@ -246,7 +233,6 @@ export const useConversationPanelPreferencesStore =
           automationFilterMode: state.automationFilterMode,
           selectedAutomationNames: state.selectedAutomationNames,
           selectedTagFacets: state.selectedTagFacets,
-          tagFiltersEnabled: state.tagFiltersEnabled,
           groupFolderOrder: state.groupFolderOrder,
         }),
       },

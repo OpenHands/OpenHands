@@ -20,7 +20,6 @@ beforeEach(() => {
     automationFilterMode: "all",
     selectedAutomationNames: [],
     selectedTagFacets: [],
-    tagFiltersEnabled: false,
   });
 });
 
@@ -74,25 +73,13 @@ describe("ConversationLayoutsMenu", () => {
     );
   });
 
-  it("hides the Tag Filters section until the preference is enabled", async () => {
-    const user = userEvent.setup();
+  it("always exposes the Tag Filters section", () => {
     renderMenu(["project=vault"]);
-
-    expect(screen.queryByTestId("tag-filters-section")).not.toBeInTheDocument();
-
-    // The gate lives in the Advanced options modal.
-    await user.click(screen.getByTestId("advanced-options-row"));
-    await user.click(screen.getByTestId("toggle-tag-filters"));
-
-    expect(
-      await screen.findByTestId("tag-filters-section"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("tag-filters-section")).toBeInTheDocument();
   });
 
   it("shows No visible tags when enabled with no facets, and toggles facets when present", async () => {
     const user = userEvent.setup();
-    useConversationPanelPreferencesStore.getState().setTagFiltersEnabled(true);
-
     const { unmount } = renderMenu();
     await user.click(screen.getByTestId("tag-filters-section"));
     expect(screen.getByTestId("tag-filters-empty")).toBeInTheDocument();
