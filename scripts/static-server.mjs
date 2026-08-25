@@ -77,7 +77,13 @@ const ASSET_LIKE_EXTENSIONS = new Set([
 // Args
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function parseArgs(argv = process.argv.slice(2)) {
+function isEnvFlagEnabled(value) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true";
+}
+
+export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const config = {
     port: 3001,
     host: "::",
@@ -91,7 +97,11 @@ export function parseArgs(argv = process.argv.slice(2)) {
     lockToCloud: null,
     basePath: "/",
     vscodeBasePath: null,
-    disableTelemetry: false,
+    // Env var is the deployment-friendly source: an image that predates this
+    // option simply ignores an unknown env var (telemetry stays at its current
+    // default) instead of crash-looping the way an unknown CLI flag would. The
+    // --disable-telemetry flag below can also turn it on.
+    disableTelemetry: isEnvFlagEnabled(env.AGENT_CANVAS_DISABLE_TELEMETRY),
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -253,6 +263,10 @@ OPTIONS:
                                frontend at runtime, without VITE_DO_NOT_TRACK
                                baked in. Injects
                                window.__AGENT_CANVAS_DO_NOT_TRACK__ = true.
+                               Equivalent to AGENT_CANVAS_DISABLE_TELEMETRY=1,
+                               which deployments should prefer: an image that
+                               predates this option ignores the env var instead
+                               of failing on an unknown flag.
   --base-path <path>           Mount the SPA under <path> (default: /).
                                For example, --base-path /canvas serves
                                index.html and assets under /canvas.
@@ -336,7 +350,8 @@ ROUTING:
  *   event) at runtime without VITE_DO_NOT_TRACK baked in. Read by
  *   `isDoNotTrackEnabled()` in `#/services/telemetry`. This is how a self-hosted
  *   deployment (e.g. OHE serving the canvas under /canvas) opts out of the
- *   shared image's default-on telemetry.
+ *   shared image's default-on telemetry. Enabled by AGENT_CANVAS_DISABLE_TELEMETRY=1
+ *   (preferred for deployments — forward-compatible) or the --disable-telemetry flag.
  */
 function makeConfigInjectionScript(
   sessionApiKey,

@@ -146,13 +146,28 @@ describe("static-server.mjs", () => {
     });
 
     it("defaults disableTelemetry to false", () => {
-      const config = parseArgs([]);
+      const config = parseArgs([], {});
       expect(config.disableTelemetry).toBe(false);
     });
 
     it("parses --disable-telemetry", () => {
-      const config = parseArgs(["--disable-telemetry"]);
+      const config = parseArgs(["--disable-telemetry"], {});
       expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=1", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "1" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=true", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "true" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("ignores a falsy AGENT_CANVAS_DISABLE_TELEMETRY value", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "0" });
+      expect(config.disableTelemetry).toBe(false);
     });
 
     it("defaults basePath to root", () => {

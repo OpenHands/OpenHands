@@ -26,8 +26,9 @@
  * - Browser's Do Not Track setting
  * - Injecting window.__AGENT_CANVAS_DO_NOT_TRACK__ = true at runtime. This lets
  *   a self-hosted deployment of the precompiled bundle (e.g. OHE serving the
- *   canvas under /canvas via scripts/static-server.mjs --disable-telemetry) opt
- *   out without VITE_DO_NOT_TRACK baked into the image.
+ *   canvas under /canvas) opt out without VITE_DO_NOT_TRACK baked into the
+ *   image. The static server injects it from AGENT_CANVAS_DISABLE_TELEMETRY=1
+ *   (or the equivalent --disable-telemetry flag).
  */
 
 import type { BootstrapConfig, CaptureResult, PostHog } from "posthog-js";
