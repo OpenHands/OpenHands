@@ -48,6 +48,11 @@ export async function getCloudOrganizations(
     backend: target,
     method: "GET",
     path: "/api/organizations",
+    // Must not send X-Org-Id: this endpoint IS the source of truth for org
+    // membership. Scoping it by a (potentially stale) stored orgId creates a
+    // chicken-and-egg where a stale org causes a 403 that prevents the
+    // self-heal from discovering the valid org.
+    omitOrgId: true,
   });
   return normalizeResult(data);
 }

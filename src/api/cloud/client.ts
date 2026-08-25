@@ -30,7 +30,10 @@ function activeOrgForBackend(backend: Backend): string | null {
   return active.backend.id === backend.id ? active.orgId : null;
 }
 
-export function createCloudClient(backend?: Backend): CloudClient {
+export function createCloudClient(
+  backend?: Backend,
+  opts?: { omitOrgId?: boolean },
+): CloudClient {
   const target = requireCloudBackend(backend);
   const proxyBaseUrl = getAgentServerBaseUrl();
   const proxyHeaders = proxyBaseUrl ? getAgentServerHeaders() : {};
@@ -38,7 +41,7 @@ export function createCloudClient(backend?: Backend): CloudClient {
   return new CloudClient({
     host: target.host,
     apiKey: target.apiKey,
-    orgId: activeOrgForBackend(target),
+    orgId: opts?.omitOrgId ? null : activeOrgForBackend(target),
     // Default request timeout in ms, matching the 30s the previous axios
     // transport used for direct and proxied calls. Per-request
     // `timeoutSeconds` still overrides it for direct calls.
