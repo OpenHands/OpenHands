@@ -347,11 +347,15 @@ test.describe("mock-LLM automation lifecycle", () => {
     const authHeader = `-H 'X-Session-API-Key: ${SESSION_API_KEY}'`;
 
     const createCmd = [
+      // Remove any leftover result file first: on a retry the file would
+      // otherwise still hold a previous attempt's response and the dispatch
+      // command would silently reuse its (stale) automation id.
+      `rm -f /tmp/auto_result.json`,
       // --retry: the automation backend can still be settling right after
       // startup in the uvx/bin dev paths; transient connect/reset/5xx
       // failures should not abort the create (observed flake → assert then
       // sees 0 automations).
-      `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
+      `&& curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
       // --retry-all-errors: retry any transient failure (conn refused or
       // HTTP 5xx), not just connection errors — a failed create leaves the
       // name-based list poll below with nothing to find.
