@@ -92,11 +92,24 @@ function validateDraftTrigger(
 const automations = new Map<string, Automation>(
   MOCK_AUTOMATIONS_RESPONSE.automations.map((a) => [a.id, { ...a }]),
 );
+const automationRuns = new Map<string, AutomationRun[]>(
+  Object.entries(MOCK_AUTOMATION_RUNS).map(([id, runs]) => [
+    id,
+    runs.map((run) => ({ ...run })),
+  ]),
+);
 
 export const resetAutomationMockData = () => {
   automations.clear();
   MOCK_AUTOMATIONS_RESPONSE.automations.forEach((a) => {
     automations.set(a.id, { ...a });
+  });
+  automationRuns.clear();
+  Object.entries(MOCK_AUTOMATION_RUNS).forEach(([id, runs]) => {
+    automationRuns.set(
+      id,
+      runs.map((run) => ({ ...run })),
+    );
   });
 };
 
@@ -163,6 +176,7 @@ export const AUTOMATION_HANDLERS = [
       repos?: { url: string; ref?: string }[];
       plugins?: { source: string }[];
       timeout?: number;
+      enabled?: boolean;
     };
     const now = new Date().toISOString();
     const automation: Automation = {
@@ -171,7 +185,7 @@ export const AUTOMATION_HANDLERS = [
       prompt: body.prompt,
       model: body.model ?? null,
       trigger: body.trigger,
-      enabled: true,
+      enabled: body.enabled ?? true,
       created_at: now,
       updated_at: now,
       last_triggered_at: null,
@@ -196,6 +210,45 @@ export const AUTOMATION_HANDLERS = [
     }
 
     automations.set(automation.id, automation);
+    automationRuns.set(automation.id, []);
+    return HttpResponse.json(automation, { status: 201 });
+  }),
+
+  // POST /api/automation/v1/uploads — Upload a bundle archive
+  http.post("*/api/automation/v1/uploads", async ({ request }) => {
+    await delay(200);
+
+    const name = new URL(request.url).searchParams.get("name") ?? "automation";
+    return HttpResponse.json({
+      tarball_path: `oh-internal://uploads/${crypto.randomUUID()}-${name}`,
+    });
+  }),
+
+  // POST /api/automation/v1 — Create a bundle automation
+  http.post("*/api/automation/v1", async ({ request }) => {
+    await delay(200);
+
+    const body = (await request.clone().json()) as {
+      name: string;
+      trigger?: Automation["trigger"];
+      timeout?: number;
+      enabled?: boolean;
+    };
+    const now = new Date().toISOString();
+    const automation: Automation = {
+      id: crypto.randomUUID(),
+      name: body.name,
+      prompt: null,
+      trigger: body.trigger ?? { type: "cron", schedule: "0 9 * * *" },
+      enabled: body.enabled ?? true,
+      timeout: body.timeout ?? null,
+      created_at: now,
+      updated_at: now,
+      last_triggered_at: null,
+    };
+
+    automations.set(automation.id, automation);
+    automationRuns.set(automation.id, []);
     return HttpResponse.json(automation, { status: 201 });
   }),
 
@@ -214,7 +267,7 @@ export const AUTOMATION_HANDLERS = [
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
-    const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
+    const allRuns = automationRuns.get(id) ?? [];
     const page = allRuns.slice(offset, offset + limit);
 
     const response: AutomationRunsResponse = {
@@ -294,6 +347,19 @@ export const AUTOMATION_HANDLERS = [
       completed_at: null,
     };
 
+    automationRuns.set(id, [
+      {
+        ...run,
+        status: AutomationRunStatus.COMPLETED,
+        conversation_id: `mock-conversation-${run.id}`,
+        phase_code: "completed",
+        phase_label: "Test run completed",
+        phase_updated_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      },
+      ...(automationRuns.get(id) ?? []),
+    ]);
+
     return HttpResponse.json(run, { status: 201 });
   }),
 
@@ -310,6 +376,7 @@ export const AUTOMATION_HANDLERS = [
     }
 
     automations.delete(id);
+    automationRuns.delete(id);
     return new HttpResponse(null, { status: 204 });
   }),
 ];
