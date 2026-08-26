@@ -610,6 +610,7 @@ const MOCK_MODELS = [
   "openhands/claude-sonnet-4-5-20250929",
   "openhands/claude-haiku-4-5-20251001",
   "openhands/claude-opus-4-5-20251101",
+  "openai/gpt-5.6-sol",
   "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
   "sambanova/Meta-Llama-3.1-8B-Instruct",
@@ -624,6 +625,7 @@ const MOCK_VERIFIED_MODELS = new Set([
   "openai/gpt-5.5",
   "openhands/claude-opus-4-5-20251101",
   "openhands/claude-sonnet-4-5-20250929",
+  "openai/gpt-5.6-sol",
   "openhands/deepseek-v4-flash",
   "openhands/glm-5.2",
 ]);
@@ -755,7 +757,7 @@ export const SETTINGS_HANDLERS = [
         "claude-sonnet-4-5-20250929",
       ],
       verified_providers: MOCK_VERIFIED_PROVIDERS,
-      default_model: "openhands/deepseek-v4-flash",
+      default_model: "openai/gpt-5.6-sol",
     }),
   ),
 

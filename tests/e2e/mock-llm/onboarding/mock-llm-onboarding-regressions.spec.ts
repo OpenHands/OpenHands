@@ -64,7 +64,7 @@ test.describe("onboarding recent regressions", () => {
   // should default users to the OpenHands provider, matching the agent
   // selected on the previous step.
 
-  test("defaults the LLM setup step to OpenHands DeepSeek V4 Flash", async ({
+  test("defaults the LLM setup step to OpenAI GPT-5.6 Sol", async ({
     page,
   }) => {
     await showOnboarding(page, {
@@ -101,7 +101,7 @@ test.describe("onboarding recent regressions", () => {
     // The model input displays the model ID without the provider prefix.
     await expect(
       modelInput,
-      "first-run onboarding should default to DeepSeek V4 Flash",
+      "first-run onboarding should default to GPT-5.6 Sol",
     ).toHaveValue("kimi-k3", {
       timeout: 10_000,
     });
