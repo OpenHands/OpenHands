@@ -14,10 +14,7 @@ interface SetupTestRunStepProps {
  * status semantics remain owned by the existing automation service/hooks; this
  * component only keeps the setup flow from inventing a second representation.
  */
-export function SetupTestRunStep({
-  run,
-  description,
-}: SetupTestRunStepProps) {
+export function SetupTestRunStep({ run, description }: SetupTestRunStepProps) {
   const { t } = useTranslation("openhands");
 
   return (
