@@ -361,6 +361,29 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     }
   };
 
+  const handleClose = async () => {
+    if (isBusy) return;
+    if (!createdAutomationId) {
+      onClose();
+      return;
+    }
+
+    setIsSubmitting(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      // Closing setup is abandonment, not finalization. Remove only the record
+      // whose unique pending marker proved it belongs to this setup session.
+      await AutomationService.deleteAutomation(createdAutomationId);
+      onClose();
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC))],
+      });
+      setIsSubmitting(false);
+    }
+  };
+
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed
   // a conversation that finishes setup instead.
@@ -387,13 +410,16 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   })();
 
   return (
-    <ModalBackdrop onClose={isBusy ? () => {} : onClose} aria-label={entry.name}>
+    <ModalBackdrop
+      onClose={() => void handleClose()}
+      aria-label={entry.name}
+    >
       <div
         data-testid="setup-dialog"
         className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton
-          onClose={onClose}
+          onClose={() => void handleClose()}
           testId="setup-dialog-close"
           disabled={isBusy}
         />
