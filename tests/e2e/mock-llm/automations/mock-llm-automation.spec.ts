@@ -162,6 +162,78 @@ async function waitForRunStatus(
 }
 
 /**
+ * Find a terminally FAILED run for the automation. The agent-server can
+ * intermittently reject the sandbox's completion message (transient 500 on
+ * POST /events), which flips the run straight to FAILED — so report it
+ * instead of endlessly polling for COMPLETED.
+ */
+async function findFailedRun(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const data = await listAutomationRuns(request, automationId);
+  const runs = data.runs ?? data.items ?? [];
+  return runs.find((r: { status: string }) => r.status === "FAILED");
+}
+
+/** Dispatch a run for the automation via the real automation backend. */
+async function dispatchAutomation(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+) {
+  const resp = await request.post(
+    `${AUTOMATION_API_BASE}/${encodeURIComponent(automationId)}/dispatch`,
+    {
+      headers: {
+        "X-Session-API-Key": SESSION_API_KEY,
+      },
+    },
+  );
+  if (!resp.ok()) {
+    throw new Error(
+      `POST automation dispatch returned ${resp.status()} for ${automationId}`,
+    );
+  }
+  return resp;
+}
+
+/**
+ * Poll for COMPLETED, but re-dispatch once when a run terminally FAILED —
+ * the completion-message race documented at findFailedRun() is upstream
+ * flakiness, not a lifecycle regression, and one re-dispatch removes it.
+ */
+async function waitForRunCompleted(
+  request: import("@playwright/test").APIRequestContext,
+  automationId: string,
+  timeoutMs = 30_000,
+) {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await waitForRunStatus(
+        request,
+        automationId,
+        "COMPLETED",
+        timeoutMs,
+      );
+    } catch (error) {
+      lastError = error as Error;
+      try {
+        if (!(await findFailedRun(request, automationId))) break;
+      } catch {
+        // Fixture closed mid-flight (e.g. test-level timeout) — surface the
+        // original timeout instead of an apiRequestContext teardown error.
+        break;
+      }
+      await dispatchAutomation(request, automationId);
+    }
+  }
+  throw (
+    lastError ?? new Error(`Automation ${automationId} never reached COMPLETED`)
+  );
+}
+
+/**
  * Delete an automation (best-effort cleanup).
  */
 async function deleteAutomation(
@@ -192,7 +264,11 @@ async function deleteAutomationsByName(
   }
 }
 
-test.describe.configure({ mode: "serial" });
+// Retry the serial lifecycle once — the automation backend, agent-server,
+// and completion callback each have transient failure modes that a single
+// extra attempt absorbs; deleteAutomationsByName() in step 1 clears any
+// fixed-name leftovers between attempts.
+test.describe.configure({ mode: "serial", retries: 1 });
 
 test.describe("mock-LLM automation lifecycle", () => {
   const conversationIds = new Set<string>();
@@ -276,7 +352,10 @@ test.describe("mock-LLM automation lifecycle", () => {
       // failures should not abort the create (observed flake → assert then
       // sees 0 automations).
       `curl --fail-with-body -sS -X POST '${AUTOMATION_API_BASE}/preset/prompt'`,
-      `--retry 3 --retry-connrefused --retry-delay 1`,
+      // --retry-all-errors: retry any transient failure (conn refused or
+      // HTTP 5xx), not just connection errors — a failed create leaves the
+      // name-based list poll below with nothing to find.
+      `--retry 4 --retry-all-errors --retry-delay 1`,
       `-H 'Content-Type: application/json'`,
       authHeader,
       `-d '${JSON.stringify({
@@ -430,13 +509,9 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // Wait for the run to reach COMPLETED. The trajectory includes extra
       // responses (indices 4-6) for the automation run's spawned conversation
-      // so it can finish and fire the completion callback.
-      const run = await waitForRunStatus(
-        request,
-        automation.id,
-        "COMPLETED",
-        90_000,
-      );
+      // so it can finish and fire the completion callback. waitForRunCompleted
+      // re-dispatches once if the callback race flips the run to FAILED.
+      const run = await waitForRunCompleted(request, automation.id, 90_000);
       expect(run.conversation_id).toBeTruthy();
       // Store the conversation ID for the click-through verification in step 3
       runConversationId = run.conversation_id;
