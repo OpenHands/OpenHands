@@ -649,7 +649,7 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with the OpenHands default model", () => {
+  it("pre-fills the LLM step with OpenAI GPT-5.5", () => {
     renderModal();
 
     expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);

@@ -21,7 +21,7 @@ export async function routeOnboardingLlmCatalog(page: Page) {
         models: {
           anthropic: ["claude-opus-4-8"],
           openai: ["gpt-5.5"],
-          openhands: ["claude-opus-4-5-20251101", "kimi-k3", "glm-5.2"],
+          openhands: ["claude-opus-4-5-20251101", "kimi-k3"],
         },
       }),
     });
@@ -37,7 +37,6 @@ export async function routeOnboardingLlmCatalog(page: Page) {
           "openai/gpt-5.5",
           "openhands/claude-opus-4-5-20251101",
           "openhands/kimi-k3",
-          "openhands/glm-5.2",
         ],
       }),
     });
