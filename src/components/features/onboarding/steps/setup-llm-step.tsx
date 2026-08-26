@@ -17,7 +17,7 @@ interface SetupLlmStepProps {
 
 /**
  * Pre-fills the LLM form with the OpenHands provider's free default model
- * (`openhands/kimi-k3`), matching `DEFAULT_SETTINGS.llm_model`. The OpenHands
+ * (`openhands/deepseek-v4-flash`), matching `DEFAULT_SETTINGS.llm_model`. The OpenHands
  * provider is the agent the user just selected, so the onboarding override
  * keeps the LLM provider aligned with that choice rather than silently
  * switching to OpenAI. Canvas stores provider-qualified LiteLLM model ids,
@@ -25,7 +25,7 @@ interface SetupLlmStepProps {
  * explicit override marks the model dirty so the Next button persists the
  * suggested default immediately.
  */
-export const ONBOARDING_DEFAULT_LLM_MODEL = "openhands/kimi-k3";
+export const ONBOARDING_DEFAULT_LLM_MODEL = "openhands/deepseek-v4-flash";
 
 /**
  * Step 2: embed the LLM settings form. The screen runs in `embedded`

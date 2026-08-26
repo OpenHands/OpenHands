@@ -64,7 +64,9 @@ test.describe("onboarding recent regressions", () => {
   // should default users to the OpenHands provider, matching the agent
   // selected on the previous step.
 
-  test("defaults the LLM setup step to OpenHands GLM-5.2", async ({ page }) => {
+  test("defaults the LLM setup step to OpenHands DeepSeek V4 Flash", async ({
+    page,
+  }) => {
     await showOnboarding(page, {
       apiKey: SESSION_API_KEY,
       beforeGoto: async () => {
