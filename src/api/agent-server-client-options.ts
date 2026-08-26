@@ -1,6 +1,7 @@
 import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getEffectiveLocalBackend } from "./backend-registry/active-store";
+import { stripTrailingSlashes } from "./backend-registry/backend-host";
 import type { Backend } from "./backend-registry/types";
 
 export interface AgentServerClientOverrides {
@@ -35,18 +36,27 @@ export const isNoBackendAvailableError = (
     "name" in error &&
     error.name === "NoBackendAvailableError");
 
-function normalizeHost(host: string): string {
-  return host.replace(/\/+$/, "");
-}
-
+/**
+ * Only the trailing-slash primitive is applied here, not the full
+ * `normalizeHostInput` used by the backend form.
+ *
+ * Every host reaching this function is already absolute, by three separate
+ * routes: hosts typed into the backend form pass through `normalizeHostInput`
+ * before they are stored; seeded backends take their host from
+ * `getAgentServerBaseUrl()` / `getCookieAuthCloudHost()`, which return either
+ * a `normalizeBaseUrl()`-ed value or `window.location.origin`; and
+ * `conversationUrl` arrives absolute from `buildHttpBaseUrl`. Re-inferring a
+ * scheme here would therefore rewrite a caller-supplied override rather than
+ * normalise it. Sharing the primitive keeps the trailing-slash rule single.
+ */
 function resolveHost(
   overrides: AgentServerClientOverrides,
   backend: Backend | null,
 ): string {
-  if (overrides.host) return normalizeHost(overrides.host);
+  if (overrides.host) return stripTrailingSlashes(overrides.host);
   if (overrides.conversationUrl)
-    return normalizeHost(buildHttpBaseUrl(overrides.conversationUrl));
-  return normalizeHost(backend?.host ?? "");
+    return stripTrailingSlashes(buildHttpBaseUrl(overrides.conversationUrl));
+  return stripTrailingSlashes(backend?.host ?? "");
 }
 
 export function getAgentServerClientOptions(
