@@ -89,5 +89,23 @@ contract lands. That test must additionally verify:
 - session-authenticated bundle delivery;
 - isolation when switching between active backends.
 
+## Verify the SVG-edit example against a real Agent Server
+
+When the Canvas Extensions Agent Server routes are available, install the
+backend-local directory:
+
+```text
+<OpenHands checkout>/tests/fixtures/canvas-extensions/svg-edit
+```
+
+Enable **SVG Editor**, open its left-rail item, and verify SVG-edit 7.4.2 loads
+inside the page. Navigate away and back, then disable the extension. In each
+case there should be exactly one editor iframe while the page is mounted and no
+iframe after the page or extension is removed.
+
+The example intentionally uses an iframe. SVG-edit owns document-level keyboard
+handlers, broad CSS, and fixed element IDs; the frame isolates those from Canvas
+until a narrower workspace-file bridge is designed.
+
 The backend contract and acceptance criteria are documented in
 [`specs/canvas-extensions.md`](../specs/canvas-extensions.md).

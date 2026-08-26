@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "svg-edit",
+  "display_name": "SVG Editor",
+  "version": "0.1.0",
+  "description": "A Canvas Extension example embedding SVG-edit 7.4.2.",
+  "entrypoint": "extension.js",
+  "contributes": {
+    "pages": [
+      {
+        "id": "editor",
+        "title": "SVG Editor",
+        "path": "/editor",
+        "nav_label": "SVG Editor"
+      }
+    ]
+  }
+}
