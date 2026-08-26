@@ -53,7 +53,11 @@ function hasPendingSetupTrigger(
   pendingEvent: string,
 ): boolean {
   const trigger = response.trigger;
-  if (typeof trigger !== "object" || trigger === null || Array.isArray(trigger)) {
+  if (
+    typeof trigger !== "object" ||
+    trigger === null ||
+    Array.isArray(trigger)
+  ) {
     return false;
   }
   const candidate = trigger as Record<string, unknown>;
