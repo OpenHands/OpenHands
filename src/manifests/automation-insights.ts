@@ -51,6 +51,13 @@ export const HEALTH_LABEL_KEYS: Record<
 export interface AutomationRunSummary {
   /** Lifetime run count, from the response — not the sample's length. */
   total: number;
+  /**
+   * Lifetime COMPLETED-run count. From the response's `status_counts` when
+   * the service reports it; an older service leaves that out, so the sample
+   * stands in exactly when it holds the whole history (`total` ≤ its length)
+   * and the count is null — unknowable, never guessed — otherwise.
+   */
+  completedTotal: number | null;
   latestRun: AutomationRun | null;
   /** Newest-first sample used by the list sparkline (same page as the summary). */
   recentRuns: AutomationRun[];
@@ -84,6 +91,15 @@ export function summarizeAutomationRuns(
     (run) => run.status === AutomationRunStatus.COMPLETED,
   ).length;
 
+  let completedTotal: number | null;
+  if (response.status_counts) {
+    completedTotal = response.status_counts[AutomationRunStatus.COMPLETED] ?? 0;
+  } else if (response.total <= response.runs.length) {
+    completedTotal = completed;
+  } else {
+    completedTotal = null;
+  }
+
   const durations = terminal.flatMap((run) => {
     if (!run.completed_at) return [];
     const ms =
@@ -93,6 +109,7 @@ export function summarizeAutomationRuns(
 
   return {
     total: response.total,
+    completedTotal,
     latestRun: response.runs[0] ?? null,
     recentRuns: response.runs,
     recentSuccessRate:
