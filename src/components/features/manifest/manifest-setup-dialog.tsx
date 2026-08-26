@@ -9,10 +9,7 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
-import {
-  getApiErrorBody,
-  getApiErrorMessage,
-} from "#/utils/api-error-message";
+import { getApiErrorBody, getApiErrorMessage } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useAutomationRuns } from "#/hooks/query/use-automation-detail";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
@@ -40,10 +37,7 @@ import {
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
 import { findAutomationCommand } from "#/utils/automation-catalog";
-import {
-  AutomationRunStatus,
-  type AutomationRun,
-} from "#/types/automation";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import type { GitRepository } from "#/types/git";
 import type {
   SetupEntry,
@@ -133,7 +127,9 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     null,
   );
   const [testRunId, setTestRunId] = useState<string | null>(null);
-  const [dispatchedRun, setDispatchedRun] = useState<AutomationRun | null>(null);
+  const [dispatchedRun, setDispatchedRun] = useState<AutomationRun | null>(
+    null,
+  );
   const [isDispatchingTest, setIsDispatchingTest] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
@@ -193,8 +189,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const testRun =
     (testRunId
       ? testRuns.data?.runs.find((run) => run.id === testRunId)
-      : null) ??
-    (dispatchedRun?.id === testRunId ? dispatchedRun : null);
+      : null) ?? (dispatchedRun?.id === testRunId ? dispatchedRun : null);
   const testIsRunning = isRunInFlight(testRun);
   const testPassed = testRun?.status === AutomationRunStatus.COMPLETED;
   const isBusy =
@@ -304,9 +299,8 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     setIsDispatchingTest(true);
     setServiceErrors(NO_SERVICE_ERRORS);
     try {
-      const run = await AutomationService.dispatchAutomation(
-        createdAutomationId,
-      );
+      const run =
+        await AutomationService.dispatchAutomation(createdAutomationId);
       setDispatchedRun(run);
       setTestRunId(run.id);
     } catch (error) {
@@ -410,10 +404,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   })();
 
   return (
-    <ModalBackdrop
-      onClose={() => void handleClose()}
-      aria-label={entry.name}
-    >
+    <ModalBackdrop onClose={() => void handleClose()} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
         className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
