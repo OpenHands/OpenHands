@@ -89,6 +89,21 @@ const MOCK_AGENT_SETTINGS_SCHEMA: NonNullable<
           required: false,
         },
         {
+          key: "enable_switch_llm_tool",
+          label: "Enable LLM switching tool",
+          description:
+            "Allow the agent to move the conversation to another saved LLM profile on its own.",
+          section: "general",
+          section_label: "General",
+          value_type: "boolean",
+          default: true,
+          choices: [],
+          depends_on: [],
+          prominence: "major",
+          secret: false,
+          required: false,
+        },
+        {
           key: "tool_concurrency_limit",
           label: "Parallel tool calls",
           description:
@@ -645,7 +660,12 @@ const MOCK_VERIFIED_MODELS_BY_PROVIDER = MOCK_MODELS.reduce<
   return acc;
 }, {});
 
-const MOCK_AGENT_SERVER_VERSION = "1.29.3";
+// Matches the pinned `@openhands/typescript-client`, so mock mode models a
+// server that actually ships this schema. At 1.29.3 the mocked settings schema
+// advertised fields (`enable_switch_llm_tool`) that the mocked server's own
+// profile model would have rejected, and version-gated UI hid controls the
+// rest of the mocks were serving.
+const MOCK_AGENT_SERVER_VERSION = "1.36.1";
 
 // --- Handlers for options/config/settings ---
 // Uses wildcard "*" prefix to match both relative paths and absolute URLs

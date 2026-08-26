@@ -285,6 +285,11 @@ export const AUTOMATION_HANDLERS = [
       conversation_id: null,
       bash_command_id: null,
       error_detail: null,
+      // A freshly dispatched run has not reported a phase yet — the service
+      // sends the fields as null rather than omitting them.
+      phase_code: null,
+      phase_label: null,
+      phase_updated_at: null,
       started_at: new Date().toISOString(),
       completed_at: null,
     };
