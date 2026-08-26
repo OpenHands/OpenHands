@@ -116,9 +116,19 @@ VIDEO_HOST_RE = re.compile(
 
 
 def visible_text(text: str) -> str:
-    """Return PR body content that should count as author-provided text."""
+    """Return PR body content that should count as author-provided text.
+
+    Strips HTML comments and fenced code blocks so that examples quoted inside
+    them do not falsely satisfy has_screenshot_or_video checks. See
+    OpenHands/OpenHands#16583.
+    """
+    # Strip HTML comments (already present).
+    text = HTML_COMMENT_RE.sub("", text)
+    # Strip fenced code blocks (triple-backtick and indented).
+    text = re.sub(r"(?s)```[\s\S]*?```", "", text)
+    text = re.sub(r"(?m)^[ \t]{4}.*$", "", text)
     lines = []
-    for line in HTML_COMMENT_RE.sub("", text).splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if stripped and stripped != "-":
             lines.append(stripped)
@@ -186,18 +196,24 @@ def touches_frontend(files: list[str]) -> bool:
 
 
 def has_screenshot_or_video(body: str) -> bool:
-    """Return True if the PR body embeds a screenshot or video."""
-    if MARKDOWN_IMAGE_RE.search(body):
+    """Return True if the PR body embeds a screenshot or video.
+
+    Fenced code blocks are stripped before matching so that screenshots or
+    videos quoted inside code examples do not falsely satisfy the check.
+    See OpenHands/OpenHands#16583.
+    """
+    visible = visible_text(body)
+    if MARKDOWN_IMAGE_RE.search(visible):
         return True
-    if HTML_IMG_RE.search(body):
+    if HTML_IMG_RE.search(visible):
         return True
-    if HTML_VIDEO_RE.search(body):
+    if HTML_VIDEO_RE.search(visible):
         return True
-    if GITHUB_ATTACHMENT_RE.search(body):
+    if GITHUB_ATTACHMENT_RE.search(visible):
         return True
-    if VIDEO_FILE_RE.search(body):
+    if VIDEO_FILE_RE.search(visible):
         return True
-    if VIDEO_HOST_RE.search(body):
+    if VIDEO_HOST_RE.search(visible):
         return True
     return False
 

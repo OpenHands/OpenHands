@@ -17,6 +17,9 @@ from check_pr_description import (
     extract_pr_type,
     validate_linked_issue_ready,
     validate_bug_fix_evidence,
+    validate_frontend_screenshot,
+    has_screenshot_or_video,
+    visible_text,
     BUG_LABEL,
     ENHANCEMENT_LABEL,
 )
@@ -319,4 +322,72 @@ x
     assert "reproduced the fenced-heading case" in extract_human_note(body)
     errors = validate_pr_body(body)
     assert "Keep the `AGENT:` marker from the PR template." not in errors
+
+
+# -----------------------------------------------------------------------------
+# Fenced content stripping in screenshot checks (#16583)
+# -----------------------------------------------------------------------------
+
+
+def test_visible_text_strips_fenced_code():
+    text = """Real text.
+```
+example content
+```
+More text."""
+    result = visible_text(text)
+    assert "example content" not in result
+    assert "Real text" in result
+    assert "More text" in result
+
+
+def test_has_screenshot_or_video_ignores_fenced_content():
+    body = """## Summary
+Fix something.
+
+## Video/Screenshots
+```
+![screenshot](https://github.com/user-attachments/assets/fake)
+```
+"""
+    assert not has_screenshot_or_video(body)
+
+
+def test_has_screenshot_or_video_still_finds_real_screenshot():
+    body = """## Summary
+Fix something.
+
+## Video/Screenshots
+![screenshot](https://github.com/user-attachments/assets/real)
+"""
+    assert has_screenshot_or_video(body)
+
+
+def test_validate_bug_fix_evidence_rejects_fenced_screenshot():
+    body = """## Summary
+Fixed the bug.
+
+## Type
+- [x] Bug fix
+
+## Video/Screenshots
+```
+![screenshot](https://github.com/user-attachments/assets/fake)
+```
+"""
+    errors = validate_bug_fix_evidence(body)
+    assert any("screenshot" in e.lower() or "video" in e.lower() for e in errors)
+
+
+def test_validate_frontend_screenshot_rejects_fenced_screenshot():
+    body = """## Summary
+Fixed the bug.
+
+## Video/Screenshots
+```
+![screenshot](https://github.com/user-attachments/assets/fake)
+```
+"""
+    errors = validate_frontend_screenshot(body, ["src/components/Button.tsx"])
+    assert any("screenshot" in e.lower() or "video" in e.lower() for e in errors)
     assert "Add a short human-written note between `HUMAN:` and `AGENT:`." not in errors

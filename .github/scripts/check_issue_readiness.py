@@ -96,8 +96,21 @@ class ReadinessResult:
 
 
 def visible_text(text: str) -> str:
-    """Return field text with HTML comments stripped and emptiness normalized."""
-    cleaned = re.sub(r"<!--[\s\S]*?-->", "", text).strip()
+    """Return field text with HTML comments and fenced code blocks stripped,
+    and emptiness normalized.
+
+    Fenced code blocks (```...```) are stripped because the helpers that call
+    this function (references_run_method, has_screenshot_or_video,
+    has_checklist_item) check for real content — example code or images
+    inside a fenced block would falsely satisfy those criteria.
+    See OpenHands/OpenHands#16583.
+    """
+    # Strip HTML comments first (already present).
+    cleaned = re.sub(r"<!--[\s\S]*?-->", "", text)
+    # Strip fenced code blocks (triple-backtick and indented).
+    cleaned = re.sub(r"(?s)```[\s\S]*?```", "", cleaned)
+    cleaned = re.sub(r"(?m)^[ \t]{4}.*$", "", cleaned)
+    cleaned = cleaned.strip()
     if cleaned == NO_RESPONSE:
         return ""
     return cleaned

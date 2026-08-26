@@ -247,6 +247,88 @@ def test_has_checklist_item_none():
 def test_visible_text_strips_html_comments():
     assert visible_text("<!-- hidden -->visible text") == "visible text"
 
+
+# -----------------------------------------------------------------------------
+# Fenced code block stripping (#16583)
+# -----------------------------------------------------------------------------
+
+
+def test_visible_text_strips_fenced_code_blocks():
+    text = """Real content here.
+```
+npm run dev
+```
+More real text."""
+    result = visible_text(text)
+    assert "npm run dev" not in result
+    assert "Real content here" in result
+    assert "More real text" in result
+
+
+def test_visible_text_strips_fenced_screenshot():
+    """Screenshot inside a fenced block must not satisfy the screenshot check."""
+    text = """```
+![screenshot](https://github.com/user-attachments/assets/fake)
+```"""
+    assert visible_text(text) == ""
+
+
+def test_visible_text_strips_fenced_checklist():
+    """Checklist items inside a fenced block must not count as real criteria."""
+    text = """### Acceptance Criteria
+```
+- [ ] Fix this
+- [ ] Fix that
+```
+Real text."""
+    result = visible_text(text)
+    assert "- [ ] Fix this" not in result
+
+
+def test_visible_text_strips_indented_code():
+    """Indented code (4+ spaces) should also be stripped."""
+    text = """Real text.
+    npm run dev
+More real text."""
+    result = visible_text(text)
+    assert "npm run dev" not in result
+    assert "Real text" in result
+
+
+def test_bug_with_only_fenced_run_method_not_ready():
+    """A bug whose Steps to Reproduce only has a fenced code run method
+    should not be considered ready-for-dev. See #16583."""
+    body = """### Steps to Reproduce
+Only has a fenced run method:
+```
+npm run dev
+```
+### Actual Behavior
+![screenshot](https://github.com/user-attachments/assets/abc123)
+### Acceptance Criteria
+- [ ] Fixed"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert not result.ready
+    assert any("Steps to Reproduce" in r for r in result.reasons)
+
+
+def test_bug_with_only_fenced_screenshot_not_ready():
+    """A bug whose Actual Behavior only has a fenced screenshot should not
+    be considered ready-for-dev. See #16583."""
+    body = """### Steps to Reproduce
+Run `npm run dev` and click the button.
+### Actual Behavior
+Only has a fenced screenshot:
+```
+![screenshot](https://github.com/user-attachments/assets/abc123)
+```
+### Acceptance Criteria
+- [ ] Button is centered"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert not result.ready
+    assert any("screenshot" in r.lower() for r in result.reasons)
+
+
 def test_visible_text_no_response():
     assert visible_text("_No response_") == ""
 
