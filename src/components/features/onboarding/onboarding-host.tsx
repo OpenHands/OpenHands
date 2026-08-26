@@ -28,12 +28,9 @@ function hasUsableLlm(settings: Settings | undefined): boolean {
  * isn't set yet). Closing or completing the flow marks it done so the
  * modal won't re-appear on subsequent visits.
  *
- * An already-configured backend provides everything onboarding would collect,
- * so once the active backend reports a usable LLM the redundant modal is
- * suppressed without writing a fake completion marker. The launcher-seeded
- * default-local backend is excluded: it points at the server this browser was
- * launched against, which may retain an LLM from an earlier user, so
- * `openhands-onboarded` stays the first-run signal there.
+ * A backend already reporting a usable LLM makes the modal redundant, so it is
+ * skipped — except the launcher-seeded default-local one, which may hold an
+ * LLM from an earlier user, leaving `openhands-onboarded` its first-run signal.
  *
  * With `?previewOnboardingStep=<0-3>` the modal opens on that slide for
  * design review without persisting completion (works on any route when
