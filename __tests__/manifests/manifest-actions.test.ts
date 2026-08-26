@@ -50,7 +50,11 @@ const ENTRY: SetupEntry = createSetupEntry({
 
 const PROMPT_ENTRY: SetupEntry = createSetupEntry();
 
-const VALUES = { repository: "OpenHands/automation", widgetName: "Widgets" };
+const VALUES = {
+  schedule: "*/15 * * * *",
+  repository: "OpenHands/automation",
+  widgetName: "Widgets",
+};
 
 /** The payload the dialog derived for the form, carrying the stand-in path. */
 const PAYLOAD = { name: "Widget monitor" };
