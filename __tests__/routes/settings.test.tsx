@@ -187,106 +187,68 @@ describe("settings route", () => {
     },
   );
 
-  describe("cloud backend redirect", () => {
-    it("redirects /settings to /conversations when the active backend is cloud", async () => {
-      window.localStorage.setItem(
-        "openhands-backends",
-        JSON.stringify([
-          {
-            id: "cloud-backend",
-            name: "Cloud",
-            host: "https://app.all-hands.dev",
-            apiKey: "key",
-            kind: "cloud",
+  describe("backend settings routes", () => {
+    it.each(["local", "cloud"] as const)(
+      "renders /settings normally when the active backend is %s",
+      (backendKind) => {
+        vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+          feature_flags: {
+            hide_llm_settings: false,
+            hide_users_page: false,
           },
-        ]),
-      );
-      window.localStorage.setItem(
-        "openhands-active-backend",
-        JSON.stringify({ backendId: "cloud-backend", orgId: null }),
-      );
-      // Re-read backends into the module-level store so the context picks up
-      // the seeded cloud backend.
-      setRegisteredBackends(readStoredBackends());
+          providers_configured: [],
+          maintenance_start_time: null,
+          recaptcha_site_key: null,
+          faulty_models: [],
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        });
 
-      const RouterStub = createRoutesStub([
-        {
-          path: "/settings",
-          Component: SettingsScreen,
-        },
-        {
-          path: "/conversations",
-          Component: () => <div data-testid="conversations-page" />,
-        },
-      ]);
-
-      render(
-        <QueryClientProvider client={new QueryClient()}>
-          <ActiveBackendProvider>
-            <RouterStub initialEntries={["/settings"]} />
-          </ActiveBackendProvider>
-        </QueryClientProvider>,
-      );
-
-      expect(
-        await screen.findByTestId("conversations-page"),
-      ).toBeInTheDocument();
-    });
-
-    it("renders /settings normally when the active backend is local", () => {
-      vi.spyOn(OptionService, "getConfig").mockResolvedValue({
-        feature_flags: {
-          hide_llm_settings: false,
-          hide_users_page: false,
-        },
-        providers_configured: [],
-        maintenance_start_time: null,
-        recaptcha_site_key: null,
-        faulty_models: [],
-        error_message: null,
-        updated_at: new Date().toISOString(),
-      });
-
-      window.localStorage.setItem(
-        "openhands-backends",
-        JSON.stringify([
-          {
-            id: "local-backend",
-            name: "Local",
-            host: "http://localhost:9000",
-            apiKey: "key",
-            kind: "local",
-          },
-        ]),
-      );
-      window.localStorage.setItem(
-        "openhands-active-backend",
-        JSON.stringify({ backendId: "local-backend", orgId: null }),
-      );
-      setRegisteredBackends(readStoredBackends());
-
-      const RouterStub = createRoutesStub([
-        {
-          path: "/settings",
-          Component: SettingsScreen,
-          children: [
+        const backendId = `${backendKind}-backend`;
+        window.localStorage.setItem(
+          "openhands-backends",
+          JSON.stringify([
             {
-              path: "/settings/llm",
-              Component: () => <div data-testid="llm-settings-screen" />,
+              id: backendId,
+              name: backendKind,
+              host:
+                backendKind === "cloud"
+                  ? "https://app.all-hands.dev"
+                  : "http://localhost:9000",
+              apiKey: "key",
+              kind: backendKind,
             },
-          ],
-        },
-      ]);
+          ]),
+        );
+        window.localStorage.setItem(
+          "openhands-active-backend",
+          JSON.stringify({ backendId, orgId: null }),
+        );
+        setRegisteredBackends(readStoredBackends());
 
-      render(
-        <QueryClientProvider client={new QueryClient()}>
-          <ActiveBackendProvider>
-            <RouterStub initialEntries={["/settings/llm"]} />
-          </ActiveBackendProvider>
-        </QueryClientProvider>,
-      );
+        const RouterStub = createRoutesStub([
+          {
+            path: "/settings",
+            Component: SettingsScreen,
+            children: [
+              {
+                path: "/settings/llm",
+                Component: () => <div data-testid="llm-settings-screen" />,
+              },
+            ],
+          },
+        ]);
 
-      expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
-    });
+        render(
+          <QueryClientProvider client={new QueryClient()}>
+            <ActiveBackendProvider>
+              <RouterStub initialEntries={["/settings/llm"]} />
+            </ActiveBackendProvider>
+          </QueryClientProvider>,
+        );
+
+        expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+      },
+    );
   });
 });
