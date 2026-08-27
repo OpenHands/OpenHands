@@ -102,7 +102,7 @@ test.describe("onboarding recent regressions", () => {
     await expect(
       modelInput,
       "first-run onboarding should default to GPT-5.6 Sol",
-    ).toHaveValue("kimi-k3", {
+    ).toHaveValue("gpt-5.6-sol", {
       timeout: 10_000,
     });
     await expect(
