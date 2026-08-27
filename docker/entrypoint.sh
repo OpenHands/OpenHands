@@ -387,9 +387,13 @@ RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --automation-url "$AUTOMATION_BASE_URL")"
 
 # EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt
+# --host :: is required so Docker published ports can reach the process.
+# --allow-lan-session-key keeps local-mode key injection inside the container
+# (the host firewall / docker -p binding is the LAN exposure control).
 node /opt/agent-canvas/static-server.mjs \
   --port "$PORT" \
   --host :: \
+  --allow-lan-session-key \
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \

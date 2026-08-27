@@ -53,7 +53,7 @@ const STATE_DIR = resolve(".tmp/mock-llm-state");
 const AUTOMATION_DB_DIR = join(dirname(STATE_DIR), "automation");
 
 // ── URLs ───────────────────────────────────────────────────────────────
-const INGRESS_URL = `http://localhost:${INGRESS_PORT}/`;
+const INGRESS_URL = `http://127.0.0.1:${INGRESS_PORT}/`;
 const MOCK_LLM_URL = `http://127.0.0.1:${MOCK_LLM_PORT}`;
 
 // Python binary for the mock server — defaults to "python3" but CI can
@@ -63,9 +63,9 @@ const MOCK_LLM_PYTHON = process.env.MOCK_LLM_PYTHON ?? "python3";
 
 // Export for the test helpers — BACKEND_URL points to the ingress (API
 // calls are proxied to the agent-server, so no direct backend port needed).
-process.env.MOCK_LLM_BACKEND_URL = `http://localhost:${INGRESS_PORT}`;
+process.env.MOCK_LLM_BACKEND_URL = `http://127.0.0.1:${INGRESS_PORT}`;
 process.env.MOCK_LLM_PORT = MOCK_LLM_PORT;
-process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://localhost:${PUBLIC_MODE_PORT}`;
+process.env.MOCK_LLM_PUBLIC_MODE_URL = `http://127.0.0.1:${PUBLIC_MODE_PORT}`;
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -151,7 +151,7 @@ export default defineConfig({
       // GET /api/automation/v1 returns 200 (empty list) without auth
       // because the dev automation backend does not enforce session-key
       // auth on the list endpoint (confirmed in CI).
-      url: `http://localhost:${INGRESS_PORT}/api/automation/v1`,
+      url: `http://127.0.0.1:${INGRESS_PORT}/api/automation/v1`,
       timeout: 180_000, // allow extra time for build + agent-server + automation startup
       reuseExistingServer: !process.env.CI,
       // Without this, Playwright tears the webServer down with
@@ -174,13 +174,14 @@ export default defineConfig({
         "exec node scripts/static-server.mjs",
         "--dir build",
         `--port ${PUBLIC_MODE_PORT}`,
+        "--host 127.0.0.1",
         "--auth-required",
         "--route /api/automation=http://localhost:18001",
         "--route /api=http://localhost:18000",
         "--route /server_info=http://localhost:18000",
         "--route /sockets=http://localhost:18000",
       ].join(" "),
-      url: `http://localhost:${PUBLIC_MODE_PORT}/`,
+      url: `http://127.0.0.1:${PUBLIC_MODE_PORT}/`,
       timeout: 15_000,
       reuseExistingServer: !process.env.CI,
     },

@@ -69,6 +69,7 @@ import {
   getNoReferrerPrefixArgs,
   getVSCodeAdvertiseArgs,
 } from "./dev-with-automation.mjs";
+import { applySessionKeyPolicy, bindHostArgs } from "./bind-host.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -426,14 +427,25 @@ function startStaticServer(config) {
       join(config.canvasPath, "build"),
       "--port",
       String(config.vitePort),
+      ...bindHostArgs(config.bindHost),
       ...(process.env.VITE_BASE_PATH
         ? ["--base-path", process.env.VITE_BASE_PATH]
         : []),
-      // Inject the API key so the pre-built frontend can authenticate
-      // to the agent-server without a baked-in VITE_SESSION_API_KEY.
-      ...(config.sessionApiKey
-        ? ["--session-api-key", config.sessionApiKey]
-        : []),
+      ...(() => {
+        const policy = applySessionKeyPolicy({
+          host: config.bindHost,
+          sessionApiKey: config.sessionApiKey,
+          warn: (msg) => logService("static", msg, c.yellow),
+        });
+        const flags = [];
+        if (policy.sessionApiKey) {
+          flags.push("--session-api-key", policy.sessionApiKey);
+        }
+        if (policy.authRequired) {
+          flags.push("--auth-required");
+        }
+        return flags;
+      })(),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
@@ -468,6 +480,7 @@ function startIngress(config) {
       ingressScript,
       "--port",
       config.ingressPort.toString(),
+      ...bindHostArgs(config.bindHost),
       "--runtime-services-info",
       runtimeServicesInfo,
       ...buildLocalServiceRouteArgs(config),
