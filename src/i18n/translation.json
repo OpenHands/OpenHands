@@ -28848,23 +28848,6 @@
     "uk": "Підключіться через DigitalOcean та інші.",
     "ca": "Connecta't amb DigitalOcean i més."
   },
-  "BACKEND$PROVIDERS_INTRO": {
-    "en": "Choose a cloud provider to host or connect an agent-server.",
-    "ja": "エージェントサーバーをホストまたは接続するクラウドプロバイダーを選択します。",
-    "zh-CN": "选择用于托管或连接 agent-server 的云服务商。",
-    "zh-TW": "選擇用於託管或連線 agent-server 的雲端服務商。",
-    "ko-KR": "agent-server를 호스팅하거나 연결할 클라우드 프로바이더를 선택하세요.",
-    "no": "Velg en skyleverandør for å drifte eller koble til en agent-server.",
-    "it": "Scegli un provider cloud per ospitare o connettere un agent-server.",
-    "pt": "Escolha um provedor de nuvem para hospedar ou conectar um agent-server.",
-    "es": "Elige un proveedor de nube para alojar o conectar un agent-server.",
-    "ar": "اختر مزوّد سحابة لاستضافة أو ربط خادم agent-server.",
-    "fr": "Choisissez un fournisseur cloud pour héberger ou connecter un agent-server.",
-    "tr": "Bir agent-server barındırmak veya bağlamak için bir bulut sağlayıcısı seçin.",
-    "de": "Wählen Sie einen Cloud-Anbieter, um einen Agent-Server zu hosten oder zu verbinden.",
-    "uk": "Виберіть хмарного провайдера, щоб розмістити або підключити agent-server.",
-    "ca": "Tria un proveïdor de núvol per allotjar o connectar un agent-server."
-  },
   "BACKEND$PROVIDERS_COMING_SOON": {
     "en": "More providers coming soon.",
     "ja": "他のプロバイダーも近日追加予定です。",
@@ -29036,21 +29019,21 @@
     "ca": "Cerca droplets"
   },
   "BACKEND$PROVIDER_DIGITALOCEAN_DROPLETS_TITLE": {
-    "en": "Select a droplet",
+    "en": "Select droplets",
     "ja": "Droplet を選択",
     "zh-CN": "选择 Droplet",
     "zh-TW": "選擇 Droplet",
     "ko-KR": "Droplet 선택",
-    "no": "Velg en droplet",
-    "it": "Seleziona un droplet",
-    "pt": "Selecione um droplet",
-    "es": "Selecciona un droplet",
-    "ar": "اختر Droplet",
-    "fr": "Sélectionnez un droplet",
-    "tr": "Bir droplet seçin",
-    "de": "Droplet auswählen",
+    "no": "Velg droplets",
+    "it": "Seleziona i droplet",
+    "pt": "Selecione droplets",
+    "es": "Selecciona droplets",
+    "ar": "اختر Droplets",
+    "fr": "Sélectionnez des droplets",
+    "tr": "Droplet seçin",
+    "de": "Droplets auswählen",
     "uk": "Виберіть droplet",
-    "ca": "Selecciona un droplet"
+    "ca": "Selecciona droplets"
   },
   "BACKEND$PROVIDER_DROPLET_STATUS_ACTIVE": {
     "en": "Active",

@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Plus } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import DigitalOceanIcon from "#/icons/digitalocean.svg?react";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -141,29 +141,40 @@ export function DigitalOceanTokenStep({
 function DigitalOceanDropletCard({
   droplet,
   selected,
-  onSelect,
+  onToggle,
 }: {
   droplet: MockDigitalOceanDroplet;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onToggle: (id: string) => void;
 }) {
   const { t } = useTranslation("openhands");
 
   return (
     <button
       type="button"
+      role="checkbox"
       data-testid={`add-backend-provider-digitalocean-droplet-${droplet.id}`}
-      aria-pressed={selected}
-      onClick={() => onSelect(droplet.id)}
+      aria-checked={selected}
+      onClick={() => onToggle(droplet.id)}
       className={cn(
-        "flex w-full items-start justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors",
+        "flex w-full items-start gap-3 rounded-xl border border-[var(--oh-border)] px-4 py-3 text-left transition-colors",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-300",
-        selected
-          ? "border-primary bg-[var(--oh-surface-raised)]"
-          : "border-[var(--oh-border)] hover:bg-[var(--oh-surface-raised)]",
+        "hover:bg-[var(--oh-surface-raised)]",
+        selected && "bg-[var(--oh-surface-raised)]",
       )}
     >
-      <span className="min-w-0">
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border",
+          selected
+            ? "border-white bg-white text-black"
+            : "border-[var(--oh-border)]",
+        )}
+      >
+        {selected ? <Check className="size-3" strokeWidth={3} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-white">
           {droplet.name}
         </span>
@@ -191,12 +202,12 @@ function DigitalOceanDropletCard({
 }
 
 export function DigitalOceanDropletsStep({
-  selectedDropletId,
-  onSelectDroplet,
+  selectedDropletIds,
+  onToggleDroplet,
   onBack,
 }: {
-  selectedDropletId: string | null;
-  onSelectDroplet: (id: string) => void;
+  selectedDropletIds: readonly string[];
+  onToggleDroplet: (id: string) => void;
   onBack: () => void;
 }) {
   const { t } = useTranslation("openhands");
@@ -216,13 +227,17 @@ export function DigitalOceanDropletsStep({
         }
       />
 
-      <div className="flex flex-col gap-2">
+      <div
+        className="flex flex-col gap-2"
+        role="group"
+        aria-label={t(I18nKey.BACKEND$PROVIDER_DIGITALOCEAN_DROPLETS_TITLE)}
+      >
         {MOCK_DIGITALOCEAN_DROPLETS.map((droplet) => (
           <DigitalOceanDropletCard
             key={droplet.id}
             droplet={droplet}
-            selected={selectedDropletId === droplet.id}
-            onSelect={onSelectDroplet}
+            selected={selectedDropletIds.includes(droplet.id)}
+            onToggle={onToggleDroplet}
           />
         ))}
       </div>
@@ -230,7 +245,7 @@ export function DigitalOceanDropletsStep({
       <BrandButton
         type="button"
         variant="secondary"
-        isDisabled={!selectedDropletId}
+        isDisabled={selectedDropletIds.length === 0}
         testId="add-backend-provider-digitalocean-submit"
         className="w-full text-center"
       >
@@ -360,9 +375,6 @@ export function ThirdPartyProviderPanel({
   return (
     <div data-testid="add-backend-providers-panel" className="w-full">
       <div className="flex flex-col gap-4">
-        <p className="text-sm leading-6 text-[var(--oh-muted)]">
-          {t(I18nKey.BACKEND$PROVIDERS_INTRO)}
-        </p>
         <div className="flex flex-col gap-2">
           {THIRD_PARTY_BACKEND_PROVIDERS.map((provider) => (
             <ProviderCatalogCard

@@ -1614,9 +1614,9 @@ function AddBackendAddModeBody({
   const { t } = useTranslation("openhands");
   const [slideStep, setSlideStep] = React.useState<AddBackendSlideStep>(0);
   const [token, setToken] = React.useState("");
-  const [selectedDropletId, setSelectedDropletId] = React.useState<
-    string | null
-  >(null);
+  const [selectedDropletIds, setSelectedDropletIds] = React.useState<string[]>(
+    [],
+  );
 
   const handleSelectProvider = (id: ThirdPartyBackendProviderId) => {
     if (id === DIGITALOCEAN_PROVIDER_ID) {
@@ -1627,7 +1627,7 @@ function AddBackendAddModeBody({
   const handleBackToChooser = () => {
     setSlideStep(0);
     setToken("");
-    setSelectedDropletId(null);
+    setSelectedDropletIds([]);
   };
 
   return (
@@ -1683,8 +1683,14 @@ function AddBackendAddModeBody({
 
       <AddBackendSlide index={2} currentStep={slideStep}>
         <DigitalOceanDropletsStep
-          selectedDropletId={selectedDropletId}
-          onSelectDroplet={setSelectedDropletId}
+          selectedDropletIds={selectedDropletIds}
+          onToggleDroplet={(id) =>
+            setSelectedDropletIds((current) =>
+              current.includes(id)
+                ? current.filter((dropletId) => dropletId !== id)
+                : [...current, id],
+            )
+          }
           onBack={() => setSlideStep(1)}
         />
       </AddBackendSlide>

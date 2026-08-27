@@ -613,13 +613,24 @@ describe("AddBackendModal – providers mock", () => {
     const submit = screen.getByTestId(
       "add-backend-provider-digitalocean-submit",
     );
-    expect(submit).toBeDisabled();
-
-    await user.click(
-      screen.getByTestId(
-        "add-backend-provider-digitalocean-droplet-do-droplet-nyc3",
-      ),
+    const nyc3 = screen.getByTestId(
+      "add-backend-provider-digitalocean-droplet-do-droplet-nyc3",
     );
+    const sfo3 = screen.getByTestId(
+      "add-backend-provider-digitalocean-droplet-do-droplet-sfo3",
+    );
+    expect(submit).toBeDisabled();
+    expect(nyc3).toHaveAttribute("aria-checked", "false");
+    expect(sfo3).toHaveAttribute("aria-checked", "false");
+
+    await user.click(nyc3);
+    expect(nyc3).toHaveAttribute("aria-checked", "true");
+    expect(sfo3).toHaveAttribute("aria-checked", "false");
+    expect(submit).toBeEnabled();
+
+    await user.click(sfo3);
+    expect(nyc3).toHaveAttribute("aria-checked", "true");
+    expect(sfo3).toHaveAttribute("aria-checked", "true");
     expect(submit).toBeEnabled();
 
     await user.click(submit);
