@@ -89,25 +89,23 @@ describe("automation-schedule", () => {
     });
 
     it("accepts the expressions the automation service accepts", () => {
-      // Arrange — verified against croniter 6.2.2, the validator behind the
-      // service's CronTrigger.schedule. Rejecting any of these here would
-      // lock an existing automation out of the edit form entirely.
+      // Arrange — verified against croniter 6.2.2.
       const serviceAccepts = [
-        "0 0 * * 7", // croniter spells Sunday as both 0 and 7
-        "0 0 * * SUN", // day names
-        "0 0 * JAN *", // month names
-        "0 0 * * MON-FRI", // a range of day names
-        "0 0 L * *", // last day of the month
-        "0 0 15W * *", // nearest weekday to the 15th
-        "0 0 * * 5#3", // third Friday
-        "0 0 ? * MON", // `?` in the day-of-month field
-        "5-1 * * * *", // a reversed range wraps around
-        "*/90 * * * *", // croniter does not bound the step
-        "* * * * * *", // trailing seconds field
-        "* * * * * * *", // trailing seconds and year fields
-        "@daily", // alias
-        "0 0 29 2 *", // fires only in leap years, but it does fire
-        "0 0 31 1,2 *", // January has a 31st even though February does not
+        "0 0 * * 7",
+        "0 0 * * SUN",
+        "0 0 * JAN *",
+        "0 0 * * MON-FRI",
+        "0 0 L * *",
+        "0 0 15W * *",
+        "0 0 * * 5#3",
+        "0 0 ? * MON",
+        "5-1 * * * *", // a reversed range wraps
+        "*/90 * * * *", // the step is unbounded
+        "* * * * * *", // seconds
+        "* * * * * * *", // seconds and year
+        "@daily",
+        "0 0 29 2 *", // leap years only, but it does fire
+        "0 0 31 1,2 *", // January has a 31st
       ];
 
       // Assert
@@ -117,7 +115,7 @@ describe("automation-schedule", () => {
     });
 
     it("rejects wrong field counts, out-of-range values and free text", () => {
-      // Arrange — croniter rejects each of these too.
+      // Arrange
       const invalid = [
         "* * * *",
         "* * * * * * * *",
@@ -137,9 +135,7 @@ describe("automation-schedule", () => {
     });
 
     it("rejects a well-formed schedule that can never fire", () => {
-      // Arrange — croniter parses these and then fails to find a fire time,
-      // so the service rejects them. Catching them here keeps the request
-      // from being sent at all.
+      // Arrange — croniter parses these, then finds no fire time.
       const unreachable = [
         "0 0 31 2 *",
         "0 0 30 2 *",
@@ -148,7 +144,7 @@ describe("automation-schedule", () => {
         "0 0 31 2 MON",
       ];
 
-      // Assert — a distinct key: the expression is well-formed, not malformed.
+      // Assert — well-formed, not malformed, so a distinct key.
       expect(unreachable.map((c) => validateCronSchedule(c))).toEqual(
         unreachable.map(() => ({
           errorKey: I18nKey.AUTOMATIONS$ERROR_CRON_UNREACHABLE,

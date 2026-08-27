@@ -117,10 +117,8 @@ export function formatEventOn(on: string | string[] | undefined): string {
 /** Example expression shown when the cron field is empty. */
 export const CRON_EXPRESSION_EXAMPLE = "*/10 * * * *";
 
-// The automation service validates with croniter, so this form must accept
-// every expression croniter does — otherwise a schedule the service is happy
-// to store cannot be saved from the UI. croniter takes five fields, optionally
-// followed by a seconds field and then a year field, or one of these aliases.
+// The service validates with croniter, so this must accept everything croniter
+// does: five fields, optionally plus seconds and then year, or an alias.
 const CRON_ALIASES = new Set([
   "@yearly",
   "@annually",
@@ -134,47 +132,34 @@ const CRON_ALIASES = new Set([
 const CRON_MIN_FIELDS = 5;
 const CRON_MAX_FIELDS = 7;
 
-// Bounds of the five positional fields, in field order. The optional seconds
-// and year fields are appended *after* these, so these positions hold for
-// every field count croniter accepts.
+// Seconds and year are appended after these, so the positions always hold.
 const CRON_FIELD_BOUNDS: readonly (readonly [number, number])[] = [
   [0, 59], // minute
   [0, 23], // hour
   [1, 31], // day of month
   [1, 12], // month
-  [0, 7], // day of week — croniter spells Sunday as both 0 and 7
+  [0, 7], // day of week — croniter spells Sunday 0 and 7
 ];
 
 const DAY_OF_MONTH_INDEX = 2;
 const MONTH_INDEX = 3;
 
-// Longest each month can be, indexed from 1. February is 29 because a schedule
-// on the 29th does fire, in leap years.
+// Indexed from 1. February is 29: the 29th does fire, in leap years.
 const MAX_DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 const MONTH_NAMES = "JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC";
 const DAY_NAMES = "SUN|MON|TUE|WED|THU|FRI|SAT";
 
-// A term this form models numerically: `*`, `5` or `1-5`, each optionally with
-// a `/step`. croniter does not bound the step (`*/90` is accepted), so neither
-// does this.
+// croniter does not bound the step: `*/90` is accepted.
 const NUMERIC_TERM = /^(\*|\d+(?:-\d+)?)(?:\/(\d+))?$/;
 
-/**
- * Per-field vocabulary beyond plain numbers. croniter takes month and day
- * names, and `L`/`W`/`#`/`?` in the two day fields. Terms matching these are
- * accepted without being expanded — enough to know the expression is
- * well-formed, and the service is left to judge the rest.
- */
+/** Vocabulary beyond plain numbers, matched but not expanded. */
 const EXTRA_TERM_PATTERNS: readonly (RegExp | null)[] = [
-  null, // minute — numbers only
-  null, // hour — numbers only
-  /^(?:\?|L|\d+W)$/i, // day of month — `?`, `L`, `15W`
-  // month — `JAN`, `JAN-MAR`, `JAN-DEC/3`
+  null, // minute
+  null, // hour
+  /^(?:\?|L|\d+W)$/i, // `?`, `L`, `15W`
   new RegExp(`^(?:${MONTH_NAMES})(?:-(?:${MONTH_NAMES}))?(?:/\\d+)?$`, "i"),
-  // day of week — `SUN`, `MON-FRI`, `SUN/2`, `MON-FRI#2`, `5#3`, `?`. croniter
-  // takes no `L` here, so `5L` falls through to the numeric check and is
-  // rejected, as croniter rejects it.
+  // `SUN`, `MON-FRI#2`, `5#3`, `?` — but no `L`, which croniter rejects here.
   new RegExp(
     `^(?:(?:${DAY_NAMES}|\\d+)(?:-(?:${DAY_NAMES}|\\d+))?(?:/\\d+)?(?:#\\d+)?|\\?)$`,
     "i",
@@ -182,9 +167,8 @@ const EXTRA_TERM_PATTERNS: readonly (RegExp | null)[] = [
 ];
 
 type CronFieldParse =
-  /** Rejected outright: croniter would reject it too. */
   | { kind: "invalid" }
-  /** Well-formed but not expanded, so it constrains nothing below. */
+  /** Well-formed, but not expanded, so it constrains nothing. */
   | { kind: "unmodelled" }
   | { kind: "values"; values: number[] };
 
@@ -220,8 +204,7 @@ function parseCronField(
     }
     const end = parseSingleInt(endPart, min, max);
     if (end === null) return { kind: "invalid" };
-    // croniter accepts a reversed range such as `5-1`, which wraps around.
-    // That wrap is not modelled here, so the field constrains nothing.
+    // croniter wraps a reversed range like `5-1`; that wrap is not modelled.
     if (end < start) return { kind: "unmodelled" };
     for (let value = start; value <= end; value += step) values.add(value);
   }
@@ -234,14 +217,11 @@ export type CronScheduleValidation =
   | { errorKey: I18nKey };
 
 /**
- * Validate a raw cron expression from the edit form. `parseCronSchedule` only
- * classifies an expression against the UI presets, so it reports arbitrary
- * text as `custom` rather than rejecting it.
+ * Validate a raw cron expression from the edit form — `parseCronSchedule` only
+ * classifies against the presets, reporting arbitrary text as `custom`.
  *
- * The service is authoritative, so this check is deliberately one-sided: it
- * rejects only what croniter certainly rejects, and defers on any construct it
- * does not model. The one semantic check it does make is the one croniter
- * itself makes after parsing — that the schedule can fire at all.
+ * One-sided by design: rejects only what croniter certainly rejects, and defers
+ * on anything it does not model.
  */
 export function validateCronSchedule(raw: string): CronScheduleValidation {
   const schedule = raw.trim();
@@ -265,9 +245,7 @@ export function validateCronSchedule(raw: string): CronScheduleValidation {
     return { errorKey: I18nKey.AUTOMATIONS$ERROR_CRON_INVALID };
   }
 
-  // croniter accepts `0 0 31 2 *` as well-formed and then fails to find a fire
-  // time for it. Reject only when no day the expression allows can occur in
-  // any month it allows, so an expression that merely fires rarely survives.
+  // croniter parses `0 0 31 2 *` and then finds no fire time for it.
   const days = parsed[DAY_OF_MONTH_INDEX];
   const months = parsed[MONTH_INDEX];
   if (

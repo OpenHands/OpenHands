@@ -96,9 +96,7 @@ const customAutomation: Automation = {
   trigger: { type: "cron", schedule: "0 9,17 * * *" },
 };
 
-// An automation whose stored schedule this form's validator rejects. Stored
-// expressions can predate the current validation or arrive from a git-synced
-// definition, so the form must never hold one against an unrelated edit.
+// An automation whose stored schedule this form's validator rejects.
 const rejectedScheduleAutomation: Automation = {
   ...dailyAutomation,
   id: "auto-6",
@@ -332,8 +330,7 @@ describe("EditAutomationModal", () => {
   });
 
   it("saves an unrelated edit without revalidating an untouched schedule", async () => {
-    // Arrange — the stored expression is one this form would reject. Because
-    // the user never touched it, that must not block a rename.
+    // Arrange — the stored expression is one this form would reject.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
       rejectedScheduleAutomation,
     );
@@ -346,7 +343,7 @@ describe("EditAutomationModal", () => {
     await user.type(nameInput, "Renamed");
     await user.click(screen.getByTestId("edit-automation-save"));
 
-    // Assert — the rename is sent and the schedule is left untouched.
+    // Assert
     await waitFor(() => {
       expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
     });
@@ -358,7 +355,7 @@ describe("EditAutomationModal", () => {
   });
 
   it("sends a named-day expression the automation service accepts", async () => {
-    // Arrange — croniter takes day names; the form must not second-guess it.
+    // Arrange — croniter takes day names.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
       customAutomation,
     );
@@ -387,13 +384,13 @@ describe("EditAutomationModal", () => {
     const user = userEvent.setup();
     renderModal(customAutomation);
 
-    // Act — February never has a 31st, so the service would reject this.
+    // Act — February never has a 31st.
     const cronInput = screen.getByTestId("edit-automation-cron");
     await user.clear(cronInput);
     await user.type(cronInput, "0 0 31 2 *");
     await user.click(screen.getByTestId("edit-automation-save"));
 
-    // Assert — a distinct message, and nothing reaches the API.
+    // Assert
     expect(
       await screen.findByText("AUTOMATIONS$ERROR_CRON_UNREACHABLE"),
     ).toBeInTheDocument();

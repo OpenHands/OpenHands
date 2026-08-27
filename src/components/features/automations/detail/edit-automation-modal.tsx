@@ -235,9 +235,7 @@ export function EditAutomationModal({
     }
 
     if (automation.trigger.type !== "event" && form.isCustomSchedule) {
-      // An untouched schedule is never re-validated. The service accepts
-      // expressions this form does not model, and an automation already on one
-      // must not be locked out of unrelated name, prompt or timeout edits.
+      // An untouched schedule is the service's business, not the form's.
       const trimmedSchedule = form.rawSchedule.trim();
       if (trimmedSchedule !== (automation.trigger.schedule ?? "").trim()) {
         const scheduleResult = validateCronSchedule(form.rawSchedule);
