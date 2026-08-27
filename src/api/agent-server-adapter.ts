@@ -456,6 +456,12 @@ export const AUTOMATION_NAME_TAG_KEY = "automationname";
 export const AUTOMATION_RUN_ID_TAG_KEY = "automationrunid";
 
 /**
+ * Stamped on every child conversation at launch time so that any client
+ * opening the same parent can detect a duplicate before firing a second launch.
+ */
+export const PARENT_TOOL_CALL_ID_TAG_KEY = "parent_tool_call_id";
+
+/**
  * Tag keys stamped on conversations created by automation runs (see the SDK's
  * `RemoteWorkspace.default_conversation_tags`). The presence of any of these
  * marks a conversation as automation-born.
@@ -480,6 +486,7 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
  *   conversation panel's automation filter (chip noise), while
  *   ``automationname`` / ``automationtrigger`` stay visible
+ * - ``parent_tool_call_id`` → dedup ledger for child-conversation launches
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
@@ -496,6 +503,7 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   "archiveworkspacepath",
   "workspace",
   "working_dir",
+  PARENT_TOOL_CALL_ID_TAG_KEY,
 ]);
 
 /**

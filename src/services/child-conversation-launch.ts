@@ -16,6 +16,8 @@ import {
 } from "#/api/conversation-metadata-store";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import type { AppConversationStartTask } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { PARENT_TOOL_CALL_ID_TAG_KEY } from "#/api/agent-server-adapter";
+import { getActiveBackend } from "#/api/backend-registry/active-store";
 import {
   CHILD_CONVERSATION_ISOLATIONS,
   CHILD_CONVERSATION_RESULT_PREFIX,
@@ -272,6 +274,7 @@ const SHARED_FALLBACK_CONSEQUENCE =
 async function launchLocalChild(
   params: ValidatedParams,
   parentConversationId: string,
+  toolCallId: string,
 ): Promise<LaunchChildConversationResult> {
   // The agent-server rejects a parent whose workspace differs from the child's,
   // so the child requests the parent's own directory. `worktree` then carves an
@@ -332,6 +335,21 @@ async function launchLocalChild(
       params.title,
     ).catch(() => undefined);
   }
+
+  // Stamp the originating tool call id as a server-side tag so that any
+  // client that opens this parent conversation can detect the launch as
+  // already handled before firing a second one. Fire-and-forget: a failed
+  // stamp degrades cross-device dedup to same-browser localStorage only,
+  // which was the pre-existing behaviour.
+  AgentServerConversationService.batchGetAppConversations([conversationId])
+    .then(([child]) => {
+      if (!child) return;
+      return AgentServerConversationService.replaceConversationTags(
+        conversationId,
+        { ...(child.tags ?? {}), [PARENT_TOOL_CALL_ID_TAG_KEY]: toolCallId },
+      );
+    })
+    .catch(() => undefined);
 
   const parentLinkNote = localParentLinkNote();
   return {
@@ -514,11 +532,35 @@ export async function handleLaunchChildConversationAction(
   if (!validation.ok) {
     result = validation.failure;
   } else {
+    // Cross-device dedup: before launching a local child, check whether
+    // another client already handled this tool call by looking for a
+    // conversation that carries the matching tag. The localStorage ledger
+    // above is the fast same-browser guard; this catches the case where the
+    // user opened the same parent conversation on a second device or browser.
+    // Cloud children of a local parent can't be tagged via the local server,
+    // so this guard is local-target-only. Errors are suppressed: a failed
+    // check falls back to same-browser-only protection.
+    if (
+      validation.params.target === "local" &&
+      getActiveBackend().backend.kind !== "cloud"
+    ) {
+      const existing =
+        await AgentServerConversationService.findConversationByTag(
+          PARENT_TOOL_CALL_ID_TAG_KEY,
+          toolCallId,
+        ).catch(() => null);
+      if (existing) return;
+    }
+
     try {
       result =
         validation.params.target === "cloud"
           ? await launchCloudChild(validation.params, parentConversationId)
-          : await launchLocalChild(validation.params, parentConversationId);
+          : await launchLocalChild(
+              validation.params,
+              parentConversationId,
+              toolCallId,
+            );
     } catch (error) {
       result = failure(
         error instanceof Error ? error.message : String(error),
