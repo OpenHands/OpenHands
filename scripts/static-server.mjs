@@ -671,8 +671,14 @@ export function startStaticServer(config) {
   });
   server.on("close", uninstallDiagnostics);
 
-  return new Promise((resolveListen) => {
+  return new Promise((resolveListen, rejectListen) => {
+    const onListenError = (err) => {
+      server.close();
+      rejectListen(err);
+    };
+    server.once("error", onListenError);
     server.listen(config.port, config.host, () => {
+      server.off("error", onListenError);
       const displayPath = basePath === "/" ? "/" : `${basePath}/`;
       console.log("");
       console.log(

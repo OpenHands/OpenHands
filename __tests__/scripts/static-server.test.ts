@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { createServer, request, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -793,5 +794,27 @@ describe("static-server.mjs", () => {
     expect(response.body).toContain("Bad Gateway");
     expect(response.body).toContain("Invalid URL");
     expect(server.listening).toBe(true);
+  });
+
+  it("rejects when the listen port is already in use", async () => {
+    const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+    tempDirs.push(buildDir);
+    writeFileSync(path.join(buildDir, "index.html"), "<main>app</main>");
+
+    const blocker = createServer();
+    await startHttpServer(blocker);
+    const address = blocker.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Blocker did not bind to a TCP port");
+    }
+
+    await expect(
+      startStaticServer({
+        port: address.port,
+        host: "127.0.0.1",
+        dir: buildDir,
+        routes: {},
+      }),
+    ).rejects.toMatchObject({ code: "EADDRINUSE" });
   });
 });
