@@ -152,6 +152,13 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /**
+   * Version of the template this entry publishes, sent with the create request
+   * as provenance. A bundle declares its own at `setup.bundle.version`; a
+   * prompt entry declares it here. Absent means the entry sends none, so the
+   * service records no template for what it creates.
+   */
+  version?: string;
   requires: SetupPrerequisites;
   /** The skill that owns the launch command. Defaults to `id`. */
   skill?: string;
