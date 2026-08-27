@@ -8,12 +8,14 @@ import {
 } from "#/utils/automation-catalog";
 import type { Automation } from "#/types/automation";
 
-// The pinned package predates the `impact` field, so entries carrying one —
-// valid and malformed — are appended to the real catalog.
+// Entries carrying an `impact` — valid and malformed — and one declaring none
+// are appended to the real catalog, so what a given package release declares
+// never decides these assertions.
 vi.mock("@openhands/extensions/automations", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@openhands/extensions/automations")>();
   const syntheticEntries = [
+    { id: "impact-absent" },
     {
       id: "impact-valid",
       impact: {
@@ -171,7 +173,7 @@ describe("resolveAutomationImpactStatement", () => {
     // basis this host does not know how to compute.
     expect(
       resolveAutomationImpactStatement(
-        createInstalledAutomation("github-pr-reviewer"),
+        createInstalledAutomation("impact-absent"),
         4,
       ),
     ).toBeNull();
