@@ -16,6 +16,49 @@ import {
  * OpenHands-managed concepts, so they are scoped to the `openhands` provider.
  */
 const OPENHANDS_PROVIDER = "openhands";
+const CLOUD_MODEL_SEARCH_PAGE_LIMIT = 100;
+const MAX_PAGINATION_DEPTH = 10;
+
+async function fetchAllOpenHandsModels(
+  verifiedByProvider: Record<string, string[]>,
+  pageId: string | null | undefined,
+  seenPageIds: Set<string>,
+  depth: number,
+): Promise<LLMModel[]> {
+  if (depth >= MAX_PAGINATION_DEPTH) {
+    throw new Error(
+      `Too many pagination requests while fetching OpenHands models (depth=${depth})`,
+    );
+  }
+
+  const page = await ConfigService.searchModels(
+    {
+      provider__eq: OPENHANDS_PROVIDER,
+      limit: CLOUD_MODEL_SEARCH_PAGE_LIMIT,
+      ...(pageId ? { page_id: pageId } : {}),
+    },
+    verifiedByProvider,
+  );
+
+  if (!page.next_page_id) {
+    return page.items;
+  }
+
+  if (seenPageIds.has(page.next_page_id)) {
+    throw new Error(
+      `Repeated page id while fetching OpenHands models: ${page.next_page_id}`,
+    );
+  }
+  seenPageIds.add(page.next_page_id);
+
+  const rest = await fetchAllOpenHandsModels(
+    verifiedByProvider,
+    page.next_page_id,
+    seenPageIds,
+    depth + 1,
+  );
+  return [...page.items, ...rest];
+}
 
 /**
  * Fetches the `openhands` provider's models with their DB-driven `free` /
@@ -30,11 +73,7 @@ const useOpenHandsModels = () =>
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
       });
-      const page = await ConfigService.searchModels(
-        { provider__eq: OPENHANDS_PROVIDER, limit: 1000 },
-        verifiedByProvider,
-      );
-      return page.items;
+      return fetchAllOpenHandsModels(verifiedByProvider, null, new Set(), 0);
     },
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
