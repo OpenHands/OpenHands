@@ -13565,23 +13565,6 @@
     "uk": "Таймаут не може перевищувати {{max}} секунд",
     "ca": "El temps d'espera no pot superar els {{max}} segons"
   },
-  "AUTOMATIONS$CUSTOM_SCHEDULE_HINT": {
-    "en": "This automation uses a custom schedule. Frequency editing is disabled to avoid breaking it.",
-    "ja": "このオートメーションはカスタムスケジュールを使用しています。誤って壊さないよう、頻度の編集は無効化されています。",
-    "zh-CN": "此自动化使用自定义计划。已禁用频率编辑以避免破坏它。",
-    "zh-TW": "此自動化使用自訂排程。已停用頻率編輯以避免破壞它。",
-    "ko-KR": "이 자동화는 사용자 지정 일정을 사용합니다. 손상을 피하기 위해 빈도 편집이 비활성화되어 있습니다.",
-    "no": "Denne automatiseringen bruker en tilpasset plan. Frekvensredigering er deaktivert for å unngå å ødelegge den.",
-    "it": "Questa automazione utilizza una pianificazione personalizzata. La modifica della frequenza è disabilitata per evitare di romperla.",
-    "pt": "Esta automação usa um cronograma personalizado. A edição da frequência está desativada para evitar quebrá-la.",
-    "es": "Esta automatización usa un cronograma personalizado. La edición de frecuencia está desactivada para evitar romperla.",
-    "ar": "تستخدم هذه الأتمتة جدولاً مخصصًا. تم تعطيل تعديل التكرار لتجنب كسرها.",
-    "fr": "Cette automatisation utilise un calendrier personnalisé. L'édition de la fréquence est désactivée pour éviter de la casser.",
-    "tr": "Bu otomasyon özel bir zamanlama kullanır. Bozmamak için sıklık düzenlemesi devre dışı bırakılmıştır.",
-    "de": "Diese Automatisierung verwendet einen benutzerdefinierten Zeitplan. Die Häufigkeitsbearbeitung ist deaktiviert, um sie nicht zu beschädigen.",
-    "uk": "Ця автоматизація використовує власний розклад. Редагування частоти вимкнено, щоб не пошкодити її.",
-    "ca": "Aquesta automatització utilitza un calendari personalitzat. L'edició de la freqüència està desactivada per evitar trencar-la."
-  },
   "AUTOMATIONS$CRON_EXPRESSION": {
     "en": "Cron expression",
     "ja": "Cron 式",

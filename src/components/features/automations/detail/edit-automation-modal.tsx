@@ -490,26 +490,18 @@ export function EditAutomationModal({
               </label>
 
               {form.isCustomSchedule && (
-                <>
-                  <SettingsInput
-                    testId="edit-automation-cron"
-                    name="cron"
-                    type="text"
-                    label={t(I18nKey.AUTOMATIONS$CRON_EXPRESSION)}
-                    value={form.rawSchedule}
-                    onChange={(value) =>
-                      setForm((f) => ({ ...f, rawSchedule: value }))
-                    }
-                    error={scheduleError ?? undefined}
-                    placeholder={CRON_EXPRESSION_EXAMPLE}
-                  />
-                  <p
-                    className="text-xs text-muted"
-                    data-testid="custom-schedule-hint"
-                  >
-                    {t(I18nKey.AUTOMATIONS$CUSTOM_SCHEDULE_HINT)}
-                  </p>
-                </>
+                <SettingsInput
+                  testId="edit-automation-cron"
+                  name="cron"
+                  type="text"
+                  label={t(I18nKey.AUTOMATIONS$CRON_EXPRESSION)}
+                  value={form.rawSchedule}
+                  onChange={(value) =>
+                    setForm((f) => ({ ...f, rawSchedule: value }))
+                  }
+                  error={scheduleError ?? undefined}
+                  placeholder={CRON_EXPRESSION_EXAMPLE}
+                />
               )}
             </>
           ) : null}

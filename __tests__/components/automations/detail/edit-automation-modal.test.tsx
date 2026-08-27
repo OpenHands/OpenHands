@@ -244,20 +244,19 @@ describe("EditAutomationModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders custom-schedule hint and skips schedule mutation for non-preset cron", async () => {
+  it("renders the cron field and skips schedule mutation for non-preset cron", async () => {
     // Arrange — schedule "0 9,17 * * *" is not a Daily/Weekdays/Weekly
-    // preset; the modal must treat it as read-only for frequency but
-    // still allow editing the prompt/name.
+    // preset; frequency stays read-only but the expression itself, and
+    // the prompt/name, remain editable.
     vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
       customAutomation,
     );
     const user = userEvent.setup();
     renderModal(customAutomation);
 
-    // The hint surfaces so the user understands why frequency is
-    // disabled; this is the user-visible signal that we're in
-    // custom mode.
-    expect(screen.getByTestId("custom-schedule-hint")).toBeInTheDocument();
+    // The cron field is the user-visible signal that we're in custom mode.
+    expect(screen.getByTestId("edit-automation-cron")).toBeInTheDocument();
+    expect(screen.getByTestId("edit-automation-frequency")).toBeDisabled();
 
     // Act — change only the name and save.
     const nameInput = screen.getByTestId("edit-automation-name");
