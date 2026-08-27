@@ -96,6 +96,16 @@ const customAutomation: Automation = {
   trigger: { type: "cron", schedule: "0 9,17 * * *" },
 };
 
+// An automation whose stored schedule this form's validator rejects. Stored
+// expressions can predate the current validation or arrive from a git-synced
+// definition, so the form must never hold one against an unrelated edit.
+const rejectedScheduleAutomation: Automation = {
+  ...dailyAutomation,
+  id: "auto-6",
+  name: "Legacy schedule",
+  trigger: { type: "cron", schedule: "0 0 30 2 *" },
+};
+
 // An event-triggered automation. `buildInitialState` marks these as custom
 // schedules too, so they guard the submit path against cron validation.
 const eventAutomation: Automation = {
@@ -317,6 +327,75 @@ describe("EditAutomationModal", () => {
     // Assert — the error surfaces and nothing reaches the API.
     expect(
       await screen.findByText("AUTOMATIONS$ERROR_CRON_INVALID"),
+    ).toBeInTheDocument();
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+  });
+
+  it("saves an unrelated edit without revalidating an untouched schedule", async () => {
+    // Arrange — the stored expression is one this form would reject. Because
+    // the user never touched it, that must not block a rename.
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+      rejectedScheduleAutomation,
+    );
+    const user = userEvent.setup();
+    renderModal(rejectedScheduleAutomation);
+
+    // Act — change only the name.
+    const nameInput = screen.getByTestId("edit-automation-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert — the rename is sent and the schedule is left untouched.
+    await waitFor(() => {
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = vi.mocked(AutomationService.updateAutomation).mock
+      .calls[0];
+    expect(body).not.toHaveProperty("trigger");
+    expect(body).toMatchObject({ name: "Renamed" });
+    expect(screen.queryByText("AUTOMATIONS$ERROR_CRON_INVALID")).toBeNull();
+  });
+
+  it("sends a named-day expression the automation service accepts", async () => {
+    // Arrange — croniter takes day names; the form must not second-guess it.
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+      customAutomation,
+    );
+    const user = userEvent.setup();
+    renderModal(customAutomation);
+
+    // Act
+    const cronInput = screen.getByTestId("edit-automation-cron");
+    await user.clear(cronInput);
+    await user.type(cronInput, "0 0 * * SUN");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = vi.mocked(AutomationService.updateAutomation).mock
+      .calls[0];
+    expect(body).toMatchObject({
+      trigger: { type: "cron", schedule: "0 0 * * SUN" },
+    });
+  });
+
+  it("blocks a schedule that can never fire instead of sending it", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderModal(customAutomation);
+
+    // Act — February never has a 31st, so the service would reject this.
+    const cronInput = screen.getByTestId("edit-automation-cron");
+    await user.clear(cronInput);
+    await user.type(cronInput, "0 0 31 2 *");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert — a distinct message, and nothing reaches the API.
+    expect(
+      await screen.findByText("AUTOMATIONS$ERROR_CRON_UNREACHABLE"),
     ).toBeInTheDocument();
     expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
   });

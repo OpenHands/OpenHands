@@ -235,18 +235,22 @@ export function EditAutomationModal({
     }
 
     if (automation.trigger.type !== "event" && form.isCustomSchedule) {
-      const scheduleResult = validateCronSchedule(form.rawSchedule);
-      if ("errorKey" in scheduleResult) {
-        setScheduleError(t(scheduleResult.errorKey));
-        return;
-      }
-      setScheduleError(null);
-      if (scheduleResult.schedule !== automation.trigger.schedule) {
+      // An untouched schedule is never re-validated. The service accepts
+      // expressions this form does not model, and an automation already on one
+      // must not be locked out of unrelated name, prompt or timeout edits.
+      const trimmedSchedule = form.rawSchedule.trim();
+      if (trimmedSchedule !== (automation.trigger.schedule ?? "").trim()) {
+        const scheduleResult = validateCronSchedule(form.rawSchedule);
+        if ("errorKey" in scheduleResult) {
+          setScheduleError(t(scheduleResult.errorKey));
+          return;
+        }
         body.trigger = {
           ...automation.trigger,
           schedule: scheduleResult.schedule,
         };
       }
+      setScheduleError(null);
     } else if (!form.isCustomSchedule && form.frequency !== "custom") {
       const parsedTime = parseTimeOfDay(form.timeOfDay);
       if (parsedTime) {
