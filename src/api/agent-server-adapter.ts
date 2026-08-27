@@ -1080,6 +1080,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  workspaceHookConfig?: Record<string, unknown> | null;
 }
 
 export function buildStartConversationRequest(
@@ -1218,6 +1219,8 @@ export function buildStartConversationRequest(
 
   if (conversationSettings.hook_config) {
     payload.hook_config = conversationSettings.hook_config;
+  } else if (options.workspaceHookConfig) {
+    payload.hook_config = options.workspaceHookConfig;
   }
 
   const toolModuleQualnames = {
@@ -1301,13 +1304,19 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
+  const { default: HooksService } = await import("./hooks-service");
 
-  const [settingsResult, customSecrets, runtimeServicesInfo] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendRuntimeServicesInfo(),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    runtimeServicesInfo,
+    workspaceHookConfig,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendRuntimeServicesInfo(),
+    HooksService.loadWorkspaceHooks(options.workingDir),
+  ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
@@ -1325,6 +1334,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    workspaceHookConfig,
   });
 }
 

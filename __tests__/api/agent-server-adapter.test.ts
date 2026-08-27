@@ -8,18 +8,23 @@ import {
   CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
+  buildStartConversationRequestWithEncryptedSettings,
   fetchBackendRuntimeServicesInfo,
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { SecretsService } from "#/api/secrets-service";
+import HooksService from "#/api/hooks-service";
 import {
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { ACP_VERTEX_SAFE_MODEL } from "#/constants/acp-providers";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import type { SettingsValue } from "#/types/settings";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
   OPENAI_SUBSCRIPTION_VENDOR,
@@ -468,6 +473,49 @@ describe("buildStartConversationRequest", () => {
       content: [{ type: "text", text: "Follow the repo conventions." }],
       run: true,
     });
+  });
+
+  it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
+    const workspaceHooks = {
+      session_start: [
+        {
+          matcher: "*",
+          hooks: [{ command: "cat AGENTS.md", type: "command" }],
+        },
+      ],
+    };
+
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      workspaceHookConfig: workspaceHooks,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(workspaceHooks);
+  });
+
+  it("prioritizes conversation_settings.hook_config over workspaceHookConfig", () => {
+    const explicitHooks = { session_start: [] };
+    const workspaceHooks = {
+      session_start: [
+        {
+          matcher: "*",
+          hooks: [{ command: "cat AGENTS.md", type: "command" }],
+        },
+      ],
+    };
+
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          hook_config: explicitHooks,
+        },
+      },
+      workspaceHookConfig: workspaceHooks,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(explicitHooks);
   });
 
   it("serializes custom secrets as host-relative LookupSecret entries", () => {
@@ -1772,5 +1820,47 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_env).toBeUndefined();
     expect(acpPayload.agent_settings.llm).toBeUndefined();
     expect(acpPayload.agent_settings.condenser).toBeUndefined();
+  });
+});
+
+describe("buildStartConversationRequestWithEncryptedSettings", () => {
+  it("loads workspace hooks and attaches them to payload when settings have no hook_config", async () => {
+    const mockHooks = {
+      session_start: [
+        {
+          matcher: "*",
+          hooks: [{ command: "cat AGENTS.md", type: "command" }],
+        },
+      ],
+      pre_tool_use: [],
+      post_tool_use: [],
+      user_prompt_submit: [],
+      session_end: [],
+      stop: [],
+    };
+
+    vi.spyOn(SettingsService, "getSettingsForConversation").mockResolvedValue({
+      agentSettings: (DEFAULT_SETTINGS.agent_settings ?? {}) as Record<
+        string,
+        SettingsValue
+      >,
+      conversationSettings: (DEFAULT_SETTINGS.conversation_settings ??
+        {}) as Record<string, SettingsValue>,
+      secretsEncrypted: true,
+    });
+    vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+    vi.spyOn(HooksService, "loadWorkspaceHooks").mockResolvedValue(
+      mockHooks as any,
+    );
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      workingDir: "/workspace/my-project",
+    });
+
+    expect(HooksService.loadWorkspaceHooks).toHaveBeenCalledWith(
+      "/workspace/my-project",
+    );
+    expect(payload.hook_config).toEqual(mockHooks);
   });
 });
