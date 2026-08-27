@@ -6,6 +6,7 @@ import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 
 interface SetupTestRunStepProps {
   run: AutomationRun | null;
+  description: string;
 }
 
 function isFailedStatus(status: AutomationRunStatus): boolean {
