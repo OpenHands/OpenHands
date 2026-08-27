@@ -34,9 +34,11 @@ import {
 } from "#/constants/llm-subscription";
 import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   FREE_OPENHANDS_MODEL_NOTE,
   isFreeOpenHandsModel,
+  isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
 
 /** Form-values key for the shared provider connection a profile links to. */
@@ -109,9 +111,12 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
     <HelpLink
       testId={testId}
       text={t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_TEXT)}
-      linkText={t(I18nKey.SETTINGS$NAV_API_KEYS)}
+      linkText={t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_LINK)}
       href="https://app.all-hands.dev/settings/api-keys"
       suffix={` ${t(I18nKey.SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX)}`}
+      suffixLinkText={t(I18nKey.SETTINGS$SEE_HERE_FOR_MORE_DETAILS)}
+      suffixLinkHref="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+      trailing="."
     />
   );
 }
@@ -159,6 +164,9 @@ export function LlmSettingsScreen({
   showProviderConnection?: boolean;
 }) {
   const { t } = useTranslation("openhands");
+
+  const { backend } = useActiveBackend();
+  const isCloud = backend.kind === "cloud";
 
   const { data: providerConnections } = useProviderConnections();
   const connectionOptions = React.useMemo(
@@ -231,9 +239,15 @@ export function LlmSettingsScreen({
         typeof values["llm.base_url"] === "string"
           ? values["llm.base_url"]
           : "";
-      const showOpenHandsApiKeyHelp = modelValue.startsWith("openhands/");
+      const showOpenHandsApiKeyHelp = isOpenHandsProviderModel(modelValue);
       const authType = resolveLlmAuthType(values[LLM_AUTH_TYPE_KEY]);
       const isSubscriptionAuth = authType === LLM_AUTH_TYPE_SUBSCRIPTION;
+      // On cloud the OpenHands provider is backed by a server-minted LLM key,
+      // so the inline API key / base URL inputs are not user-supplied. Local
+      // mode still collects an api_key (the OpenHands provider can run against
+      // a self-hosted endpoint there).
+      const hideInlineCredentials =
+        isCloud && showOpenHandsApiKeyHelp && !isSubscriptionAuth;
       const shouldDisableSubscriptionControls =
         isDisabled || (isSubscriptionAuth && isWaitingForSubscriptionModels);
       const subscriptionModelValue = subscriptionModels?.includes(modelValue)
@@ -304,7 +318,11 @@ export function LlmSettingsScreen({
         />
       );
 
-      const renderApiKeyInput = (testId: string, helpTestId: string) => (
+      const renderApiKeyInput = (
+        testId: string,
+        helpTestId: string,
+        openHandsHelpTestId: string,
+      ) => (
         <>
           <SettingsInput
             testId={testId}
@@ -321,12 +339,19 @@ export function LlmSettingsScreen({
             }
           />
 
-          <HelpLink
-            testId={helpTestId}
-            text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-            linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-            href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
-          />
+          {/* The OpenHands provider's key lives in the OpenHands Cloud "API
+              Keys" tab, so point users there instead of the generic docs page
+              that covers both LLM and regular API keys. */}
+          {showOpenHandsApiKeyHelp ? (
+            <OpenHandsApiKeyHelp testId={openHandsHelpTestId} />
+          ) : (
+            <HelpLink
+              testId={helpTestId}
+              text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
+              linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
+              href="https://docs.openhands.dev/usage/local-setup#getting-an-api-key"
+            />
+          )}
         </>
       );
 
@@ -446,17 +471,15 @@ export function LlmSettingsScreen({
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
-                    <OpenHandsApiKeyHelp testId="openhands-api-key-help" />
-                  ) : null}
-
-                  {isLinkedToConnection
+                  {isLinkedToConnection || hideInlineCredentials
                     ? null
                     : renderApiKeyInput(
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-input",
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-help-anchor",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "openhands-api-key-help",
                       )}
                 </>
               )}
@@ -488,13 +511,12 @@ export function LlmSettingsScreen({
                       {isFreeOpenHandsModel(modelValue) ? (
                         <OpenHandsFreeModelsNote />
                       ) : null}
-                      <OpenHandsApiKeyHelp testId="openhands-api-key-help-2" />
                     </>
                   ) : null}
 
                   {showConnectionSelector ? renderConnectionSelector() : null}
 
-                  {isLinkedToConnection ? null : (
+                  {isLinkedToConnection || hideInlineCredentials ? null : (
                     <SettingsInput
                       testId="base-url-input"
                       label={t(I18nKey.SETTINGS$BASE_URL)}
@@ -508,13 +530,15 @@ export function LlmSettingsScreen({
                     />
                   )}
 
-                  {isLinkedToConnection
+                  {isLinkedToConnection || hideInlineCredentials
                     ? null
                     : renderApiKeyInput(
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-input",
                         // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
                         "llm-api-key-help-anchor-advanced",
+                        // eslint-disable-next-line i18next/no-literal-string -- DOM id, not user-facing
+                        "openhands-api-key-help-2",
                       )}
                 </>
               )}
@@ -528,6 +552,7 @@ export function LlmSettingsScreen({
       showProviderConnection,
       defaultModel,
       embedded,
+      isCloud,
       isWaitingForSubscriptionModels,
       settings?.llm_api_key_set,
       subscriptionModels,
@@ -580,12 +605,22 @@ export function LlmSettingsScreen({
         if (context.view === "basic" && llm.model !== undefined) {
           llm.base_url = getSchemaFieldDefaultValue(schema, "llm.base_url");
         }
+        // On cloud the OpenHands provider uses a server-minted LLM key, so
+        // never send an inline api_key / base_url — let the backend attach its
+        // own credential. (Local mode still collects an inline key.)
+        if (
+          isCloud &&
+          isOpenHandsProviderModel(String(context.values["llm.model"] ?? ""))
+        ) {
+          delete llm.api_key;
+          delete llm.base_url;
+        }
       }
 
       agentSettings.llm = llm;
       return { agent_settings_diff: agentSettings };
     },
-    [schema, subscriptionModels],
+    [schema, subscriptionModels, isCloud],
   );
 
   return (

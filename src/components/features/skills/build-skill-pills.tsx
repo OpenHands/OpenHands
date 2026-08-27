@@ -13,6 +13,7 @@ import {
   SKILL_CATEGORY_LABEL_KEYS,
   UNCATEGORIZED_SKILL_CATEGORY,
 } from "#/utils/skill-category";
+import { isRecommendedSkill } from "#/utils/skill-enablement";
 
 type SkillPillVariant = "card" | "detail";
 
@@ -45,6 +46,23 @@ export function buildSkillPills(
       node: <SkillTypeBadge type={skill.type} />,
     },
   ];
+
+  if (isRecommendedSkill(skill.name)) {
+    pills.push({
+      id: "recommended",
+      node: (
+        <span
+          data-testid={
+            pillTestId(testIdPrefix, skill.name, "recommended") ??
+            `skill-recommended-${skill.name}`
+          }
+          className={SKILL_CARD_PILL_CLASS}
+        >
+          {translate(I18nKey.SETTINGS$SKILLS_RECOMMENDED)}
+        </span>
+      ),
+    });
+  }
 
   // An "Other" pill says nothing, and every local skill would carry one:
   // only the catalog assigns categories.
