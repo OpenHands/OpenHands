@@ -47,6 +47,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { isExternalBrowsableUrl, isLoopbackAppUrl } from "./lib/window-url-policy.mjs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -391,15 +393,19 @@ function createMainWindow() {
         overrideBrowserWindowOptions: { width: 800, height: 700 },
       };
     }
-    // All other external URLs open directly in the system browser.
-    if (
-      !url.startsWith("http://localhost") &&
-      !url.startsWith("http://127.0.0.1")
-    ) {
-      shell.openExternal(url);
-      return { action: "deny" };
+    // All other URLs open directly in the system browser. The loopback test
+    // goes through URL parsing: prefix matching would also accept
+    // attacker-controlled hosts like http://localhost.evil.com (or
+    // http://localhost@evil.com) and render them in a chromeless native
+    // window. Non-http(s) schemes are denied outright — shell.openExternal
+    // would forward them to OS protocol handlers.
+    if (isLoopbackAppUrl(url)) {
+      return { action: "allow" };
     }
-    return { action: "allow" };
+    if (isExternalBrowsableUrl(url)) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 
   // When the renderer opens a popup (the about:blank above), watch for its
@@ -408,13 +414,11 @@ function createMainWindow() {
   // now-unneeded Electron popup.
   mainWin.webContents.on("did-create-window", (popupWin) => {
     popupWin.webContents.on("will-navigate", (_event, url) => {
-      if (
-        url !== "about:blank" &&
-        !url.startsWith("http://localhost") &&
-        !url.startsWith("http://127.0.0.1")
-      ) {
+      if (url !== "about:blank" && !isLoopbackAppUrl(url)) {
         _event.preventDefault();
-        shell.openExternal(url);
+        if (isExternalBrowsableUrl(url)) {
+          shell.openExternal(url);
+        }
         popupWin.close();
       }
     });
