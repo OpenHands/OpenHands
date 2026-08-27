@@ -49,7 +49,7 @@ export function ChatInputField({
         <div
           ref={chatInputRef}
           className={cn(
-            "chat-input bg-transparent text-white text-[16px] font-normal leading-[20px] outline-none resize-none custom-scrollbar min-h-[20px] max-h-[400px] [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
+            "chat-input bg-transparent text-white text-[16px] font-normal leading-[20px] outline-none resize-none custom-scrollbar min-h-[20px] max-h-[160px] sm:max-h-[400px] [text-overflow:inherit] [text-wrap-mode:inherit] [white-space-collapse:inherit] block whitespace-pre-wrap",
             disabled && "cursor-not-allowed opacity-50",
           )}
           contentEditable={!disabled}

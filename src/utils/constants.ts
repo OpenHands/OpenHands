@@ -30,6 +30,10 @@ export const SETTINGS_FORM = {
 // Chat input constants
 export const CHAT_INPUT = {
   HEIGHT_THRESHOLD: 100, // Height in pixels when suggestions should be hidden
+  /** Max composer height on desktop (px). */
+  MAX_HEIGHT: 400,
+  /** Max composer height on phones/tablets (px) so a long draft can't swallow the conversation above it. */
+  MOBILE_MAX_HEIGHT: 160,
 };
 
 // UI tolerance constants

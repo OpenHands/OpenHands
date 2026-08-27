@@ -76,7 +76,14 @@ export const useChatInputEvents = (
 
       if (checkIsContentEmpty()) {
         e.preventDefault();
-        increaseHeightForEmptyContent();
+        // Only grow the empty box on desktop. On phones/tablets Enter is a
+        // newline key, and tapping it on an empty input (often accidentally,
+        // or to dismiss the keyboard) must not balloon the composer into the
+        // conversation above — the grown height also sticks (manual mode)
+        // until the message is sent, hiding the chat on small screens.
+        if (!isMobileUserAgent()) {
+          increaseHeightForEmptyContent();
+        }
         return;
       }
 
