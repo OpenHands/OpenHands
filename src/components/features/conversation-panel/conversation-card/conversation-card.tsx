@@ -1,5 +1,5 @@
 import React from "react";
-import { Pin, Tag } from "lucide-react";
+import { Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTracking } from "#/hooks/use-tracking";
 import { cn } from "#/utils/utils";
@@ -103,26 +103,11 @@ export function ConversationCard({
   const { t } = useTranslation("openhands");
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
-  const [tagsCollapsed, setTagsCollapsed] = React.useState(false);
   const { mutateAsync: downloadConversation } = useDownloadConversation();
 
   const displayTags = getDisplayConversationTags(tags);
-  // The two tag controls own different things, and that is what keeps them
-  // from ever contradicting each other. The panel's Tags preference owns
-  // PRESENCE: off means no tag UI on the card at all, not even the indicator.
-  // The indicator owns DENSITY within the on state: expanded shows the chip
-  // row, collapsed tucks it to an icon + count. Every state the indicator can
-  // reach still shows tags, so it can never leave the preference reading "off"
-  // while a card shows tags.
   const hasDisplayTags = displayTags.length > 0;
-  const showTagIndicator = showTags && hasDisplayTags;
-  const showTagChipRow = showTags && hasDisplayTags && !tagsCollapsed;
-
-  // Turning the preference on means "show me tags", so cards come back
-  // expanded rather than in whatever density they were left at.
-  React.useEffect(() => {
-    setTagsCollapsed(false);
-  }, [showTags]);
+  const showTagChipRow = showTags && hasDisplayTags;
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -217,44 +202,6 @@ export function ConversationCard({
     onTogglePin?.();
   };
 
-  const handleToggleTagsCollapsed = (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setTagsCollapsed((value) => !value);
-  };
-
-  const renderTagIndicator = () => (
-    <button
-      type="button"
-      data-testid={
-        conversationId
-          ? `conversation-tags-indicator-${conversationId}`
-          : "conversation-tags-indicator"
-      }
-      aria-pressed={!tagsCollapsed}
-      aria-label={
-        tagsCollapsed
-          ? t(I18nKey.CONVERSATION_PANEL$SHOW_TAGS, {
-              count: displayTags.length,
-            })
-          : t(I18nKey.CONVERSATION_PANEL$HIDE_TAGS)
-      }
-      onClick={handleToggleTagsCollapsed}
-      className={cn(
-        "flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1 py-0.5",
-        "text-[10px] leading-4",
-        tagsCollapsed
-          ? "text-[var(--oh-muted)] hover:bg-white/10 hover:text-white"
-          : "text-[var(--oh-accent)]",
-      )}
-    >
-      <Tag className="h-3.5 w-3.5" aria-hidden />
-      <span>{displayTags.length}</span>
-    </button>
-  );
-
   const renderPinButton = () => (
     <button
       type="button"
@@ -322,15 +269,6 @@ export function ConversationCard({
           {sandboxStatus === "ERROR" && <ConversationStatusBadges />}
         </div>
 
-        {/* Outside the trailing slot on purpose. That slot is the offset
-            parent of the `absolute right-0` action overlay, which is wider
-            than the timestamp it covers — anything rendered inside the slot
-            is unclickable once the row is hovered (and permanently so on
-            coarse pointers, where the overlay never hides). The indicator is
-            always-on affordance, not hover chrome, so it lives in front of
-            the slot and the slot's reserve keeps a stable gap for it. */}
-        {showTagIndicator ? renderTagIndicator() : null}
-
         <div
           data-testid="conversation-card-trailing-slot"
           className={cn(
@@ -343,13 +281,7 @@ export function ConversationCard({
             // clickable without a hover pass.
             showPersistentPinIcon
               ? "min-w-[3.75rem]"
-              : hasHoverActions &&
-                  // Force the reserve whenever the indicator is present: without
-                  // it the slot grows from timestamp-width to 3.75rem on hover
-                  // and shoves the indicator sideways under the cursor.
-                  hoverRevealReserveClassName(
-                    contextMenuOpen || showTagIndicator,
-                  ),
+              : hasHoverActions && hoverRevealReserveClassName(contextMenuOpen),
           )}
         >
           {!showPersistentPinIcon && (createdAt ?? lastUpdatedAt) && (

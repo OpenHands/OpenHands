@@ -780,6 +780,9 @@ describe("ConversationCard", () => {
       expect(
         within(chips[1]).getByTestId("conversation-card-tag-chip-icon"),
       ).toHaveAttribute("data-tag-key", "owner");
+      expect(
+        screen.queryByTestId("conversation-tags-indicator"),
+      ).not.toBeInTheDocument();
     });
 
     it("filters reserved tag keys out of the chip row", () => {
@@ -871,140 +874,6 @@ describe("ConversationCard", () => {
       expect(
         screen.queryByTestId("conversation-card-tag-chip"),
       ).not.toBeInTheDocument();
-    });
-
-    it("keeps the indicator outside the slot the hover overlay covers", () => {
-      // Regression: the indicator used to sit inside the trailing slot, which
-      // is the offset parent of the `absolute right-0` pin/ellipsis overlay.
-      // On hover that overlay covered 28 of the indicator's 29 pixels, so a
-      // real mouse click landed on the pin — the indicator's own
-      // stopPropagation never ran because the button never got the event.
-      // jsdom has no layout, so the geometry can't be asserted directly; what
-      // it can assert is the structural cause. Anything inside the trailing
-      // slot is reachable by the overlay; anything outside it is not.
-      renderWithProviders(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          showTags
-          tags={{ origin: "slack", owner: "alice" }}
-          onTogglePin={vi.fn()}
-          onDelete={vi.fn()}
-          onContextMenuToggle={vi.fn()}
-        />,
-      );
-
-      const indicator = screen.getByTestId("conversation-tags-indicator");
-      const trailingSlot = screen.getByTestId(
-        "conversation-card-trailing-slot",
-      );
-      const hoverActions = screen.getByTestId(
-        "conversation-card-hover-actions",
-      );
-
-      expect(trailingSlot).toContainElement(hoverActions);
-      expect(trailingSlot).not.toContainElement(indicator);
-    });
-
-    it("starts expanded and lets the indicator tuck chips away, never remove them", async () => {
-      // The indicator owns density, not presence. Collapsed still advertises
-      // the tags as an icon + count, so no click on it can contradict a
-      // preference that reads on.
-      const user = userEvent.setup();
-      renderWithProviders(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          showTags
-          tags={{ origin: "slack", owner: "alice" }}
-        />,
-      );
-
-      // Turning the preference on means "show me tags": chips are up front.
-      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
-        2,
-      );
-      const indicator = screen.getByTestId("conversation-tags-indicator");
-      expect(indicator).toHaveTextContent("2");
-      expect(indicator).toHaveAttribute("aria-pressed", "true");
-      expect(indicator).toHaveAttribute(
-        "aria-label",
-        "CONVERSATION_PANEL$HIDE_TAGS",
-      );
-
-      await user.click(indicator);
-
-      // Collapsed: chips gone, but the indicator stays — tags are still
-      // present on the card, just compact.
-      expect(
-        screen.queryByTestId("conversation-card-tag-chip"),
-      ).not.toBeInTheDocument();
-      const collapsed = screen.getByTestId("conversation-tags-indicator");
-      expect(collapsed).toBeInTheDocument();
-      expect(collapsed).toHaveAttribute("aria-pressed", "false");
-      expect(collapsed).toHaveAttribute(
-        "aria-label",
-        "CONVERSATION_PANEL$SHOW_TAGS",
-      );
-
-      await user.click(collapsed);
-
-      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
-        2,
-      );
-    });
-
-    it("re-expands a collapsed card when the Tags preference is toggled back on", async () => {
-      // Density is a glance-level choice, so asking for tags again gives you
-      // tags rather than whatever density the card was left at.
-      const user = userEvent.setup();
-      const { rerender } = renderWithProviders(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          showTags
-          tags={{ origin: "slack", owner: "alice" }}
-        />,
-      );
-
-      await user.click(screen.getByTestId("conversation-tags-indicator"));
-      expect(
-        screen.queryByTestId("conversation-card-tag-chip"),
-      ).not.toBeInTheDocument();
-
-      // Preference off: nothing about tags at all.
-      rerender(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          tags={{ origin: "slack", owner: "alice" }}
-        />,
-      );
-      expect(
-        screen.queryByTestId("conversation-tags-indicator"),
-      ).not.toBeInTheDocument();
-
-      // Preference back on: expanded, not collapsed where it was left.
-      rerender(
-        <ConversationCard
-          title="Conversation 1"
-          selectedRepository={null}
-          lastUpdatedAt="2021-10-01T12:00:00Z"
-          showTags
-          tags={{ origin: "slack", owner: "alice" }}
-        />,
-      );
-      expect(screen.getAllByTestId("conversation-card-tag-chip")).toHaveLength(
-        2,
-      );
-      expect(screen.getByTestId("conversation-tags-indicator")).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
     });
 
     it("renders no indicator when every tag is reserved", () => {
