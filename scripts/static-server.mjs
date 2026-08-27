@@ -35,6 +35,10 @@ import { pathToFileURL } from "node:url";
 import sirv from "sirv";
 
 import {
+  applySessionKeyPolicy,
+  DEFAULT_BIND_HOST,
+} from "./bind-host.mjs";
+import {
   createProxyHandlers,
   createRouter,
   isServerInfoRequest,
@@ -86,13 +90,14 @@ function isEnvFlagEnabled(value) {
 export function parseArgs(argv = process.argv.slice(2), env = process.env) {
   const config = {
     port: 3001,
-    host: "::",
+    host: DEFAULT_BIND_HOST,
     dir: "build",
     routes: {},
     rejectPrefixes: [],
     noReferrerPrefixes: [],
     sessionApiKey: null,
     authRequired: false,
+    allowLanSessionKey: false,
     runtimeServicesInfo: null,
     lockToCloud: null,
     basePath: "/",
@@ -159,6 +164,9 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
         break;
       case "--disable-telemetry":
         config.disableTelemetry = true;
+        break;
+      case "--allow-lan-session-key":
+        config.allowLanSessionKey = true;
         break;
       case "--reject-prefix": {
         const prefix = argv[++i];
@@ -236,7 +244,10 @@ USAGE:
 
 OPTIONS:
   -p, --port  <port>           Port to bind (default: 3001)
-  -H, --host  <host>           Hostname to bind (default: :: dual-stack)
+  -H, --host  <host>           Hostname to bind (default: 127.0.0.1 loopback).
+                               Use 0.0.0.0 or :: to expose on the LAN; the
+                               session key is then not injected unless you also
+                               pass --allow-lan-session-key.
   -d, --dir   <dir>            Directory to serve (default: build)
   -r, --route <prefix=url>     Proxy <prefix> (and subpaths) to <url>;
                                may be repeated. WebSockets supported.
@@ -246,6 +257,8 @@ OPTIONS:
   --auth-required              Inject authRequired flag into index.html so the
                                pre-built frontend shows the API key entry screen
                                (public mode) without VITE_AUTH_REQUIRED baked in.
+  --allow-lan-session-key      Permit --session-api-key when --host is not
+                               loopback (Docker/container entrypoints only).
   --runtime-services-info <json>
                                Inject a JSON description of the local runtime
                                services into index.html so the pre-built
@@ -463,7 +476,7 @@ async function serveInjectedIndexHtml(
   res.writeHead(200, {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Length": buf.length,
-    "Cache-Control": "no-cache",
+    "Cache-Control": "no-store",
   });
   if (req.method === "HEAD") {
     res.end();
@@ -638,9 +651,15 @@ export function startStaticServer(config) {
   const route = createRouter(config.routes);
   const proxy = createProxyHandlers({ label: `static:${config.port}` });
   const dirAbs = resolve(config.dir);
-  const injectionOpts = {
+  const policy = applySessionKeyPolicy({
+    host: config.host,
     sessionApiKey: config.sessionApiKey || null,
     authRequired: config.authRequired || false,
+    allowLanSessionKey: config.allowLanSessionKey || false,
+  });
+  const injectionOpts = {
+    sessionApiKey: policy.sessionApiKey,
+    authRequired: policy.authRequired,
     runtimeServicesInfo: config.runtimeServicesInfo || null,
     lockToCloud: config.lockToCloud || null,
     basePath: normalizeBasePath(config.basePath),

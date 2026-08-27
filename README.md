@@ -121,6 +121,8 @@ npm run dev
 
 Access the UI at [http://localhost:8000](http://localhost:8000) for the npm/source launchers, or [http://localhost:8000/canvas](http://localhost:8000/canvas) for the Docker image. You can add additional backends directly from the UI.
 
+Local (`npx` / `npm run dev`) listeners bind **loopback only** (`127.0.0.1`) so the auto-injected session key is not reachable from other machines on the network. To listen on all interfaces, pass `--host 0.0.0.0` (or set `OH_BIND_HOST`); the session key is then **not** injected and the UI uses the same API-key entry screen as `--public`. Docker still binds `::` inside the container so published ports work; use a host firewall if you do not want LAN access to the published port. For internet-facing installs, use `--public` and [self-hosting](./docs/SELF_HOSTING.md).
+
 # Architecture
 
 Agent Canvas is powered by the [OpenHands Agent Server](https://github.com/OpenHands/software-agent-sdk/tree/main/openhands-agent-server/openhands/agent_server), a REST API for running multiple agents on a single machine. Each Agent Server runs on a single host/port; the Agent Canvas can connect to multiple Agent Servers and easily flip between them.
