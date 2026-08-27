@@ -86,6 +86,7 @@
     "test:e2e:live": "node --env-file-if-exists=.env tests/e2e/live/scripts/run-live-e2e.mjs",
     "test:e2e:mock-llm": "playwright test --config=playwright.mock-llm.config.ts",
     "test:e2e:mock-llm:docker": "playwright test --config=playwright.mock-llm-docker.config.ts",
+    "test:e2e:bind-policy": "playwright test --config=playwright.bind-policy.config.ts",
     "test:coverage": "npm run make-i18n && vitest run --coverage",
     "test:mutation": "npm run make-i18n && stryker run",
     "test:mutation:diff": "npm run make-i18n && node scripts/stryker-diff.mjs",
