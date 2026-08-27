@@ -1135,7 +1135,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("OpenHands GLM-5.2 (free)");
+      expect(chip).toHaveTextContent("glm-5.2");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
     });
 
