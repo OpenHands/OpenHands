@@ -4,12 +4,12 @@ import type {
   InstallCanvasExtensionRequest,
   InstalledCanvasExtensionInfo,
 } from "#/types/canvas-extension";
-import demoManifestSource from "../../tests/fixtures/canvas-extensions/demo-page/canvas-extension.json?raw";
+import demoManifestSource from "#/fixtures/canvas-extensions/demo-page/canvas-extension.json?raw";
 // eslint-disable-next-line import-x/extensions -- Vite requires the real filename before ?raw.
-import demoBundle from "../../tests/fixtures/canvas-extensions/demo-page/extension.js?raw";
+import demoBundle from "#/fixtures/canvas-extensions/demo-page/extension.js?raw";
 
 export const CANVAS_EXTENSION_DEMO_SOURCE =
-  "tests/fixtures/canvas-extensions/demo-page";
+  "src/fixtures/canvas-extensions/demo-page";
 
 const demoManifest = JSON.parse(demoManifestSource) as CanvasExtensionManifest;
 

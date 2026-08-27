@@ -41,7 +41,7 @@ reload.
 2. Enter this exact source:
 
    ```text
-   tests/fixtures/canvas-extensions/demo-page
+   src/fixtures/canvas-extensions/demo-page
    ```
 
 3. Leave **Ref** and **Repository path** empty, then select **Install**.
@@ -68,7 +68,7 @@ reload.
 ## Test an extension edit
 
 Edit
-`tests/fixtures/canvas-extensions/demo-page/extension.js`, restart the mock
+`src/fixtures/canvas-extensions/demo-page/extension.js`, restart the mock
 frontend if Vite does not rebuild the raw fixture import automatically, then
 uninstall and reinstall the fixture. This allows page mounting, cleanup,
 subrouting, and use of the host API to be developed before backend support is

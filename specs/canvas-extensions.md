@@ -262,7 +262,12 @@ continues to work.
 ## Verification
 
 Each slice adds service and runtime unit tests. The routed page slice also adds a
-mock-LLM end-to-end fixture against a backend implementing the new endpoints.
+mock-LLM end-to-end spec (`tests/e2e/mock-llm/canvas-extensions/`) that drives
+the production build through install → enable → page render → disable →
+uninstall. Until the pinned agent-server ships the endpoints, the spec serves
+the API contract from `src/fixtures/canvas-extensions/demo-page` through
+Playwright route interception; once it does, the stub is removed and the same
+steps run against the real backend.
 Changing the mock-LLM feature layout or mapping requires updating `AGENTS.md` in
 the same change. Before merge, run `npm run lint`, `npm test`, `npm run build`,
 and `npm run build:lib`.
