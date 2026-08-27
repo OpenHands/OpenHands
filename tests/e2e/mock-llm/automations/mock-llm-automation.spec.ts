@@ -156,23 +156,54 @@ async function listAutomationRuns(
   return resp.json();
 }
 
+interface AutomationRunRecord {
+  id: string;
+  status: string;
+  conversation_id: string | null;
+  error_detail?: string | null;
+}
+
+/** Statuses a run never leaves (see RunStatus in openhands-automation). */
+const TERMINAL_RUN_STATUSES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "SKIPPED",
+]);
+
 /**
  * Poll until a run reaches the expected status or times out.
+ *
+ * Fails fast, quoting the backend's `error_detail`, once every run has ended
+ * in some other terminal status — polling on would only surface a timeout
+ * and hide why the run actually stopped.
  */
 async function waitForRunStatus(
   request: import("@playwright/test").APIRequestContext,
   automationId: string,
   expectedStatus: string,
   timeoutMs = 30_000,
-) {
+): Promise<AutomationRunRecord> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const data = await listAutomationRuns(request, automationId);
-    const runs = data.runs ?? data.items ?? [];
-    const match = runs.find(
-      (r: { status: string }) => r.status === expectedStatus,
-    );
+    const runs: AutomationRunRecord[] = data.runs ?? data.items ?? [];
+    const match = runs.find((r) => r.status === expectedStatus);
     if (match) return match;
+    if (
+      runs.length > 0 &&
+      runs.every((r) => TERMINAL_RUN_STATUSES.has(r.status))
+    ) {
+      const summary = runs
+        .map(
+          (r) =>
+            `${r.id}=${r.status}${r.error_detail ? ` (${r.error_detail})` : ""}`,
+        )
+        .join(", ");
+      throw new Error(
+        `No run reached "${expectedStatus}"; every run already ended: ${summary}`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 1_000));
   }
   throw new Error(
