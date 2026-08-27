@@ -596,6 +596,16 @@ test.describe("cross-connect: frontend-only → multiple backends", () => {
       timeout: 15_000,
     });
 
+    // Adding a backend auto-switches to it. Backend B has no LLM yet, so the
+    // readiness gate must re-open onboarding even though Backend A was
+    // dismissed. Explicitly skip for Backend B before continuing this test's
+    // backend-selector coverage.
+    await expect(page.getByTestId("onboarding-step-choose-agent")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByTestId("onboarding-skip").click();
+    await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
+
     // ── 7. Switch to Backend B via the dropdown ───────────────────────
     // The dropdown should now list both backends. Click Backend B.
     await page.getByTestId("backend-selector").click();
@@ -765,6 +775,14 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     });
 
     const backendAId = await readBackendIdByHost(page, beUrlA);
+    // Backend B is unconfigured and becomes active when it is added, so its
+    // backend-scoped readiness gate opens onboarding in this tab.
+    await expect(page.getByTestId("onboarding-step-choose-agent")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByTestId("onboarding-skip").click();
+    await expect(page.getByTestId("onboarding-modal")).toHaveCount(0);
+
     expect(backendAId, "backend A should be in the registry").toBeTruthy();
 
     // Adding a backend auto-switches to it (@spec BM-001), so put tab 1
@@ -787,6 +805,14 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
     await suppressAnalytics(otherTab);
     await otherTab.goto(feUrl, { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(otherTab);
+
+    // A new page has independent sessionStorage, so dismiss onboarding for
+    // its initially active, unconfigured backend before using the selector.
+    await expect(
+      otherTab.getByTestId("onboarding-step-choose-agent"),
+    ).toBeVisible({ timeout: 20_000 });
+    await otherTab.getByTestId("onboarding-skip").click();
+    await expect(otherTab.getByTestId("onboarding-modal")).toHaveCount(0);
 
     await switchBackendViaSelector(otherTab, "Backend B");
 
@@ -837,9 +863,12 @@ test.describe("cross-connect: sidebar links pin their backend", () => {
       })
       .toBe(`/conversations/${conversationId}`);
 
-    await expect(newTab.getByTestId("chat-interface")).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect
+      .poll(() => readActiveBackendId(newTab, "session"), {
+        message: "the new tab should activate the conversation's backend",
+        timeout: 20_000,
+      })
+      .toBe(backendAId);
 
     // ── 8. And the mechanism: the link named the owning backend ───────
     expect(

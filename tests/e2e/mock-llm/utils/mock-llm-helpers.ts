@@ -55,7 +55,7 @@ export const SESSION_API_KEY = (() => {
   return key;
 })();
 
-/** Seed localStorage with flags that skip onboarding / analytics modals
+/** Seed browser storage with flags that skip onboarding / analytics modals
  *  and a default local backend so the app boots straight into the home
  *  page. The backend registry is seeded explicitly for two reasons:
  *
@@ -67,7 +67,7 @@ export const SESSION_API_KEY = (() => {
  *  As of the published-binary session-key fix, the static-server also
  *  exposes the runtime key via `window.__AGENT_CANVAS_SESSION_API_KEY__`,
  *  which `getBakedSessionApiKey()` reads — so a real user with an empty
- *  localStorage no longer needs this seeding to reach onboarding.  See
+ *  browser profile no longer needs this seeding to reach onboarding. See
  *  `auth mode: fresh install with runtime-injected key` in
  *  `mock-llm-auth-modes.spec.ts` for the test that covers that path. */
 export async function seedBackendAnalyticsConsent(
@@ -100,7 +100,10 @@ export async function seedLocalStorage(page: Page) {
       window.localStorage.setItem("analytics-consent", "false");
       window.localStorage.setItem("openhands-telemetry-consent", "denied");
       window.localStorage.setItem("openhands-telemetry-first-use", "true");
-      window.localStorage.setItem("openhands-onboarded", "1");
+      window.sessionStorage.setItem(
+        "openhands-onboarding-dismissed:default-local",
+        "1",
+      );
       window.localStorage.setItem(
         "openhands-backends",
         JSON.stringify([

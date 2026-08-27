@@ -31,7 +31,6 @@ import {
   BACKEND_URL,
   SESSION_API_KEY,
   PUBLIC_MODE_URL,
-  seedLocalStorage,
   routeSessionApiKey,
   dismissAnalyticsModal,
   waitForTestId,
@@ -54,7 +53,7 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
   // `window.__AGENT_CANVAS_SESSION_API_KEY__` injected by
   // `scripts/static-server.mjs`; without that fallback the backend
   // registry seeds empty and `MissingAgentServerScreen` traps the user.
-  test("reaches the onboarding modal without pre-seeded localStorage", async ({
+  test("reaches the app without pre-seeded backend storage", async ({
     page,
     request,
   }) => {
@@ -83,9 +82,17 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
 
     // The static-server injected the runtime key into
     // `window.__AGENT_CANVAS_SESSION_API_KEY__`; the React app reads it,
-    // seeds the default-local backend, and lands on the home page where
-    // OnboardingHost mounts the first onboarding step.
-    await waitForTestId(page, "onboarding-step-choose-agent");
+    // seeds the default-local backend, and reaches the app. If that backend
+    // has no usable LLM, onboarding is shown; if an earlier suite scenario
+    // configured it, the home launcher is shown directly.
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId("home-chat-launcher").isVisible()) ||
+          (await page.getByTestId("onboarding-step-choose-agent").isVisible()),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
 
     // The Manage Backends "trap" modal must NOT be the screen the user
     // sees on first launch.
@@ -149,8 +156,11 @@ test.describe("auth mode: non-public key rotation", () => {
           ]),
         );
 
-        // 3. Mark onboarding as done, opt out of analytics
-        window.localStorage.setItem("openhands-onboarded", "1");
+        // 3. Dismiss onboarding for this backend session and opt out of analytics
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
         window.localStorage.setItem("analytics-consent", "false");
         window.localStorage.setItem("openhands-telemetry-consent", "denied");
         window.localStorage.setItem("openhands-telemetry-first-use", "true");
@@ -303,7 +313,10 @@ test.describe("auth mode: public gate", () => {
             },
           ]),
         );
-        window.localStorage.setItem("openhands-onboarded", "1");
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
       },
       { apiKey: SESSION_API_KEY, host: PUBLIC_MODE_URL },
     );
@@ -353,7 +366,10 @@ test.describe("auth mode: public gate", () => {
             },
           ]),
         );
-        window.localStorage.setItem("openhands-onboarded", "1");
+        window.sessionStorage.setItem(
+          "openhands-onboarding-dismissed:default-local",
+          "1",
+        );
       },
       { staleKey: STALE_KEY, host: PUBLIC_MODE_URL },
     );

@@ -58,6 +58,32 @@ describe("SettingsService", () => {
     expect(settings.security_analyzer).toBe("llm");
   });
 
+  it("rethrows local settings failures when requested", async () => {
+    const failure = new Error("temporary local settings failure");
+    const fetchSpy = vi
+      .spyOn(SettingsService, "fetchSettingsFromApi")
+      .mockRejectedValue(failure);
+
+    await expect(
+      SettingsService.getSettings({ throwOnError: true }),
+    ).rejects.toBe(failure);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("rethrows Cloud settings failures when requested", async () => {
+    const failure = new Error("temporary Cloud settings failure");
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id });
+    mockFetchCloudSettings.mockRejectedValue(failure);
+
+    await expect(
+      SettingsService.getSettings({ throwOnError: true }),
+    ).rejects.toBe(failure);
+
+    expect(mockFetchCloudSettings).toHaveBeenCalledTimes(3);
+  });
+
   it("saves settings via PATCH API and invalidates cache", async () => {
     // Save some settings
     await SettingsService.saveSettings({

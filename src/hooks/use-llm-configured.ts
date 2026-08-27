@@ -42,7 +42,7 @@ export function useLlmConfigured(): LlmConfiguredResult {
     data: settings,
     isLoading: settingsLoading,
     isError: settingsError,
-  } = useSettings();
+  } = useSettings("personal", { throwOnError: true });
   const {
     data: config,
     isLoading: configLoading,
@@ -67,6 +67,13 @@ export function useLlmConfigured(): LlmConfiguredResult {
   const isAcpAgent =
     (activeAgentKind ?? settings?.agent_settings?.agent_kind) === "acp";
   const hasApiKey = settings?.llm_api_key_set === true;
+  const configuredLlm = settings?.agent_settings?.llm as
+    | Record<string, unknown>
+    | undefined;
+  const hasConfiguredModel =
+    typeof configuredLlm?.model === "string" &&
+    configuredLlm.model.trim().length > 0;
+  const hasCloudAuth = hasApiKey || isSubscriptionLlmConfig(configuredLlm);
   // The LLM that will actually power the next conversation is the profile the
   // active AGENT profile references (`llm_profile_ref`) — conversations launch
   // from the agent profile, not the standalone "active LLM profile".
@@ -138,7 +145,9 @@ export function useLlmConfigured(): LlmConfiguredResult {
   // backends don't use profiles and keep the settings-key signal.
   const hasUsableActiveProfile =
     hasActiveProfileApiKey || hasActiveProfileSubscription;
-  const hasUsableLlm = isLocal ? hasUsableActiveProfile : hasApiKey;
+  const hasUsableLlm = isLocal
+    ? hasUsableActiveProfile
+    : hasConfiguredModel && hasCloudAuth;
 
   // Treat a fetch failure as indeterminate (same as loading) only when it
   // leaves us with no data to decide from — otherwise a transient network

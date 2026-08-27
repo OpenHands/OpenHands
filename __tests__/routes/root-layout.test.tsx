@@ -35,6 +35,10 @@ vi.mock("#/components/features/alerts/alert-banner", () => ({
   AlertBanner: () => <div data-testid="alert-banner" />,
 }));
 
+vi.mock("#/components/features/onboarding", () => ({
+  OnboardingHost: () => <div data-testid="onboarding-host" />,
+}));
+
 vi.mock("#/i18n", () => ({
   default: {
     changeLanguage: vi.fn(),
@@ -127,6 +131,17 @@ describe("root layout", () => {
     expect(
       screen.queryByTestId("user-capture-consent-form"),
     ).not.toBeInTheDocument();
+  });
+
+  it("mounts onboarding readiness globally on non-home routes", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterStub initialEntries={["/settings"]} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("outlet-content")).toBeInTheDocument();
+    expect(screen.getByTestId("onboarding-host")).toBeInTheDocument();
   });
 
   it("renders an identical root-layout className across routes so navigation never shifts the outer container", () => {

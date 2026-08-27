@@ -173,4 +173,20 @@ describe("useLlmConfigured", () => {
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
   });
+
+  it("keeps readiness indeterminate when settings fail transiently", async () => {
+    mockGetSettings.mockRejectedValue(new Error("temporary network failure"));
+    mockListProfiles.mockResolvedValue({
+      active_profile: null,
+      profiles: [],
+    });
+
+    const { result } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(mockGetSettings).toHaveBeenCalledOnce());
+
+    expect(mockGetSettings).toHaveBeenCalledWith({ throwOnError: true });
+    expect(result.current.isConfigured).toBe(false);
+    expect(result.current.isLoading).toBe(true);
+  });
 });

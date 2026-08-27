@@ -16,6 +16,19 @@ export const SETTINGS_QUERY_KEYS = {
   all: ["settings"] as const,
   byScope: (scope: SettingsScope) => ["settings", scope] as const,
   personal: () => ["settings", "personal"] as const,
+  byBackend: (
+    scope: SettingsScope,
+    backendId: string,
+    orgId: string | null,
+    throwOnError: boolean,
+  ) =>
+    [
+      "settings",
+      scope,
+      backendId,
+      orgId,
+      ...(throwOnError ? ["throw-on-error"] : []),
+    ] as const,
 } as const;
 
 export const LLM_PROFILES_QUERY_KEYS = {
