@@ -10,6 +10,7 @@ import { ToggleSwitchVisual } from "#/ui/toggle-switch";
 import { EnumFilterDropdown } from "#/components/shared/filters/enum-filter-dropdown";
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import {
+  DEFAULT_OLDER_CONVERSATION_CUTOFF,
   isOlderConversationCutoff,
   OLDER_CONVERSATION_CUTOFFS,
 } from "./conversation-panel-list-helpers";
@@ -44,7 +45,7 @@ export function HideOlderConversationsRow() {
   const hideOlder = !showOlderConversations;
   const cutoff = isOlderConversationCutoff(olderConversationCutoff)
     ? olderConversationCutoff
-    : "1h";
+    : DEFAULT_OLDER_CONVERSATION_CUTOFF;
 
   return (
     <div

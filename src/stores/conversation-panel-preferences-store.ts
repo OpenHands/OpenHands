@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import {
+  DEFAULT_OLDER_CONVERSATION_CUTOFF,
   isOlderConversationCutoff,
   type AutomationFilterMode,
   type ConversationSortField,
@@ -48,11 +49,7 @@ interface ConversationPanelPreferencesState {
   groupFolderOrder: string[];
 }
 
-/**
- * The preference subset a conversation-layouts preset may set. Presets are
- * partial bundles over these fields; any manual deviation in the Advanced
- * options modal drops the active preset to "Custom".
- */
+/** The complete preference bundle controlled by conversation layout presets. */
 export type LayoutSettingsSlice = Pick<
   ConversationPanelPreferencesState,
   | "organizeMode"
@@ -64,6 +61,17 @@ export type LayoutSettingsSlice = Pick<
   | "showTagsMetadata"
   | "showHoverMetadata"
 >;
+
+export const DEFAULT_LAYOUT_SETTINGS: LayoutSettingsSlice = {
+  organizeMode: "chronological",
+  conversationSort: "updated",
+  threadScope: "all",
+  showOlderConversations: true,
+  showRepoBranchMetadata: false,
+  showLlmProfiles: false,
+  showTagsMetadata: true,
+  showHoverMetadata: true,
+};
 
 interface ConversationPanelPreferencesActions {
   setShowOlderConversations: (value: boolean) => void;
@@ -103,16 +111,9 @@ type ConversationPanelPreferencesStore = ConversationPanelPreferencesState &
   ConversationPanelPreferencesActions;
 
 const initialState: ConversationPanelPreferencesState = {
-  showOlderConversations: true,
-  olderConversationCutoff: "1h",
+  ...DEFAULT_LAYOUT_SETTINGS,
+  olderConversationCutoff: DEFAULT_OLDER_CONVERSATION_CUTOFF,
   showArchivedConversations: false,
-  showRepoBranchMetadata: false,
-  showLlmProfiles: false,
-  showTagsMetadata: true,
-  showHoverMetadata: true,
-  organizeMode: "chronological",
-  conversationSort: "updated",
-  threadScope: "all",
   automationFilterMode: "all",
   selectedAutomationNames: [],
   selectedTagFacets: [],
@@ -135,7 +136,7 @@ export const useConversationPanelPreferencesStore =
           set(() => ({
             olderConversationCutoff: isOlderConversationCutoff(value)
               ? value
-              : "1h",
+              : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           })),
 
         setShowArchivedConversations: (value) =>
@@ -221,7 +222,7 @@ export const useConversationPanelPreferencesStore =
             state.olderConversationCutoff,
           )
             ? state.olderConversationCutoff
-            : "1h",
+            : DEFAULT_OLDER_CONVERSATION_CUTOFF,
           showArchivedConversations: state.showArchivedConversations,
           showRepoBranchMetadata: state.showRepoBranchMetadata,
           showLlmProfiles: state.showLlmProfiles,

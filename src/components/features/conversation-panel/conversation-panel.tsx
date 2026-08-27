@@ -46,6 +46,7 @@ import {
   applyTagConversationFilter,
   collectAutomationNameFacets,
   collectTagFacets,
+  DEFAULT_OLDER_CONVERSATION_CUTOFF,
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
   groupConversations,
@@ -434,7 +435,7 @@ export function ConversationPanel({
   const { recent: recentScoped, older: olderScoped } = React.useMemo(() => {
     const cutoff = isOlderConversationCutoff(olderConversationCutoff)
       ? olderConversationCutoff
-      : "1h";
+      : DEFAULT_OLDER_CONVERSATION_CUTOFF;
     return partitionByCutoff(
       scopedConversations,
       OLDER_CONVERSATION_CUTOFF_MS[cutoff],

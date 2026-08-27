@@ -11,7 +11,7 @@ describe("conversation-panel-preferences store", () => {
   it("defaults to showing older conversations, chronological list, and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
-    expect(state.olderConversationCutoff).toBe("1h");
+    expect(state.olderConversationCutoff).toBe("7d");
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
     expect(state.showTagsMetadata).toBe(true);

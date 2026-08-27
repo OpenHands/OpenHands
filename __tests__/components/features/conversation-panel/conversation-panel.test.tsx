@@ -149,6 +149,8 @@ describe("ConversationPanel", () => {
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
     useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
+      showOlderConversations: true,
+      olderConversationCutoff: "7d",
       showArchivedConversations: false,
       automationFilterMode: "all",
       selectedAutomationNames: [],
@@ -1780,9 +1782,9 @@ describe("ConversationPanel", () => {
   describe("older conversations cutoff", () => {
     const recentIso = () => new Date().toISOString();
     const olderIso = () =>
-      new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 
-    it("shows conversations older than 1h and includes a summary line", async () => {
+    it("shows conversations older than 1 week and includes a summary line", async () => {
       vi.spyOn(
         AgentServerConversationService,
         "searchConversations",
@@ -2228,7 +2230,7 @@ describe("ConversationPanel", () => {
   describe("load-more link", () => {
     const recentIso = () => new Date().toISOString();
     const olderIso = () =>
-      new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 
     it("shows a load-more link when there is a next page and no older conversations are hidden", async () => {
       vi.spyOn(

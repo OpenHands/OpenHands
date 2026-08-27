@@ -52,8 +52,44 @@ describe("ConversationLayoutsMenu", () => {
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("relevant");
     expect(state.showOlderConversations).toBe(false);
-    // Fields the preset does not name stay at their defaults.
+    // Applying a preset resets every layout-controlled field.
+    expect(state.showTagsMetadata).toBe(true);
     expect(state.showHoverMetadata).toBe(true);
+  });
+
+  it("replaces the previous mode and marks each clicked preset selected", async () => {
+    const user = userEvent.setup();
+    renderMenu();
+
+    await user.click(screen.getByTestId("layout-preset-minimal"));
+    expect(screen.getByTestId("layout-preset-minimal")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    await user.click(screen.getByTestId("layout-preset-focused"));
+    expect(screen.getByTestId("layout-preset-focused")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByTestId("layout-preset-minimal")).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(
+      useConversationPanelPreferencesStore.getState().showTagsMetadata,
+    ).toBe(true);
+
+    await user.click(screen.getByTestId("layout-preset-recent-activity"));
+    expect(
+      screen.getByTestId("layout-preset-recent-activity"),
+    ).toHaveAttribute("aria-checked", "true");
+
+    await user.click(screen.getByTestId("layout-preset-by-workspace"));
+    expect(screen.getByTestId("layout-preset-by-workspace")).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("labels the Advanced options row Custom when no preset matches", async () => {

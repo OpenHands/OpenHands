@@ -24,6 +24,8 @@ export const OLDER_CONVERSATION_CUTOFFS = [
   "30d",
 ] as const satisfies readonly OlderConversationCutoff[];
 
+export const DEFAULT_OLDER_CONVERSATION_CUTOFF: OlderConversationCutoff = "7d";
+
 export const OLDER_CONVERSATION_CUTOFF_MS: Record<
   OlderConversationCutoff,
   number

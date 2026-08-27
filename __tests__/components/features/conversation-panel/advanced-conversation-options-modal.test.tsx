@@ -40,7 +40,7 @@ describe("AdvancedConversationOptionsModal", () => {
   afterEach(() => {
     useConversationPanelPreferencesStore.setState({
       showOlderConversations: true,
-      olderConversationCutoff: "1h",
+      olderConversationCutoff: "7d",
     });
     vi.unstubAllGlobals();
   });

@@ -19,6 +19,7 @@ import {
   dropdownMenuViewportScrollClassName,
 } from "#/utils/dropdown-classes";
 import {
+  DEFAULT_LAYOUT_SETTINGS,
   useConversationPanelPreferencesStore,
   type LayoutSettingsSlice,
 } from "#/stores/conversation-panel-preferences-store";
@@ -33,25 +34,31 @@ interface LayoutPreset {
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   /** Omitted for the backend-dependent first preset (workspace vs repo). */
   labelKey?: I18nKey;
-  settings: Partial<LayoutSettingsSlice>;
+  settings: LayoutSettingsSlice;
 }
 
 /**
- * Layout presets are partial preference bundles (design inference from the
+ * Layout presets are complete preference bundles (design inference from the
  * 2026-08-14 PM walkthrough video; the video names the presets but not their
- * exact bundles). A preset is "active" when every field it names matches the
- * current preferences; any manual deviation reads as "Custom".
+ * exact bundles). Applying one replaces every layout-controlled field so a
+ * previous preset cannot leak into the next one. Any manual deviation reads
+ * as "Custom".
  */
 const LAYOUT_PRESETS: LayoutPreset[] = [
-  { id: "by-workspace", icon: Folder, settings: { organizeMode: "grouped" } },
+  {
+    id: "by-workspace",
+    icon: Folder,
+    settings: {
+      ...DEFAULT_LAYOUT_SETTINGS,
+      organizeMode: "grouped",
+    },
+  },
   {
     id: "recent-activity",
     icon: Clock3,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_RECENT_ACTIVITY,
     settings: {
-      organizeMode: "chronological",
-      conversationSort: "updated",
-      threadScope: "all",
+      ...DEFAULT_LAYOUT_SETTINGS,
       showOlderConversations: false,
     },
   },
@@ -60,8 +67,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     icon: Star,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_FOCUSED,
     settings: {
-      organizeMode: "chronological",
-      conversationSort: "updated",
+      ...DEFAULT_LAYOUT_SETTINGS,
       threadScope: "relevant",
       showOlderConversations: false,
     },
@@ -71,8 +77,7 @@ const LAYOUT_PRESETS: LayoutPreset[] = [
     icon: Shrink,
     labelKey: I18nKey.CONVERSATION_PANEL$LAYOUT_MINIMAL,
     settings: {
-      organizeMode: "chronological",
-      conversationSort: "updated",
+      ...DEFAULT_LAYOUT_SETTINGS,
       threadScope: "relevant",
       showOlderConversations: false,
       showRepoBranchMetadata: false,
