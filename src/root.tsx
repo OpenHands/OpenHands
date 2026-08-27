@@ -21,7 +21,6 @@ import {
   isAgentServerAuthError,
 } from "#/api/agent-server-compatibility";
 import {
-  getLockedCloudAuthMode,
   getLockedCloudHost,
   isAuthRequiredAndMissing,
   isSameCloudHost,
@@ -31,7 +30,10 @@ import {
   redirectToMainAppLogin,
   shouldUseMainAppCookieAuth,
 } from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getEffectiveLocalBackend,
+  isNoBackend,
+} from "#/api/backend-registry/active-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
@@ -45,7 +47,7 @@ import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
 import { buildAgentCanvasPath } from "#/utils/base-path";
-import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
+import { useLlmConfigured } from "#/hooks/use-llm-configured";
 import { NavigationProvider } from "#/context/navigation-context";
 import {
   applyColorTheme,
@@ -157,6 +159,7 @@ function MissingAgentServerScreen() {
     </main>
   );
 }
+
 function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -213,6 +216,20 @@ function FirstRunOnboardingScreen({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * Identity of the backend an onboarding dismissal applies to.
+ *
+ * "Skip for now" is deliberately NOT persisted: onboarding visibility is a
+ * function of the active backend's LLM readiness (#16107), and a stored
+ * marker would let one browser hide onboarding for a backend that never got
+ * configured. The dismissal lives in component state for this session only,
+ * and is scoped to the backend + org it was made for so switching backends
+ * re-evaluates readiness from scratch.
+ */
+function getOnboardingDismissalKey(backendId: string, orgId: string | null) {
+  return `${backendId}:${orgId ?? "null"}`;
+}
+
 export const links: LinksFunction = () => [
   {
     rel: "icon",
@@ -242,6 +259,11 @@ export default function App() {
   const hasRegisteredKey = Boolean(getEffectiveLocalBackend()?.apiKey);
   const authMissing = bakedKeyMissing && !hasRegisteredKey;
   const { active } = useActiveBackendContext();
+  const onboarding = useLlmConfigured();
+  const [dismissedOnboardingKey, setDismissedOnboardingKey] = React.useState<
+    string | null
+  >(null);
+
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
   // host matches the configured locked Cloud host. A missing backend, a stale
   // Local backend (e.g. one persisted from a previous non-locked session), or
@@ -249,7 +271,6 @@ export default function App() {
   // onboarding instead of the Manage Backends recovery modal — the onboarding
   // flow owns the Cloud login that replaces the stale backend.
   const lockedCloudHost = getLockedCloudHost();
-  const lockedCloudAuthMode = getLockedCloudAuthMode();
   const isLockedToCloud = lockedCloudHost !== null;
   // True only when the active backend IS the configured locked Cloud host
   // (normalized comparison so trailing slash / case / protocol differences
@@ -260,31 +281,45 @@ export default function App() {
     isLockedToCloud &&
     active.backend.kind === "cloud" &&
     isSameCloudHost(active.backend.host, lockedCloudHost);
-  const { isCompleted: onboardingCompleted, markCompleted } =
-    useOnboardingCompletion();
 
-  // In locked-to-Cloud mode the `openhands-onboarded` localStorage flag is
-  // not trustworthy: it may have been set during a previous non-locked
-  // session on the same origin, and origin-scoped localStorage cannot tell
-  // the two deployments apart. So when the active backend is not the locked
-  // Cloud host we ignore the completion flag and force first-run onboarding
-  // (which owns the Cloud login). A stale completion flag must never strand
-  // the user on the Manage Backends recovery modal ("Add Backend") in locked
-  // mode.
-  //
-  // Once the active backend IS the locked Cloud host, a Cloud login that
-  // just succeeded (markCompleted fired via the onboarding modal's onClose)
-  // must hide first-run onboarding immediately. Treating
-  // `onboardingCompleted` as authoritative once the locked Cloud backend is
-  // active suppresses reopen flicker. (The flag is only honored when the
-  // active backend really is the locked Cloud host, so the stale-flag bypass
-  // concerns above don't apply here.)
+  const activeOnboardingKey = getOnboardingDismissalKey(
+    active.backend.id,
+    active.orgId,
+  );
+  const onboardingDismissedForActiveBackend =
+    dismissedOnboardingKey === activeOnboardingKey;
+
   const shouldCheckMainAppAuth = shouldUseMainAppCookieAuth();
+
+  // Onboarding visibility is driven by the ACTIVE BACKEND's readiness, not by
+  // a per-browser completion marker (#16107): a shared backend that already
+  // has a usable LLM must behave identically from every browser profile, and
+  // a backend that loses its LLM config must surface onboarding again.
+  //
+  // Three cases:
+  //  - Locked to Cloud: a missing/stale/other-host backend has to go through
+  //    onboarding first (it owns the Cloud login). Once the locked Cloud host
+  //    IS the active backend, defer to its LLM readiness — but only once that
+  //    readiness is known. While it is indeterminate (settings still loading,
+  //    or the Cloud session expired and the probe 401s) we must not show
+  //    onboarding: the first keeps it from flashing, the second belongs to the
+  //    reconnect recovery screen below, not to first-run onboarding.
+  //  - No backend at all: the bootstrap case — nothing to read readiness from,
+  //    so onboarding collects the backend.
+  //  - Otherwise: show onboarding only when the active backend is known to
+  //    have no usable LLM. `isLoading` covers both the initial fetch and
+  //    transient errors, so neither flashes the modal.
   const showFirstRunOnboarding = isLockedToCloud
     ? !shouldCheckMainAppAuth &&
+      !onboardingDismissedForActiveBackend &&
       (!isActiveLockedCloudBackend ||
-        (lockedCloudAuthMode !== "cookie" && !onboardingCompleted))
-    : !onboardingCompleted;
+        (!onboarding.isLoading && !onboarding.isConfigured))
+    : isNoBackend(active.backend)
+      ? !onboardingDismissedForActiveBackend
+      : !onboarding.isLoading &&
+        !onboarding.isConfigured &&
+        !onboardingDismissedForActiveBackend;
+
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,
@@ -339,7 +374,9 @@ export default function App() {
   if (showFirstRunOnboarding) {
     return (
       <>
-        <FirstRunOnboardingScreen onClose={markCompleted} />
+        <FirstRunOnboardingScreen
+          onClose={() => setDismissedOnboardingKey(activeOnboardingKey)}
+        />
         <TelemetryConsentBanner />
       </>
     );

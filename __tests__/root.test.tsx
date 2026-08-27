@@ -7,7 +7,6 @@ import App, { links } from "#/root";
 import { server } from "#/mocks/node";
 import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
-import { ONBOARDING_COMPLETED_STORAGE_KEY } from "#/components/features/onboarding/use-onboarding-completion";
 
 const TRANSLATIONS: Record<string, string> = {
   BACKEND$MANAGE_TITLE: "Manage backends",
@@ -184,9 +183,6 @@ describe("App root agent-server availability guard", () => {
     await waitFor(() => {
       expect(screen.getByTestId("conversation-outlet")).toBeInTheDocument();
     });
-    expect(window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY)).toBe(
-      "1",
-    );
     expect(
       screen.queryByTestId("first-run-onboarding-screen"),
     ).not.toBeInTheDocument();
@@ -337,10 +333,6 @@ describe("App root agent-server availability guard", () => {
     expect(
       screen.queryByTestId("manage-backends-modal"),
     ).not.toBeInTheDocument();
-    // Backend readiness must NOT persist onboarding completion.
-    expect(
-      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
-    ).toBeNull();
   });
 
   it("forces first-run onboarding in locked mode when a Cloud backend points at a different host with a configured LLM", async () => {
@@ -390,27 +382,13 @@ describe("App root agent-server availability guard", () => {
       ).toBeInTheDocument();
     });
     expect(await screen.findByTestId("onboarding-modal")).toBeInTheDocument();
-    expect(
-      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
-    ).toBeNull();
   });
 
   it("shows first-run onboarding when locked to Cloud even if onboarding was previously completed", async () => {
-    // Reproduces hieptl's report on PR #1389: the user had previously
-    // completed onboarding in a non-locked session (so the
-    // `openhands-onboarded` localStorage flag is set), then relaunched the
-    // static server with --lock-to-cloud. The stale completion flag used to
-    // suppress first-run onboarding, so the app fell through to the Manage
-    // Backends recovery modal ("Add Backend") instead of going straight to
-    // Cloud login. In locked-to-Cloud mode the completion flag must not
-    // bypass onboarding when the active backend is not a connected Cloud
-    // backend.
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     vi.stubEnv("VITE_SESSION_API_KEY", "");
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_SESSION_API_KEY__;
-    window.localStorage.clear();
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
 
     renderApp(["/"]);
@@ -429,14 +407,38 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the auth gate after onboarding was already completed", async () => {
+  it("shows the auth gate after onboarding is skipped when the backend is already configured", async () => {
     vi.stubEnv("VITE_AUTH_REQUIRED", "true");
     vi.stubEnv("VITE_SESSION_API_KEY", "");
     delete (window as unknown as Record<string, unknown>)
       .__AGENT_CANVAS_SESSION_API_KEY__;
-    window.localStorage.clear();
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
+    const cloudBackend = {
+      id: "cloud-ready",
+      name: "OpenHands Cloud",
+      host: "https://app.all-hands.dev",
+      apiKey: "cloud-session-key",
+      kind: "cloud",
+    };
+    window.localStorage.setItem(
+      "openhands-backends",
+      JSON.stringify([cloudBackend]),
+    );
+    window.localStorage.setItem(
+      "openhands-active-backend",
+      JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
+    );
     __resetActiveStoreForTests();
+
+    server.use(
+      http.get("*/api/settings", () =>
+        HttpResponse.json({
+          llm_api_key_set: true,
+          agent_settings: {
+            llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+        }),
+      ),
+    );
 
     renderApp(["/"]);
 
@@ -447,7 +449,6 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("shows the manage-backends modal when the connected server reports an old version", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     server.use(
       http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0, version: "1.27.1" }),
@@ -469,7 +470,6 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("shows the manage-backends modal when the server omits a version field", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     server.use(
       http.get("*/server_info", () =>
         HttpResponse.json({ uptime: 0, idle_time: 0 }),
@@ -488,7 +488,6 @@ describe("App root agent-server availability guard", () => {
 
   it("shows the manage-backends modal when the backend is unreachable", async () => {
     let serverInfoRequests = 0;
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
 
     // Use "*" prefix to match both relative paths and absolute URLs (e.g.,
     // http://127.0.0.1:8000/server_info) when VITE_BACKEND_BASE_URL is configured.
@@ -539,7 +538,6 @@ describe("App root agent-server availability guard", () => {
       "openhands-active-backend",
       JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
     );
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
     server.use(
       http.get("https://app.all-hands.dev/api/keys/current", () =>
@@ -563,6 +561,10 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("shows locked Cloud reconnect recovery without add-backend controls", async () => {
+    // Also guards the readiness gate (#16107): the locked Cloud session is
+    // expired, so the LLM-readiness probe 401s and never resolves to a
+    // configured/unconfigured answer. An indeterminate answer must fall
+    // through to reconnect recovery, NOT show first-run onboarding.
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     const cloudBackend = {
       id: "cloud-expired",
@@ -583,7 +585,6 @@ describe("App root agent-server availability guard", () => {
       "openhands-active-backend",
       JSON.stringify({ backendId: cloudBackend.id, orgId: null }),
     );
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
     server.use(
       http.get("https://app.all-hands.dev/api/keys/current", () =>
@@ -606,8 +607,6 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("renders the routed page when the agent server is reachable", async () => {
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
-
     renderApp(["/"]);
 
     await waitFor(() => {
@@ -619,15 +618,10 @@ describe("App root agent-server availability guard", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows first-run onboarding for the launcher-seeded default-local backend even when the agent-server reports a configured LLM", async () => {
-    // Regression for mock-llm-onboarding-regressions.spec.ts:16
-    // ("keeps the modal open on backdrop click and Escape") and
-    // mock-llm-auth-modes.spec.ts:57 ("reaches the onboarding modal
-    // without pre-seeded localStorage"). The shared mock-LLM
-    // agent-server retains a previously-configured LLM across browser
-    // sessions, so a genuinely fresh browser install (launcher-seeded
-    // default-local backend, no `openhands-onboarded` flag) must NOT
-    // have onboarding auto-marked complete by backend readiness.
+  it("skips first-run onboarding for the launcher-seeded default-local backend when the agent-server reports a configured LLM", async () => {
+    // Shared npm-installed / launcher-seeded instances should behave the same
+    // as any other configured backend: the active backend readiness decides
+    // whether onboarding appears, not a browser-completion marker.
     vi.stubEnv("VITE_BACKEND_BASE_URL", "http://127.0.0.1:8000");
     vi.stubEnv("VITE_SESSION_API_KEY", "test-session-key");
     // The launcher-seeded default-local backend (id
@@ -651,15 +645,11 @@ describe("App root agent-server availability guard", () => {
     renderApp(["/"]);
 
     await waitFor(() => {
-      expect(
-        screen.getByTestId("first-run-onboarding-screen"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("app-outlet")).not.toBeInTheDocument();
-
     expect(
-      window.localStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
-    ).toBeNull();
+      screen.queryByTestId("first-run-onboarding-screen"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders Cloud login directly for a fresh locked-to-Cloud first run", async () => {
@@ -729,18 +719,10 @@ describe("App root agent-server availability guard", () => {
   });
 
   it("hides first-run onboarding immediately after Cloud login completes in locked-to-Cloud mode (no flicker)", async () => {
-    // Regression for hieptl's flicker report on PR #1389: after Cloud
-    // login succeeds in locked-to-Cloud mode, the onboarding modal's
-    // onClose marks onboarding complete. The root first-run gate must
-    // honor that completion IMMEDIATELY — without waiting for the Cloud
-    // settings probe to confirm a configured LLM — so the first-run
-    // screen disappears and the routed app renders, rather than the
-    // modal flickering back via OnboardingHost. This test simulates the
-    // post-login state (active locked Cloud backend + completion flag
-    // set by the modal's onClose) with the Cloud settings probe
-    // reporting NO configured LLM, which is exactly the window where
-    // the old LLM-readiness gate kept the first-run screen mounted and
-    // caused the reopen.
+    // Regression for the locked-cloud login flow: once the active backend is
+    // the locked Cloud host and the backend reports a usable LLM, the root
+    // gate must let the routed app render immediately without reopening the
+    // onboarding screen.
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     vi.stubEnv("VITE_SESSION_API_KEY", "");
     delete (window as unknown as Record<string, unknown>)
@@ -760,17 +742,15 @@ describe("App root agent-server availability guard", () => {
       "openhands-active-backend",
       JSON.stringify({ backendId: lockedCloud.id, orgId: null }),
     );
-    // The onboarding modal's onClose (markCompleted) sets this right
-    // after Cloud login succeeds — before the Cloud settings probe
-    // resolves. Seed it to reproduce the post-login moment.
-    window.localStorage.setItem(ONBOARDING_COMPLETED_STORAGE_KEY, "1");
     __resetActiveStoreForTests();
-    // Cloud settings probe reports no configured LLM. The completed
-    // onboarding flag should still hide first-run onboarding once the
-    // locked Cloud backend is active.
     server.use(
       http.get("https://app.all-hands.dev/api/v1/settings", () =>
-        HttpResponse.json({ llm_api_key_set: false }),
+        HttpResponse.json({
+          llm_api_key_set: true,
+          agent_settings: {
+            llm: { model: "openai/gpt-5.5", api_key: "stored" },
+          },
+        }),
       ),
       http.get("https://app.all-hands.dev/api/keys/current", () =>
         HttpResponse.json({ org_id: "org-1" }),
@@ -779,8 +759,6 @@ describe("App root agent-server availability guard", () => {
 
     renderApp(["/"]);
 
-    // The first-run onboarding screen must NOT be mounted (no reopen),
-    // and the routed app must render instead.
     await waitFor(() => {
       expect(screen.getByTestId("app-outlet")).toBeInTheDocument();
     });

@@ -173,4 +173,57 @@ describe("useLlmConfigured", () => {
     // Detail is fetched because the profile is local + active + key-less.
     expect(mockGetProfile).toHaveBeenCalledWith("gpt-5.5");
   });
+
+  it("reevaluates when the active backend switches from unconfigured local to configured cloud", async () => {
+    mockListProfiles.mockResolvedValue({
+      active_profile: "gpt-5.5",
+      profiles: [
+        {
+          name: "gpt-5.5",
+          model: "gpt-5.5",
+          base_url: "https://api.openai.com/v1",
+          api_key_set: false,
+        },
+      ],
+    });
+    mockGetProfile.mockResolvedValue({
+      name: "gpt-5.5",
+      api_key_set: false,
+      config: {
+        model: "openai/gpt-5.5",
+      },
+    });
+
+    const { result, rerender } = renderLlmConfiguredHook();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isConfigured).toBe(false);
+
+    setRegisteredBackends([
+      {
+        id: "cloud-backend",
+        name: "OpenHands Cloud",
+        host: "https://app.all-hands.dev",
+        apiKey: "cloud-session-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-backend" });
+    mockGetSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      llm_api_key_set: true,
+      agent_settings: {
+        ...(DEFAULT_SETTINGS.agent_settings ?? {}),
+        llm: {
+          model: "openai/gpt-5.5",
+          api_key: "stored",
+        },
+      },
+    });
+
+    rerender();
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.isConfigured).toBe(true);
+  });
 });
