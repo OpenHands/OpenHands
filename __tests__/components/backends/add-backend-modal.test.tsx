@@ -110,7 +110,7 @@ describe("AddBackendModal – connection chooser", () => {
     renderWithProviders(<AddBackendModal onClose={vi.fn()} />);
 
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(2);
+    expect(tabs).toHaveLength(3);
     expect(tabs[0]).toHaveAttribute("data-testid", "add-backend-option-cloud");
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(tabs[1]).toHaveAttribute(
@@ -118,13 +118,17 @@ describe("AddBackendModal – connection chooser", () => {
       "add-backend-option-agent-server",
     );
     expect(tabs[1]).toHaveAttribute("aria-selected", "false");
+    expect(tabs[2]).toHaveAttribute(
+      "data-testid",
+      "add-backend-option-providers",
+    );
+    expect(tabs[2]).toHaveAttribute("aria-selected", "false");
     expect(
       within(tabs[0]).getByTestId("add-backend-option-cloud-logo"),
     ).toBeInTheDocument();
-    expect(tabs[0]).toHaveTextContent("BACKEND$CLOUD_OPTION_DESCRIPTION");
-    expect(tabs[1]).toHaveTextContent(
-      "BACKEND$AGENT_SERVER_OPTION_DESCRIPTION",
-    );
+    expect(tabs[0]).toHaveTextContent("BACKEND$CLOUD_TITLE");
+    expect(tabs[1]).toHaveTextContent("BACKEND$AGENT_SERVER_TITLE");
+    expect(tabs[2]).toHaveTextContent("BACKEND$PROVIDERS_TITLE");
 
     expect(screen.getByTestId("add-backend-cloud-panel")).toBeInTheDocument();
     expect(screen.getByTestId("add-backend-login-button")).toBeInTheDocument();
@@ -530,6 +534,104 @@ describe("AddBackendModal – redirect after adding a backend", () => {
 
     // Assert
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe("AddBackendModal – providers mock", () => {
+  it("walks through DigitalOcean without adding a backend", async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<AddBackendModal onClose={onClose} />);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("add-backend-option-providers"));
+
+    expect(
+      screen.getByTestId("add-backend-providers-panel"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    const createDroplet = screen.getByTestId(
+      "add-backend-provider-digitalocean-create",
+    );
+    expect(createDroplet).toHaveAttribute(
+      "href",
+      "https://marketplace.digitalocean.com/apps/openhands",
+    );
+    expect(createDroplet).toHaveAttribute("target", "_blank");
+
+    expect(screen.getByTestId("add-backend-slide-0")).toHaveAttribute(
+      "data-active",
+      "false",
+    );
+    expect(screen.getByTestId("add-backend-slide-0")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(screen.getByTestId("add-backend-slide-1")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+
+    await user.click(screen.getByTestId("add-backend-providers-back"));
+    expect(screen.getByTestId("add-backend-slide-0")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    expect(screen.getByTestId("add-backend-slide-0")).not.toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await user.click(screen.getByTestId("add-backend-provider-digitalocean"));
+
+    const continueButton = screen.getByTestId(
+      "add-backend-provider-digitalocean-continue",
+    );
+    expect(continueButton).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("add-backend-provider-digitalocean-token-input"),
+      "dop_v1_mock",
+    );
+    expect(continueButton).toBeEnabled();
+
+    await user.click(continueButton);
+
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean-droplets"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("add-backend-provider-digitalocean-create-again"),
+    ).toHaveAttribute(
+      "href",
+      "https://marketplace.digitalocean.com/apps/openhands",
+    );
+    const submit = screen.getByTestId(
+      "add-backend-provider-digitalocean-submit",
+    );
+    expect(submit).toBeDisabled();
+
+    await user.click(
+      screen.getByTestId(
+        "add-backend-provider-digitalocean-droplet-do-droplet-nyc3",
+      ),
+    );
+    expect(submit).toBeEnabled();
+
+    await user.click(submit);
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(captureMock).not.toHaveBeenCalledWith(
+      "backend_added",
+      expect.anything(),
+    );
+    expect(
+      screen.getByTestId("add-backend-providers-panel"),
+    ).toBeInTheDocument();
   });
 });
 
