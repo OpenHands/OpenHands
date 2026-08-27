@@ -3,6 +3,9 @@ import { I18nKey } from "#/i18n/declaration";
 const SETTINGS_PREFIX = "/settings";
 const CUSTOMIZE_HUB = "/customize";
 const EXTENSIONS_DETAIL_PATHS = ["/skills", "/mcp", "/plugins"] as const;
+// Exact match only: /extensions/:name/* routes are extension pages, which are
+// rail-level destinations rather than Customize details.
+const CANVAS_EXTENSIONS_MANAGEMENT_PATH = "/extensions";
 
 export type MobileTopBarMode = "menu" | "back";
 
@@ -33,6 +36,7 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
   }
 
   if (
+    pathname === CANVAS_EXTENSIONS_MANAGEMENT_PATH ||
     EXTENSIONS_DETAIL_PATHS.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     )
@@ -50,6 +54,7 @@ export function getMobileTopBarState(pathname: string): MobileTopBarState {
 export function isExtensionsSectionPath(pathname: string): boolean {
   return (
     pathname === CUSTOMIZE_HUB ||
+    pathname === CANVAS_EXTENSIONS_MANAGEMENT_PATH ||
     EXTENSIONS_DETAIL_PATHS.some(
       (path) => pathname === path || pathname.startsWith(`${path}/`),
     )

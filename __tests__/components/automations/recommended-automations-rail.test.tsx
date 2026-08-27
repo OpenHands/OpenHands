@@ -71,8 +71,13 @@ describe("RecommendedAutomationsRail", () => {
       "news-digest",
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
     ]);
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL),
@@ -125,6 +130,11 @@ describe("RecommendedAutomationsRail", () => {
           { name: "Linear issue triage assistant" },
           { name: "Jira issue to GitHub PR" },
           { name: "Research brief writer" },
+          { name: "Linear issue to GitHub PR" },
+          { name: "Linear issue to GitLab MR" },
+          { name: "Linear issue to Bitbucket PR" },
+          { name: "Jira issue to GitLab MR" },
+          { name: "Jira issue to Bitbucket PR" },
         ]}
         onSelect={vi.fn()}
       />,
