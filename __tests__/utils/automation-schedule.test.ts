@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildCronSchedule,
+  isValidCronExpression,
   parseCronSchedule,
   parseTimeOfDay,
 } from "#/utils/automation-schedule";
@@ -65,6 +66,31 @@ describe("automation-schedule", () => {
       expect(daily).toBe("0 9 * * *");
       expect(weekdays).toBe("30 8 * * 1-5");
       expect(weekly).toBe("0 14 * * 3");
+    });
+  });
+
+  describe("isValidCronExpression", () => {
+    it("accepts expressions the preset parser reports as custom", () => {
+      // Arrange — none of these map onto Daily/Weekdays/Weekly, so the
+      // edit modal relies on this check rather than parseCronSchedule.
+      const valid = ["*/10 * * * *", "0 9,17 * * *", "0 0 1-15 * 1-5"];
+
+      // Assert
+      expect(valid.every(isValidCronExpression)).toBe(true);
+      expect(valid.every((c) => parseCronSchedule(c).kind === "custom")).toBe(
+        true,
+      );
+    });
+
+    it("rejects wrong field counts, out-of-range values and free text", () => {
+      // Act / Assert
+      expect(isValidCronExpression("* * * *")).toBe(false);
+      expect(isValidCronExpression("* * * * * *")).toBe(false);
+      expect(isValidCronExpression("60 * * * *")).toBe(false);
+      expect(isValidCronExpression("* * * * 9")).toBe(false);
+      expect(isValidCronExpression("5-1 * * * *")).toBe(false);
+      expect(isValidCronExpression("every ten minutes please now")).toBe(false);
+      expect(isValidCronExpression("")).toBe(false);
     });
   });
 

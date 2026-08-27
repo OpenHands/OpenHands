@@ -111,3 +111,51 @@ export function formatEventOn(on: string | string[] | undefined): string {
   if (Array.isArray(on)) return on.join(", ");
   return on;
 }
+
+/** Example expression shown when the cron field is empty. */
+export const CRON_EXPRESSION_EXAMPLE = "*/10 * * * *";
+
+// Per-field bounds of a standard 5-field cron expression, in field order.
+const CRON_FIELD_BOUNDS: readonly (readonly [number, number])[] = [
+  [0, 59], // minute
+  [0, 23], // hour
+  [1, 31], // day of month
+  [1, 12], // month
+  [0, 6], // day of week
+];
+
+/** One comma-separated term: `*`, `5`, `1-5`, each optionally `/step`. */
+function isValidCronTerm(
+  term: string,
+  [min, max]: readonly [number, number],
+): boolean {
+  const [rangePart, stepPart, ...extraSteps] = term.split("/");
+  if (extraSteps.length > 0) return false;
+  if (stepPart !== undefined && parseSingleInt(stepPart, 1, max) === null) {
+    return false;
+  }
+  if (rangePart === "*") return true;
+
+  const [startPart, endPart, ...extraBounds] = rangePart.split("-");
+  if (extraBounds.length > 0) return false;
+  const start = parseSingleInt(startPart, min, max);
+  if (start === null) return false;
+  if (endPart === undefined) return true;
+  const end = parseSingleInt(endPart, min, max);
+  return end !== null && end >= start;
+}
+
+/**
+ * Whether `cron` is a schedule the backend can accept. `parseCronSchedule`
+ * only classifies an expression against the UI presets, so it reports
+ * arbitrary text as `custom` rather than rejecting it.
+ */
+export function isValidCronExpression(cron: string): boolean {
+  const fields = cron.trim().split(/\s+/);
+  if (fields.length !== CRON_FIELD_BOUNDS.length) return false;
+  return fields.every((field, index) =>
+    field
+      .split(",")
+      .every((term) => isValidCronTerm(term, CRON_FIELD_BOUNDS[index])),
+  );
+}

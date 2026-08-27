@@ -96,6 +96,15 @@ const customAutomation: Automation = {
   trigger: { type: "cron", schedule: "0 9,17 * * *" },
 };
 
+// An event-triggered automation. `buildInitialState` marks these as custom
+// schedules too, so they guard the submit path against cron validation.
+const eventAutomation: Automation = {
+  ...dailyAutomation,
+  id: "auto-5",
+  name: "On PR opened",
+  trigger: { type: "event", source: "github", on: "pull_request.opened" },
+};
+
 // A schedule automation pinned to a concrete LLM profile, used to exercise
 // the profile picker (the base fixtures intentionally leave `model` unset).
 const modeledAutomation: Automation = {
@@ -258,6 +267,85 @@ describe("EditAutomationModal", () => {
 
     // Assert — the PATCH body does NOT include a trigger override, so
     // the user's hand-tuned cron is preserved.
+    await waitFor(() => {
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = vi.mocked(AutomationService.updateAutomation).mock
+      .calls[0];
+    expect(body).not.toHaveProperty("trigger");
+    expect(body).toMatchObject({ name: "Renamed" });
+  });
+
+  it("sends the edited cron expression for a custom schedule", async () => {
+    // Arrange
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+      customAutomation,
+    );
+    const user = userEvent.setup();
+    renderModal(customAutomation);
+
+    // The field starts pre-filled with the automation's own expression.
+    const cronInput = screen.getByTestId("edit-automation-cron");
+    expect(cronInput).toHaveValue("0 9,17 * * *");
+
+    // Act
+    await user.clear(cronInput);
+    await user.type(cronInput, "*/5 * * * *");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert
+    await waitFor(() => {
+      expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = vi.mocked(AutomationService.updateAutomation).mock
+      .calls[0];
+    expect(body).toMatchObject({
+      trigger: { type: "cron", schedule: "*/5 * * * *" },
+    });
+  });
+
+  it("blocks an invalid cron expression instead of sending it", async () => {
+    // Arrange
+    const user = userEvent.setup();
+    renderModal(customAutomation);
+
+    // Act — 60 is out of range for the minute field.
+    const cronInput = screen.getByTestId("edit-automation-cron");
+    await user.clear(cronInput);
+    await user.type(cronInput, "60 * * * *");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert — the error surfaces and nothing reaches the API.
+    expect(
+      await screen.findByText("AUTOMATIONS$ERROR_CRON_INVALID"),
+    ).toBeInTheDocument();
+    expect(AutomationService.updateAutomation).not.toHaveBeenCalled();
+  });
+
+  it("disables the time input while the cron field owns the schedule", () => {
+    // Arrange / Act
+    renderModal(customAutomation);
+
+    // Assert — the field no longer accepts input that save would discard.
+    expect(screen.getByTestId("edit-automation-time")).toBeDisabled();
+    expect(screen.getByTestId("edit-automation-cron")).toBeEnabled();
+  });
+
+  it("saves an event-triggered automation without a cron trigger", async () => {
+    // Arrange — these have no schedule, so cron validation must not run.
+    vi.mocked(AutomationService.updateAutomation).mockResolvedValue(
+      eventAutomation,
+    );
+    const user = userEvent.setup();
+    renderModal(eventAutomation);
+
+    // Act
+    const nameInput = screen.getByTestId("edit-automation-name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed");
+    await user.click(screen.getByTestId("edit-automation-save"));
+
+    // Assert
     await waitFor(() => {
       expect(AutomationService.updateAutomation).toHaveBeenCalledTimes(1);
     });
