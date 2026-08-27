@@ -198,8 +198,12 @@ describe("ConversationCard", () => {
     const model = screen.getByTestId("conversation-card-agent-chip");
     const tags = screen.getByTestId("conversation-card-tag-chips");
 
-    expect(repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      repo.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      model.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders the workspace folder name when no repository is selected", () => {
@@ -985,10 +989,7 @@ describe("ConversationCard", () => {
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
       expect(chip).toHaveTextContent("Claude Opus (1M)");
-      expect(chip).toHaveAttribute(
-        "title",
-        "Claude Code · Claude Opus (1M)",
-      );
+      expect(chip).toHaveAttribute("title", "Claude Code · Claude Opus (1M)");
     });
 
     it("falls back to the provider display name for an ACP conversation with no model", () => {
@@ -1098,7 +1099,7 @@ describe("ConversationCard", () => {
       );
 
       const chip = screen.getByTestId("conversation-card-agent-chip");
-      expect(chip).toHaveTextContent("OpenHands GLM-5.2 (free)");
+      expect(chip).toHaveTextContent("glm-5.2");
       expect(chip).toHaveAttribute("title", "openhands/glm-5.2");
     });
 
