@@ -205,6 +205,12 @@ async function main() {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // The agent-server is spawned detached, so a SIGHUP that kills this launcher
+  // (terminal or multiplexer death) would otherwise leave it running and holding
+  // its port. Forward SIGTERM rather than SIGHUP: uvicorn only handles
+  // SIGINT/SIGTERM, so a forwarded SIGHUP would terminate the agent-server by
+  // default action instead of shutting it down gracefully.
+  process.on("SIGHUP", () => shutdown("SIGTERM"));
 
   const backendErrored = new Promise((_, reject) => {
     backend.once("error", (error) => reject(error));

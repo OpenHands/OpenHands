@@ -7,7 +7,9 @@ import {
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { isInvalidTimestamp } from "#/utils/format-relative-time";
 import { RunStatusBadge } from "./run-status-badge";
+import { RunPhase, shouldShowRunPhase } from "./run-phase";
 import { RunLogsModal } from "./run-logs-modal";
 
 interface ActivityLogItemProps {
@@ -25,12 +27,6 @@ function formatRunTimestamp(dateStr: string, locale: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function isInvalidTimestamp(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return true;
-  const t = new Date(dateStr).getTime();
-  return Number.isNaN(t) || t === 0;
 }
 
 function getConversationUrl(conversationId: string): string {
@@ -65,6 +61,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
     run.status === AutomationRunStatus.COMPLETED ||
     run.status === AutomationRunStatus.FAILED;
   const showNoConversationLabel = !hasConversation && isTerminal;
+  const showPhase = shouldShowRunPhase(run.status);
   const [logsOpen, setLogsOpen] = useState(false);
   // The backend leaves started_at unset (epoch/zero) while a run is Pending
   // and only populates it once execution begins. Show the user's local time
@@ -116,7 +113,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         {formattedCost && (
           <span
             data-testid="run-cost"
@@ -127,6 +124,15 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
           </span>
         )}
         {logsButton}
+        {showPhase && (
+          <RunPhase
+            status={run.status}
+            code={run.phase_code}
+            label={run.phase_label}
+            updatedAt={run.phase_updated_at}
+            wide
+          />
+        )}
         <RunStatusBadge status={run.status} />
       </div>
     </>
