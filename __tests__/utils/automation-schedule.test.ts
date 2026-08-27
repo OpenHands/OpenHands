@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { I18nKey } from "#/i18n/declaration";
 import {
   buildCronSchedule,
-  isValidCronExpression,
+  validateCronSchedule,
   parseCronSchedule,
   parseTimeOfDay,
 } from "#/utils/automation-schedule";
@@ -69,28 +70,42 @@ describe("automation-schedule", () => {
     });
   });
 
-  describe("isValidCronExpression", () => {
-    it("accepts expressions the preset parser reports as custom", () => {
+  describe("validateCronSchedule", () => {
+    it("accepts, and trims, expressions the preset parser reports as custom", () => {
       // Arrange — none of these map onto Daily/Weekdays/Weekly, so the
       // edit modal relies on this check rather than parseCronSchedule.
       const valid = ["*/10 * * * *", "0 9,17 * * *", "0 0 1-15 * 1-5"];
 
       // Assert
-      expect(valid.every(isValidCronExpression)).toBe(true);
+      expect(valid.map((c) => validateCronSchedule(c))).toEqual(
+        valid.map((schedule) => ({ schedule })),
+      );
       expect(valid.every((c) => parseCronSchedule(c).kind === "custom")).toBe(
         true,
       );
+      expect(validateCronSchedule("  */10 * * * *  ")).toEqual({
+        schedule: "*/10 * * * *",
+      });
     });
 
     it("rejects wrong field counts, out-of-range values and free text", () => {
-      // Act / Assert
-      expect(isValidCronExpression("* * * *")).toBe(false);
-      expect(isValidCronExpression("* * * * * *")).toBe(false);
-      expect(isValidCronExpression("60 * * * *")).toBe(false);
-      expect(isValidCronExpression("* * * * 9")).toBe(false);
-      expect(isValidCronExpression("5-1 * * * *")).toBe(false);
-      expect(isValidCronExpression("every ten minutes please now")).toBe(false);
-      expect(isValidCronExpression("")).toBe(false);
+      // Arrange
+      const invalid = [
+        "* * * *",
+        "* * * * * *",
+        "60 * * * *",
+        "* * * * 9",
+        "5-1 * * * *",
+        "every ten minutes please now",
+        "",
+      ];
+
+      // Assert — one shared key, so the form shows the same guidance.
+      expect(invalid.map((c) => validateCronSchedule(c))).toEqual(
+        invalid.map(() => ({
+          errorKey: I18nKey.AUTOMATIONS$ERROR_CRON_INVALID,
+        })),
+      );
     });
   });
 

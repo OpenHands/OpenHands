@@ -19,7 +19,7 @@ import {
   formatTimeOfDay,
   parseTimeOfDay,
   formatEventOn,
-  isValidCronExpression,
+  validateCronSchedule,
   CRON_EXPRESSION_EXAMPLE,
   type SchedulePresetKind,
 } from "#/utils/automation-schedule";
@@ -235,14 +235,17 @@ export function EditAutomationModal({
     }
 
     if (automation.trigger.type !== "event" && form.isCustomSchedule) {
-      const schedule = form.rawSchedule.trim();
-      if (!isValidCronExpression(schedule)) {
-        setScheduleError(t(I18nKey.AUTOMATIONS$ERROR_CRON_INVALID));
+      const scheduleResult = validateCronSchedule(form.rawSchedule);
+      if ("errorKey" in scheduleResult) {
+        setScheduleError(t(scheduleResult.errorKey));
         return;
       }
       setScheduleError(null);
-      if (schedule !== automation.trigger.schedule) {
-        body.trigger = { ...automation.trigger, schedule };
+      if (scheduleResult.schedule !== automation.trigger.schedule) {
+        body.trigger = {
+          ...automation.trigger,
+          schedule: scheduleResult.schedule,
+        };
       }
     } else if (!form.isCustomSchedule && form.frequency !== "custom") {
       const parsedTime = parseTimeOfDay(form.timeOfDay);

@@ -1,3 +1,5 @@
+import { I18nKey } from "#/i18n/declaration";
+
 export type SchedulePresetKind = "daily" | "weekdays" | "weekly";
 
 export interface PresetSchedule {
@@ -145,17 +147,25 @@ function isValidCronTerm(
   return end !== null && end >= start;
 }
 
+export type CronScheduleValidation =
+  | { schedule: string }
+  | { errorKey: I18nKey };
+
 /**
- * Whether `cron` is a schedule the backend can accept. `parseCronSchedule`
- * only classifies an expression against the UI presets, so it reports
- * arbitrary text as `custom` rather than rejecting it.
+ * Validate a raw cron expression from the edit form. `parseCronSchedule` only
+ * classifies an expression against the UI presets, so it reports arbitrary
+ * text as `custom` rather than rejecting it.
  */
-export function isValidCronExpression(cron: string): boolean {
-  const fields = cron.trim().split(/\s+/);
-  if (fields.length !== CRON_FIELD_BOUNDS.length) return false;
-  return fields.every((field, index) =>
-    field
-      .split(",")
-      .every((term) => isValidCronTerm(term, CRON_FIELD_BOUNDS[index])),
-  );
+export function validateCronSchedule(raw: string): CronScheduleValidation {
+  const schedule = raw.trim();
+  const fields = schedule.split(/\s+/);
+  const valid =
+    fields.length === CRON_FIELD_BOUNDS.length &&
+    fields.every((field, index) =>
+      field
+        .split(",")
+        .every((term) => isValidCronTerm(term, CRON_FIELD_BOUNDS[index])),
+    );
+  if (!valid) return { errorKey: I18nKey.AUTOMATIONS$ERROR_CRON_INVALID };
+  return { schedule };
 }
