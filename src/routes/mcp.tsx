@@ -15,6 +15,7 @@ import {
   getMcpMarketplaceCatalog,
   installedServerMatchesQuery,
 } from "#/utils/mcp-marketplace-utils";
+import { AUTOMATION_CATALOG } from "@openhands/extensions/automations";
 import {
   INTEGRATION_CATALOG as MCP_MARKETPLACE,
   type IntegrationCatalogEntry as MarketplaceEntry,
@@ -26,9 +27,20 @@ import {
   McpToolbar,
   MarketplaceSection,
   InstallServerModal,
+  IntegrationAutomationRecommendationsModal,
   CustomServerEditor,
   type McpSectionFilter,
 } from "#/components/features/mcp-page";
+import { getAutomationsForIntegration } from "#/utils/automation-catalog";
+import { useActiveBackend } from "#/contexts/active-backend-context";
+import type { BackendKind } from "#/api/backend-registry/types";
+import { hasAutomationInterface } from "#/manifests/automation-interface";
+
+interface RecommendationContext {
+  entry: MarketplaceEntry;
+  backendId: string;
+  backendKind: BackendKind;
+}
 
 // No ACP guard here (unlike `/settings` and `/settings/condenser`): MCP
 // servers configured via `agent_settings.mcp_config` are now forwarded to
@@ -40,11 +52,15 @@ export default function MCPPage() {
   const { t } = useTranslation("openhands");
   const { data: settings, isLoading } = useSettings();
   const { mutate: updateMcpServer } = useUpdateMcpServer();
+  const { backend } = useActiveBackend();
 
   const [installEntry, setInstallEntry] =
     React.useState<MarketplaceEntry | null>(null);
   const [editingServer, setEditingServer] =
     React.useState<MCPServerConfig | null>(null);
+  const [recommendationContext, setRecommendationContext] =
+    React.useState<RecommendationContext | null>(null);
+  const recommendationReturnFocusRef = React.useRef<HTMLElement | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [sectionFilter, setSectionFilter] =
     React.useState<McpSectionFilter>("all");
@@ -68,8 +84,38 @@ export default function MCPPage() {
   );
 
   const handleMarketplaceInstall = (entry: MarketplaceEntry) => {
+    recommendationReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setInstallEntry(entry);
   };
+
+  const handleInstallSuccess = (entry: MarketplaceEntry) => {
+    if (
+      backend.kind === "local" &&
+      hasAutomationInterface() &&
+      getAutomationsForIntegration(AUTOMATION_CATALOG, entry.id).length > 0
+    ) {
+      setRecommendationContext({
+        entry,
+        backendId: backend.id,
+        backendKind: backend.kind,
+      });
+    }
+  };
+
+  const activeRecommendationEntry =
+    recommendationContext?.backendId === backend.id &&
+    recommendationContext.backendKind === backend.kind
+      ? recommendationContext.entry
+      : null;
+
+  React.useEffect(() => {
+    if (recommendationContext && !activeRecommendationEntry) {
+      setRecommendationContext(null);
+    }
+  }, [activeRecommendationEntry, recommendationContext]);
 
   const handleEdit = (server: MCPServerConfig) => {
     setEditingServer(server);
@@ -171,6 +217,15 @@ export default function MCPPage() {
             entry={installEntry}
             existingServers={allServers}
             onClose={() => setInstallEntry(null)}
+            onSuccess={handleInstallSuccess}
+          />
+        )}
+
+        {activeRecommendationEntry && (
+          <IntegrationAutomationRecommendationsModal
+            entry={activeRecommendationEntry}
+            returnFocusTo={recommendationReturnFocusRef.current}
+            onClose={() => setRecommendationContext(null)}
           />
         )}
 

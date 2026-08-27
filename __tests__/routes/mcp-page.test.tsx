@@ -1,18 +1,43 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   render,
   screen,
   within,
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MCPPage from "#/routes/mcp";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { Settings } from "#/types/settings";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { SecretsService } from "#/api/secrets-service";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
+import * as automationInterface from "#/manifests/automation-interface";
+
+const localBackend: Backend = {
+  id: "local-1",
+  name: "Local 1",
+  host: "http://localhost:8000",
+  apiKey: "session-key",
+  kind: "local",
+};
+
+const secondLocalBackend: Backend = {
+  id: "local-2",
+  name: "Local 2",
+  host: "http://localhost:8001",
+  apiKey: "other-session-key",
+  kind: "local",
+};
 
 function buildSettings(overrides: Partial<Settings> = {}): Settings {
   return {
@@ -40,14 +65,52 @@ function renderPage() {
   });
 }
 
+async function submitSlackMarketplaceInstall() {
+  const marketplaceCard = await screen.findByTestId(
+    "mcp-marketplace-card-slack",
+  );
+  marketplaceCard.focus();
+  fireEvent.click(marketplaceCard);
+  fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_BOT_TOKEN"), {
+    target: { value: "xoxb-recommendations" },
+  });
+  fireEvent.change(screen.getByTestId("mcp-install-field-SLACK_TEAM_ID"), {
+    target: { value: "T-recommendations" },
+  });
+  fireEvent.click(screen.getByTestId("mcp-install-submit"));
+
+  return marketplaceCard;
+}
+
+async function installSlackFromMarketplace() {
+  const marketplaceCard = await submitSlackMarketplaceInstall();
+
+  const recommendations = await screen.findByTestId(
+    "integration-automation-recommendations-modal",
+  );
+  return { marketplaceCard, recommendations };
+}
+
 describe("MCPPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend, secondLocalBackend]);
+    setActiveSelection({ backendId: localBackend.id });
     vi.restoreAllMocks();
     // Pre-flight connectivity test must pass so save mutations are reached.
     vi.spyOn(McpService, "testServer").mockResolvedValue({
       ok: true,
       tools: [],
     });
+    vi.spyOn(SecretsService, "createSecret").mockResolvedValue();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    __resetActiveStoreForTests();
   });
 
   it("renders the empty installed state and the marketplace", async () => {
@@ -105,6 +168,117 @@ describe("MCPPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("mcp-install-field-url")).toBeNull();
     expect(screen.queryByTestId("mcp-install-field-api_key")).toBeNull();
+  });
+
+  it("offers only catalog-declared automations after an integration is installed", async () => {
+    // Arrange
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(120);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(2000);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    renderPage();
+
+    // Act — install Slack through the ordinary marketplace success flow.
+    const { marketplaceCard, recommendations } =
+      await installSlackFromMarketplace();
+
+    // Assert — recommendations appear at the success boundary and are scoped
+    // by the catalog's exact `slack` requirement, not a text search.
+    expect(
+      within(recommendations).getByTestId(
+        "integration-automation-recommendations-skip",
+      ),
+    ).toHaveFocus();
+    expect(recommendations).toHaveAttribute("data-integration-id", "slack");
+    expect(
+      within(recommendations).getByTestId(
+        "recommended-automation-card-slack-channel-monitor",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(recommendations).getByTestId(
+        "recommended-automation-card-slack-standup-digest",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(recommendations).queryByTestId(
+        "recommended-automation-card-github-pr-reviewer",
+      ),
+    ).not.toBeInTheDocument();
+    const connectedPills = within(recommendations).getByTestId(
+      "recommended-automation-pills-slack-standup-digest",
+    );
+    expect(connectedPills).toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$CONNECTED",
+    );
+    expect(connectedPills).not.toHaveTextContent(
+      "RECOMMENDED_AUTOMATIONS$MISSING_CONNECT",
+    );
+
+    // A recommendation can open its own modal. One Escape closes only that
+    // topmost child; a second Escape closes the recommendation modal.
+    fireEvent.click(
+      within(recommendations).getByTestId(
+        "recommended-automation-card-slack-channel-monitor",
+      ),
+    );
+    await screen.findByTestId("responder-deployment-modal");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("responder-deployment-modal"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByTestId("integration-automation-recommendations-modal"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("integration-automation-recommendations-modal"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(marketplaceCard).toHaveFocus();
+  });
+
+  it("does not open recommendations without an admitted automation interface", async () => {
+    vi.spyOn(automationInterface, "hasAutomationInterface").mockReturnValue(
+      false,
+    );
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    renderPage();
+
+    await submitSlackMarketplaceInstall();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mcp-install-modal")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("integration-automation-recommendations-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears integration recommendations when the active backend changes", async () => {
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(120);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(2000);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(buildSettings());
+    vi.spyOn(SettingsService, "createMcpServer").mockResolvedValue(true);
+    renderPage();
+
+    await installSlackFromMarketplace();
+
+    act(() => {
+      setActiveSelection({ backendId: secondLocalBackend.id });
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("integration-automation-recommendations-modal"),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("filters marketplace tiles by the search input", async () => {

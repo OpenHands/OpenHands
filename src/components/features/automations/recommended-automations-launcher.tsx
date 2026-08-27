@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useNavigation } from "#/context/navigation-context";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
@@ -50,6 +50,10 @@ interface RecommendedAutomationsLauncherProps {
    */
   variant?: "catalog" | "rail";
   className?: string;
+  /** Show only automations configured for this integration. */
+  integrationId?: string;
+  /** Reports whether this launcher has opened a modal above its host. */
+  onChildOverlayChange?: (isOpen: boolean) => void;
 }
 
 /**
@@ -75,6 +79,8 @@ export function RecommendedAutomationsLauncher({
   scrollableGrid = false,
   variant = "catalog",
   className,
+  integrationId,
+  onChildOverlayChange,
 }: RecommendedAutomationsLauncherProps) {
   const activeBackend = useActiveBackend();
   const { navigate } = useNavigation();
@@ -101,6 +107,19 @@ export function RecommendedAutomationsLauncher({
     useAutomations({
       enabled: isRail && activeBackend.backend.kind === "local",
     });
+  const isChildOverlayOpen =
+    installQueue.length > 0 || deploymentChoiceAutomation !== null;
+
+  useEffect(() => {
+    onChildOverlayChange?.(isChildOverlayOpen);
+  }, [isChildOverlayOpen, onChildOverlayChange]);
+
+  useEffect(
+    () => () => {
+      onChildOverlayChange?.(false);
+    },
+    [onChildOverlayChange],
+  );
 
   const installedMcpConfig = useMemo(
     () =>
@@ -175,9 +194,11 @@ export function RecommendedAutomationsLauncher({
   const getMissingEntries = useCallback(
     (automation: RecommendedAutomation) =>
       getRequiredEntries(automation).filter(
-        (entry) => !findInstalledEntryMatch(entry, installedMcpConfig),
+        (entry) =>
+          entry.id !== integrationId &&
+          !findInstalledEntryMatch(entry, installedMcpConfig),
       ),
-    [installedMcpConfig],
+    [installedMcpConfig, integrationId],
   );
 
   const proceedWithLocalLaunch = (automation: RecommendedAutomation) => {
@@ -294,6 +315,7 @@ export function RecommendedAutomationsLauncher({
           query={query}
           onSelect={handleSelectAutomation}
           scrollableGrid={scrollableGrid}
+          integrationId={integrationId}
         />
       )}
 

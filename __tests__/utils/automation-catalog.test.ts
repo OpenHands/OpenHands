@@ -4,7 +4,9 @@ import { Activity, Bot } from "lucide-react";
 import {
   getAutomationIcon,
   getAutomationLaunchPrompt,
+  getAutomationsForIntegration,
 } from "#/utils/automation-catalog";
+import { INTEGRATION_CATALOG } from "@openhands/extensions/integrations";
 
 const automationById = (id: string) =>
   AUTOMATION_CATALOG.find((automation) => automation.id === id)!;
@@ -56,5 +58,31 @@ describe("getAutomationIcon", () => {
         icon: "not-a-real-slug",
       } as unknown as Parameters<typeof getAutomationIcon>[0]),
     ).toBeNull();
+  });
+});
+
+describe("getAutomationsForIntegration", () => {
+  it("matches the exact declared integration id instead of provider keywords", () => {
+    // Arrange: GitHub appears in copy across the catalog, while only entries
+    // that declare `github` should be eligible after a GitHub connection.
+    const expectedIds = AUTOMATION_CATALOG.filter((automation) =>
+      Object.hasOwn(automation.requires.integrations, "github"),
+    ).map((automation) => automation.id);
+
+    // Act
+    const matches = getAutomationsForIntegration(AUTOMATION_CATALOG, "github");
+
+    // Assert
+    expect(matches.map((automation) => automation.id)).toEqual(expectedIds);
+    expect(matches).not.toContain(automationById("slack-standup-digest"));
+  });
+
+  it("returns an empty list when the connected integration has no recommendations", () => {
+    expect(
+      INTEGRATION_CATALOG.some((integration) => integration.id === "atlassian"),
+    ).toBe(true);
+    expect(
+      getAutomationsForIntegration(AUTOMATION_CATALOG, "atlassian"),
+    ).toEqual([]);
   });
 });
