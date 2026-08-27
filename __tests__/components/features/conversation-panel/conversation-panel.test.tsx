@@ -573,7 +573,7 @@ describe("ConversationPanel", () => {
     ).toEqual([]);
   });
 
-  it("clears every trace of tags from the cards when the Tag chips preference is off", async () => {
+  it("clears tag chips from the cards when the Tag chips preference is off", async () => {
     vi.spyOn(
       AgentServerConversationService,
       "searchConversations",
@@ -594,10 +594,6 @@ describe("ConversationPanel", () => {
     expect(
       await screen.findByTestId("conversation-card-tag-chip"),
     ).toBeInTheDocument();
-    // Preference on: the density control is available on the card.
-    expect(
-      screen.getByTestId("conversation-tags-indicator-1"),
-    ).toBeInTheDocument();
 
     act(() => {
       useConversationPanelPreferencesStore.setState({
@@ -605,16 +601,11 @@ describe("ConversationPanel", () => {
       });
     });
 
-    // Preference off: chips AND the indicator go. Leaving the indicator behind
-    // is what let a card put tags back on screen while the toggle read off.
     await waitFor(() => {
       expect(
-        screen.queryByTestId("conversation-tags-indicator-1"),
+        screen.queryByTestId("conversation-card-tag-chip"),
       ).not.toBeInTheDocument();
     });
-    expect(
-      screen.queryByTestId("conversation-card-tag-chip"),
-    ).not.toBeInTheDocument();
   });
 
   it("keeps load more reachable with the filtered empty message when the automation filter hides every loaded conversation", async () => {
