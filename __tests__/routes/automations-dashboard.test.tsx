@@ -178,6 +178,7 @@ describe("AutomationsList — manifest-declared dashboard", () => {
       launcher: null,
       rail: null,
     });
+    expect(screen.getByTestId("sdlc-automations-guide")).toBeInTheDocument();
   });
 
   it("orders the list by the manifest's declared sort default", async () => {
