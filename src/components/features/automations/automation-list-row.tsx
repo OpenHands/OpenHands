@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useHasPermission } from "#/hooks/use-has-permission";
 import { useNavigation } from "#/context/navigation-context";
@@ -88,6 +89,7 @@ export function AutomationListRow({
   const runState = toLatestRunState(insights?.state);
   const health = deriveRunHealth(runState);
   const latestRun = runState.latestRun;
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
   const lastRunAt = latestRun
     ? getLastRunTimestamp(latestRun)
     : automation.last_triggered_at;
@@ -173,7 +175,10 @@ export function AutomationListRow({
                         ·
                       </span>
                     ) : null}
-                    <RunStatusBadge status={latestRun.status} compact />
+                    <RunStatusBadge
+                      status={display?.badgeStatus ?? latestRun.status}
+                      compact
+                    />
                   </>
                 ) : null}
               </span>

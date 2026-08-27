@@ -106,6 +106,33 @@ describe("deriveAutomationHealth", () => {
       "healthy",
     ],
     [
+      "a completed but blocked latest task means failing",
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          run_metadata: {
+            finish_tool_response: {
+              status: "blocked",
+              outcome_summary: "Missing HubSpot credentials.",
+            },
+          },
+        }),
+      }),
+      "failing",
+    ],
+    [
+      "a completed latest task with custom metadata is unknown",
+      createAutomation(),
+      settled({
+        latestRun: createRun({
+          run_metadata: {
+            finish_tool_response: { crm_contacts_checked: 12 },
+          },
+        }),
+      }),
+      "unknown",
+    ],
+    [
       // Statuses the backend added after the dashboard's reference design:
       // neither a success nor a failure, so not "failing".
       "a cancelled latest run does not read as failing",
@@ -113,7 +140,7 @@ describe("deriveAutomationHealth", () => {
       settled({
         latestRun: createRun({ status: AutomationRunStatus.CANCELLED }),
       }),
-      "healthy",
+      "unknown",
     ],
   ])("%s", (_case, automation, state, expected) => {
     expect(deriveAutomationHealth(automation, state)).toBe(expected);
@@ -145,6 +172,17 @@ describe("summarizeAutomationRuns", () => {
       createRun({ status: AutomationRunStatus.SKIPPED, completed_at: null }),
       createRun({ status: AutomationRunStatus.RUNNING, completed_at: null }),
       createRun({
+        id: "blocked-task",
+        started_at: "2026-01-02T00:00:00Z",
+        completed_at: "2026-01-02T00:01:00Z",
+        run_metadata: {
+          finish_tool_response: {
+            status: "blocked",
+            outcome_summary: "Missing HubSpot credentials.",
+          },
+        },
+      }),
+      createRun({
         started_at: "2026-01-01T00:00:00Z",
         completed_at: "2026-01-01T00:01:30Z",
       }),
@@ -153,14 +191,14 @@ describe("summarizeAutomationRuns", () => {
     // Act
     const summary = summarizeAutomationRuns({ runs, total: 40 });
 
-    // Assert — success rate and durations consider COMPLETED and FAILED only;
+    // Assert — success rate counts task-successful terminal runs only;
     // total is the response's lifetime count, not the sample's length.
     expect(summary).toEqual({
       total: 40,
       latestRun: runs[0],
       recentRuns: runs,
-      recentSuccessRate: 0.5,
-      averageDurationMs: (30_000 + 90_000) / 2,
+      recentSuccessRate: 1 / 3,
+      averageDurationMs: (30_000 + 60_000 + 90_000) / 3,
     });
   });
 

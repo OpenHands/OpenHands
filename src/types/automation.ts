@@ -72,6 +72,37 @@ export enum AutomationRunStatus {
   SKIPPED = "SKIPPED",
 }
 
+export type AutomationTaskOutcomeStatus =
+  | "success"
+  | "partial_success"
+  | "blocked"
+  | "failed"
+  | "unknown";
+
+export interface AutomationFinishToolResponse {
+  status?: AutomationTaskOutcomeStatus | string;
+  outcome_summary?: string;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunMetadata {
+  finish_tool_response?: AutomationFinishToolResponse | string | null;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunStatusDetail {
+  phase?: string;
+  kind?: string;
+  detail?: string;
+  formatted_detail?: string;
+  transient?: boolean;
+  source?: string;
+  operation?: string;
+  code?: string;
+  status_code?: number;
+  [key: string]: unknown;
+}
+
 export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
@@ -85,6 +116,8 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  status_detail?: AutomationRunStatusDetail | null;
+  run_metadata?: AutomationRunMetadata | null;
   /**
    * Accumulated LLM cost of the run in USD, reported by the SDK in the
    * completion callback. `null` means unknown — the run predates cost
