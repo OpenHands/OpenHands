@@ -172,6 +172,42 @@ export OH_PERSISTENCE_DIR="${OH_PERSISTENCE_DIR:-${OPENHANDS_DIR}}"
 export OH_CONVERSATIONS_PATH="${OH_CONVERSATIONS_PATH:-${OPENHANDS_DIR}/${CONFIG_CONVERSATIONS:-agent-canvas/conversations}}"
 export OH_BASH_EVENTS_DIR="${OH_BASH_EVENTS_DIR:-${OPENHANDS_DIR}/${CONFIG_BASH_EVENTS:-agent-canvas/bash_events}}"
 
+# ── Preflight: persistence dirs must be writable ───────────────────────────
+# The image runs as uid 10001 (openhands); a host bind mount that isn't
+# writable by that uid leaves the backend half-dead (frontend serves,
+# APIs 502). Fail fast with an actionable message.
+# Probe the effective paths (not just $OPENHANDS_DIR): OH_PERSISTENCE_DIR /
+# OH_CONVERSATIONS_PATH / OH_BASH_EVENTS_DIR can be overridden by the user,
+# and $OPENHANDS_DIR itself still hosts the persisted secret-key/api-key files.
+for dir in "$OPENHANDS_DIR" "$OH_PERSISTENCE_DIR" "$OH_CONVERSATIONS_PATH" "$OH_BASH_EVENTS_DIR"; do
+  if ! (mkdir -p "$dir" && touch "$dir/.write-test" 2>/dev/null); then
+    log_error "Persistence directory is not writable: $dir"
+    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+    log_error "must be writable by that uid. Fix with either:"
+    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\" (add -e HOME=/home/openhands)"
+    log_error "  2) find ~/.openhands -type d -exec chmod a+rwX {} +  # host shell; dirs only"
+    exit 1
+  fi
+  rm -f "$dir/.write-test"
+done
+
+# ── Preflight: /projects workspace mount must be writable ──────────────────
+# Optional — only probed when the user actually mounted a workspace dir
+# (e.g. -v "$PROJECTS_PATH:/projects"). A uid-mismatched or read-only mount
+# here breaks the agent's file access the same way, so fail fast too. We
+# deliberately don't mkdir: an absent /projects just means no workspace mount.
+if [ -d /projects ]; then
+  if ! touch /projects/.write-test 2>/dev/null; then
+    log_error "Workspace directory is not writable: /projects"
+    log_error "The container runs as uid $(id -u); the bind-mounted host dir"
+    log_error "must be writable by that uid. Fix with either:"
+    log_error "  1) rerun with --user \"\$(id -u):\$(id -g)\""
+    log_error "  2) find ~/projects -type d -exec chmod a+rwX {} +  # host shell; dirs only"
+    exit 1
+  fi
+  rm -f /projects/.write-test
+fi
+
 # OH_SECRET_KEY is required for settings/secrets encryption. Without it the
 # agent-server refuses to return encrypted secrets → conversation creation
 # fails with a 503.  Auto-generate and persist (just like the session API key)
