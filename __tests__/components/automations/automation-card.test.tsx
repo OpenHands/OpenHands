@@ -36,6 +36,27 @@ vi.mock("#/hooks/use-has-permission", () => ({
   useHasPermission: () => true,
 }));
 
+// The pinned package predates the `impact` field, so an entry carrying one is
+// appended to the real catalog.
+vi.mock("@openhands/extensions/automations", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@openhands/extensions/automations")>();
+  return {
+    ...actual,
+    AUTOMATION_CATALOG: [
+      ...actual.AUTOMATION_CATALOG,
+      {
+        id: "widget-checker",
+        impact: {
+          basis: "completed-runs",
+          one: "1 widget check completed",
+          other: "{{count}} widget checks completed",
+        },
+      },
+    ] as typeof actual.AUTOMATION_CATALOG,
+  };
+});
+
 const automation: Automation = {
   id: "automation-1",
   name: "Async Standup Digest",
@@ -158,6 +179,7 @@ describe("AutomationCard", () => {
           state: {
             summary: {
               total: 4,
+              completedTotal: 4,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -183,6 +205,48 @@ describe("AutomationCard", () => {
     expect(screen.getByTestId("automation-run-stats")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
+  });
+
+  it("shows the value statement for its completed runs", () => {
+    // Arrange — provenance joining back to a catalog entry with an impact
+    // declaration, and a summary carrying the lifetime completed count.
+    const latestRun = createRun();
+
+    // Act
+    render(
+      <AutomationCard
+        automation={{
+          ...automation,
+          preset_metadata: {
+            template: { id: "widget-checker", version: "1.0.0", config: {} },
+          },
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 5,
+              completedTotal: 4,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-impact-automation-1"),
+    ).toHaveTextContent("4 widget checks completed");
   });
 });
 
