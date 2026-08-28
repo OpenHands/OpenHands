@@ -5,18 +5,62 @@ export interface GitDiffLineStats {
   deletions: number;
 }
 
+/**
+ * In a unified diff, the file header block has a deterministic shape:
+ * `diff --git a/path b/path` followed by `--- a/path` and `+++ b/path`.
+ * Once that block is past, `---` and `+++` prefixes on a hunk line are
+ * real changes (deletions and additions whose own text starts with two
+ * dashes or two pluses). The previous `startsWith` checks skipped every
+ * such line, undercounting any change that touched a line whose text
+ * began with `--` or `++` (SQL/Lua comments, `--count;`, `++i;`, shell
+ * flags, YAML `---` separators, etc.).
+ *
+ * `@@` is still always a hunk header.
+ */
 function countUnifiedDiffStats(diff: string): GitDiffLineStats {
   let additions = 0;
   let deletions = 0;
 
+  // After a `diff --git` line, the next two lines are the file-path
+  // header (`--- a/path` and `+++ b/path`). A raw patch that omits
+  // the `diff --git` line still starts with the same `--- ` / `+++ `
+  // pair; open the same 2-line skip window for that case too.
+  let skipNextHeaderLines = 0;
+  let fileHeaderOpened = false;
+
+  const openFileHeader = (alreadyConsumedFirstLine: boolean) => {
+    fileHeaderOpened = true;
+    skipNextHeaderLines = alreadyConsumedFirstLine ? 1 : 2;
+  };
+
   for (const line of diff.split("\n")) {
-    if (
-      line.startsWith("+++") ||
-      line.startsWith("---") ||
-      line.startsWith("@@")
-    ) {
+    if (line.startsWith("@@")) {
       continue;
     }
+
+    if (line.startsWith("diff --git ")) {
+      openFileHeader(false);
+      continue;
+    }
+
+    if (
+      !fileHeaderOpened &&
+      (line.startsWith("--- ") || line.startsWith("+++ "))
+    ) {
+      // First line of a raw patch (no `diff --git`): the line we just
+      // read is one of the two file-header lines; one slot remains.
+      openFileHeader(true);
+      continue;
+    }
+
+    if (
+      skipNextHeaderLines > 0 &&
+      (line.startsWith("--- ") || line.startsWith("+++ "))
+    ) {
+      skipNextHeaderLines -= 1;
+      continue;
+    }
+
     if (line.startsWith("+")) {
       additions += 1;
     } else if (line.startsWith("-")) {
