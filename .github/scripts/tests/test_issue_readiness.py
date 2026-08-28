@@ -196,13 +196,29 @@ def test_enhancement_not_ready_prose_acceptance():
 
 
 # ---------------------------------------------------------------------------
-# No type label
+# No type section
 # ---------------------------------------------------------------------------
 
-def test_no_type_label_not_ready():
-    result = evaluate_readiness("### Something\nSome text", ["frontend"])
+def test_no_type_section_not_ready():
+    result = evaluate_readiness("### Something\nSome text", [])
     assert not result.ready
     assert any("neither" in r.lower() for r in result.reasons)
+
+
+def test_type_inferred_from_body_ignores_labels():
+    # A bug-shaped body is treated as a bug even without a `bug` label.
+    result = evaluate_readiness(BUG_BODY_READY, [])
+    assert result.ready, result.reasons
+
+    # A feature-shaped body is treated as an enhancement even with a `bug` label.
+    result = evaluate_readiness(ENHANCEMENT_BODY_READY, ["bug"])
+    assert result.ready, result.reasons
+
+    # A body with only an `### Actual Behavior` section (no Steps to Reproduce)
+    # is still recognized as a bug report.
+    result = evaluate_readiness(BUG_BODY_MISSING_REPRODUCTION, [])
+    assert not result.ready
+    assert any("Steps to Reproduce" in r for r in result.reasons)
 
 
 # ---------------------------------------------------------------------------
