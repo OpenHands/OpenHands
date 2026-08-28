@@ -6,11 +6,11 @@
  * to avoid being cleaned up.
  *
  * Written markers:
- *   .results.json — written after EVERY test; always has the latest results
- *                   so that even a mid-suite kill leaves usable data
- *   .tests-done   — written only when all tests complete; content is
+ *   .results.json — written after EVERY test attempt; always has the latest
+ *                   results so that even a mid-suite kill leaves usable data
+ *   .tests-done   — written only once the run is over; content is
  *                   "passed" or "failed"
- *   .all-passed   — written only when all tests passed
+ *   .all-passed   — written only when the run finished and every case passed
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -39,15 +39,29 @@ interface TestRecord {
  * script always has data — even when the process is killed mid-suite
  * (e.g. the CI polling deadline expires before all tests finish).
  *
- * `.tests-done` / `.all-passed` are written only when the full suite
- * completes, letting the CI wrapper distinguish "still running" from
- * "done".
+ * `.tests-done` / `.all-passed` are written only from `onEnd()`, letting the
+ * CI wrapper distinguish "still running" from "done".
+ *
+ * `onEnd()` is the only safe place to decide the run is over. `onTestEnd()`
+ * fires once per *attempt*, and no property of a single attempt tells you
+ * whether Playwright will schedule another one: under
+ * `test.describe.configure({ mode: "serial" })` — which every mock-LLM spec
+ * uses — a failure re-runs the whole group, so cases that already reported
+ * `passed`, and cases cut short with `skipped`, run a second time. Counting
+ * attempts, or trying to classify an attempt as final, declares the suite
+ * complete while cases are still queued; the workflow's poll loop then breaks
+ * on the marker and kills a run that had work left.
  */
 class DoneMarkerReporter implements Reporter {
   private totalTests = 0;
-  private completedTests = 0;
-  private allPassed = true;
-  private tests: TestRecord[] = [];
+  /**
+   * Latest attempt per test *case*, keyed by `TestCase.id`, in first-seen
+   * order. A retried case is one case, and its last attempt decides its
+   * verdict — the same rule the report script applies when it reads
+   * `lastResult` from Playwright's own JSON.
+   */
+  private testsById = new Map<string, TestRecord>();
+  private runEnded = false;
   private markerDirCreated = false;
 
   onBegin(_config: unknown, suite: { allTests(): TestCase[] }) {
@@ -55,13 +69,7 @@ class DoneMarkerReporter implements Reporter {
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
-    this.completedTests++;
-    const passed = result.status === "passed" || result.status === "skipped";
-    if (!passed) {
-      this.allPassed = false;
-    }
-
-    this.tests.push({
+    this.testsById.set(test.id, {
       title: test.titlePath().filter(Boolean).join(" › "),
       status: result.status,
       durationMs: result.duration,
@@ -74,28 +82,48 @@ class DoneMarkerReporter implements Reporter {
 
     // Always flush results so a mid-suite kill still leaves usable data.
     this.writeResults();
-
-    // Write completion markers only after the last test.
-    if (this.completedTests >= this.totalTests) {
-      this.writeCompletionMarkers();
-    }
   }
 
   onEnd(_result: FullResult) {
-    // Fallback: if onTestEnd never fired (webServer timeout, config
-    // error, etc.), treat that as a failure and write what we have.
-    if (this.totalTests === 0 || this.completedTests === 0) {
-      this.allPassed = false;
-    }
+    this.runEnded = true;
     this.writeResults();
     this.writeCompletionMarkers();
   }
 
-  /** Flush per-test timing/error data — called after every test. */
+  /**
+   * The run is over and every declared case reported at least once.
+   *
+   * A run cut short — by the global timeout, `maxFailures`, a webServer
+   * failure, or an interrupt — leaves fewer cases than declared and stays
+   * `in_progress`, so it cannot be reported as passing.
+   */
+  private isComplete() {
+    return this.runEnded && this.testsById.size >= this.totalTests;
+  }
+
+  /**
+   * Whether the run finished with nothing outstanding and nothing failing.
+   *
+   * Derived from the recorded cases rather than accumulated as attempts
+   * arrive, so a case that fails and then passes on retry reads as a pass —
+   * the verdict Playwright itself reports for a flaky test.
+   *
+   * A suite that declared no tests is a configuration failure, not a pass.
+   */
+  private allPassed() {
+    if (!this.isComplete() || this.totalTests === 0) return false;
+    for (const record of this.testsById.values()) {
+      if (record.status !== "passed" && record.status !== "skipped") {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Flush per-test timing/error data — called after every test attempt. */
   private writeResults() {
-    const done = this.completedTests >= this.totalTests;
-    const status = done
-      ? this.allPassed
+    const status = this.isComplete()
+      ? this.allPassed()
         ? "passed"
         : "failed"
       : "in_progress";
@@ -105,9 +133,12 @@ class DoneMarkerReporter implements Reporter {
         join(MARKER_DIR, ".results.json"),
         JSON.stringify({
           status,
-          completed: this.completedTests,
+          // One entry per case, so this always matches `tests.length` and can
+          // never exceed `total` — the report script derives "N not run" from
+          // `total - completed`.
+          completed: this.testsById.size,
           total: this.totalTests,
-          tests: this.tests,
+          tests: [...this.testsById.values()],
         }),
       );
     } catch {
@@ -115,13 +146,16 @@ class DoneMarkerReporter implements Reporter {
     }
   }
 
-  /** Write .tests-done and .all-passed — only when the suite is complete. */
+  /** Write .tests-done and .all-passed — only once the run is over. */
   private writeCompletionMarkers() {
-    const status = this.allPassed ? "passed" : "failed";
+    const passed = this.allPassed();
     try {
       this.ensureMarkerDir();
-      writeFileSync(join(MARKER_DIR, ".tests-done"), status);
-      if (this.allPassed) {
+      writeFileSync(
+        join(MARKER_DIR, ".tests-done"),
+        passed ? "passed" : "failed",
+      );
+      if (passed) {
         writeFileSync(join(MARKER_DIR, ".all-passed"), "1");
       }
     } catch {
