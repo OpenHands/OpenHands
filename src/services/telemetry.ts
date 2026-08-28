@@ -816,6 +816,26 @@ export async function trackEvent(
   posthog.capture(eventName, properties);
 }
 
+/**
+ * Annotate the current person without changing who they are.
+ *
+ * `setTelemetryIdentity` is the wrong tool when there is no account to identify:
+ * it calls `identify`, which promotes an anonymous person to identified keyed by
+ * the device id, and it replaces the desired property set — so it races with
+ * `use-telemetry-identity`, which owns that state. `setPersonProperties` adds
+ * properties to whoever the current distinct id already refers to.
+ *
+ * No-ops without consent, like every other capture path here.
+ */
+export async function setTelemetryPersonProperties(
+  properties: Record<string, unknown>,
+): Promise<void> {
+  const posthog = await getPostHogForConsentedCapture();
+  if (!posthog) return;
+
+  posthog.setPersonProperties(properties);
+}
+
 /** Track an exception through the same consent-aware client as custom events. */
 export async function trackException(
   error: unknown,

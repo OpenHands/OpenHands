@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { getLockedCloudHost } from "#/api/agent-server-config";
 import { BrandButton } from "#/components/features/settings/brand-button";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useTracking } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
@@ -17,9 +18,8 @@ import { cn } from "#/utils/utils";
  * control cannot become a recurring interruption. The button is the anchor a
  * future survey bubble would attach to.
  *
- * Hidden entirely when the app is locked to Cloud — the same signal
- * `agent-canvas-update-card` uses to hide install-specific affordances on a
- * hosted deployment.
+ * Hidden on hosted installs, gated on the same pair of signals as
+ * `telemetry-consent-banner`: locked-to-Cloud, or a non-local active backend.
  *
  * ## Telemetry
  *
@@ -27,8 +27,9 @@ import { cn } from "#/utils/utils";
  * | --- | --- |
  * | `canvas_feedback_submitted` | `feedback`, `feedback_length`, `has_email`, `conversation_id`, plus the common backend context |
  *
- * A supplied email is attached to the PostHog person via `identify` as the
- * `email` person property, not repeated on the event.
+ * A supplied email is attached to the PostHog person with
+ * `setPersonProperties` as the `email` person property, not repeated on the
+ * event.
  */
 
 /** Deliberately permissive: reject obvious typos, not unusual-but-valid addresses. */
@@ -40,16 +41,41 @@ export function FeedbackLauncher() {
   const { t } = useTranslation();
   const { trackFeedbackSubmitted, attachFeedbackEmail } = useTracking();
   const { conversationId } = useOptionalConversationId();
+  const { backend } = useActiveBackend();
 
   const [isOpen, setIsOpen] = React.useState(false);
   const [feedback, setFeedback] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [emailError, setEmailError] = React.useState(false);
   const [state, setState] = React.useState<SubmitState>("idle");
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
 
-  // Not a hook, so it is safe to read on every render; the early return below
-  // happens after every hook has run.
-  const isLockedToCloud = getLockedCloudHost() !== null;
+  // Both signals, matching `telemetry-consent-banner` — the other install-gated
+  // control mounted alongside this one. `getLockedCloudHost()` alone is not
+  // enough: a self-hosted OHE reached on its own domain is not locked to Cloud,
+  // and `backend-form-modal` notes it is otherwise indistinguishable from a
+  // local agent-server by host.
+  const isHostedInstall =
+    getLockedCloudHost() !== null || backend.kind !== "local";
+
+  const close = React.useCallback(() => {
+    setIsOpen(false);
+    // Reset here rather than only on the success button, so reopening never
+    // shows a stale "thank you" or error from the previous submission.
+    setState("idle");
+    setEmailError(false);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      close();
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, close]);
 
   /**
    * The form is `noValidate`: the browser's own constraint messages are not
@@ -94,14 +120,15 @@ export function FeedbackLauncher() {
     }
   };
 
-  if (isLockedToCloud) return null;
+  if (isHostedInstall) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+    <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
       {isOpen && (
         <div
           data-testid="feedback-panel"
           role="dialog"
+          aria-modal="false"
           aria-label={t(I18nKey.FEEDBACK$TITLE)}
           className="w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-[var(--oh-border-subtle)] bg-tertiary p-4 shadow-lg"
         >
@@ -114,10 +141,7 @@ export function FeedbackLauncher() {
                 type="button"
                 variant="secondary"
                 testId="feedback-close"
-                onClick={() => {
-                  setIsOpen(false);
-                  setState("idle");
-                }}
+                onClick={close}
               >
                 {t(I18nKey.BUTTON$CLOSE)}
               </BrandButton>
@@ -185,7 +209,7 @@ export function FeedbackLauncher() {
                   type="button"
                   variant="secondary"
                   testId="feedback-cancel"
-                  onClick={() => setIsOpen(false)}
+                  onClick={close}
                 >
                   {t(I18nKey.FEEDBACK$CANCEL_LABEL)}
                 </BrandButton>
@@ -198,7 +222,7 @@ export function FeedbackLauncher() {
                 >
                   {state === "submitting"
                     ? t(I18nKey.FEEDBACK$SUBMITTING_LABEL)
-                    : t(I18nKey.FEEDBACK$SHARE_LABEL)}
+                    : t(I18nKey.BUTTON$SEND)}
                 </BrandButton>
               </div>
             </form>
@@ -207,11 +231,14 @@ export function FeedbackLauncher() {
       )}
 
       <BrandButton
+        ref={triggerRef}
         type="button"
         variant="primary"
         testId="feedback-launcher"
         ariaLabel={t(I18nKey.FEEDBACK$TITLE)}
-        onClick={() => setIsOpen((open) => !open)}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        onClick={() => (isOpen ? close() : setIsOpen(true))}
       >
         {t(I18nKey.FEEDBACK$TITLE)}
       </BrandButton>

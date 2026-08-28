@@ -11,9 +11,8 @@ import {
   getBackendTelemetryProperties,
 } from "#/services/telemetry-context";
 import {
-  getTelemetryDistinctId,
   setTelemetryBackendContext,
-  setTelemetryIdentity,
+  setTelemetryPersonProperties,
   trackEvent,
 } from "#/services/telemetry";
 
@@ -450,10 +449,15 @@ export const useTracking = () => {
    * `isTelemetryEnabled()` first rather than reading a resolved promise as
    * success.
    *
-   * The feedback text is the payload here, not incidental telemetry — it is the
-   * thing being reported. The email is deliberately absent: it is attached to
-   * the person rather than the event, so it is not duplicated across every
-   * captured event.
+   * Every other event here sends a length rather than the text
+   * (`query_character_length`, `current_message_length`), because that prose is
+   * incidental to the event. This one is the exception on purpose: the feedback
+   * *is* the report, and a length alone would make the event useless. Flagged
+   * rather than assumed — happy to send a length instead if the convention
+   * should hold here too.
+   *
+   * The email is deliberately absent: it goes on the person, not repeated on
+   * every event.
    */
   const trackFeedbackSubmitted = ({
     feedback,
@@ -477,20 +481,13 @@ export const useTracking = () => {
   /**
    * Attach a feedback author's email to their PostHog person.
    *
-   * Uses `identify` on the existing distinct id rather than minting a new one,
-   * so an anonymous OSS person gains an `email` property instead of becoming a
-   * second person. `getTelemetryDistinctId()` returns null without consent, in
-   * which case there is no person to annotate and this is a no-op.
-   *
-   * Only the email is passed: `setTelemetryIdentity` replaces the desired
-   * property set, and on the non-OHE installs this control is shown to,
-   * `use-telemetry-identity` does not set any (it gates on a cloud backend).
+   * Uses `setPersonProperties` rather than `identify`: there is no account to
+   * identify here, and identifying would both promote an anonymous person using
+   * the device id and contend with `use-telemetry-identity`, which owns the
+   * identity state.
    */
-  const attachFeedbackEmail = async (email: string): Promise<void> => {
-    const distinctId = await getTelemetryDistinctId();
-    if (!distinctId) return;
-    await setTelemetryIdentity(distinctId, { email });
-  };
+  const attachFeedbackEmail = (email: string): Promise<void> =>
+    setTelemetryPersonProperties({ email });
 
   const trackOnboardingLinkClicked = ({
     linkId,

@@ -4,27 +4,45 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FeedbackLauncher } from "#/components/features/feedback/feedback-launcher";
 
+/**
+ * `use-tracking` is deliberately NOT mocked. The acceptance criteria name the
+ * PostHog submission and identify calls, so the real hook runs and the telemetry
+ * service is the seam — otherwise these tests would only prove that one mock
+ * called another.
+ */
 const mocks = vi.hoisted(() => ({
-  trackFeedbackSubmitted: vi.fn(),
-  attachFeedbackEmail: vi.fn(),
-  getLockedCloudHost: vi.fn(),
+  trackEvent: vi.fn(),
+  setTelemetryPersonProperties: vi.fn(),
+  setTelemetryBackendContext: vi.fn(),
   isTelemetryEnabled: vi.fn(),
+  getLockedCloudHost: vi.fn(),
+  backendKind: "local" as "local" | "cloud",
   conversationId: null as string | null,
 }));
 
-vi.mock("#/hooks/use-tracking", () => ({
-  useTracking: () => ({
-    trackFeedbackSubmitted: mocks.trackFeedbackSubmitted,
-    attachFeedbackEmail: mocks.attachFeedbackEmail,
-  }),
+vi.mock("#/services/telemetry", () => ({
+  trackEvent: mocks.trackEvent,
+  setTelemetryPersonProperties: mocks.setTelemetryPersonProperties,
+  setTelemetryBackendContext: mocks.setTelemetryBackendContext,
+  isTelemetryEnabled: mocks.isTelemetryEnabled,
 }));
 
 vi.mock("#/api/agent-server-config", () => ({
   getLockedCloudHost: mocks.getLockedCloudHost,
 }));
 
-vi.mock("#/services/telemetry", () => ({
-  isTelemetryEnabled: mocks.isTelemetryEnabled,
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackend: () => ({
+    backend: { kind: mocks.backendKind, host: "http://127.0.0.1:8000" },
+  }),
+}));
+
+vi.mock("#/hooks/query/use-automation-sdk-version", () => ({
+  useAutomationSdkVersion: () => null,
+}));
+
+vi.mock("#/api/agent-server-compatibility", () => ({
+  getCachedAgentServerVersion: () => null,
 }));
 
 vi.mock("#/hooks/use-conversation-id", () => ({
@@ -38,11 +56,23 @@ const openPanel = async () => {
   return user;
 };
 
+const submitWith = async (message: string, email?: string) => {
+  const user = await openPanel();
+  await user.type(screen.getByTestId("feedback-message"), message);
+  if (email) await user.type(screen.getByTestId("feedback-email"), email);
+  await user.click(screen.getByTestId("feedback-submit"));
+  return user;
+};
+
+/** The event properties passed to the real `trackEvent`. */
+const capturedProperties = () => mocks.trackEvent.mock.calls[0][1];
+
 beforeEach(() => {
-  mocks.trackFeedbackSubmitted.mockResolvedValue(undefined);
-  mocks.attachFeedbackEmail.mockResolvedValue(undefined);
-  mocks.getLockedCloudHost.mockReturnValue(null);
+  mocks.trackEvent.mockResolvedValue(undefined);
+  mocks.setTelemetryPersonProperties.mockResolvedValue(undefined);
   mocks.isTelemetryEnabled.mockReturnValue(true);
+  mocks.getLockedCloudHost.mockReturnValue(null);
+  mocks.backendKind = "local";
   mocks.conversationId = null;
 });
 
@@ -52,7 +82,7 @@ afterEach(() => {
 
 describe("FeedbackLauncher", () => {
   describe("install gating", () => {
-    it("renders the control on a non-OHE install", () => {
+    it("renders on a local install that is not locked to Cloud", () => {
       render(<FeedbackLauncher />);
       expect(screen.getByTestId("feedback-launcher")).toBeInTheDocument();
     });
@@ -62,68 +92,104 @@ describe("FeedbackLauncher", () => {
       render(<FeedbackLauncher />);
       expect(screen.queryByTestId("feedback-launcher")).not.toBeInTheDocument();
     });
+
+    it("renders nothing on a non-local backend", () => {
+      // A self-hosted OHE reached on its own domain is not locked to Cloud, so
+      // the backend kind is the signal that keeps this off hosted installs.
+      mocks.backendKind = "cloud";
+      render(<FeedbackLauncher />);
+      expect(screen.queryByTestId("feedback-launcher")).not.toBeInTheDocument();
+    });
   });
 
-  describe("opening the form", () => {
+  describe("opening and closing", () => {
     it("does not show the form until the button is clicked", () => {
       render(<FeedbackLauncher />);
       expect(screen.queryByTestId("feedback-panel")).not.toBeInTheDocument();
     });
 
-    it("opens the form from the button", async () => {
+    it("opens the form from the button and marks the trigger expanded", async () => {
       await openPanel();
       expect(screen.getByTestId("feedback-panel")).toBeInTheDocument();
+      expect(screen.getByTestId("feedback-launcher")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+    });
+
+    it("closes on Escape", async () => {
+      const user = await openPanel();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByTestId("feedback-panel")).not.toBeInTheDocument();
+    });
+
+    it("does not reopen showing a stale confirmation", async () => {
+      const user = await submitWith("done");
+      await waitFor(() =>
+        expect(screen.getByTestId("feedback-success")).toBeInTheDocument(),
+      );
+
+      await user.click(screen.getByTestId("feedback-launcher")); // close
+      await user.click(screen.getByTestId("feedback-launcher")); // reopen
+
+      expect(screen.queryByTestId("feedback-success")).not.toBeInTheDocument();
       expect(screen.getByTestId("feedback-message")).toBeInTheDocument();
     });
   });
 
-  describe("the email is optional", () => {
-    it("submits with no email and does not touch the person", async () => {
-      const user = await openPanel();
-      await user.type(
-        screen.getByTestId("feedback-message"),
-        "the sidebar lags",
-      );
-      await user.click(screen.getByTestId("feedback-submit"));
+  describe("what reaches PostHog", () => {
+    it("captures the feedback with no email and touches no person property", async () => {
+      await submitWith("the sidebar lags");
 
-      await waitFor(() =>
-        expect(mocks.trackFeedbackSubmitted).toHaveBeenCalledWith(
-          expect.objectContaining({
-            feedback: "the sidebar lags",
-            hasEmail: false,
-          }),
-        ),
+      await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalledTimes(1));
+      expect(mocks.trackEvent.mock.calls[0][0]).toBe(
+        "canvas_feedback_submitted",
       );
-      expect(mocks.attachFeedbackEmail).not.toHaveBeenCalled();
+      expect(capturedProperties()).toMatchObject({
+        feedback: "the sidebar lags",
+        feedback_length: 16,
+        has_email: false,
+      });
+      expect(mocks.setTelemetryPersonProperties).not.toHaveBeenCalled();
     });
 
-    it("attaches the email to the person when one is given", async () => {
-      const user = await openPanel();
-      await user.type(screen.getByTestId("feedback-message"), "looks good");
-      await user.type(screen.getByTestId("feedback-email"), "dev@example.com");
-      await user.click(screen.getByTestId("feedback-submit"));
+    it("sets the email as a person property rather than an event property", async () => {
+      await submitWith("looks good", "dev@example.com");
 
       await waitFor(() =>
-        expect(mocks.attachFeedbackEmail).toHaveBeenCalledWith(
-          "dev@example.com",
-        ),
+        expect(mocks.setTelemetryPersonProperties).toHaveBeenCalledWith({
+          email: "dev@example.com",
+        }),
       );
-      expect(mocks.trackFeedbackSubmitted).toHaveBeenCalledWith(
-        expect.objectContaining({ hasEmail: true }),
-      );
+      expect(capturedProperties()).toMatchObject({ has_email: true });
+      expect(capturedProperties()).not.toHaveProperty("email");
+    });
+
+    it("carries the conversation the user is in", async () => {
+      mocks.conversationId = "conv-42";
+      await submitWith("in-conversation");
+
+      await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalled());
+      expect(capturedProperties()).toMatchObject({
+        conversation_id: "conv-42",
+      });
+    });
+
+    it("omits the conversation id outside a conversation", async () => {
+      await submitWith("on the home page");
+
+      await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalled());
+      expect(capturedProperties().conversation_id).toBeUndefined();
     });
   });
 
   describe("validation", () => {
-    it("rejects a malformed email and says so instead of submitting", async () => {
-      const user = await openPanel();
-      await user.type(screen.getByTestId("feedback-message"), "hello");
-      await user.type(screen.getByTestId("feedback-email"), "not-an-email");
-      await user.click(screen.getByTestId("feedback-submit"));
+    it("rejects a malformed email and captures nothing", async () => {
+      await submitWith("hello", "not-an-email");
 
       expect(screen.getByTestId("feedback-email-error")).toBeInTheDocument();
-      expect(mocks.trackFeedbackSubmitted).not.toHaveBeenCalled();
-      expect(mocks.attachFeedbackEmail).not.toHaveBeenCalled();
+      expect(mocks.trackEvent).not.toHaveBeenCalled();
+      expect(mocks.setTelemetryPersonProperties).not.toHaveBeenCalled();
     });
 
     it("cannot be submitted with empty feedback", async () => {
@@ -134,20 +200,15 @@ describe("FeedbackLauncher", () => {
 
   describe("outcome", () => {
     it("confirms a successful submission", async () => {
-      const user = await openPanel();
-      await user.type(screen.getByTestId("feedback-message"), "nice work");
-      await user.click(screen.getByTestId("feedback-submit"));
-
+      await submitWith("nice work");
       await waitFor(() =>
         expect(screen.getByTestId("feedback-success")).toBeInTheDocument(),
       );
     });
 
-    it("keeps what was typed when submission fails", async () => {
-      mocks.trackFeedbackSubmitted.mockRejectedValue(new Error("network"));
-      const user = await openPanel();
-      await user.type(screen.getByTestId("feedback-message"), "keep this");
-      await user.click(screen.getByTestId("feedback-submit"));
+    it("keeps what was typed when the capture throws", async () => {
+      mocks.trackEvent.mockRejectedValue(new Error("boom"));
+      await submitWith("keep this");
 
       await waitFor(() =>
         expect(screen.getByTestId("feedback-error")).toBeInTheDocument(),
@@ -159,45 +220,10 @@ describe("FeedbackLauncher", () => {
       // `trackEvent` resolves without capturing when consent is absent, so a
       // resolved promise would otherwise read as success.
       mocks.isTelemetryEnabled.mockReturnValue(false);
-      const user = await openPanel();
-      await user.type(screen.getByTestId("feedback-message"), "unheard");
-      await user.click(screen.getByTestId("feedback-submit"));
+      await submitWith("unheard");
 
       expect(screen.getByTestId("feedback-error")).toBeInTheDocument();
-      expect(mocks.trackFeedbackSubmitted).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("session association", () => {
-    it("passes the conversation id when the user is in one", async () => {
-      mocks.conversationId = "conv-42";
-      const user = await openPanel();
-      await user.type(
-        screen.getByTestId("feedback-message"),
-        "in-conversation",
-      );
-      await user.click(screen.getByTestId("feedback-submit"));
-
-      await waitFor(() =>
-        expect(mocks.trackFeedbackSubmitted).toHaveBeenCalledWith(
-          expect.objectContaining({ conversationId: "conv-42" }),
-        ),
-      );
-    });
-
-    it("omits the conversation id outside a conversation", async () => {
-      const user = await openPanel();
-      await user.type(
-        screen.getByTestId("feedback-message"),
-        "on the home page",
-      );
-      await user.click(screen.getByTestId("feedback-submit"));
-
-      await waitFor(() =>
-        expect(mocks.trackFeedbackSubmitted).toHaveBeenCalledWith(
-          expect.objectContaining({ conversationId: undefined }),
-        ),
-      );
+      expect(mocks.trackEvent).not.toHaveBeenCalled();
     });
   });
 });
