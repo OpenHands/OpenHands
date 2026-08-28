@@ -33,6 +33,7 @@ import {
 } from "#/components/features/home/featured-automations/automation-run-health";
 import type { AutomationInsightsProps } from "./automation-card";
 import { toLatestRunState } from "./to-latest-run-state";
+import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 
 interface AutomationListRowProps {
   automation: Automation;
@@ -87,6 +88,10 @@ export function AutomationListRow({
 
   const runState = toLatestRunState(insights?.state);
   const health = deriveRunHealth(runState);
+  const impactStatement = resolveAutomationImpactStatement(
+    automation,
+    insights?.state?.summary?.completedTotal ?? null,
+  );
   const latestRun = runState.latestRun;
   const lastRunAt = latestRun
     ? getLastRunTimestamp(latestRun)
@@ -174,6 +179,21 @@ export function AutomationListRow({
                       </span>
                     ) : null}
                     <RunStatusBadge status={latestRun.status} compact />
+                  </>
+                ) : null}
+                {impactStatement ? (
+                  <>
+                    {hasTriggerMeta || whenLabel || latestRun ? (
+                      <span className="shrink-0" aria-hidden="true">
+                        ·
+                      </span>
+                    ) : null}
+                    <span
+                      data-testid={`automation-impact-${automation.id}`}
+                      className="truncate"
+                    >
+                      {impactStatement}
+                    </span>
                   </>
                 ) : null}
               </span>

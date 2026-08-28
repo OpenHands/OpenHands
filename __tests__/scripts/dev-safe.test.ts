@@ -480,6 +480,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.44.1, default)");
   });
@@ -504,6 +506,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -527,6 +531,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -548,6 +554,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -584,6 +592,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -602,6 +612,27 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
     );
     expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+  });
+
+  it("passes --import-modules to the agent-server, after the executable, in every source mode", () => {
+    // The flag must sit after "agent-server" so uvx hands it to the server
+    // instead of parsing it itself. tools/canvas_ui_tool.py documents why the
+    // module has to be imported before any conversation is created.
+    const variants = [
+      {},
+      { OH_AGENT_SERVER_VERSION: "1.18.0" },
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ];
+    for (const env of variants) {
+      const { args } = buildAgentServerCommand(env);
+      const executable = args.indexOf("agent-server");
+      expect(executable).toBeGreaterThan(-1);
+      expect(args.slice(executable + 1)).toEqual([
+        "--import-modules",
+        "canvas_ui_tool",
+      ]);
+    }
   });
 
   it("rejects relative OH_AGENT_SERVER_LOCAL_PATH", () => {

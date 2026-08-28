@@ -6,6 +6,7 @@ import {
   Plus,
   Server,
   Settings,
+  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -40,6 +41,7 @@ import {
   sidebarNavListClassName,
   sidebarNavRowClassName,
 } from "./sidebar-layout";
+import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
 
 const ICON_SIZE = 18;
 const SIDEBAR_LOGO_WIDTH = 34;
@@ -87,6 +89,7 @@ export function SidebarRailBody({
   onOpenManageBackends,
 }: SidebarRailBodyProps) {
   const { t } = useTranslation("openhands");
+  const { pages: canvasExtensionPages } = useCanvasExtensionsRuntime();
   const backendCloseTimerRef = collapsedBackendCloseTimer;
   const { isPinnedRoute, togglePinnedRoute } = usePinnedHomeRoute();
 
@@ -241,6 +244,16 @@ export function SidebarRailBody({
             )}
           />
         )}
+        {canvasExtensionPages.map((page) => (
+          <SidebarNavLink
+            key={`${page.extension.name}:${page.contribution.id}`}
+            to={page.href}
+            label={page.contribution.nav_label || page.contribution.title}
+            testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
+            collapsed={collapsed}
+            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+          />
+        ))}
       </nav>
 
       <SidebarConversationList collapsed={collapsed} />
