@@ -13,6 +13,7 @@ import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-pr
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
 import * as activeBackendContext from "#/contexts/active-backend-context";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import type { Backend } from "#/api/backend-registry/types";
 
 const mockCloudBackend: Backend = {
@@ -212,6 +213,10 @@ describe("LlmSettingsLocalView", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
 
     vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
       createMockLlmProfilesReturn(),
@@ -361,6 +366,23 @@ describe("LlmSettingsLocalView", () => {
 
       expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
         "openai/gpt-5.6-sol",
+      );
+    });
+
+    it("prefills the DB-selected OpenHands default when creating a new profile", async () => {
+      useFreeModelsStore.getState().setFlags({
+        freeModels: new Set(["openhands/gpt-5.2"]),
+        defaultModel: "openhands/gpt-5.2",
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<LlmSettingsLocalView />);
+
+      await user.click(screen.getByTestId("add-llm-profile"));
+
+      expect(screen.getByTestId("profile-name-input")).toHaveValue("gpt-5.2");
+      expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+        "openhands/gpt-5.2",
       );
     });
 

@@ -19,6 +19,7 @@ import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
@@ -176,10 +177,7 @@ function seedCloudBackend() {
   return backend;
 }
 
-function renderModal(
-  onClose = vi.fn(),
-  options?: { initialStep?: number },
-) {
+function renderModal(onClose = vi.fn(), options?: { initialStep?: number }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -210,6 +208,10 @@ beforeEach(() => {
   vi.stubEnv("VITE_BACKEND_BASE_URL", "http://localhost:9000");
   vi.stubEnv("VITE_SESSION_API_KEY", "session-key");
   __resetActiveStoreForTests();
+  useFreeModelsStore.getState().setFlags({
+    freeModels: new Set(),
+    defaultModel: null,
+  });
   // Clear accumulated spy/mock call history so per-test assertions (the
   // ACP secret-write checks and the LLM-defaults mock) don't see calls
   // leaked from a prior test. Covers `llmSettingsScreenMock` too.
@@ -699,6 +701,24 @@ describe("OnboardingModal", () => {
       expect.objectContaining({
         initialValueOverrides: {
           "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+        },
+      }),
+    );
+  });
+
+  it("pre-fills the LLM step with the DB-selected OpenHands default", () => {
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/gpt-5.2"]),
+      defaultModel: "openhands/gpt-5.2",
+    });
+
+    renderModal();
+
+    expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
+    expect(llmSettingsScreenMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialValueOverrides: {
+          "llm.model": "openhands/gpt-5.2",
         },
       }),
     );

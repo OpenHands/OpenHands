@@ -8,6 +8,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
+import { useDefaultModel } from "#/hooks/query/use-free-models";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
 
 interface SetupLlmStepProps {
@@ -16,10 +17,9 @@ interface SetupLlmStepProps {
 }
 
 /**
- * Pre-fills the LLM form with the OpenAI GPT-5.6 Sol default
- * (`openai/gpt-5.6-sol`), matching `DEFAULT_SETTINGS.llm_model`. The explicit
- * override marks the model dirty so the Next button persists the suggested
- * default immediately.
+ * Fallback when the backend has not exposed a DB-selected OpenHands default.
+ * The onboarding override still marks the model dirty so Next persists the
+ * suggested model immediately.
  */
 export const ONBOARDING_DEFAULT_LLM_MODEL = "openai/gpt-5.6-sol";
 
@@ -47,6 +47,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const applyAgentProfile = useApplyOnboardingAgentProfile();
+  const defaultLlmModel = useDefaultModel() ?? ONBOARDING_DEFAULT_LLM_MODEL;
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
@@ -153,7 +154,7 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           hideSaveButton
           suppressSuccessToast
           initialValueOverrides={{
-            "llm.model": ONBOARDING_DEFAULT_LLM_MODEL,
+            "llm.model": defaultLlmModel,
           }}
           onSaveSuccess={handleSaveSuccess}
           onSaveControlChange={setSaveControl}

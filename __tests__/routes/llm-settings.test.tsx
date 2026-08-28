@@ -11,8 +11,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
 // The default export now renders LlmSettingsLocalView (the profiles manager view).
 import LlmSettingsRoute, { LlmSettingsScreen } from "#/routes/llm-settings";
+import ConfigService from "#/api/config-service/config-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 import { Settings } from "#/types/settings";
 import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
@@ -116,6 +118,10 @@ function createMockLlmProfilesReturn(
 describe("LlmSettingsScreen", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
   });
 
   it("renders the OSS LLM settings form from the SDK schema fallback", async () => {
@@ -443,12 +449,32 @@ describe("LlmSettingsScreen - provider connection selector", () => {
 describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/kimi-k3"]),
+      defaultModel: "openhands/kimi-k3",
+    });
     vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
       backend: mockCloudBackend,
     } as ReturnType<typeof activeBackendContext.useActiveBackend>);
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openhands/kimi-k3", llm_api_key_set: true }),
     );
+    vi.spyOn(ConfigService, "searchProviders").mockResolvedValue({
+      items: [{ name: "openhands", verified: true }],
+      next_page_id: null,
+    });
+    vi.spyOn(ConfigService, "searchModels").mockResolvedValue({
+      items: [
+        {
+          provider: "openhands",
+          name: "kimi-k3",
+          verified: true,
+          free: true,
+          default: true,
+        },
+      ],
+      next_page_id: null,
+    });
   });
 
   it("hides the inline API key and base URL inputs for an OpenHands provider model", async () => {
@@ -468,7 +494,7 @@ describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
     expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
     // The free-models note is still surfaced so the user understands the model.
     expect(
-      screen.getByTestId("openhands-free-models-note"),
+      await screen.findByTestId("openhands-free-models-note"),
     ).toBeInTheDocument();
   });
 
