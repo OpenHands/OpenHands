@@ -124,14 +124,21 @@ export function FeedbackLauncher() {
   if (isHostedInstall) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
+    /*
+     * `pointer-events-none` on the wrapper, re-enabled on the button and the
+     * panel: the wrapper is a flex column that grows with the panel, so without
+     * it the empty space above the button would swallow clicks meant for the
+     * page beneath — which is what "does not block or interfere with normal
+     * user interaction" asks for, independently of viewport width.
+     */
+    <div className="pointer-events-none fixed bottom-4 right-4 z-30 flex flex-col items-end gap-2">
       {isOpen && (
         <div
           data-testid="feedback-panel"
           role="dialog"
           aria-modal="false"
           aria-label={t(I18nKey.FEEDBACK$TITLE)}
-          className="w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-[var(--oh-border-subtle)] bg-tertiary p-4 shadow-lg"
+          className="pointer-events-auto w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-[var(--oh-border-subtle)] bg-tertiary p-4 shadow-lg"
         >
           {state === "submitted" ? (
             <div className="flex flex-col gap-3">
@@ -235,6 +242,7 @@ export function FeedbackLauncher() {
         ref={triggerRef}
         type="button"
         variant="primary"
+        className="pointer-events-auto"
         testId="feedback-launcher"
         ariaLabel={t(I18nKey.FEEDBACK$TITLE)}
         aria-haspopup="dialog"
