@@ -156,4 +156,32 @@ describe("useLiveConversationMetrics", () => {
       true,
     );
   });
+
+  // Regression: a partial WebSocket stats event can populate the store's
+  // `cost` without a usage payload (e.g. when the agent's LLM has not been
+  // invoked yet, the event still aggregates a non-null cost from a usage id
+  // whose accumulated_token_usage is null). The Usage Tab must still display
+  // `cache_read_tokens` from the REST snapshot in that window.
+  it("uses the REST snapshot's usage when the store has only cost populated", () => {
+    useMetricsStore.setState({
+      cost: 0.5,
+      max_budget_per_task: null,
+      usage: null,
+    });
+    useConversationMetricsMock.mockReturnValue({
+      data: snapshot(),
+    });
+
+    const { result } = renderHook(() => useLiveConversationMetrics());
+
+    expect(result.current.cost).toBe(0.5);
+    expect(result.current.usage).toEqual({
+      prompt_tokens: 10,
+      completion_tokens: 20,
+      cache_read_tokens: 1,
+      cache_write_tokens: 2,
+      context_window: 128_000,
+      per_turn_token: 500,
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import useMetricsStore, { type MetricsState } from "#/stores/metrics-store";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
+import type { MetricsSnapshot } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 /**
  * Combined cost/token metrics for the active conversation.
@@ -41,8 +42,13 @@ export function useLiveConversationMetrics(
 
   return useMemo(() => {
     // Live store first: real-time and (post-reset) always the active
-    // conversation's data. Any non-null field counts as data.
-    if (storeCost !== null || storeUsage !== null) {
+    // conversation's data. Prefer the store's `usage` whenever it is
+    // populated; a partial WebSocket stats event can carry `cost` from a
+    // usage id whose `accumulated_token_usage` is null, and that case
+    // must still consult the REST snapshot for token fields like
+    // `cache_read_tokens` (issue #16835). When the store has no usage yet
+    // but REST has loaded, fall through to the snapshot for those fields.
+    if (storeUsage !== null) {
       return {
         cost: storeCost,
         max_budget_per_task: storeMaxBudgetPerTask,
@@ -50,36 +56,50 @@ export function useLiveConversationMetrics(
       };
     }
 
+    if (storeCost !== null && conversationMetrics?.accumulated_token_usage) {
+      // Partial live state: cost is fresh from the socket, but token
+      // counts come from the most recent REST snapshot. The cost
+      // contribution from the snapshot would double-count once the
+      // socket starts emitting usage, so prefer the live cost.
+      return {
+        cost: storeCost,
+        max_budget_per_task:
+          storeMaxBudgetPerTask ?? conversationMetrics.max_budget_per_task,
+        usage: formatUsage(conversationMetrics.accumulated_token_usage),
+      };
+    }
+
     if (conversationMetrics) {
       return {
         cost: conversationMetrics.accumulated_cost,
         max_budget_per_task: conversationMetrics.max_budget_per_task,
-        usage: conversationMetrics.accumulated_token_usage
-          ? {
-              prompt_tokens:
-                conversationMetrics.accumulated_token_usage.prompt_tokens ?? 0,
-              completion_tokens:
-                conversationMetrics.accumulated_token_usage.completion_tokens ??
-                0,
-              cache_read_tokens:
-                conversationMetrics.accumulated_token_usage.cache_read_tokens ??
-                0,
-              cache_write_tokens:
-                conversationMetrics.accumulated_token_usage
-                  .cache_write_tokens ?? 0,
-              context_window:
-                conversationMetrics.accumulated_token_usage.context_window ?? 0,
-              per_turn_token:
-                conversationMetrics.accumulated_token_usage.per_turn_token ?? 0,
-            }
-          : null,
+        usage: formatUsage(conversationMetrics.accumulated_token_usage),
       };
     }
 
     return {
-      cost: null,
-      max_budget_per_task: null,
+      cost: storeCost,
+      max_budget_per_task: storeMaxBudgetPerTask,
       usage: null,
     };
   }, [conversationMetrics, storeCost, storeMaxBudgetPerTask, storeUsage]);
+}
+
+function formatUsage(
+  accumulatedTokenUsage:
+    | MetricsSnapshot["accumulated_token_usage"]
+    | null
+    | undefined,
+) {
+  if (!accumulatedTokenUsage) {
+    return null;
+  }
+  return {
+    prompt_tokens: accumulatedTokenUsage.prompt_tokens ?? 0,
+    completion_tokens: accumulatedTokenUsage.completion_tokens ?? 0,
+    cache_read_tokens: accumulatedTokenUsage.cache_read_tokens ?? 0,
+    cache_write_tokens: accumulatedTokenUsage.cache_write_tokens ?? 0,
+    context_window: accumulatedTokenUsage.context_window ?? 0,
+    per_turn_token: accumulatedTokenUsage.per_turn_token ?? 0,
+  };
 }
