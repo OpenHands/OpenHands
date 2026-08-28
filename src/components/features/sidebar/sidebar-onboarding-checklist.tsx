@@ -99,40 +99,43 @@ function ChecklistItem({
   return (
     <li>
       <Tooltip
-        placement="right-start"
         delay={0}
         closeDelay={100}
-        disableAnimation={disableAnimation}
-        className={CHECKLIST_ITEM_TOOLTIP_CLASS}
-        content={
+        shouldSkipAnimation={disableAnimation}
+      >
+        <Tooltip.Trigger>
+          {href.kind === "external" ? (
+            <a
+              href={href.href}
+              target="_blank"
+              rel="noreferrer"
+              data-testid={`sidebar-onboarding-checklist-item-${id}`}
+              className={itemClassName}
+              onClick={handleLinkClick}
+            >
+              {label}
+            </a>
+          ) : (
+            <NavigationLink
+              to={href.href}
+              data-testid={`sidebar-onboarding-checklist-item-${id}`}
+              className={itemClassName}
+              onClick={handleLinkClick}
+            >
+              {label}
+            </NavigationLink>
+          )}
+        </Tooltip.Trigger>
+        <Tooltip.Content
+          placement="right top"
+          className={CHECKLIST_ITEM_TOOLTIP_CLASS}
+        >
           <SidebarOnboardingChecklistItemPreview
             id={id}
             onActionClick={handleLinkClick}
             onDocsClick={handleDocsClick}
           />
-        }
-      >
-        {href.kind === "external" ? (
-          <a
-            href={href.href}
-            target="_blank"
-            rel="noreferrer"
-            data-testid={`sidebar-onboarding-checklist-item-${id}`}
-            className={itemClassName}
-            onClick={handleLinkClick}
-          >
-            {label}
-          </a>
-        ) : (
-          <NavigationLink
-            to={href.href}
-            data-testid={`sidebar-onboarding-checklist-item-${id}`}
-            className={itemClassName}
-            onClick={handleLinkClick}
-          >
-            {label}
-          </NavigationLink>
-        )}
+        </Tooltip.Content>
       </Tooltip>
     </li>
   );

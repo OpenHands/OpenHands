@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Autocomplete,
-  AutocompleteItem,
-  AutocompleteSection,
-} from "@heroui/react";
+import { ComboBox, Header, Input, ListBox } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsInput } from "#/components/features/settings/settings-input";
@@ -186,57 +182,59 @@ export function ProviderConnectionModal({
             <label className="text-sm">
               {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
             </label>
-            <Autocomplete
-              data-testid="provider-connection-provider-input"
+            <ComboBox
               isRequired
-              isVirtualized={false}
-              name="provider-connection-provider-input"
               aria-label={t(I18nKey.SETTINGS$PROVIDER_CONNECTION_PROVIDER)}
-              isClearable={false}
               selectedKey={provider}
               onSelectionChange={(key) => setProvider(key?.toString() ?? null)}
-              classNames={{
-                popoverContent:
-                  "bg-content1 rounded-xl border border-[var(--oh-border)]",
-                selectorButton: heroUiAutocompleteSelectorButtonClassName,
-              }}
-              selectorButtonProps={{ disableRipple: true }}
-              inputProps={{
-                classNames: {
-                  inputWrapper: formControlSettingsFieldClassName,
-                },
-              }}
             >
-              <AutocompleteSection
-                title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-                classNames={{ heading: "text-[var(--oh-muted)]" }}
+              <ComboBox.InputGroup
+                className={formControlSettingsFieldClassName}
               >
-                {verifiedProviders.map((candidate) => (
-                  <AutocompleteItem
-                    data-testid={`provider-item-${candidate.name}`}
-                    key={candidate.name}
-                    textValue={mapProvider(candidate.name)}
-                  >
-                    {mapProvider(candidate.name)}
-                  </AutocompleteItem>
-                ))}
-              </AutocompleteSection>
-              {unverifiedProviders.length > 0 ? (
-                <AutocompleteSection
-                  title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                  classNames={{ heading: "text-[var(--oh-muted)]" }}
-                >
-                  {unverifiedProviders.map((candidate) => (
-                    <AutocompleteItem
-                      key={candidate.name}
-                      textValue={mapProvider(candidate.name)}
-                    >
-                      {mapProvider(candidate.name)}
-                    </AutocompleteItem>
-                  ))}
-                </AutocompleteSection>
-              ) : null}
-            </Autocomplete>
+                <Input
+                  data-testid="provider-connection-provider-input"
+                  name="provider-connection-provider-input"
+                />
+                <ComboBox.Trigger
+                  className={heroUiAutocompleteSelectorButtonClassName}
+                />
+              </ComboBox.InputGroup>
+              <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
+                <ListBox>
+                  <ListBox.Section>
+                    <Header className="text-[var(--oh-muted)]">
+                      {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                    </Header>
+                    {verifiedProviders.map((candidate) => (
+                      <ListBox.Item
+                        data-testid={`provider-item-${candidate.name}`}
+                        key={candidate.name}
+                        id={candidate.name}
+                        textValue={mapProvider(candidate.name)}
+                      >
+                        {mapProvider(candidate.name)}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox.Section>
+                  {unverifiedProviders.length > 0 ? (
+                    <ListBox.Section>
+                      <Header className="text-[var(--oh-muted)]">
+                        {t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                      </Header>
+                      {unverifiedProviders.map((candidate) => (
+                        <ListBox.Item
+                          key={candidate.name}
+                          id={candidate.name}
+                          textValue={mapProvider(candidate.name)}
+                        >
+                          {mapProvider(candidate.name)}
+                        </ListBox.Item>
+                      ))}
+                    </ListBox.Section>
+                  ) : null}
+                </ListBox>
+              </ComboBox.Popover>
+            </ComboBox>
           </fieldset>
         ) : (
           <SettingsInput

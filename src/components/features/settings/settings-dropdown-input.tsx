@@ -1,5 +1,6 @@
-import { Autocomplete, AutocompleteItem } from "@heroui/react";
-import React, { ReactNode } from "react";
+import { ComboBox, Input, ListBox } from "@heroui/react";
+import { ComboBoxStateContext } from "react-aria-components";
+import React, { ReactNode, useCallback, useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { OptionalTag } from "./optional-tag";
 import { cn } from "#/utils/utils";
@@ -30,6 +31,35 @@ interface SettingsDropdownInputProps {
   inputClassName?: string;
 }
 
+function ClearButton({
+  isClearable,
+  isLoading,
+  clearLabel,
+}: {
+  isClearable: boolean;
+  isLoading: boolean | undefined;
+  clearLabel: string;
+}) {
+  const state = useContext(ComboBoxStateContext);
+  const handleClear = useCallback(() => {
+    state?.setSelectedKey(null);
+    state?.setInputValue("");
+  }, [state]);
+
+  if (!isClearable || isLoading) return null;
+
+  return (
+    <button
+      type="button"
+      aria-label={clearLabel}
+      onClick={handleClear}
+      className="inline-flex size-4 shrink-0 items-center justify-center text-current opacity-60 transition-opacity hover:opacity-100"
+    >
+      ×
+    </button>
+  );
+}
+
 export function SettingsDropdownInput({
   testId,
   label,
@@ -42,7 +72,7 @@ export function SettingsDropdownInput({
   isLoading,
   defaultSelectedKey,
   selectedKey,
-  isClearable,
+  isClearable = false,
   allowsCustomValue,
   required,
   onSelectionChange,
@@ -64,43 +94,49 @@ export function SettingsDropdownInput({
           {showOptionalTag && <OptionalTag />}
         </div>
       )}
-      <Autocomplete
+      <ComboBox
         aria-label={typeof label === "string" ? label : name}
-        data-testid={testId}
-        name={name}
         defaultItems={items}
         defaultSelectedKey={defaultSelectedKey}
         selectedKey={selectedKey}
         onSelectionChange={onSelectionChange}
         onInputChange={onInputChange}
-        isClearable={isClearable}
         isDisabled={isDisabled || isLoading}
-        isLoading={isLoading}
-        placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
         allowsCustomValue={allowsCustomValue}
         isRequired={required}
         className="w-full"
-        classNames={{
-          popoverContent: "bg-content1 rounded-xl",
-          selectorButton: heroUiAutocompleteSelectorButtonClassName,
-        }}
-        selectorButtonProps={{ disableRipple: true }}
-        inputProps={{
-          classNames: {
-            inputWrapper: cn(
-              formControlSettingsFieldClassName,
-              inputWrapperClassName,
-            ),
-            input: inputClassName,
-          },
-        }}
         defaultFilter={defaultFilter}
-        startContent={startContent || null}
       >
-        {(item) => (
-          <AutocompleteItem key={item.key}>{item.label}</AutocompleteItem>
-        )}
-      </Autocomplete>
+        <ComboBox.InputGroup className={cn(inputWrapperClassName)}>
+          {startContent || null}
+          <Input
+            data-testid={testId}
+            name={name}
+            className={cn(formControlSettingsFieldClassName, inputClassName)}
+            placeholder={isLoading ? t(I18nKey.HOME$LOADING) : placeholder}
+          />
+          <ClearButton
+            isClearable={isClearable}
+            isLoading={isLoading}
+            clearLabel={t(I18nKey.COMMON$CLEAR_SELECTION)}
+          />
+          <ComboBox.Trigger
+            className={heroUiAutocompleteSelectorButtonClassName}
+          />
+        </ComboBox.InputGroup>
+        <ComboBox.Popover className="rounded-xl">
+          <ListBox items={items}>
+            {(item) => (
+              <ListBox.Item
+                id={item.key as string | number}
+                textValue={item.label}
+              >
+                {item.label}
+              </ListBox.Item>
+            )}
+          </ListBox>
+        </ComboBox.Popover>
+      </ComboBox>
     </label>
   );
 }

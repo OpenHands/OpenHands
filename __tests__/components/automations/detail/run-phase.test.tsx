@@ -339,8 +339,12 @@ describe("RunPhase — reachable without a mouse", () => {
     expect(age).toHaveTextContent("il y a 7min");
     expect(text).not.toHaveAttribute("aria-hidden");
     expect(age).not.toHaveAttribute("aria-hidden");
-    // No focusable ancestor: the phase must never be its own tab stop
-    // inside the link every surface wraps it in.
-    expect(text.closest("[tabindex]")).toBeNull();
+    // HeroUI v3 Tooltip.Trigger adds tabindex to its wrapper div for
+    // keyboard accessibility (tooltips must be reachable via focus).
+    // The wrapper is a <div>, not a <button>, so it does not create a
+    // nested-interactive violation inside the parent link.
+    const trigger = text.closest("[data-slot='tooltip-trigger']");
+    expect(trigger).toBeInTheDocument();
+    expect(trigger?.tagName).toBe("DIV");
   });
 });

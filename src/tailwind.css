@@ -1,8 +1,8 @@
 @import "tailwindcss";
+@import "@heroui/styles";
 
-@plugin '../hero.ts';
 @config "../tailwind.config.js";
-@source '../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';
+@source '../node_modules/@heroui/styles/dist/**/*.{js,ts,jsx,tsx}';
 
 @plugin 'tailwind-scrollbar' {
   nocompatible: true;

@@ -111,34 +111,35 @@ function RunActivityBar({
   const href = `/automations/${encodeURIComponent(automationId)}?run=${encodeURIComponent(run.id)}`;
 
   return (
-    <Tooltip
-      content={<RunActivityBarTooltip run={run} nowMs={nowMs} />}
-      placement="top"
-      closeDelay={80}
-      delay={200}
-      disableAnimation={disableAnimation}
-      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
-    >
-      {/* Wider hit target than the 4px bar so cancelled/skipped greys are easy to inspect. */}
-      <NavigationLink
-        to={href}
-        aria-label={statusLabel}
-        className="group/spark-bar inline-flex h-full cursor-pointer items-end px-[2px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-focus)]"
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
+    <Tooltip closeDelay={80} delay={200} shouldSkipAnimation={disableAnimation}>
+      <Tooltip.Trigger>
+        {/* Wider hit target than the 4px bar so cancelled/skipped greys are easy to inspect. */}
+        <NavigationLink
+          to={href}
+          aria-label={statusLabel}
+          className="group/spark-bar inline-flex h-full cursor-pointer items-end px-[2px] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--oh-focus)]"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span
+            className={cn(
+              "w-1 shrink-0 origin-bottom rounded-[1px]",
+              "transition-transform duration-100 ease-out motion-reduce:transition-none",
+              // Grow the hovered/focused bar so it reads clearly among neighbors.
+              "group-hover/spark-bar:scale-x-[1.4] group-hover/spark-bar:scale-y-[1.15]",
+              "group-focus-visible/spark-bar:scale-x-[1.4] group-focus-visible/spark-bar:scale-y-[1.15]",
+              barColorClassForStatus(run.status),
+            )}
+            style={{ height: durationMsToSparklineBarHeightPx(durationMs) }}
+          />
+        </NavigationLink>
+      </Tooltip.Trigger>
+      <Tooltip.Content
+        placement="top"
+        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
       >
-        <span
-          className={cn(
-            "w-1 shrink-0 origin-bottom rounded-[1px]",
-            "transition-transform duration-100 ease-out motion-reduce:transition-none",
-            // Grow the hovered/focused bar so it reads clearly among neighbors.
-            "group-hover/spark-bar:scale-x-[1.4] group-hover/spark-bar:scale-y-[1.15]",
-            "group-focus-visible/spark-bar:scale-x-[1.4] group-focus-visible/spark-bar:scale-y-[1.15]",
-            barColorClassForStatus(run.status),
-          )}
-          style={{ height: durationMsToSparklineBarHeightPx(durationMs) }}
-        />
-      </NavigationLink>
+        <RunActivityBarTooltip run={run} nowMs={nowMs} />
+      </Tooltip.Content>
     </Tooltip>
   );
 }

@@ -223,19 +223,22 @@ export function AutomationCard({
                 {shortErrorDetail ? (
                   showErrorHovercard && errorDetail ? (
                     <Tooltip
-                      content={
+                      closeDelay={100}
+                      shouldSkipAnimation={disableAnimation}
+                    >
+                      <Tooltip.Trigger>
+                        <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
+                          {shortErrorDetail}
+                        </span>
+                      </Tooltip.Trigger>
+                      <Tooltip.Content
+                        placement="top"
+                        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+                      >
                         <p className="max-w-xs whitespace-pre-wrap break-words p-2 text-xs">
                           {errorDetail}
                         </p>
-                      }
-                      placement="top"
-                      closeDelay={100}
-                      disableAnimation={disableAnimation}
-                      className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
-                    >
-                      <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
-                        {shortErrorDetail}
-                      </span>
+                      </Tooltip.Content>
                     </Tooltip>
                   ) : (
                     <p className="min-w-0 flex-1 truncate text-[var(--oh-status-error)]">

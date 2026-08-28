@@ -99,74 +99,74 @@ function RunningAutomationRow({
       data-testid={`running-automation-row-${item.id}`}
       className={automationActivityRowClassName}
     >
-      <Tooltip
-        content={
+      <Tooltip closeDelay={100} shouldSkipAnimation={disableAnimation}>
+        <Tooltip.Trigger>
+          <NavigationLink
+            to={hrefForActivityItem(item)}
+            aria-label={`${item.name} ${t(statusLabelKey)}`}
+            className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
+          >
+            <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+              <span className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center">
+                <AutomationHealthIndicator health={health} />
+              </span>
+              <span className="truncate text-sm font-medium leading-5 text-[var(--oh-foreground)]">
+                {item.name}
+              </span>
+              {hasMeta ? (
+                <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-[var(--oh-text-secondary)]">
+                  <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
+                  {triggerEventLabel ? (
+                    <span className="truncate">{triggerEventLabel}</span>
+                  ) : null}
+                  {triggerScheduleLabel ? (
+                    <span className="truncate">{triggerScheduleLabel}</span>
+                  ) : null}
+                  {triggerSource ? (
+                    <span
+                      className={cn(
+                        extensionModuleCardPillClassName,
+                        "shrink-0 px-1.5 py-0 text-[var(--oh-text-secondary)]",
+                      )}
+                    >
+                      {formatTriggerSourceLabel(triggerSource)}
+                    </span>
+                  ) : null}
+                  {item.whenLabel ? (
+                    <>
+                      {hasTriggerMeta ? (
+                        <span className="shrink-0" aria-hidden="true">
+                          ·
+                        </span>
+                      ) : null}
+                      <span className="truncate">{item.whenLabel}</span>
+                    </>
+                  ) : null}
+                  {item.status ? (
+                    <>
+                      {hasTriggerMeta || item.whenLabel ? (
+                        <span className="shrink-0" aria-hidden="true">
+                          ·
+                        </span>
+                      ) : null}
+                      <RunStatusBadge status={item.status} compact />
+                    </>
+                  ) : null}
+                </span>
+              ) : null}
+              <span className="sr-only">{t(statusLabelKey)}</span>
+            </div>
+          </NavigationLink>
+        </Tooltip.Trigger>
+        <Tooltip.Content
+          placement="top start"
+          className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+        >
           <HomeAutomationRunTooltip
             automation={automation}
             runState={runState}
           />
-        }
-        placement="top-start"
-        closeDelay={100}
-        disableAnimation={disableAnimation}
-        className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
-      >
-        <NavigationLink
-          to={hrefForActivityItem(item)}
-          aria-label={`${item.name} ${t(statusLabelKey)}`}
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--oh-focus)]"
-        >
-          <div className="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-x-2">
-            <span className="inline-flex h-5 w-2.5 shrink-0 items-center justify-center">
-              <AutomationHealthIndicator health={health} />
-            </span>
-            <span className="truncate text-sm font-medium leading-5 text-[var(--oh-foreground)]">
-              {item.name}
-            </span>
-            {hasMeta ? (
-              <span className="col-start-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-xs leading-4 text-[var(--oh-text-secondary)]">
-                <TriggerIcon className="size-3 shrink-0" aria-hidden="true" />
-                {triggerEventLabel ? (
-                  <span className="truncate">{triggerEventLabel}</span>
-                ) : null}
-                {triggerScheduleLabel ? (
-                  <span className="truncate">{triggerScheduleLabel}</span>
-                ) : null}
-                {triggerSource ? (
-                  <span
-                    className={cn(
-                      extensionModuleCardPillClassName,
-                      "shrink-0 px-1.5 py-0 text-[var(--oh-text-secondary)]",
-                    )}
-                  >
-                    {formatTriggerSourceLabel(triggerSource)}
-                  </span>
-                ) : null}
-                {item.whenLabel ? (
-                  <>
-                    {hasTriggerMeta ? (
-                      <span className="shrink-0" aria-hidden="true">
-                        ·
-                      </span>
-                    ) : null}
-                    <span className="truncate">{item.whenLabel}</span>
-                  </>
-                ) : null}
-                {item.status ? (
-                  <>
-                    {hasTriggerMeta || item.whenLabel ? (
-                      <span className="shrink-0" aria-hidden="true">
-                        ·
-                      </span>
-                    ) : null}
-                    <RunStatusBadge status={item.status} compact />
-                  </>
-                ) : null}
-              </span>
-            ) : null}
-            <span className="sr-only">{t(statusLabelKey)}</span>
-          </div>
-        </NavigationLink>
+        </Tooltip.Content>
       </Tooltip>
 
       <div className="flex shrink-0 items-center gap-1.5 pr-1.5">

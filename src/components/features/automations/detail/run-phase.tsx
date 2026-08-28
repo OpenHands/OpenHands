@@ -174,39 +174,37 @@ export function RunPhase({
 
   return (
     <Tooltip
-      content={
-        <>
-          {text}
-          {age ? <span className="mt-1 block text-muted">{age}</span> : null}
-        </>
-      }
-      placement="top"
       closeDelay={100}
-      disableAnimation={import.meta.env.MODE === "test"}
-      classNames={{
-        content:
-          "max-w-xs whitespace-pre-wrap break-words rounded-xl border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl",
-      }}
+      shouldSkipAnimation={import.meta.env.MODE === "test"}
     >
-      <span className="flex min-w-0 cursor-default items-center gap-1">
-        <span
-          data-testid="run-phase"
-          className={cn(
-            "min-w-0 truncate text-xs text-muted",
-            wide ? "max-w-[28rem]" : "max-w-[12rem]",
-          )}
-        >
-          {text}
-        </span>
-        {age ? (
+      <Tooltip.Trigger>
+        <span className="flex min-w-0 cursor-default items-center gap-1">
           <span
-            data-testid="run-phase-age"
-            className="shrink-0 whitespace-nowrap text-xs text-muted"
+            data-testid="run-phase"
+            className={cn(
+              "min-w-0 truncate text-xs text-muted",
+              wide ? "max-w-[28rem]" : "max-w-[12rem]",
+            )}
           >
-            · {age}
+            {text}
           </span>
-        ) : null}
-      </span>
+          {age ? (
+            <span
+              data-testid="run-phase-age"
+              className="shrink-0 whitespace-nowrap text-xs text-muted"
+            >
+              · {age}
+            </span>
+          ) : null}
+        </span>
+      </Tooltip.Trigger>
+      <Tooltip.Content
+        placement="top"
+        className="max-w-xs whitespace-pre-wrap break-words rounded-xl border border-[var(--oh-border)] bg-base-secondary px-3 py-2 text-left text-xs text-white shadow-xl"
+      >
+        {text}
+        {age ? <span className="mt-1 block text-muted">{age}</span> : null}
+      </Tooltip.Content>
     </Tooltip>
   );
 }

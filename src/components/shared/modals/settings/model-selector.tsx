@@ -1,8 +1,4 @@
-import {
-  Autocomplete,
-  AutocompleteItem,
-  AutocompleteSection,
-} from "@heroui/react";
+import { ComboBox, Header, Input, ListBox, Spinner } from "@heroui/react";
 import { Info } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
@@ -166,58 +162,59 @@ export function ModelSelector({
         <label className={cn("text-sm", labelClassName)}>
           {t(I18nKey.LLM$PROVIDER)}
         </label>
-        <Autocomplete
-          data-testid="llm-provider-input"
+        <ComboBox
           isRequired
-          isVirtualized={false}
-          name="llm-provider-input"
           isDisabled={isDisabled}
           aria-label={t(I18nKey.LLM$PROVIDER)}
-          isClearable={false}
           onSelectionChange={(e) => {
             if (e?.toString()) handleChangeProvider(e.toString());
           }}
           onInputChange={(value) => !value && clear()}
           defaultSelectedKey={selectedProvider ?? undefined}
           selectedKey={selectedProvider}
-          classNames={{
-            popoverContent:
-              "bg-content1 rounded-xl border border-[var(--oh-border)]",
-            selectorButton: heroUiAutocompleteSelectorButtonClassName,
-          }}
-          selectorButtonProps={{ disableRipple: true }}
-          inputProps={{
-            classNames: {
-              inputWrapper: formControlSettingsFieldClassName,
-            },
-          }}
         >
-          <AutocompleteSection
-            title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-            classNames={{ heading: "text-[var(--oh-muted)]" }}
-          >
-            {verifiedProviders.map((provider) => (
-              <AutocompleteItem
-                data-testid={`provider-item-${provider.name}`}
-                key={provider.name}
-              >
-                {mapProvider(provider.name)}
-              </AutocompleteItem>
-            ))}
-          </AutocompleteSection>
-          {unverifiedProviders.length > 0 ? (
-            <AutocompleteSection
-              title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
-            >
-              {unverifiedProviders.map((provider) => (
-                <AutocompleteItem key={provider.name}>
-                  {mapProvider(provider.name)}
-                </AutocompleteItem>
-              ))}
-            </AutocompleteSection>
-          ) : null}
-        </Autocomplete>
+          <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
+            <Input data-testid="llm-provider-input" name="llm-provider-input" />
+            <ComboBox.Trigger
+              className={heroUiAutocompleteSelectorButtonClassName}
+            />
+          </ComboBox.InputGroup>
+          <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
+            <ListBox>
+              <ListBox.Section>
+                <Header className="text-[var(--oh-muted)]">
+                  {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                </Header>
+                {verifiedProviders.map((provider) => (
+                  <ListBox.Item
+                    data-testid={`provider-item-${provider.name}`}
+                    id={provider.name}
+                    key={provider.name}
+                    textValue={mapProvider(provider.name)}
+                  >
+                    {mapProvider(provider.name)}
+                  </ListBox.Item>
+                ))}
+              </ListBox.Section>
+              {unverifiedProviders.length > 0 ? (
+                <ListBox.Section>
+                  <Header className="text-[var(--oh-muted)]">
+                    {t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                  </Header>
+                  {unverifiedProviders.map((provider) => (
+                    <ListBox.Item
+                      id={provider.name}
+                      key={provider.name}
+                      textValue={mapProvider(provider.name)}
+                    >
+                      {mapProvider(provider.name)}
+                    </ListBox.Item>
+                  ))}
+                </ListBox.Section>
+              ) : null}
+            </ListBox>
+          </ComboBox.Popover>
+        </ComboBox>
       </fieldset>
 
       {selectedProvider === "openhands" && (
@@ -238,68 +235,74 @@ export function ModelSelector({
           {t(I18nKey.LLM$MODEL)}
         </label>
         <div className="relative">
-          <Autocomplete
-            data-testid="llm-model-input"
+          <ComboBox
             isRequired
-            isVirtualized={false}
-            isLoading={isLoadingModels}
-            name="llm-model-input"
             aria-label={t(I18nKey.LLM$MODEL)}
-            isClearable={false}
             onSelectionChange={(e) => {
               if (e?.toString()) handleChangeModel(e.toString());
             }}
             isDisabled={isDisabled || !selectedProvider}
             selectedKey={selectedModel}
             defaultSelectedKey={selectedModel ?? undefined}
-            classNames={{
-              popoverContent:
-                "bg-content1 rounded-xl border border-[var(--oh-border)]",
-              selectorButton: heroUiAutocompleteSelectorButtonClassName,
-            }}
-            selectorButtonProps={{ disableRipple: true }}
-            inputProps={{
-              classNames: {
-                inputWrapper: formControlSettingsFieldClassName,
-              },
-            }}
           >
-            <AutocompleteSection
-              title={t(I18nKey.MODEL_SELECTOR$VERIFIED)}
-              classNames={{ heading: "text-[var(--oh-muted)]" }}
-            >
-              {verifiedModels.map((model) => (
-                <AutocompleteItem key={model.name} textValue={model.name}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="truncate">{model.name}</span>
-                    {isFreeOpenHandsModel(
-                      `${selectedProvider}/${model.name}`,
-                    ) ? (
-                      <span className={freeModelBadgeClassName}>
-                        {FREE_MODEL_BADGE_LABEL}
+            <ComboBox.InputGroup className={formControlSettingsFieldClassName}>
+              <Input data-testid="llm-model-input" name="llm-model-input" />
+              {isLoadingModels ? (
+                <Spinner
+                  size="sm"
+                  className="mr-2"
+                  aria-label={t(I18nKey.HOME$LOADING)}
+                />
+              ) : null}
+              <ComboBox.Trigger
+                className={heroUiAutocompleteSelectorButtonClassName}
+              />
+            </ComboBox.InputGroup>
+            <ComboBox.Popover className="rounded-xl border border-[var(--oh-border)]">
+              <ListBox>
+                <ListBox.Section>
+                  <Header className="text-[var(--oh-muted)]">
+                    {t(I18nKey.MODEL_SELECTOR$VERIFIED)}
+                  </Header>
+                  {verifiedModels.map((model) => (
+                    <ListBox.Item
+                      key={model.name}
+                      id={model.name}
+                      textValue={model.name}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">{model.name}</span>
+                        {isFreeOpenHandsModel(
+                          `${selectedProvider}/${model.name}`,
+                        ) ? (
+                          <span className={freeModelBadgeClassName}>
+                            {FREE_MODEL_BADGE_LABEL}
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                  </span>
-                </AutocompleteItem>
-              ))}
-            </AutocompleteSection>
-            {unverifiedModels.length > 0 ? (
-              <AutocompleteSection
-                title={t(I18nKey.MODEL_SELECTOR$OTHERS)}
-                classNames={{ heading: "text-[var(--oh-muted)]" }}
-              >
-                {unverifiedModels.map((model) => (
-                  <AutocompleteItem
-                    data-testid={`model-item-${model.name}`}
-                    key={model.name}
-                    textValue={model.name}
-                  >
-                    {model.name}
-                  </AutocompleteItem>
-                ))}
-              </AutocompleteSection>
-            ) : null}
-          </Autocomplete>
+                    </ListBox.Item>
+                  ))}
+                </ListBox.Section>
+                {unverifiedModels.length > 0 ? (
+                  <ListBox.Section>
+                    <Header className="text-[var(--oh-muted)]">
+                      {t(I18nKey.MODEL_SELECTOR$OTHERS)}
+                    </Header>
+                    {unverifiedModels.map((model) => (
+                      <ListBox.Item
+                        data-testid={`model-item-${model.name}`}
+                        key={model.name}
+                        id={model.name}
+                        textValue={model.name}
+                      >
+                        {model.name}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox.Section>
+                ) : null}
+              </ListBox>
+            </ComboBox.Popover>
+          </ComboBox>
           {isSelectedModelFree && selectedModel ? (
             <>
               <span
