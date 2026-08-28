@@ -37,6 +37,24 @@ import { ViewToggle } from "./view-toggle";
 
 const EMPTY_EXCLUDE_KEYS = new Set<string>();
 
+function withSourceFieldDirty(
+  prev: Partial<Record<SettingsValueSource, SettingsDirtyState>>,
+  sourceKey: SettingsValueSource,
+  fieldKey: string,
+  isDirty: boolean,
+): Partial<Record<SettingsValueSource, SettingsDirtyState>> {
+  const nextSourceDirty = { ...(prev[sourceKey] ?? {}) };
+  if (isDirty) {
+    nextSourceDirty[fieldKey] = true;
+  } else {
+    delete nextSourceDirty[fieldKey];
+  }
+  return {
+    ...prev,
+    [sourceKey]: nextSourceDirty,
+  };
+}
+
 const VIEW_ORDER: Record<SettingsView, number> = {
   basic: 0,
   advanced: 1,
@@ -364,8 +382,15 @@ export function SdkSectionPage({
     Partial<Record<SettingsValueSource, SettingsDirtyState>>
   >({});
   const hasHydratedViewRef = React.useRef(false);
+  // Persisted (pre-override) values. Field edits compare against this so
+  // reverting a toggle such as confirmation_mode clears dirty instead of
+  // latching Save enabled. Updated again after a successful save so the
+  // next revert uses the values that were just written.
+  const dirtyBaselineRef = React.useRef<Partial<
+    Record<SettingsValueSource, SettingsFormValues>
+  > | null>(null);
 
-  const initialValuesBySource = React.useMemo<Partial<
+  const persistedValuesBySource = React.useMemo<Partial<
     Record<SettingsValueSource, SettingsFormValues>
   > | null>(() => {
     if (!settings) return null;
@@ -381,17 +406,26 @@ export function SdkSectionPage({
         ),
       };
     }
-    if (initialValueOverrides) {
-      const firstSource = resolvedSources[0]?.settingsSource;
-      if (firstSource && result[firstSource]) {
-        result[firstSource] = {
-          ...result[firstSource],
-          ...initialValueOverrides,
-        };
-      }
-    }
     return result;
-  }, [settings, resolvedSources, overridesSignature]);
+  }, [settings, resolvedSources]);
+
+  const initialValuesBySource = React.useMemo<Partial<
+    Record<SettingsValueSource, SettingsFormValues>
+  > | null>(() => {
+    if (!persistedValuesBySource) return null;
+    if (!initialValueOverrides) return persistedValuesBySource;
+    const firstSource = resolvedSources[0]?.settingsSource;
+    if (!firstSource || !persistedValuesBySource[firstSource]) {
+      return persistedValuesBySource;
+    }
+    return {
+      ...persistedValuesBySource,
+      [firstSource]: {
+        ...persistedValuesBySource[firstSource],
+        ...initialValueOverrides,
+      },
+    };
+  }, [persistedValuesBySource, resolvedSources, overridesSignature]);
 
   const initialView = React.useMemo(() => {
     if (!settings) return null;
@@ -424,6 +458,7 @@ export function SdkSectionPage({
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
 
+    dirtyBaselineRef.current = persistedValuesBySource;
     setValuesBySource(initialValuesBySource);
     if (initialValueOverrides) {
       const firstSource = resolvedSources[0]?.settingsSource;
@@ -447,7 +482,7 @@ export function SdkSectionPage({
     } else {
       setView((currentView) => getLessDetailedView(currentView, initialView));
     }
-  }, [initialValuesBySource, initialView]);
+  }, [initialValuesBySource, initialView, persistedValuesBySource]);
 
   const fieldKeyToSource = React.useMemo(() => {
     const map = new Map<string, SettingsValueSource>();
@@ -492,13 +527,12 @@ export function SdkSectionPage({
           [fieldKey]: nextValue,
         },
       }));
-      setDirtyBySource((prev) => ({
-        ...prev,
-        [sourceKey]: {
-          ...(prev[sourceKey] ?? {}),
-          [fieldKey]: true,
-        },
-      }));
+      // Delete the key on revert. ``isDirty`` is ``Object.keys(flatDirty)``,
+      // so a ``false`` flag would still keep Save enabled.
+      const baseline = dirtyBaselineRef.current?.[sourceKey]?.[fieldKey];
+      setDirtyBySource((prev) =>
+        withSourceFieldDirty(prev, sourceKey, fieldKey, nextValue !== baseline),
+      );
     },
     [fieldKeyToSource],
   );
@@ -577,6 +611,7 @@ export function SdkSectionPage({
         if (!suppressSuccessToast) {
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
         }
+        dirtyBaselineRef.current = valuesBySource;
         setDirtyBySource({});
         onSaveSuccess?.();
       },

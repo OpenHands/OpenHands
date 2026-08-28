@@ -865,6 +865,73 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("disables Save after confirmation mode is reverted to the saved value", async () => {
+    const conversationSchema: NonNullable<
+      Settings["conversation_settings_schema"]
+    > = {
+      model_name: "ConversationSettings",
+      sections: [
+        {
+          key: "verification",
+          label: "Verification",
+          fields: [
+            {
+              key: "confirmation_mode",
+              label: "Confirmation mode",
+              section: "verification",
+              section_label: "Verification",
+              value_type: "boolean",
+              default: false,
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings_schema: conversationSchema,
+        conversation_settings: {
+          confirmation_mode: false,
+        },
+      }),
+    );
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSdkSectionPage({
+      settingsSources: [
+        {
+          settingsSource: "conversation_settings",
+          sectionKeys: ["verification"],
+        },
+      ],
+    });
+
+    const confirmationInput = await screen.findByTestId(
+      "sdk-settings-confirmation_mode",
+    );
+    const saveButton = screen.getByTestId("save-button") as HTMLButtonElement;
+    const label = confirmationInput.closest("label")!;
+
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.click(label);
+    expect(saveButton).toBeEnabled();
+
+    await userEvent.click(label);
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.click(saveButton);
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+  });
+
   it("shows an error toast when saving settings fails", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSavableSettings(),

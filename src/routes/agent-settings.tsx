@@ -101,6 +101,59 @@ function isKnownAcpModel(
   );
 }
 
+interface LoadedAgentFormSnapshot {
+  agentType: AgentType;
+  commandText: string;
+  acpModel: string;
+  acpServer: string | null;
+  isCustomAcpModel: boolean;
+}
+
+/**
+ * Values the Agent Settings form seeds from the loaded/saved snapshot.
+ * Dirty tracking compares live fields against this so reverting an edit
+ * disables Save again.
+ */
+function getLoadedAgentFormSnapshot(
+  source: Record<string, SettingsValue> | null,
+): LoadedAgentFormSnapshot {
+  if (source?.agent_kind !== "acp") {
+    return {
+      agentType: "openhands",
+      commandText: "",
+      acpModel: "",
+      acpServer: null,
+      isCustomAcpModel: false,
+    };
+  }
+
+  const rawAcpServer = source.acp_server;
+  const acpServer = typeof rawAcpServer === "string" ? rawAcpServer : undefined;
+  const provider = getAcpProvider(acpServer);
+  const storedCommand = toStringArray(source.acp_command);
+  const effectiveBaseCommand =
+    storedCommand.length > 0
+      ? storedCommand
+      : (provider?.default_command ?? []);
+  const tokens = [...effectiveBaseCommand, ...toStringArray(source.acp_args)];
+  const commandText = tokens.length > 0 ? formatCommand(tokens) : "";
+  const savedModel = source.acp_model;
+  const normalizedSavedModel =
+    typeof savedModel === "string" ? savedModel.trim() : "";
+  const acpModel =
+    normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "";
+
+  return {
+    agentType: "acp",
+    commandText,
+    acpModel,
+    acpServer: acpServer ?? null,
+    isCustomAcpModel:
+      !!normalizedSavedModel &&
+      (!provider || !isKnownAcpModel(provider, normalizedSavedModel)),
+  };
+}
+
 /**
  * Variant-specific AgentProfile fields derived from the form state. The
  * OpenHands branch omits `llm_profile_ref` — the profile editor supplies it.
@@ -338,7 +391,6 @@ export function AgentSettingsScreen({
   const [commandText, setCommandText] = useState("");
   const [acpModel, setAcpModel] = useState("");
   const [isCustomAcpModel, setIsCustomAcpModel] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
 
   // ACP credentials live alongside the agent spec, so the page owns the
   // credential form and a single Save persists both. Called unconditionally
@@ -356,6 +408,13 @@ export function AgentSettingsScreen({
   const lastInitializedSettingsRef = useRef<unknown>(null);
   const loadedAcpServerRef = useRef<string | null>(null);
   const loadedCommandTextRef = useRef<string>("");
+  const [savedDirtySnapshot, setSavedDirtySnapshot] = useState<
+    Pick<LoadedAgentFormSnapshot, "agentType" | "commandText" | "acpModel">
+  >({
+    agentType: "openhands",
+    commandText: "",
+    acpModel: "",
+  });
 
   useEffect(() => {
     // Seed from the profile override (embedded) or the live global settings.
@@ -365,49 +424,18 @@ export function AgentSettingsScreen({
     if (lastInitializedSettingsRef.current === initIdentity) return;
 
     lastInitializedSettingsRef.current = initIdentity;
-    const kind = source?.agent_kind;
-
-    if (kind === "acp") {
-      setAgentType("acp");
-
-      const rawAcpServer = source?.acp_server;
-      const acpServer =
-        typeof rawAcpServer === "string" ? rawAcpServer : undefined;
-      const provider = getAcpProvider(acpServer);
-      const storedCommand = toStringArray(source?.acp_command);
-      const effectiveBaseCommand =
-        storedCommand.length > 0
-          ? storedCommand
-          : (provider?.default_command ?? []);
-      const tokens = [
-        ...effectiveBaseCommand,
-        ...toStringArray(source?.acp_args),
-      ];
-      const renderedCommandText =
-        tokens.length > 0 ? formatCommand(tokens) : "";
-      setCommandText(renderedCommandText);
-      loadedAcpServerRef.current = acpServer ?? null;
-      loadedCommandTextRef.current = renderedCommandText;
-
-      const savedModel = source?.acp_model;
-      const normalizedSavedModel =
-        typeof savedModel === "string" ? savedModel.trim() : "";
-      setAcpModel(
-        normalizedSavedModel || getAcpPreferredDefaultModel(acpServer) || "",
-      );
-      setIsCustomAcpModel(
-        !!normalizedSavedModel &&
-          (!provider || !isKnownAcpModel(provider, normalizedSavedModel)),
-      );
-    } else {
-      setAgentType("openhands");
-      setCommandText("");
-      setAcpModel("");
-      loadedAcpServerRef.current = null;
-      loadedCommandTextRef.current = "";
-      setIsCustomAcpModel(false);
-    }
-    setIsDirty(false);
+    const snapshot = getLoadedAgentFormSnapshot(source);
+    setAgentType(snapshot.agentType);
+    setCommandText(snapshot.commandText);
+    setAcpModel(snapshot.acpModel);
+    setIsCustomAcpModel(snapshot.isCustomAcpModel);
+    loadedAcpServerRef.current = snapshot.acpServer;
+    loadedCommandTextRef.current = snapshot.commandText;
+    setSavedDirtySnapshot({
+      agentType: snapshot.agentType,
+      commandText: snapshot.commandText,
+      acpModel: snapshot.acpModel,
+    });
   }, [settings, agentSettingsOverride]);
 
   // Sync the sub-agents toggle when settings reload
@@ -510,18 +538,24 @@ export function AgentSettingsScreen({
       toolConcurrency,
     });
 
-  // Dirty tracking: for OpenHands path, also check the sub-agents and
-  // LLM-switching toggles and the parallel-tool-calls input.
+  // Dirty tracking compares live fields to the loaded/saved snapshot so
+  // reverting an edit disables Save again. OpenHands toggles/fields already
+  // did this; ACP previously latched ``isDirty`` on the first keystroke.
+  // ``savedDirtySnapshot`` also absorbs a successful save immediately, so
+  // Save disables before settings refetch replaces the server snapshot.
+  const isAgentTypeDirty = agentType !== savedDirtySnapshot.agentType;
+  const isAcpDirty =
+    isAcp &&
+    (commandText !== savedDirtySnapshot.commandText ||
+      acpModel.trim() !== savedDirtySnapshot.acpModel.trim());
   const isOpenHandsDirty =
     !isAcp &&
     (subAgentsEnabled !== initialSubAgentsEnabled ||
       switchLlmToolEnabled !== initialSwitchLlmToolEnabled ||
       toolConcurrency !== initialToolConcurrency);
-  const settingsDirty = isDirty || isOpenHandsDirty;
+  const settingsDirty = isAgentTypeDirty || isAcpDirty || isOpenHandsDirty;
   // The single Save covers both the agent spec and ACP credentials, so it is
   // active when either changed, and shows "Saving…" while either is in flight.
-  // ``isDirty`` is already false off the ACP path (no credential fields), so no
-  // ``isAcp`` guard is needed.
   const credentialsDirty = acpCredentialForm.isDirty;
   const isAnyDirty = settingsDirty || credentialsDirty;
   const isSavingAny = isSaving || acpCredentialForm.isSaving;
@@ -577,7 +611,13 @@ export function AgentSettingsScreen({
           },
           onSuccess: () => {
             displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsDirty(false);
+            loadedCommandTextRef.current = commandText;
+            loadedAcpServerRef.current = providerKey;
+            setSavedDirtySnapshot({
+              agentType: "acp",
+              commandText,
+              acpModel: acpModel.trim(),
+            });
           },
         },
       );
@@ -626,7 +666,13 @@ export function AgentSettingsScreen({
           },
           onSuccess: () => {
             displaySuccessToast(t(I18nKey.SETTINGS$SAVED));
-            setIsDirty(false);
+            loadedAcpServerRef.current = null;
+            loadedCommandTextRef.current = "";
+            setSavedDirtySnapshot({
+              agentType: "openhands",
+              commandText: "",
+              acpModel: "",
+            });
           },
         },
       );
@@ -703,7 +749,6 @@ export function AgentSettingsScreen({
           } else if (newType === "openhands") {
             setIsCustomAcpModel(false);
           }
-          setIsDirty(true);
         }}
       />
 
@@ -800,7 +845,6 @@ export function AgentSettingsScreen({
                 setAcpModel("");
                 setIsCustomAcpModel(true);
               }
-              setIsDirty(true);
             }}
           />
 
@@ -832,7 +876,6 @@ export function AgentSettingsScreen({
                   setIsCustomAcpModel(false);
                 }
                 setCommandText(nextCommandText);
-                setIsDirty(true);
               }}
             />
             <Typography.Text className="text-xs text-[#717888]">
@@ -867,7 +910,6 @@ export function AgentSettingsScreen({
                     setIsCustomAcpModel(false);
                     setAcpModel(modelKey);
                   }
-                  setIsDirty(true);
                 }}
               />
             )}
@@ -885,7 +927,6 @@ export function AgentSettingsScreen({
                 showOptionalTag
                 onChange={(value) => {
                   setAcpModel(value);
-                  setIsDirty(true);
                 }}
               />
             )}

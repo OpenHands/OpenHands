@@ -663,6 +663,115 @@ describe("AgentSettingsScreen", () => {
     });
   });
 
+  it("disables Save after ACP edits are reverted to the saved values", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          schema_version: 1,
+          agent_kind: "acp",
+          acp_server: "claude-code",
+          acp_command: ["npx", "-y", "@agentclientprotocol/claude-agent-acp"],
+          acp_model: "my-pinned-fork-model",
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
+    renderAgentSettingsScreen();
+    const cmd = (await screen.findByTestId(
+      "agent-command-input",
+    )) as HTMLTextAreaElement;
+    const model = screen.getByTestId("agent-model-input") as HTMLInputElement;
+    const saveButton = screen.getByTestId(
+      "agent-save-button",
+    ) as HTMLButtonElement;
+    const originalCommand = cmd.value;
+    const originalModel = model.value;
+
+    expect(saveButton).toBeDisabled();
+
+    await user.clear(cmd);
+    await user.type(cmd, `${originalCommand} --flag`);
+    expect(saveButton).toBeEnabled();
+
+    await user.clear(cmd);
+    await user.type(cmd, originalCommand);
+    expect(saveButton).toBeDisabled();
+
+    await user.clear(model);
+    await user.type(model, "other-model");
+    expect(saveButton).toBeEnabled();
+
+    await user.clear(model);
+    await user.type(model, originalModel);
+    expect(saveButton).toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_TYPE_OPENHANDS",
+      }),
+    );
+    expect(saveButton).toBeEnabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+    expect(saveButton).toBeDisabled();
+
+    await user.click(saveButton);
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("disables Save after OpenHands fields and agent type are reverted to the saved values", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings: {
+          ...MOCK_DEFAULT_USER_SETTINGS.agent_settings,
+          agent_kind: "openhands",
+          enable_sub_agents: false,
+        },
+      }),
+    );
+    const save = vi.spyOn(SettingsService, "saveSettings");
+
+    renderAgentSettingsScreen();
+    await screen.findByTestId("agent-settings-screen");
+    const saveButton = screen.getByTestId(
+      "agent-save-button",
+    ) as HTMLButtonElement;
+
+    expect(saveButton).toBeDisabled();
+
+    const toggle = screen.getByTestId("agent-settings-enable-sub-agents");
+    const label = toggle.closest("label")!;
+    await user.click(label);
+    expect(saveButton).toBeEnabled();
+
+    await user.click(label);
+    expect(saveButton).toBeDisabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", { name: "SETTINGS$AGENT_TYPE_ACP" }),
+    );
+    expect(saveButton).toBeEnabled();
+
+    await user.click(screen.getByTestId("agent-type-selector"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "SETTINGS$AGENT_TYPE_OPENHANDS",
+      }),
+    );
+    expect(saveButton).toBeDisabled();
+
+    await user.click(saveButton);
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("disables Save when the user has cleared the command on the ACP path", async () => {
     const user = userEvent.setup();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
@@ -792,13 +901,13 @@ describe("AgentSettingsScreen", () => {
       "npx -y @agentclientprotocol/claude-agent-acp@0.63.0 --extra-arg",
     );
 
-    // Touch the form to mark it dirty (Save is disabled until isDirty),
-    // then submit. The data the form sends has to carry the registry-
-    // default prefix the user can now SEE in the textarea, not the bare
-    // ``--extra-arg`` that was stored.
-    await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    // Extra args make detectPreset miss the built-in default, so the form
+    // is on Custom (no model dropdown). Change the custom model field so
+    // Save enables without rewriting the expanded command. The payload
+    // still has to carry the registry-default prefix the user can SEE.
+    const model = screen.getByTestId("agent-model-input") as HTMLInputElement;
+    await user.clear(model);
+    await user.type(model, "haiku");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
@@ -814,6 +923,7 @@ describe("AgentSettingsScreen", () => {
       "@agentclientprotocol/claude-agent-acp@0.63.0",
       "--extra-arg",
     ]);
+    expect(call.agent_settings_diff?.acp_model).toBe("haiku");
     // ``acp_args: []`` resets the API-set args so they don't double up
     // at spawn time.
     expect(call.agent_settings_diff?.acp_args).toEqual([]);
@@ -823,15 +933,16 @@ describe("AgentSettingsScreen", () => {
     // Data-corruption regression: a user with an ``acp_server`` value
     // canvas's registry doesn't know about (e.g. set via the API for a
     // future provider that hasn't been mirrored into ``ACP_PROVIDERS``
-    // yet) opens Settings → Agent and clicks Save. Without preservation
-    // the save flow demotes ``acp_server: "amp"`` → ``acp_server:
-    // "custom"`` because ``detectPreset`` returns ``custom`` for any
-    // unknown server. The original key name is silently lost.
+    // yet) opens Settings → Agent and saves a non-command change.
+    // Without preservation the save flow demotes ``acp_server: "amp"``
+    // → ``acp_server: "custom"`` because ``detectPreset`` returns
+    // ``custom`` for any unknown server. The original key name is
+    // silently lost.
     //
-    // The fix is narrow: when the user hasn't touched the command since
-    // load AND the loaded server is non-empty, non-``"custom"``, and
-    // absent from ``ACP_PROVIDERS``, write the loaded key back verbatim
-    // via the ``allowUnknownServer`` pass-through.
+    // The fix is narrow: when the command is unchanged since load AND
+    // the loaded server is non-empty, non-``"custom"``, and absent from
+    // ``ACP_PROVIDERS``, write the loaded key back verbatim via the
+    // ``allowUnknownServer`` pass-through.
     const user = userEvent.setup();
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({
@@ -852,12 +963,12 @@ describe("AgentSettingsScreen", () => {
     )) as HTMLTextAreaElement;
     expect(cmd.value).toBe("npx -y @some-future/amp-acp");
 
-    // Touch + revert the textarea to flip isDirty without changing
-    // the persisted command text — matches "user opens settings and
-    // hits Save without intending to change anything."
-    await user.click(cmd);
-    await user.keyboard("{End} ");
-    await user.keyboard("{Backspace}");
+    // Change the model only so Save enables while the command stays at
+    // the loaded value. Unknown-server preservation is keyed off an
+    // unchanged command, not a latched dirty flag.
+    const model = screen.getByTestId("agent-model-input") as HTMLInputElement;
+    await user.clear(model);
+    await user.type(model, "amp-model");
 
     await user.click(screen.getByTestId("agent-save-button"));
     await waitFor(() => {
@@ -872,6 +983,7 @@ describe("AgentSettingsScreen", () => {
       "-y",
       "@some-future/amp-acp",
     ]);
+    expect(call.agent_settings_diff?.acp_model).toBe("amp-model");
   });
 
   it("demotes an unknown loaded acp_server to 'custom' when the user edits the command", async () => {
