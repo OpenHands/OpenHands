@@ -115,7 +115,13 @@ def extract_sections(body: str) -> dict[str, str]:
     for index, match in enumerate(matches):
         start = match.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        sections[match.group(1).strip().lower()] = body[start:end]
+        raw_heading = match.group(1).strip()
+        heading_key = raw_heading.rstrip(":").strip().lower()
+        content = body[start:end]
+        if heading_key in sections:
+            sections[heading_key] = f"{sections[heading_key]}\n{content}"
+        else:
+            sections[heading_key] = content
     return sections
 
 
