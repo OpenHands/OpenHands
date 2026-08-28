@@ -50,10 +50,21 @@ function addUrlSecrets(values: Set<string>, rawUrl: string | undefined): void {
   if (!rawUrl) return;
   try {
     const url = new URL(rawUrl);
+    // Decode defensively: a lone '%' in the userinfo (e.g. a raw percent in a
+    // password) makes decodeURIComponent throw URIError, which would abort
+    // this whole block and leave the query-string secrets unredacted
+    // (issue #16978).
+    const safeDecode = (value: string): string => {
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    };
     addValue(values, url.username);
     addValue(values, url.password);
-    addValue(values, decodeURIComponent(url.username));
-    addValue(values, decodeURIComponent(url.password));
+    addValue(values, safeDecode(url.username));
+    addValue(values, safeDecode(url.password));
     url.searchParams.forEach((value, name) => {
       if (SECRETLIKE_PARAM_NAME.test(name)) addValue(values, value);
     });
