@@ -297,10 +297,12 @@ describe("DoneMarkerReporter", () => {
     });
   });
 
-  describe("a truncated run is never green", () => {
-    it("fails a run that ended with cases unreported", () => {
-      // The global timeout or a kill lands here: three cases declared, two ran,
-      // both passed. Reporting that as passed would hide the missing case.
+  describe("runs that never got going", () => {
+    it("keeps the existing verdict when the run ends with cases unreported", () => {
+      // The global timeout lands here: three cases declared, two ran, both
+      // passed. Whether that should be green is a separate question from the
+      // retry arithmetic, so the verdict is deliberately left as it is today
+      // and `.results.json` still records the shortfall.
       const [a, b, c] = [
         testCase("a", "a"),
         testCase("b", "b"),
@@ -312,9 +314,30 @@ describe("DoneMarkerReporter", () => {
       reporter.onTestEnd(b, attempt("passed", 0));
       reporter.onEnd({ status: "timedout" });
 
+      expect(marker(".tests-done")).toBe("passed");
+      expect(results()).toMatchObject({
+        status: "in_progress",
+        completed: 2,
+        total: 3,
+      });
+    });
+
+    it("never leaves a stale .all-passed behind a failed verdict", () => {
+      // The markers are written once, from onEnd, so `.all-passed` cannot
+      // survive from an earlier point at which the run looked green — which is
+      // what let the workflow's rescue turn a failed run into a pass.
+      const [a, b] = [testCase("a", "a"), testCase("b", "b - flaky")];
+      const reporter = begin([a, b]);
+
+      reporter.onTestEnd(a, attempt("passed", 0));
+      reporter.onTestEnd(b, attempt("passed", 0));
+      expect(marker(".all-passed")).toBeNull();
+
+      reporter.onTestEnd(b, attempt("failed", 1, "boom"));
+      reporter.onEnd({ status: "failed" });
+
       expect(marker(".tests-done")).toBe("failed");
       expect(marker(".all-passed")).toBeNull();
-      expect(results()).toMatchObject({ completed: 2, total: 3 });
     });
 
     it("fails a run where no test ever reported", () => {

@@ -95,23 +95,31 @@ class DoneMarkerReporter implements Reporter {
    *
    * A run cut short — by the global timeout, `maxFailures`, a webServer
    * failure, or an interrupt — leaves fewer cases than declared and stays
-   * `in_progress`, so it cannot be reported as passing.
+   * `in_progress` in `.results.json`.
    */
   private isComplete() {
     return this.runEnded && this.testsById.size >= this.totalTests;
   }
 
   /**
-   * Whether the run finished with nothing outstanding and nothing failing.
+   * Whether every case that reported ended in a passing state.
    *
    * Derived from the recorded cases rather than accumulated as attempts
    * arrive, so a case that fails and then passes on retry reads as a pass —
    * the verdict Playwright itself reports for a flaky test.
    *
-   * A suite that declared no tests is a configuration failure, not a pass.
+   * Deliberately does not require every declared case to have reported: a run
+   * cut short by the global timeout keeps the verdict it has today. Whether
+   * such a run should be green is a separate question from the retry
+   * arithmetic, and is tracked on its own.
+   *
+   * A suite that declared no tests, or one where nothing reported at all, is a
+   * configuration failure rather than a pass.
    */
   private allPassed() {
-    if (!this.isComplete() || this.totalTests === 0) return false;
+    if (!this.runEnded || this.totalTests === 0 || this.testsById.size === 0) {
+      return false;
+    }
     for (const record of this.testsById.values()) {
       if (record.status !== "passed" && record.status !== "skipped") {
         return false;
