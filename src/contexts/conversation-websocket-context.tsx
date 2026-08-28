@@ -69,15 +69,12 @@ import { setConversationState } from "#/utils/conversation-local-storage";
 import {
   recordModelSwitchMessage,
   seedModelSwitchesFromHistory,
+  stampActiveLlmProfile,
 } from "#/hooks/chat/record-model-switch-message";
 import {
   invalidateConversationQueries,
   updateConversationLlmModelInCache,
 } from "#/hooks/mutation/conversation-mutation-utils";
-import {
-  getStoredConversationMetadata,
-  setStoredConversationMetadata,
-} from "#/api/conversation-metadata-store";
 
 export type WebSocketConnectionState =
   | "CONNECTING"
@@ -697,18 +694,14 @@ export function ConversationWebSocketProvider({
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
-            // when several profiles share a model (#1082).
-            const prevMetadata = getStoredConversationMetadata(conversationId);
-            setStoredConversationMetadata(conversationId, {
-              selected_repository: prevMetadata?.selected_repository ?? null,
-              selected_branch: prevMetadata?.selected_branch ?? null,
-              git_provider: prevMetadata?.git_provider ?? null,
-              selected_workspace: prevMetadata?.selected_workspace ?? null,
-              active_profile: switchLLMObservation.observation.profile_name,
-              // Full-object replace: carry the plugins snapshot forward so the
-              // in-conversation plugins view survives a profile switch.
-              plugins: prevMetadata?.plugins ?? null,
-            });
+            // when several profiles share a model (#1082). Stamp with the
+            // observation's own timestamp so a later history seed of this same
+            // event can't roll it back (or needlessly rewrite it).
+            stampActiveLlmProfile(
+              conversationId,
+              switchLLMObservation.observation.profile_name,
+              switchLLMObservation.timestamp,
+            );
 
             if (switchLLMObservation.observation.active_model) {
               updateConversationLlmModelInCache(
