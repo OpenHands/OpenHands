@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   trackEvent: vi.fn(),
   setTelemetryPersonProperties: vi.fn(),
   setTelemetryBackendContext: vi.fn(),
-  isTelemetryEnabled: vi.fn(),
+  canCaptureTelemetry: vi.fn(),
   getLockedCloudHost: vi.fn(),
   backendKind: "local" as "local" | "cloud",
   conversationId: null as string | null,
@@ -24,7 +24,7 @@ vi.mock("#/services/telemetry", () => ({
   trackEvent: mocks.trackEvent,
   setTelemetryPersonProperties: mocks.setTelemetryPersonProperties,
   setTelemetryBackendContext: mocks.setTelemetryBackendContext,
-  isTelemetryEnabled: mocks.isTelemetryEnabled,
+  canCaptureTelemetry: mocks.canCaptureTelemetry,
 }));
 
 vi.mock("#/api/agent-server-config", () => ({
@@ -70,7 +70,7 @@ const capturedProperties = () => mocks.trackEvent.mock.calls[0][1];
 beforeEach(() => {
   mocks.trackEvent.mockResolvedValue(undefined);
   mocks.setTelemetryPersonProperties.mockResolvedValue(undefined);
-  mocks.isTelemetryEnabled.mockReturnValue(true);
+  mocks.canCaptureTelemetry.mockReturnValue(true);
   mocks.getLockedCloudHost.mockReturnValue(null);
   mocks.backendKind = "local";
   mocks.conversationId = null;
@@ -142,9 +142,7 @@ describe("FeedbackLauncher", () => {
       await submitWith("the sidebar lags");
 
       await waitFor(() => expect(mocks.trackEvent).toHaveBeenCalledTimes(1));
-      expect(mocks.trackEvent.mock.calls[0][0]).toBe(
-        "canvas_feedback_submitted",
-      );
+      expect(mocks.trackEvent.mock.calls[0][0]).toBe("feedback_submitted");
       expect(capturedProperties()).toMatchObject({
         feedback: "the sidebar lags",
         feedback_length: 16,
@@ -219,7 +217,7 @@ describe("FeedbackLauncher", () => {
     it("reports an error rather than silently dropping feedback without consent", async () => {
       // `trackEvent` resolves without capturing when consent is absent, so a
       // resolved promise would otherwise read as success.
-      mocks.isTelemetryEnabled.mockReturnValue(false);
+      mocks.canCaptureTelemetry.mockReturnValue(false);
       await submitWith("unheard");
 
       expect(screen.getByTestId("feedback-error")).toBeInTheDocument();

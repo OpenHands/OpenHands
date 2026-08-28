@@ -619,6 +619,19 @@ export function isTelemetryEnabled(): boolean {
 }
 
 /**
+ * Whether a capture would actually reach PostHog right now.
+ *
+ * `isTelemetryEnabled()` reports consent alone, but an embedder can switch
+ * telemetry off through `configureTelemetry()`; every capture path honours that
+ * flag while consent does not reflect it. A caller that has to tell the user
+ * whether their submission landed must check both, or it will report success
+ * for a silently dropped event.
+ */
+export function canCaptureTelemetry(): boolean {
+  return !telemetryDisabled && getTelemetryConsent() === "granted";
+}
+
+/**
  * Check if first use event has already been sent
  */
 function hasFirstUseSent(): boolean {

@@ -7,7 +7,7 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useOptionalConversationId } from "#/hooks/use-conversation-id";
 import { useTracking } from "#/hooks/use-tracking";
 import { I18nKey } from "#/i18n/declaration";
-import { isTelemetryEnabled } from "#/services/telemetry";
+import { canCaptureTelemetry } from "#/services/telemetry";
 import { cn } from "#/utils/utils";
 
 /**
@@ -25,7 +25,7 @@ import { cn } from "#/utils/utils";
  *
  * | name | properties |
  * | --- | --- |
- * | `canvas_feedback_submitted` | `feedback`, `feedback_length`, `has_email`, `conversation_id`, plus the common backend context |
+ * | `feedback_submitted` | `feedback`, `feedback_length`, `has_email`, `conversation_id`, plus the common backend context |
  *
  * A supplied email is attached to the PostHog person with
  * `setPersonProperties` as the `email` person property, not repeated on the
@@ -95,10 +95,11 @@ export function FeedbackLauncher() {
     }
     setEmailError(false);
 
-    // Consent is the one failure this can detect up front. `trackEvent`
-    // resolves without capturing when consent is absent, so a resolved promise
-    // is not evidence the feedback landed.
-    if (!isTelemetryEnabled()) {
+    // `trackEvent` resolves without capturing whenever telemetry is off, so a
+    // resolved promise is not evidence the feedback landed. Checked up front,
+    // and against both switches: consent, and the embedder's
+    // `configureTelemetry()` flag, which consent alone does not reflect.
+    if (!canCaptureTelemetry()) {
       setState("error");
       return;
     }

@@ -469,7 +469,7 @@ export const useTracking = () => {
     conversationId?: string;
   }): Promise<void> => {
     setTelemetryBackendContext(getBackendTelemetryContext());
-    return trackEvent("canvas_feedback_submitted", {
+    return trackEvent("feedback_submitted", {
       ...commonProperties,
       feedback,
       feedback_length: feedback.length,
