@@ -10,7 +10,12 @@ import {
   type BackendConnectionMethod,
   getBackendTelemetryProperties,
 } from "#/services/telemetry-context";
-import { setTelemetryBackendContext, trackEvent } from "#/services/telemetry";
+import {
+  getTelemetryDistinctId,
+  setTelemetryBackendContext,
+  setTelemetryIdentity,
+  trackEvent,
+} from "#/services/telemetry";
 
 /**
  * Stable semantic identifier for an onboarding link or CTA. Identifies the
@@ -436,6 +441,57 @@ export const useTracking = () => {
     });
   };
 
+  /**
+   * User-submitted feedback from the persistent feedback control.
+   *
+   * Awaited rather than fire-and-forget: the form tells the user whether the
+   * submission landed, so it needs the capture to settle. `trackEvent` resolves
+   * without capturing when consent has not been granted, so callers must check
+   * `isTelemetryEnabled()` first rather than reading a resolved promise as
+   * success.
+   *
+   * The feedback text is the payload here, not incidental telemetry — it is the
+   * thing being reported. The email is deliberately absent: it is attached to
+   * the person rather than the event, so it is not duplicated across every
+   * captured event.
+   */
+  const trackFeedbackSubmitted = ({
+    feedback,
+    hasEmail,
+    conversationId,
+  }: {
+    feedback: string;
+    hasEmail: boolean;
+    conversationId?: string;
+  }): Promise<void> => {
+    setTelemetryBackendContext(getBackendTelemetryContext());
+    return trackEvent("canvas_feedback_submitted", {
+      ...commonProperties,
+      feedback,
+      feedback_length: feedback.length,
+      has_email: hasEmail,
+      conversation_id: conversationId,
+    });
+  };
+
+  /**
+   * Attach a feedback author's email to their PostHog person.
+   *
+   * Uses `identify` on the existing distinct id rather than minting a new one,
+   * so an anonymous OSS person gains an `email` property instead of becoming a
+   * second person. `getTelemetryDistinctId()` returns null without consent, in
+   * which case there is no person to annotate and this is a no-op.
+   *
+   * Only the email is passed: `setTelemetryIdentity` replaces the desired
+   * property set, and on the non-OHE installs this control is shown to,
+   * `use-telemetry-identity` does not set any (it gates on a cloud backend).
+   */
+  const attachFeedbackEmail = async (email: string): Promise<void> => {
+    const distinctId = await getTelemetryDistinctId();
+    if (!distinctId) return;
+    await setTelemetryIdentity(distinctId, { email });
+  };
+
   const trackOnboardingLinkClicked = ({
     linkId,
     destinationType,
@@ -496,5 +552,7 @@ export const useTracking = () => {
     trackOnboardingCompleted,
     trackOnboardingSkipped,
     trackOnboardingLinkClicked,
+    trackFeedbackSubmitted,
+    attachFeedbackEmail,
   };
 };

@@ -44,6 +44,7 @@ import { useConfig } from "#/hooks/query/use-config";
 import { QUERY_KEYS } from "#/hooks/query/query-keys";
 import { AgentServerUIRoot } from "#/components/providers";
 import { TelemetryConsentBanner } from "#/components/features/analytics/telemetry-consent-banner";
+import { FeedbackLauncher } from "#/components/features/feedback/feedback-launcher";
 import { buildAgentCanvasPath } from "#/utils/base-path";
 import { useOnboardingCompletion } from "#/components/features/onboarding/use-onboarding-completion";
 import { NavigationProvider } from "#/context/navigation-context";
@@ -375,6 +376,7 @@ export default function App() {
     <>
       <Outlet />
       <TelemetryConsentBanner />
+      <FeedbackLauncher />
     </>
   );
 }
