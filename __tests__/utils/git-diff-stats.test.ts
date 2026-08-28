@@ -6,6 +6,12 @@ const DIFF_STAT_HEADER = "diff --git a/foo.txt b/foo.txt\n";
 const HUNK_HEADER = "@@ -1,3 +1,3 @@\n";
 const HUNK_LINE = (prefix: "+" | "-", text: string) => `${prefix}${text}\n`;
 
+// `countGitChangeDiffStats` takes a full `GitChangeDiff` and dispatches
+// to `countUnifiedDiffStats` when `diff` is present. The original and
+// modified strings are ignored on that path, so the tests only need
+// to provide the `diff` they want to exercise.
+const wrap = (diff: string) => ({ diff, modified: "", original: "" });
+
 const twoDashDeletedLine = HUNK_LINE(
   "-",
   "-- a deleted line that starts with two dashes",
@@ -28,7 +34,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       normalDeleted +
       normalAdded;
 
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 1,
       deletions: 1,
     });
@@ -45,7 +51,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
 
     // The previous implementation skipped `---…` and reported 0
     // deletions; with the fix both deletions are counted.
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 0,
       deletions: 2,
     });
@@ -60,7 +66,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       normalAdded +
       twoDashAddedLine;
 
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 2,
       deletions: 0,
     });
@@ -78,7 +84,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       normalAdded +
       twoDashAddedLine;
 
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 2,
       deletions: 2,
     });
@@ -100,7 +106,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       HUNK_LINE("-", "--drop the old index") +
       HUNK_LINE("+", "--keep this comment");
 
-    expect(countGitChangeDiffStats({ diff: firstFile + secondFile })).toEqual({
+    expect(countGitChangeDiffStats(wrap(firstFile + secondFile))).toEqual({
       additions: 2,
       deletions: 2,
     });
@@ -117,7 +123,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       twoDashDeletedLine +
       twoDashAddedLine;
 
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 1,
       deletions: 1,
     });
@@ -137,7 +143,7 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       normalDeleted +
       normalAdded;
 
-    expect(countGitChangeDiffStats({ diff })).toEqual({
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
       additions: 1,
       deletions: 1,
     });
