@@ -320,7 +320,7 @@ export function LlmSettingsLocalView() {
       // so the profile must not carry an inline api_key / base_url — let the
       // backend attach its own credential when the profile is saved.
       const isCloudOpenHandsProvider =
-        !isLocal &&
+        backend.kind === "cloud" &&
         isOpenHandsProviderModel(
           typeof llmConfig.model === "string" ? llmConfig.model : "",
         );
@@ -431,6 +431,7 @@ export function LlmSettingsLocalView() {
     profileName,
     viewMode,
     editingProfile,
+    backend.kind,
     profilesData?.active_profile,
     saveProfile,
     activateProfile,
