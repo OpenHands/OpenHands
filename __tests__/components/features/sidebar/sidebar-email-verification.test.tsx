@@ -41,6 +41,11 @@ vi.mock("#/components/features/command-menu/command-menu-trigger", () => ({
 vi.mock("#/components/shared/buttons/openhands-logo-button", () => ({
   OpenHandsLogoButton: () => <div data-testid="logo-button" />,
 }));
+vi.mock("#/components/features/sidebar/sidebar-onboarding-checklist", () => ({
+  SidebarOnboardingChecklist: () => (
+    <div data-testid="sidebar-onboarding-checklist" />
+  ),
+}));
 
 // The backend-health hook polls each backend over the network to drive a status
 // dot shown only in the collapsed rail — unrelated to the behavior under test.

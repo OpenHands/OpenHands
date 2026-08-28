@@ -95,6 +95,20 @@ class MockProgressEvent extends Event {
   }
 }
 
+// Ensure `ProgressEvent` is always resolvable in the global scope even after
+// Vitest's jsdom environment teardown deletes own properties from `globalThis`.
+// Installing on `Object.prototype` ensures that `delete globalThis.ProgressEvent`
+// during per-file teardown only removes the own accessor, leaving this fallback
+// so late async MSW callbacks (e.g. XMLHttpRequestController `createEvent`)
+// don't throw `ReferenceError: ProgressEvent is not defined`.
+if (!Object.prototype.hasOwnProperty("ProgressEvent")) {
+  Object.defineProperty(Object.prototype, "ProgressEvent", {
+    value: MockProgressEvent,
+    configurable: true,
+    writable: true,
+  });
+}
+
 // `afterAll` runs while jsdom is still active, so `globalThis.ProgressEvent`
 // is jsdom's constructor here. Stash it so the post-teardown getter can
 // keep returning the real class even after the accessor is removed.
