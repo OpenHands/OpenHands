@@ -430,3 +430,73 @@ def test_main_event_path_json_ready(tmp_path, capsys, monkeypatch):
     assert len(data["reasons"]) == 0
 
 
+
+
+def test_extract_sections_trailing_colons_and_whitespace():
+    raw_body = chr(10).join([
+        "### Actual Behavior:",
+        "Text 1",
+        "### Acceptance Criteria : ",
+        "- [ ] item"
+    ])
+    sections = extract_sections(raw_body)
+    assert "actual behavior" in sections
+    assert "acceptance criteria" in sections
+    assert "Text 1" in sections["actual behavior"]
+    assert "- [ ] item" in sections["acceptance criteria"]
+
+
+def test_extract_sections_repeated_headings_accumulates_content():
+    body = chr(10).join([
+        "### Actual Behavior",
+        "Part 1",
+        "### Expected Behavior",
+        "Expected",
+        "### Actual Behavior",
+        "Part 2"
+    ])
+    sections = extract_sections(body)
+    assert "Part 1" in sections["actual behavior"]
+    assert "Part 2" in sections["actual behavior"]
+
+
+def test_bug_with_colons_in_headings_is_ready():
+    body_with_colons = chr(10).join([
+        "### Steps to Reproduce:",
+        "1. Run `npm run dev`",
+        "",
+        "### Actual Behavior:",
+        "I ran npm run dev and saw this:",
+        "",
+        "![screenshot](https://github.com/user-attachments/assets/abc123)",
+        "",
+        "The button was misaligned.",
+        "",
+        "### Expected Behavior:",
+        "The button should be centered.",
+        "",
+        "### Acceptance Criteria:",
+        "- [ ] Button is centered",
+        "- [ ] No layout shift on resize"
+    ])
+    result = evaluate_readiness(body_with_colons, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_bug_repeated_actual_behavior_preserves_evidence():
+    body_repeated = chr(10).join([
+        "### Steps to Reproduce",
+        "I used agent-canvas to reproduce this.",
+        "",
+        "### Actual Behavior",
+        "First part of description.",
+        "",
+        "### Acceptance Criteria",
+        "- [ ] Fixed",
+        "",
+        "### Actual Behavior",
+        "Additional notes with screenshot:",
+        "![screenshot](https://example.com/screenshot.png)"
+    ])
+    result = evaluate_readiness(body_repeated, [BUG_LABEL])
+    assert result.ready, result.reasons
