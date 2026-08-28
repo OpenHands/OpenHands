@@ -128,7 +128,7 @@ describe("AutomationGitSync — failed background refetch", () => {
     vi.useFakeTimers();
     renderGitSync();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1);
     });
     expect(screen.getByTestId("git-sync-repo-url-input")).toBeInTheDocument();
 
@@ -155,7 +155,7 @@ describe("AutomationGitSync — sync progress", () => {
     vi.useFakeTimers();
     renderGitSync();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1);
     });
     return screen.getByTestId("git-sync-now-button");
   }
