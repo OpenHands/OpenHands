@@ -4,6 +4,20 @@ const sortedKeys = (record?: Record<string, string> | null): string[] =>
   Object.keys(record ?? {}).sort();
 
 /**
+ * Identity scope for an MCP server's health entry. The same server
+ * structure on two backends is two independent installs with two
+ * independent credentials and reachability, so their health verdicts
+ * must not share storage. `backendId` distinguishes backends; the
+ * optional `connectionRevision` rotates whenever the backend's
+ * credentials change, returning the health to "unchecked" without the
+ * caller having to clear the entry explicitly.
+ */
+export interface McpServerHealthScope {
+  backendId: string;
+  connectionRevision?: number;
+}
+
+/**
  * Stable identity for a server's health entry.
  *
  * Built from the server's structural, non-secret fields. Names are included
@@ -15,7 +29,16 @@ const sortedKeys = (record?: Record<string, string> | null): string[] =>
  * names, auth strategy, ...) therefore produces a new key, orphaning the old
  * health entry instead of misattributing it.
  */
-export function getMcpServerHealthKey(server: MCPServerConfig): string {
+export function getMcpServerHealthKey(
+  scope: McpServerHealthScope,
+  server: MCPServerConfig,
+): string {
+  const serverPart = serverKeyPart(server);
+  const scopePart = `b=${scope.backendId}|r=${scope.connectionRevision ?? 0}`;
+  return `${scopePart}|${serverPart}`;
+}
+
+function serverKeyPart(server: MCPServerConfig): string {
   if (server.type === "stdio") {
     return JSON.stringify({
       type: server.type,
