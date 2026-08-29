@@ -54,6 +54,22 @@ export const PLUGINS_QUERY_KEYS = {
   local: ["plugins-local"] as const,
 } as const;
 
+export const CANVAS_EXTENSIONS_QUERY_KEYS = {
+  all: ["canvas-extensions"] as const,
+  installed: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+  ) =>
+    [
+      "canvas-extensions",
+      "installed",
+      backendId,
+      orgId,
+      connectionRevision,
+    ] as const,
+} as const;
+
 export const SETUP_QUERY_KEYS = {
   /** What the deployment supports. The same answer for every setup entry. */
   capabilities: () => ["setup-capabilities"] as const,

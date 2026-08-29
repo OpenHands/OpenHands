@@ -181,6 +181,7 @@ export function Sidebar() {
     currentPath === "/customize" ||
     currentPath.startsWith("/skills") ||
     currentPath === "/plugins" ||
+    currentPath === "/extensions" ||
     currentPath === "/mcp";
 
   const railBodyProps = {
