@@ -289,6 +289,7 @@ describe("AgentProfilesLocalView save mapping", () => {
     emitControl = {
       agentType: "openhands",
       isValid: true,
+      isDirty: true,
       buildAgentProfileFields: () => ({
         agent_kind: "openhands",
         enable_sub_agents: false,
