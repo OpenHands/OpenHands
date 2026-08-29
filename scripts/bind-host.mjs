@@ -23,8 +23,10 @@ export function isLoopbackBind(host) {
  * CLI `--host` wins, then `OH_BIND_HOST`, then loopback.
  */
 export function resolveBindHost({ flag, env } = {}) {
-  const fromFlag = flag != null && String(flag).trim() !== "" ? String(flag).trim() : null;
-  const fromEnv = env != null && String(env).trim() !== "" ? String(env).trim() : null;
+  const fromFlag =
+    flag != null && String(flag).trim() !== "" ? String(flag).trim() : null;
+  const fromEnv =
+    env != null && String(env).trim() !== "" ? String(env).trim() : null;
   return fromFlag || fromEnv || DEFAULT_BIND_HOST;
 }
 
