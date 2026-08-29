@@ -96,6 +96,109 @@ const PAYLOAD_DIFF_KEY: Record<SettingsValueSource, string> = {
   conversation_settings: "conversation_settings_diff",
 };
 
+type ValuesBySource = Partial<Record<SettingsValueSource, SettingsFormValues>>;
+
+/**
+ * The values to display: the server baseline with the user's edits laid over
+ * it, per source. A source present in either side appears in the result.
+ */
+const mergeOverlay = (
+  baseline: ValuesBySource,
+  edits: ValuesBySource,
+): ValuesBySource => {
+  const sources = new Set<SettingsValueSource>([
+    ...(Object.keys(baseline) as SettingsValueSource[]),
+    ...(Object.keys(edits) as SettingsValueSource[]),
+  ]);
+  const merged: ValuesBySource = {};
+  for (const source of sources) {
+    merged[source] = { ...(baseline[source] ?? {}), ...(edits[source] ?? {}) };
+  }
+  return merged;
+};
+
+/**
+ * Dirty is a derived fact — the keys the user has an edit for — rather than a
+ * flag that has to be cleared in step with the values it describes.
+ */
+const dirtyFromEdits = (
+  edits: ValuesBySource,
+): Partial<Record<SettingsValueSource, SettingsDirtyState>> => {
+  const dirty: Partial<Record<SettingsValueSource, SettingsDirtyState>> = {};
+  for (const [source, fields] of Object.entries(edits) as [
+    SettingsValueSource,
+    SettingsFormValues | undefined,
+  ][]) {
+    dirty[source] = Object.fromEntries(
+      Object.keys(fields ?? {}).map((key) => [key, true]),
+    );
+  }
+  return dirty;
+};
+
+/**
+ * Drop overlay entries for schema fields that have gone away.
+ *
+ * A key the schema once defined and no longer does is unreachable — nothing
+ * renders it and `buildSdkSettingsPayload` walks schema fields — yet it would
+ * still count towards `dirty` and strand the form behind an enabled Save button
+ * that submits nothing.
+ *
+ * `everSchemaKeys` is every key that has appeared in a baseline so far, and is
+ * what separates that case from a key the schema never defined at all. Callers
+ * legitimately drive values outside the schema and read them back off
+ * `saveControl.values` — `llm-settings-local-view` does this with
+ * `llm.provider_connection_id` to keep a profile's connection link — so a key
+ * that was never a schema field is left alone. Pruning those would silently
+ * unlink the profile on the next save.
+ */
+const pruneToBaseline = (
+  edits: ValuesBySource,
+  baseline: ValuesBySource,
+  everSchemaKeys: ReadonlySet<string>,
+): ValuesBySource => {
+  const next: ValuesBySource = {};
+  for (const [source, fields] of Object.entries(edits) as [
+    SettingsValueSource,
+    SettingsFormValues | undefined,
+  ][]) {
+    const known = baseline[source] ?? {};
+    next[source] = Object.fromEntries(
+      Object.entries(fields ?? {}).filter(
+        ([key]) => key in known || !everSchemaKeys.has(key),
+      ),
+    );
+  }
+  return next;
+};
+
+/**
+ * Remove the keys a save carried from the overlay, leaving the rest.
+ *
+ * Paired with folding the same keys into the baseline, this is the "rebase" a
+ * successful save performs. Clearing the overlay outright would drop the
+ * display back to a baseline still holding pre-save values until the refetch
+ * lands, so saved fields would visibly flicker to their old values. A field
+ * edited while the request was in flight was not submitted, so it stays.
+ */
+const dropSavedKeys = (
+  edits: ValuesBySource,
+  saved: ValuesBySource,
+): ValuesBySource => {
+  const next: ValuesBySource = {};
+  for (const [source, fields] of Object.entries(edits) as [
+    SettingsValueSource,
+    SettingsFormValues | undefined,
+  ][]) {
+    next[source] = Object.fromEntries(
+      Object.entries(fields ?? {}).filter(
+        ([key]) => !(key in (saved[source] ?? {})),
+      ),
+    );
+  }
+  return next;
+};
+
 const getSchemaUnavailableMessage = (
   error: unknown,
   fallbackMessage: string,
@@ -357,13 +460,26 @@ export function SdkSectionPage({
   );
 
   const [view, setView] = React.useState<SettingsView>("basic");
-  const [valuesBySource, setValuesBySource] = React.useState<
-    Partial<Record<SettingsValueSource, SettingsFormValues>>
-  >({});
-  const [dirtyBySource, setDirtyBySource] = React.useState<
-    Partial<Record<SettingsValueSource, SettingsDirtyState>>
-  >({});
+  /**
+   * Server-derived values, replaced wholesale on every settings/schema
+   * refetch. Never carries user input.
+   */
+  const [baselineBySource, setBaselineBySource] =
+    React.useState<ValuesBySource>({});
+  /**
+   * The user's unsaved edits, keyed only by the fields they actually touched.
+   * Survives a refetch of {@link baselineBySource}, which is what stops a
+   * background refresh from silently discarding what someone has typed.
+   */
+  const [editsBySource, setEditsBySource] = React.useState<ValuesBySource>({});
   const hasHydratedViewRef = React.useRef(false);
+  const seededOverridesRef = React.useRef<string | null>(null);
+  /**
+   * Every key that has appeared in a baseline for this scope/source pair, so
+   * the prune can tell a schema field that disappeared from a key the schema
+   * never defined.
+   */
+  const everSchemaKeysRef = React.useRef<Set<string>>(new Set());
 
   const initialValuesBySource = React.useMemo<Partial<
     Record<SettingsValueSource, SettingsFormValues>
@@ -381,17 +497,14 @@ export function SdkSectionPage({
         ),
       };
     }
-    if (initialValueOverrides) {
-      const firstSource = resolvedSources[0]?.settingsSource;
-      if (firstSource && result[firstSource]) {
-        result[firstSource] = {
-          ...result[firstSource],
-          ...initialValueOverrides,
-        };
-      }
-    }
+    // Overrides deliberately do NOT go into the baseline. The baseline is what
+    // the server says; an override is a local prefill, so it belongs in the
+    // overlay with every other unsaved value. Merging it here would let it
+    // outrank the server copy forever — including after the user has edited
+    // and saved the field, whose confirming refetch would then be overwritten
+    // by the stale prefill.
     return result;
-  }, [settings, resolvedSources, overridesSignature]);
+  }, [settings, resolvedSources]);
 
   const initialView = React.useMemo(() => {
     if (!settings) return null;
@@ -414,30 +527,64 @@ export function SdkSectionPage({
     showAll,
   ]);
 
+  // A scope or source change is a different form, so edits made against the
+  // previous one are deliberately discarded rather than carried over.
   React.useEffect(() => {
     hasHydratedViewRef.current = false;
+    seededOverridesRef.current = null;
+    everSchemaKeysRef.current = new Set();
     setView("basic");
-    setValuesBySource({});
-    setDirtyBySource({});
+    setBaselineBySource({});
+    setEditsBySource({});
   }, [scope, sourcesSignature]);
 
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
 
-    setValuesBySource(initialValuesBySource);
-    if (initialValueOverrides) {
+    // The baseline always tracks the server. Edits are left alone: this effect
+    // re-runs on every settings/schema refetch, and replacing the values here
+    // is what used to discard unsaved input while the form stayed on screen.
+    setBaselineBySource(initialValuesBySource);
+
+    // Drop overlay entries for fields the new schema no longer defines. They
+    // can never be displayed or submitted again — `buildSdkSettingsPayload`
+    // walks schema fields — so leaving them would keep the form permanently
+    // dirty behind a Save button that builds an empty payload and no-ops.
+    // Keys the schema never defined are spared: a caller may drive a value
+    // outside the schema and read it back off `saveControl.values`.
+    for (const fields of Object.values(initialValuesBySource)) {
+      for (const key of Object.keys(fields ?? {})) {
+        everSchemaKeysRef.current.add(key);
+      }
+    }
+    setEditsBySource((prev) =>
+      pruneToBaseline(prev, initialValuesBySource, everSchemaKeysRef.current),
+    );
+
+    // Overrides are seeded into the overlay once per override set, so they
+    // start dirty and are savable untouched. Re-seeding on every refetch would
+    // resurrect a prefill the user had deliberately cleared or already saved.
+    if (
+      initialValueOverrides &&
+      seededOverridesRef.current !== overridesSignature
+    ) {
+      seededOverridesRef.current = overridesSignature;
       const firstSource = resolvedSources[0]?.settingsSource;
       if (firstSource) {
-        const overrideDirty: SettingsDirtyState = Object.fromEntries(
-          Object.keys(initialValueOverrides).map((key) => [key, true]),
-        );
-        setDirtyBySource({ [firstSource]: overrideDirty });
-      } else {
-        setDirtyBySource({});
+        setEditsBySource((prev) => ({
+          ...prev,
+          // The new overrides win. This branch only runs when the caller
+          // actually changed the override set, and a changed prefill is a
+          // deliberate instruction — spreading `prev` last would let the
+          // previous seed outrank it and the new values would never appear.
+          [firstSource]: {
+            ...(prev[firstSource] ?? {}),
+            ...initialValueOverrides,
+          },
+        }));
       }
-    } else {
-      setDirtyBySource({});
     }
+
     // The ref flip stays outside the updater: React double-invokes state
     // updaters in StrictMode, so mutating it in there makes the second
     // (kept) call take the already-hydrated branch and pin the view.
@@ -447,7 +594,22 @@ export function SdkSectionPage({
     } else {
       setView((currentView) => getLessDetailedView(currentView, initialView));
     }
-  }, [initialValuesBySource, initialView]);
+    // `overridesSignature` is a dependency because overrides no longer feed
+    // `initialValuesBySource`; without it a changed override set would never
+    // re-seed the overlay.
+  }, [initialValuesBySource, initialView, overridesSignature]);
+
+  // Displayed values and dirty state are both derived from the two stores
+  // above, so they can never disagree with each other the way two
+  // independently-mutated trees could.
+  const valuesBySource = React.useMemo(
+    () => mergeOverlay(baselineBySource, editsBySource),
+    [baselineBySource, editsBySource],
+  );
+  const dirtyBySource = React.useMemo(
+    () => dirtyFromEdits(editsBySource),
+    [editsBySource],
+  );
 
   const fieldKeyToSource = React.useMemo(() => {
     const map = new Map<string, SettingsValueSource>();
@@ -485,18 +647,13 @@ export function SdkSectionPage({
     (fieldKey: string, nextValue: string | boolean) => {
       const sourceKey = fieldKeyToSource.get(fieldKey);
       if (!sourceKey) return;
-      setValuesBySource((prev) => ({
+      // One write, to the overlay only. The displayed value and the dirty flag
+      // both fall out of it, so they cannot drift apart.
+      setEditsBySource((prev) => ({
         ...prev,
         [sourceKey]: {
           ...(prev[sourceKey] ?? {}),
           [fieldKey]: nextValue,
-        },
-      }));
-      setDirtyBySource((prev) => ({
-        ...prev,
-        [sourceKey]: {
-          ...(prev[sourceKey] ?? {}),
-          [fieldKey]: true,
         },
       }));
     },
@@ -571,13 +728,26 @@ export function SdkSectionPage({
 
     if (Object.keys(payload).length === 0) return;
 
+    // The overlay as it stood when Save was pressed (`handleSaveRef` is rebound
+    // every render, so this closure reads the current one).
+    //
+    // Not the same set as the payload: `buildSdkSettingsPayloadForView`
+    // rewrites every view-invisible field to its schema default after the
+    // dirty pass, and a caller-supplied `buildPayload` may drop more. These are
+    // the edits the save *consumed* — they stop being pending either way, which
+    // matches what `setDirtyBySource({})` did here before.
+    const consumedEdits = editsBySource;
+
     saveSettings(payload, {
       onError: handleError,
       onSuccess: () => {
         if (!suppressSuccessToast) {
           displaySuccessToast(t(I18nKey.SETTINGS$SAVED_WARNING));
         }
-        setDirtyBySource({});
+        // Rebase rather than clear, so the form keeps showing what was saved
+        // until the refetch confirms it.
+        setBaselineBySource((prev) => mergeOverlay(prev, consumedEdits));
+        setEditsBySource((prev) => dropSavedKeys(prev, consumedEdits));
         onSaveSuccess?.();
       },
     });
