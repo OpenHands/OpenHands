@@ -154,7 +154,10 @@ export function ConversationCard({
         if (data.vscode_url) {
           const transformedUrl = transformVSCodeUrl(data.vscode_url);
           if (transformedUrl) {
-            window.open(transformedUrl, "_blank");
+            // `noopener` keeps the opened page from reaching back through
+            // `window.opener` to redirect this tab (reverse tabnabbing); the
+            // returned reference is not used.
+            window.open(transformedUrl, "_blank", "noopener,noreferrer");
           }
         }
         // VS Code URL not available

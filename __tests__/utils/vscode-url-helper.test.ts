@@ -53,8 +53,21 @@ describe("transformVSCodeUrl", () => {
     expect(transformVSCodeUrl(input)).toBe(input);
   });
 
-  it("should handle invalid URLs gracefully", () => {
-    const input = "not-a-valid-url";
+  it("should return null for a malformed URL rather than passing it through", () => {
+    expect(transformVSCodeUrl("not-a-valid-url")).toBeNull();
+  });
+
+  it.each([
+    ["javascript:", "javascript:alert(document.domain)"],
+    ["data:", "data:text/html,<script>alert(1)</script>"],
+    ["vscode:", "vscode://file/etc/passwd"],
+    ["file:", "file:///etc/passwd"],
+  ])("should return null for a %s URL", (_scheme, input) => {
+    expect(transformVSCodeUrl(input)).toBeNull();
+  });
+
+  it("should keep https URLs", () => {
+    const input = "https://vscode.example.com/?tkn=abc123&folder=/workspace";
 
     expect(transformVSCodeUrl(input)).toBe(input);
   });

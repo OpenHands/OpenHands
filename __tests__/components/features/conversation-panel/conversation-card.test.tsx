@@ -15,6 +15,7 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { ConversationCard } from "#/components/features/conversation-panel/conversation-card/conversation-card";
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import {
   __resetActiveStoreForTests,
@@ -386,6 +387,75 @@ describe("ConversationCard", () => {
 
     expect(onDelete).toHaveBeenCalled();
     expect(onContextMenuToggle).toHaveBeenCalledWith(false);
+  });
+
+  it("opens the VS Code URL with noopener so the new tab cannot reach back through window.opener", async () => {
+    const user = userEvent.setup();
+    const getVSCodeUrl = vi
+      .spyOn(ConversationService, "getVSCodeUrl")
+      .mockResolvedValue({
+        vscode_url: "https://vscode.example.com/?tkn=abc123",
+      });
+
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        conversationId="conversation-1"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("download-vscode-button"));
+
+    // `vi.waitFor`, not testing-library's: this suite stubs `window` with a
+    // plain object, so the DOM-bound helper has no `document` to poll.
+    await vi.waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        "https://vscode.example.com/?tkn=abc123",
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
+
+    getVSCodeUrl.mockRestore();
+  });
+
+  it("does not open a VS Code URL whose scheme is outside the allowlist", async () => {
+    const user = userEvent.setup();
+    const getVSCodeUrl = vi
+      .spyOn(ConversationService, "getVSCodeUrl")
+      .mockResolvedValue({
+        vscode_url: "javascript:alert(document.domain)",
+      });
+
+    renderWithProviders(
+      <ConversationCard
+        onDelete={onDelete}
+        onChangeTitle={onChangeTitle}
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        conversationId="conversation-1"
+        showOptions
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+      />,
+    );
+
+    const menu = screen.getByTestId("context-menu");
+    await user.click(within(menu).getByTestId("download-vscode-button"));
+
+    await vi.waitFor(() => expect(getVSCodeUrl).toHaveBeenCalled());
+    expect(window.open).not.toHaveBeenCalled();
+
+    getVSCodeUrl.mockRestore();
   });
 
   it("should call onArchive when the archive button is clicked", async () => {
