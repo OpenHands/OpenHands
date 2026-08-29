@@ -110,7 +110,7 @@ describe("ModelMessages", () => {
     useModelStore.getState().show(CONVERSATION_ID, "event-1", [
       {
         name: "free",
-        model: "openhands/glm-5.2",
+        model: "openhands/deepseek-v4-flash",
         base_url: null,
         api_key_set: true,
       },
@@ -129,7 +129,7 @@ describe("ModelMessages", () => {
     );
 
     expect(
-      screen.getByText(/model:\s+OpenHands GLM-5\.2 \(free\)/),
+      screen.getByText(/model:\s+OpenHands DeepSeek V4 Flash \(free\)/),
     ).toBeInTheDocument();
   });
 });

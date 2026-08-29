@@ -33,6 +33,7 @@ import {
   deriveProfileNameFromModel,
   isProfileNameValid,
 } from "#/utils/derive-profile-name";
+import { isOpenHandsProviderModel } from "#/utils/format-model-name";
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
 import {
   LLM_AUTH_TYPE_API_KEY,
@@ -312,27 +313,40 @@ export function LlmSettingsLocalView() {
       // cloud the field stays untouched below).
       if (isLocal) llmConfig.provider_connection_id = null;
 
-      // The Basic tab has no base_url field. Preserve an existing hidden value
-      // when the model did not actually change; if the user chooses a new model,
-      // drop the old base URL so provider defaults can apply to that model.
-      if (didChangeModelInBasic) {
+      // On cloud the OpenHands provider is backed by a server-minted LLM key,
+      // so the profile must not carry an inline api_key / base_url — let the
+      // backend attach its own credential when the profile is saved.
+      const isCloudOpenHandsProvider =
+        !isLocal &&
+        isOpenHandsProviderModel(
+          typeof llmConfig.model === "string" ? llmConfig.model : "",
+        );
+      if (isCloudOpenHandsProvider) {
+        delete llmConfig.api_key;
         delete llmConfig.base_url;
-      }
+      } else {
+        // The Basic tab has no base_url field. Preserve an existing hidden value
+        // when the model did not actually change; if the user chooses a new model,
+        // drop the old base URL so provider defaults can apply to that model.
+        if (didChangeModelInBasic) {
+          delete llmConfig.base_url;
+        }
 
-      // API key handling: an empty value means "no change" (the UX doesn't
-      // support clearing a key). In edit mode preserve the existing encrypted
-      // key from the profile; in create mode omit api_key entirely. A newly
-      // typed key arrives in `dirtyLlm` and wins.
-      if (
-        typeof llmConfig.api_key !== "string" ||
-        llmConfig.api_key.trim() === ""
-      ) {
-        const existingKey =
-          typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
-        if (existingKey) {
-          llmConfig.api_key = existingKey;
-        } else {
-          delete llmConfig.api_key;
+        // API key handling: an empty value means "no change" (the UX doesn't
+        // support clearing a key). In edit mode preserve the existing encrypted
+        // key from the profile; in create mode omit api_key entirely. A newly
+        // typed key arrives in `dirtyLlm` and wins.
+        if (
+          typeof llmConfig.api_key !== "string" ||
+          llmConfig.api_key.trim() === ""
+        ) {
+          const existingKey =
+            typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
+          if (existingKey) {
+            llmConfig.api_key = existingKey;
+          } else {
+            delete llmConfig.api_key;
+          }
         }
       }
     }

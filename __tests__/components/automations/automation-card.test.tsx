@@ -1,12 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { http, HttpResponse } from "msw";
 import { AutomationCard } from "#/components/features/automations/automation-card";
 import {
   AutomationRunStatus,
   type Automation,
   type AutomationRun,
 } from "#/types/automation";
+import { useAutomationRunSummaries } from "#/hooks/query/use-automation-run-summaries";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
+import { server } from "#/mocks/node";
+import { I18nKey } from "#/i18n/declaration";
 import type { InterfaceListInsights } from "#/manifests/types";
 
 vi.mock("react-i18next", () => ({
@@ -23,6 +35,27 @@ vi.mock("#/context/navigation-context", () => ({
 vi.mock("#/hooks/use-has-permission", () => ({
   useHasPermission: () => true,
 }));
+
+// The pinned package predates the `impact` field, so an entry carrying one is
+// appended to the real catalog.
+vi.mock("@openhands/extensions/automations", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@openhands/extensions/automations")>();
+  return {
+    ...actual,
+    AUTOMATION_CATALOG: [
+      ...actual.AUTOMATION_CATALOG,
+      {
+        id: "widget-checker",
+        impact: {
+          basis: "completed-runs",
+          one: "1 widget check completed",
+          other: "{{count}} widget checks completed",
+        },
+      },
+    ] as typeof actual.AUTOMATION_CATALOG,
+  };
+});
 
 const automation: Automation = {
   id: "automation-1",
@@ -146,6 +179,7 @@ describe("AutomationCard", () => {
           state: {
             summary: {
               total: 4,
+              completedTotal: 4,
               latestRun,
               recentRuns: [latestRun],
               recentSuccessRate: 1,
@@ -158,7 +192,9 @@ describe("AutomationCard", () => {
       />,
     );
 
-    expect(screen.queryByTestId("automation-health-badge")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("automation-health-badge"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByTestId("automation-last-run-automation-1"),
     ).toHaveTextContent("AUTOMATIONS$DETAIL$TIME_MINUTES_AGO");
@@ -169,5 +205,159 @@ describe("AutomationCard", () => {
     expect(screen.getByTestId("automation-run-stats")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
+  });
+
+  it("shows the value statement for its completed runs", () => {
+    // Arrange — provenance joining back to a catalog entry with an impact
+    // declaration, and a summary carrying the lifetime completed count.
+    const latestRun = createRun();
+
+    // Act
+    render(
+      <AutomationCard
+        automation={{
+          ...automation,
+          preset_metadata: {
+            template: { id: "widget-checker", version: "1.0.0", config: {} },
+          },
+        }}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{
+          spec: insightsSpec satisfies InterfaceListInsights,
+          state: {
+            summary: {
+              total: 5,
+              completedTotal: 4,
+              latestRun,
+              recentRuns: [latestRun],
+              recentSuccessRate: 1,
+              averageDurationMs: 120_000,
+            },
+            isLoading: false,
+            isError: false,
+          },
+        }}
+      />,
+    );
+
+    // Assert
+    expect(
+      screen.getByTestId("automation-impact-automation-1"),
+    ).toHaveTextContent("4 widget checks completed");
+  });
+});
+
+describe("AutomationCard — run phase", () => {
+  const localBackend: Backend = {
+    id: "local-1",
+    name: "Local 1",
+    host: "http://localhost:8000",
+    apiKey: "k",
+    kind: "local",
+  };
+
+  const insightAutomation: Automation = {
+    id: "auto-with-active-run",
+    name: "Digest",
+    prompt: null,
+    enabled: true,
+    trigger: { type: "cron", schedule_human: "cron" },
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+
+  const insightsSpec: InterfaceListInsights = {
+    health: {
+      healthy: "Healthy",
+      failing: "Failing",
+      running: "Running",
+      disabled: "Disabled",
+      neverRun: "Never run",
+      checking: "Checking",
+    },
+    lastRun: { label: "Last run", never: "Never", justNow: "Just now" },
+    stats: {
+      runs: "Runs",
+      recentSuccess: "Success",
+      averageDuration: "Duration",
+    },
+  };
+
+  beforeEach(() => {
+    __resetActiveStoreForTests();
+    setRegisteredBackends([localBackend]);
+    setActiveSelection({ backendId: localBackend.id });
+  });
+
+  afterEach(() => {
+    __resetActiveStoreForTests();
+  });
+
+  function Harness() {
+    const byId = useAutomationRunSummaries([insightAutomation]);
+    return (
+      <AutomationCard
+        automation={insightAutomation}
+        onToggle={vi.fn()}
+        onRunNow={vi.fn()}
+        onExport={vi.fn()}
+        onDelete={vi.fn()}
+        insights={{ spec: insightsSpec, state: byId.get(insightAutomation.id) }}
+      />
+    );
+  }
+
+  function renderHarness() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveBackendProvider>
+          <Harness />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("shows the active run's phase using only the run-summaries fetch insights already makes — no extra request", async () => {
+    // Arrange: count every hit to the runs endpoint the card's insights
+    // already fetch (via useAutomationRunSummaries) — if displaying the
+    // phase required a second request, this would be > 1.
+    let callCount = 0;
+    server.use(
+      http.get("*/api/automation/v1/:id/runs", () => {
+        callCount += 1;
+        return HttpResponse.json({
+          runs: [
+            {
+              id: "run-active",
+              status: AutomationRunStatus.RUNNING,
+              conversation_id: null,
+              bash_command_id: null,
+              error_detail: null,
+              phase_code: "running_agent",
+              phase_label: null,
+              phase_updated_at: null,
+              started_at: "2026-01-01T09:00:00Z",
+              completed_at: null,
+            },
+          ],
+          total: 1,
+        });
+      }),
+    );
+
+    // Act
+    renderHarness();
+
+    // Assert: the phase renders ...
+    await screen.findByText(I18nKey.AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT);
+    // ... and exactly one request was made — the pre-existing insights
+    // fetch, not a new one just for the phase.
+    expect(callCount).toBe(1);
   });
 });
