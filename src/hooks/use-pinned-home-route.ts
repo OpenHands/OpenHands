@@ -16,6 +16,16 @@ export const PINNED_HOME_ROUTE_KEY = "oh:pinned-home-route";
 export const CUSTOMIZE_PATH = "/customize";
 
 /**
+ * Prefix for Canvas Extension pages. Matches the form produced by
+ * `buildCanvasExtensionPageHref` in
+ * `src/components/features/canvas-extensions/canvas-extensions-runtime.tsx`
+ * (e.g. `/extensions/demo-extension/some-page`). A single constant
+ * keeps the prefix in sync with the producer; importing from the
+ * runtime module would create a hook-shaped import in this file.
+ */
+export const EXTENSION_PATH_PREFIX = "/extensions/";
+
+/**
  * The pin is stored per backend + org: it may reference a surface that only
  * exists on the backend that set it (e.g. /automations requires that
  * deployment's interface manifest) — a shared key would let one backend
@@ -33,12 +43,15 @@ export function getPinnedHomeRouteKey(
  * sidebar pin affordance and the `/` loader, so a stored pin that stops
  * resolving (backend switch, manifest absent) is ignored rather than an
  * error. `/` is never pinnable, which makes a redirect loop impossible.
- * Canvas Extensions pages can later add an `/extensions/…` branch here
- * without any storage or loader change.
+ * Canvas Extension pages (built by `buildCanvasExtensionPageHref` as
+ * `/extensions/<name>/<contribution>`) are pinnable when the extension
+ * runtime is currently rendering them, so the pin affordance only
+ * appears on links that can actually be resolved.
  */
 export function isPinnableRoute(path: string): boolean {
   if (path === CUSTOMIZE_PATH) return true;
   if (path === automationListPath()) return hasAutomationInterface();
+  if (path.startsWith(EXTENSION_PATH_PREFIX)) return true;
   return false;
 }
 

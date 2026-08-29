@@ -252,6 +252,10 @@ export function SidebarRailBody({
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
             icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            pinAction={buildPinAction(
+              page.href,
+              `sidebar-pin-home-toggle-extension-${page.extension.name}-${page.contribution.id}`,
+            )}
           />
         ))}
       </nav>
