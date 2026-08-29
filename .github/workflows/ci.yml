@@ -61,6 +61,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set up Helm
+        if: matrix.full_checks
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.21.4
+
+      - name: Verify Helm chart
+        if: matrix.full_checks
+        run: python3 helm/agent-canvas/tests/render_test.py
+
       - name: Lint
         if: matrix.full_checks
         run: npm run lint

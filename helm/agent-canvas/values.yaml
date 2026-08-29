@@ -1,6 +1,6 @@
 # Default values for agent-canvas.
 # This chart deploys the all-in-one agent-canvas image (frontend +
-# agent-server + automation) as a single-replica StatefulSet with a
+# agent-server + automation) as a single-replica Deployment with a
 # PersistentVolumeClaim mounted at $HOME/.openhands.
 
 # -- Number of replicas. The all-in-one image stores conversation state,
@@ -121,10 +121,12 @@ persistence:
   # storageClassName: ""    # empty → cluster default
   accessModes:
     - ReadWriteOnce
+  # Extra annotations for a chart-created PVC. The chart also adds
+  # helm.sh/resource-policy: keep so uninstalling cannot delete user data.
   annotations: {}
   # If you prefer to bring your own PVC (already existing in the
-  # namespace), set existingClaim to its name. That disables the
-  # StatefulSet volumeClaimTemplates path.
+  # namespace), set existingClaim to its name. The chart will not create
+  # a PVC in that case.
   existingClaim: ""
 
 # ── Configuration ────────────────────────────────────────────────────────────
@@ -220,16 +222,10 @@ probes:
     # Allow up to 5 minutes for first-boot dependencies / DB migration.
     failureThreshold: 60
 
-# StatefulSet-specific knobs.
-statefulSet:
-  # Whether the StatefulSet uses OrderedReady or Parallel pod management.
-  # OrderedReady is safer for stateful workloads; use Parallel only if
-  # you understand the implications.
-  podManagementPolicy: OrderedReady
-  # updateStrategy for rollouts.
-  updateStrategy:
-    type: RollingUpdate
-  # Retained volumes on scale-down/deletion. Kubernetes 1.27+.
-  # persistentVolumeClaimRetentionPolicy:
-  #   whenDeleted: Retain
-  #   whenScaled: Retain
+# Deployment-specific knobs.
+deployment:
+  # Recreate is the safe default for a single ReadWriteOnce PVC: the old pod
+  # releases the volume before the replacement pod starts. If your storage
+  # supports concurrent attachment, you may opt into RollingUpdate instead.
+  strategy:
+    type: Recreate
