@@ -21,6 +21,7 @@ import {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
@@ -556,6 +557,42 @@ describe("stack mode routing", () => {
     expect(buildViteBackendEnv(config, {})).toEqual({
       VITE_BACKEND_HOST: `127.0.0.1:${config.ingressPort}`,
     });
+  });
+
+  it("binds Vite to loopback and injects the key by default", async () => {
+    const config = await buildConfig({}, envWithIsolatedKeyPath());
+
+    expect(buildViteFrontendEnv(config)).toMatchObject({
+      VITE_BIND_HOST: "127.0.0.1",
+      VITE_SESSION_API_KEY: config.sessionApiKey,
+    });
+    expect(buildViteFrontendEnv(config)).not.toHaveProperty(
+      "VITE_AUTH_REQUIRED",
+    );
+  });
+
+  it("keeps the session key out of an off-loopback Vite origin", async () => {
+    const config = await buildConfig(
+      { host: "0.0.0.0" },
+      envWithIsolatedKeyPath(),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("0.0.0.0");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
+  });
+
+  it("keeps the session key out of public-mode Vite on loopback", async () => {
+    const config = await buildConfig(
+      { public: true },
+      envWithIsolatedKeyPath({ LOCAL_BACKEND_API_KEY: "public-key" }),
+    );
+
+    const viteEnv = buildViteFrontendEnv(config);
+    expect(viteEnv.VITE_BIND_HOST).toBe("127.0.0.1");
+    expect(viteEnv).not.toHaveProperty("VITE_SESSION_API_KEY");
+    expect(viteEnv.VITE_AUTH_REQUIRED).toBe("true");
   });
 
   it("allows frontend-only Vite to target an explicit backend URL", async () => {

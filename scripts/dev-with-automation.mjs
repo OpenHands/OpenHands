@@ -1178,16 +1178,13 @@ export function buildAutomationRuntimeServicesInfo(config) {
   });
 }
 
-function startVite(config) {
-  logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
-
-  const frontendCommand = buildNpmScriptCommand("dev:frontend");
-
+function buildViteFrontendEnv(config) {
   const viteEnv = {
     // Full-stack mode points Vite at this launcher's ingress. Frontend-only
     // mode uses the separately running backend ingress instead.
     ...buildViteBackendEnv(config),
     VITE_FRONTEND_PORT: config.vitePort.toString(),
+    VITE_BIND_HOST: config.bindHost,
   };
   if (config.viteWorkingDir) {
     viteEnv.VITE_WORKING_DIR = config.viteWorkingDir;
@@ -1210,15 +1207,34 @@ function startVite(config) {
     viteEnv.VITE_VSCODE_TARGET = `http://127.0.0.1:${config.vscodePort}`;
   }
 
-  // In local mode, bake the session key into the frontend so the user
-  // never has to paste it. In public mode, omit the key and set
-  // VITE_AUTH_REQUIRED so the frontend shows the API key entry screen
-  // immediately (no network round-trip needed).
-  if (config.launchAgentServer && config.isPublic) {
+  // The Vite origin is directly reachable on its own port, so it must use the
+  // same bind/key policy as ingress and the static server. Local loopback mode
+  // keeps transparent auth; public or off-loopback mode serves no credential
+  // and shows the API-key entry screen.
+  const policy = applySessionKeyPolicy({
+    host: config.bindHost,
+    sessionApiKey:
+      config.launchAgentServer && !config.isPublic
+        ? config.sessionApiKey
+        : null,
+    authRequired: Boolean(config.launchAgentServer && config.isPublic),
+    warn: (msg) => logService("vite", msg, c.yellow),
+  });
+  if (policy.authRequired) {
     viteEnv.VITE_AUTH_REQUIRED = "true";
-  } else if (config.launchAgentServer) {
-    viteEnv.VITE_SESSION_API_KEY = config.sessionApiKey;
   }
+  if (policy.sessionApiKey) {
+    viteEnv.VITE_SESSION_API_KEY = policy.sessionApiKey;
+  }
+
+  return viteEnv;
+}
+
+function startVite(config) {
+  logService("vite", `Starting on port ${config.vitePort}...`, c.magenta);
+
+  const frontendCommand = buildNpmScriptCommand("dev:frontend");
+  const viteEnv = buildViteFrontendEnv(config);
 
   spawnService("vite", frontendCommand.command, frontendCommand.args, {
     cwd: config.canvasPath,
@@ -1716,6 +1732,7 @@ export {
   buildConfig,
   buildRouteArgs,
   buildViteBackendEnv,
+  buildViteFrontendEnv,
   getAgentServerBaseUrl,
   getFrontendBackend,
   getLocalServiceRoutes,
