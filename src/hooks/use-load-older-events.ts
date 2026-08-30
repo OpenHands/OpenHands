@@ -54,14 +54,6 @@ export const useLoadOlderEvents = (
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
-  // The conversation the store currently belongs to. Assigned during render
-  // (not in the effect below) so it is synchronously correct the moment this
-  // component re-renders for a different conversation. Moving it into the
-  // effect is not enough: passive effects flush AFTER an in-flight page's
-  // promise continuation, so the stale closure would still see the old id and
-  // wrongly merge the page — see the ownership check in `loadOlder`.
-  const conversationIdRef = React.useRef(conversationId);
-  conversationIdRef.current = conversationId;
 
   React.useEffect(() => {
     isLoadingRef.current = false;
@@ -148,12 +140,20 @@ export const useLoadOlderEvents = (
       }
 
       // Ownership check: the user may have switched to another conversation
-      // while this page was in flight. The global store has by then been
-      // cleared and reseeded for the *new* conversation, so merging this page
-      // would splice the old conversation's history into the new one. Discard
-      // the page unless the store still belongs to the conversation this
-      // request was started for.
-      if (conversationIdRef.current !== conversationId) {
+      // while this page was in flight. The conversation route synchronously
+      // re-owns the global store via `clearEventsForConversation(nextId)`,
+      // which sets `loadedConversationId`. Reading that ID here — rather than
+      // relying on a React ref — is immune to render/effect timing, so a page
+      // whose conversation no longer owns the store is dropped instead of
+      // spliced into the new conversation's history. `null` means no
+      // conversation has claimed the store yet (e.g. isolated store tests), in
+      // which case we keep the page.
+      const loadedConversationId =
+        useEventStore.getState().loadedConversationId;
+      if (
+        loadedConversationId != null &&
+        loadedConversationId !== conversationId
+      ) {
         return;
       }
 
