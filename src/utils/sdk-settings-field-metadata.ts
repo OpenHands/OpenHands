@@ -61,6 +61,13 @@ const FIELD_METADATA: Record<string, SettingsFieldMetadata> = {
       step: 0.1,
     },
   },
+  // Mirrors CondenserSettings.max_size (int with ge=20) in the SDK.
+  "condenser.max_size": {
+    constraints: {
+      min: 20,
+      step: 1,
+    },
+  },
 };
 
 export function getSettingsFieldConstraints(fieldKey: string) {
