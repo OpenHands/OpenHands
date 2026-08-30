@@ -6,8 +6,18 @@ import {
   ImageContent,
 } from "./common";
 
-// Base event interface - fundamental properties for all events
-export interface BaseEvent {
+import type { BaseEvent as CanonicalBaseEvent } from "@openhands/typescript-client";
+
+// Base event interface - fundamental properties for all events.
+//
+// The wire envelope is sourced from `@openhands/typescript-client`, the
+// canonical agent-server event contract, instead of being redeclared as a
+// parallel copy. Canvas pins the wire fields (`id`, `timestamp`, `source`) as
+// required and omits the client's `kind` discriminator because Canvas
+// identifies events structurally (see the event union in
+// `openhands-event.ts`). Any new field the server adds to the canonical
+// envelope is inherited automatically.
+export type BaseEvent = Omit<CanonicalBaseEvent, "kind"> & {
   /**
    * Unique event id (ULID/UUID)
    */
@@ -22,7 +32,7 @@ export interface BaseEvent {
    * The source of this event
    */
   source: SourceType;
-}
+};
 
 // LLM Message structure
 export interface Message {
