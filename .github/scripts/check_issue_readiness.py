@@ -13,9 +13,9 @@ The criteria are type-specific:
   one checklist item.
 
 GitHub issue forms render each field as an `### <Label>` (h3) heading followed
-by the field text, with empty optional fields rendered as `_No response_`. This
-parser splits the body on those headings so each criterion is checked against
-the right field rather than the whole body.
+by the field text, with empty optional fields rendered as `_No response_`. The
+parser also accepts `## <Label>` headings used by hand-edited and free-form
+issues, and checks each criterion against the corresponding section.
 
 Local usage:
 
@@ -39,10 +39,10 @@ from markdown_sections import find_headings
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
-# Issue-form fields render as `### Label` h3 headings. Match case-insensitively
-# and tolerate trailing whitespace/colons. `^###\s+` is specific enough because
-# h1/h2 are not produced by issue forms.
-HEADING_RE = re.compile(r"(?m)^###\s+(.+?)\s*$")
+# Issue-form fields render as h3 headings, while hand-edited and free-form
+# issues commonly use h2. Accept either level without treating document titles
+# or nested headings as readiness sections.
+HEADING_RE = re.compile(r"(?m)^#{2,3}\s+(.+?)\s*$")
 
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
@@ -104,11 +104,10 @@ def visible_text(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    """Split the body into a {heading: text} map using `### <heading>` boundaries.
+    """Split the body into a {heading: text} map using h2 or h3 boundaries.
 
-    Issue forms render every field this way. Free-form issues (not created via a
-    form) may still use `###` headings; if they don't, the map is empty and the
-    caller falls back to whole-body checks.
+    Issue forms render fields as h3 headings. Free-form and hand-edited issues
+    may use h2 headings instead, including a mix of both levels.
     """
     matches = find_headings(body, HEADING_RE)
     sections: dict[str, str] = {}
