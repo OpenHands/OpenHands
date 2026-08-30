@@ -344,12 +344,12 @@ describe("LlmSettingsLocalView", () => {
       // Should be in create view
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // The profile name is auto-derived from the prefilled free default model.
+      // The profile name is auto-derived from the prefilled default model.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
-        "openhands/kimi-k3",
+        "openai/gpt-5.6-sol",
       );
     });
 
@@ -363,7 +363,7 @@ describe("LlmSettingsLocalView", () => {
 
       // The profile name starts from the free-model derived default.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // Go back to list
       await user.click(screen.getByTestId("back-to-profiles"));
@@ -375,7 +375,7 @@ describe("LlmSettingsLocalView", () => {
       // The profile name should return to the free-model derived default
       // again (fresh form).
       const freshNameInput = screen.getByTestId("profile-name-input");
-      expect(freshNameInput).toHaveValue("kimi-k3");
+      expect(freshNameInput).toHaveValue("gpt-5.6-sol");
     });
 
     it("does not carry over values from edit mode to create mode", async () => {
@@ -390,7 +390,7 @@ describe("LlmSettingsLocalView", () => {
 
       // Should be in create view with the free-model derived profile name.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("kimi-k3");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
