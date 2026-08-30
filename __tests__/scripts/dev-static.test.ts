@@ -3,7 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   buildAutomationBackendEnv,
   buildLocalServiceRouteArgs,
+  parseArgs,
 } from "../../scripts/dev-static.mjs";
+
+describe("dev-static CLI", () => {
+  it.each([
+    [["--host", "0.0.0.0"], "0.0.0.0"],
+    [["-H", "::"], "::"],
+  ])("parses an explicit bind host", (argv, expected) => {
+    expect(parseArgs(argv).host).toBe(expected);
+  });
+});
 
 describe("dev-static", () => {
   it("uses the same session key for both agent-server and automation backend auth", () => {

@@ -118,6 +118,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     automationRepo: null,
     skipBuild: false,
     verbose: false,
+    host: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -125,6 +126,10 @@ export function parseArgs(argv = process.argv.slice(2)) {
       case "-p":
       case "--port":
         config.port = parseInt(argv[++i], 10);
+        break;
+      case "-H":
+      case "--host":
+        config.host = argv[++i];
         break;
       case "--automation-ref":
         config.automationGitRef = argv[++i];
@@ -162,6 +167,7 @@ USAGE:
 
 OPTIONS:
   -p, --port <port>           Ingress port (default: 8000)
+  -H, --host <host>           Bind address for ingress/static (default: 127.0.0.1)
   --automation-ref <ref>      Git ref for automation backend (default: main)
   --automation-repo <url>     Git repo URL for automation
   --skip-build                Reuse existing build/ directory (faster restart)
