@@ -258,6 +258,57 @@ def test_extract_sections():
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
 
+
+def test_bug_ready_with_h2_sections():
+    body = BUG_BODY_READY.replace("### ", "## ")
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_enhancement_ready_with_mixed_h2_h3_sections():
+    body = ENHANCEMENT_BODY_READY.replace(
+        "### Desired Behavior", "## Desired Behavior"
+    )
+    result = evaluate_readiness(body, [ENHANCEMENT_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_extract_sections_excludes_h1_and_h4_headings():
+    body = "# Document Title\nintro\n#### Nested Detail\ntext"
+    assert extract_sections(body) == {}
+
+
+def test_nested_h3_stays_inside_h2_readiness_section():
+    body = """## Steps to Reproduce
+Run `npm run dev`.
+
+## Actual Behavior
+The page is broken.
+
+### Screenshot
+![broken page](https://github.com/user-attachments/assets/abc123)
+
+## Acceptance Criteria
+- [ ] The page works
+"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+    assert "### Screenshot" in extract_sections(body)["actual behavior"]
+
+
+def test_extract_sections_ignores_h2_heading_inside_fence():
+    body = """## Notes
+The template says:
+
+```markdown
+## Acceptance Criteria
+- [ ] Add criteria here
+```
+"""
+    sections = extract_sections(body)
+    assert set(sections) == {"notes"}
+
+
 def test_extract_sections_ignores_heading_inside_fence():
     body = """### Notes
 The template says:
@@ -471,6 +522,29 @@ def test_normalize_heading_strips_trailing_colon():
 def test_bug_ready_with_colon_headings():
     result = evaluate_readiness(BUG_BODY_COLON_HEADINGS, [BUG_LABEL])
     assert result.ready, result.reasons
+
+
+def test_h3_readiness_heading_with_a_colon_stays_a_boundary_under_h2():
+    """An h3 readiness section keeps its own body when the issue also uses h2.
+
+    h2 bodies promote only h3 headings named in READINESS_SECTION_LABELS to section
+    boundaries, so that lookup has to normalize the same way `extract_sections` does.
+    Otherwise `### Actual Behavior:` is not promoted and its text is swallowed by the
+    preceding h2 section.
+    """
+    body = """## Summary
+An overview paragraph.
+
+### Actual Behavior:
+The button overlaps the field.
+
+## Steps to Reproduce
+Run `npm run dev`.
+"""
+    sections = extract_sections(body)
+    assert "actual behavior" in sections
+    assert "overlaps the field" in sections["actual behavior"]
+    assert "overlaps the field" not in sections["summary"]
 
 def test_repeated_heading_keeps_the_first_section():
     sections = extract_sections(BUG_BODY_REPEATED_HEADING)

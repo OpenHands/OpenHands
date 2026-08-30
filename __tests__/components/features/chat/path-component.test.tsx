@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { isLikelyDirectory } from "#/components/features/chat/path-component";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  isLikelyDirectory,
+  PathComponent,
+} from "#/components/features/chat/path-component";
+
+const openWorkspaceFile = vi.fn();
+
+vi.mock("#/services/canvas-ui", () => ({
+  openWorkspaceFile: (...args: unknown[]) => openWorkspaceFile(...args),
+}));
+
+vi.mock("#/hooks/use-conversation-id", () => ({
+  useOptionalConversationId: () => ({ conversationId: "conv-1" }),
+}));
 
 describe("isLikelyDirectory", () => {
   it("should return false for empty path", () => {
@@ -30,5 +45,21 @@ describe("isLikelyDirectory", () => {
     expect(isLikelyDirectory("/path/to/file.txt")).toBe(false);
     expect(isLikelyDirectory("file.js")).toBe(false);
     expect(isLikelyDirectory("script.test.ts")).toBe(false);
+  });
+});
+
+describe("PathComponent", () => {
+  beforeEach(() => {
+    openWorkspaceFile.mockClear();
+  });
+
+  it("opens the workspace file when the path is clicked", async () => {
+    const user = userEvent.setup();
+    const path = "docs/test.md";
+    render(<PathComponent>{path}</PathComponent>);
+
+    await user.click(screen.getByTestId("path-component-link"));
+
+    expect(openWorkspaceFile).toHaveBeenCalledWith(path, "conv-1");
   });
 });

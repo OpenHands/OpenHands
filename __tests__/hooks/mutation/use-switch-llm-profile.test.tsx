@@ -27,7 +27,12 @@ vi.mock(
   }),
 );
 
-vi.mock("#/hooks/chat/record-model-switch-message", () => ({
+vi.mock("#/hooks/chat/record-model-switch-message", async (importOriginal) => ({
+  // Keep the real stampActiveLlmProfile so the metadata-stamp assertions
+  // below exercise the actual write; only the inline-message recorder is spied.
+  ...(await importOriginal<
+    typeof import("#/hooks/chat/record-model-switch-message")
+  >()),
   recordModelSwitchMessage: vi.fn(),
 }));
 
@@ -226,7 +231,10 @@ describe("useSwitchLlmProfile", () => {
       selected_branch: "main",
       git_provider: "github",
       selected_workspace: null,
+      workspace_mode: null,
       active_profile: "claude-sonnet-4.6",
+      // Client-clock ISO timestamp; the mutation path has no event timestamp.
+      stamped_at: expect.any(String),
       plugins: null,
     });
   });

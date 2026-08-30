@@ -79,6 +79,22 @@ describe("mergeAgentProfileSaveInput", () => {
     });
   });
 
+  it("lets an edited enable_switch_llm_tool win over the stored value", () => {
+    // The editor now models the field, so an edited value must override the
+    // stored one rather than being carried under it. The field rides untyped
+    // (the pinned ts-client predates it), hence the cast.
+    const edited = {
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: true,
+      llm_profile_ref: "new-llm",
+    } as unknown as AgentProfileSaveInput;
+
+    const merged = mergeAgentProfileSaveInput(storedOpenHands, edited);
+
+    expect(merged).toMatchObject({ enable_switch_llm_tool: true });
+  });
+
   it("preserves unmodeled ACP fields under the edited ones", () => {
     const edited: AgentProfileSaveInput = {
       agent_kind: "acp",
