@@ -193,6 +193,7 @@ jobs:
         id: run_tests
         env:
           MOCK_LLM_PYTHON: .mock-llm-venv/bin/python3
+          MOCK_LLM_GLOBAL_TIMEOUT_MS: 1200000
           AFFECTED_TEST_PATHS: ${{ steps.affected_tests.outputs.test_paths }}
           SELECTIVE_TESTS: ${{ steps.affected_tests.outputs.selective }}
         run: |
@@ -216,13 +217,13 @@ jobs:
           $PW_CMD &
           PW_PID=$!
 
-          # Wait for tests to complete. Playwright's globalTimeout is 600s
-          # (10 min) in CI; we add 60s buffer for webServer startup/teardown.
+          # Wait for tests to complete. Playwright's globalTimeout is 20 min
+          # in CI; we add 60s buffer for webServer startup/teardown.
           # The custom DoneMarkerReporter writes .tests-done only after ALL
           # tests finish (pass or fail), before webServer teardown begins.
           # .results.json is flushed after every single test, so even if we
           # hit the deadline mid-suite the report script still has data.
-          deadline=$((SECONDS + 660))
+          deadline=$((SECONDS + (MOCK_LLM_GLOBAL_TIMEOUT_MS / 1000) + 60))
           while [ "$SECONDS" -lt "$deadline" ]; do
             if ! kill -0 "$PW_PID" 2>/dev/null; then
               break
