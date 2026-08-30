@@ -12,6 +12,13 @@ The criteria are type-specific:
   Desired Behavior and Acceptance Criteria sections, the latter with at least
   one checklist item.
 
+The type normally comes from the `bug`/`enhancement` label. When neither label
+is present (common for agent-filed issues that cannot set labels), the type is
+inferred from the body structure instead: a `### Steps to Reproduce` +
+`### Actual Behavior` combination marks a bug report, a `### Desired Behavior`
+section marks a feature request. Only when the body matches neither template is
+the issue treated as not-ready.
+
 GitHub issue forms render each field as an `### <Label>` (h3) heading followed
 by the field text, with empty optional fields rendered as `_No response_`. The
 parser also accepts `## <Label>` headings used by hand-edited and free-form
@@ -231,26 +238,49 @@ def check_enhancement(sections: dict[str, str]) -> ReadinessResult:
     return result
 
 
+def infer_issue_type(sections: dict[str, str]) -> str | None:
+    """Infer the issue type from its body structure when no type label exists.
+
+    Bug reports use the `### Steps to Reproduce` + `### Actual Behavior`
+    sections; feature requests use `### Desired Behavior`. Agent-filed issues
+    may be unable to set labels, so the gate falls back to these markers.
+    """
+    if "steps to reproduce" in sections and "actual behavior" in sections:
+        return BUG_LABEL
+    if "desired behavior" in sections:
+        return ENHANCEMENT_LABEL
+    return None
+
+
 def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     """Return the readiness result for an issue body + label set.
 
-    An issue is only a candidate when it carries the `bug` or `enhancement`
-    label. If it has neither, it is treated as not-ready-for-dev (the gate does
-    not apply a label it cannot validate).
+    The type is taken from the `bug`/`enhancement` label when present.
+    Otherwise it is inferred from the body structure (see `infer_issue_type`),
+    so agent-filed issues that cannot set labels are still evaluated. Only when
+    neither a type label nor a recognizable template is present is the issue
+    treated as not-ready.
     """
     label_set = {label.lower() for label in labels}
     sections = extract_sections(body or "")
 
-    if BUG_LABEL in label_set:
+    if BUG_LABEL in label_set or ENHANCEMENT_LABEL in label_set:
+        if BUG_LABEL in label_set:
+            return check_bug(sections)
+        return check_enhancement(sections)
+
+    inferred = infer_issue_type(sections)
+    if inferred == BUG_LABEL:
         return check_bug(sections)
-    if ENHANCEMENT_LABEL in label_set:
+    if inferred == ENHANCEMENT_LABEL:
         return check_enhancement(sections)
 
     return ReadinessResult(
         ready=False,
         reasons=[
-            "The issue has neither the `bug` nor `enhancement` label, so its "
-            "readiness criteria cannot be evaluated. Add the appropriate label."
+            "The issue has neither a `bug` nor `enhancement` label, and its "
+            "body does not match a bug or feature template, so the readiness "
+            "criteria cannot be evaluated."
         ],
     )
 

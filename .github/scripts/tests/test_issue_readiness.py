@@ -205,6 +205,35 @@ def test_no_type_label_not_ready():
     assert any("neither" in r.lower() for r in result.reasons)
 
 
+def test_no_type_label_infers_bug_from_body():
+    result = evaluate_readiness(BUG_BODY_READY, ["frontend"])
+    assert result.ready, result.reasons
+
+
+def test_no_type_label_infers_enhancement_from_body():
+    result = evaluate_readiness(ENHANCEMENT_BODY_READY, [])
+    assert result.ready, result.reasons
+
+
+def test_no_type_label_inferred_bug_still_validates_fields():
+    result = evaluate_readiness(BUG_BODY_NO_SCREENSHOT, [])
+    assert not result.ready
+    assert any("screenshot" in r for r in result.reasons)
+
+
+def test_no_type_label_inferred_enhancement_still_validates_fields():
+    result = evaluate_readiness(ENHANCEMENT_BODY_NO_ACCEPTANCE, ["frontend"])
+    assert not result.ready
+    assert any("Acceptance Criteria" in r for r in result.reasons)
+
+
+def test_infer_issue_type_labels_take_precedence():
+    # A labeled enhancement should not be re-interpreted as a bug just because
+    # the body happens to contain bug-style sections.
+    body = BUG_BODY_READY + "\n### Desired Behavior\nAlso animate on hover.\n"
+    assert evaluate_readiness(body, [ENHANCEMENT_LABEL]).ready
+
+
 # ---------------------------------------------------------------------------
 # Unit-level helpers
 # ---------------------------------------------------------------------------

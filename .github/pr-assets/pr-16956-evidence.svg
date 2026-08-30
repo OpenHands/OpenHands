@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="400" viewBox="0 0 760 400">
+  <rect width="760" height="400" fill="#0d1117"/>
+  <text x="20" y="32" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#8b949e">Terminal &#8594; #16956 ready-for-dev gate: infer type from body structure</text>
+  <text x="20" y="66" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ python3 check_issue_readiness.py --body-file /tmp/bug.md --labels frontend</text>
+  <text x="20" y="92" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#a5d6ff">[after] Issue meets ready-for-dev criteria. &#8594; exit 0</text>
+  <text x="40" y="116" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">(before: "neither bug nor enhancement label, readiness cannot be evaluated")</text>
+  <text x="20" y="150" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ python3 check_issue_readiness.py --body-file /tmp/feat.md --labels frontend</text>
+  <text x="20" y="176" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#a5d6ff">[after] Issue meets ready-for-dev criteria. &#8594; exit 0</text>
+  <text x="20" y="216" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ python3 -m pytest tests/ -q</text>
+  <text x="20" y="242" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#7ee787">..&lt;...&gt; [100%]</text>
+  <text x="20" y="266" font-family="SFMono-Regular,Consolas,monospace" font-size="15" fill="#7ee787"><tspan font-weight="bold">98 passed</tspan> in 0.19s</text>
+  <line x1="20" y1="288" x2="740" y2="288" stroke="#30363d" stroke-width="1"/>
+  <text x="20" y="312" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">Body with `### Steps to Reproduce` + `### Actual Behavior` &#8594; inferred bug report</text>
+  <text x="20" y="334" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">Body with `### Desired Behavior` &#8594; inferred feature request</text>
+  <text x="20" y="356" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">Label still wins when present; agent-filed no-label issues are evaluated.</text>
+  <text x="20" y="382" font-family="SFMono-Regular,Consolas,monospace" font-size="12" fill="#484f58">Generated from local run: python3 -m pytest tests/ &#8226; commit working tree</text>
+</svg>
