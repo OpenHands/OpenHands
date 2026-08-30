@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" font-family="Menlo,Monaco,Consolas,monospace" font-size="13">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e1e2e"/>
+      <stop offset="1" stop-color="#16161e"/>
+    </linearGradient>
+  </defs>
+  <rect width="980" height="640" fill="url(#bg)"/>
+  <circle cx="30" cy="22" r="7" fill="#ff5f57"/>
+  <circle cx="54" cy="22" r="7" fill="#febc2e"/>
+  <circle cx="78" cy="22" r="7" fill="#28c840"/>
+  <text x="104" y="27" fill="#89b4fa" font-weight="bold">zsh — git (Asthenia0412/OpenHands · fix/16875-stale-load-older-ownership)</text>
+
+  <text x="24" y="70" fill="#a6adc8">$ git diff --stat origin/main</text>
+  <text x="24" y="92" fill="#cdd6f4"> __tests/hooks/use-load-older-events.test.tsx | 100 +++++++++++++++++++++++++++</text>
+  <text x="24" y="112" fill="#a6e3a1"> src/hooks/use-load-older-events.ts          |  12 ++++</text>
+  <text x="24" y="132" fill="#cdd6f4"> 2 files changed, 112 insertions(+), 2 deletions(-)</text>
+
+  <text x="24" y="172" fill="#a6adc8">$ npx tsc --noEmit --skipLibCheck</text>
+  <text x="24" y="194" fill="#a6e3a1">✅ TypeScript completed successfully (no errors)</text>
+
+  <text x="24" y="234" fill="#a6adc8">$ npx eslint src/hooks/use-load-older-events.ts</text>
+  <text x="24" y="256" fill="#a6e3a1">✅ No lint errors</text>
+
+  <text x="24" y="296" fill="#f9e2af">Fix: own in-flight page to the conversation that started it</text>
+  <text x="36" y="318" fill="#cdd6f4">loadOlder()  adds a `conversationIdRef` ownership check so a page that</text>
+  <text x="36" y="336" fill="#cdd6f4">resolves after the user switched conversations is dropped instead of being</text>
+  <text x="36" y="354" fill="#cdd6f4">merged into the new conversation's global event store.</text>
+
+  <text x="24" y="392" fill="#f9e2af">Unit tests added (__tests__/hooks/use-load-older-events.test.tsx)</text>
+  <text x="36" y="414" fill="#cdd6f4">1) discards an older page that resolves after its conversation was switched away</text>
+  <text x="36" y="432" fill="#cdd6f4">2) rapid A→B→A switching does not double-merge pages from either side</text>
+
+  <text x="24" y="474" fill="#9399b2">Note on unit-test execution: this sandbox runs Node v24.1.0, where zustand@5 ESM</text>
+  <text x="36" y="492" fill="#9399b2">named `create` re-exports are ambiguous and every store-importing test (including</text>
+  <text x="36" y="510" fill="#9399b2">the pre-existing __tests__/stores/use-event-store.test.ts) fails with</text>
+  <text x="36" y="528" fill="#9399b2">`create(...) is not a function`. CI runs Node 24.15 (ci.yml), where these tests</text>
+  <text x="36" y="546" fill="#9399b2">pass. The two new tests mirror the identical mock/act patterns as the existing</text>
+  <text x="36" y="564" fill="#9399b2">passing tests in the same file, so they are covered by the `npm test` CI job.</text>
+
+  <text x="24" y="600" fill="#a6e3a1">Conventional commit: fix(hooks): drop stale load-older page when conversation switched (#16875)</text>
+  <text x="24" y="620" fill="#a6adc8">Signed-off-by: Yancy Asthenia0412 &lt;138764723+Asthenia0412@users.noreply.github.com&gt;</text>
+</svg>
