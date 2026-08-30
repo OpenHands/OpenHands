@@ -1,0 +1,117 @@
+name: Quint Model Selection Checks
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/quint-model-selection.yml"
+      - "spec/quint/agent-canvas-model-selection.qnt"
+      - "src/api/conversation-metadata-store.ts"
+      - "src/api/conversation-service/agent-server-conversation-service.api.ts"
+      - "src/api/conversation-service/agent-server-conversation-service.types.ts"
+      - "src/components/features/chat/components/chat-input-llm-profile-picker.tsx"
+      - "src/components/features/chat/components/chat-input-model.tsx"
+      - "src/contexts/conversation-websocket-context.tsx"
+      - "src/hooks/chat/record-model-switch-message.ts"
+      - "src/hooks/mutation/use-create-conversation.ts"
+      - "src/hooks/mutation/use-switch-acp-model.ts"
+      - "src/hooks/mutation/use-switch-llm-profile.ts"
+      - "src/hooks/mutation/use-switch-llm-profile-and-log.ts"
+      - "src/hooks/use-acp-model-context.ts"
+      - "src/hooks/use-chat-input-model-state.ts"
+      - "src/hooks/use-chat-input-llm-profile-state.ts"
+      - "src/stores/model-store.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/quint-model-selection.yml"
+      - "spec/quint/agent-canvas-model-selection.qnt"
+      - "src/api/conversation-metadata-store.ts"
+      - "src/api/conversation-service/agent-server-conversation-service.api.ts"
+      - "src/api/conversation-service/agent-server-conversation-service.types.ts"
+      - "src/components/features/chat/components/chat-input-llm-profile-picker.tsx"
+      - "src/components/features/chat/components/chat-input-model.tsx"
+      - "src/contexts/conversation-websocket-context.tsx"
+      - "src/hooks/chat/record-model-switch-message.ts"
+      - "src/hooks/mutation/use-create-conversation.ts"
+      - "src/hooks/mutation/use-switch-acp-model.ts"
+      - "src/hooks/mutation/use-switch-llm-profile.ts"
+      - "src/hooks/mutation/use-switch-llm-profile-and-log.ts"
+      - "src/hooks/use-acp-model-context.ts"
+      - "src/hooks/use-chat-input-model-state.ts"
+      - "src/hooks/use-chat-input-llm-profile-state.ts"
+      - "src/stores/model-store.ts"
+
+concurrency:
+  group: quint-model-selection-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-model-selection:
+    name: Check model-selection authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          # Match the Node line used by the main CI workflow.
+          node-version: "24.15"
+
+      - name: Typecheck specification
+        run: >-
+          npx --yes @informalsystems/quint@0.32.0 typecheck
+          spec/quint/agent-canvas-model-selection.qnt
+
+      - name: Run deterministic design tests
+        run: >-
+          npx --yes @informalsystems/quint@0.32.0 test
+          spec/quint/agent-canvas-model-selection.qnt
+
+      - name: Check the fixed authority invariant
+        run: >-
+          npx --yes @informalsystems/quint@0.32.0 run
+          spec/quint/agent-canvas-model-selection.qnt
+          --invariant=displayMatchesAuthority
+          --max-samples=10000
+          --max-steps=20
+
+      - name: Confirm stale implementations produce counterexamples
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expect_counterexample() {
+            local init_action="$1"
+            local step_action="$2"
+            local output_file
+            output_file="$(mktemp)"
+
+            if npx --yes @informalsystems/quint@0.32.0 run \
+              spec/quint/agent-canvas-model-selection.qnt \
+              --init="$init_action" \
+              --step="$step_action" \
+              --invariant=displayMatchesAuthority \
+              --max-samples=1 \
+              --max-steps=1 >"$output_file" 2>&1; then
+              echo "::error::$step_action unexpectedly satisfied displayMatchesAuthority"
+              sed -n '1,200p' "$output_file"
+              exit 1
+            fi
+
+            sed -n '1,200p' "$output_file"
+            if ! grep -q "Invariant violated" "$output_file"; then
+              echo "::error::$step_action failed without the expected invariant counterexample"
+              exit 1
+            fi
+          }
+
+          expect_counterexample initStaleReopenWitness reopenWithStaleDisplay
+          expect_counterexample initStaleSwitchWitness switchWithStaleDisplay
