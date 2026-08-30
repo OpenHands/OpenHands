@@ -48,6 +48,7 @@ function settled(summary: Partial<AutomationRunSummary>): RunSummaryState {
   return {
     summary: {
       total: 0,
+      completedTotal: null,
       latestRun: null,
       recentRuns: [],
       recentSuccessRate: null,
@@ -154,9 +155,12 @@ describe("summarizeAutomationRuns", () => {
     const summary = summarizeAutomationRuns({ runs, total: 40 });
 
     // Assert — success rate and durations consider COMPLETED and FAILED only;
-    // total is the response's lifetime count, not the sample's length.
+    // total is the response's lifetime count, not the sample's length. With
+    // no status_counts and more history than the sample, the completed count
+    // is unknowable rather than guessed.
     expect(summary).toEqual({
       total: 40,
+      completedTotal: null,
       latestRun: runs[0],
       recentRuns: runs,
       recentSuccessRate: 0.5,
@@ -178,6 +182,51 @@ describe("summarizeAutomationRuns", () => {
       rate: summary.recentSuccessRate,
       duration: summary.averageDurationMs,
     }).toEqual({ rate: null, duration: null });
+  });
+
+  it("takes the lifetime completed count from status_counts", () => {
+    // Arrange — the service's counts outrank anything the sample suggests.
+    const runs = [createRun({ status: AutomationRunStatus.FAILED })];
+
+    // Act
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 80,
+      status_counts: { COMPLETED: 70, FAILED: 10 },
+    });
+
+    // Assert
+    expect(summary.completedTotal).toBe(70);
+  });
+
+  it("treats a missing COMPLETED key as zero when status_counts is present", () => {
+    // Arrange — the field is sparse, so its presence makes absence mean zero.
+    const runs = [createRun({ status: AutomationRunStatus.FAILED })];
+
+    // Act
+    const summary = summarizeAutomationRuns({
+      runs,
+      total: 1,
+      status_counts: { FAILED: 1 },
+    });
+
+    // Assert
+    expect(summary.completedTotal).toBe(0);
+  });
+
+  it("counts the sample exactly when it holds the whole history", () => {
+    // Arrange — an older service reports no status_counts, but total says the
+    // two sampled runs are all there ever were.
+    const runs = [
+      createRun(),
+      createRun({ status: AutomationRunStatus.FAILED }),
+    ];
+
+    // Act
+    const summary = summarizeAutomationRuns({ runs, total: 2 });
+
+    // Assert
+    expect(summary.completedTotal).toBe(1);
   });
 });
 
