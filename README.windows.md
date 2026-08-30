@@ -8,7 +8,8 @@ For the main install options and overall context, see [README.md](./README.md).
 
 **Prerequisites**:
 
-- Docker Desktop for Windows
+- [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/) installed and running
+- At least 2GB of free disk space
 - A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access (create it before starting the container)
 
 ```powershell

@@ -18,6 +18,7 @@
   <a href="https://go.openhands.dev/slack"><img src="https://img.shields.io/badge/Slack-Join%20the%20community-611f69?logo=slack&logoColor=white&style=for-the-badge" alt="Join us on Slack"></a>
 </div>
 <div align="center">
+  <a href="#prerequisites">Prerequisites</a> |
   <a href="#quickstart">Quickstart</a> |
   <a href="./docs/README.md">Docs</a> |
   <a href="./docs/SELF_HOSTING.md">Self-Hosting</a> |
@@ -47,6 +48,34 @@ Agent Canvas runs the open source OpenHands agent out-of-the-box, but can use an
 
 If you have questions or feedback, please open a GitHub issue or join the [#proj-agent-canvas channel in Slack](https://openhands.dev/joinslack).
 
+## Prerequisites
+
+Before installing Agent Canvas, complete the prerequisites for the method you
+plan to use.
+
+### For all installation methods
+
+- A terminal (Terminal on macOS/Linux, or PowerShell / Windows Terminal on Windows)
+- Basic familiarity with command-line operations
+
+### For npm installation (Option 1)
+
+- [Node.js](https://nodejs.org/) 22.12.x or later (includes npm)
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — Python package installer used to run the agent server via `uvx`
+- At least 1GB of free disk space
+
+### For Docker installation (Option 2)
+
+- Docker installed and running ([Install Docker](https://docs.docker.com/get-docker/)): Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux
+- At least 2GB of free disk space
+- Windows users should follow the [Windows quickstart](./README.windows.md)
+
+### For source installation (Option 3)
+
+- [Git](https://git-scm.com/downloads)
+- [Node.js](https://nodejs.org/) 22.12.x or later (includes npm)
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+
 ## Quickstart
 
 You can install OpenHands to run agents on any machine: on your laptop, on a dedicated computer like a Mac Mini,
@@ -65,8 +94,6 @@ code review and dependency updates, then have your personal agents running on yo
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
 
-**Prerequisites**: Node.js 22.12.x or later, `uv`
-
 ```sh
 npm install -g @openhands/agent-canvas
 agent-canvas
@@ -81,10 +108,7 @@ agent-canvas --backend-only   # agent server + automation backend + ingress only
 
 ### Option 2: With a Docker Sandbox
 
-**Prerequisites**:
-
-- Docker: Docker Desktop on macOS/Windows, or Docker Engine/Docker Desktop on Linux.
-- A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
+Choose a host directory for `PROJECTS_PATH` containing the project folders you want the agent to access. Create it before starting the container.
 
 **macOS / Linux:**
 
@@ -107,8 +131,6 @@ The agent will be able to access any project under `PROJECTS_PATH`.
 
 > [!WARNING]
 > This runs the agent-server directly on the machine you're installing on — the agent will have full access to your filesystem!
-
-**Prerequisites**: Node.js 22.12.x or later, `npm`, `uv` (for running the agent server via `uvx`)
 
 ```sh
 git clone https://github.com/OpenHands/OpenHands.git
