@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="360" role="img" aria-label="Terminal verification passed">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ node scripts/check-sdk-version-sync.mjs</text>
+  <text x="28" y="116" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">All SDK versions are in sync!</text>
+  <text x="28" y="170" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npm test -- --run __tests__/scripts/docs-version-sync.test.ts __tests__/scripts/dev-safe.test.ts __tests__/scripts/check-sdk-version-sync.test.ts</text>
+  <text x="28" y="208" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">Test Files 3 passed (3) · Tests 81 passed (81)</text>
+  <text x="28" y="262" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">$ npm test</text>
+  <text x="28" y="300" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">Test Files 619 passed (619) · Tests 5220 passed | 4 skipped | 7 todo</text>
+</svg>
