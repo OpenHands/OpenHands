@@ -11,6 +11,16 @@ import {
 } from "./dev-with-automation.mjs";
 import { buildNpmScriptCommand } from "./dev-safe.mjs";
 
+export function buildFrontendEnv(config, env = process.env) {
+  return {
+    ...env,
+    VITE_SESSION_API_KEY: "",
+    ...(config.viteWorkingDir
+      ? { VITE_WORKING_DIR: config.viteWorkingDir }
+      : {}),
+  };
+}
+
 export function buildFrontend(config, args = {}) {
   const buildDir = join(config.canvasPath, "build");
 
@@ -39,18 +49,9 @@ export function buildFrontend(config, args = {}) {
   );
 
   const cmd = buildNpmScriptCommand("build:app");
-  const buildEnv = {
-    ...process.env,
-    // Bake the session API key — used by the frontend for both agent-server
-    // and automation auth via the `X-Session-API-Key` header.
-    VITE_SESSION_API_KEY: config.sessionApiKey,
-    // Intentionally do NOT set VITE_BACKEND_BASE_URL: leaving it unset makes
-    // the runtime fall back to window.location.origin, which keeps the build
-    // portable across localhost, LAN hosts, and tunnels such as ngrok.
-  };
-  if (config.viteWorkingDir) {
-    buildEnv.VITE_WORKING_DIR = config.viteWorkingDir;
-  }
+  // The static server injects runtime configuration after applying the
+  // bind-host policy, so the reusable build itself must remain key-free.
+  const buildEnv = buildFrontendEnv(config);
 
   const result = spawnSync(cmd.command, cmd.args, {
     cwd: config.canvasPath,

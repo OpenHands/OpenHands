@@ -5,6 +5,7 @@ import {
   buildLocalServiceRouteArgs,
   parseArgs,
 } from "../../scripts/dev-static.mjs";
+import { buildFrontendEnv } from "../../scripts/static-build.mjs";
 
 describe("dev-static CLI", () => {
   it.each([
@@ -36,6 +37,16 @@ describe("dev-static", () => {
         "phc_kBtz5nKmxVRRQ7HtPwr2QX9eMC5j65zE86QKocVNwb4U",
       AUTOMATION_POSTHOG_HOST: "https://us.i.posthog.com",
     });
+  });
+
+  it("keeps reusable frontend builds free of session credentials", () => {
+    const env = buildFrontendEnv(
+      { viteWorkingDir: "/tmp/workspace" },
+      { VITE_SESSION_API_KEY: "inherited-secret" },
+    );
+
+    expect(env.VITE_SESSION_API_KEY).toBe("");
+    expect(env.VITE_WORKING_DIR).toBe("/tmp/workspace");
   });
 
   it("points every local proxy route at the IPv4 loopback", () => {
