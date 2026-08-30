@@ -54,15 +54,16 @@ export const useLoadOlderEvents = (
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
-  // The conversation the store currently belongs to. Updated on every
-  // `conversationId` change (same effect that resets the page-request state)
-  // so an in-flight page load can tell whether its originating conversation
-  // is still the one owning the global store — see the ownership check in
-  // `loadOlder`.
+  // The conversation the store currently belongs to. Assigned during render
+  // (not in the effect below) so it is synchronously correct the moment this
+  // component re-renders for a different conversation. Moving it into the
+  // effect is not enough: passive effects flush AFTER an in-flight page's
+  // promise continuation, so the stale closure would still see the old id and
+  // wrongly merge the page — see the ownership check in `loadOlder`.
   const conversationIdRef = React.useRef(conversationId);
+  conversationIdRef.current = conversationId;
 
   React.useEffect(() => {
-    conversationIdRef.current = conversationId;
     isLoadingRef.current = false;
     setIsLoading(false);
 
