@@ -176,10 +176,12 @@ const pruneToBaseline = (
  * Remove the keys a save carried from the overlay, leaving the rest.
  *
  * Paired with folding the same keys into the baseline, this is the "rebase" a
- * successful save performs. Clearing the overlay outright would drop the
- * display back to a baseline still holding pre-save values until the refetch
- * lands, so saved fields would visibly flicker to their old values. A field
- * edited while the request was in flight was not submitted, so it stays.
+ * successful save performs.
+ *
+ * Only the submitted keys go, which is the point: a field edited after Save was
+ * pressed was not in that request, so clearing the overlay wholesale would
+ * silently discard it. (It would not cause a flicker — the same batch folds the
+ * saved values into the baseline — so that is not the reason to be selective.)
  */
 const dropSavedKeys = (
   edits: ValuesBySource,

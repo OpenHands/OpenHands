@@ -1721,6 +1721,53 @@ describe("SdkSectionPage", () => {
       });
     });
 
+    it("keeps an edit made while the save was in flight", async () => {
+      // A successful save consumes only the edits it actually submitted. A
+      // field typed into after Save was pressed was never part of that
+      // request, so clearing the whole overlay would discard it — the same
+      // class of silent loss this issue is about.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+      let release: () => void = () => {};
+      const inFlight = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(SettingsService, "saveSettings").mockImplementation(async () => {
+        await inFlight;
+        getSettingsSpy.mockResolvedValue(
+          buildTwoFieldSettings({ endpoint: "https://submitted.example.com" }),
+        );
+        return true;
+      });
+
+      renderSdkSectionPage({ settingsSources: AGENT_LLM_SOURCE });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await userEvent.clear(endpointInput);
+      await userEvent.type(endpointInput, "https://submitted.example.com");
+      await userEvent.click(screen.getByTestId("save-button"));
+
+      // Typed while the request is still open, so it is not in the payload.
+      const modelInput = screen.getByTestId("sdk-settings-llm.model");
+      await userEvent.clear(modelInput);
+      await userEvent.type(modelInput, "typed-during-save");
+
+      release();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+          "https://submitted.example.com",
+        );
+      });
+      expect(screen.getByTestId("sdk-settings-llm.model")).toHaveValue(
+        "typed-during-save",
+      );
+      expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
     it("keeps getDirtyPayload dirty-only after a refetch", async () => {
       // A refetch changing an untouched field must not make it look edited.
       const getSettingsSpy = vi
