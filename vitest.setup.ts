@@ -215,8 +215,13 @@ afterAll(async () => {
   // Reset handlers first so no new intercepted requests start processing
   // during the drain window.
   server.resetHandlers();
+  // Zero-delay timers can coalesce or be starved on a loaded CI runner, which
+  // lets a pending MSW `respondWith` callback outlive jsdom teardown. Interleave
+  // a few short real-delay waits so in-flight responses get a real temporal
+  // window to settle. The bound stays small so 600+ test files do not add
+  // meaningful wall-clock time.
   for (let i = 0; i < 30; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, i % 5 === 0 ? 5 : 0));
   }
   server.close();
   vi.unstubAllGlobals();
