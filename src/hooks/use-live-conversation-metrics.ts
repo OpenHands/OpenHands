@@ -56,23 +56,11 @@ export function useLiveConversationMetrics(
       };
     }
 
-    if (storeCost !== null && conversationMetrics?.accumulated_token_usage) {
-      // Partial live state: cost is fresh from the socket, but token
-      // counts come from the most recent REST snapshot. The cost
-      // contribution from the snapshot would double-count once the
-      // socket starts emitting usage, so prefer the live cost.
-      return {
-        cost: storeCost,
-        max_budget_per_task:
-          storeMaxBudgetPerTask ?? conversationMetrics.max_budget_per_task,
-        usage: formatUsage(conversationMetrics.accumulated_token_usage),
-      };
-    }
-
     if (conversationMetrics) {
       return {
-        cost: conversationMetrics.accumulated_cost,
-        max_budget_per_task: conversationMetrics.max_budget_per_task,
+        cost: storeCost ?? conversationMetrics.accumulated_cost,
+        max_budget_per_task:
+          storeMaxBudgetPerTask ?? conversationMetrics.max_budget_per_task,
         usage: formatUsage(conversationMetrics.accumulated_token_usage),
       };
     }

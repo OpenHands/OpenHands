@@ -184,4 +184,24 @@ describe("useLiveConversationMetrics", () => {
       per_turn_token: 500,
     });
   });
+
+  it("preserves the live store cost when the REST snapshot has null token usage", () => {
+    useMetricsStore.setState({
+      cost: 0.5,
+      max_budget_per_task: null,
+      usage: null,
+    });
+    useConversationMetricsMock.mockReturnValue({
+      data: snapshot({
+        accumulated_cost: 0.2,
+        accumulated_token_usage: null,
+      }),
+    });
+
+    const { result } = renderHook(() => useLiveConversationMetrics());
+
+    expect(result.current.cost).toBe(0.5);
+    expect(result.current.max_budget_per_task).toBe(5);
+    expect(result.current.usage).toBeNull();
+  });
 });
