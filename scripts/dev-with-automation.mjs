@@ -1179,6 +1179,7 @@ export function buildAutomationRuntimeServicesInfo(config) {
 }
 
 function buildViteFrontendEnv(config) {
+  /** @type {Record<string, string>} */
   const viteEnv = {
     // Full-stack mode points Vite at this launcher's ingress. Frontend-only
     // mode uses the separately running backend ingress instead.
