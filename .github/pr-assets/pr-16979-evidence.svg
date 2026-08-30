@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" font-family="'SF Mono','Menlo','Consolas',monospace">
+  <defs>
+    <linearGradient id="winBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e2430"/>
+      <stop offset="1" stop-color="#171c26"/>
+    </linearGradient>
+    <linearGradient id="okGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2ea043"/>
+      <stop offset="1" stop-color="#1f7a31"/>
+    </linearGradient>
+    <linearGradient id="failGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d9524d"/>
+      <stop offset="1" stop-color="#a63e3a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Window backdrop -->
+  <rect x="0" y="0" width="960" height="640" rx="10" fill="url(#winBg)"/>
+
+  <!-- Title bar -->
+  <rect x="0" y="0" width="960" height="46" rx="10" fill="#232a38"/>
+  <rect x="0" y="26" width="960" height="20" fill="#232a38"/>
+  <circle cx="24" cy="23" r="7" fill="#ff5f57"/>
+  <circle cx="44" cy="23" r="7" fill="#febc2e"/>
+  <circle cx="64" cy="23" r="7" fill="#28c840"/>
+  <text x="480" y="29" fill="#9aa4b2" font-size="14" text-anchor="middle">vitest run __tests__/utils/git-diff-stats.test.ts</text>
+
+  <!-- ===== BEFORE FIX ===== -->
+  <text x="24" y="84" fill="#e9eeff" font-size="16" font-weight="bold">BEFORE FIX · repro test (issue #16979)</text>
+  <text x="24" y="112" fill="#f0883e" font-size="13">$ cat &gt; __tests__/utils/zz-repro-diffstats.test.ts</text>
+
+  <g font-size="13">
+    <text x="24" y="140" fill="#9aa4b2">const diff = [</text>
+    <text x="24" y="160" fill="#9aa4b2">  "@@ -1,3 +1,3 @@",</text>
+    <text x="24" y="180" fill="#cab9ff">  "-normal deleted line",</text>
+    <text x="24" y="200" fill="#a775ff">  "--- a deleted line that starts with two dashes",</text>
+    <text x="24" y="220" fill="#cab9ff">  "+normal added line",</text>
+    <text x="24" y="240" fill="#cab9ff">  "+++ an added line that starts with two pluses",</text>
+    <text x="24" y="260" fill="#9aa4b2">].join("\n");</text>
+  </g>
+
+  <text x="24" y="290" fill="#f0883e" font-size="13">$ npx vitest run __tests__/utils/zz-repro-diffstats.test.ts</text>
+  <rect x="24" y="304" width="912" height="56" rx="6" fill="url(#failGradient)" opacity="0.16"/>
+  <text x="34" y="328" fill="#f0b6b6" font-size="13"> FAIL  git-diff-stats &gt; counts hunk lines whose content starts with -- or ++</text>
+  <text x="34" y="350" fill="#f0b6b6" font-size="13">AssertionError: expected { additions: 1, deletions: 1 } to deeply equal { additions: 2, deletions: 2 }</text>
+
+  <!-- ===== AFTER FIX ===== -->
+  <text x="24" y="404" fill="#e9eeff" font-size="16" font-weight="bold">AFTER FIX · new module test suite</text>
+  <text x="24" y="432" fill="#f0883e" font-size="13">$ npx vitest run __tests__/utils/git-diff-stats.test.ts</text>
+  <rect x="24" y="446" width="912" height="76" rx="6" fill="url(#okGradient)" opacity="0.14"/>
+  <g font-size="13">
+    <text x="34" y="470" fill="#7ee787"> ✓ __tests__/utils/git-diff-stats.test.ts (9)</text>
+    <text x="34" y="492" fill="#7ee787">   ✓ counts -- deletion and ++ addition lines as changes</text>
+    <text x="34" y="512" fill="#7ee787">   ✓ unified + text paths agree and match git diff --numstat (2 insertions, 2 deletions)</text>
+  </g>
+
+  <rect x="24" y="532" width="912" height="40" rx="6" fill="none" stroke="#2ea043" stroke-opacity="0.4"/>
+  <text x="34" y="556" fill="#7ee787" font-size="13" font-weight="bold">Test Files  1 passed · Tests  9 passed · tsc --noEmit clean · eslint clean</text>
+
+  <text x="24" y="612" fill="#9aa4b2" font-size="12">git diff --stat for the repro change: 2 insertions(+), 2 deletions(-)  —  matches both counting paths.</text>
+</svg>
