@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="460" viewBox="0 0 820 460">
+  <rect width="820" height="460" fill="#0d1117"/>
+  <text x="20" y="32" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#8b949e">Terminal &#8594; #16949 Files/Changes stay source-driven after refresh</text>
+
+  <text x="20" y="64" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#ff7b72">$ # before: cloud list keyed separately (never invalidated by the refresh family)</text>
+  <text x="40" y="88" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">["workspace-files", ...]         # local</text>
+  <text x="40" y="108" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">["workspace-files-cloud", ...]   # cloud &#8592; refresh invalidates only the local family</text>
+
+  <text x="20" y="144" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ npx vitest run __tests__/hooks/query/use-unified-get-git-changes.test.tsx __tests__/hooks/query/use-workspace-files.test.tsx</text>
+  <text x="20" y="170" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#7ee787">✓ use-unified-get-git-changes.test.tsx (5 tests)   M &#8594; D status flip, added prepend, pruned, reset</text>
+  <text x="20" y="192" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#7ee787">✓ use-workspace-files.test.tsx (5 tests)   cloud list refetched on family invalidation</text>
+  <text x="20" y="216" font-family="SFMono-Regular,Consolas,monospace" font-size="15" fill="#7ee787"><tspan font-weight="bold">Test Files 2 passed (2)  |  Tests 10 passed (10)</tspan></text>
+
+  <text x="20" y="252" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ npx tsc --noEmit</text>
+  <text x="20" y="276" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#7ee787">OK &#8212; no type errors</text>
+
+  <text x="20" y="310" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#58a6ff">$ npx eslint src/hooks/query/use-workspace-files.ts src/hooks/query/use-unified-get-git-changes.ts</text>
+  <text x="20" y="334" font-family="SFMono-Regular,Consolas,monospace" font-size="14" fill="#7ee787">OK &#8212; no lint errors</text>
+
+  <line x1="20" y1="356" x2="800" y2="356" stroke="#30363d" stroke-width="1"/>
+  <text x="20" y="382" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">after:  local + cloud share ["workspace-files", "local" | "cloud", ...] family</text>
+  <text x="20" y="404" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">after:  changes ordering kept as path identities; objects projected from latest response</text>
+  <text x="20" y="426" font-family="SFMono-Regular,Consolas,monospace" font-size="13" fill="#8b949e">        ordering resets when conversation/git identity changes; no stale GitChange mirrored</text>
+  <text x="20" y="450" font-family="SFMono-Regular,Consolas,monospace" font-size="12" fill="#484f58">Generated from local run in sandbox &#8226; no GPU / browser E2E involved</text>
+</svg>
