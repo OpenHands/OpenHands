@@ -76,15 +76,26 @@ export type SourceType = import("@openhands/typescript-client").EventSource;
 
 export { ConversationExecutionStatus as ExecutionStatus } from "@openhands/typescript-client";
 
-// Content types for LLM messages
-export interface TextContent {
-  type: "text";
-  text: string;
+// Content types for LLM messages.
+//
+// Sourced from `@openhands/typescript-client`, the canonical agent-server
+// contract, instead of a parallel copy. The canonical `TextContent` /
+// `ImageContent` are refined with the wire's optional `cache_prompt` flag,
+// which the server emits (agent-server-schema) but the client's simplified
+// content types omit. Keeping the refinement narrow (one field) avoids
+// recreating the wire contract while staying in sync with the client's
+// structural base and any new content variants it adds.
+export type TextContent = import("@openhands/typescript-client").TextContent & {
+  /**
+   * Whether this content block is cached by the prompt-caching layer.
+   */
   cache_prompt?: boolean;
-}
+};
 
-export interface ImageContent {
-  type: "image";
-  image_urls: string[];
-  cache_prompt?: boolean;
-}
+export type ImageContent =
+  import("@openhands/typescript-client").ImageContent & {
+    /**
+     * Whether this content block is cached by the prompt-caching layer.
+     */
+    cache_prompt?: boolean;
+  };

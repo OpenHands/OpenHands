@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   ExecutionStatus,
+  ImageContent,
   SourceType,
+  TextContent,
 } from "#/types/agent-server/core/base/common";
+import type {
+  ImageContent as CanonicalImageContent,
+  TextContent as CanonicalTextContent,
+} from "@openhands/typescript-client";
 import {
   isBaseEvent,
   isAgentServerEvent,
@@ -59,5 +65,48 @@ describe("runtime guards and the widened source set", () => {
     expect(isBaseEvent(notAnEvent)).toBe(false);
     expect(isBaseEvent(null)).toBe(false);
     expect(isBaseEvent("string")).toBe(false);
+  });
+});
+
+describe("TextContent / ImageContent (sourced from @openhands/typescript-client)", () => {
+  it("refines the canonical client content types instead of redeclaring them", () => {
+    // The local types must be assignable both ways against the canonical
+    // client contracts so Canvas stays a pure consumer of the wire model.
+    const text: TextContent = { type: "text", text: "hello" };
+    const image: ImageContent = { type: "image", image_urls: ["u1", "u2"] };
+    expectTypeOf<TextContent>().toMatchTypeOf<CanonicalTextContent>();
+    expectTypeOf<ImageContent>().toMatchTypeOf<CanonicalImageContent>();
+    expect(text.type).toBe("text");
+    expect(image.image_urls).toHaveLength(2);
+  });
+
+  it("keeps the wire's optional cache_prompt refinement", () => {
+    // The agent-server schema emits `cache_prompt` on content blocks, but the
+    // client's simplified content types omit it. Canvas preserves the narrow
+    // refinement so wire payloads with the flag still type-check (#16952).
+    const cachedText: TextContent = {
+      type: "text",
+      text: "cached",
+      cache_prompt: true,
+    };
+    const uncachedImage: ImageContent = {
+      type: "image",
+      image_urls: ["u"],
+      cache_prompt: false,
+    };
+    expect(cachedText.cache_prompt).toBe(true);
+    expect(uncachedImage.cache_prompt).toBe(false);
+  });
+
+  it("preserves the discriminated structural base from the client", () => {
+    const blocks: (TextContent | ImageContent)[] = [
+      { type: "text", text: "a" },
+      { type: "image", image_urls: ["b"] },
+    ];
+    const texts = blocks.filter((b) => b.type === "text");
+    const images = blocks.filter((b) => b.type === "image");
+    // Narrowing on `type` works because the canonical base is a union.
+    expect(texts[0].text).toBe("a");
+    expect(images[0].image_urls).toEqual(["b"]);
   });
 });
