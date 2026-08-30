@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="420" role="img" aria-label="Node engines bump verification passed">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="40" cy="40" r="9" fill="#ff5f56"/>
+  <circle cx="70" cy="40" r="9" fill="#ffbd2e"/>
+  <circle cx="100" cy="40" r="9" fill="#27c93f"/>
+  <text x="30" y="96" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">$ node -v</text>
+  <text x="30" y="130" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">v24.1.0</text>
+  <text x="30" y="180" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">$ npm pkg get engines</text>
+  <text x="30" y="214" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">{ "node": "&gt;=24" }</text>
+  <text x="30" y="258" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">$ sed -n '116,118p' package-lock.json   # root &quot;&quot; entry engines</text>
+  <text x="30" y="292" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">&quot;engines&quot;: { &quot;node&quot;: &quot;&gt;=24&quot; }</text>
+  <text x="30" y="342" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">$ npm ci --no-audit --no-fund</text>
+  <text x="30" y="376" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">added 1501 packages in 30s · exit 0 ✓</text>
+</svg>
