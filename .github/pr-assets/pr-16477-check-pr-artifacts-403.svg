@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="470" role="img" aria-label="check-pr-artifacts fails with 403 on fork PRs because .pr exists in base main">
+  <rect width="100%" height="100%" rx="18" fill="#0b1020"/>
+  <circle cx="34" cy="32" r="8" fill="#ff5f56"/>
+  <circle cx="60" cy="32" r="8" fill="#ffbd2e"/>
+  <circle cx="86" cy="32" r="8" fill="#27c93f"/>
+  <text x="28" y="78" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">$ check-pr-artifacts (run on fork PR #17025, merge ref of main + head)</text>
+  <text x="28" y="114" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">Check for .pr directory (base main still contains .pr/17010...png)</text>
+  <text x="28" y="150" fill="#ffd27d" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">exists=true</text>
+  <text x="28" y="186" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">Post or update PR artifacts comment (read-only GITHUB_TOKEN for forks)</text>
+  <text x="28" y="222" fill="#ff6b6b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">POST /repos/OpenHands/OpenHands/issues/17025/comments - 403</text>
+  <text x="28" y="258" fill="#ff6b6b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">HttpError: Resource not accessible by integration</text>
+  <text x="28" y="294" fill="#ff6b6b" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">##[error]Unhandled error: HttpError: Resource not accessible by integration</text>
+  <text x="28" y="344" fill="#d7e2ff" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">After this PR (delete .pr/17010-readiness-heading-evidence.png):</text>
+  <text x="28" y="380" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">Check for .pr directory</text>
+  <text x="28" y="416" fill="#8ef0a1" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20">exists=false  →  no comment step  →  job succeeds for every fork PR</text>
+</svg>
