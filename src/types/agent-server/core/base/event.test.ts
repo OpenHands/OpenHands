@@ -57,4 +57,29 @@ describe("Canvas base event envelope (#16952 stage 2)", () => {
       source: "agent",
     });
   });
+
+  it("reflects that legacy wire events may omit id/timestamp (#16952 acceptance)", () => {
+    // The on-the-wire contract (WebSocket streams, legacy history, REST RSS)
+    // marks id/timestamp optional, so a partial event can legitimately arrive
+    // without them. This is exactly why Canvas pins them as required on its
+    // own refined envelope below.
+    const legacyWire: CanonicalBaseEvent = { kind: "AgentErrorEvent" };
+    expect(legacyWire.id).toBeUndefined();
+    expect(legacyWire.timestamp).toBeUndefined();
+
+    // Canvas never weakens the id it pins on its envelope: a type where id is
+    // optional must NOT be assignable to BaseEvent.
+    expectTypeOf<{ id?: string }>().not.toMatchTypeOf<BaseEvent>();
+  });
+
+  it("accepts legacy payloads that omit optional envelope fields (#16952 acceptance)", () => {
+    // Older persisted events predate the conversation tree and therefore lack
+    // `parent_id`; the envelope must still type-check and read cleanly.
+    const legacy: BaseEvent = {
+      id: "evt-legacy",
+      timestamp: "2024-06-01T00:00:00Z",
+      source: "agent",
+    };
+    expect(legacy.parent_id).toBeUndefined();
+  });
 });
