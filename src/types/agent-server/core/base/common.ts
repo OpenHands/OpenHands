@@ -52,9 +52,6 @@ export interface CmdOutputMetadata {
 export type EventID = string;
 export type ToolCallID = string;
 
-// Source type for events
-export type SourceType = "agent" | "user" | "environment" | "hook";
-
 // Security risk levels
 export enum SecurityRisk {
   UNKNOWN = "UNKNOWN",
@@ -63,16 +60,21 @@ export enum SecurityRisk {
   HIGH = "HIGH",
 }
 
-// Agent status
-export enum ExecutionStatus {
-  IDLE = "idle",
-  RUNNING = "running",
-  PAUSED = "paused",
-  WAITING_FOR_CONFIRMATION = "waiting_for_confirmation",
-  FINISHED = "finished",
-  ERROR = "error",
-  STUCK = "stuck",
-}
+// =============================================================================
+// Canonical event source and execution status contracts
+// =============================================================================
+//
+// These are sourced from `@openhands/typescript-client`, the canonical browser
+// contract for the agent-server event wire, rather than being redeclared here.
+// The client's supersets intentionally cover variants Canvas misses:
+//   - `EventSource` adds `system` to the historical four sources.
+//   - `ConversationExecutionStatus` adds `deleting`.
+// Canvas consumers therefore stay in sync with new server statuses/sources
+// without carrying a parallel, drifting copy of the model.
+
+export type SourceType = import("@openhands/typescript-client").EventSource;
+
+export { ConversationExecutionStatus as ExecutionStatus } from "@openhands/typescript-client";
 
 // Content types for LLM messages
 export interface TextContent {
