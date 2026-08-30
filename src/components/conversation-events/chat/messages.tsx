@@ -1,5 +1,9 @@
 import React from "react";
-import { OpenHandsEvent } from "#/types/agent-server/core";
+import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  isActionEvent,
+  isObservationEvent,
+} from "#/types/agent-server/type-guards";
 import { EventMessage } from "./event-message";
 import { usePlanPreviewEvents } from "./hooks/use-plan-preview-events";
 import { groupEvents } from "./group-events";
@@ -23,6 +27,18 @@ export const Messages: React.FC<MessagesProps> = React.memo(
     // Get the set of event IDs that should render PlanPreview
     // This ensures only one preview per user message "phase"
     const planPreviewEventIds = usePlanPreviewEvents(allEvents);
+
+    // EventMessage used to receive the complete allEvents array and the plan
+    // Set, so every append changed every historical item's shallow props.
+    // Derive the two event-specific values once and keep unchanged wrappers
+    // eligible for React.memo without removing allEvents from grouping logic.
+    const actionById = React.useMemo(() => {
+      const actions = new Map<string, ActionEvent>();
+      for (const event of allEvents) {
+        if (isActionEvent(event)) actions.set(event.id, event);
+      }
+      return actions;
+    }, [allEvents]);
 
     // Set of event ids that have a /model entry anchored to them — used to
     // avoid mounting <ModelMessages> for every event (the component would
@@ -67,10 +83,14 @@ export const Messages: React.FC<MessagesProps> = React.memo(
       <EventMessage
         key={event.id}
         event={event}
-        messages={allEvents}
+        correspondingAction={
+          isObservationEvent(event) && event.action_id
+            ? (actionById.get(event.action_id) ?? null)
+            : null
+        }
         isLastMessage={messages.length - 1 === index}
         isInLast10Actions={messages.length - 1 - index < 10}
-        planPreviewEventIds={planPreviewEventIds}
+        showPlanPreview={event.id ? planPreviewEventIds.has(event.id) : false}
         suppressThought={suppressThought}
       />
     );
