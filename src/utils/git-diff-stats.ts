@@ -35,6 +35,7 @@ function countUnifiedDiffStats(diff: string): GitDiffLineStats {
 
   for (const line of diff.split("\n")) {
     if (line.startsWith("@@")) {
+      skipNextHeaderLines = 0;
       continue;
     }
 

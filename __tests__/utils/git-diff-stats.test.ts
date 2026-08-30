@@ -148,4 +148,19 @@ describe("countGitChangeDiffStats (unified diff)", () => {
       deletions: 1,
     });
   });
+
+  it("resets the file-header skip window when reaching @@ so subsequent hunk changes are never skipped", () => {
+    // Malformed/unusual patch with only 1 header line before @@
+    const diff =
+      DIFF_STAT_HEADER +
+      "--- a/foo.txt\n" +
+      HUNK_HEADER +
+      twoDashDeletedLine +
+      twoDashAddedLine;
+
+    expect(countGitChangeDiffStats(wrap(diff))).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+  });
 });
