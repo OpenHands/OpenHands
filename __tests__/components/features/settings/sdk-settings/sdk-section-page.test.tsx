@@ -325,6 +325,115 @@ describe("SdkSectionPage", () => {
     });
   });
 
+  it("keeps embedded editor tab and edits across settings refetch", async () => {
+    const schema: NonNullable<Settings["agent_settings_schema"]> = {
+      model_name: "AgentSettings",
+      sections: [
+        {
+          key: "llm",
+          label: "LLM",
+          fields: [
+            {
+              key: "llm.model",
+              label: "Model",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: "openhands/claude-opus-4-5-20251101",
+              choices: [],
+              depends_on: [],
+              prominence: "critical",
+              secret: false,
+              required: true,
+            },
+            {
+              key: "llm.base_url",
+              label: "Base URL",
+              section: "llm",
+              section_label: "LLM",
+              value_type: "string",
+              default: null,
+              choices: [],
+              depends_on: [],
+              prominence: "major",
+              secret: false,
+              required: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    const getSettingsSpy = vi
+      .spyOn(SettingsService, "getSettings")
+      .mockResolvedValue(
+        buildSettings({
+          agent_settings_schema: schema,
+          agent_settings: {
+            "llm.model": "openhands/claude-opus-4-5-20251101",
+          },
+        }),
+      );
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+
+    let latestControl: SdkSectionSaveControl | null = null;
+
+    mockUseConfig.mockReturnValue({
+      data: {},
+      isLoading: false,
+    });
+    mockUseSearchParams.mockReturnValue([{ get: () => null }, vi.fn()]);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SdkSectionPage
+          settingsSources={[
+            { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+          ]}
+          hideSaveButton
+          markInitialOverridesDirty={false}
+          initialValueOverrides={{
+            "llm.model": "",
+            "llm.base_url": "",
+          }}
+          onSaveControlChange={(control) => {
+            latestControl = control;
+          }}
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId("sdk-section-advanced-toggle");
+    await userEvent.click(screen.getByTestId("sdk-section-advanced-toggle"));
+    const baseUrlInput = await screen.findByTestId("sdk-settings-llm.base_url");
+    await userEvent.clear(baseUrlInput);
+    await userEvent.type(baseUrlInput, "http://127.0.0.1:9999");
+
+    getSettingsSpy.mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+        agent_settings: {
+          "llm.model": "openhands/claude-opus-4-5-20251101",
+          "llm.base_url": null,
+        },
+      }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ["settings"] });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sdk-settings-llm.base_url")).toHaveValue(
+        "http://127.0.0.1:9999",
+      );
+      expect(latestControl?.view).toBe("advanced");
+      expect(latestControl?.isDirty).toBe(true);
+    });
+  });
+
   it("resets from advanced to the inferred basic view after saving when advanced settings match defaults", async () => {
     const schema: NonNullable<Settings["agent_settings_schema"]> = {
       model_name: "AgentSettings",
@@ -985,6 +1094,121 @@ describe("SdkSectionPage", () => {
       expect(latestControl?.getDirtyPayload()).toEqual({
         llm: { endpoint: "https://new.example.com" },
       });
+    });
+  });
+
+  it("disables Save after a boolean field is changed and then reverted", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        conversation_settings_schema: {
+          model_name: "ConversationSettings",
+          sections: [
+            {
+              key: "verification",
+              label: "Verification",
+              fields: [
+                {
+                  key: "confirmation_mode",
+                  label: "Confirmation mode",
+                  section: "verification",
+                  section_label: "Verification",
+                  value_type: "boolean",
+                  default: false,
+                  choices: [],
+                  depends_on: [],
+                  prominence: "critical",
+                  secret: false,
+                  required: false,
+                },
+              ],
+            },
+          ],
+        },
+        conversation_settings: {
+          confirmation_mode: false,
+        },
+      }),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        {
+          settingsSource: "conversation_settings",
+          sectionKeys: ["verification"],
+        },
+      ],
+    });
+
+    const confirmationInput = await screen.findByTestId(
+      "sdk-settings-confirmation_mode",
+    );
+    const saveButton = screen.getByTestId("save-button") as HTMLButtonElement;
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.click(confirmationInput.closest("label")!);
+    expect(saveButton).not.toBeDisabled();
+
+    await userEvent.click(confirmationInput.closest("label")!);
+    expect(saveButton).toBeDisabled();
+  });
+
+  it("disables Save after a string field is edited back to the loaded value", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+    });
+
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
+    const saveButton = screen.getByTestId("save-button") as HTMLButtonElement;
+    expect(saveButton).toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://changed.example.com");
+    expect(saveButton).not.toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://api.example.com");
+    await waitFor(() => {
+      expect(saveButton).toBeDisabled();
+    });
+  });
+
+  it("does not force-dirty override fields when markInitialOverridesDirty is false", async () => {
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSavableSettings(),
+    );
+
+    renderSdkSectionPage({
+      settingsSources: [
+        { settingsSource: "agent_settings", sectionKeys: ["llm"] },
+      ],
+      initialValueOverrides: {
+        "llm.endpoint": "https://seeded.example.com",
+      },
+      markInitialOverridesDirty: false,
+    });
+
+    const endpointInput = await screen.findByTestId(
+      "sdk-settings-llm.endpoint",
+    );
+    expect(endpointInput).toHaveValue("https://seeded.example.com");
+    expect(screen.getByTestId("save-button")).toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://changed.example.com");
+    expect(screen.getByTestId("save-button")).not.toBeDisabled();
+
+    await userEvent.clear(endpointInput);
+    await userEvent.type(endpointInput, "https://seeded.example.com");
+    await waitFor(() => {
+      expect(screen.getByTestId("save-button")).toBeDisabled();
     });
   });
 

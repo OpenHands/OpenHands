@@ -10,7 +10,12 @@ import {
 } from "#/hooks/query/use-agent-settings-schema";
 import { useSettings } from "#/hooks/query/use-settings";
 import { I18nKey } from "#/i18n/declaration";
-import { Settings, SettingsSchema, SettingsScope } from "#/types/settings";
+import {
+  Settings,
+  SettingsFieldSchema,
+  SettingsSchema,
+  SettingsScope,
+} from "#/types/settings";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 import {
   displayErrorToast,
@@ -27,6 +32,7 @@ import {
   hasMinorSettings,
   inferInitialView,
   isValidSettingsSchema,
+  normalizeComparableValue,
   SettingsDirtyState,
   SettingsFormValues,
   type SettingsValueSource,
@@ -120,6 +126,10 @@ const mergeOverlay = (
 /**
  * Dirty is a derived fact — the keys the user has an edit for — rather than a
  * flag that has to be cleared in step with the values it describes.
+ *
+ * A field edited back to its baseline value is removed from the overlay by
+ * `handleFieldChange`, so "reverted edits are not dirty" falls out of the same
+ * structure rather than needing a second comparison here.
  */
 const dirtyFromEdits = (
   edits: ValuesBySource,
@@ -139,18 +149,12 @@ const dirtyFromEdits = (
 /**
  * Drop overlay entries for schema fields that have gone away.
  *
- * A key the schema once defined and no longer does is unreachable — nothing
- * renders it and `buildSdkSettingsPayload` walks schema fields — yet it would
- * still count towards `dirty` and strand the form behind an enabled Save button
- * that submits nothing.
- *
- * `everSchemaKeys` is every key that has appeared in a baseline so far, and is
- * what separates that case from a key the schema never defined at all. Callers
- * legitimately drive values outside the schema and read them back off
- * `saveControl.values` — `llm-settings-local-view` does this with
- * `llm.provider_connection_id` to keep a profile's connection link — so a key
- * that was never a schema field is left alone. Pruning those would silently
- * unlink the profile on the next save.
+ * A key the schema no longer defines is unreachable — nothing renders it and
+ * `buildSdkSettingsPayload` walks schema fields — yet it would still count
+ * towards `dirty` and strand the form behind an enabled Save button that
+ * submits nothing. Keys the schema never defined are left alone: callers drive
+ * values outside the schema and read them back off `saveControl.values`, as
+ * `llm-settings-local-view` does with `llm.provider_connection_id`.
  */
 const pruneToBaseline = (
   edits: ValuesBySource,
@@ -176,12 +180,9 @@ const pruneToBaseline = (
  * Remove the keys a save carried from the overlay, leaving the rest.
  *
  * Paired with folding the same keys into the baseline, this is the "rebase" a
- * successful save performs.
- *
- * Only the submitted keys go, which is the point: a field edited after Save was
- * pressed was not in that request, so clearing the overlay wholesale would
- * silently discard it. (It would not cause a flicker — the same batch folds the
- * saved values into the baseline — so that is not the reason to be selective.)
+ * successful save performs. Only the submitted keys go: a field edited after
+ * Save was pressed was not in that request, so clearing the overlay wholesale
+ * would silently discard it.
  */
 const dropSavedKeys = (
   edits: ValuesBySource,
@@ -293,6 +294,7 @@ export function SdkSectionPage({
   forceShowAdvancedView = false,
   allowAllView = true,
   initialValueOverrides,
+  markInitialOverridesDirty = true,
   embedded = false,
   hideSaveButton = false,
   suppressSuccessToast = false,
@@ -325,14 +327,15 @@ export function SdkSectionPage({
   forceShowAdvancedView?: boolean;
   allowAllView?: boolean;
   /**
-   * Per-field initial value overrides that win over the values
-   * derived from `useSettings`. The keys of each override are also
-   * marked dirty on hydration so the user can save the form without
-   * having to touch the prefilled fields. Useful when the page is
-   * embedded in a flow that wants to nudge brand-new users toward a
-   * particular default (e.g. onboarding pre-filling OpenHands/Opus).
+   * Per-field initial value overrides that win over the values derived from
+   * `useSettings`. When {@link markInitialOverridesDirty} is true (default),
+   * override keys also start dirty so onboarding can save a prefill without
+   * a touch. Profile editors should pass `false` so Save stays off until the
+   * user changes something.
    */
   initialValueOverrides?: SettingsFormValues;
+  /** @default true */
+  markInitialOverridesDirty?: boolean;
   embedded?: boolean;
   hideSaveButton?: boolean;
   /** Suppress the default success toast after save completes. */
@@ -460,6 +463,7 @@ export function SdkSectionPage({
     () => (initialValueOverrides ? JSON.stringify(initialValueOverrides) : ""),
     [initialValueOverrides],
   );
+  const firstSettingsSource = resolvedSources[0]?.settingsSource;
 
   const [view, setView] = React.useState<SettingsView>("basic");
   /**
@@ -501,10 +505,9 @@ export function SdkSectionPage({
     }
     // Overrides deliberately do NOT go into the baseline. The baseline is what
     // the server says; an override is a local prefill, so it belongs in the
-    // overlay with every other unsaved value. Merging it here would let it
-    // outrank the server copy forever — including after the user has edited
-    // and saved the field, whose confirming refetch would then be overwritten
-    // by the stale prefill.
+    // overlay. Merging it here would let it outrank the server copy forever —
+    // including after the user has edited and saved the field, whose confirming
+    // refetch would then be overwritten by the stale prefill.
     return result;
   }, [settings, resolvedSources]);
 
@@ -543,17 +546,32 @@ export function SdkSectionPage({
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
 
-    // The baseline always tracks the server. Edits are left alone: this effect
-    // re-runs on every settings/schema refetch, and replacing the values here
-    // is what used to discard unsaved input while the form stayed on screen.
-    setBaselineBySource(initialValuesBySource);
+    // A prefill applies once, on the first hydration for a given override set.
+    // It seeds the baseline so the value is displayed and so reverting *to* it
+    // reads as clean, which is what `markInitialOverridesDirty: false` means.
+    // Re-applying it on later refetches is what let a stale prefill outrank the
+    // server copy — including the value the user had just saved.
+    const isFirstApply =
+      !!initialValueOverrides &&
+      seededOverridesRef.current !== overridesSignature;
 
-    // Drop overlay entries for fields the new schema no longer defines. They
-    // can never be displayed or submitted again — `buildSdkSettingsPayload`
-    // walks schema fields — so leaving them would keep the form permanently
-    // dirty behind a Save button that builds an empty payload and no-ops.
-    // Keys the schema never defined are spared: a caller may drive a value
-    // outside the schema and read it back off `saveControl.values`.
+    // The baseline otherwise tracks the server exactly. Edits are left alone:
+    // this effect re-runs whenever a refetch brings settings or a schema that
+    // differ from the last, and replacing the values here is what used to
+    // discard unsaved input while the form stayed on screen.
+    setBaselineBySource(
+      isFirstApply && firstSettingsSource
+        ? {
+            ...initialValuesBySource,
+            [firstSettingsSource]: {
+              ...(initialValuesBySource[firstSettingsSource] ?? {}),
+              ...initialValueOverrides,
+            },
+          }
+        : initialValuesBySource,
+    );
+
+    // Drop overlay entries for fields the new schema no longer defines.
     for (const fields of Object.values(initialValuesBySource)) {
       for (const key of Object.keys(fields ?? {})) {
         everSchemaKeysRef.current.add(key);
@@ -566,27 +584,22 @@ export function SdkSectionPage({
     // Overrides are seeded into the overlay once per override set, so they
     // start dirty and are savable untouched. Re-seeding on every refetch would
     // resurrect a prefill the user had deliberately cleared or already saved.
-    if (
-      initialValueOverrides &&
-      seededOverridesRef.current !== overridesSignature
-    ) {
+    if (isFirstApply) {
       seededOverridesRef.current = overridesSignature;
-      const firstSource = resolvedSources[0]?.settingsSource;
-      if (firstSource) {
+    }
+    // Only a dirty-marked prefill also enters the overlay, which is what makes
+    // it savable without the user touching anything.
+    if (isFirstApply && markInitialOverridesDirty) {
+      if (firstSettingsSource) {
         setEditsBySource((prev) => ({
           ...prev,
-          // The new overrides win. This branch only runs when the caller
-          // actually changed the override set, and a changed prefill is a
-          // deliberate instruction — spreading `prev` last would let the
-          // previous seed outrank it and the new values would never appear.
-          [firstSource]: {
-            ...(prev[firstSource] ?? {}),
+          [firstSettingsSource]: {
+            ...(prev[firstSettingsSource] ?? {}),
             ...initialValueOverrides,
           },
         }));
       }
     }
-
     // The ref flip stays outside the updater: React double-invokes state
     // updaters in StrictMode, so mutating it in there makes the second
     // (kept) call take the already-hydrated branch and pin the view.
@@ -596,10 +609,14 @@ export function SdkSectionPage({
     } else {
       setView((currentView) => getLessDetailedView(currentView, initialView));
     }
-    // `overridesSignature` is a dependency because overrides no longer feed
-    // `initialValuesBySource`; without it a changed override set would never
-    // re-seed the overlay.
-  }, [initialValuesBySource, initialView, overridesSignature]);
+  }, [
+    initialValuesBySource,
+    initialView,
+    overridesSignature,
+    markInitialOverridesDirty,
+    firstSettingsSource,
+    hideSaveButton,
+  ]);
 
   // Displayed values and dirty state are both derived from the two stores
   // above, so they can never disagree with each other the way two
@@ -645,19 +662,72 @@ export function SdkSectionPage({
     return merged;
   }, [resolvedSources, dirtyBySource]);
 
+  const fieldsByKey = React.useMemo(() => {
+    const map = new Map<string, SettingsFieldSchema>();
+    for (const src of resolvedSources) {
+      if (!src.filteredSchema) continue;
+      for (const section of src.filteredSchema.sections) {
+        for (const field of section.fields) {
+          if (!map.has(field.key)) {
+            map.set(field.key, field);
+          }
+        }
+      }
+    }
+    return map;
+  }, [resolvedSources]);
+
+  const initialValuesBySourceRef = React.useRef(initialValuesBySource);
+  initialValuesBySourceRef.current = initialValuesBySource;
+  // The effective baseline, which includes a first-applied prefill. Reverting a
+  // field to *this* is what counts as clean, not reverting to the raw server
+  // value the prefill was laid over.
+  const baselineBySourceRef = React.useRef(baselineBySource);
+  baselineBySourceRef.current = baselineBySource;
+  const initialValueOverridesRef = React.useRef(initialValueOverrides);
+  initialValueOverridesRef.current = initialValueOverrides;
+  const markInitialOverridesDirtyRef = React.useRef(markInitialOverridesDirty);
+  markInitialOverridesDirtyRef.current = markInitialOverridesDirty;
+  const fieldsByKeyRef = React.useRef(fieldsByKey);
+  fieldsByKeyRef.current = fieldsByKey;
+
   const handleFieldChange = React.useCallback(
     (fieldKey: string, nextValue: string | boolean) => {
       const sourceKey = fieldKeyToSource.get(fieldKey);
       if (!sourceKey) return;
       // One write, to the overlay only. The displayed value and the dirty flag
       // both fall out of it, so they cannot drift apart.
-      setEditsBySource((prev) => ({
-        ...prev,
-        [sourceKey]: {
-          ...(prev[sourceKey] ?? {}),
-          [fieldKey]: nextValue,
-        },
-      }));
+      //
+      // An edit that returns a field to its baseline value is removed from the
+      // overlay rather than recorded, which is how "reverted edits are not
+      // dirty" (#16120) holds here: with a single structure it is a deletion
+      // rather than a second tree kept in step with this one. A prefilled
+      // override stays sticky, because it is meant to be savable untouched.
+      setEditsBySource((prev) => {
+        const baselineVal =
+          baselineBySourceRef.current?.[sourceKey]?.[fieldKey];
+        const stickyOverride =
+          markInitialOverridesDirtyRef.current &&
+          !!initialValueOverridesRef.current &&
+          fieldKey in initialValueOverridesRef.current;
+        const field = fieldsByKeyRef.current.get(fieldKey);
+        const matchesBaseline = field
+          ? normalizeComparableValue(field, nextValue) ===
+            normalizeComparableValue(field, baselineVal)
+          : nextValue === baselineVal;
+
+        if (matchesBaseline && !stickyOverride) {
+          if (!(fieldKey in (prev[sourceKey] ?? {}))) return prev;
+          const sourceEdits = { ...(prev[sourceKey] ?? {}) };
+          delete sourceEdits[fieldKey];
+          return { ...prev, [sourceKey]: sourceEdits };
+        }
+
+        return {
+          ...prev,
+          [sourceKey]: { ...(prev[sourceKey] ?? {}), [fieldKey]: nextValue },
+        };
+      });
     },
     [fieldKeyToSource],
   );
@@ -730,14 +800,11 @@ export function SdkSectionPage({
 
     if (Object.keys(payload).length === 0) return;
 
-    // The overlay as it stood when Save was pressed (`handleSaveRef` is rebound
-    // every render, so this closure reads the current one).
-    //
-    // Not the same set as the payload: `buildSdkSettingsPayloadForView`
-    // rewrites every view-invisible field to its schema default after the
-    // dirty pass, and a caller-supplied `buildPayload` may drop more. These are
-    // the edits the save *consumed* — they stop being pending either way, which
-    // matches what `setDirtyBySource({})` did here before.
+    // The overlay as it stood when Save was pressed. Not the same set as the
+    // payload: `buildSdkSettingsPayloadForView` rewrites view-invisible fields
+    // to their schema defaults, and a caller's `buildPayload` may drop more.
+    // These are the edits the save consumed — they stop being pending either
+    // way, which matches what clearing the dirty map did here before.
     const consumedEdits = editsBySource;
 
     saveSettings(payload, {
