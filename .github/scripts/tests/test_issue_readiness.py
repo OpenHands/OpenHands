@@ -277,6 +277,24 @@ def test_extract_sections_excludes_h1_and_h4_headings():
     assert extract_sections(body) == {}
 
 
+def test_nested_h3_stays_inside_h2_readiness_section():
+    body = """## Steps to Reproduce
+Run `npm run dev`.
+
+## Actual Behavior
+The page is broken.
+
+### Screenshot
+![broken page](https://github.com/user-attachments/assets/abc123)
+
+## Acceptance Criteria
+- [ ] The page works
+"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+    assert "### Screenshot" in extract_sections(body)["actual behavior"]
+
+
 def test_extract_sections_ignores_h2_heading_inside_fence():
     body = """## Notes
 The template says:
