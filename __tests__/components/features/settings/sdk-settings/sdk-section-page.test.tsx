@@ -1,7 +1,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1990,6 +1990,59 @@ describe("SdkSectionPage", () => {
         "typed-during-save",
       );
       expect(screen.getByTestId("save-button")).not.toBeDisabled();
+    });
+
+    it("keeps an embedded form's prefill when a refetch brings new settings", async () => {
+      // The profile editor mounts this embedded, with `hideSaveButton` and
+      // `markInitialOverridesDirty: false`, and drives it entirely from
+      // `initialValueOverrides` — the profile being edited. A settings refetch
+      // must not repopulate that form with global settings.
+      const getSettingsSpy = vi
+        .spyOn(SettingsService, "getSettings")
+        .mockResolvedValue(buildTwoFieldSettings());
+
+      const { queryClient } = renderSdkSectionPage({
+        settingsSources: AGENT_LLM_SOURCE,
+        hideSaveButton: true,
+        markInitialOverridesDirty: false,
+        initialValueOverrides: {
+          "llm.endpoint": "https://from-the-profile.example.com",
+        },
+      });
+
+      const endpointInput = await screen.findByTestId(
+        "sdk-settings-llm.endpoint",
+      );
+      await waitFor(() =>
+        expect(endpointInput).toHaveValue(
+          "https://from-the-profile.example.com",
+        ),
+      );
+
+      // The refetch must carry a real delta, or structural sharing keeps the
+      // same `settings` reference and hydration never re-runs.
+      const callsBefore = getSettingsSpy.mock.calls.length;
+      getSettingsSpy.mockResolvedValue(
+        buildTwoFieldSettings({ model: "global-settings-changed" }),
+      );
+      await queryClient.invalidateQueries();
+      await waitFor(() => {
+        expect(getSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+      // Then let effects settle. Waiting on a DOM change is not an option here:
+      // when the guard works, nothing on this form changes at all — which is
+      // exactly the property under test.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      expect(screen.getByTestId("sdk-settings-llm.endpoint")).toHaveValue(
+        "https://from-the-profile.example.com",
+      );
+      // The embedded form is caller-driven, so global settings must not leak in.
+      expect(screen.getByTestId("sdk-settings-llm.model")).not.toHaveValue(
+        "global-settings-changed",
+      );
     });
 
     it("keeps getDirtyPayload dirty-only after a refetch", async () => {

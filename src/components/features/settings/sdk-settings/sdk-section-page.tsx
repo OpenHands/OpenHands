@@ -545,6 +545,15 @@ export function SdkSectionPage({
 
   React.useEffect(() => {
     if (!initialValuesBySource || !initialView) return;
+    // #16120's guard, kept as-is. An embedded form is driven by its caller's
+    // `initialValueOverrides` rather than by global settings — the profile
+    // editor passes a whole profile that way — so re-hydrating it from a
+    // settings refetch would replace the caller's values with unrelated ones.
+    // The overlay below handles the non-embedded routes, where the form *is*
+    // the global settings and the baseline should track the server.
+    if (hideSaveButton && hasHydratedViewRef.current) {
+      return;
+    }
 
     // A prefill applies once, on the first hydration for a given override set.
     // It seeds the baseline so the value is displayed and so reverting *to* it
@@ -677,8 +686,6 @@ export function SdkSectionPage({
     return map;
   }, [resolvedSources]);
 
-  const initialValuesBySourceRef = React.useRef(initialValuesBySource);
-  initialValuesBySourceRef.current = initialValuesBySource;
   // The effective baseline, which includes a first-applied prefill. Reverting a
   // field to *this* is what counts as clean, not reverting to the raw server
   // value the prefill was laid over.
