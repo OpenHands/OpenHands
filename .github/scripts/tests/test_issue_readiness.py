@@ -257,6 +257,57 @@ def test_extract_sections():
     assert "Text 1" in sections["title one"]
     assert "Text 2" in sections["title two"]
 
+
+def test_bug_ready_with_h2_sections():
+    body = BUG_BODY_READY.replace("### ", "## ")
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_enhancement_ready_with_mixed_h2_h3_sections():
+    body = ENHANCEMENT_BODY_READY.replace(
+        "### Desired Behavior", "## Desired Behavior"
+    )
+    result = evaluate_readiness(body, [ENHANCEMENT_LABEL])
+    assert result.ready, result.reasons
+
+
+def test_extract_sections_excludes_h1_and_h4_headings():
+    body = "# Document Title\nintro\n#### Nested Detail\ntext"
+    assert extract_sections(body) == {}
+
+
+def test_nested_h3_stays_inside_h2_readiness_section():
+    body = """## Steps to Reproduce
+Run `npm run dev`.
+
+## Actual Behavior
+The page is broken.
+
+### Screenshot
+![broken page](https://github.com/user-attachments/assets/abc123)
+
+## Acceptance Criteria
+- [ ] The page works
+"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+    assert "### Screenshot" in extract_sections(body)["actual behavior"]
+
+
+def test_extract_sections_ignores_h2_heading_inside_fence():
+    body = """## Notes
+The template says:
+
+```markdown
+## Acceptance Criteria
+- [ ] Add criteria here
+```
+"""
+    sections = extract_sections(body)
+    assert set(sections) == {"notes"}
+
+
 def test_extract_sections_ignores_heading_inside_fence():
     body = """### Notes
 The template says:

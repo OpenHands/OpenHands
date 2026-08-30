@@ -13,9 +13,9 @@ The criteria are type-specific:
   one checklist item.
 
 GitHub issue forms render each field as an `### <Label>` (h3) heading followed
-by the field text, with empty optional fields rendered as `_No response_`. This
-parser splits the body on those headings so each criterion is checked against
-the right field rather than the whole body.
+by the field text, with empty optional fields rendered as `_No response_`. The
+parser also accepts `## <Label>` headings used by hand-edited and free-form
+issues, and checks each criterion against the corresponding section.
 
 Local usage:
 
@@ -39,13 +39,24 @@ from markdown_sections import find_headings
 BUG_LABEL = "bug"
 ENHANCEMENT_LABEL = "enhancement"
 
-# Issue-form fields render as `### Label` h3 headings. Match case-insensitively
-# and tolerate trailing whitespace/colons. `^###[ \t]+` is specific enough because
-# h1/h2 are not produced by issue forms. The class is spaces and tabs rather than
-# `\s` so a heading cannot run past its own line: `find_headings` blanks fenced
-# code, and `\s*$` would then absorb the masked lines into the heading match and
-# drop the section's body.
-HEADING_RE = re.compile(r"(?m)^###[ \t]+(.+?)[ \t]*$")
+# Issue-form fields render as h3 headings, while hand-edited and free-form
+# issues commonly use h2. Capture the level so nested h3 headings can remain
+# part of an h2 section. The separator and trailing class are spaces and tabs
+# rather than `\s` so a heading cannot run past its own line: `find_headings`
+# blanks fenced code, and `\s` would then absorb the masked lines into the
+# heading match and drop the section's body.
+HEADING_RE = re.compile(r"(?m)^(?P<level>#{2,3})[ \t]+(?P<title>.+?)[ \t]*$")
+
+READINESS_SECTION_LABELS = {
+    "steps to reproduce",
+    "reproduction",
+    "actual behavior",
+    "actual",
+    "desired behavior",
+    "desired",
+    "acceptance criteria",
+    "acceptance",
+}
 
 # `_No response_` is what GitHub writes for an empty optional form field.
 NO_RESPONSE = "_No response_"
@@ -107,18 +118,30 @@ def visible_text(text: str) -> str:
 
 
 def extract_sections(body: str) -> dict[str, str]:
-    """Split the body into a {heading: text} map using `### <heading>` boundaries.
+    """Split the body into a {heading: text} map using h2 or h3 boundaries.
 
-    Issue forms render every field this way. Free-form issues (not created via a
-    form) may still use `###` headings; if they don't, the map is empty and the
-    caller falls back to whole-body checks.
+    Issue forms render fields as h3 headings. Free-form and hand-edited issues
+    may use h2 headings instead, including a mix of both levels.
     """
     matches = find_headings(body, HEADING_RE)
+    has_h2 = any(match.group("level") == "##" for match in matches)
+    boundaries = [
+        match
+        for match in matches
+        if match.group("level") == "##"
+        or not has_h2
+        or match.group("title").strip().lower() in READINESS_SECTION_LABELS
+    ]
+
     sections: dict[str, str] = {}
-    for index, match in enumerate(matches):
+    for index, match in enumerate(boundaries):
         start = match.end()
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
-        sections[match.group(1).strip().lower()] = body[start:end]
+        end = (
+            boundaries[index + 1].start()
+            if index + 1 < len(boundaries)
+            else len(body)
+        )
+        sections[match.group("title").strip().lower()] = body[start:end]
     return sections
 
 
