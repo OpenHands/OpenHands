@@ -8,15 +8,34 @@ export interface GitDiffLineStats {
 function countUnifiedDiffStats(diff: string): GitDiffLineStats {
   let additions = 0;
   let deletions = 0;
+  // A file's header block (e.g. `index …`, `--- a/path`, `+++ b/path`, mode
+  // lines) precedes its first hunk header (`@@ … @@`). Git's unified format
+  // never puts a counted addition/deletion before that `@@`. We must not skip
+  // `---`/`+++` globally: inside a hunk they are real changes whose content
+  // happens to start with `--`/`++` (SQL/Lua comments, `--flag` CLI args, or
+  // `++i`/`--count` expressions). Header lines are skipped only until we have
+  // entered the first hunk of the current file.
+  let inHunk = false;
 
   for (const line of diff.split("\n")) {
-    if (
-      line.startsWith("+++") ||
-      line.startsWith("---") ||
-      line.startsWith("@@")
-    ) {
+    // Each `diff --git` line opens a new file and resets the hunk state, so the
+    // second file's `--- a/y` / `+++ b/y` header pair is not counted as changes.
+    if (line.startsWith("diff --git ")) {
+      inHunk = false;
       continue;
     }
+    // A hunk header enters the counted region of the current file.
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    // Still in the header block — file paths, index hashes, mode lines, and
+    // binary markers carry no counted changes.
+    if (!inHunk) {
+      continue;
+    }
+    // Every line inside a hunk is a context line, an addition, or a deletion.
+    // Count by the single leading marker to keep `---…`/`+++…` body lines.
     if (line.startsWith("+")) {
       additions += 1;
     } else if (line.startsWith("-")) {
