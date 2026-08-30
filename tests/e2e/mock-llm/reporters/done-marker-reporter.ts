@@ -49,14 +49,36 @@ class DoneMarkerReporter implements Reporter {
   private allPassed = true;
   private tests: TestRecord[] = [];
   private markerDirCreated = false;
+  /** Test cases already counted toward `completedTests` (keyed by test.id). */
+  private countedTestCases = new Set<string>();
 
   onBegin(_config: unknown, suite: { allTests(): TestCase[] }) {
     this.totalTests = suite.allTests().length;
   }
 
   onTestEnd(test: TestCase, result: TestResult) {
-    this.completedTests++;
-    const passed = result.status === "passed" || result.status === "skipped";
+    // onTestEnd fires once per ATTEMPT. A failed attempt that still has
+    // retries left is not the final state of this test case, so skip it.
+    // Otherwise completedTests counts attempts while totalTests counts
+    // cases, the completion marker fires before the suite ends, and CI
+    // kills tests that were still queued. Mirrors Playwright's willRetry().
+    const willRetry =
+      test.outcome() === "unexpected" && test.results.length <= test.retries;
+    if (willRetry) {
+      return;
+    }
+
+    if (!this.countedTestCases.has(test.id)) {
+      this.completedTests++;
+      this.countedTestCases.add(test.id);
+    }
+
+    // test.outcome() reflects the final verdict across attempts:
+    // "expected" (passed), "flaky" (failed then passed on retry) and
+    // "skipped" are green; "unexpected" (failed every attempt) is red.
+    const outcome = test.outcome();
+    const passed =
+      outcome === "expected" || outcome === "flaky" || outcome === "skipped";
     if (!passed) {
       this.allPassed = false;
     }
@@ -75,7 +97,7 @@ class DoneMarkerReporter implements Reporter {
     // Always flush results so a mid-suite kill still leaves usable data.
     this.writeResults();
 
-    // Write completion markers only after the last test.
+    // Write completion markers only after the last test case.
     if (this.completedTests >= this.totalTests) {
       this.writeCompletionMarkers();
     }
