@@ -1,4 +1,8 @@
-import { ActionEvent, OpenHandsEvent } from "#/types/agent-server/core";
+import {
+  ActionEvent,
+  MessageEvent,
+  OpenHandsEvent,
+} from "#/types/agent-server/core";
 import { ThinkingBlock } from "#/types/agent-server/core/base/event";
 import {
   isActionEvent,
@@ -42,6 +46,32 @@ export const getReasoningContent = (action: ActionEvent): string => {
 
 export const hasNonEmptyThought = (action: ActionEvent): boolean =>
   getActionThoughtText(action).trim().length > 0;
+
+/**
+ * Extracts extended thinking / reasoning content from a `MessageEvent`.
+ *
+ * The OpenHands SDK stores the final assistant message's reasoning in
+ * `llm_message.reasoning_content` (a plain string produced by many reasoning
+ * models) — text-only final replies carry it while inline `\n` tags are
+ * absent. Prefers it, then falls back to `thinking_blocks` (Anthropic extended
+ * thinking). Returns an empty string when neither is available.
+ */
+export const getMessageReasoningContent = (event: MessageEvent): string => {
+  const { reasoning_content, thinking_blocks } = event.llm_message;
+
+  if (reasoning_content) {
+    return reasoning_content;
+  }
+
+  if (thinking_blocks?.length) {
+    return thinking_blocks
+      .filter((b): b is ThinkingBlock => b.type === "thinking")
+      .map((b) => b.thinking)
+      .join("\n\n");
+  }
+
+  return "";
+};
 
 /**
  * Splits a leading `<think>…</think>` reasoning block out of assistant content
