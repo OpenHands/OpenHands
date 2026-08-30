@@ -80,6 +80,20 @@ describe("ExtensionsNavigation", () => {
     expect(skillsItem.tagName).toBe("A");
   });
 
+  it("orders MCP Servers before Skills and Plugins", () => {
+    renderExtensionsNavigation(<ExtensionsNavigation />);
+
+    const nav = screen.getByTestId("extensions-navbar-desktop");
+    const navigationItems = within(nav).getAllByRole("link");
+
+    expect(navigationItems.map((item) => item.textContent)).toEqual([
+      "MCP Servers",
+      "Skills",
+      "Plugins",
+      "Extensions",
+    ]);
+  });
+
   it("renders the Plugins item as a live link without a Coming Soon badge", () => {
     renderExtensionsNavigation(<ExtensionsNavigation />);
 
@@ -113,7 +127,7 @@ describe("ExtensionsNavigation", () => {
       );
     });
 
-    it("hides the Plugins item", () => {
+    it("hides the Plugins and Extensions items", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -122,6 +136,9 @@ describe("ExtensionsNavigation", () => {
       const nav = screen.getByTestId("extensions-navbar-desktop");
       expect(
         within(nav).queryByTestId("sidebar-extensions-/plugins"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(nav).queryByTestId("sidebar-extensions-/extensions"),
       ).not.toBeInTheDocument();
     });
 

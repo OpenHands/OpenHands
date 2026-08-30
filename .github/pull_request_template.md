@@ -4,16 +4,19 @@ HUMAN:
 
 <!-- Human contributors: add a short note about your testing. -->
 
+---
+
 AGENT:
 
 <!-- AI/LLM agents:
 Do not edit the HUMAN section.
+Write a concise summary of what changed and link any reviewer artifacts, such
+as files under `.pr/`. For HTML artifacts, include a rendered preview link:
+https://htmlpreview.github.io/?https://github.com/<owner>/<repo>/blob/<branch>/.pr/<file>.html
 In this AGENT section and the template fields below, provide evidence that the
 code runs properly end-to-end. Just running unit tests is NOT sufficient. Explain
 exactly what command you ran and include logs, screenshots, or reproduction notes.
 -->
-
----
 
 ## Why
 
@@ -25,7 +28,11 @@ exactly what command you ran and include logs, screenshots, or reproduction note
 -
 
 ## Issue Number
-<!-- Required if there is a relevant issue to this PR. -->
+<!-- Required. The linked issue must carry the `ready-for-dev` label, which
+means it has clear acceptance criteria (and, for bugs, reproduction evidence).
+If no such issue exists yet, open one using the Bug or Feature Request template
+and wait for it to be labeled `ready-for-dev` before opening this PR. -->
+Fixes #
 
 ## How to Test
 
@@ -40,6 +47,9 @@ If you could not test this, say why.
 <!--
 Provide a video or screenshots of testing your PR. e.g. you added a new feature to the gui, show us the video of you testing it successfully.
 
+For bug fixes: reproduction evidence is required. Show the bug reproduced (the
+error state) and then the result after your fix. A terminal screenshot or video
+is fine for non-UI bugs.
 -->
 
 ## Type

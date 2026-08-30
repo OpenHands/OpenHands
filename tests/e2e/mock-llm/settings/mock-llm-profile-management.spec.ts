@@ -40,6 +40,7 @@ import {
   setChatInput,
   waitForPath,
   createProfileViaUI,
+  editProfileViaUI,
   deleteProfileIfExists,
   activateProfileViaUI,
   ensureMockLLMAgentProfile,
@@ -409,17 +410,42 @@ test.describe("OpenHands provider hidden base_url preservation", () => {
     // Advanced view. The value becomes hidden after switching to Basic, but it
     // is still part of the profile unless the model changes. ──
     await routeSessionApiKey(page);
+    // agent-server >= 1.43 pre-flights every profile save with a 1-token
+    // completion through the submitted config. CUSTOM_BASE_URL is a
+    // placeholder host by design — this test is about the value surviving a
+    // Basic-view re-save, not about reaching it — so answer the check from
+    // the browser instead of letting the SDK retry an unreachable host past
+    // the canvas's 30 s validation budget. Registered after
+    // routeSessionApiKey(): Playwright routes are LIFO, and that handler
+    // `continue()`s every backend request it sees first.
+    await page.route("**/api/profiles/*/validate", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ valid: true, error: null }),
+      }),
+    );
     await ensureMockLLMAgentProfile(page.request);
     await page.goto("/settings/llm", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
     await waitForTestId(page, "add-llm-profile");
 
-    await deleteProfileIfExists(page, OPENHANDS_PROFILE);
-    await createProfileViaUI(page, {
-      profileName: OPENHANDS_PROFILE,
-      model: OPENHANDS_MODEL,
-      baseUrl: CUSTOM_BASE_URL,
-    });
+    const existingProfile = page
+      .getByTestId("profile-row")
+      .filter({ has: page.locator(`span[title="${OPENHANDS_PROFILE}"]`) });
+    if ((await existingProfile.count()) > 0) {
+      await editProfileViaUI(page, {
+        profileName: OPENHANDS_PROFILE,
+        model: OPENHANDS_MODEL,
+        baseUrl: CUSTOM_BASE_URL,
+      });
+    } else {
+      await createProfileViaUI(page, {
+        profileName: OPENHANDS_PROFILE,
+        model: OPENHANDS_MODEL,
+        baseUrl: CUSTOM_BASE_URL,
+      });
+    }
 
     await test.step("open profile in edit mode", async () => {
       const profileRows = page.getByTestId("profile-row");

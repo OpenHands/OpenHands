@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, request, type Server } from "node:http";
 import { connect as netConnect, type AddressInfo, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -100,6 +100,50 @@ async function waitForPort(port: number, child?: ChildProcess) {
     await delay(50);
   }
   throw new Error(`Timed out waiting for port ${port}`);
+}
+
+async function getJson(url: string) {
+  return new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+    const req = request(url, { method: "GET" }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        try {
+          resolve({
+            status: res.statusCode ?? 0,
+            body: JSON.parse(body),
+          });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+async function getText(url: string) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = request(url, { method: "GET" }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode ?? 0,
+          body,
+        });
+      });
+    });
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 async function stopChild(child?: ChildProcess) {
@@ -338,6 +382,141 @@ describe("ingress proxy functionality", () => {
       await stopChild(badIngress);
     }
   });
+
+  it("returns 502 when backend target URL is invalid", async () => {
+    const badIngressPort = await getFreePort();
+    const badIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        badIngressPort.toString(),
+        "--default",
+        "not-a-url",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    badIngress.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    await waitForPort(badIngressPort, badIngress);
+
+    try {
+      const response = await getText(`${originForPort(badIngressPort)}/test`);
+      await delay(100);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid URL");
+      expect(badIngress.exitCode).toBeNull();
+      expect(stderr).toContain("Invalid URL");
+    } finally {
+      await stopChild(badIngress);
+    }
+  });
+
+  it("adds runtime_services to proxied /server_info", async () => {
+    const serverInfoBackend = createServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ version: "1.28.0" }));
+    });
+    const serverInfoBackendPort = await listenOnLoopback(serverInfoBackend);
+    const runtimeIngressPort = await getFreePort();
+    const runtimeServicesInfo = JSON.stringify({
+      mode: "dev:automation",
+      services: {
+        agent_server: { url_from_agent: "http://localhost:18000" },
+        automation: { url_from_agent: "http://localhost:18001" },
+      },
+    });
+    const runtimeIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        runtimeIngressPort.toString(),
+        "--runtime-services-info",
+        runtimeServicesInfo,
+        "--route",
+        `/server_info=${originForPort(serverInfoBackendPort)}`,
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    await waitForPort(runtimeIngressPort, runtimeIngress);
+
+    try {
+      const response = await getJson(
+        `${originForPort(runtimeIngressPort)}/server_info`,
+      );
+      const body = response.body as {
+        version?: string;
+        runtime_services?: unknown;
+      };
+
+      expect(response.status).toBe(200);
+      expect(body.version).toBe("1.28.0");
+      expect(body.runtime_services).toEqual(JSON.parse(runtimeServicesInfo));
+    } finally {
+      await stopChild(runtimeIngress);
+      await closeServer(serverInfoBackend);
+    }
+  });
+
+  it("returns 502 when intercepted /server_info target URL is invalid", async () => {
+    const runtimeIngressPort = await getFreePort();
+    const runtimeServicesInfo = JSON.stringify({
+      mode: "dev:automation",
+      services: {},
+    });
+    const runtimeIngress = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        runtimeIngressPort.toString(),
+        "--runtime-services-info",
+        runtimeServicesInfo,
+        "--route",
+        "/server_info=not-a-url",
+      ],
+      {
+        cwd: repoRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let stderr = "";
+    runtimeIngress.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    await waitForPort(runtimeIngressPort, runtimeIngress);
+
+    try {
+      const response = await getText(
+        `${originForPort(runtimeIngressPort)}/server_info`,
+      );
+      await delay(100);
+
+      expect(response.status).toBe(502);
+      expect(response.body).toContain("Bad Gateway");
+      expect(response.body).toContain("Invalid backend URL");
+      expect(runtimeIngress.exitCode).toBeNull();
+      expect(stderr).toContain("Invalid backend URL");
+    } finally {
+      await stopChild(runtimeIngress);
+    }
+  });
 });
 
 describe("ingress route matching", () => {
@@ -557,5 +736,75 @@ describe("ingress socket-error resilience", () => {
     expect(ingressProcess.exitCode).toBeNull();
     expect(ingressProcess.signalCode).toBeNull();
     expect(ingressStderr).not.toContain("Unhandled 'error' event");
+  });
+});
+
+describe("ingress --no-referrer-prefix", () => {
+  // The editor is advertised as `<origin><prefix>/?tkn=<token>`, and
+  // agent-server derives that token from session_api_keys[0] — the same secret
+  // that authenticates /api. The workbench then loads webviews, previews and
+  // extension content from that document, so without a Referrer-Policy the
+  // token rides along on each of those subrequests.
+  let backend: Server | undefined;
+  let ingressProcess: ChildProcess | undefined;
+  let ingressPort: number;
+
+  beforeAll(async () => {
+    backend = createServer((req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ path: req.url }));
+    });
+    const backendPort = await listenOnLoopback(backend);
+
+    ingressPort = await getFreePort();
+    ingressProcess = spawn(
+      process.execPath,
+      [
+        ingressScript,
+        "--port",
+        ingressPort.toString(),
+        "--route",
+        `/vscode=${originForPort(backendPort)}`,
+        "--route",
+        `/api=${originForPort(backendPort)}`,
+        "--no-referrer-prefix",
+        "/vscode",
+      ],
+      { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    await waitForPort(ingressPort, ingressProcess);
+  });
+
+  afterAll(async () => {
+    await stopChild(ingressProcess);
+    await closeServer(backend);
+  });
+
+  it("sets no-referrer on the editor prefix", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/vscode/?tkn=secret`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("covers assets under the prefix, which is where the leak would happen", async () => {
+    const response = await fetch(
+      `${originForPort(ingressPort)}/vscode/static/out/vs/workbench/workbench.web.main.js`,
+    );
+
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+  });
+
+  it("leaves other routes alone", async () => {
+    // Deliberately scoped rather than a blanket policy for the origin: the
+    // canvas itself is served here too, and its outbound requests are not the
+    // problem being solved.
+    const response = await fetch(`${originForPort(ingressPort)}/api/anything`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBeNull();
   });
 });

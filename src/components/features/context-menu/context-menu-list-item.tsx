@@ -6,6 +6,7 @@ interface ContextMenuListItemProps {
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   isDisabled?: boolean;
   className?: string;
+  ref?: React.Ref<HTMLButtonElement>;
 }
 
 export function ContextMenuListItem({
@@ -14,9 +15,11 @@ export function ContextMenuListItem({
   onClick,
   isDisabled,
   className,
+  ref,
 }: React.PropsWithChildren<ContextMenuListItemProps>) {
   return (
     <button
+      ref={ref}
       data-testid={testId || "context-menu-list-item"}
       type="button"
       onClick={onClick}

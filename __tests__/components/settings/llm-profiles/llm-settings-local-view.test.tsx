@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string -- test mocks intentionally use literal labels */
 import { describe, expect, it, vi, beforeEach, type Mock } from "vitest";
 import { AxiosError } from "axios";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
@@ -11,10 +12,25 @@ import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import * as useActivateLlmProfileHook from "#/hooks/mutation/use-activate-llm-profile";
 import * as useSaveLlmProfileHook from "#/hooks/mutation/use-save-llm-profile";
 import ProfilesService from "#/api/profiles-service/profiles-service.api";
+import * as activeBackendContext from "#/contexts/active-backend-context";
+import type { Backend } from "#/api/backend-registry/types";
+
+const mockCloudBackend: Backend = {
+  id: "cloud-1",
+  name: "Cloud Backend",
+  host: "https://app.all-hands.dev",
+  apiKey: "test-key",
+  kind: "cloud",
+};
+
+vi.mock("#/hooks/use-can-manage-org-profiles", () => ({
+  useCanManageOrgProfiles: () => true,
+}));
 
 vi.mock("#/routes/llm-settings", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
   return {
+    LLM_PROVIDER_CONNECTION_KEY: "llm.provider_connection_id",
     LlmSettingsScreen: ({
       initialValueOverrides,
       onSaveControlChange,
@@ -318,7 +334,7 @@ describe("LlmSettingsLocalView", () => {
   });
 
   describe("create mode form initialization", () => {
-    it("passes empty initial values when creating a new profile", async () => {
+    it("prefills the free OpenHands default when creating a new profile", async () => {
       const user = userEvent.setup();
       renderWithProviders(<LlmSettingsLocalView />);
 
@@ -328,14 +344,13 @@ describe("LlmSettingsLocalView", () => {
       // Should be in create view
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // The profile name input should be empty
+      // The profile name is auto-derived from the prefilled default model.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
-      // The embedded LlmSettingsScreen receives initialValueOverrides with
-      // empty values for create mode. We verify this by checking the
-      // component's behavior - the profile name should start empty and
-      // the form should be ready for fresh input.
+      expect(screen.getByTestId("mock-basic-model-input")).toHaveValue(
+        "openai/gpt-5.6-sol",
+      );
     });
 
     it("uses unique key for create mode to ensure form remounts", async () => {
@@ -346,10 +361,9 @@ describe("LlmSettingsLocalView", () => {
       await user.click(screen.getByTestId("add-llm-profile"));
       expect(screen.getByTestId("profile-name-input")).toBeInTheDocument();
 
-      // Fill in some data
+      // The profile name starts from the free-model derived default.
       const nameInput = screen.getByTestId("profile-name-input");
-      await user.type(nameInput, "test-profile");
-      expect(nameInput).toHaveValue("test-profile");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // Go back to list
       await user.click(screen.getByTestId("back-to-profiles"));
@@ -358,9 +372,10 @@ describe("LlmSettingsLocalView", () => {
       // Navigate to create view again
       await user.click(screen.getByTestId("add-llm-profile"));
 
-      // The profile name should be empty again (fresh form)
+      // The profile name should return to the free-model derived default
+      // again (fresh form).
       const freshNameInput = screen.getByTestId("profile-name-input");
-      expect(freshNameInput).toHaveValue("");
+      expect(freshNameInput).toHaveValue("gpt-5.6-sol");
     });
 
     it("does not carry over values from edit mode to create mode", async () => {
@@ -373,9 +388,9 @@ describe("LlmSettingsLocalView", () => {
       // Navigate directly to create view (not edit)
       await user.click(screen.getByTestId("add-llm-profile"));
 
-      // Should be in create view with empty profile name
+      // Should be in create view with the free-model derived profile name.
       const nameInput = screen.getByTestId("profile-name-input");
-      expect(nameInput).toHaveValue("");
+      expect(nameInput).toHaveValue("gpt-5.6-sol");
 
       // The key "new-profile" should be used, ensuring a fresh form mount
       // that doesn't inherit any existing profile data
@@ -614,6 +629,72 @@ describe("LlmSettingsLocalView", () => {
     });
   });
 
+  describe("Pre-flight validation", () => {
+    async function openEditView(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getAllByTestId("profile-menu-trigger")[0]);
+      await user.click(screen.getByTestId("profile-edit"));
+      await waitFor(() =>
+        expect(screen.getByTestId("profile-name-input")).toHaveValue(
+          "gpt-4-profile",
+        ),
+      );
+    }
+
+    it("blocks saving when validation returns an invalid verdict", async () => {
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.validateProfile).mockResolvedValue({
+        valid: false,
+        error: { type: "authentication", message: "Invalid API key" },
+      });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() =>
+        expect(ProfilesService.validateProfile).toHaveBeenCalled(),
+      );
+      expect(mockSaveMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it.each([null, { valid: true }])(
+      "saves when validation returns %j",
+      async (verdict) => {
+        const user = userEvent.setup();
+        vi.mocked(ProfilesService.validateProfile).mockResolvedValue(verdict);
+        mockSaveMutateAsync.mockResolvedValue({ success: true });
+        renderWithProviders(<LlmSettingsLocalView />);
+        await openEditView(user);
+        await user.click(screen.getByTestId("save-profile-btn"));
+
+        await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      },
+    );
+
+    it("skips pre-flight validation for a connection-linked profile", async () => {
+      // A linked profile carries no inline key — its credential lives on the
+      // provider connection — so there is nothing on this profile to pre-flight.
+      const user = userEvent.setup();
+      vi.mocked(ProfilesService.getProfile).mockResolvedValue({
+        name: "gpt-4-profile",
+        api_key_set: true,
+        config: {
+          model: "anthropic/claude-sonnet-4",
+          provider_connection_id: "conn1",
+        },
+      });
+      mockSaveMutateAsync.mockResolvedValue({ success: true });
+      renderWithProviders(<LlmSettingsLocalView />);
+      await openEditView(user);
+      await waitFor(() => {
+        expect(screen.getByTestId("save-profile-btn")).not.toBeDisabled();
+      });
+      await user.click(screen.getByTestId("save-profile-btn"));
+
+      await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+      expect(ProfilesService.validateProfile).not.toHaveBeenCalled();
+    });
+  });
+
   describe("Basic tab save", () => {
     it("preserves hidden base_url for OpenHands models without a model change", async () => {
       // Arrange — a profile has an actual advanced base_url value. Switching to
@@ -822,5 +903,65 @@ describe("shouldReapplyProfileAfterSave", () => {
         savedName: "gpt-4-profile",
       }),
     ).toBe(false);
+  });
+});
+
+describe("LlmSettingsLocalView - OpenHands provider on cloud", () => {
+  const mockSaveMutateAsync = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(useLlmProfilesHook.useLlmProfiles).mockReturnValue(
+      createMockLlmProfilesReturn({
+        data: { profiles: [], active_profile: null },
+      }),
+    );
+    vi.mocked(useActivateLlmProfileHook.useActivateLlmProfile).mockReturnValue(
+      createMockMutationReturn<
+        ReturnType<typeof useActivateLlmProfileHook.useActivateLlmProfile>
+      >(vi.fn()),
+    );
+    vi.mocked(useSaveLlmProfileHook.useSaveLlmProfile).mockReturnValue(
+      createMockMutationReturn<
+        ReturnType<typeof useSaveLlmProfileHook.useSaveLlmProfile>
+      >(mockSaveMutateAsync),
+    );
+    // Cloud backend: the OpenHands provider is backed by a server-minted key.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    // Pre-flight validation is a no-op on cloud (returns null), mirroring the
+    // real cloud path; the api_key stripping is what we assert here.
+    vi.mocked(ProfilesService.validateProfile).mockResolvedValue(null);
+    mockSaveMutateAsync.mockResolvedValue({ success: true });
+  });
+
+  it("strips api_key and base_url when saving an OpenHands provider profile", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<LlmSettingsLocalView />);
+
+    await user.click(screen.getByTestId("add-llm-profile"));
+
+    // The mocked LlmSettingsScreen seeds an openai model by default; switch to
+    // an OpenHands provider model and enter an api_key the save must drop.
+    const modelInput = screen.getByTestId("mock-basic-model-input");
+    await user.clear(modelInput);
+    await user.type(modelInput, "openhands/kimi-k3");
+
+    // Give the profile an explicit name so the save payload is deterministic.
+    const nameInput = screen.getByTestId("profile-name-input");
+    await user.clear(nameInput);
+    await user.type(nameInput, "openhands-profile");
+
+    await user.click(screen.getByTestId("save-profile-btn"));
+
+    await waitFor(() => expect(mockSaveMutateAsync).toHaveBeenCalled());
+    const request = mockSaveMutateAsync.mock.calls[0][0].request as {
+      llm: Record<string, unknown>;
+    };
+    expect(request.llm.model).toBe("openhands/kimi-k3");
+    expect(request.llm).not.toHaveProperty("api_key");
+    expect(request.llm).not.toHaveProperty("base_url");
   });
 });

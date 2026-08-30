@@ -214,13 +214,17 @@ export const AUTOMATION_HANDLERS = [
     const url = new URL(request.url);
     const limit = Number(url.searchParams.get("limit") ?? "50");
     const offset = Number(url.searchParams.get("offset") ?? "0");
-
     const allRuns = MOCK_AUTOMATION_RUNS[id] ?? [];
     const page = allRuns.slice(offset, offset + limit);
+    const statusCounts: AutomationRunsResponse["status_counts"] = {};
+    for (const run of allRuns) {
+      statusCounts[run.status] = (statusCounts[run.status] ?? 0) + 1;
+    }
 
     const response: AutomationRunsResponse = {
       runs: page,
       total: allRuns.length,
+      status_counts: statusCounts,
     };
 
     return HttpResponse.json(response);
@@ -286,6 +290,11 @@ export const AUTOMATION_HANDLERS = [
       conversation_id: null,
       bash_command_id: null,
       error_detail: null,
+      // A freshly dispatched run has not reported a phase yet — the service
+      // sends the fields as null rather than omitting them.
+      phase_code: null,
+      phase_label: null,
+      phase_updated_at: null,
       started_at: new Date().toISOString(),
       completed_at: null,
     };

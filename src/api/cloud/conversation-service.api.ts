@@ -1,4 +1,7 @@
-import { getActiveBackend } from "../backend-registry/active-store";
+import {
+  getActiveBackend,
+  getRegisteredBackends,
+} from "../backend-registry/active-store";
 import type { Backend } from "../backend-registry/types";
 import { getStoredConversationMetadata } from "../conversation-metadata-store";
 import type {
@@ -49,6 +52,31 @@ function getActiveCloudBackend(): Backend {
     throw new Error("Cloud conversations call requires a cloud backend.");
   }
   return active;
+}
+
+/**
+ * Resolve the cloud backend a Cloud conversation should be launched against
+ * when the active backend may not be a cloud one. Cloud conversations cannot
+ * register client tools, so the typed launch action always runs from a local
+ * parent and has to reach a registered-but-inactive cloud backend.
+ *
+ * Prefers the active backend when it is already cloud, then the first
+ * registered cloud backend that carries credentials. Returns `null` when the
+ * user has no cloud backend connected, so callers can give the agent
+ * corrective guidance instead of failing opaquely.
+ *
+ * Note: `createCloudClient` only sends `X-Org-Id` for the *active* backend, so
+ * a conversation launched against an inactive backend lands in the API key's
+ * own organization.
+ */
+export function pickCloudBackendForLaunch(): Backend | null {
+  const active = getActiveBackend().backend;
+  if (active.kind === "cloud") return active;
+  return (
+    getRegisteredBackends().find(
+      (backend) => backend.kind === "cloud" && !!backend.apiKey,
+    ) ?? null
+  );
 }
 
 /**
@@ -120,8 +148,11 @@ export async function batchGetCloudConversations(
  */
 export async function createCloudAppConversation(
   request: AppConversationStartRequest,
+  // Defaults to the active backend. The typed launch action passes an explicit
+  // backend because it always runs from a *local* parent conversation.
+  backendOverride?: Backend,
 ): Promise<AppConversationStartTask> {
-  const backend = getActiveCloudBackend();
+  const backend = backendOverride ?? getActiveCloudBackend();
   const data = await callCloudProxy<AppConversationStartTask>({
     backend,
     method: "POST",
@@ -190,6 +221,24 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Rename a cloud v1 app-conversation. The title belongs to the Cloud
+ * app-conversation resource, so updating a runtime Agent Server would not
+ * persist it in the Cloud conversation list.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops
@@ -244,14 +293,38 @@ export async function readCloudConversationFile(
 }
 
 /**
+ * List every file in a cloud conversation's sandbox workspace. Hits
+ * `GET /api/v1/app-conversations/{id}/files?path=...` on the cloud backend,
+ * which resolves the conversation's runtime and runs a bounded `find`
+ * server-side (see enterprise `list_conversation_files`). Unlike the
+ * git-changes source, this returns the full tree so the Files tab matches the
+ * local-backend experience. Paths come back relative to `path`.
+ */
+export async function listCloudConversationFiles(
+  conversationId: string,
+  path: string,
+): Promise<string[]> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("path", path);
+  const data = await callCloudProxy<string[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/files?${params.toString()}`,
+  });
+  return Array.isArray(data) ? data : [];
+}
+
+/**
  * Fetch a single v1 app-conversation start task. Mirrors OpenHands'
  * `AgentServerConversationService.getStartTask` — uses the batch search endpoint
  * with a single id and unwraps the first result.
  */
 export async function getCloudAppConversationStartTask(
   taskId: string,
+  backendOverride?: Backend,
 ): Promise<AppConversationStartTask | null> {
-  const backend = getActiveCloudBackend();
+  const backend = backendOverride ?? getActiveCloudBackend();
   const params = new URLSearchParams();
   params.set("ids", taskId);
   const data = await callCloudProxy<(AppConversationStartTask | null)[]>({

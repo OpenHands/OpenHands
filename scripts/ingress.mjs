@@ -13,6 +13,8 @@
  *   INGRESS_PORT          - Port to listen on (default: 8000)
  *   INGRESS_ROUTES        - JSON object of path prefix -> backend URL
  *   INGRESS_DEFAULT       - Default backend for unmatched routes
+ *   INGRESS_RUNTIME_SERVICES_INFO - Runtime services JSON appended to
+ *                                   /server_info
  *
  * Route matching:
  *   - Routes are matched by longest prefix first
@@ -27,6 +29,9 @@ import {
   createProxyHandlers,
   createRouter,
   isBenignSocketError,
+  isServerInfoRequest,
+  matchesPathPrefix,
+  proxyServerInfoRequest,
 } from "./proxy-utils.mjs";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -39,6 +44,8 @@ function parseArgs() {
     port: 8000,
     routes: {},
     defaultBackend: null,
+    noReferrerPrefixes: [],
+    runtimeServicesInfo: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -56,6 +63,19 @@ function parseArgs() {
       case "-d":
       case "--default":
         config.defaultBackend = args[++i];
+        break;
+      case "--no-referrer-prefix": {
+        const prefix = args[++i];
+        if (!prefix || !prefix.startsWith("/")) {
+          throw new Error(
+            `--no-referrer-prefix value must start with '/': ${prefix ?? "(empty)"}`,
+          );
+        }
+        config.noReferrerPrefixes.push(prefix);
+        break;
+      }
+      case "--runtime-services-info":
+        config.runtimeServicesInfo = args[++i] || null;
         break;
       case "-h":
       case "--help":
@@ -80,12 +100,18 @@ OPTIONS:
   -p, --port <port>           Port to listen on (default: 8000)
   -r, --route <path=url>      Add a route (can be repeated)
   -d, --default <url>         Default backend for unmatched routes
+  --no-referrer-prefix <p>    Send "Referrer-Policy: no-referrer" on proxied
+                              responses under <p>. For upstreams whose URL
+                              carries a credential in the query string.
+  --runtime-services-info     Runtime services JSON for /server_info
   -h, --help                  Show this help
 
 ENVIRONMENT VARIABLES:
   INGRESS_PORT                Port to listen on
   INGRESS_ROUTES              JSON object: {"path": "url", ...}
   INGRESS_DEFAULT             Default backend URL
+  INGRESS_RUNTIME_SERVICES_INFO
+                              Runtime services JSON for /server_info
 
 EXAMPLES:
   # Basic setup with agent server and automation
@@ -125,6 +151,9 @@ function buildConfig(args, env = process.env) {
     port: args.port || parseInt(env.INGRESS_PORT, 10) || 8000,
     routes,
     defaultBackend: args.defaultBackend || env.INGRESS_DEFAULT || null,
+    noReferrerPrefixes: args.noReferrerPrefixes ?? [],
+    runtimeServicesInfo:
+      args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
   };
 }
 
@@ -137,12 +166,31 @@ export function startIngress(config) {
   const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
   const uninstallDiagnostics = proxy.installDiagnostics();
 
+  const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
+
   const server = createServer((req, res) => {
-    const backend = route(req.url ?? "/");
+    const url = req.url ?? "/";
+    const backend = route(url);
 
     if (!backend) {
       res.writeHead(503);
       res.end("No backend configured for this route");
+      return;
+    }
+
+    // See the matching note in static-server.mjs: the editor's URL carries
+    // agent-server's session key as a query parameter, so the document must
+    // not send a Referer on the subresources the workbench loads.
+    if (noReferrerPrefixes.some((prefix) => matchesPathPrefix(url, prefix))) {
+      res.setHeader("Referrer-Policy", "no-referrer");
+    }
+
+    if (
+      config.runtimeServicesInfo &&
+      isServerInfoRequest(req) &&
+      (req.method === "GET" || req.method === "HEAD")
+    ) {
+      proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
       return;
     }
 

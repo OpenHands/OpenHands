@@ -25,9 +25,16 @@ import {
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
+import {
+  readStoredLocalWorkspaceMode,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
+import { RecommendedAutomationsLauncher } from "#/components/features/automations/recommended-automations-launcher";
+import { PinnedAutomationsDashboard } from "./featured-automations/pinned-automations-dashboard";
+import { RunningAutomationsList } from "./featured-automations/running-automations-list";
 import { HomeHeaderTitle } from "./home-header/home-header-title";
 import { OpenLauncherButton } from "./open-launcher-button";
 import { OpenWorkspaceDialog } from "./open-workspace-dialog";
@@ -47,8 +54,9 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceMode] =
-    useState<WorkspaceMode>("local_repo");
+  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
+    readStoredLocalWorkspaceMode(),
+  );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
 
@@ -68,6 +76,11 @@ export function HomeChatLauncher() {
   const workspacesUnsupportedMessage = isLocal
     ? getWorkspacesUnsupportedMessage(workspacesError, t)
     : null;
+
+  const setWorkspaceMode = (mode: WorkspaceMode) => {
+    setWorkspaceModeState(mode);
+    if (isLocal) writeStoredLocalWorkspaceMode(mode);
+  };
 
   const hasSelection = isLocal
     ? !!pendingWorkspace
@@ -217,45 +230,53 @@ export function HomeChatLauncher() {
   return (
     <div
       data-testid="home-chat-launcher"
-      className="flex w-full max-w-[800px] flex-col gap-4 md:px-4"
+      className="flex w-full flex-col items-center pt-[max(4rem,28vh)] pb-10"
     >
-      <div className="flex w-full justify-center">
-        <HomeHeaderTitle />
-      </div>
+      <div className="flex w-full max-w-[800px] flex-col gap-4 md:px-4">
+        <div className="flex w-full justify-center">
+          <HomeHeaderTitle />
+        </div>
 
-      <div className="w-full">
-        <CustomChatInput
-          onSubmit={handleSubmitWithModelGuard}
-          onFilesPaste={handleUpload}
-          disabled={isCreating || llmBlocked}
-        />
-      </div>
+        <div className="w-full">
+          <CustomChatInput
+            onSubmit={handleSubmitWithModelGuard}
+            onFilesPaste={handleUpload}
+            disabled={isCreating || llmBlocked}
+          />
+        </div>
 
-      <div className="flex items-center justify-start gap-2">
-        {hasSelection ? (
-          <HomeGitControlBarPreview
-            workspace={pendingWorkspace}
-            repository={pendingRepository}
-            branch={pendingBranch}
-            provider={pendingProvider}
-            workspaceMode={workspaceMode}
-            backendKind={backend.kind}
-            onRepoClick={() => setIsDialogOpen(true)}
-            onWorkspaceModeChange={setWorkspaceMode}
+        <div className="flex items-center justify-start gap-2">
+          {hasSelection ? (
+            <HomeGitControlBarPreview
+              workspace={pendingWorkspace}
+              repository={pendingRepository}
+              branch={pendingBranch}
+              provider={pendingProvider}
+              workspaceMode={workspaceMode}
+              backendKind={backend.kind}
+              onRepoClick={() => setIsDialogOpen(true)}
+              onWorkspaceModeChange={setWorkspaceMode}
+            />
+          ) : (
+            <OpenLauncherButton
+              kind={isLocal ? "local" : "cloud"}
+              onClick={() => setIsDialogOpen(true)}
+              disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
+              disabledTooltip={workspacesUnsupportedMessage}
+            />
+          )}
+          <PluginPickerTrigger
+            count={selectedPlugins.length}
+            onClick={() => setIsPluginPickerOpen(true)}
+            disabled={isCreating}
           />
-        ) : (
-          <OpenLauncherButton
-            kind={isLocal ? "local" : "cloud"}
-            onClick={() => setIsDialogOpen(true)}
-            disabled={isCreating || Boolean(workspacesUnsupportedMessage)}
-            disabledTooltip={workspacesUnsupportedMessage}
-          />
-        )}
-        <PluginPickerTrigger
-          count={selectedPlugins.length}
-          onClick={() => setIsPluginPickerOpen(true)}
-          disabled={isCreating}
-        />
+        </div>
+
+        <div className="mt-8 flex w-full flex-col gap-8">
+          <RecommendedAutomationsLauncher variant="rail" />
+          <PinnedAutomationsDashboard />
+          <RunningAutomationsList />
+        </div>
       </div>
 
       {isLocal ? (
@@ -267,7 +288,6 @@ export function HomeChatLauncher() {
             setPendingRepository(null);
             setPendingBranch(null);
             setPendingProvider(null);
-            setWorkspaceMode("local_repo");
           }}
         />
       ) : (
@@ -279,7 +299,7 @@ export function HomeChatLauncher() {
             setPendingBranch(branch);
             setPendingProvider(provider ?? repository.git_provider);
             setPendingWorkspace(null);
-            setWorkspaceMode("local_repo");
+            setWorkspaceModeState("local_repo");
           }}
         />
       )}

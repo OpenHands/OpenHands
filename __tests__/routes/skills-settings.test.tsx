@@ -1,6 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  within,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsSettingsScreen from "#/routes/skills-settings";
 import SettingsService from "#/api/settings-service/settings-service.api";
@@ -40,7 +48,8 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   return {
     name: "deno",
     type: "knowledge",
-    source: "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
+    source:
+      "/Users/test/.openhands/cache/skills/public-skills/skills/deno/SKILL.md",
     description:
       "If the project uses deno, use this skill to initialize Deno projects.",
     triggers: ["deno", "deno.json", "deno.lock"],
@@ -55,8 +64,22 @@ function buildSkill(overrides: Partial<SkillInfo> = {}): SkillInfo {
   };
 }
 
-function renderSkillsSettingsScreen() {
-  return render(<SkillsSettingsScreen />, {
+function renderSkillsSettingsScreen(initialEntry = "/skills") {
+  const router = createMemoryRouter(
+    [
+      {
+        path: "/skills",
+        Component: () => (
+          <ActiveBackendProvider>
+            <SkillsSettingsScreen />
+          </ActiveBackendProvider>
+        ),
+      },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+
+  render(<RouterProvider router={router} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider
         client={
@@ -65,10 +88,12 @@ function renderSkillsSettingsScreen() {
           })
         }
       >
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        {children}
       </QueryClientProvider>
     ),
   });
+
+  return router;
 }
 
 describe("SkillsSettingsScreen", () => {
@@ -118,7 +143,9 @@ Full skill body.`,
 
     expect(
       within(card).getByTestId(`skill-description-${skill.name}`),
-    ).toHaveTextContent("Connect and run commands on remote machines over SSH.");
+    ).toHaveTextContent(
+      "Connect and run commands on remote machines over SSH.",
+    );
   });
 
   it("surfaces the YAML description under the card title with the source path beneath it", async () => {
@@ -196,7 +223,71 @@ Full skill body.`,
     expect(screen.getByTestId("skill-card-vercel")).toBeInTheDocument();
   });
 
-  it("narrows the visible skills when a type filter chip is selected", async () => {
+  it("narrows the visible skills when a facet row is selected", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", type: "knowledge" }),
+      buildSkill({
+        name: "global-rules",
+        type: "repo",
+        triggers: [],
+        source: "/skills/global-rules.md",
+      }),
+    ]);
+
+    const router = renderSkillsSettingsScreen();
+    await screen.findByTestId("skill-card-deno");
+
+    await user.click(screen.getByTestId("skill-facet-type-repo"));
+
+    expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
+    expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("?type=repo");
+  });
+
+  it("seeds the filter state from the URL on load", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", category: "environment" }),
+      buildSkill({ name: "prd", category: "writing", triggers: [] }),
+    ]);
+
+    renderSkillsSettingsScreen("/skills?category=writing");
+
+    await screen.findByTestId("skill-card-prd");
+    expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
+  });
+
+  it("restores the search text when history navigation changes the query", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: "deno", type: "knowledge", description: "A helper" }),
+      buildSkill({
+        name: "global-rules",
+        type: "repo",
+        description: "A helper",
+        triggers: [],
+        source: "/skills/global-rules.md",
+      }),
+    ]);
+
+    const router = renderSkillsSettingsScreen("/skills?q=helper");
+    await screen.findByTestId("skill-card-deno");
+    const search = screen.getByTestId("skills-search-input");
+
+    // Push a second entry, then drop the query from it, so going back lands on a URL whose `q` differs from the input.
+    await user.click(screen.getByTestId("skill-facet-type-repo"));
+    fireEvent.change(search, { target: { value: "" } });
+    await waitFor(() =>
+      expect(router.state.location.search).toBe("?type=repo"),
+    );
+
+    await act(() => router.navigate(-1));
+
+    await waitFor(() => expect(search).toHaveValue("helper"));
+    expect(router.state.location.search).toBe("?q=helper");
+  });
+
+  it("filters through the mobile filters modal", async () => {
     const user = userEvent.setup();
     vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
       buildSkill({ name: "deno", type: "knowledge" }),
@@ -211,9 +302,9 @@ Full skill body.`,
     renderSkillsSettingsScreen();
     await screen.findByTestId("skill-card-deno");
 
-    const filter = screen.getByTestId("skills-type-filter");
-    await user.click(within(filter).getByTestId("dropdown-trigger"));
-    await user.click(screen.getByTestId("skills-type-filter-repo"));
+    await user.click(screen.getByTestId("skills-filters-button"));
+    const modal = await screen.findByTestId("skill-filters-modal");
+    await user.click(within(modal).getByTestId("skill-facet-type-repo"));
 
     expect(screen.queryByTestId("skill-card-deno")).not.toBeInTheDocument();
     expect(screen.getByTestId("skill-card-global-rules")).toBeInTheDocument();
@@ -247,7 +338,9 @@ Full skill body.`,
       within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-bash`),
     ).toHaveTextContent("bash");
     expect(
-      within(modal).getByTestId(`skill-modal-pill-${skill.name}-tool-execute_bash`),
+      within(modal).getByTestId(
+        `skill-modal-pill-${skill.name}-tool-execute_bash`,
+      ),
     ).toHaveTextContent("execute_bash");
     expect(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -264,7 +357,9 @@ Full skill body.`,
     await user.click(card);
 
     const modal = await screen.findByTestId("skill-detail-modal");
-    expect(within(modal).getByText("SETTINGS$SKILLS_ENABLED")).toBeInTheDocument();
+    expect(
+      within(modal).getByText("SETTINGS$SKILLS_ENABLED"),
+    ).toBeInTheDocument();
 
     await user.click(
       within(modal).getByTestId(`skill-modal-toggle-${skill.name}`),
@@ -274,7 +369,9 @@ Full skill body.`,
     expect(
       within(card).getByTestId(`skill-toggle-${skill.name}`),
     ).toHaveAttribute("aria-checked", "false");
-    expect(within(modal).getByText("SETTINGS$SKILLS_DISABLED")).toBeInTheDocument();
+    expect(
+      within(modal).getByText("SETTINGS$SKILLS_DISABLED"),
+    ).toBeInTheDocument();
   });
 
   it("saves disabled_skills to the server when a skill is toggled off and settings has no prior disabled_skills field", async () => {
@@ -395,5 +492,138 @@ Full skill body.`,
     await user.click(screen.getByTestId("add-skill-modal-example-copy"));
 
     expect(writeText).toHaveBeenCalledWith(ADD_SKILL_EXAMPLE_COMMAND);
+  });
+  // A skill from the bundled `@openhands/extensions` catalog: those are
+  // governed by the `enabled_skills` allow-list, not the deny-list.
+  const CATALOG_RECOMMENDED = "add-skill";
+  const CATALOG_OPTIONAL = "add-javadoc";
+
+  it("shows the notice that skill changes only reach new conversations", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([]);
+
+    renderSkillsSettingsScreen();
+
+    expect(
+      await screen.findByTestId("skills-new-conversation-notice"),
+    ).toHaveTextContent("SETTINGS$SKILLS_NEW_CONVERSATION_NOTICE");
+  });
+
+  it("badges a catalog skill the catalog recommends", async () => {
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    expect(
+      screen.getByTestId(`skill-recommended-${CATALOG_RECOMMENDED}`),
+    ).toHaveTextContent("SETTINGS$SKILLS_RECOMMENDED");
+    expect(
+      screen.queryByTestId(`skill-recommended-${CATALOG_OPTIONAL}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders an unlisted catalog skill as off without it being denied", async () => {
+    // The reported bug: everything in the catalog arrived switched on.
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
+    );
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+
+    expect(
+      within(card).getByTestId(`skill-toggle-${CATALOG_OPTIONAL}`),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("writes nothing back when the user toggles nothing", async () => {
+    // Persisting the hydrated state on mount would race the one-shot migration
+    // and could narrow a workspace it had just preserved.
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_OPTIONAL }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: undefined, disabled_skills: [] }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    await screen.findByTestId(`skill-card-${CATALOG_OPTIONAL}`);
+    await waitFor(() =>
+      expect(screen.getByTestId("skills-result-summary")).toBeInTheDocument(),
+    );
+
+    expect(saveSpy).not.toHaveBeenCalled();
+  });
+
+  it("saves a catalog toggle to enabled_skills rather than the deny-list", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ enabled_skills: [CATALOG_RECOMMENDED] }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    await user.click(
+      within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+    );
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled_skills: [],
+          disabled_skills: [],
+        }),
+      ),
+    );
+  });
+
+  it("drops a re-enabled catalog skill from an unmigrated deny-list", async () => {
+    // A stale deny entry would otherwise veto the allow-list entry we just
+    // wrote, leaving the toggle on and the skill still absent.
+    const user = userEvent.setup();
+    vi.spyOn(SkillsService, "getSkills").mockResolvedValue([
+      buildSkill({ name: CATALOG_RECOMMENDED }),
+    ]);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        enabled_skills: undefined,
+        disabled_skills: [CATALOG_RECOMMENDED],
+      }),
+    );
+    const saveSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+
+    renderSkillsSettingsScreen();
+    const card = await screen.findByTestId(`skill-card-${CATALOG_RECOMMENDED}`);
+
+    await user.click(
+      within(card).getByTestId(`skill-toggle-${CATALOG_RECOMMENDED}`),
+    );
+
+    await waitFor(() =>
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          enabled_skills: expect.arrayContaining([CATALOG_RECOMMENDED]),
+          disabled_skills: [],
+        }),
+      ),
+    );
   });
 });

@@ -16,7 +16,7 @@ const makeMessage = (index: number): MessageEvent => ({
     role: "user",
     content: [{ type: "text", text: `Message ${index}` }],
   },
-  activated_microagents: [],
+  activated_skills: [],
   extended_content: [],
 });
 

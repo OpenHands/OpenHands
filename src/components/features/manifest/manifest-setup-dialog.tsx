@@ -17,6 +17,7 @@ import { useSetupAction } from "#/manifests/manifest-actions";
 import {
   buildCreatePayload,
   deriveErrorMap,
+  missingCreateEndpoints,
 } from "#/manifests/automation-setup";
 import {
   collectFields,
@@ -32,8 +33,16 @@ import {
   normalizeServiceErrors,
   type MappedManifestErrors,
 } from "#/manifests/manifest-error-map";
+import { automationDetailPath } from "#/manifests/automation-interface";
+import { findAutomationCommand } from "#/utils/automation-catalog";
 import type { GitRepository } from "#/types/git";
-import type { SetupEntry, SetupFormValues } from "#/manifests/types";
+import type {
+  SetupEntry,
+  SetupFormValue,
+  SetupFormValues,
+  SetupMode,
+  SetupRequestBody,
+} from "#/manifests/types";
 import { SetupFormField } from "./manifest-form-field";
 import { SetupPrerequisitesStep } from "./manifest-prerequisites-step";
 import { SetupReviewStep } from "./manifest-review-step";
@@ -59,7 +68,7 @@ function getDestination(response: Record<string, unknown>): string | null {
   if (typeof response.conversation_id === "string") {
     return `/conversations/${response.conversation_id}`;
   }
-  if (typeof response.id === "string") return `/automations/${response.id}`;
+  if (typeof response.id === "string") return automationDetailPath(response.id);
   return null;
 }
 
@@ -132,7 +141,18 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     trackAutomationSetupOpened({ automationId: entry.id });
   }, [entry.id, trackAutomationSetupOpened]);
 
-  const isUnsupported = capabilities.supported === false;
+  // An entry the published interface cannot create is refused here rather than
+  // at the moment of creating: a bundle needs two endpoints a manifest from
+  // before bundles does not declare, and no answer the user gives supplies
+  // them. Named alongside the deployment's own unmet requirements, because
+  // "which one" is the only thing that makes either diagnosable.
+  const missingEndpoints = useMemo(
+    () => missingCreateEndpoints(entry),
+    [entry],
+  );
+  const isUnsupported =
+    capabilities.supported === false || missingEndpoints.length > 0;
+  const unmet = [...capabilities.unmet, ...missingEndpoints];
   const showPrerequisites =
     prerequisites.blockingIntegrations.length > 0 ||
     prerequisites.warningIntegrations.length > 0;
@@ -141,7 +161,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
 
-  const setFieldValue = (name: string, value: string) => {
+  const setFieldValue = (name: string, value: SetupFormValue) => {
     valuesRef.current = { ...valuesRef.current, [name]: value };
     setValues(valuesRef.current);
     setLocalErrors(({ [name]: _removed, ...rest }) => rest);
@@ -185,13 +205,16 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     setStep("review");
   };
 
-  const handleConfirm = async () => {
+  const submitAction = async (
+    actionPayload: SetupRequestBody | null,
+    setupMode: SetupMode,
+  ) => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(entry, values, payload);
+      const { response } = await runAction(entry, values, actionPayload);
       trackAutomationSetupCreated({
         automationId: entry.id,
-        setupMode: entry.setup.mode,
+        setupMode,
       });
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
@@ -199,10 +222,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     } catch (error) {
       trackAutomationSetupFailed({
         automationId: entry.id,
-        setupMode: entry.setup.mode,
+        setupMode,
       });
       const mapped = mapServiceErrors(
-        normalizeServiceErrors(getApiErrorBody(error), payload),
+        normalizeServiceErrors(getApiErrorBody(error), actionPayload),
         errorMap,
       );
       setServiceErrors(
@@ -218,6 +241,17 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
       setIsSubmitting(false);
     }
   };
+
+  const handleConfirm = () => submitAction(payload, entry.setup.mode);
+
+  // A direct entry whose deployment cannot run the direct path degrades to the
+  // assisted outcome: the skill command and the entry's fallback message seed
+  // a conversation that finishes setup instead.
+  const handleFallbackConversation = () => submitAction(null, "assisted");
+  const canFallBackToConversation =
+    entry.setup.mode === "direct" &&
+    (findAutomationCommand(entry) !== null ||
+      entry.setup.message !== undefined);
 
   const resolveFieldError = (name: string): string | undefined => {
     const local = localErrors[name];
@@ -266,12 +300,12 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   translated. Without them the block is undiagnosable: the
                   deployment answered, and the host would be discarding the
                   one thing it learned. */}
-              {capabilities.unmet.length > 0 && (
+              {unmet.length > 0 && (
                 <p
                   data-testid="setup-unmet-requirements"
                   className="text-sm text-[var(--oh-muted)]"
                 >
-                  {capabilities.unmet.join(", ")}
+                  {unmet.join(", ")}
                 </p>
               )}
             </div>
@@ -344,9 +378,27 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
           )}
 
           {isUnsupported ? (
-            <BrandButton type="button" variant="secondary" onClick={onClose}>
-              {t(I18nKey.BUTTON$CLOSE)}
-            </BrandButton>
+            <>
+              <BrandButton
+                type="button"
+                variant="secondary"
+                isDisabled={isSubmitting}
+                onClick={onClose}
+              >
+                {t(I18nKey.BUTTON$CLOSE)}
+              </BrandButton>
+              {canFallBackToConversation && (
+                <BrandButton
+                  testId="setup-fallback-conversation"
+                  type="button"
+                  variant="primary"
+                  isDisabled={isSubmitting}
+                  onClick={handleFallbackConversation}
+                >
+                  {t(I18nKey.SETUP$FALLBACK_CONVERSATION)}
+                </BrandButton>
+              )}
+            </>
           ) : (
             <BrandButton
               testId="setup-continue-button"

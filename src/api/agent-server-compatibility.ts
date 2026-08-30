@@ -10,6 +10,7 @@ import {
   getEffectiveLocalBackend,
   isNoBackend,
 } from "#/api/backend-registry/active-store";
+import type { Backend } from "#/api/backend-registry/types";
 import defaults from "../../config/defaults.json";
 
 const AGENT_SERVER_INFO_TIMEOUT_MS = 5000;
@@ -22,12 +23,22 @@ export const AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE =
 export const AGENT_SERVER_UNKNOWN_VERSION_ERROR_CODE =
   "AGENT_SERVER_UNKNOWN_VERSION";
 
+/**
+ * Sentinel string thrown (as an Error message) when a local backend
+ * rejects the configured session API key with HTTP 401.
+ * Shared between the backend health probe ({@link validateLocalBackend})
+ * and any consumer that needs to detect this specific failure.
+ */
+export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
+
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
   usable_tools?: string[] | null;
+  runtime_services?: unknown;
 }
 
 let cachedAgentServerInfo: AgentServerInfo | null = null;
+let cachedAgentServerInfoHost: string | null = null;
 
 const getAdvertisedTools = (serverInfo: AgentServerInfo | null) => {
   if (Array.isArray(serverInfo?.usable_tools)) {
@@ -63,7 +74,9 @@ export const isAgentServerUnavailableError = (
   (typeof error === "object" &&
     error !== null &&
     "name" in error &&
-    error.name === "AgentServerUnavailableError");
+    (error.name === "AgentServerUnavailableError" ||
+      error.name === "AgentServerUnsupportedVersionError" ||
+      error.name === "AgentServerUnknownVersionError"));
 
 export class AgentServerUnsupportedVersionError extends AgentServerUnavailableError {
   readonly code = AGENT_SERVER_UNSUPPORTED_VERSION_ERROR_CODE;
@@ -130,6 +143,16 @@ export const isAgentServerAuthError = (error: unknown): boolean =>
 
 export function clearCachedAgentServerInfo() {
   cachedAgentServerInfo = null;
+  cachedAgentServerInfoHost = null;
+}
+
+export function getCachedAgentServerInfo(options?: {
+  host?: string | null;
+}): AgentServerInfo | null {
+  if (options?.host && options.host !== cachedAgentServerInfoHost) {
+    return null;
+  }
+  return cachedAgentServerInfo;
 }
 
 export function isAgentServerToolAvailable(toolName: string) {
@@ -303,6 +326,41 @@ export function assertAgentServerVersionIsSupported(
   }
 }
 
+/**
+ * Validates a local agent-server backend with a two-step probe:
+ *  1. GET /api/settings — authenticates the configured session API key;
+ *     a 401 throws an Error with message {@link INVALID_BACKEND_API_KEY_ERROR}.
+ *  2. GET /server_info  — asserts the server meets the minimum version floor.
+ *
+ * Returns the display version string reported by the server, or `null` when
+ * the server does not report a parseable version. Throws on any failure.
+ *
+ * Used by both the backend health poller and the backend-form connection test
+ * so that auth-check semantics (status codes, error messages) stay in one place.
+ */
+export async function validateLocalBackend(
+  backend: Pick<Backend, "host" | "apiKey">,
+  timeout: number,
+): Promise<string | null> {
+  const clientOptions = getAgentServerClientOptions({
+    host: backend.host,
+    sessionApiKey: backend.apiKey || null,
+    timeout,
+  });
+
+  try {
+    await new SettingsClient(clientOptions).getSettings();
+    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
+    assertAgentServerVersionIsSupported(serverInfo);
+    return getDisplayAgentServerVersion(serverInfo);
+  } catch (error) {
+    if (isSdkHttpStatusError(error, 401)) {
+      throw new Error(INVALID_BACKEND_API_KEY_ERROR);
+    }
+    throw error;
+  }
+}
+
 export async function loadAgentServerInfo() {
   // The probe is a *local* agent-server concern — it verifies the runtime
   // hosting the GUI is reachable. It must NEVER run against the active
@@ -381,5 +439,6 @@ export async function loadAgentServerInfo() {
   }
 
   cachedAgentServerInfo = serverInfo;
+  cachedAgentServerInfoHost = clientOptions.host;
   return serverInfo;
 }

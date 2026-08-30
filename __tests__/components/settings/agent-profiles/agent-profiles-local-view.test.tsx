@@ -20,14 +20,23 @@ vi.mock("react-i18next", () => ({
 // the named export to match; the factory is hoisted, so define the stub inline.
 vi.mock("#/routes/agent-settings", () => {
   const MockAgentSettings = ({
+    agentSettingsOverride,
     onSaveControlChange,
   }: {
+    agentSettingsOverride?: Record<string, unknown> | null;
     onSaveControlChange?: (c: AgentSettingsSaveControl) => void;
   }) => {
     useEffect(() => {
       if (emitControl) onSaveControlChange?.(emitControl);
     }, [onSaveControlChange]);
-    return <div data-testid="mock-agent-settings" />;
+    // Surface the seed override so tests can assert what the embedded form
+    // would open on.
+    return (
+      <div
+        data-testid="mock-agent-settings"
+        data-override={JSON.stringify(agentSettingsOverride)}
+      />
+    );
   };
   return {
     __esModule: true,
@@ -214,6 +223,22 @@ describe("AgentProfilesLocalView save mapping", () => {
     const user = userEvent.setup();
     await user.click(screen.getByTestId("edit-agent-profile"));
     await screen.findByTestId("mock-agent-settings");
+
+    // The embedded form is seeded from the stored profile — including
+    // `enable_switch_llm_tool`, which the editor now models. (Asserted before
+    // the save: a successful save returns to the list and unmounts the form.)
+    const seededOverride = JSON.parse(
+      screen
+        .getByTestId("mock-agent-settings")
+        .getAttribute("data-override") as string,
+    );
+    expect(seededOverride).toMatchObject({
+      agent_kind: "openhands",
+      enable_sub_agents: false,
+      enable_switch_llm_tool: false,
+      tool_concurrency_limit: 4,
+    });
+
     await user.click(screen.getByTestId("save-agent-profile-btn"));
 
     await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
@@ -239,6 +264,45 @@ describe("AgentProfilesLocalView save mapping", () => {
     expect(profile).not.toHaveProperty("id");
     expect(profile).not.toHaveProperty("name");
     expect(profile).not.toHaveProperty("revision");
+  });
+
+  it("edit-save persists an edited enable_switch_llm_tool over the stored value", async () => {
+    // The stored profile has the tool disabled; the embedded form's builder
+    // emits the edited value, which must win over the stored one in the
+    // whole-profile overwrite.
+    vi.mocked(AgentProfilesService.getProfile).mockResolvedValue({
+      name: "default",
+      profile: {
+        schema_version: 1,
+        id: "p-1",
+        name: "default",
+        revision: 3,
+        agent_kind: "openhands",
+        llm_profile_ref: "default",
+        enable_sub_agents: false,
+        enable_switch_llm_tool: false,
+      },
+    } as never);
+    emitControl = {
+      agentType: "openhands",
+      isValid: true,
+      buildAgentProfileFields: () => ({
+        agent_kind: "openhands",
+        enable_sub_agents: false,
+        enable_switch_llm_tool: true,
+      }),
+      credentials: { isDirty: false, save: vi.fn(), reset: vi.fn() },
+    };
+
+    render(<AgentProfilesLocalView />);
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("edit-agent-profile"));
+    await screen.findByTestId("mock-agent-settings");
+    await user.click(screen.getByTestId("save-agent-profile-btn"));
+
+    await waitFor(() => expect(saveMutate).toHaveBeenCalledTimes(1));
+    const { profile } = saveMutate.mock.calls[0][0];
+    expect(profile.enable_switch_llm_tool).toBe(true);
   });
 
   it("kind-switch edit-save sends a clean variant payload", async () => {

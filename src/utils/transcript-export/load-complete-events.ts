@@ -36,7 +36,7 @@ type SearchTranscriptEvents = (
 const compareEventTimestamps = (
   first: OpenHandsEvent,
   second: OpenHandsEvent,
-): number => first.timestamp.localeCompare(second.timestamp);
+): number => (first.timestamp ?? "").localeCompare(second.timestamp ?? "");
 
 /**
  * Loads the persisted history from the newest page back to the beginning,
@@ -51,6 +51,10 @@ export const loadCompleteTranscriptEvents = async (
 ): Promise<OpenHandsEvent[]> => {
   const persistedDescending: OpenHandsEvent[] = [];
   const fetchedEventIds = new Set<string>();
+  // Id-less events can't be de-duplicated by id, so keep a separate ordered
+  // list and a count so they survive the merge and count toward completeness.
+  const idLessEvents: OpenHandsEvent[] = [];
+  let idLessPersisted = 0;
   const seenPageIds = new Set<string>();
   let oldestTimestamp: string | undefined;
   let pageId: string | undefined;
@@ -76,12 +80,19 @@ export const loadCompleteTranscriptEvents = async (
     let pageOldestTimestamp: string | undefined;
     let addedEvent = false;
     page.items.forEach((event) => {
-      if (!fetchedEventIds.has(event.id)) {
-        fetchedEventIds.add(event.id);
+      if (!fetchedEventIds.has(event.id ?? "")) {
+        if (event.id) {
+          fetchedEventIds.add(event.id);
+        } else {
+          idLessPersisted += 1;
+        }
         addedEvent = true;
       }
-      if (!pageOldestTimestamp || event.timestamp < pageOldestTimestamp) {
-        pageOldestTimestamp = event.timestamp;
+      if (
+        !pageOldestTimestamp ||
+        (event.timestamp ?? "") < pageOldestTimestamp
+      ) {
+        pageOldestTimestamp = event.timestamp ?? "";
       }
     });
 
@@ -131,20 +142,34 @@ export const loadCompleteTranscriptEvents = async (
     .slice()
     .reverse()
     .forEach((event) => {
-      if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+      if (event.id !== undefined) {
+        if (!eventsById.has(event.id)) {
+          eventsById.set(event.id, event);
+        }
+        return;
+      }
+      idLessEvents.push(event);
     });
   loadedEvents.forEach((event) => {
-    if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+    if (event.id !== undefined) {
+      if (!eventsById.has(event.id)) {
+        eventsById.set(event.id, event);
+      }
+      return;
+    }
+    idLessEvents.push(event);
   });
   // Array.prototype.sort is stable, so equal-timestamp events keep the causal
   // order returned by the server/store rather than being reordered by id.
-  const completeEvents = [...eventsById.values()].sort(compareEventTimestamps);
+  const completeEvents = [...idLessEvents, ...eventsById.values()].sort(
+    compareEventTimestamps,
+  );
   if (
     expectedEventCount !== undefined &&
-    fetchedEventIds.size < expectedEventCount
+    fetchedEventIds.size + idLessPersisted < expectedEventCount
   ) {
     throw new Error(
-      `Transcript history is incomplete: expected ${expectedEventCount} persisted events, received ${fetchedEventIds.size}.`,
+      `Transcript history is incomplete: expected ${expectedEventCount} persisted events, received ${fetchedEventIds.size + idLessPersisted}.`,
     );
   }
   return completeEvents;
