@@ -74,6 +74,7 @@ function useLocalWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const query = useQuery<string[]>({
     queryKey: [
       "workspace-files",
+      "local",
       conversationId,
       conversationUrl,
       sessionApiKey,
@@ -145,7 +146,7 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
   const absolutePath = gitPath.startsWith("/") ? gitPath : `/${gitPath}`;
 
   const query = useQuery<string[]>({
-    queryKey: ["workspace-files-cloud", conversationId, absolutePath],
+    queryKey: ["workspace-files", "cloud", conversationId, absolutePath],
     queryFn: async () => {
       const files = await listCloudConversationFiles(
         conversationId!,
@@ -171,6 +172,12 @@ function useCloudWorkspaceFiles(enabled: boolean): WorkspaceFilesResult {
  * `find` directly against the agent-server; cloud backends call the cloud
  * API's first-class file-listing endpoint, which runs the same `find`
  * server-side on the conversation's runtime (see `useCloudWorkspaceFiles`).
+ *
+ * Both transports share one query-key family — `["workspace-files", "local" |
+ * "cloud", ...identity]` — so `invalidateQueries({ queryKey:
+ * ["workspace-files"] })` (the manual refresh button and file-edit
+ * observations) refetches whichever backend is active, while the transport
+ * segment keeps the two cache entries distinct (#16949).
  *
  * Cloud detection reads the backend-registry store (via `useSyncExternalStore`)
  * rather than the `ActiveBackendProvider` context. The transport layer that

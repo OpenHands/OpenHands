@@ -10,8 +10,6 @@ import type { GitChange } from "#/api/open-hands.types";
 export const useUnifiedGetGitChanges = () => {
   const { conversationId } = useConversationId();
   const { data: conversation } = useActiveConversation();
-  const [orderedChanges, setOrderedChanges] = React.useState<GitChange[]>([]);
-  const previousDataRef = React.useRef<GitChange[] | null>(null);
   const runtimeIsReady = useRuntimeIsReady();
 
   const conversationUrl = conversation?.conversation_url;
@@ -52,39 +50,60 @@ export const useUnifiedGetGitChanges = () => {
     },
   });
 
-  // Latest changes should be on top
+  // Identity of the git surface this hook is observing. When it changes
+  // (conversation switch, different repo/workdir), path ordering from the
+  // previous workspace must not leak into the next one (#16949).
+  const queryIdentity = React.useMemo(
+    () => [conversationId, conversationUrl, sessionApiKey, gitPath].join("|"),
+    [conversationId, conversationUrl, sessionApiKey, gitPath],
+  );
+
+  // Ordering is preserved as PATH IDENTITIES only; the objects rendered always
+  // come from the latest response. The previous implementation mirrored stale
+  // `GitChange` objects, so a retained path whose status changed (e.g. M -> D)
+  // kept showing the old status until its cache entry expired (#16949).
+  const [ordering, setOrdering] = React.useState<{
+    identity: string;
+    paths: string[];
+  }>({ identity: queryIdentity, paths: [] });
+
   React.useEffect(() => {
-    if (!result.isFetching && result.isSuccess && result.data) {
-      const currentData = result.data;
-
-      // If this is new data (not the same reference as before)
-      if (currentData !== previousDataRef.current) {
-        previousDataRef.current = currentData;
-
-        // Figure out new items by comparing with what we already have
-        if (Array.isArray(currentData)) {
-          const currentIds = new Set(currentData.map((item) => item.path));
-          const existingIds = new Set(orderedChanges.map((item) => item.path));
-
-          // Filter out items that already exist in orderedChanges
-          const newItems = currentData.filter(
-            (item) => !existingIds.has(item.path),
-          );
-
-          // Filter out items that no longer exist in the API response
-          const existingItems = orderedChanges.filter((item) =>
-            currentIds.has(item.path),
-          );
-
-          // Add new items to the beginning
-          setOrderedChanges([...newItems, ...existingItems]);
-        } else {
-          // If not an array, just use the data directly
-          setOrderedChanges([currentData]);
-        }
+    if (result.isFetching || !result.isSuccess || !result.data) return;
+    const currentPaths = result.data.map((item) => item.path);
+    setOrdering((prev) => {
+      const currentPathSet = new Set(currentPaths);
+      // Conversation/git identity changed: rebuild ordering from the new
+      // response instead of reusing the previous workspace's path order.
+      if (prev.identity !== queryIdentity) {
+        return { identity: queryIdentity, paths: currentPaths };
       }
+      // Drop removed paths, keep the established relative order, and prepend
+      // newly-seen paths so the latest changes stay on top.
+      const retained = prev.paths.filter((path) => currentPathSet.has(path));
+      const prevPathSet = new Set(prev.paths);
+      const newPaths = currentPaths.filter((path) => !prevPathSet.has(path));
+      return { identity: prev.identity, paths: [...newPaths, ...retained] };
+    });
+  }, [result.isFetching, result.isSuccess, result.data, queryIdentity]);
+
+  // Project the latest response objects in the established path order. Always
+  // derive synchronously from the current response so a refetch never renders
+  // a stale object (issue #16949).
+  const orderedChanges = React.useMemo<GitChange[]>(() => {
+    const current = result.data ?? [];
+    if (ordering.paths.length === 0) return current;
+    const byPath = new Map(current.map((item) => [item.path, item]));
+    const ordered = ordering.paths
+      .map((path) => byPath.get(path))
+      .filter((change): change is GitChange => change !== undefined);
+    // Append any path the response reports that we haven't ordered yet (e.g.
+    // the very first data arriving before the ordering effect has run).
+    const seen = new Set(ordered.map((item) => item.path));
+    for (const item of current) {
+      if (!seen.has(item.path)) ordered.push(item);
     }
-  }, [result.isFetching, result.isSuccess, result.data]);
+    return ordered;
+  }, [result.data, ordering.paths]);
 
   return {
     data: orderedChanges,
