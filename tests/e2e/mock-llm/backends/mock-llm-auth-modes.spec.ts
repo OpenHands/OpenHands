@@ -99,13 +99,16 @@ test.describe("auth mode: fresh install with runtime-injected key", () => {
     });
     expect(settingsResp.ok()).toBe(true);
 
-    // Sanity check: the runtime key landed on the window global.
+    // Docker's externally reachable listener must not expose the key. The
+    // loopback-only npm launcher injects it for the local first-run path.
     const injected = await page.evaluate(
       () =>
         (window as unknown as Record<string, unknown>)
           .__AGENT_CANVAS_SESSION_API_KEY__,
     );
-    expect(injected).toBe(SESSION_API_KEY);
+    expect(injected).toBe(
+      process.env.MOCK_LLM_DOCKER_MODE ? undefined : SESSION_API_KEY,
+    );
   });
 });
 
