@@ -91,4 +91,33 @@ describe("the index route with a pinned home page", () => {
     // Act & Assert
     expect(clientLoader()).toBeNull();
   });
+
+  it("redirects / to a pinned canvas extension page", () => {
+    // Arrange
+    window.localStorage.setItem(
+      PIN_KEY,
+      JSON.stringify("/extensions/demo-extension/dashboard"),
+    );
+
+    // Act
+    const result = clientLoader();
+
+    // Assert
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).headers.get("Location")).toBe(
+      "/extensions/demo-extension/dashboard",
+    );
+  });
+
+  it("falls back to the default home when an extension pin has been cleared", () => {
+    // Arrange
+    window.localStorage.setItem(
+      PIN_KEY,
+      JSON.stringify("/extensions/demo-extension/dashboard"),
+    );
+    window.localStorage.removeItem(PIN_KEY);
+
+    // Act & Assert
+    expect(clientLoader()).toBeNull();
+  });
 });

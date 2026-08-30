@@ -124,3 +124,69 @@ export function usePinnedHomeRoute() {
     togglePinnedRoute,
   };
 }
+
+/**
+ * Extracts the extension name from a `/extensions/<name>/...` path.
+ */
+export function getExtensionNameFromPath(path: string): string | null {
+  if (!path.startsWith(EXTENSION_PATH_PREFIX)) return null;
+  const remainder = path.slice(EXTENSION_PATH_PREFIX.length);
+  const segment = remainder.split("/")[0];
+  return segment ? decodeURIComponent(segment) : null;
+}
+
+/**
+ * Clear the stored pinned home route if it points to a page under the
+ * specified extension name. Used during disable/uninstall flows so visiting
+ * `/` falls back to the default home screen.
+ */
+export function clearPinnedExtensionRoute(
+  extensionName: string,
+  backendId?: string,
+  orgId?: string | null,
+): void {
+  const active = getActiveBackend();
+  const targetBackendId =
+    backendId ?? (isNoBackend(active.backend) ? undefined : active.backend.id);
+  if (!targetBackendId) return;
+  const targetOrgId = orgId !== undefined ? orgId : active.orgId;
+  const key = getPinnedHomeRouteKey(targetBackendId, targetOrgId);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const path = JSON.parse(raw);
+    if (
+      typeof path === "string" &&
+      getExtensionNameFromPath(path) === extensionName
+    ) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore invalid JSON / storage errors
+  }
+}
+
+/**
+ * Clear the stored pinned home route if it points to a Canvas Extension page
+ * whose extension is not in the list of currently enabled extensions.
+ */
+export function clearStalePinnedExtensionRoutes(
+  backendId: string,
+  orgId: string | null,
+  enabledExtensionNames: readonly string[],
+): void {
+  const key = getPinnedHomeRouteKey(backendId, orgId);
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const path = JSON.parse(raw);
+    if (typeof path === "string" && path.startsWith(EXTENSION_PATH_PREFIX)) {
+      const extName = getExtensionNameFromPath(path);
+      if (extName && !enabledExtensionNames.includes(extName)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}

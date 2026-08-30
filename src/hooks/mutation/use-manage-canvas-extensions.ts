@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import type { InstallCanvasExtensionRequest } from "#/types/canvas-extension";
 import { CANVAS_EXTENSIONS_QUERY_KEYS } from "#/hooks/query/query-keys";
+import { clearPinnedExtensionRoute } from "#/hooks/use-pinned-home-route";
 import { I18nKey } from "#/i18n/declaration";
 import { displaySuccessToast } from "#/utils/custom-toast-handlers";
 
@@ -34,7 +35,12 @@ export function useSetCanvasExtensionEnabled() {
   return useMutation({
     mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
       CanvasExtensionsService.setEnabled(name, enabled),
-    onSuccess: () => void invalidate(),
+    onSuccess: (_data, { name, enabled }) => {
+      if (!enabled) {
+        clearPinnedExtensionRoute(name);
+      }
+      void invalidate();
+    },
   });
 }
 
@@ -43,7 +49,8 @@ export function useUninstallCanvasExtension() {
   const { t } = useTranslation("openhands");
   return useMutation({
     mutationFn: (name: string) => CanvasExtensionsService.uninstall(name),
-    onSuccess: () => {
+    onSuccess: (_data, name) => {
+      clearPinnedExtensionRoute(name);
       void invalidate();
       displaySuccessToast(
         t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_UNINSTALL_SUCCESS),
