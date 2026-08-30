@@ -298,6 +298,100 @@ describe("useLoadOlderEvents", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it("discards an older page that resolves after its conversation was switched away (#16875)", async () => {
+    act(() => {
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"));
+    });
+
+    const aPage = [makeEvent("evt-a-older-1", "2024-05-01T00:00:00Z")];
+    let resolvePage!: (page: EventSearchPage<OpenHandsEvent>) => void;
+    const pendingA = new Promise<EventSearchPage<OpenHandsEvent>>((resolve) => {
+      resolvePage = resolve;
+    });
+
+    const spy = vi
+      .spyOn(EventService, "searchEvents")
+      .mockReturnValue(pendingA);
+
+    const { result, rerender } = renderHook(
+      ({ cid }) => useLoadOlderEvents(cid),
+      { initialProps: { cid: "conv-a" }, wrapper },
+    );
+
+    let aLoad!: Promise<void>;
+    await act(async () => {
+      aLoad = result.current.loadOlder();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    // The user switches to conversation B while A's page is still in flight.
+    // The global store is cleared/re-seeded for B, and the request's
+    // conversation changes — then A's response finally resolves.
+    await act(async () => {
+      useEventStore.getState().clearEventsForConversation("conv-b");
+      rerender({ cid: "conv-b" });
+      resolvePage(makePage(aPage, null));
+      await aLoad;
+    });
+
+    // A's older events must NOT be merged into B's store.
+    expect(useEventStore.getState().events.map((e) => (e as any).id)).toEqual(
+      [],
+    );
+  });
+
+  it("rapid A→B→A switching does not double-merge pages from either side (#16875)", async () => {
+    // Conversation A populated, then the user flips to B while A's older page
+    // request is in flight.
+    act(() => {
+      useEventStore.getState().clearEventsForConversation("conv-a");
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"));
+    });
+
+    let resolveA!: (page: EventSearchPage<OpenHandsEvent>) => void;
+    const pendingA = new Promise<EventSearchPage<OpenHandsEvent>>((resolve) => {
+      resolveA = resolve;
+    });
+    vi.spyOn(EventService, "searchEvents").mockReturnValueOnce(pendingA);
+
+    const { result, rerender } = renderHook(
+      ({ cid }) => useLoadOlderEvents(cid),
+      { initialProps: { cid: "conv-a" }, wrapper },
+    );
+
+    let aLoad!: Promise<void>;
+    await act(async () => {
+      aLoad = result.current.loadOlder();
+    });
+
+    // A → B: B's store is cleared and A's stale page resolves late.
+    await act(async () => {
+      useEventStore.getState().clearEventsForConversation("conv-b");
+      rerender({ cid: "conv-b" });
+      resolveA(makePage([makeEvent("evt-a-older", "2024-05-01T00:00:00Z")], null));
+      await aLoad;
+    });
+    expect(useEventStore.getState().events).toEqual([]);
+
+    // B → A again: A's own recent event is present exactly once. The stale A
+    // page from the earlier leg was already dropped, so no duplicate merge.
+    act(() => {
+      useEventStore.getState().clearEventsForConversation("conv-a");
+      useEventStore
+        .getState()
+        .addEvent(makeEvent("evt-a-recent", "2024-06-01T00:00:00Z"));
+    });
+    rerender({ cid: "conv-a" });
+
+    expect(useEventStore.getState().events.map((e) => (e as any).id)).toEqual([
+      "evt-a-recent",
+    ]);
+  });
+
   it("cleans up loading state and rethrows when the page request fails", async () => {
     act(() => {
       useEventStore

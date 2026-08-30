@@ -54,8 +54,15 @@ export const useLoadOlderEvents = (
   const [hasMore, setHasMore] = React.useState(true);
   const isLoadingRef = React.useRef(false);
   const hasMoreRef = React.useRef(true);
+  // The conversation the store currently belongs to. Updated on every
+  // `conversationId` change (same effect that resets the page-request state)
+  // so an in-flight page load can tell whether its originating conversation
+  // is still the one owning the global store — see the ownership check in
+  // `loadOlder`.
+  const conversationIdRef = React.useRef(conversationId);
 
   React.useEffect(() => {
+    conversationIdRef.current = conversationId;
     isLoadingRef.current = false;
     setIsLoading(false);
 
@@ -137,6 +144,16 @@ export const useLoadOlderEvents = (
         throw new Error(
           "Invalid older-events response: expected page.items to be an array.",
         );
+      }
+
+      // Ownership check: the user may have switched to another conversation
+      // while this page was in flight. The global store has by then been
+      // cleared and reseeded for the *new* conversation, so merging this page
+      // would splice the old conversation's history into the new one. Discard
+      // the page unless the store still belongs to the conversation this
+      // request was started for.
+      if (conversationIdRef.current !== conversationId) {
+        return;
       }
 
       const older = [...page.items].reverse();
