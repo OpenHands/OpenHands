@@ -161,11 +161,9 @@ test.describe("auth mode: non-public key rotation", () => {
       { staleKey: STALE_KEY },
     );
 
-    // The runtime session key (injected by static-server) should be the
-    // CORRECT key. `syncLauncherDefaultLocalBackend()` overwrites the
-    // stale apiKey on the registry's default-local entry on boot, and the
-    // static-server's localStorage write overwrites the legacy stored
-    // sessionApiKey so the next read produces the live key.
+    // The loopback launcher replaces stale browser state with its injected
+    // key. Docker stays key-free, so route test traffic with the known key
+    // without exposing or persisting it in the browser.
     await routeSessionApiKey(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await dismissAnalyticsModal(page);
@@ -185,13 +183,15 @@ test.describe("auth mode: non-public key rotation", () => {
       `GET /api/settings should succeed but returned ${settingsResp.status()}`,
     ).toBe(true);
 
-    // Verify localStorage was updated: the stale key should have been
-    // replaced by the baked key.
     const storedConfig = await page.evaluate(() => {
       const raw = window.localStorage.getItem("openhands-agent-server-config");
       return raw ? JSON.parse(raw) : null;
     });
-    expect(storedConfig?.sessionApiKey).not.toBe(STALE_KEY);
+    if (process.env.MOCK_LLM_DOCKER_MODE) {
+      expect(storedConfig?.sessionApiKey).toBe(STALE_KEY);
+    } else {
+      expect(storedConfig?.sessionApiKey).not.toBe(STALE_KEY);
+    }
   });
 });
 
