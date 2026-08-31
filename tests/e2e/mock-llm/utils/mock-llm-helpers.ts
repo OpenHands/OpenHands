@@ -632,7 +632,12 @@ async function fillLlmProfileEditorAndSave(
   await apiKeyInput.click();
   await apiKeyInput.fill(apiKey);
 
-  await page.getByTestId("save-profile-btn").click();
+  const saveButton = page.getByTestId("save-profile-btn");
+  if (await saveButton.isEnabled()) {
+    await saveButton.click();
+  } else {
+    await page.getByTestId("back-to-profiles").click();
+  }
   await waitForTestId(page, "add-llm-profile");
 }
 

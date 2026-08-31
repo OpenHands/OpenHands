@@ -43,11 +43,18 @@ export interface Automation {
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
+  /**
+   * Service-owned preset state, returned verbatim. The GUI reads only the
+   * `template` provenance block inside it ({id, version, config}, written at
+   * setup time), and only through the guarded helper in
+   * `#/utils/automation-catalog`.
+   */
+  preset_metadata?: Record<string, unknown> | null;
 }
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at"
+  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */
@@ -115,6 +122,13 @@ export interface AutomationRun {
 export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+  /**
+   * Lifetime run counts by status, unaffected by pagination. Sparse — a
+   * status with no runs has no key, so when the field is present a missing
+   * key means zero. Absent entirely when the automation service is older
+   * than the release that added it.
+   */
+  status_counts?: Partial<Record<AutomationRunStatus, number>>;
 }
 
 export type ActivityLogExportFormat = "json" | "csv";
