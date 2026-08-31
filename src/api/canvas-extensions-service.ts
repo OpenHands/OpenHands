@@ -25,10 +25,10 @@ export class CanvasExtensionsUnsupportedError extends Error {
   constructor(reason: CanvasExtensionsUnsupportedReason) {
     const message =
       reason === "no-backend"
-        ? "Add an Agent Server backend to use Canvas Extensions."
+        ? "Add an Agent Server backend to use Apps."
         : reason === "cloud-backend"
-          ? "Canvas Extensions are not available on Cloud backends yet."
-          : "This Agent Server does not support Canvas Extensions yet. Upgrade the backend and try again.";
+          ? "Apps are not available on Cloud backends yet."
+          : "This Agent Server does not support Apps yet. Upgrade the backend and try again.";
     super(message);
     this.name = "CanvasExtensionsUnsupportedError";
     this.reason = reason;

@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { ExternalLink } from "lucide-react";
 import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
 import { AddCanvasExtensionModal } from "#/components/features/canvas-extensions/add-canvas-extension-modal";
 import { CanvasExtensionCard } from "#/components/features/canvas-extensions/canvas-extension-card";
@@ -29,6 +30,9 @@ import type { InstalledCanvasExtensionInfo } from "#/types/canvas-extension";
 type PendingAction =
   | { type: "enable"; extension: InstalledCanvasExtensionInfo }
   | { type: "uninstall"; extension: InstalledCanvasExtensionInfo };
+
+const CANVAS_EXTENSIONS_DOCS_URL =
+  "https://docs.openhands.dev/openhands/usage/agent-canvas/canvas-extensions";
 
 export default function CanvasExtensionsScreen() {
   const { t } = useTranslation("openhands");
@@ -67,9 +71,7 @@ export default function CanvasExtensionsScreen() {
     : "";
   const confirmationText =
     pendingAction?.type === "enable"
-      ? t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ENABLE_CONFIRM, {
-          name: pendingDisplayName,
-        })
+      ? t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ENABLE_CONFIRM)
       : pendingAction?.type === "uninstall"
         ? t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_UNINSTALL_CONFIRM, {
             name: pendingDisplayName,
@@ -87,11 +89,20 @@ export default function CanvasExtensionsScreen() {
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-xl font-semibold leading-6 text-foreground">
-                {t(I18nKey.NAV$EXTENSIONS)}
+                {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_PAGE_TITLE)}
               </h2>
               <p className="max-w-2xl text-sm text-tertiary-light">
                 {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_PAGE_DESCRIPTION)}
               </p>
+              <a
+                href={CANVAS_EXTENSIONS_DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_BUILD_LINK)}
+                <ExternalLink className="size-3.5" aria-hidden />
+              </a>
             </div>
             <BrandButton
               type="button"
@@ -110,6 +121,10 @@ export default function CanvasExtensionsScreen() {
           <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
             {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_TRUST_NOTICE)}
           </div>
+
+          <h3 className="text-base font-semibold text-foreground">
+            {t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_INSTALLED)}
+          </h3>
 
           {unsupported ? (
             <div className={extensionModuleEmptyStateClassName}>
@@ -194,6 +209,11 @@ export default function CanvasExtensionsScreen() {
           text={confirmationText}
           onCancel={() => setPendingAction(null)}
           onConfirm={confirmAction}
+          confirmText={
+            pendingAction.type === "enable"
+              ? t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_ENABLE_ACTION)
+              : undefined
+          }
           isConfirming={isBusy}
         />
       ) : null}

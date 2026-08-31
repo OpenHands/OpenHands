@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -13,6 +13,14 @@ import type { Backend } from "#/api/backend-registry/types";
 import { useSidebarStore } from "#/stores/sidebar-store";
 
 import { ExtensionsNavigation } from "#/components/features/skills/extensions-navigation";
+
+vi.mock("react-i18next", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-i18next")>()),
+  useTranslation: () => ({
+    t: (key: string) => (key === "NAV$EXTENSIONS" ? "Apps" : key),
+    i18n: { language: "en", exists: () => false },
+  }),
+}));
 
 const cloudBackend: Backend = {
   id: "cloud-1",
@@ -90,8 +98,18 @@ describe("ExtensionsNavigation", () => {
       "MCP Servers",
       "Skills",
       "Plugins",
-      "Extensions",
+      "Apps",
     ]);
+  });
+
+  it("links Apps to its management page", () => {
+    renderExtensionsNavigation(<ExtensionsNavigation />);
+
+    const nav = screen.getByTestId("extensions-navbar-desktop");
+    expect(within(nav).getByTestId("sidebar-extensions-/apps")).toHaveAttribute(
+      "href",
+      "/apps",
+    );
   });
 
   it("renders the Plugins item as a live link without a Coming Soon badge", () => {
@@ -127,7 +145,7 @@ describe("ExtensionsNavigation", () => {
       );
     });
 
-    it("hides the Plugins and Extensions items", () => {
+    it("hides the Plugins and Apps items", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -138,7 +156,7 @@ describe("ExtensionsNavigation", () => {
         within(nav).queryByTestId("sidebar-extensions-/plugins"),
       ).not.toBeInTheDocument();
       expect(
-        within(nav).queryByTestId("sidebar-extensions-/extensions"),
+        within(nav).queryByTestId("sidebar-extensions-/apps"),
       ).not.toBeInTheDocument();
     });
 

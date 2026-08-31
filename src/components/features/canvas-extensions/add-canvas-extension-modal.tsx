@@ -63,7 +63,7 @@ export function AddCanvasExtensionModal({
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 custom-scrollbar">
           <SettingsInput
             testId="add-canvas-extension-source-input"
-            label={t(I18nKey.SETTINGS$PLUGINS_SOURCE_LABEL)}
+            label={t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_SOURCE_LABEL)}
             type="text"
             value={source}
             onChange={setSource}
