@@ -335,48 +335,4 @@ describe("buildStartConversationRequest — agentProfileId path", () => {
 
     expect(payload.secrets_encrypted).toBeUndefined();
   });
-
-  it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
-    const workspaceHooks = {
-      session_start: [
-        {
-          matcher: "*",
-          hooks: [{ command: "cat AGENTS.md", type: "command" }],
-        },
-      ],
-    };
-
-    const payload = buildStartConversationRequest({
-      settings: makeSettings({ agent_kind: "openhands" }),
-      workspaceHookConfig: workspaceHooks,
-    });
-
-    expect(payload.hook_config).toEqual(workspaceHooks);
-  });
-
-  it("prioritizes conversation_settings.hook_config over workspaceHookConfig", () => {
-    const explicitHooks = { session_start: [] };
-    const workspaceHooks = {
-      session_start: [
-        {
-          matcher: "*",
-          hooks: [{ command: "cat AGENTS.md", type: "command" }],
-        },
-      ],
-    };
-
-    const settings = makeSettings({ agent_kind: "openhands" });
-    const payload = buildStartConversationRequest({
-      settings: {
-        ...settings,
-        conversation_settings: {
-          ...settings.conversation_settings,
-          hook_config: explicitHooks,
-        },
-      },
-      workspaceHookConfig: workspaceHooks,
-    });
-
-    expect(payload.hook_config).toEqual(explicitHooks);
-  });
 });

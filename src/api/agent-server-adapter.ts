@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -1080,7 +1081,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
-  workspaceHookConfig?: Record<string, unknown> | null;
+  workspaceHookConfig?: HookConfig | null;
 }
 
 export function buildStartConversationRequest(
@@ -1298,6 +1299,14 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   parentConversationId?: string;
   workingDir?: string;
+  /**
+   * Workspace root to look up `.openhands/hooks.json` in. Deliberately not
+   * `workingDir`: the default launch's working dir is a fresh
+   * `<workspace>/<hex>` subdir the agent-server has not created yet, so hooks
+   * are never found there (#16907). Omitted, the lookup falls back to the
+   * configured agent-server working dir.
+   */
+  hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
@@ -1317,7 +1326,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     SettingsService.getSettingsForConversation(),
     SecretsService.getSecrets(),
     fetchBackendRuntimeServicesInfo(),
-    HooksService.loadWorkspaceHooks(options.workingDir),
+    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
   ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =

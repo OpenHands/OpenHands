@@ -5,6 +5,7 @@ import {
   setActiveSelection,
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
+import { DEFAULT_WORKING_DIR } from "#/api/agent-server-config";
 import type { Backend } from "#/api/backend-registry/types";
 
 const { mockLoadHooks } = vi.hoisted(() => ({
@@ -45,7 +46,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   __resetActiveStoreForTests();
 });
 
@@ -85,17 +85,35 @@ describe("HooksService.loadWorkspaceHooks", () => {
 
     expect(mockLoadHooks).toHaveBeenCalledTimes(1);
     expect(mockLoadHooks).toHaveBeenCalledWith({
-      project_dir: "workspace/project",
+      project_dir: DEFAULT_WORKING_DIR,
     });
     expect(result).toBeNull();
   });
 
-  it("gracefully returns null when the agent-server throws an error", async () => {
+  it("gracefully returns null and warns when the agent-server throws an error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockLoadHooks.mockRejectedValue(new Error("500 Internal Server Error"));
 
     const result = await HooksService.loadWorkspaceHooks("/workspace/broken");
 
     expect(result).toBeNull();
+    // Without this the hooks a user configured silently never run and leave
+    // nothing to debug from.
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // The lookup is optional but sits on the conversation-start critical path,
+  // and `loadHooks()` spends its budget twice (a `/server_info` version probe,
+  // then the lookup), so the SDK's 60s default would stall a launch for two
+  // minutes against a reachable-but-wedged agent-server.
+  it("bounds the request so a wedged agent-server cannot stall a launch", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: null });
+
+    await HooksService.loadWorkspaceHooks("/workspace/test-project");
+
+    const [clientOptions] = vi.mocked(HooksClient).mock.calls[0];
+    expect(clientOptions.timeout).toBeLessThanOrEqual(10_000);
   });
 
   it("returns null immediately for cloud backend without calling HooksClient", async () => {

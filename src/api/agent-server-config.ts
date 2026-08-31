@@ -257,6 +257,25 @@ export function buildConversationWorkingDirForBackend(
     : buildRelativeConversationWorkingDir(conversationId);
 }
 
+/**
+ * Workspace root for the backend at `backendHost` — the directory each
+ * conversation's own `<root>/<hex>` working dir is created under.
+ *
+ * Config that belongs to the user's workspace rather than to a single
+ * conversation (`.openhands/hooks.json`) lives here, so those lookups must use
+ * this and not the per-conversation working dir, which is created empty after
+ * the lookup runs. Mirrors the per-backend rule in
+ * `buildConversationWorkingDirForBackend()`: the baked (possibly absolute)
+ * default is only valid for the served-origin backend.
+ */
+export function getWorkspaceRootForBackend(
+  backendHost: string | null | undefined,
+): string {
+  return isServedOriginHost(backendHost)
+    ? getAgentServerWorkingDir()
+    : DEFAULT_WORKING_DIR;
+}
+
 export function getAgentServerHeaders(): Record<string, string> {
   const sessionApiKey = getAgentServerSessionApiKey();
   return sessionApiKey ? { "X-Session-API-Key": sessionApiKey } : {};
