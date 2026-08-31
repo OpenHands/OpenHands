@@ -190,8 +190,26 @@ const basicAuthHeader = (username: string, password: string): string => {
   return `Basic ${token}`;
 };
 
+// Basic Auth transmits credentials as reversible Base64, so it MUST only be
+// sent over HTTPS (or to localhost during local development). Otherwise the
+// credentials could be exposed to network intermediaries.
+const isSecureMcpUrl = (serverUrl: unknown): boolean => {
+  if (typeof serverUrl !== "string") return false;
+  try {
+    const { protocol, hostname } = new URL(serverUrl);
+    return (
+      protocol === "https:" ||
+      hostname === "localhost" ||
+      hostname === "127.0.0.1"
+    );
+  } catch {
+    return false;
+  }
+};
+
 const headersFromMcpAuth = (
   auth: Record<string, unknown>,
+  serverUrl?: unknown,
 ): Record<string, string> | null => {
   switch (auth.strategy) {
     case "none":
@@ -212,7 +230,8 @@ const headersFromMcpAuth = (
     case "basic":
       if (
         typeof auth.username !== "string" ||
-        typeof auth.password !== "string"
+        typeof auth.password !== "string" ||
+        !isSecureMcpUrl(serverUrl)
       ) {
         return null;
       }
@@ -287,7 +306,7 @@ const cloudCompatibleMcpConfig = async (value: unknown): Promise<unknown> => {
       }
       if (!isRecord(server.auth)) return [name, server];
 
-      const authHeaders = headersFromMcpAuth(server.auth);
+      const authHeaders = headersFromMcpAuth(server.auth, server.url);
       if (authHeaders === null) return [name, server];
 
       const nextServer = { ...server };
