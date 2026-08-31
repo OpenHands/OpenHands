@@ -397,8 +397,9 @@ function createMainWindow() {
     // goes through URL parsing: prefix matching would also accept
     // attacker-controlled hosts like http://localhost.evil.com (or
     // http://localhost@evil.com) and render them in a chromeless native
-    // window. Non-http(s) schemes are denied outright — shell.openExternal
-    // would forward them to OS protocol handlers.
+    // window. Schemes outside the openExternal allowlist are denied
+    // outright — shell.openExternal would forward them to OS protocol
+    // handlers.
     if (isLoopbackAppUrl(url)) {
       return { action: "allow" };
     }

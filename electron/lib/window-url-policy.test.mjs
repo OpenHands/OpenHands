@@ -37,12 +37,16 @@ describe("isLoopbackAppUrl", () => {
 });
 
 describe("isExternalBrowsableUrl", () => {
-  it.each(["https://github.com/openhands", "http://example.com/docs"])(
-    "allows browsable schemes: %s",
-    (url) => {
-      expect(isExternalBrowsableUrl(url)).toBe(true);
-    },
-  );
+  it.each([
+    "https://github.com/openhands",
+    "http://example.com/docs",
+    // Allowed `href` protocols in the renderer's markdown sanitizer; denying
+    // them here would make such links click into nothing.
+    "mailto:dev@example.com",
+    "tel:+15551234",
+  ])("allows browsable schemes: %s", (url) => {
+    expect(isExternalBrowsableUrl(url)).toBe(true);
+  });
 
   it.each([
     "file:///etc/passwd",
