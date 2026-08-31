@@ -84,6 +84,16 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
       cancelHandshakeWatchdog();
       // Check if this specific WebSocket instance is allowed to reconnect
       const canReconnect = allowedToReconnectRef.current.has(ws);
+      // A socket replaced by reconnect() must not mutate connection state —
+      // its late close event would flip isConnected to false and set an
+      // error while the replacement socket is live (#16842). Consumer
+      // callbacks were already guarded; the bug was that setIsConnected and
+      // setError ran unconditionally before the wasReplaced check.
+      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
+      if (wasReplaced) {
+        return;
+      }
+
       setIsConnected(false);
       // If the connection closes with an error code, treat it as an error
       if (event.code !== 1000) {
@@ -98,14 +108,9 @@ export const useWebSocket = (url: string, options?: WebSocketHookOptions) => {
           optionsRef.current?.onError?.(event);
         }
       }
-      // Notify the consumer unless this socket was deliberately replaced by a
-      // newer one — a replaced socket's close event arrives late and must not
-      // clobber the replacement's OPEN state in the consumer. Final closes
-      // (disconnect/unmount, nothing replacing the socket) still notify.
-      const wasReplaced = wsRef.current !== null && wsRef.current !== ws;
-      if (!wasReplaced) {
-        optionsRef.current?.onClose?.(event);
-      }
+      // Notify the consumer. A replaced socket already early-returned above;
+      // disconnect/unmount and normal closes still reach this point.
+      optionsRef.current?.onClose?.(event);
 
       // Attempt reconnection if enabled and allowed
       // IMPORTANT: Only reconnect if this specific instance is allowed to reconnect
