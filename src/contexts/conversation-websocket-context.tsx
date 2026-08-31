@@ -122,6 +122,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey,
   subConversations,
   subConversationIds,
+  isSubConversationsLoading,
 }: {
   children: React.ReactNode;
   conversationId?: string;
@@ -129,6 +130,7 @@ export function ConversationWebSocketProvider({
   sessionApiKey?: string | null;
   subConversations?: AppConversation[];
   subConversationIds?: string[];
+  isSubConversationsLoading?: boolean;
 }) {
   // Separate connection state tracking for each WebSocket
   const [mainConnectionState, setMainConnectionState] =
@@ -505,6 +507,18 @@ export function ConversationWebSocketProvider({
     // Reset the tracked event ref when sub-conversations change
     latestPlanningFileEventRef.current = null;
   }, [subConversationIds]);
+
+  // When the sub-conversations fetch has settled (success, empty, or
+  // error) and no planning WebSocket URL can be built, mark planning
+  // history as settled. While the query is still pending we keep the
+  // skeleton, matching the existing defensive pattern where every other
+  // failure branch marks history loaded only after its async work settles.
+  useEffect(() => {
+    if (isSubConversationsLoading) return;
+    if (!isLoadingHistoryPlanning) return;
+    if (planningAgentWsUrl) return;
+    setIsLoadingHistoryPlanning(false);
+  }, [isSubConversationsLoading, isLoadingHistoryPlanning, planningAgentWsUrl]);
 
   // Reset hasConnected flags when the conversation changes.
   useEffect(() => {

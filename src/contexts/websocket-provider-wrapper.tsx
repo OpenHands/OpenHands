@@ -13,9 +13,8 @@ export function WebSocketProviderWrapper({
   conversationId,
 }: WebSocketProviderWrapperProps) {
   const { data: conversation } = useActiveConversation();
-  const { data: subConversations } = useSubConversations(
-    conversation?.sub_conversation_ids ?? [],
-  );
+  const { data: subConversations, isPending: isSubConversationsPending } =
+    useSubConversations(conversation?.sub_conversation_ids ?? []);
 
   const filteredSubConversations = subConversations?.filter(
     (subConversation) => subConversation !== null,
@@ -39,6 +38,7 @@ export function WebSocketProviderWrapper({
       sessionApiKey={conversation?.session_api_key}
       subConversationIds={conversation?.sub_conversation_ids}
       subConversations={filteredSubConversations}
+      isSubConversationsLoading={isSubConversationsPending}
     >
       {children}
     </ConversationWebSocketProvider>
