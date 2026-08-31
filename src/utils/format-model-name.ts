@@ -4,15 +4,11 @@ export const FREE_MODEL_BADGE_LABEL = "Free";
 export const FREE_MODEL_SUFFIX = " (free)";
 
 /**
- * Static pretty-print labels for the OpenHands free models known at build
- * time. Used by the profile picker to render a human-readable sub-label
- * **without** waiting for the async DB-driven free-model set to hydrate.
- *
- * New free models added only via the DB will fall back to the raw model id
- * plus the `(free)` suffix (see {@link formatModelPillLabel}).
+ * Static pretty-print labels for OpenHands models known at build time. Free
+ * status still comes only from the backend-provided `freeModels` set.
  */
 export const FREE_OPENHANDS_MODELS = {
-  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash (free)",
+  "openhands/deepseek-v4-flash": "OpenHands DeepSeek V4 Flash",
 } as const;
 
 export const FREE_OPENHANDS_MODEL_IDS = Object.keys(FREE_OPENHANDS_MODELS);
@@ -92,19 +88,18 @@ export function formatNativeModelName(
 }
 
 /**
- * Display label used by the LLM-profile picker sub-line. Looks up the model
- * in the static {@link FREE_OPENHANDS_MODELS} table first so the label renders
- * instantly (no async hydration needed). For models that are free according to
- * the DB-driven `freeModels` set but absent from the static table, falls back
- * to the raw model id with the `(free)` suffix.
+ * Display label used by the LLM-profile picker sub-line. Looks up the model in
+ * the static label table for a prettier name, but appends `(free)` only when the
+ * backend-provided `freeModels` set marks the concrete model free.
  */
 export function formatModelPillLabel(
   model: string | null | undefined,
   freeModels: FreeModelSet = EMPTY_FREE_MODELS,
 ): string | null {
   if (!model) return null;
-  if (model in FREE_OPENHANDS_MODELS) {
-    return FREE_OPENHANDS_MODELS[model as keyof typeof FREE_OPENHANDS_MODELS];
-  }
-  return formatModelNameForDisplay(model, freeModels);
+  const display =
+    model in FREE_OPENHANDS_MODELS
+      ? FREE_OPENHANDS_MODELS[model as keyof typeof FREE_OPENHANDS_MODELS]
+      : model;
+  return appendFreeSuffix(display, isFreeOpenHandsModel(model, freeModels));
 }

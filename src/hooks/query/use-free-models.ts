@@ -87,8 +87,11 @@ const useOpenHandsModels = () =>
  * stay renderable in isolation without a QueryClientProvider in scope.
  */
 export const useHydrateFreeModels = (): void => {
-  const { data } = useOpenHandsModels();
+  const { data, isError } = useOpenHandsModels();
   const setFlags = useFreeModelsStore((state) => state.setFlags);
+  const markDefaultModelReady = useFreeModelsStore(
+    (state) => state.markDefaultModelReady,
+  );
 
   React.useEffect(() => {
     if (!data) return;
@@ -105,6 +108,10 @@ export const useHydrateFreeModels = (): void => {
         : null,
     });
   }, [data, setFlags]);
+
+  React.useEffect(() => {
+    if (isError) markDefaultModelReady();
+  }, [isError, markDefaultModelReady]);
 };
 
 /**
@@ -123,3 +130,6 @@ export const useFreeModels = (): FreeModelSet =>
  */
 export const useDefaultModel = (): string | null =>
   useFreeModelsStore((state) => state.defaultModel);
+
+export const useDefaultModelReady = (): boolean =>
+  useFreeModelsStore((state) => state.defaultModelReady);

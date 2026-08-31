@@ -10,6 +10,8 @@ interface FreeModelsState {
   freeModels: FreeModelSet;
   /** DB-driven default OpenHands model id (``openhands/<model>``), or null. */
   defaultModel: string | null;
+  /** True once the backend flags query has settled at least once. */
+  defaultModelReady: boolean;
 }
 
 interface FreeModelsActions {
@@ -23,6 +25,7 @@ interface FreeModelsActions {
     freeModels: FreeModelSet;
     defaultModel: string | null;
   }) => void;
+  markDefaultModelReady: () => void;
 }
 
 type FreeModelsStore = FreeModelsState & FreeModelsActions;
@@ -32,6 +35,12 @@ const EMPTY_FREE_MODELS: FreeModelSet = new Set<string>();
 export const useFreeModelsStore = create<FreeModelsStore>()((set) => ({
   freeModels: EMPTY_FREE_MODELS,
   defaultModel: null,
+  defaultModelReady: false,
   setFlags: (flags) =>
-    set({ freeModels: flags.freeModels, defaultModel: flags.defaultModel }),
+    set({
+      freeModels: flags.freeModels,
+      defaultModel: flags.defaultModel,
+      defaultModelReady: true,
+    }),
+  markDefaultModelReady: () => set({ defaultModelReady: true }),
 }));

@@ -8,7 +8,11 @@ import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useApplyOnboardingAgentProfile } from "#/hooks/mutation/use-apply-onboarding-agent-profile";
-import { useDefaultModel } from "#/hooks/query/use-free-models";
+import {
+  useDefaultModel,
+  useDefaultModelReady,
+} from "#/hooks/query/use-free-models";
+import { LlmSettingsInputsSkeleton } from "#/components/features/settings/llm-settings/llm-settings-inputs-skeleton";
 import { deriveProfileNameFromModel } from "#/utils/derive-profile-name";
 
 interface SetupLlmStepProps {
@@ -47,7 +51,9 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
   const saveProfile = useSaveLlmProfile();
   const activateProfile = useActivateLlmProfile();
   const applyAgentProfile = useApplyOnboardingAgentProfile();
-  const defaultLlmModel = useDefaultModel() ?? ONBOARDING_DEFAULT_LLM_MODEL;
+  const dbDefaultLlmModel = useDefaultModel();
+  const isDefaultModelReady = useDefaultModelReady();
+  const defaultLlmModel = dbDefaultLlmModel ?? ONBOARDING_DEFAULT_LLM_MODEL;
   const [saveControl, setSaveControl] =
     React.useState<SdkSectionSaveControl | null>(null);
   const [isFinalizing, setIsFinalizing] = React.useState(false);
@@ -149,16 +155,20 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
         data-testid="onboarding-llm-settings"
         className="flex min-h-0 flex-1 flex-col overflow-y-auto custom-scrollbar-always"
       >
-        <LlmSettingsScreen
-          embedded
-          hideSaveButton
-          suppressSuccessToast
-          initialValueOverrides={{
-            "llm.model": defaultLlmModel,
-          }}
-          onSaveSuccess={handleSaveSuccess}
-          onSaveControlChange={setSaveControl}
-        />
+        {isDefaultModelReady ? (
+          <LlmSettingsScreen
+            embedded
+            hideSaveButton
+            suppressSuccessToast
+            initialValueOverrides={{
+              "llm.model": defaultLlmModel,
+            }}
+            onSaveSuccess={handleSaveSuccess}
+            onSaveControlChange={setSaveControl}
+          />
+        ) : (
+          <LlmSettingsInputsSkeleton />
+        )}
       </div>
 
       <div className="sticky bottom-0 flex items-center justify-between gap-2 bg-base-secondary pt-4 pb-7">
@@ -174,7 +184,11 @@ export function SetupLlmStep({ onBack, onNext }: SetupLlmStepProps) {
           testId="onboarding-llm-next"
           type="button"
           variant="primary"
-          isDisabled={(saveControl?.isSaving ?? false) || isFinalizing}
+          isDisabled={
+            !isDefaultModelReady ||
+            (saveControl?.isSaving ?? false) ||
+            isFinalizing
+          }
           onClick={handleNext}
         >
           {t(I18nKey.ONBOARDING$NEXT)}
