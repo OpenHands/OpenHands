@@ -1,7 +1,14 @@
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TestCase, TestResult } from "@playwright/test/reporter";
 
 import DoneMarkerReporter from "#/../tests/e2e/mock-llm/reporters/done-marker-reporter";
+
+// Mirrors the reporter's marker directory (the reporter derives it from cwd).
+const markerDir = join(process.cwd(), ".mock-llm-markers");
+const testsDonePath = join(markerDir, ".tests-done");
+const resultsPath = join(markerDir, ".results.json");
 
 function makeTestCase(title: string, retries = 0): TestCase {
   return {
@@ -22,17 +29,20 @@ function makeResult(status: TestResult["status"], retries = 0): TestResult {
 }
 
 describe("DoneMarkerReporter", () => {
-  const markerDir = "/tmp/openhands-marker-test";
   let reporter: DoneMarkerReporter;
 
   beforeEach(() => {
     vi.resetModules();
-    process.env.MARKER_DIR = markerDir;
     reporter = new DoneMarkerReporter();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const p of [resultsPath, testsDonePath]) {
+      if (existsSync(p)) {
+        rmSync(p);
+      }
+    }
   });
 
   it("counts a flaky test once (final attempt only), not once per retry", () => {
@@ -46,9 +56,15 @@ describe("DoneMarkerReporter", () => {
     test.results = [failResult, passResult];
 
     reporter.onTestEnd(test, failResult);
-    reporter.onTestEnd(test, passResult);
+    // An earlier attempt must not be counted or flushed any markers yet.
+    expect(existsSync(testsDonePath)).toBe(false);
 
-    // After the final attempt the suite is done exactly once.
-    expect(reporter.completedTests).toBe(1);
+    reporter.onTestEnd(test, passResult);
+    // Only the final attempt completes the suite — exactly once.
+    expect(readFileSync(testsDonePath, "utf8")).toBe("passed");
+    expect(JSON.parse(readFileSync(resultsPath, "utf8"))).toMatchObject({
+      completed: 1,
+      total: 1,
+    });
   });
 });
