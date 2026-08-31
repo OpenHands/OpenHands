@@ -87,8 +87,15 @@ describe("useChatInputLlmProfileState", () => {
     expect(result.current.currentProfileName).toBe("Smart");
   });
 
-  it("falls back to the account active_profile when there is no conversation model", () => {
+  it("does not fallback to account active_profile inside a conversation when there is no conversation model", () => {
     useActiveConversationMock.mockReturnValue({ data: { llm_model: null } });
+    const { result } = renderState();
+    expect(result.current.currentProfileName).toBeNull();
+  });
+
+  it("falls back to the account active_profile on the home page", () => {
+    useOptionalConversationIdMock.mockReturnValue({ conversationId: null });
+    useActiveConversationMock.mockReturnValue({ data: undefined });
     const { result } = renderState();
     expect(result.current.currentProfileName).toBe("Fast");
   });
