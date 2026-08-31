@@ -352,7 +352,7 @@ Ensure each test is meaningful, concise, and covers a unique aspect of user inte
 - Direct `dependencies` and `devDependencies` in `package.json` are exact-pinned (no caret ranges); reproducible installs should use the committed `package-lock.json` plus `npm ci`, and targeted transitive fixes still belong in `overrides`.
 - Current `overrides` in `package.json` and the advisories they address (keep this list in sync when adding/removing overrides):
   - `@vercel/static-config > ajv: 8.20.0` — **GHSA-2g4f-4pwh-qvx6** (ReDoS in ajv's `$data` option, affects 7.0.0-alpha.0–8.17.1, reaches us through `@vercel/react-router` → `@vercel/static-config` → `ajv@8.6.3`). The override is intentionally **scoped** to `@vercel/static-config`: a top-level `ajv` override forces ajv 8.x everywhere and breaks ESLint's `@eslint/eslintrc`, which requires ajv ^6.x (incompatible API). Scoping lets ESLint keep its nested `ajv@6.x` while only the vulnerable consumer is bumped.
-  - `dompurify: 3.4.12` — keeps Monaco's exact-pinned `dompurify@3.2.7` on a patched release for **GHSA-39q2-94rc-95cp** and related XSS bypasses.
+  - `dompurify: 3.4.14` — keeps Monaco's exact-pinned `dompurify@3.2.7` on a patched release for **GHSA-55q2-fjhq-7xh7**, **GHSA-39q2-94rc-95cp**, and related XSS bypasses.
   - `typed-rest-client > qs: 6.15.3` — overrides the vulnerable `qs@6.15.1` exact-pinned by every published `typed-rest-client` release in the `@stryker-mutator/core` dependency tree.
 - When bumping pinned versions, use npm to update `package.json` and `package-lock.json` together; do not hand-edit only one of them.
 - `npm test` now runs `npm run make-i18n` first so clean environments generate `src/i18n/declaration.ts` before Vitest loads aliased imports.
