@@ -101,5 +101,7 @@ describe("redactMcpSecrets", () => {
     );
 
     expect(redacted).not.toContain("querysecret456");
+    expect(redacted).not.toContain("us%er");
+    expect(redacted).not.toContain("urlpass123");
   });
 });
