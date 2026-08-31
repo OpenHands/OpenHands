@@ -154,6 +154,12 @@ describe("useSlashCommand", () => {
           base_url: null,
           api_key_set: true,
         },
+        {
+          name: "free",
+          model: "openhands/deepseek-v4-flash",
+          base_url: null,
+          api_key_set: true,
+        },
       ],
       active_profile: "haiku",
     };
@@ -169,7 +175,12 @@ describe("useSlashCommand", () => {
     expect(result.current.filteredItems.map((i) => i.command)).toEqual([
       "/model haiku",
       "/model gpt",
+      "/model free",
     ]);
+    expect(
+      result.current.filteredItems.find((i) => i.command === "/model free")
+        ?.skill.content,
+    ).toBe("Switch to OpenHands DeepSeek V4 Flash (free)");
   });
 
   it("filters saved LLM profile suggestions by profile name or model", () => {

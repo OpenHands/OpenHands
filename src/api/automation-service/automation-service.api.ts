@@ -14,7 +14,16 @@ import type {
   AutomationsResponse,
   AutomationRunsResponse,
 } from "#/types/automation";
-import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
+import type {
+  GitSyncCheckResponse,
+  GitSyncConfigUpdateRequest,
+  GitSyncStatus,
+  GitSyncTriggerResponse,
+} from "#/types/git-sync";
+import {
+  automationCreateEndpoint,
+  automationUploadEndpoint,
+} from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
   getAutomationIdEndpoint,
@@ -22,6 +31,7 @@ import {
 } from "#/manifests/automation-interface";
 import type {
   DeploymentCapabilities,
+  SetupEntry,
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
@@ -579,9 +589,11 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
+    /** The entry the draft came from, which decides the create endpoint. */
+    entry?: SetupEntry,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${AUTOMATION_CREATE_ENDPOINT}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
@@ -597,6 +609,153 @@ class AutomationService {
       path,
       body,
     );
+    return data;
+  }
+
+  /**
+   * Upload a packed bundle, and return the `oh-internal://` path the create
+   * call references.
+   *
+   * The body is the archive itself rather than a multipart form - the service
+   * streams it and takes its metadata from the query string, so it never has
+   * to buffer the whole file to start writing.
+   */
+  static async uploadAutomationTarball(
+    name: string,
+    archive: Uint8Array,
+  ): Promise<string> {
+    const active = getActiveBackend().backend;
+    const path =
+      `${AUTOMATION_BASE_PATH}${automationUploadEndpoint()}` +
+      `?name=${encodeURIComponent(name)}`;
+    const headers = { "Content-Type": "application/gzip" };
+
+    let upload: Record<string, unknown>;
+    if (active.kind === "cloud") {
+      // Post the archive straight to the cloud host rather than through the
+      // cloud client: that client JSON-serializes any non-FormData body, which
+      // would turn the gzip `Uint8Array` into `{"0":31,...}` even though the
+      // header says `application/gzip`. Axios preserves the raw bytes (its
+      // `transformRequest` sends the underlying buffer), so the service still
+      // receives the archive as the stream it expects, with metadata in the
+      // query string. This upload sets no host override, so a direct call
+      // matches the cloud client's own direct-to-host path -- we just add the
+      // two headers that path would (`Bearer` auth and `X-Org-Id`).
+      const { orgId } = getActiveBackend();
+      upload = (
+        await axios.post<Record<string, unknown>>(
+          `${active.host.replace(/\/+$/, "")}${path}`,
+          archive,
+          {
+            headers: {
+              ...(await buildAutomationRequestHeaders()),
+              ...headers,
+              ...(active.apiKey
+                ? { Authorization: `Bearer ${active.apiKey}` }
+                : {}),
+              ...(orgId ? { "X-Org-Id": orgId } : {}),
+            },
+          },
+        )
+      ).data;
+    } else {
+      upload = (
+        await localAutomationAxios.post<Record<string, unknown>>(
+          path,
+          archive,
+          { headers },
+        )
+      ).data;
+    }
+
+    const tarballPath = upload.tarball_path;
+    if (typeof tarballPath !== "string" || !tarballPath) {
+      throw new Error("The upload returned no tarball path.");
+    }
+    return tarballPath;
+  }
+
+  // Git sync paths are literal rather than routed through
+  // `getAutomationEndpoint`. That manifest describes the automation surface a
+  // host may remap, and `InterfaceEndpoints` requires every key it declares --
+  // adding these would break existing manifests. Git sync is a local-mode
+  // operator feature outside that surface.
+  static async getGitSyncStatus(): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/status`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "GET",
+        path,
+      });
+    }
+
+    const { data } = await localAutomationAxios.get<GitSyncStatus>(path);
+    return data;
+  }
+
+  static async updateGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncStatus> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/config`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncStatus>({
+        backend: active,
+        method: "PUT",
+        path,
+        body: body as Record<string, unknown>,
+      });
+    }
+
+    const { data } = await localAutomationAxios.put<GitSyncStatus>(path, body);
+    return data;
+  }
+
+  /**
+   * Ask whether a configuration can reach its repo, without saving it. Takes
+   * the same body as `updateGitSyncConfig` and answers for the settings that
+   * body would leave in place.
+   */
+  static async checkGitSyncConfig(
+    body: GitSyncConfigUpdateRequest,
+  ): Promise<GitSyncCheckResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/check`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncCheckResponse>({
+        backend: active,
+        method: "POST",
+        path,
+        body: body as Record<string, unknown>,
+      });
+    }
+
+    const { data } = await localAutomationAxios.post<GitSyncCheckResponse>(
+      path,
+      body,
+    );
+    return data;
+  }
+
+  static async triggerGitSync(): Promise<GitSyncTriggerResponse> {
+    const active = getActiveBackend().backend;
+    const path = `${AUTOMATION_BASE_PATH}/v1/git-sync/sync`;
+
+    if (active.kind === "cloud") {
+      return callCloudProxy<GitSyncTriggerResponse>({
+        backend: active,
+        method: "POST",
+        path,
+      });
+    }
+
+    const { data } =
+      await localAutomationAxios.post<GitSyncTriggerResponse>(path);
     return data;
   }
 

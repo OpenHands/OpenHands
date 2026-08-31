@@ -19,10 +19,14 @@ import type {
 
 // The restart mutation resolves the launch profile through these services
 // before creating the conversation; stub them so it deterministically takes
-// the legacy agent_settings path (their absence is a supported fallback).
+// the legacy agent_settings path (no active agent profile).
 vi.mock("#/api/agent-profiles-service/agent-profiles-service.api", () => ({
   __esModule: true,
-  default: { listProfiles: vi.fn().mockRejectedValue(new Error("n/a")) },
+  default: {
+    listProfiles: vi
+      .fn()
+      .mockResolvedValue({ profiles: [], active_agent_profile_id: null }),
+  },
   WELL_KNOWN_DEFAULT_AGENT_PROFILE_NAME: "default",
 }));
 vi.mock("#/api/profiles-service/profiles-service.api", () => ({
@@ -175,10 +179,9 @@ describe("SkillInstallRestartBanner", () => {
 
     await waitFor(() => {
       const call = createConversationSpy.mock.lastCall;
-      // Positional contract of createConversation: workingDir is #5 and
-      // workspaceMode #6 — the parsed install root, reused directly.
-      expect(call?.[4]).toBe("/tmp/demo-ws");
-      expect(call?.[5]).toBe("local_repo");
+      // The parsed install root is reused directly as the launch workspace.
+      expect(call?.[0]?.workingDirOverride).toBe("/tmp/demo-ws");
+      expect(call?.[0]?.workspaceMode).toBe("local_repo");
       expect(navigate).toHaveBeenCalledWith("/conversations/new-conv-1");
     });
   });

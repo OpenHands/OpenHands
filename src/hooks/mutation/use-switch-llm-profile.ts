@@ -7,8 +7,10 @@ import {
   SETTINGS_QUERY_KEYS,
 } from "#/hooks/query/query-keys";
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
-import { recordModelSwitchMessage } from "#/hooks/chat/record-model-switch-message";
-import { mergeStoredConversationMetadata } from "#/api/conversation-metadata-store";
+import {
+  recordModelSwitchMessage,
+  stampActiveLlmProfile,
+} from "#/hooks/chat/record-model-switch-message";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 import { I18nKey } from "#/i18n/declaration";
@@ -77,9 +79,7 @@ export const useSwitchLlmProfile = () => {
         // Keep the per-conversation profile identity fresh so the chat-header
         // switcher shows the right name after a reload (the agent-server only
         // round-trips the model string). #1082
-        mergeStoredConversationMetadata(conversationId, {
-          active_profile: profileName,
-        });
+        stampActiveLlmProfile(conversationId, profileName);
       } else {
         // Home-page activate path (same server endpoint as
         // useActivateLlmProfile): clear the SettingsService cache so the next

@@ -7,6 +7,7 @@ import type {
 } from "@openhands/typescript-client";
 import type { CommandResult } from "#/api/runtime-service/agent-server-runtime-service";
 import { sendWebSocketAuth } from "#/utils/websocket-auth";
+import { startHandshakeWatchdog } from "#/utils/websocket-handshake";
 import { buildBashWebSocketUrl } from "#/utils/websocket-url";
 
 interface WaitingCommand {
@@ -78,7 +79,13 @@ export function useBashCommandRunner(
     wsRef.current = ws;
     readyWsRef.current = null;
 
+    // Abort a handshake stuck in CONNECTING — a hung bash-events handshake
+    // would also block the conversation's events socket (the one the chat
+    // needs) until it settles.
+    const cancelHandshakeWatchdog = startHandshakeWatchdog(ws);
+
     ws.onopen = () => {
+      cancelHandshakeWatchdog();
       sendWebSocketAuth(ws, sessionApiKey);
       readyWsRef.current = ws;
       for (const {
@@ -142,6 +149,7 @@ export function useBashCommandRunner(
     }
 
     ws.onclose = () => {
+      cancelHandshakeWatchdog();
       wsRef.current = null;
       readyWsRef.current = null;
       rejectAll("Bash WebSocket closed");
@@ -154,6 +162,8 @@ export function useBashCommandRunner(
     };
 
     return () => {
+      // The close handler is nulled below, so cancel the watchdog here.
+      cancelHandshakeWatchdog();
       // Prevent the close/error handlers from double-rejecting after unmount
       ws.onclose = null;
       ws.onerror = null;

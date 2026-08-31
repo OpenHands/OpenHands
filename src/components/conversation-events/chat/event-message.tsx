@@ -55,14 +55,8 @@ interface EventMessageProps {
   suppressThought?: boolean;
 }
 
-/**
- * Extracts activated skills from a MessageEvent, supporting both
- * activated_skills and activated_microagents field names.
- */
 const getActivatedSkills = (event: MessageEvent): string[] =>
-  (event as unknown as { activated_skills?: string[] }).activated_skills ||
-  event.activated_microagents ||
-  [];
+  event.activated_skills || [];
 
 /**
  * Checks if extended content contains valid text content.

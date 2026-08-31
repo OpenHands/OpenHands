@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
@@ -28,7 +29,12 @@ describe("ModelSelector — OpenHands provider display", () => {
         verifiedCount += 1;
         return HttpResponse.json({
           models: {
-            openhands: ["claude-opus-4-7"],
+            openhands: [
+              "claude-opus-4-7",
+              "glm-5.2",
+              "deepseek-v4-flash",
+              "minimax-m2.7",
+            ],
             anthropic: ["claude-opus-4-5-20251101"],
           },
         });
@@ -59,5 +65,31 @@ describe("ModelSelector — OpenHands provider display", () => {
     expect(providersCount).toBe(1);
     expect(verifiedCount).toBe(1);
     expect(modelsCount).toBe(1);
+  });
+
+  it("makes clear which OpenHands models are free", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<ModelSelector currentModel="openhands/deepseek-v4-flash" />);
+
+    await waitFor(() => {
+    });
+    expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
+      "openhands/deepseek-v4-flash",
+    );
+    expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
+      "Free",
+    );
+
+    await user.click(screen.getByLabelText("LLM$MODEL"));
+
+    expect(screen.getAllByText("Free")).toHaveLength(2);
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
+
+    await user.click(screen.getByRole("option", { name: /deepseek-v4-flash/ }));
+
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
+    expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
+      "Free",
+    );
   });
 });

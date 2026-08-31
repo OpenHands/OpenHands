@@ -52,6 +52,12 @@ export interface SetupFormField {
   default?: string;
   required: boolean;
   provider?: SetupGitProvider;
+  /**
+   * repo-picker only. The field collects several repositories rather than one,
+   * and its value is a list. A placeholder that is the whole value resolves to
+   * that list, so a payload can state one and get an array.
+   */
+  multiple?: true;
   options?: SetupFieldOption[];
   constraints?: SetupFieldConstraints;
 }
@@ -67,12 +73,53 @@ export interface SetupForm {
   args: SetupFormFields;
 }
 
+/** A config.json leaf: templated string, number, boolean, null, or a nesting. */
+export type SetupBundleConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | SetupBundleConfigValue[]
+  | { [key: string]: SetupBundleConfigValue };
+
+/**
+ * The name the rendered configuration is packed under, which is therefore a
+ * name a bundle's own files may not claim. Stated here rather than beside the
+ * packing, so admission can refuse the collision without importing it.
+ */
+export const BUNDLE_CONFIG_FILENAME = "config.json";
+
+/**
+ * The script tarball a direct entry may ship instead of a prompt, for an
+ * automation that is deterministic machinery rather than judgement.
+ *
+ * `files` maps a path inside the archive to the repository path the extensions
+ * package read it from; the contents themselves come from that package's
+ * `getAutomationBundleFiles`, because this host has the package and not the
+ * repository.
+ */
+export interface SetupBundle {
+  /** Provenance recorded on the created automation, alongside the entry id. */
+  version: string;
+  /** The command the service runs inside the extracted tarball. */
+  entrypoint: string;
+  /** Script run once before the entrypoint. Absent when nothing to install. */
+  setupScript?: string;
+  /** Seconds a run may take, when the service default is not enough. */
+  timeout?: number;
+  files: Record<string, string>;
+  /** Rendered from the form and packed as config.json. */
+  config: Record<string, SetupBundleConfigValue>;
+}
+
 export interface SetupBlock {
   version: typeof SETUP_VERSION;
   mode: SetupMode;
   form: SetupForm;
   /** direct only. What the automation is told to do. */
   prompt?: string;
+  /** direct only, and the alternative to `prompt`. Exactly one is present. */
+  bundle?: SetupBundle;
   /** direct only, event trigger only. Which delivered events belong to it. */
   filter?: string;
   /**
@@ -105,6 +152,13 @@ export interface SetupEntry {
   id: string;
   name: string;
   description: string;
+  /**
+   * Version of the template this entry publishes, sent with the create request
+   * as provenance. A bundle declares its own at `setup.bundle.version`; a
+   * prompt entry declares it here. Absent means the entry sends none, so the
+   * service records no template for what it creates.
+   */
+  version?: string;
   requires: SetupPrerequisites;
   /** The skill that owns the launch command. Defaults to `id`. */
   skill?: string;
@@ -123,8 +177,15 @@ export interface SetupRequestBody {
   [key: string]: SetupPayloadValue;
 }
 
-/** Form values are collected as strings; the payload mapping shapes them. */
-export type SetupFormValues = Record<string, string>;
+/**
+ * Form values as collected; the payload mapping shapes them.
+ *
+ * A field collecting several values holds a list. Everything else holds a
+ * string, including fields whose value is a number to the service - the
+ * payload mapping is where a value stops being what was typed.
+ */
+export type SetupFormValue = string | string[];
+export type SetupFormValues = Record<string, SetupFormValue>;
 
 /** `GET /v1/capabilities` — what this deployment supports. */
 export interface DeploymentCapabilities {
@@ -218,6 +279,13 @@ export interface InterfaceEndpoints {
   validate: string;
   createPrompt: string;
   createPlugin: string;
+  /**
+   * The raw create endpoint, which a bundle entry is created through, and
+   * where its tarball is uploaded first. Optional: a manifest published before
+   * bundles existed declares neither, and is still admitted.
+   */
+  createBundle?: string;
+  uploads?: string;
 }
 
 export type InterfaceEndpointName = keyof InterfaceEndpoints;
@@ -252,6 +320,7 @@ export type InterfaceSubPageId = (typeof INTERFACE_SUB_PAGE_IDS)[number];
 export const INTERFACE_ICON_SLUGS = [
   "layout-dashboard",
   "sparkles",
+  "library",
   "bot",
   "circle-alert",
   "activity",

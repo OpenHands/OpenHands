@@ -33,6 +33,10 @@ import {
   getTriggerSource,
 } from "./automation-run-health";
 import {
+  automationActivityListClassName,
+  automationActivityRowClassName,
+} from "#/components/features/automations/automation-view-mode";
+import {
   buildHomeAutomationActivityItems,
   hrefForActivityItem,
   type HomeAutomationActivityItem,
@@ -93,7 +97,7 @@ function RunningAutomationRow({
   return (
     <li
       data-testid={`running-automation-row-${item.id}`}
-      className="group relative flex items-stretch transition-colors hover:bg-[var(--oh-interactive-hover)] has-[:focus-visible]:bg-[var(--oh-interactive-hover)]"
+      className={automationActivityRowClassName}
     >
       <Tooltip
         content={
@@ -212,6 +216,7 @@ export function RunningAutomationsList() {
     isBackendHealthy,
     isHealthLoading,
     isError,
+    isAutomationsLoading,
     enabledAutomations,
     runStates,
   } = useHomeAutomations();
@@ -245,15 +250,17 @@ export function RunningAutomationsList() {
     !isExpanded && items.length > HOME_AUTOMATIONS_PREVIEW_LIMIT;
   const canViewAll = isExpanded && items.length >= MAX_HOME_AUTOMATION_CHIPS;
 
-  if (isHealthLoading || !isBackendHealthy || isError || items.length === 0) {
+  if (isHealthLoading || !isBackendHealthy || isError || isAutomationsLoading) {
     return null;
   }
+
+  const isEmpty = items.length === 0;
 
   return (
     <section
       aria-labelledby="running-automations-heading"
       data-testid="running-automations-list"
-      className="mt-8 w-full"
+      className="w-full"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2
@@ -278,23 +285,32 @@ export function RunningAutomationsList() {
         </StyledTooltip>
       </div>
 
-      <ul
-        aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
-        className="divide-y divide-[var(--oh-border-subtle)] overflow-hidden rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)]"
-      >
-        {visibleItems.map((item) => {
-          const automation = automationById.get(item.id);
-          if (!automation) return null;
-          return (
-            <RunningAutomationRow
-              key={item.id}
-              item={item}
-              automation={automation}
-              runState={runStates.get(item.id) ?? UNKNOWN_RUN_STATE}
-            />
-          );
-        })}
-      </ul>
+      {isEmpty ? (
+        <p
+          data-testid="running-automations-empty-hint"
+          className="rounded-xl border border-[var(--oh-border-subtle)] bg-[var(--oh-surface)] px-4 py-3 text-xs text-[var(--oh-text-secondary)]"
+        >
+          {t(I18nKey.FEATURED_AUTOMATIONS$EMPTY_HINT)}
+        </p>
+      ) : (
+        <ul
+          aria-label={t(I18nKey.FEATURED_AUTOMATIONS$RECENT_GROUP_LABEL)}
+          className={automationActivityListClassName}
+        >
+          {visibleItems.map((item) => {
+            const automation = automationById.get(item.id);
+            if (!automation) return null;
+            return (
+              <RunningAutomationRow
+                key={item.id}
+                item={item}
+                automation={automation}
+                runState={runStates.get(item.id) ?? UNKNOWN_RUN_STATE}
+              />
+            );
+          })}
+        </ul>
+      )}
 
       {canViewMore ? (
         <div className="mt-2 flex justify-start">

@@ -9,12 +9,17 @@ import { useTranslation } from "react-i18next";
 import { LlmProfilesManager } from "./llm-profiles-manager";
 import { ProfileNameInput } from "./profile-name-input";
 import { BrandButton } from "#/components/features/settings/brand-button";
-import { LlmSettingsScreen } from "#/routes/llm-settings";
+import {
+  LlmSettingsScreen,
+  LLM_PROVIDER_CONNECTION_KEY,
+} from "#/routes/llm-settings";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { DEFAULT_SETTINGS } from "#/services/settings";
 import ProfilesService, {
   ProfileInfo,
   type SaveProfileRequest,
@@ -28,6 +33,7 @@ import {
   deriveProfileNameFromModel,
   isProfileNameValid,
 } from "#/utils/derive-profile-name";
+import { isOpenHandsProviderModel } from "#/utils/format-model-name";
 import { SdkSectionSaveControl } from "../sdk-settings/sdk-section-page";
 import {
   LLM_AUTH_TYPE_API_KEY,
@@ -103,6 +109,10 @@ export function LlmSettingsLocalView() {
   const agentSchemaRef = useRef(agentSchema);
   agentSchemaRef.current = agentSchema;
 
+  // Provider connections are a local agent-server feature.
+  const { backend } = useActiveBackend();
+  const isLocal = backend.kind === "local";
+
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [profileName, setProfileName] = useState("");
   const [editingProfile, setEditingProfile] = useState<EditingProfile | null>(
@@ -112,6 +122,7 @@ export function LlmSettingsLocalView() {
     null,
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     setHideSectionHeader(viewMode !== "list");
@@ -195,6 +206,13 @@ export function LlmSettingsLocalView() {
             OPENAI_SUBSCRIPTION_VENDOR;
         }
 
+        // Seed the provider-connection link explicitly (it is excluded from the
+        // schema-driven inputs), so an unchanged profile keeps its connection.
+        initialValues[LLM_PROVIDER_CONNECTION_KEY] =
+          typeof config.provider_connection_id === "string"
+            ? config.provider_connection_id
+            : "";
+
         setEditingProfile({ profile, initialValues, baseConfig: config });
         setProfileName(profile.name);
         setViewMode("edit");
@@ -269,36 +287,66 @@ export function LlmSettingsLocalView() {
     const llmConfig: Record<string, unknown> = { ...baseConfig, ...dirtyLlm };
     const authType = resolveLlmAuthType(llmConfig.auth_type);
 
+    // A profile linked to a provider connection sources its credential from the
+    // connection, so it never carries an inline api_key / base_url. The form
+    // value is the source of truth: empty (or absent) means "not linked".
+    const connectionId = isLocal
+      ? String(saveControl.values[LLM_PROVIDER_CONNECTION_KEY] ?? "").trim()
+      : "";
+
     if (authType === LLM_AUTH_TYPE_SUBSCRIPTION) {
       llmConfig.auth_type = LLM_AUTH_TYPE_SUBSCRIPTION;
       llmConfig.subscription_vendor = OPENAI_SUBSCRIPTION_VENDOR;
+      llmConfig.provider_connection_id = null;
+      delete llmConfig.api_key;
+      delete llmConfig.base_url;
+    } else if (connectionId) {
+      llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
+      llmConfig.subscription_vendor = null;
+      llmConfig.provider_connection_id = connectionId;
       delete llmConfig.api_key;
       delete llmConfig.base_url;
     } else {
       llmConfig.auth_type = LLM_AUTH_TYPE_API_KEY;
       llmConfig.subscription_vendor = null;
+      // Clear any prior link so unlinking sticks (only relevant on local; on
+      // cloud the field stays untouched below).
+      if (isLocal) llmConfig.provider_connection_id = null;
 
-      // The Basic tab has no base_url field. Preserve an existing hidden value
-      // when the model did not actually change; if the user chooses a new model,
-      // drop the old base URL so provider defaults can apply to that model.
-      if (didChangeModelInBasic) {
+      // On cloud the OpenHands provider is backed by a server-minted LLM key,
+      // so the profile must not carry an inline api_key / base_url — let the
+      // backend attach its own credential when the profile is saved.
+      const isCloudOpenHandsProvider =
+        !isLocal &&
+        isOpenHandsProviderModel(
+          typeof llmConfig.model === "string" ? llmConfig.model : "",
+        );
+      if (isCloudOpenHandsProvider) {
+        delete llmConfig.api_key;
         delete llmConfig.base_url;
-      }
+      } else {
+        // The Basic tab has no base_url field. Preserve an existing hidden value
+        // when the model did not actually change; if the user chooses a new model,
+        // drop the old base URL so provider defaults can apply to that model.
+        if (didChangeModelInBasic) {
+          delete llmConfig.base_url;
+        }
 
-      // API key handling: an empty value means "no change" (the UX doesn't
-      // support clearing a key). In edit mode preserve the existing encrypted
-      // key from the profile; in create mode omit api_key entirely. A newly
-      // typed key arrives in `dirtyLlm` and wins.
-      if (
-        typeof llmConfig.api_key !== "string" ||
-        llmConfig.api_key.trim() === ""
-      ) {
-        const existingKey =
-          typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
-        if (existingKey) {
-          llmConfig.api_key = existingKey;
-        } else {
-          delete llmConfig.api_key;
+        // API key handling: an empty value means "no change" (the UX doesn't
+        // support clearing a key). In edit mode preserve the existing encrypted
+        // key from the profile; in create mode omit api_key entirely. A newly
+        // typed key arrives in `dirtyLlm` and wins.
+        if (
+          typeof llmConfig.api_key !== "string" ||
+          llmConfig.api_key.trim() === ""
+        ) {
+          const existingKey =
+            typeof baseConfig.api_key === "string" ? baseConfig.api_key : "";
+          if (existingKey) {
+            llmConfig.api_key = existingKey;
+          } else {
+            delete llmConfig.api_key;
+          }
         }
       }
     }
@@ -320,7 +368,26 @@ export function LlmSettingsLocalView() {
     });
 
     setIsSaving(true);
+    setIsValidating(true);
     try {
+      // Pre-flight validation fires a minimal completion to catch a
+      // misconfigured profile before saving it. Skip it for connection-linked
+      // profiles: their credential lives on the provider connection, not
+      // inline, so there is nothing on this profile to pre-flight here.
+      if (!connectionId) {
+        const preflight = await ProfilesService.validateProfile(trimmedName, {
+          llm: llmConfig as SaveProfileRequest["llm"],
+          include_secrets: true,
+        });
+        if (preflight && !preflight.valid) {
+          const errorMsg = preflight.error?.message ?? t(I18nKey.ERROR$GENERIC);
+          displayErrorToast(errorMsg);
+          return;
+        }
+      }
+
+      setIsValidating(false);
+
       // If editing and name changed, rename the profile first
       if (isRename) {
         await ProfilesService.renameProfile(originalName, trimmedName);
@@ -351,11 +418,13 @@ export function LlmSettingsLocalView() {
       console.error("Failed to save profile:", error);
       displayErrorToast(t(I18nKey.ERROR$GENERIC));
     } finally {
+      setIsValidating(false);
       setIsSaving(false);
     }
   }, [
     saveControl,
     isNameValid,
+    isLocal,
     profileName,
     viewMode,
     editingProfile,
@@ -423,19 +492,23 @@ export function LlmSettingsLocalView() {
         }
         embedded
         hideSaveButton
+        markInitialOverridesDirty={false}
         initialValueOverrides={
           viewMode === "edit" && editingProfile?.initialValues
             ? // Edit mode: use the existing profile values
               editingProfile.initialValues
-            : // Create mode: start with empty fields for a fresh profile
+            : // Create mode: prefill the model with Canvas' free default,
+              // while keeping secret/base URL fields blank for a fresh profile.
               {
-                "llm.model": "",
+                "llm.model": DEFAULT_SETTINGS.llm_model,
                 "llm.api_key": "",
                 "llm.base_url": "",
+                [LLM_PROVIDER_CONNECTION_KEY]: "",
                 [LLM_AUTH_TYPE_KEY]: LLM_AUTH_TYPE_API_KEY,
                 [LLM_SUBSCRIPTION_VENDOR_KEY]: OPENAI_SUBSCRIPTION_VENDOR,
               }
         }
+        showProviderConnection={isLocal}
         onSaveControlChange={handleSaveControlChange}
       />
 
@@ -454,10 +527,24 @@ export function LlmSettingsLocalView() {
           type="button"
           variant="primary"
           onClick={handleSave}
-          isDisabled={!isNameValid || isSaving || !saveControl}
-          aria-busy={isSaving}
+          isDisabled={
+            !isNameValid ||
+            isSaving ||
+            isValidating ||
+            !saveControl ||
+            !(
+              viewMode === "create" ||
+              saveControl.isDirty ||
+              profileName !== editingProfile?.profile.name
+            )
+          }
+          aria-busy={isSaving || isValidating}
         >
-          {isSaving ? t(I18nKey.STATUS$SAVING) : t(I18nKey.BUTTON$SAVE)}
+          {isValidating
+            ? t(I18nKey.STATUS$VALIDATING)
+            : isSaving
+              ? t(I18nKey.STATUS$SAVING)
+              : t(I18nKey.BUTTON$SAVE)}
         </BrandButton>
       </div>
     </div>

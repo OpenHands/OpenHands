@@ -14,6 +14,7 @@ import {
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
 import { OnboardingModal } from "#/components/features/onboarding/onboarding-modal";
 import { ONBOARDING_DEFAULT_LLM_MODEL } from "#/components/features/onboarding/steps/setup-llm-step";
+import { SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY } from "#/components/features/sidebar/sidebar-onboarding-checklist.constants";
 import { NavigationProvider } from "#/context/navigation-context";
 import SettingsService from "#/api/settings-service/settings-service.api";
 import { SecretsService } from "#/api/secrets-service";
@@ -22,6 +23,7 @@ import * as telemetry from "#/services/telemetry";
 
 const llmSettingsScreenMock = vi.hoisted(() => vi.fn());
 const getServerInfoMock = vi.hoisted(() => vi.fn());
+const getSettingsMock = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 let captureMock: MockInstance<typeof telemetry.trackEvent>;
 
 // Both the backend status badge in the embedded edit form and the
@@ -37,7 +39,7 @@ vi.mock("@openhands/typescript-client/clients", () => ({
   // `LlmSettingsScreen` is stubbed, so provide the minimal client it needs.
   SettingsClient: vi.fn(function SettingsClientMock() {
     return {
-      getSettings: vi.fn().mockResolvedValue({}),
+      getSettings: vi.fn(() => getSettingsMock()),
     };
   }),
 }));
@@ -174,7 +176,10 @@ function seedCloudBackend() {
   return backend;
 }
 
-function renderModal(onClose = vi.fn()) {
+function renderModal(
+  onClose = vi.fn(),
+  options?: { initialStep?: number },
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -188,7 +193,10 @@ function renderModal(onClose = vi.fn()) {
     <QueryClientProvider client={queryClient}>
       <ActiveBackendProvider>
         <NavigationProvider value={navigationValue}>
-          <OnboardingModal onClose={onClose} />
+          <OnboardingModal
+            onClose={onClose}
+            initialStep={options?.initialStep}
+          />
         </NavigationProvider>
       </ActiveBackendProvider>
     </QueryClientProvider>,
@@ -611,6 +619,47 @@ describe("OnboardingModal", () => {
     expect(screen.queryByText("BACKEND$LOGIN_OR")).toBeNull();
   });
 
+  it("shows a connection error when the backend API key is invalid", async () => {
+    window.localStorage.clear();
+    vi.stubEnv("VITE_BACKEND_BASE_URL", "");
+    vi.stubEnv("VITE_SESSION_API_KEY", "");
+    delete (window as unknown as Record<string, unknown>)
+      .__AGENT_CANVAS_SESSION_API_KEY__;
+    __resetActiveStoreForTests();
+
+    // Mock SettingsClient to throw a 401 error
+    const authError = new Error("Unauthorized");
+    authError.name = "HttpError";
+    (authError as any).status = 401;
+    getSettingsMock.mockRejectedValueOnce(authError);
+    // getServerInfoMock implicitly resolves, but shouldn't be reached if test is correct
+
+    renderModal();
+    const user = userEvent.setup();
+
+    await user.clear(screen.getByTestId("onboarding-backend-host"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-host"),
+      "https://127.0.0.1:8000",
+    );
+    await user.clear(screen.getByTestId("onboarding-backend-api-key"));
+    await user.type(
+      screen.getByTestId("onboarding-backend-api-key"),
+      "invalid-session-key",
+    );
+    await user.click(screen.getByTestId("onboarding-backend-next"));
+
+    expect(
+      await screen.findByTestId("onboarding-backend-error"),
+    ).toHaveTextContent("BACKEND$CONNECTION_TEST_FAILED");
+    expect(screen.getByTestId("onboarding-backend-error")).toHaveTextContent(
+      "Invalid API key", // This comes from INVALID_BACKEND_API_KEY_ERROR
+    );
+
+    // Should not advance to the next step
+    expect(screen.queryByText("BACKEND$LOGIN_OR")).toBeNull();
+  });
+
   it("shows a connection error when saving an unreachable backend", async () => {
     window.localStorage.clear();
     vi.stubEnv("VITE_BACKEND_BASE_URL", "");
@@ -642,7 +691,7 @@ describe("OnboardingModal", () => {
     );
   });
 
-  it("pre-fills the LLM step with OpenAI GPT-5.5", () => {
+  it("pre-fills the LLM step with the OpenHands default model", () => {
     renderModal();
 
     expect(llmSettingsScreenMock).toHaveBeenCalledTimes(1);
@@ -735,6 +784,12 @@ describe("OnboardingModal", () => {
     const scrollArea = screen.getByTestId("onboarding-scroll-area");
     const rail = screen.getByTestId("onboarding-slide-rail");
     expect(scrollArea.contains(rail)).toBe(true);
+    // Bottom padding matches the header (`pt-7`) so the last control is
+    // not flush against the modal edge. The region must size to its
+    // content (`min-h-0` + overflow, no `flex-1`) so a content-fitting
+    // step does not paint a leftover scrollbar.
+    expect(scrollArea).toHaveClass("pb-7");
+    expect(scrollArea).not.toHaveClass("flex-1");
   });
 
   it("keeps the LLM step heading and Back/Next outside the scrollable settings body", async () => {
@@ -964,7 +1019,7 @@ describe("OnboardingModal", () => {
     );
     expect(
       helloInput.compareDocumentPosition(recommendations) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       within(recommendations).getByTestId(
@@ -1126,6 +1181,51 @@ describe("OnboardingModal", () => {
           agent: "openhands",
         }),
       );
+    });
+  });
+
+  describe("Getting Started checklist skip", () => {
+    it("renders a centered skip checkbox below the modal on Say Hello", async () => {
+      renderModal(vi.fn(), { initialStep: 3 });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("onboarding-step-say-hello"),
+        ).toBeInTheDocument();
+      });
+
+      const checkbox = screen.getByTestId(
+        "onboarding-skip-getting-started-checklist",
+      );
+      expect(checkbox).toBeInTheDocument();
+      expect(checkbox).not.toBeChecked();
+      expect(
+        screen.getByText("ONBOARDING$SKIP_GETTING_STARTED_CHECKLIST"),
+      ).toBeInTheDocument();
+
+      const modal = screen.getByTestId("onboarding-modal");
+      expect(modal.contains(checkbox)).toBe(false);
+    });
+
+    it("persists dismissal when the skip checkbox is checked", async () => {
+      const user = userEvent.setup();
+      renderModal(vi.fn(), { initialStep: 3 });
+
+      await waitFor(() => {
+        expect(
+          screen.getByTestId("onboarding-skip-getting-started-checklist"),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByTestId("onboarding-skip-getting-started-checklist"),
+      );
+
+      expect(
+        window.localStorage.getItem(
+          SIDEBAR_ONBOARDING_CHECKLIST_DISMISSED_STORAGE_KEY,
+        ),
+      ).toBe("true");
     });
   });
 });

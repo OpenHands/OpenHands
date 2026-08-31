@@ -14,7 +14,7 @@ import type { Backend } from "#/api/backend-registry/types";
 const CONVERSATION_ID = "conv-abc123";
 
 vi.mock("#/hooks/use-conversation-id", () => ({
-  useOptionalConversationId: () => ({ conversationId: "test-conversation-id" }),
+  useOptionalConversationId: () => ({ conversationId: CONVERSATION_ID }),
   useConversationId: () => ({ conversationId: CONVERSATION_ID }),
 }));
 
@@ -64,6 +64,7 @@ describe("ConversationTabsContextMenu", () => {
 
     const expectedTabs = [
       "COMMON$FILES",
+      "DIFF_VIEWER$COMMITS",
       "COMMON$TERMINAL",
       "COMMON$BROWSER",
       // Local planning is now supported, so the Planner tab is a default tab.
@@ -72,6 +73,8 @@ describe("ConversationTabsContextMenu", () => {
     for (const tab of expectedTabs) {
       expect(screen.getByText(tab)).toBeInTheDocument();
     }
+
+    expect(screen.queryByText("FILES$DIFF_VIEW")).not.toBeInTheDocument();
   });
 
   it("should show the Planner entry when the active backend is cloud", () => {

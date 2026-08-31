@@ -1,5 +1,14 @@
-import { ReactNode } from "react";
+import { createContext, ReactNode, useContext } from "react";
+import { useOptionalConversationId } from "#/hooks/use-conversation-id";
+import { openWorkspaceFile } from "#/services/canvas-ui";
 import EventLogger from "#/utils/event-logger";
+
+/**
+ * When false, PathComponent renders a non-interactive span. EventGroup's
+ * header wraps titles in a toggle <button>, so nested path buttons would be
+ * invalid markup — that context sets this to false.
+ */
+export const PathInteractiveContext = createContext(true);
 
 /**
  * Decodes HTML entities in a string
@@ -47,27 +56,47 @@ const extractFilename = (path: string): string => {
 };
 
 /**
- * Component that displays only the filename in the text but shows the full path on hover
- * Similar to MonoComponent but with path-specific functionality
+ * Displays only the filename, with the full path on hover.
+ * Click opens the Files drawer on that path (when interactive).
  */
 function PathComponent(props: { children?: ReactNode }) {
   const { children } = props;
+  const { conversationId } = useOptionalConversationId();
+  const interactive = useContext(PathInteractiveContext);
 
   const processPath = (path: string) => {
     try {
-      // First decode any HTML entities in the path
       const decodedPath = decodeHtmlEntities(path);
-      // Extract the filename from the decoded path
       const filename = extractFilename(decodedPath);
+      if (!interactive) {
+        return (
+          <span
+            className="font-mono font-normal tracking-tight"
+            title={decodedPath}
+          >
+            {filename}
+          </span>
+        );
+      }
       return (
-        <span className="font-mono" title={decodedPath}>
+        <button
+          type="button"
+          data-testid="path-component-link"
+          className="cursor-pointer font-mono font-normal tracking-tight hover:underline"
+          title={decodedPath}
+          onClick={(event) => {
+            event.stopPropagation();
+            openWorkspaceFile(decodedPath, conversationId);
+          }}
+        >
           {filename}
-        </span>
+        </button>
       );
     } catch (e) {
-      // Just log the error without any message to avoid localization issues
       EventLogger.error(String(e));
-      return <span className="font-mono">{path}</span>;
+      return (
+        <span className="font-mono font-normal tracking-tight">{path}</span>
+      );
     }
   };
 
@@ -80,14 +109,22 @@ function PathComponent(props: { children?: ReactNode }) {
       ),
     );
 
-    return <strong className="font-mono">{processedChildren}</strong>;
+    return (
+      <span className="font-normal tracking-tight">{processedChildren}</span>
+    );
   }
 
   if (typeof children === "string") {
-    return <strong>{processPath(children)}</strong>;
+    return (
+      <span className="font-normal tracking-tight">
+        {processPath(children)}
+      </span>
+    );
   }
 
-  return <strong className="font-mono">{children}</strong>;
+  return (
+    <span className="font-mono font-normal tracking-tight">{children}</span>
+  );
 }
 
 export { PathComponent, isLikelyDirectory };

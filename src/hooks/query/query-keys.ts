@@ -26,6 +26,10 @@ export const AGENT_PROFILES_QUERY_KEYS = {
   all: ["agent-profiles"] as const,
 } as const;
 
+export const PROVIDER_CONNECTIONS_QUERY_KEYS = {
+  all: ["provider-connections"] as const,
+} as const;
+
 /** Fail fast when older backends lack the profile endpoint. */
 export const AGENT_PROFILES_RETRY_OPTIONS = {
   retry: false,
@@ -48,6 +52,22 @@ export const PLUGINS_QUERY_KEYS = {
   installed: ["plugins-installed"] as const,
   /** Locally-discovered ambient plugins (used by `use-local-plugins`). */
   local: ["plugins-local"] as const,
+} as const;
+
+export const CANVAS_EXTENSIONS_QUERY_KEYS = {
+  all: ["canvas-extensions"] as const,
+  installed: (
+    backendId: string,
+    orgId: string | null,
+    connectionRevision: number,
+  ) =>
+    [
+      "canvas-extensions",
+      "installed",
+      backendId,
+      orgId,
+      connectionRevision,
+    ] as const,
 } as const;
 
 export const SETUP_QUERY_KEYS = {

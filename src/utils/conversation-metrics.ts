@@ -1,18 +1,17 @@
 import type {
   MetricsSnapshot,
   RuntimeConversationInfo,
+  RuntimeConversationStats,
   TokenUsage,
 } from "#/api/conversation-service/agent-server-conversation-service.types";
 
 /**
  * TypeScript equivalent of the get_combined_metrics method from the Python SDK
- * Combines metrics from all LLM usage IDs in the conversation stats
+ * Combines metrics from all LLM usage IDs in a conversation's stats
  */
-export function getCombinedMetrics(
-  conversationInfo: RuntimeConversationInfo,
+export function combineUsageMetrics(
+  stats: RuntimeConversationStats | null | undefined,
 ): MetricsSnapshot {
-  const { stats } = conversationInfo;
-
   if (!stats?.usage_to_metrics) {
     return {
       accumulated_cost: 0,
@@ -71,4 +70,10 @@ export function getCombinedMetrics(
     max_budget_per_task: maxBudgetPerTask,
     accumulated_token_usage: combinedTokenUsage,
   };
+}
+
+export function getCombinedMetrics(
+  conversationInfo: RuntimeConversationInfo,
+): MetricsSnapshot {
+  return combineUsageMetrics(conversationInfo.stats);
 }
