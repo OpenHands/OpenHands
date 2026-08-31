@@ -28,17 +28,18 @@ piece of a multi-repo system. Before adding code here, check the change belongs 
 | Repo | Owns | Add code here when… |
 |------|------|---------------------|
 | **`OpenHands/OpenHands`** (this repo) | The React/TypeScript **frontend** (agent-canvas): UI, routes, frontend services in `src/api/` that *consume* backend APIs. | You are changing UI, frontend state, or how the frontend *calls* an existing backend endpoint. |
-| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server**: agents, tools, conversations, events, and the REST/WebSocket **API surface** (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`). | You are adding or changing a backend endpoint, agent/tool behaviour, or server-side logic. New API **endpoints** live here, not in the frontend. |
-| **`OpenHands/typescript-client`** (`@openhands/typescript-client`) | The generated/maintained **TypeScript client** that mirrors the agent-server API. The frontend's *only* sanctioned way to reach the agent-server (see "API Access Rules"). | You are adding client-side **access to an agent-server endpoint** (typed client method, request/response types). API-access code belongs here, **not** re-implemented in this repo. |
-| **`OpenHands/extensions`** (`@openhands/extensions`) | Public **skills, automations, and integrations** (loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, automation, or MCP integration. |
+| **`OpenHands/software-agent-sdk`** | The Python **SDK + agent-server** and browser-compatible **TypeScript client**: agents, tools, conversations, events, the REST/WebSocket API surface, and typed access to that API (`openhands-sdk`, `openhands-tools`, `openhands-agent-server`, `openhands-workspace`, `clients/typescript`). | You are adding or changing a backend endpoint, agent/tool behaviour, server-side logic, or typed client access to an agent-server endpoint. New API endpoints and client methods live there, not in the frontend. |
+| **`OpenHands/extensions`** (`@openhands/extensions`) | Reusable **skills, plugins, and integrations** (public skills are loaded here at build time via `SKILLS_CATALOG`). | You are adding or editing a skill, plugin, or MCP integration. |
+| **`OpenHands/automation`** | Automation definitions, scheduling, webhooks, run history, dispatching, and sandbox lifecycle orchestration. | You are changing when or how automation runs are scheduled and dispatched. |
 
 Common mis-placements to avoid:
 
-- **API endpoint access** → belongs in `typescript-client`, then consumed here. Do **not**
-  add raw `axios`/`fetch` endpoint code to the frontend (CI guard:
-  `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
+- **API endpoint access** → belongs in `software-agent-sdk/clients/typescript`, then
+  consumed here. Do **not** add raw `axios`/`fetch` endpoint code to the frontend
+  (CI guard: `src/api/no-direct-agent-server-calls.test.ts`; see "API Access Rules").
 - **New server endpoints / agent or tool logic** → belongs in `software-agent-sdk`.
-- **Skills / automations / integrations** → belong in `extensions`.
+- **Skills / plugins / integrations** → belong in `extensions`.
+- **Automation scheduling / dispatch lifecycle** → belongs in `automation`.
 
 ## Cross-Repository Boundaries
 
@@ -47,11 +48,11 @@ The four repositories have distinct ownership boundaries:
 | Repository | Owns |
 |---|---|
 | [`OpenHands/OpenHands`](https://github.com/OpenHands/OpenHands) | Agent Canvas frontend, user-facing control center, backend selection, and local-stack orchestration. |
-| [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and the canonical server API. |
-| [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) | Browser-compatible TypeScript client and generated/maintained types for the Agent Server API. |
-| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, and dispatching. It manages when automations run; the Agent Server/SDK executes them. |
+| [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) | Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, the canonical server API, and the browser-compatible TypeScript client under `clients/typescript/`. |
+| [`OpenHands/extensions`](https://github.com/OpenHands/extensions) | Reusable skills, plugins, and integrations. |
+| [`OpenHands/automation`](https://github.com/OpenHands/automation) | Automation definitions, scheduling, webhooks, run history, dispatching, and sandbox lifecycle orchestration. It manages when automations run; the Agent Server/SDK executes dispatched conversations. |
 
-The usual dependency direction is `software-agent-sdk` / Agent Server → OpenAPI contract → `typescript-client` → Agent Canvas. Automation scheduling and dispatching flow from Agent Canvas to `automation`, which starts work on the Agent Server/SDK. Put new server behavior and endpoints in `software-agent-sdk`, client access in `typescript-client`, UI and frontend integration in this repository, and scheduling/webhook lifecycle behavior in `automation`.
+The usual dependency direction is `software-agent-sdk` / Agent Server → OpenAPI contract → `software-agent-sdk/clients/typescript` → Agent Canvas. Automation scheduling and dispatching flow from Agent Canvas to `automation`, which starts work on the Agent Server/SDK. Put new server behavior, endpoints, and client access in `software-agent-sdk`, UI and frontend integration in this repository, reusable extensions in `extensions`, and scheduling/webhook lifecycle behavior in `automation`.
 
 All pull requests for this repository must comply with [`.agents/skills/custom-codereview-guide.md`](.agents/skills/custom-codereview-guide.md), in addition to the general contribution requirements and CI checks.
 
