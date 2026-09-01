@@ -34,6 +34,7 @@ import {
   resetPersistedSessionApiKeyCache,
 } from "../../scripts/dev-safe.mjs";
 import {
+  chmodSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -433,17 +434,23 @@ describe("buildAgentServerTelemetryEnv", () => {
   it("includes telemetry defaults in the full agent-server environment", () => {
     const env = buildAgentServerEnv(
       {
+        cwd: "/tmp/cwd",
+        backendPort: 18000,
         tmuxTmpDir: "/tmp/tmux",
         stateDir: "/tmp/state",
         conversationsPath: "/tmp/conversations",
+        workspacesPath: "/tmp/workspaces",
         bashEventsDir: "/tmp/bash-events",
         vscodePort: 19000,
+        vscodeBasePath: "/vscode",
         secretKey: "secret",
         sessionApiKey: "session",
         backendBaseUrl: "http://127.0.0.1:18000",
+        backendHost: "127.0.0.1:18000",
+        workingDir: "/tmp/workspaces",
         canvasToolsDir: "/tmp/tools",
       },
-      {},
+      { env: {} },
     );
 
     expect(env).toMatchObject({
@@ -461,20 +468,22 @@ describe("buildAgentServerCommand", () => {
     // Defaults to the released PyPI version with all SDK packages pinned to same version
     expect(cmd.args).toEqual([
       "--from",
-      "openhands-agent-server==1.42.1",
+      "openhands-agent-server==1.44.1",
       "--with",
-      "openhands-sdk==1.42.1",
+      "openhands-sdk==1.44.1",
       "--with",
-      "openhands-tools==1.42.1",
+      "openhands-tools==1.44.1",
       "--with",
-      "openhands-workspace==1.42.1",
+      "openhands-workspace==1.44.1",
       "--with",
       "agent-client-protocol<0.11",
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
-    expect(cmd.source).toBe("PyPI (1.42.1, default)");
+    expect(cmd.source).toBe("PyPI (1.44.1, default)");
   });
 
   it("uses specific PyPI version when OH_AGENT_SERVER_VERSION is set with all packages pinned", () => {
@@ -497,6 +506,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -520,6 +531,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -541,6 +554,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -577,6 +592,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "posthog>=6,<7",
       "agent-server",
+      "--import-modules",
+      "canvas_ui_tool",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -595,6 +612,27 @@ describe("buildAgentServerCommand", () => {
       "git+https://github.com/OpenHands/software-agent-sdk@feature-branch#subdirectory=openhands-agent-server",
     );
     expect(cmd.args).not.toContain("openhands-agent-server==1.18.0");
+  });
+
+  it("passes --import-modules to the agent-server, after the executable, in every source mode", () => {
+    // The flag must sit after "agent-server" so uvx hands it to the server
+    // instead of parsing it itself. tools/canvas_ui_tool.py documents why the
+    // module has to be imported before any conversation is created.
+    const variants = [
+      {},
+      { OH_AGENT_SERVER_VERSION: "1.18.0" },
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ];
+    for (const env of variants) {
+      const { args } = buildAgentServerCommand(env);
+      const executable = args.indexOf("agent-server");
+      expect(executable).toBeGreaterThan(-1);
+      expect(args.slice(executable + 1)).toEqual([
+        "--import-modules",
+        "canvas_ui_tool",
+      ]);
+    }
   });
 
   it("rejects relative OH_AGENT_SERVER_LOCAL_PATH", () => {
@@ -948,6 +986,107 @@ describe("dev-safe CLI startup", () => {
     expect(output).toContain("npm run dev:mock");
     expect(output).toContain("spawn uvx ENOENT");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "cleans up the detached agent-server when the launcher receives SIGHUP",
+    async () => {
+      // Services are spawned detached (getProcessTreeSpawnOptions), so killing
+      // the launcher does not kill them. Drive the real launcher with a stub
+      // agent-server, then SIGHUP the launcher and assert the stub's port is
+      // released rather than held by a survivor.
+      const stubDir = mkdtempSync(path.join(tmpdir(), "dev-safe-sighup-"));
+      const stubJs = path.join(stubDir, "stub-agent-server.mjs");
+      const uvxStub = path.join(stubDir, "uvx");
+
+      writeFileSync(
+        stubJs,
+        [
+          'import net from "node:net";',
+          'const portIndex = process.argv.indexOf("--port");',
+          "const port = Number(process.argv[portIndex + 1]);",
+          "const server = net.createServer(() => {});",
+          'server.listen(port, "127.0.0.1", () => {',
+          '  console.log("STUB_LISTENING", process.pid, port);',
+          "});",
+          "setInterval(() => {}, 1_000);",
+        ].join("\n"),
+      );
+      writeFileSync(
+        uvxStub,
+        `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(stubJs)} "$@"\n`,
+      );
+      chmodSync(uvxStub, 0o755);
+
+      const backendPort = await findFreePort(0);
+      const isPortListening = async () =>
+        new Promise<boolean>((resolve) => {
+          const socket = net
+            .connect(backendPort, "127.0.0.1")
+            .on("connect", () => {
+              socket.destroy();
+              resolve(true);
+            })
+            .on("error", () => resolve(false));
+        });
+
+      const launcher = spawn(process.execPath, ["scripts/dev-safe.mjs"], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          PATH: `${stubDir}${path.delimiter}${process.env.PATH ?? ""}`,
+          OH_CANVAS_SAFE_BACKEND_PORT: String(backendPort),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let output = "";
+      let stubPid: number | undefined;
+      const capture = (chunk: Buffer) => {
+        output += chunk.toString();
+        const stubMatch = output.match(/STUB_LISTENING (\d+)/);
+        if (stubMatch) stubPid = Number(stubMatch[1]);
+      };
+      launcher.stdout.on("data", capture);
+      launcher.stderr.on("data", capture);
+
+      try {
+        const readyDeadline = Date.now() + 20_000;
+        let listening = false;
+        while (!listening && Date.now() < readyDeadline) {
+          if (launcher.exitCode !== null) break;
+          listening = await isPortListening();
+          if (!listening) await delay(100);
+        }
+        expect(listening, output).toBe(true);
+
+        launcher.kill("SIGHUP");
+        await Promise.race([once(launcher, "exit"), delay(10_000)]);
+
+        // shutdown() forwards SIGTERM, then SIGKILLs after 3s.
+        const freeDeadline = Date.now() + 12_000;
+        let stillListening = true;
+        while (stillListening && Date.now() < freeDeadline) {
+          stillListening = await isPortListening();
+          if (stillListening) await delay(200);
+        }
+        expect(stillListening, output).toBe(false);
+      } finally {
+        if (launcher.exitCode === null) launcher.kill("SIGKILL");
+        // The stub is a detached process-group leader, so killing the launcher
+        // does not reap it. Without this, the regression path this test exists
+        // to catch would itself leave the stub holding its port indefinitely.
+        if (stubPid !== undefined) {
+          try {
+            process.kill(-stubPid, "SIGKILL");
+          } catch {
+            // Already gone, which is the passing path.
+          }
+        }
+        rmSync(stubDir, { recursive: true, force: true });
+      }
+    },
+    45_000,
+  );
 });
 
 interface RuntimeServiceEntry {

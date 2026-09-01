@@ -65,12 +65,19 @@ describe("RecommendedAutomationsRail", () => {
       );
 
     expect(cardIds).toEqual([
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
     ]);
     expect(
       screen.getByText(I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_LABEL),
@@ -115,12 +122,19 @@ describe("RecommendedAutomationsRail", () => {
       <RecommendedAutomationsRail
         installedAutomations={[
           { name: "GitHub Code Review Agent" },
-          { name: "GitHub repository monitor" },
+          { name: "GitHub Issue to PR Agent" },
           { name: "Slack channel monitor" },
+          { name: "AGENTS.md Maintainer" },
+          { name: "Daily news digest" },
           { name: "Slack standup digest" },
           { name: "Linear issue triage assistant" },
           { name: "Jira issue to GitHub PR" },
           { name: "Research brief writer" },
+          { name: "Linear issue to GitHub PR" },
+          { name: "Linear issue to GitLab MR" },
+          { name: "Linear issue to Bitbucket PR" },
+          { name: "Jira issue to GitLab MR" },
+          { name: "Jira issue to Bitbucket PR" },
         ]}
         onSelect={vi.fn()}
       />,

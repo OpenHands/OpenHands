@@ -95,6 +95,8 @@ export default defineConfig(({ mode }) => {
     VITE_FRONTEND_PORT = "3001",
     VITE_INSECURE_SKIP_VERIFY = "false",
     VITE_BASE_PATH,
+    VITE_VSCODE_BASE_PATH,
+    VITE_VSCODE_TARGET,
     // Runtime-services metadata for the dev server, passed by launchers that
     // run the Vite dev server directly (e.g. dev:minimal). Unlike
     // ingress/static-server, the Vite proxy cannot post-process the upstream
@@ -437,6 +439,28 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: !INSECURE_SKIP_VERIFY,
         },
+        // The bundled editor, when the launcher put agent-server into
+        // prefix-mode (`dev:minimal` — see VITE_VSCODE_TARGET in
+        // scripts/dev-safe.mjs). agent-server then advertises
+        // `<origin><prefix>/?tkn=…`, and this origin is Vite's, so without
+        // this entry the prefix falls through to the SPA and the editor
+        // button opens a second copy of the canvas.
+        //
+        // The prefix is preserved, not rewritten: openvscode-server is
+        // launched with `--server-base-path`, generates its HTTP and
+        // WebSocket URLs beneath the prefix, and only answers there.
+        // `ws: true` because the workbench upgrades to a WebSocket
+        // immediately on load.
+        ...(VITE_VSCODE_BASE_PATH && VITE_VSCODE_TARGET
+          ? {
+              [VITE_VSCODE_BASE_PATH]: {
+                target: VITE_VSCODE_TARGET,
+                ws: true,
+                changeOrigin: true,
+                secure: !INSECURE_SKIP_VERIFY,
+              },
+            }
+          : {}),
       },
       watch: {
         ignored: ["**/node_modules/**", "**/.git/**"],

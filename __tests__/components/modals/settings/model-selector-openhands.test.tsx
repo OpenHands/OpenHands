@@ -69,18 +69,12 @@ describe("ModelSelector — OpenHands provider display", () => {
 
   it("makes clear which OpenHands models are free", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ModelSelector currentModel="openhands/glm-5.2" />);
+    renderWithQuery(<ModelSelector currentModel="openhands/deepseek-v4-flash" />);
 
     await waitFor(() => {
-      expect(
-        screen.getByTestId("openhands-free-models-note"),
-      ).toHaveTextContent("openhands/glm-5.2");
     });
     expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
       "openhands/deepseek-v4-flash",
-    );
-    expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
-      "openhands/minimax-m2.7",
     );
     expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
       "Free",
@@ -88,12 +82,12 @@ describe("ModelSelector — OpenHands provider display", () => {
 
     await user.click(screen.getByLabelText("LLM$MODEL"));
 
-    expect(screen.getAllByText("Free")).toHaveLength(4);
-    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("glm-5.2");
+    expect(screen.getAllByText("Free")).toHaveLength(2);
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
 
-    await user.click(screen.getByText("minimax-m2.7"));
+    await user.click(screen.getByRole("option", { name: /deepseek-v4-flash/ }));
 
-    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("minimax-m2.7");
+    expect(screen.getByLabelText("LLM$MODEL")).toHaveValue("deepseek-v4-flash");
     expect(screen.getByTestId("selected-free-model-badge")).toHaveTextContent(
       "Free",
     );

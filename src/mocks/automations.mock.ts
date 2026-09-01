@@ -145,6 +145,11 @@ export const MOCK_AUTOMATIONS_RESPONSE: AutomationsResponse = {
       plugins: ["GitHub"],
       notification: "GitHub PR comment",
       last_triggered_at: daysAgo(0),
+      // Template provenance, as the setup flow stores it. The other mock
+      // automations stay without one to exercise the no-statement path.
+      preset_metadata: {
+        template: { id: "github-pr-reviewer", version: "1.0.0", config: {} },
+      },
     },
     {
       id: "a1000000-0000-0000-0000-000000000007",

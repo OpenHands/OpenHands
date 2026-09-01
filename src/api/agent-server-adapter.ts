@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -26,6 +27,12 @@ import {
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
 import { combineUsageMetrics } from "#/utils/conversation-metrics";
+import {
+  buildSkillEnablementFilter,
+  findInvokedCatalogSkill,
+  toSkillEnablement,
+  type SkillEnablement,
+} from "#/utils/skill-enablement";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -749,7 +756,8 @@ function buildBundledSkills(): BundledSkill[] {
 function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
-  disabledSkills: string[] = [],
+  enablement: SkillEnablement = {},
+  invokedCatalogSkill?: string,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -760,11 +768,25 @@ function buildAgentContext(
   const existingSkills = Array.isArray(existingContext.skills)
     ? (existingContext.skills as SettingsRecord[])
     : [];
+  const disabledSkills = enablement.disabledSkills ?? [];
   const disabledSkillNames = new Set(disabledSkills);
-  const mergedSkills = [...existingSkills, ...buildBundledSkills()].filter(
-    (skill) =>
-      typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
-  );
+  const isSkillEnabled = buildSkillEnablementFilter(enablement);
+
+  // The bundled catalog is allow-listed, not deny-listed: it is a build-time
+  // snapshot of ~60 skills, so a deny-list puts every future addition into
+  // every system prompt (OpenHands#16302). Skills the agent context already
+  // carries are user-authored and stay opt-out. A skill the opening message
+  // invokes by name overrides both, for this conversation only.
+  const mergedSkills = [
+    ...existingSkills.filter(
+      (skill) =>
+        typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
+    ),
+    ...buildBundledSkills().filter(
+      (skill) =>
+        skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
+    ),
+  ];
 
   return {
     ...existingContext,
@@ -781,6 +803,11 @@ function buildAgentContext(
     load_public_skills: false,
     load_user_skills: true,
     load_project_skills: true,
+    // The backend also auto-loads user/project skills; the deny-list must
+    // travel with the context so those skills are excluded from the system
+    // prompt too. The allow-list has no counterpart to send: the backend
+    // loads no catalog skills of its own (`load_public_skills` is false).
+    disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix
       ? { system_message_suffix: runtimeServicesSuffix }
       : {}),
@@ -817,6 +844,7 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
 function buildConfiguredAcpAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
@@ -824,7 +852,8 @@ function buildConfiguredAcpAgentSettings(
     agent_context: buildAgentContext(
       agentSettings,
       runtimeServicesInfo,
-      settings.disabled_skills,
+      toSkillEnablement(settings),
+      findInvokedCatalogSkill(query),
     ),
   };
 
@@ -883,6 +912,7 @@ function buildConfiguredAcpAgentSettings(
 function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = toRecord(agentSettings.llm);
@@ -940,7 +970,8 @@ function buildConfiguredOpenHandsAgentSettings(
     agent_context: buildAgentContext(
       agentSettings,
       runtimeServicesInfo,
-      settings.disabled_skills,
+      toSkillEnablement(settings),
+      findInvokedCatalogSkill(query),
     ),
     tools: getAgentTools(agentSettings),
   };
@@ -949,10 +980,15 @@ function buildConfiguredOpenHandsAgentSettings(
 function buildConfiguredAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo)
-    : buildConfiguredOpenHandsAgentSettings(settings, runtimeServicesInfo);
+    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo, query)
+    : buildConfiguredOpenHandsAgentSettings(
+        settings,
+        runtimeServicesInfo,
+        query,
+      );
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -1045,6 +1081,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  workspaceHookConfig?: HookConfig | null;
 }
 
 export function buildStartConversationRequest(
@@ -1063,6 +1100,7 @@ export function buildStartConversationRequest(
   const agentSettings = buildConfiguredAgentSettings(
     sourceAgentSettings,
     options.runtimeServicesInfo,
+    options.query,
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
@@ -1182,6 +1220,8 @@ export function buildStartConversationRequest(
 
   if (conversationSettings.hook_config) {
     payload.hook_config = conversationSettings.hook_config;
+  } else if (options.workspaceHookConfig) {
+    payload.hook_config = options.workspaceHookConfig;
   }
 
   const toolModuleQualnames = {
@@ -1259,19 +1299,29 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   parentConversationId?: string;
   workingDir?: string;
+  /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
+  hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
-  const { SecretsService } = await import("./secrets-service");
+  const [{ SecretsService }, { default: HooksService }] = await Promise.all([
+    import("./secrets-service"),
+    import("./hooks-service"),
+  ]);
 
-  const [settingsResult, customSecrets, runtimeServicesInfo] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendRuntimeServicesInfo(),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    runtimeServicesInfo,
+    workspaceHookConfig,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendRuntimeServicesInfo(),
+    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+  ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
@@ -1289,6 +1339,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    workspaceHookConfig,
   });
 }
 

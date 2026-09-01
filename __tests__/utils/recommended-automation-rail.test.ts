@@ -49,8 +49,10 @@ describe("recommended automation rail", () => {
     ]);
 
     expect(groups.proven.map((entry) => entry.id)).toEqual([
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
     ]);
   });
 
@@ -60,17 +62,29 @@ describe("recommended automation rail", () => {
 
     expect(groups.proven.map((entry) => entry.id)).toEqual([
       "github-pr-reviewer",
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
     ]);
     expect(conversationIds).toEqual([
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
     ]);
     expect(conversationIds).not.toContain("upstream-fork-sync");
     expect(conversationIds).not.toContain("incident-retrospective-drafter");
+    // Beta as of extensions 0.18.0, and set up by a host form rather than a
+    // conversation, so it is in neither group.
+    expect(conversationIds).not.toContain("github-repo-monitor");
+    // Same for `qa-changes` (extensions 0.19.0): host form, so neither group.
+    expect(conversationIds).not.toContain("qa-changes");
     expect(isConversationLaunchAutomation(slackStandup)).toBe(true);
     expect(isConversationLaunchAutomation(upstreamFork)).toBe(false);
     expect(SETUP_REGISTRY.findById(upstreamFork.id)).not.toBeNull();
@@ -79,12 +93,19 @@ describe("recommended automation rail", () => {
   it("returns an empty rail when every recommended automation has been added", () => {
     const groups = getRecommendedRailGroups([
       { name: "GitHub Code Review Agent" },
-      { name: "GitHub repository monitor" },
+      { name: "GitHub Issue to PR Agent" },
       { name: "Slack channel monitor" },
+      { name: "AGENTS.md Maintainer" },
+      { name: "Daily news digest" },
       { name: "Slack standup digest" },
       { name: "Linear issue triage assistant" },
       { name: "Jira issue to GitHub PR" },
       { name: "Research brief writer" },
+      { name: "Linear issue to GitHub PR" },
+      { name: "Linear issue to GitLab MR" },
+      { name: "Linear issue to Bitbucket PR" },
+      { name: "Jira issue to GitLab MR" },
+      { name: "Jira issue to Bitbucket PR" },
     ]);
 
     expect(flattenRecommendedRailGroups(groups)).toEqual([]);

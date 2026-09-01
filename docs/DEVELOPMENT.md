@@ -8,6 +8,18 @@ This document is for contributors working on `agent-canvas` itself.
 `uvx`, Vite dev server with live reload, and an ingress proxy) — all without
 Docker.
 
+## Repository boundaries
+
+This repository contains the Agent Canvas frontend and local-stack orchestration. Use the sibling repositories for their owned layers:
+
+- [`OpenHands/software-agent-sdk`](https://github.com/OpenHands/software-agent-sdk) owns the Python SDK, Agent Server, agent/tool behavior, conversations, workspaces, events, and server API.
+- [`OpenHands/typescript-client`](https://github.com/OpenHands/typescript-client) owns browser-compatible typed access to that Agent Server API. Add client methods there rather than reimplementing API calls in Canvas.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations.
+- [`OpenHands/extensions`](https://github.com/OpenHands/extensions) owns reusable skills, plugins, automations, and integrations; [`OpenHands/automation`](https://github.com/OpenHands/automation) owns automation definitions, scheduling, webhooks, run history, and dispatching; Agent Server/SDK code executes the dispatched conversations.
+
+When a feature crosses repositories, implement the backend contract in the SDK first, expose it through `typescript-client`, and consume it in Canvas. Coordinate automation lifecycle changes in `automation`. See the repository [contributor notes](../AGENTS.md) and follow the [custom code-review guide](../.agents/skills/custom-codereview-guide.md) for every pull request.
+
+
 For a static frontend build (better for slow networks, remote access, tunnels):
 
 ```sh

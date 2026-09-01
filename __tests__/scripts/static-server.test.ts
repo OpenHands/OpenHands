@@ -2,7 +2,7 @@ import { createServer, request, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseArgs, startStaticServer } from "../../scripts/static-server.mjs";
 
@@ -145,6 +145,31 @@ describe("static-server.mjs", () => {
       expect(config.lockToCloud).toBeNull();
     });
 
+    it("defaults disableTelemetry to false", () => {
+      const config = parseArgs([], {});
+      expect(config.disableTelemetry).toBe(false);
+    });
+
+    it("parses --disable-telemetry", () => {
+      const config = parseArgs(["--disable-telemetry"], {});
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=1", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "1" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=true", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "true" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("ignores a falsy AGENT_CANVAS_DISABLE_TELEMETRY value", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "0" });
+      expect(config.disableTelemetry).toBe(false);
+    });
+
     it("defaults basePath to root", () => {
       const config = parseArgs([]);
       expect(config.basePath).toBe("/");
@@ -169,6 +194,108 @@ describe("static-server.mjs", () => {
     it("treats empty string as null for runtime services info", () => {
       const config = parseArgs(["--runtime-services-info", ""]);
       expect(config.runtimeServicesInfo).toBeNull();
+    });
+  });
+
+  describe("--vscode-base-path", () => {
+    it("parses the prefix and normalizes a trailing slash", () => {
+      const config = parseArgs([
+        "--route",
+        "/vscode=http://127.0.0.1:8001",
+        "--vscode-base-path",
+        "/vscode/",
+      ]);
+      expect(config.vscodeBasePath).toBe("/vscode");
+    });
+
+    it("defaults to null so an origin advertises nothing unless asked", () => {
+      expect(parseArgs([]).vscodeBasePath).toBeNull();
+    });
+
+    it("rejects a value that is not a path", () => {
+      expect(() => parseArgs(["--vscode-base-path", "vscode"])).toThrow(
+        /must start with '\//,
+      );
+    });
+
+    // The guard that makes this flag trustworthy: advertising the editor and
+    // routing it are the same decision, so a prefix with no route behind it
+    // must not start. Without it, the frontend would render the control and
+    // the navigation would fall through to the SPA — the exact bug the flag
+    // exists to prevent.
+    it("refuses to start when the advertised prefix has no matching route", () => {
+      const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("process.exit");
+      }) as never);
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        expect(() =>
+          parseArgs([
+            "--route",
+            "/api=http://127.0.0.1:8000",
+            "--vscode-base-path",
+            "/vscode",
+          ]),
+        ).toThrow("process.exit");
+        expect(exit).toHaveBeenCalledWith(1);
+        expect(error.mock.calls[0][0]).toContain("has no matching --route");
+      } finally {
+        exit.mockRestore();
+        error.mockRestore();
+      }
+    });
+  });
+
+  describe("vscode base path injection", () => {
+    async function startServerAdvertising(
+      dir: string,
+      vscodeBasePath: string | null,
+    ) {
+      const server = await startStaticServer({
+        port: 0,
+        host: "127.0.0.1",
+        dir,
+        routes: {},
+        vscodeBasePath,
+      });
+      servers.push(server);
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Static server did not bind to a TCP port");
+      }
+      return `http://127.0.0.1:${address.port}`;
+    }
+
+    function makeBuildDir() {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+      return buildDir;
+    }
+
+    // Read by getOriginVSCodeBasePath() in src/utils/vscode-origin.ts, which
+    // is what lets the frontend tell "this server has an editor" apart from
+    // "this origin can reach it".
+    it("exposes the prefix on window.__AGENT_CANVAS_VSCODE_BASE_PATH__", async () => {
+      const origin = await startServerAdvertising(makeBuildDir(), "/vscode");
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain(
+        'window.__AGENT_CANVAS_VSCODE_BASE_PATH__="/vscode"',
+      );
+    });
+
+    // Public mode: the same document, served without the advertisement, is
+    // what hides the control on an origin that has no editor route.
+    it("injects nothing when the origin serves no editor", async () => {
+      const origin = await startServerAdvertising(makeBuildDir(), null);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_VSCODE_BASE_PATH__");
     });
   });
 
@@ -372,6 +499,57 @@ describe("static-server.mjs", () => {
 
       expect(response.status).toBe(200);
       expect(body).toContain("__AGENT_CANVAS_LOCK_TO_CLOUD__");
+    });
+  });
+
+  describe("disable-telemetry injection", () => {
+    async function startServerWithDisabledTelemetry(dir: string) {
+      const origin = await startServer(dir, { disableTelemetry: true });
+      return origin;
+    }
+
+    it("exposes window.__AGENT_CANVAS_DO_NOT_TRACK__ when enabled", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithDisabledTelemetry(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_DO_NOT_TRACK__=true");
+    });
+
+    it("injects the flag into the SPA fallback index.html", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithDisabledTelemetry(buildDir);
+      const response = await fetch(`${origin}/some/deep/route`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("window.__AGENT_CANVAS_DO_NOT_TRACK__=true");
+    });
+
+    it("does not inject the flag when telemetry is not disabled", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_DO_NOT_TRACK__");
     });
   });
 
@@ -626,6 +804,32 @@ describe("static-server.mjs", () => {
 
       expect(response.status).toBe(404);
     });
+  });
+
+  describe("--no-referrer-prefix", () => {
+    it("defaults to none", () => {
+      expect(parseArgs([]).noReferrerPrefixes).toEqual([]);
+    });
+
+    it("collects repeated prefixes", () => {
+      const config = parseArgs([
+        "--no-referrer-prefix",
+        "/vscode",
+        "--no-referrer-prefix",
+        "/editor",
+      ]);
+      expect(config.noReferrerPrefixes).toEqual(["/vscode", "/editor"]);
+    });
+
+    it("rejects a prefix without a leading slash", () => {
+      expect(() => parseArgs(["--no-referrer-prefix", "vscode"])).toThrow(
+        /must start with/,
+      );
+    });
+
+    // Behaviour on a live proxied response is covered in ingress.test.ts,
+    // which drives a real child process; an in-process proxy deadlocks against
+    // the MSW interceptor this suite installs globally.
   });
 
   it("keeps paths confined to the static directory", async () => {

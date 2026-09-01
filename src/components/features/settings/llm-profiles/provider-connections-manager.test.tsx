@@ -1,4 +1,5 @@
 import { screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "test-utils";
 import ProviderConnectionsService, {
@@ -12,6 +13,17 @@ const displaySuccessToast = vi.hoisted(() => vi.fn());
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast,
   displaySuccessToast,
+}));
+
+vi.mock("#/hooks/query/use-search-providers", () => ({
+  useSearchProviders: () => ({
+    data: [
+      { name: "openai", verified: true },
+      { name: "anthropic", verified: true },
+      { name: "openhands", verified: true },
+      { name: "azure", verified: false },
+    ],
+  }),
 }));
 
 const renderWith = (ui: React.ReactElement) => renderWithProviders(ui);
@@ -51,6 +63,79 @@ describe("ProviderConnectionsManager", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows supported providers in the create-connection selector", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("OpenHands")).toBeInTheDocument();
+    expect(screen.getByText("Azure")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Anthropic"));
+    expect(providerSelector).toHaveValue("Anthropic");
+  });
+
+  it("submits the raw provider id when creating a connection", async () => {
+    const user = userEvent.setup();
+    const createSpy = vi
+      .spyOn(ProviderConnectionsService, "create")
+      .mockResolvedValue({
+        ...connection,
+        id: "conn-anthropic",
+        display_name: "My Anthropic",
+        provider: "anthropic",
+      });
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "My Anthropic",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-anthropic"));
+
+    await user.type(
+      screen.getByTestId("provider-connection-api-key-input"),
+      "test-key",
+    );
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: "anthropic" }),
+      );
+    });
+  });
+
   it("lists a row per connection with its display name and provider", () => {
     renderWith(
       <ProviderConnectionsManager
@@ -64,6 +149,31 @@ describe("ProviderConnectionsManager", () => {
     expect(screen.getByTestId("provider-connection-row")).toBeInTheDocument();
     expect(screen.getByText("My OpenAI")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
+  });
+
+  it("shows supported providers in the edit-connection selector", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[connection]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("provider-connection-edit"));
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    expect(providerSelector).toHaveValue("OpenAI");
+
+    await user.click(providerSelector);
+
+    expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("OpenHands")).toBeInTheDocument();
   });
 
   it("surfaces the server message when deleting a referenced connection fails", async () => {

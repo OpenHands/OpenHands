@@ -3,19 +3,14 @@ import axios from "axios";
 import { useQueries } from "@tanstack/react-query";
 import { HttpError } from "@openhands/typescript-client";
 import {
-  ServerClient,
-  SettingsClient,
-} from "@openhands/typescript-client/clients";
-import {
   getCloudOrganizations,
   getCurrentCloudApiKey,
 } from "#/api/cloud/organization-service.api";
 import {
-  assertAgentServerVersionIsSupported,
-  isSdkHttpStatusError,
+  validateLocalBackend,
+  INVALID_BACKEND_API_KEY_ERROR,
 } from "#/api/agent-server-compatibility";
 import type { Backend } from "#/api/backend-registry/types";
-import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import {
   isCorsOrNetworkError,
   isCorsOrNetworkErrorMessage,
@@ -28,9 +23,12 @@ import {
 } from "#/api/backend-registry/health-store";
 import { MAX_CONSECUTIVE_FAILURES } from "#/api/backend-registry/health-storage";
 
-const REFRESH_INTERVAL_MS = 10000;
+// 30s: each tick costs two sequential requests per backend (settings +
+// server_info), which on slow links measurably competes with conversation
+// traffic for the browser's per-origin HTTP/1.1 connection pool.
+const REFRESH_INTERVAL_MS = 30000;
 const PROBE_TIMEOUT_MS = 4000;
-export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
+export { INVALID_BACKEND_API_KEY_ERROR } from "#/api/agent-server-compatibility";
 export const MISSING_BACKEND_API_KEY_ERROR = "API key required";
 export const CLOUD_BACKEND_API_KEY_OR_NETWORK_ERROR =
   "Cloud API key or network issue";
@@ -111,22 +109,7 @@ async function probeBackend(backend: Backend): Promise<true> {
     return true;
   }
 
-  try {
-    const clientOptions = getAgentServerClientOptions({
-      host: backend.host,
-      sessionApiKey: backend.apiKey || null,
-      timeout: PROBE_TIMEOUT_MS,
-    });
-
-    await new SettingsClient(clientOptions).getSettings();
-    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
-    assertAgentServerVersionIsSupported(serverInfo);
-  } catch (error) {
-    if (isSdkHttpStatusError(error, 401)) {
-      throw new Error(INVALID_BACKEND_API_KEY_ERROR);
-    }
-    throw error;
-  }
+  await validateLocalBackend(backend, PROBE_TIMEOUT_MS);
   return true;
 }
 
@@ -142,10 +125,10 @@ const PROBE_RETRY_DELAY_MS = 300;
  *
  * The connectivity indicator (and the onboarding "backend connected" banner)
  * only flips green once a probe succeeds. With `retry: false` at the query
- * level and a REFRESH_INTERVAL_MS (10s) poll, a single transient first-probe
+ * level and a REFRESH_INTERVAL_MS (30s) poll, a single transient first-probe
  * miss — the agent-server still warming up right after navigation, a momentary
- * proxy 5xx, a dropped connection — would otherwise leave the banner stuck for
- * a full 10s until the next scheduled refetch. That is the root cause of the
+ * proxy 5xx, a dropped connection — would otherwise leave the banner stuck
+ * until the next scheduled refetch. That is the root cause of the
  * flaky onboarding e2e "backend health probe should report connected" timeout.
  *
  * Retrying here, inside the query function rather than via React Query's

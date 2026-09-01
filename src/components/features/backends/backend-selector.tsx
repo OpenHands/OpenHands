@@ -254,6 +254,10 @@ export function BackendSelector({
   }, [onOpenManageBackends, onSelectOption]);
 
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // A cookie-auth (OHE-hosted) Canvas has nothing to add, manage, or
+  // reconnect — its single locked backend is owned by the main-app session.
+  const hideBackendFooter =
+    isLockedToCloud && active.backend.authMode === "cookie";
 
   const preventDropdownMenuClose = React.useCallback(
     (event: React.SyntheticEvent<HTMLButtonElement>) => {
@@ -295,7 +299,7 @@ export function BackendSelector({
     [openManageBackendsModal, preventDropdownMenuClose],
   );
 
-  const addBackendFooter = (
+  const addBackendFooter = hideBackendFooter ? undefined : (
     <div className={dropdownMenuListClassName}>
       {isLockedToCloud ? null : (
         <button

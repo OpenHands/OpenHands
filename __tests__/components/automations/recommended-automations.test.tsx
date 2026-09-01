@@ -206,12 +206,21 @@ describe("recommended automations", () => {
 
     expect(cardIds).toEqual([
       "github-pr-reviewer",
-      "github-repo-monitor",
+      "github-issue-to-pr",
       "slack-channel-monitor",
+      "github-agents-md-maintainer",
+      "news-digest",
+      "github-repo-monitor",
       "slack-standup-digest",
       "linear-triage-assistant",
+      "linear-issue-to-github-pr",
+      "linear-issue-to-gitlab-mr",
+      "linear-issue-to-bitbucket-pr",
       "jira-issue-to-pr",
+      "qa-changes",
+      "jira-issue-to-gitlab-mr",
       "research-brief-writer",
+      "jira-issue-to-bitbucket-pr",
       "upstream-fork-sync",
       "incident-retrospective-drafter",
     ]);
@@ -229,7 +238,7 @@ describe("recommended automations", () => {
     const provenHeading = screen.getByText(
       I18nKey.RECOMMENDED_AUTOMATIONS$SECTION_TITLE,
     ).parentElement!;
-    expect(within(provenHeading).getByText("3")).toBeInTheDocument();
+    expect(within(provenHeading).getByText("5")).toBeInTheDocument();
 
     const betaHeading = screen.getByTestId(
       "recommended-automations-beta-heading",
@@ -237,7 +246,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("6")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("13")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -314,6 +323,24 @@ describe("recommended automations", () => {
         "recommended-automation-icon-incident-retrospective-drafter",
       ),
     ).toHaveAttribute("data-layout", "quadrants");
+  });
+
+  it("shows the declared glyph instead of a logo stack when an entry names one", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    // `news-digest` connects to nothing, so there are no logos to stack; it
+    // names its own glyph, and the badge must render that rather than the
+    // generic placeholder a bare empty stack would give.
+    const badge = screen.getByTestId("recommended-automation-icon-news-digest");
+    expect(badge).not.toHaveAttribute("data-layout");
+    expect(badge.querySelector("svg")).toBeInTheDocument();
+    expect(badge.querySelector("img")).not.toBeInTheDocument();
   });
 
   it("renders missing MCP connect copy as a pill on the same row", () => {
