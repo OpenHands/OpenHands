@@ -17,7 +17,7 @@
     "agent-canvas": "bin/agent-canvas.mjs"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "@heroui/react": "2.8.10",
