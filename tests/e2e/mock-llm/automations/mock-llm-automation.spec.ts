@@ -399,7 +399,7 @@ test.describe("mock-LLM automation lifecycle", () => {
       // ── Automation run's conversation (responses 4+) ──
       // The run starts a fresh conversation with the automation prompt.
       // Script one internal padding call + the required `finish` tool turn
-      // (plus a trailing safety blank** so the run reaches COMPLETED.
+      // (plus two trailing safety blanks** so the run reaches COMPLETED.
       { text: "" }, // 4: possible internal/condenser call
       {
         // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
@@ -414,6 +414,7 @@ test.describe("mock-LLM automation lifecycle", () => {
         },
       },
       { text: "" }, // 6: safety buffer for any follow-up internal call after finish
+      { text: "" }, // 7: final safety — the run conversation consumes 4 LLM turns
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
