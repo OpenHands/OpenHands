@@ -18,6 +18,74 @@ can reach it from anywhere via a browser.
 4. **(Optional) Get a domain** — point a domain at the machine with nginx + Let's Encrypt for TLS
 5. **(Optional) Connect locally** — add the remote as a backend in your local Agent Canvas
 
+## Separated Docker topology
+
+The repository also provides a container topology that keeps the local control
+plane (Canvas, Automation, and ingress) separate from the Agent Server sandbox.
+It exposes the same Canvas port and routes as the all-in-one image; only the
+internal Agent Server host changes from loopback to a private Compose service.
+
+Start both containers with one command:
+
+```bash
+npm run dev:docker:separated -- --detach
+```
+
+The launcher generates local runtime secrets when they are not supplied and
+stores generated values with mode `0600` under
+`.tmp/docker-separated-state/`. You can instead provide
+`LOCAL_BACKEND_API_KEY` and `OH_SECRET_KEY` in the process environment. Secrets
+are passed to Compose at runtime and are not Docker build arguments.
+
+Only port `8000` on the control-plane container is published. The Agent Server
+and editor ports remain on the private Compose network. Stop the stack with:
+
+```bash
+docker compose -f docker/compose.yml down
+```
+
+The existing `npm run build:docker` command and published `agent-canvas` image
+remain the all-in-one compatibility path.
+
+## OpenHands Enterprise sandbox image
+
+The `enterprise-sandbox` Docker target is a custom sandbox/pod image for
+OpenHands Enterprise. It extends the pinned official Agent Server image and
+does not replace its `ENTRYPOINT` or `CMD`. It contains no Canvas, Automation,
+proxy, SQLite, or local-secret startup behavior.
+
+Before building, open the Enterprise Admin Console and enable **Use a Custom
+Sandbox Image**. The default **Sandbox Image Tag** shows the Agent Server version
+expected by that Enterprise release. The custom image must use the same major
+and minor version; rebuild it for every Enterprise upgrade.
+
+Build the repository-pinned image locally:
+
+```bash
+npm run build:docker:enterprise
+```
+
+To target the version shown by the Admin Console explicitly:
+
+```bash
+npm run build:docker:enterprise -- \
+  --agent-server-image ghcr.io/openhands/agent-server:<expected-version>-python \
+  --tag ghcr.io/<your-org>/agent-canvas-enterprise-sandbox:<your-tag>
+docker push ghcr.io/<your-org>/agent-canvas-enterprise-sandbox:<your-tag>
+```
+
+The build is restricted to `linux/amd64`, matching the Enterprise Replicated VM
+architecture. In the Admin Console, configure:
+
+- **Sandbox Image Repository** — for example
+  `ghcr.io/<your-org>/agent-canvas-enterprise-sandbox`;
+- **Sandbox Image Tag** — the immutable tag pushed above; and
+- registry server, username, and credentials when the registry is private.
+
+Save the configuration and deploy it. Registry credentials and other secrets
+belong in the Enterprise configuration; never add them to the Dockerfile,
+labels, build arguments, or image layers.
+
 ## Details
 
 The deployment model:

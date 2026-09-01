@@ -12,6 +12,14 @@ const dockerfile = readFileSync(
   path.join(repoRoot, "docker", "Dockerfile"),
   "utf-8",
 );
+const workflow = readFileSync(
+  path.join(repoRoot, ".github", "workflows", "docker.yml"),
+  "utf-8",
+);
+const selfHosting = readFileSync(
+  path.join(repoRoot, "docs", "SELF_HOSTING.md"),
+  "utf-8",
+);
 
 interface DockerStage {
   parent: string;
@@ -20,9 +28,7 @@ interface DockerStage {
 }
 
 function parseStages(source: string): DockerStage[] {
-  const matches = [
-    ...source.matchAll(/^FROM\s+(\S+)\s+AS\s+(\S+)\s*$/gim),
-  ];
+  const matches = [...source.matchAll(/^FROM\s+(\S+)\s+AS\s+(\S+)\s*$/gim)];
   return matches.map((match, index) => ({
     parent: match[1],
     name: match[2].toLowerCase(),
@@ -72,5 +78,19 @@ describe("Docker image target contract", () => {
     expect(stage("final").body).toContain(
       'ENTRYPOINT ["tini", "--", "/opt/agent-canvas/entrypoint.sh"]',
     );
+  });
+});
+
+describe("Enterprise sandbox distribution contract", () => {
+  it("builds and publishes only the supported Enterprise architecture", () => {
+    expect(workflow).toContain("target: enterprise-sandbox");
+    expect(workflow).toContain("platforms: linux/amd64");
+    expect(workflow).toContain("agent-canvas-enterprise-sandbox");
+  });
+
+  it("documents the Enterprise Admin Console image configuration", () => {
+    expect(selfHosting).toContain("OpenHands Enterprise sandbox image");
+    expect(selfHosting).toContain("Sandbox Image Tag");
+    expect(selfHosting).toContain("npm run build:docker:enterprise");
   });
 });

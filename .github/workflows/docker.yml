@@ -22,6 +22,10 @@ on:
         description: GHCR image name
         type: string
         default: ghcr.io/openhands/agent-canvas
+      enterprise_image:
+        description: GHCR image name for the Enterprise sandbox
+        type: string
+        default: ghcr.io/openhands/agent-canvas-enterprise-sandbox
 
 # Cancel redundant runs for the same branch/PR.
 concurrency:
@@ -92,11 +96,13 @@ jobs:
           AUTOMATION_VERSION=$(node -p "require('./config/defaults.json').versions.automation")
           AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
           CANVAS_BASE_PATH=$(node -p "require('./config/defaults.json').paths.canvasBasePath")
-          echo "agent_server_version=$AGENT_SERVER_VERSION" >> "$GITHUB_OUTPUT"
-          echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python" >> "$GITHUB_OUTPUT"
-          echo "default_automation_version=$AUTOMATION_VERSION" >> "$GITHUB_OUTPUT"
-          echo "agent_canvas_version=$AGENT_CANVAS_VERSION" >> "$GITHUB_OUTPUT"
-          echo "canvas_base_path=$CANVAS_BASE_PATH" >> "$GITHUB_OUTPUT"
+          {
+            echo "agent_server_version=$AGENT_SERVER_VERSION"
+            echo "default_agent_server_image=${AGENT_SERVER_IMAGE_BASE}:${AGENT_SERVER_VERSION}-python"
+            echo "default_automation_version=$AUTOMATION_VERSION"
+            echo "agent_canvas_version=$AGENT_CANVAS_VERSION"
+            echo "canvas_base_path=$CANVAS_BASE_PATH"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Compute metadata and tags
         id: prep
@@ -113,10 +119,16 @@ jobs:
 
           # Resolve agent-server base image (input override > config/defaults.json)
           if [ -n "$AGENT_SERVER_IMAGE_INPUT" ]; then
-            echo "agent_server_image=$AGENT_SERVER_IMAGE_INPUT" >> "$GITHUB_OUTPUT"
+            AGENT_SERVER_IMAGE="$AGENT_SERVER_IMAGE_INPUT"
           else
-            echo "agent_server_image=$DEFAULT_AGENT_SERVER_IMAGE" >> "$GITHUB_OUTPUT"
+            AGENT_SERVER_IMAGE="$DEFAULT_AGENT_SERVER_IMAGE"
           fi
+          AGENT_SERVER_TAG=${AGENT_SERVER_IMAGE##*:}
+          AGENT_SERVER_VERSION=${AGENT_SERVER_TAG%-python}
+          {
+            echo "agent_server_image=$AGENT_SERVER_IMAGE"
+            echo "agent_server_version=$AGENT_SERVER_VERSION"
+          } >> "$GITHUB_OUTPUT"
 
           # Resolve automation version (input override > config/defaults.json)
           if [ -n "$AUTOMATION_VERSION_INPUT" ]; then
@@ -196,6 +208,7 @@ jobs:
           tags: ${{ steps.prep.outputs.tags }}
           build-args: |
             AGENT_SERVER_IMAGE=${{ steps.prep.outputs.agent_server_image }}
+            AGENT_SERVER_VERSION=${{ steps.prep.outputs.agent_server_version }}
             AUTOMATION_VERSION=${{ steps.prep.outputs.automation_version }}
             AGENT_CANVAS_VERSION=${{ steps.config.outputs.agent_canvas_version }}
             OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
@@ -245,6 +258,100 @@ jobs:
           name: build-info-${{ matrix.arch }}
           path: build-info/${{ matrix.arch }}.json
           retention-days: 1
+
+  # OpenHands Enterprise runs this image as the per-conversation sandbox pod.
+  # It is intentionally amd64-only and never receives a floating latest tag.
+  build-and-push-enterprise-sandbox:
+    name: Build & Push Enterprise Sandbox (amd64)
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       !github.event.pull_request.head.repo.fork)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || '' }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve Enterprise image metadata
+        id: enterprise
+        env:
+          AGENT_SERVER_IMAGE_INPUT: ${{ inputs.agent_server_image }}
+          ENTERPRISE_IMAGE_INPUT: ${{ inputs.enterprise_image }}
+        run: |
+          DEFAULT_AGENT_SERVER_IMAGE=$(node -p "const c=require('./config/defaults.json'); c.images.agentServer + ':' + c.versions.agentServer + '-python'")
+          AGENT_SERVER_IMAGE=${AGENT_SERVER_IMAGE_INPUT:-$DEFAULT_AGENT_SERVER_IMAGE}
+          AGENT_SERVER_TAG=${AGENT_SERVER_IMAGE##*:}
+          AGENT_SERVER_VERSION=${AGENT_SERVER_TAG%-python}
+          if [ -z "$AGENT_SERVER_VERSION" ] || [ "$AGENT_SERVER_VERSION" = "$AGENT_SERVER_IMAGE" ]; then
+            echo "::error::Agent Server image must use a versioned :<version>-python tag"
+            exit 1
+          fi
+
+          DEFAULT_ENTERPRISE_IMAGE=$(node -p "require('./config/defaults.json').images.enterpriseSandbox")
+          ENTERPRISE_IMAGE=${ENTERPRISE_IMAGE_INPUT:-$DEFAULT_ENTERPRISE_IMAGE}
+          AGENT_CANVAS_VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(echo "$RELEVANT_SHA" | cut -c1-7)
+          TAGS="${ENTERPRISE_IMAGE}:sha-${SHORT_SHA}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAGS="${TAGS},${ENTERPRISE_IMAGE}:pr-${{ github.event.pull_request.number }}"
+          fi
+          if [[ "$RELEVANT_REF" == refs/tags/v* ]]; then
+            TAGS="${TAGS},${ENTERPRISE_IMAGE}:${AGENT_CANVAS_VERSION}-agent-server-${AGENT_SERVER_VERSION}"
+          fi
+
+          {
+            echo "agent_server_image=$AGENT_SERVER_IMAGE"
+            echo "agent_server_version=$AGENT_SERVER_VERSION"
+            echo "agent_canvas_version=$AGENT_CANVAS_VERSION"
+            echo "primary_tag=${ENTERPRISE_IMAGE}:sha-${SHORT_SHA}"
+            echo "tags=$TAGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Enterprise sandbox
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: enterprise-sandbox
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.enterprise.outputs.tags }}
+          build-args: |
+            AGENT_SERVER_IMAGE=${{ steps.enterprise.outputs.agent_server_image }}
+            AGENT_SERVER_VERSION=${{ steps.enterprise.outputs.agent_server_version }}
+            AGENT_CANVAS_VERSION=${{ steps.enterprise.outputs.agent_canvas_version }}
+            OPENHANDS_BUILD_GIT_SHA=${{ env.RELEVANT_SHA }}
+            OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Verify inherited Agent Server entrypoint
+        env:
+          AGENT_SERVER_IMAGE: ${{ steps.enterprise.outputs.agent_server_image }}
+          ENTERPRISE_IMAGE: ${{ steps.enterprise.outputs.primary_tag }}
+        run: |
+          docker pull "$AGENT_SERVER_IMAGE"
+          docker pull "$ENTERPRISE_IMAGE"
+          UPSTREAM_CONTRACT=$(docker image inspect "$AGENT_SERVER_IMAGE" --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}')
+          ENTERPRISE_CONTRACT=$(docker image inspect "$ENTERPRISE_IMAGE" --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}')
+          test "$UPSTREAM_CONTRACT" = "$ENTERPRISE_CONTRACT"
+          test "$(docker image inspect "$ENTERPRISE_IMAGE" --format '{{.Architecture}}')" = "amd64"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Merge Multi-Arch Manifests
@@ -318,7 +425,7 @@ jobs:
               continue
             fi
 
-            TAG_NAME=${AMD64_IMAGE_TAG#${IMAGE}:}
+            TAG_NAME=${AMD64_IMAGE_TAG#"${IMAGE}:"}
             if [ "$TAG_NAME" = "$AMD64_IMAGE_TAG" ] || [[ ! "$TAG_NAME" == *-amd64 ]]; then
               echo "Skipping unexpected architecture tag: $AMD64_IMAGE_TAG"
               continue
