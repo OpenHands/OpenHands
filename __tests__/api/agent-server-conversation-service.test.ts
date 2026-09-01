@@ -259,6 +259,40 @@ describe("AgentServerConversationService", () => {
         expect.anything(),
       );
     });
+
+    it("uses the conversation URL and session key for workspace resolution and download", async () => {
+      const encodedFile = new TextEncoder().encode("document").buffer;
+      mockHttpGet.mockImplementation((url: string) => {
+        if (url === "/api/conversations") {
+          return Promise.resolve({
+            data: [
+              {
+                id: "conv-123",
+                created_at: "2024-01-01",
+                updated_at: "2024-01-01",
+                workspace: { working_dir: "/workspace/project/conv-123" },
+              },
+            ],
+          });
+        }
+        return Promise.resolve({ data: encodedFile });
+      });
+
+      await AgentServerConversationService.readConversationFile(
+        "conv-123",
+        "/workspace/project/conv-123/document-viewer-test.md",
+        "http://conversation.example:8000",
+        "conversation-session-key",
+      );
+
+      const expectedClientOptions = {
+        host: "http://conversation.example:8000",
+        apiKey: "conversation-session-key",
+        workingDir: "/workspace/project/agent-canvas",
+      };
+      expect(ConversationClient).toHaveBeenCalledWith(expectedClientOptions);
+      expect(FileClient).toHaveBeenCalledWith(expectedClientOptions);
+    });
   });
 
   describe("createConversation", () => {

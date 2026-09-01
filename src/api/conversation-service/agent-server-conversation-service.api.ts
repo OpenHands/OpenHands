@@ -581,8 +581,11 @@ class AgentServerConversationService {
     // `useUnifiedVSCodeUrl` + `useCloudSandbox`); the runtime's own
     // `/api/vscode/url` only knows its internal `localhost:8001`, which
     // the user's browser can't reach.
-    const workspaceDir =
-      await this.resolveConversationWorkingDir(conversationId);
+    const workspaceDir = await this.resolveConversationWorkingDir(
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    );
     // Local mode: the typescript-client targets the local agent-server
     // directly via the conversationUrl override.
     const vscodeUrl = await new VSCodeClient(
@@ -622,15 +625,21 @@ class AgentServerConversationService {
 
   static async resolveConversationWorkingDir(
     conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
   ): Promise<string> {
-    const [conversation] = await this.batchGetAppConversations([
-      conversationId,
-    ]);
+    const [conversation] = await this.batchGetAppConversations(
+      [conversationId],
+      conversationUrl,
+      sessionApiKey,
+    );
     return conversation?.workspace?.working_dir ?? getAgentServerWorkingDir();
   }
 
   static async batchGetAppConversations(
     ids: string[],
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
   ): Promise<(AppConversation | null)[]> {
     if (ids.length === 0) return [];
 
@@ -639,7 +648,7 @@ class AgentServerConversationService {
     }
 
     const data = await new ConversationClient(
-      getAgentServerClientOptions(),
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).getConversations<DirectConversationInfo>(ids);
 
     return requireDirectConversationItems(data).map((item) =>
@@ -683,6 +692,8 @@ class AgentServerConversationService {
   static async readConversationFile(
     conversationId: string,
     filePath?: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
   ): Promise<string> {
     if (getActiveBackend().backend.kind === "cloud") {
       // Cloud exposes a per-conversation file endpoint; the sandbox
@@ -695,22 +706,32 @@ class AgentServerConversationService {
       return readCloudConversationFile(conversationId, path);
     }
 
-    const workingDir = await this.resolveConversationWorkingDir(conversationId);
+    const workingDir = await this.resolveConversationWorkingDir(
+      conversationId,
+      conversationUrl,
+      sessionApiKey,
+    );
     const path = requirePathInsideDirectory(
       filePath ?? `${workingDir}/.agents_tmp/PLAN.md`,
       workingDir,
     );
-    return new FileClient(getAgentServerClientOptions()).downloadTextFile(path);
+    return new FileClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).downloadTextFile(path);
   }
 
-  static async downloadConversation(conversationId: string): Promise<Blob> {
+  static async downloadConversation(
+    conversationId: string,
+    conversationUrl?: string | null,
+    sessionApiKey?: string | null,
+  ): Promise<Blob> {
     if (getActiveBackend().backend.kind === "cloud") {
       return downloadCloudConversation(conversationId);
     }
 
-    return new FileClient(getAgentServerClientOptions()).downloadTrajectory(
-      conversationId,
-    );
+    return new FileClient(
+      getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
+    ).downloadTrajectory(conversationId);
   }
 
   static async getHooks(conversationId: string): Promise<GetHooksResponse> {

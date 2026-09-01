@@ -49,6 +49,7 @@ vi.mock("#/api/cloud/conversation-service.api", () => ({
 }));
 
 const fetchMock = vi.fn();
+const refreshWorkspaceSessionMock = vi.fn();
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -74,6 +75,9 @@ describe("useWorkspaceFileContent", () => {
     vi.stubGlobal("fetch", fetchMock);
     fetchMock.mockReset();
     useWorkspaceSessionMock.mockReset();
+    refreshWorkspaceSessionMock.mockReset().mockResolvedValue({
+      baseUrl: BASE_URL,
+    });
     useActiveConversationMock.mockReset();
     useRuntimeIsReadyMock.mockReset();
     getActiveBackendMock.mockReset();
@@ -92,6 +96,7 @@ describe("useWorkspaceFileContent", () => {
       isLoading: false,
       isError: false,
       error: null,
+      refresh: refreshWorkspaceSessionMock,
     });
     getActiveBackendMock.mockReturnValue({
       backend: { id: "local-1", kind: "local", host: "http://localhost:8000" },
@@ -269,6 +274,32 @@ describe("useWorkspaceFileContent", () => {
         message: "Failed to read missing.txt: 404",
       }),
     );
+  });
+
+  it("re-mints the workspace session and retries once after a 401", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        arrayBuffer: () =>
+          Promise.resolve(arrayBufferFromString("# Recovered document")),
+      });
+
+    const { result } = renderHook(
+      () => useWorkspaceFileContent("conversation-log.md"),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(refreshWorkspaceSessionMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.data?.text).toBe("# Recovered document");
   });
 
   describe("cloud backend", () => {
