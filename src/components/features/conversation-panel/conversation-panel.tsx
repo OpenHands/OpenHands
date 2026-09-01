@@ -50,7 +50,7 @@ import {
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
-import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { usePinnedConversations } from "#/hooks/use-pinned-conversations";
 
 interface ConversationPanelProps {
   onClose?: () => void;
@@ -202,17 +202,6 @@ export function ConversationPanel({
   const [expandedPinnedPreview, setExpandedPinnedPreview] =
     React.useState(false);
 
-  const pinnedIds = usePinnedConversationsStore(
-    (state) =>
-      state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
-  );
-  const togglePin = usePinnedConversationsStore((state) => state.togglePin);
-  const unpinConversation = usePinnedConversationsStore(
-    (state) => state.unpinConversation,
-  );
-  const pruneMissingPinnedConversations = usePinnedConversationsStore(
-    (state) => state.pruneMissingConversations,
-  );
   const archivedIds = useArchivedConversationsStore(
     (state) =>
       state.archivesByBackendId[activeBackend.id] ??
@@ -304,6 +293,11 @@ export function ConversationPanel({
       return true;
     });
   }, [data]);
+
+  // Unfiltered loaded pages, so an archived-but-still-pinned row keeps its pin.
+  const { pinnedIds, togglePin, unpinConversation } = usePinnedConversations(
+    allLoadedConversations,
+  );
 
   // Grouped pagination is folder-oriented. Record the first backend page for
   // every conversation so later pages can introduce new folders without
@@ -405,19 +399,6 @@ export function ConversationPanel({
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
   );
-
-  React.useEffect(() => {
-    if (!isFetched) {
-      return;
-    }
-    // Prune pins against the unfiltered loaded pages so archived-but-still-
-    // pinned rows are not treated as missing. Archived IDs are intentionally
-    // not pruned here — pagination would otherwise drop archives that are not
-    // on the currently loaded pages and let them reappear in the list.
-    const loadedIds =
-      data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
-    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
-  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -780,7 +761,7 @@ export function ConversationPanel({
       return;
     }
     archiveConversation(activeBackend.id, selectedConversationId);
-    unpinConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(selectedConversationId);
     if (selectedConversationId === currentConversationId) {
       navigate("/conversations");
     }
@@ -964,7 +945,7 @@ export function ConversationPanel({
               showTags={showTagsMetadata}
               isArchived={isArchived}
               isPinned={isPinned}
-              onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
+              onTogglePin={() => togglePin(conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
             />
           </NavigationLink>

@@ -27,6 +27,7 @@ import { ConversationPanel } from "#/components/features/conversation-panel/conv
 import { useConversationPanelPreferencesStore } from "#/stores/conversation-panel-preferences-store";
 import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
+import { PINNED_TAG_KEY } from "#/api/agent-server-adapter";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -122,6 +123,56 @@ describe("ConversationPanel", () => {
     createMockConversation({ id: "2", title: "Conversation 2" }),
     createMockConversation({ id: "3", title: "Conversation 3" }),
   ];
+
+  /** Pins as the backend stores them: a `pinned` tag, PATCHed read-merge-write. */
+  const seedConversationsWithPins = (
+    conversations: AppConversation[],
+    pinnedIds: readonly string[],
+  ) => {
+    let items: AppConversation[] = conversations.map((conversation) => {
+      const pinIndex = pinnedIds.indexOf(conversation.id);
+      if (pinIndex === -1) {
+        return conversation;
+      }
+      return {
+        ...conversation,
+        tags: {
+          ...(conversation.tags ?? {}),
+          [PINNED_TAG_KEY]: new Date(
+            Date.UTC(2026, 0, 1, 0, 0, pinIndex),
+          ).toISOString(),
+        },
+      };
+    });
+
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockImplementation(async () => ({
+      items: [...items],
+      next_page_id: null,
+    }));
+
+    vi.spyOn(
+      AgentServerConversationService,
+      "mergeConversationTags",
+    ).mockImplementation(async (conversationId, patch) => {
+      items = items.map((conversation) => {
+        if (conversation.id !== conversationId) {
+          return conversation;
+        }
+        const tags: Record<string, string> = { ...(conversation.tags ?? {}) };
+        Object.entries(patch).forEach(([key, value]) => {
+          if (value === null) {
+            delete tags[key];
+          } else {
+            tags[key] = value;
+          }
+        });
+        return { ...conversation, tags };
+      });
+    });
+  };
 
   const cloudBackend: Backend = {
     id: "cloud-prod",
@@ -2400,9 +2451,7 @@ describe("ConversationPanel", () => {
   });
 
   it("shows a pinned section above the conversations list when pins exist", async () => {
-    usePinnedConversationsStore
-      .getState()
-      .pinConversation("default-local", "2");
+    seedConversationsWithPins(mockConversations, ["2"]);
 
     renderConversationPanel();
 
@@ -2421,9 +2470,7 @@ describe("ConversationPanel", () => {
   });
 
   it("renders pinned conversations only in the pinned section in chronological mode", async () => {
-    usePinnedConversationsStore
-      .getState()
-      .pinConversation("default-local", "2");
+    seedConversationsWithPins(mockConversations, ["2"]);
 
     renderConversationPanel();
 
@@ -2439,9 +2486,7 @@ describe("ConversationPanel", () => {
 
   it("renders pinned conversations only in the pinned section in grouped mode", async () => {
     useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
-    usePinnedConversationsStore
-      .getState()
-      .pinConversation("default-local", "2");
+    seedConversationsWithPins(mockConversations, ["2"]);
 
     renderConversationPanel();
 
@@ -2456,9 +2501,7 @@ describe("ConversationPanel", () => {
   });
 
   it("hides the pinned section after the last pin is removed", async () => {
-    usePinnedConversationsStore
-      .getState()
-      .pinConversation("default-local", "2");
+    seedConversationsWithPins(mockConversations, ["2"]);
 
     const user = userEvent.setup();
     renderConversationPanel();
@@ -2486,18 +2529,10 @@ describe("ConversationPanel", () => {
         title: `Conversation ${index + 1}`,
       }),
     );
-    vi.spyOn(
-      AgentServerConversationService,
-      "searchConversations",
-    ).mockResolvedValue({
-      items: manyConversations,
-      next_page_id: null,
-    });
-    for (const conversation of manyConversations) {
-      usePinnedConversationsStore
-        .getState()
-        .pinConversation("default-local", conversation.id);
-    }
+    seedConversationsWithPins(
+      manyConversations,
+      manyConversations.map((conversation) => conversation.id),
+    );
 
     renderConversationPanel();
 

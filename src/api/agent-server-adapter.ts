@@ -451,6 +451,9 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
 export const CLIENT_SOURCE_TAG_KEY = "clientsource";
 export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
+/** Sidebar pin marker; the value is the ISO-8601 instant that orders the list. */
+export const PINNED_TAG_KEY = "pinned";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -481,12 +484,14 @@ export const AUTOMATION_TAG_KEYS: readonly string[] = [
  * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
  *   conversation panel's automation filter (chip noise), while
  *   ``automationname`` / ``automationtrigger`` stay visible
+ * - ``pinned`` → drives the sidebar's pinned section, not a user-authored tag
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
   CLIENT_SOURCE_TAG_KEY,
   AUTOMATION_ID_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
+  PINNED_TAG_KEY,
   "title",
   "git_provider",
   "repo_name",

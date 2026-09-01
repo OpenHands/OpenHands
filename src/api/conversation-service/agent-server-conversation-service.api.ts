@@ -827,6 +827,33 @@ class AgentServerConversationService {
   }
 
   /**
+   * Merges `patch` into a conversation's tags; a `null` value removes the key.
+   * PATCH replaces the complete tags map, so this is read-merge-write and two
+   * concurrent writes can clobber each other. Agent-server backends only — the
+   * cloud app-server does not round-trip `tags`.
+   */
+  static async mergeConversationTags(
+    conversationId: string,
+    patch: Record<string, string | null>,
+  ): Promise<void> {
+    const [current] = await this.batchGetAppConversations([conversationId]);
+    const merged: Record<string, string> = {
+      ...(requireAppConversation(current, conversationId).tags ?? {}),
+    };
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value === null) {
+        delete merged[key];
+      } else {
+        merged[key] = value;
+      }
+    });
+
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, { tags: merged });
+  }
+
+  /**
    * Forks a conversation, copying event history up to and including
    * `fromEventId`. Local agent-server only; needs agent-server >= 1.31.0 for
    * `from_event_id` (older backends copy the whole conversation).
