@@ -84,6 +84,9 @@ function resolveEditorConfig(
     "set -uo pipefail",
     // Defined near the top of entrypoint.sh, above the extracted block.
     `log_error() { printf 'ERROR: %s\\n' "$*" >&2; }`,
+    // Resolved by the topology block immediately above the extracted editor
+    // block. These tests exercise the embedded/default routing perspective.
+    `VSCODE_HOST="${env.VSCODE_HOST ?? "127.0.0.1"}"`,
     editorConfigBlock(),
     `printf '%s\\n%s\\n%s\\n' "$OH_VSCODE_BASE_PATH" "$OH_VSCODE_PORT" "$VSCODE_ROUTE"`,
   ].join("\n");
@@ -191,7 +194,7 @@ describe("docker editor route", () => {
     // The editor is a separate process. Pointing the prefix at the
     // agent-server port would 404 the workbench.
     expect(entrypoint).toMatch(
-      /^VSCODE_ROUTE="\$\{VSCODE_BASE_PATH\}=http:\/\/127\.0\.0\.1:\$\{VSCODE_PORT\}"$/m,
+      /^VSCODE_ROUTE="\$\{VSCODE_BASE_PATH\}=http:\/\/\$\{VSCODE_HOST\}:\$\{VSCODE_PORT\}"$/m,
     );
     expect(defaults.ports.vscode).not.toBe(defaults.ports.proxy);
   });

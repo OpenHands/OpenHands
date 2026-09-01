@@ -70,6 +70,32 @@ PORT="${PORT:-${CONFIG_PROXY_PORT:-8000}}"
 AGENT_SERVER_PORT="${AGENT_SERVER_PORT:-${CONFIG_AGENT_SERVER_PORT:-18000}}"
 AUTOMATION_PORT="${AUTOMATION_PORT:-${CONFIG_AUTOMATION_PORT:-18001}}"
 
+# Resolve the Agent Server once so every downstream consumer uses the same
+# topology. The all-in-one image keeps the embedded loopback default; the
+# separated control plane requires an explicit sandbox service URL.
+# >>> agent-server-topology: extracted by docker-separated-topology.test.ts
+AGENT_CANVAS_AGENT_SERVER_MODE="${AGENT_CANVAS_AGENT_SERVER_MODE:-embedded}"
+case "$AGENT_CANVAS_AGENT_SERVER_MODE" in
+  embedded)
+    AGENT_SERVER_PROXY_URL="${AGENT_SERVER_URL:-http://127.0.0.1:${AGENT_SERVER_PORT}}"
+    VSCODE_HOST="${VSCODE_HOST:-127.0.0.1}"
+    ;;
+  external)
+    if [ -z "${AGENT_SERVER_URL:-}" ]; then
+      log_error "AGENT_SERVER_URL is required in external mode"
+      exit 1
+    fi
+    AGENT_SERVER_PROXY_URL="$AGENT_SERVER_URL"
+    VSCODE_HOST="${VSCODE_HOST:-agent-server}"
+    ;;
+  *)
+    log_error "Unsupported AGENT_CANVAS_AGENT_SERVER_MODE: $AGENT_CANVAS_AGENT_SERVER_MODE"
+    exit 1
+    ;;
+esac
+export AGENT_SERVER_URL="$AGENT_SERVER_PROXY_URL"
+# <<< agent-server-topology
+
 # The bundled editor is reached through a path prefix on the proxy port rather
 # than a published port of its own. The same prefix has to reach agent-server
 # (it launches openvscode-server with --server-base-path and advertises the
@@ -161,7 +187,7 @@ export OH_VSCODE_PORT="$VSCODE_PORT"
 export OH_VSCODE_BASE_PATH="$VSCODE_BASE_PATH"
 # The single route string every static-server instance registers. Derived from
 # the exported pair above so the advertised URL and the route cannot diverge.
-VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://127.0.0.1:${VSCODE_PORT}"
+VSCODE_ROUTE="${VSCODE_BASE_PATH}=http://${VSCODE_HOST}:${VSCODE_PORT}"
 # <<< vscode-config
 
 # Persistence paths — keep settings, conversations, bash history under a
@@ -255,16 +281,13 @@ if [ "${OH_TELEMETRY_EXPORTER:-}" = "posthog" ] && [ -n "${OH_TELEMETRY_POSTHOG_
   export OH_TELEMETRY_POSTHOG_HOST="${OH_TELEMETRY_POSTHOG_HOST:-${VITE_POSTHOG_HOST:-${CONFIG_POSTHOG_HOST:-}}}"
 fi
 
-# AGENT_SERVER_URL — needed by automation sandbox callbacks.
-export AGENT_SERVER_URL="${AGENT_SERVER_URL:-http://127.0.0.1:${AGENT_SERVER_PORT}}"
-
 # AUTOMATION_AGENT_SERVER_URL — the URL the automation service uses to reach
 # the agent-server REST API (tarball upload, bash dispatch, auth key minting).
 # When set, ServiceSettings.is_local_mode returns True, enabling local API key
 # authentication. Without this, the automation server falls back to validating
 # keys against the OpenHands cloud API (app.all-hands.dev), which returns 401
 # for locally-generated session keys.
-export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.0.1:${AGENT_SERVER_PORT}}"
+export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-${AGENT_SERVER_PROXY_URL}}"
 
 # Keep the legacy canvas_ui_tool module importable when the agent-server restores
 # conversations whose persisted metadata still references its module qualname.
@@ -287,22 +310,26 @@ cleanup() {
 }
 trap cleanup EXIT SIGINT SIGTERM
 
-# ── 1. Start Agent Server ────────────────────────────────────────────────────
-log "Starting agent-server on port $AGENT_SERVER_PORT..."
+# ── 1. Start Agent Server only for the legacy all-in-one target ──────────────
+if [ "$AGENT_CANVAS_AGENT_SERVER_MODE" = "embedded" ]; then
+  log "Starting agent-server on port $AGENT_SERVER_PORT..."
 
-if command -v openhands-agent-server >/dev/null 2>&1; then
-  # Binary build (production image)
-  openhands-agent-server --port "$AGENT_SERVER_PORT" \
-    --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
-elif [ -x /agent-server/.venv/bin/python ]; then
-  # Source build (development image)
-  /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT" \
-    --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
+  if command -v openhands-agent-server >/dev/null 2>&1; then
+    # Binary build (production image)
+    openhands-agent-server --port "$AGENT_SERVER_PORT" \
+      --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
+  elif [ -x /agent-server/.venv/bin/python ]; then
+    # Source build (development image)
+    /agent-server/.venv/bin/python -m openhands.agent_server --port "$AGENT_SERVER_PORT" \
+      --import-modules "$AGENT_SERVER_IMPORT_MODULES" &
+  else
+    log_error "Cannot find agent-server binary or source venv."
+    exit 1
+  fi
+  PIDS+=($!)
 else
-  log_error "Cannot find agent-server binary or source venv."
-  exit 1
+  log "Using external agent-server at $AGENT_SERVER_PROXY_URL"
 fi
-PIDS+=($!)
 
 # ── 2. Start Automation Server ───────────────────────────────────────────────
 log "Starting automation server on port $AUTOMATION_PORT..."
@@ -364,7 +391,25 @@ wait_for_port() {
   log "$name is ready on port $port"
 }
 
-wait_for_port "$AGENT_SERVER_PORT" "Agent Server" 60 &
+wait_for_url() {
+  local url=$1 name=$2 max_wait=${3:-30}
+  local elapsed=0
+  while ! node -e 'fetch(process.argv[1]).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))' "$url"; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [ "$elapsed" -ge "$max_wait" ]; then
+      log "WARNING: $name at $url did not become ready within ${max_wait}s"
+      return 1
+    fi
+  done
+  log "$name is ready at $url"
+}
+
+if [ "$AGENT_CANVAS_AGENT_SERVER_MODE" = "embedded" ]; then
+  wait_for_port "$AGENT_SERVER_PORT" "Agent Server" 60 &
+else
+  wait_for_url "${AGENT_SERVER_PROXY_URL%/}/alive" "Agent Server" 60 &
+fi
 WAIT_PID1=$!
 wait_for_port "$AUTOMATION_PORT" "Automation Server" 60 &
 WAIT_PID2=$!
@@ -383,7 +428,7 @@ log "Starting frontend + proxy on port $PORT..."
 RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --mode docker \
   --agent-host-alias 127.0.0.1 \
-  --agent-server-url "$AGENT_SERVER_URL" \
+  --agent-server-url "${SANDBOX_AGENT_SERVER_URL:-http://localhost:${AGENT_SERVER_PORT}}" \
   --automation-url "$AUTOMATION_BASE_URL")"
 
 # EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt
@@ -395,15 +440,15 @@ node /opt/agent-canvas/static-server.mjs \
   --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
-  --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-  --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" \
+  --route "/api=${AGENT_SERVER_PROXY_URL}" \
+  --route "/server_info=${AGENT_SERVER_PROXY_URL}" \
+  --route "/sockets=${AGENT_SERVER_PROXY_URL}" \
+  --route "/alive=${AGENT_SERVER_PROXY_URL}" \
+  --route "/health=${AGENT_SERVER_PROXY_URL}" \
+  --route "/ready=${AGENT_SERVER_PROXY_URL}" \
+  --route "/docs=${AGENT_SERVER_PROXY_URL}" \
+  --route "/redoc=${AGENT_SERVER_PROXY_URL}" \
+  --route "/openapi.json=${AGENT_SERVER_PROXY_URL}" \
   --route "$VSCODE_ROUTE" \
   --vscode-base-path "$VSCODE_BASE_PATH" \
   --no-referrer-prefix "$VSCODE_BASE_PATH" &
@@ -447,15 +492,15 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --auth-required \
     --runtime-services-info "$RUNTIME_SERVICES_INFO" \
     --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
-    --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/alive=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/health=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/ready=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/docs=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/redoc=http://127.0.0.1:${AGENT_SERVER_PORT}" \
-    --route "/openapi.json=http://127.0.0.1:${AGENT_SERVER_PORT}" &
+    --route "/api=${AGENT_SERVER_PROXY_URL}" \
+    --route "/server_info=${AGENT_SERVER_PROXY_URL}" \
+    --route "/sockets=${AGENT_SERVER_PROXY_URL}" \
+    --route "/alive=${AGENT_SERVER_PROXY_URL}" \
+    --route "/health=${AGENT_SERVER_PROXY_URL}" \
+    --route "/ready=${AGENT_SERVER_PROXY_URL}" \
+    --route "/docs=${AGENT_SERVER_PROXY_URL}" \
+    --route "/redoc=${AGENT_SERVER_PROXY_URL}" \
+    --route "/openapi.json=${AGENT_SERVER_PROXY_URL}" &
   PIDS+=($!)
 fi
 
