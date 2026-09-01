@@ -72,7 +72,9 @@ export function buildComposeCommand(args, baseEnvironment) {
     baseEnvironment.OH_SESSION_API_KEYS_0 ||
     newSecret();
   const secretKey = baseEnvironment.OH_SECRET_KEY || newSecret();
-  const agentServerImage = `${config.images.agentServer}:${config.versions.agentServer}-python`;
+  const agentServerImage =
+    baseEnvironment.AGENT_SERVER_IMAGE ||
+    `${config.images.agentServer}:${config.versions.agentServer}-python`;
 
   return {
     command: [
@@ -90,7 +92,8 @@ export function buildComposeCommand(args, baseEnvironment) {
       ...baseEnvironment,
       AGENT_CANVAS_VERSION: packageJson.version,
       AGENT_SERVER_IMAGE: agentServerImage,
-      AGENT_SERVER_VERSION: config.versions.agentServer,
+      AGENT_SERVER_VERSION:
+        baseEnvironment.AGENT_SERVER_VERSION || config.versions.agentServer,
       AUTOMATION_VERSION: config.versions.automation,
       LOCAL_BACKEND_API_KEY: sessionKey,
       OH_SECRET_KEY: secretKey,

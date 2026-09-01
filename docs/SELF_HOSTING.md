@@ -36,6 +36,8 @@ stores generated values with mode `0600` under
 `.tmp/docker-separated-state/`. You can instead provide
 `LOCAL_BACKEND_API_KEY` and `OH_SECRET_KEY` in the process environment. Secrets
 are passed to Compose at runtime and are not Docker build arguments.
+Set `AGENT_SERVER_IMAGE` and `AGENT_SERVER_VERSION` together to exercise a
+different compatible Agent Server base in the separated local stack.
 
 Only port `8000` on the control-plane container is published. The Agent Server
 and editor ports remain on the private Compose network. Stop the stack with:

@@ -166,4 +166,15 @@ describe("separated Docker Compose topology", () => {
     expect(invocation.env.OH_SESSION_API_KEYS_0).toBe("provided-session");
     expect(invocation.env.OH_SECRET_KEY).toBe("provided-secret");
   });
+
+  it("allows the shared Agent Server base image to be overridden", () => {
+    const invocation = buildComposeCommand([], {
+      AGENT_SERVER_IMAGE: "agent-server-verification:1.44.1-python",
+      AGENT_SERVER_VERSION: "1.44.1",
+    });
+    expect(invocation.env.AGENT_SERVER_IMAGE).toBe(
+      "agent-server-verification:1.44.1-python",
+    );
+    expect(invocation.env.AGENT_SERVER_VERSION).toBe("1.44.1");
+  });
 });
