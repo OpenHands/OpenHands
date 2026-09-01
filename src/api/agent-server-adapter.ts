@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -1103,6 +1104,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  workspaceHookConfig?: HookConfig | null;
 }
 
 export function buildStartConversationRequest(
@@ -1241,6 +1243,8 @@ export function buildStartConversationRequest(
 
   if (conversationSettings.hook_config) {
     payload.hook_config = conversationSettings.hook_config;
+  } else if (options.workspaceHookConfig) {
+    payload.hook_config = options.workspaceHookConfig;
   }
 
   const toolModuleQualnames = {
@@ -1318,19 +1322,29 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   parentConversationId?: string;
   workingDir?: string;
+  /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
+  hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
-  const { SecretsService } = await import("./secrets-service");
+  const [{ SecretsService }, { default: HooksService }] = await Promise.all([
+    import("./secrets-service"),
+    import("./hooks-service"),
+  ]);
 
-  const [settingsResult, customSecrets, runtimeServicesInfo] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendRuntimeServicesInfo(),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    runtimeServicesInfo,
+    workspaceHookConfig,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendRuntimeServicesInfo(),
+    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+  ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
@@ -1348,6 +1362,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    workspaceHookConfig,
   });
 }
 
