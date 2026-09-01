@@ -215,7 +215,7 @@ test.describe("Apps lifecycle", () => {
     await page.goto(PAGE_PATH, { waitUntil: "domcontentloaded" });
     await expect(
       page.getByText(
-        "This extension is disabled, missing, or does not provide this page.",
+        "This app is disabled, missing, or does not provide this page.",
       ),
     ).toBeVisible();
   });
