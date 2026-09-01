@@ -48,11 +48,11 @@ it instead.
 
 ### Environment Variables
 
-| Variable                  | Description                    | Default |
-| ------------------------- | ------------------------------ | ------- |
-| `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
+| Variable                  | Description                                      | Default |
+| ------------------------- | ------------------------------------------------ | ------- |
+| `PORT`                    | Ingress port                                     | `8000`  |
+| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend (overrides pin)   | unset (`config/defaults.json`) |
+| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server (overrides pin)         | unset (`config/defaults.json`) |
 
 ### Alternative: Minimal Mode (without Automation)
 
@@ -67,7 +67,7 @@ Access at `http://localhost:3001/`
 
 ### Agent server version selection
 
-By default, the latest released version from PyPI is used. You can override this (highest precedence first):
+By default, launchers pin the PyPI versions from [`config/defaults.json`](../config/defaults.json) (`versions.agentServer`, and `versions.automation` for the automation backend). You can override this (highest precedence first):
 
 ```sh
 # Run against a local software-agent-sdk checkout.
