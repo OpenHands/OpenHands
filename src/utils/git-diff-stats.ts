@@ -8,13 +8,18 @@ export interface GitDiffLineStats {
 function countUnifiedDiffStats(diff: string): GitDiffLineStats {
   let additions = 0;
   let deletions = 0;
+  let inHunk = false;
 
   for (const line of diff.split("\n")) {
-    if (
-      line.startsWith("+++") ||
-      line.startsWith("---") ||
-      line.startsWith("@@")
-    ) {
+    if (line.startsWith("diff --git ")) {
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) {
       continue;
     }
     if (line.startsWith("+")) {
