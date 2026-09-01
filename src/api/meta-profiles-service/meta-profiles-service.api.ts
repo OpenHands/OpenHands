@@ -20,6 +20,14 @@
 import { MetaProfilesClient } from "@openhands/typescript-client/clients";
 import type { MetaProfile as SdkMetaProfile } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
+import { getActiveBackend } from "../backend-registry/active-store";
+import {
+  activateCloudMetaProfile,
+  deleteCloudMetaProfile,
+  fetchCloudMetaProfile,
+  fetchCloudMetaProfiles,
+  saveCloudMetaProfile,
+} from "../cloud/meta-profiles-service.api";
 
 export interface MetaProfileClass {
   description: string;
@@ -69,6 +77,9 @@ export interface ActivateMetaProfileResponse {
 
 class MetaProfilesService {
   static async listMetaProfiles(): Promise<MetaProfileListResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return fetchCloudMetaProfiles();
+    }
     return new MetaProfilesClient(
       getAgentServerClientOptions(),
     ).listMetaProfiles();
@@ -77,6 +88,9 @@ class MetaProfilesService {
   static async getMetaProfile(
     name: string,
   ): Promise<MetaProfileDetailResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return fetchCloudMetaProfile(name);
+    }
     // The server returns the full direct-prompt config (including
     // ``prompt_template`` / ``model_table``); the SDK's ``MetaProfile`` type
     // just does not declare those fields yet, so widen the typed result.
@@ -89,6 +103,9 @@ class MetaProfilesService {
     name: string,
     config: MetaProfile,
   ): Promise<MetaProfileMutationResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return saveCloudMetaProfile(name, config);
+    }
     return new MetaProfilesClient(
       getAgentServerClientOptions(),
     ).saveMetaProfile(name, config as unknown as SdkMetaProfile);
@@ -97,6 +114,9 @@ class MetaProfilesService {
   static async deleteMetaProfile(
     name: string,
   ): Promise<MetaProfileMutationResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return deleteCloudMetaProfile(name);
+    }
     return new MetaProfilesClient(
       getAgentServerClientOptions(),
     ).deleteMetaProfile(name);
@@ -105,6 +125,9 @@ class MetaProfilesService {
   static async activateMetaProfile(
     name: string,
   ): Promise<ActivateMetaProfileResponse> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      return activateCloudMetaProfile(name);
+    }
     return new MetaProfilesClient(
       getAgentServerClientOptions(),
     ).activateMetaProfile(name);

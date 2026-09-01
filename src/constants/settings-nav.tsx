@@ -81,3 +81,7 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
  * (OHE-3168).
  */
 export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";
+export const LOCKED_CLOUD_SETTINGS_NAV_PATHS = new Set([
+  LOCKED_CLOUD_SETTINGS_NAV_PATH,
+  "/settings/meta-llm",
+]);

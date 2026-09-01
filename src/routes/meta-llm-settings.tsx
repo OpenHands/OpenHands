@@ -7,17 +7,17 @@ import { I18nKey } from "#/i18n/declaration";
  * Settings route for managing *meta-profiles* — declarative model-routing
  * configurations consumed by the agent's ``classify_and_switch_llm`` tool.
  *
- * Meta-profiles (like LLM profiles) are stored on the local agent-server, so
- * the management view is only available for local backends. Cloud backends get
- * an explanatory message.
+ * Local backends store meta-profiles on the agent-server. Organization-bound
+ * cloud backends store them in the SaaS control plane and pass the active
+ * configuration inline to ephemeral runtimes.
  *
  * Note: This is a route file, only the router should import the default export.
  */
 export default function MetaLlmSettingsRoute() {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
 
-  if (backend.kind === "cloud") {
+  if (backend.kind === "cloud" && !orgId) {
     return (
       <p
         data-testid="meta-profile-cloud-unsupported"
