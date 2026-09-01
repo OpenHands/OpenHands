@@ -198,6 +198,10 @@ describe("useSettingsNavItems", () => {
     const paths = result.current
       .filter((item) => item.type === "item")
       .map((item) => (item.type === "item" ? item.item.to : null));
-    expect(paths).toEqual(["/settings/meta-llm", "/settings/app"]);
+    expect(paths).toEqual([
+      "/settings/llm",
+      "/settings/meta-llm",
+      "/settings/app",
+    ]);
   });
 });
