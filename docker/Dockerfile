@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# agent-canvas all-in-one Docker image
+# agent-canvas Docker images
 #
-# Combines three services into a single image:
-#   1. Agent Server  — from ghcr.io/openhands/agent-server (upstream SDK image)
-#   2. Automation    — installed via pip from openhands-automation
-#   3. Frontend      — agent-canvas static build served by Node.js
+# Named targets support two deployment topologies from one pinned Agent Server
+# base image:
+#   1. enterprise-sandbox / dev-sandbox — upstream Agent Server runtime contract
+#   2. control-plane                    — Canvas + Automation + ingress/proxy
+#   3. final                            — legacy all-in-one compatibility image
 #
 # The entrypoint starts all three services and an ingress proxy that unifies
 # them behind a single port (default 8000):
@@ -69,8 +70,34 @@ RUN node -e " \
   require('fs').writeFileSync('/tmp/defaults.env', lines.join('\n') + '\n'); \
 "
 
-# ── Stage 2: Combined image ──────────────────────────────────────────────────
-FROM ${AGENT_SERVER_IMAGE} AS final
+# ── Stage 2: Shared sandbox runtime ──────────────────────────────────────────
+# Do not add ENTRYPOINT or CMD in this stage or either sandbox target below.
+# OpenHands Enterprise requires the effective runtime contract to remain the
+# one supplied by the selected upstream Agent Server image.
+FROM ${AGENT_SERVER_IMAGE} AS agent-runtime-base
+
+ARG AGENT_CANVAS_VERSION=dev
+ARG AGENT_SERVER_VERSION=unknown
+ARG OPENHANDS_BUILD_GIT_SHA=unknown
+ARG OPENHANDS_BUILD_GIT_REF=unknown
+
+LABEL org.opencontainers.image.source="https://github.com/OpenHands/OpenHands"
+LABEL org.opencontainers.image.version="${AGENT_CANVAS_VERSION}"
+LABEL org.opencontainers.image.revision="${OPENHANDS_BUILD_GIT_SHA}"
+LABEL dev.openhands.agent-server.version="${AGENT_SERVER_VERSION}"
+
+# Production sandbox pod for OpenHands Enterprise. This deliberately contains
+# no Canvas/Automation layers and inherits the upstream entrypoint and command.
+FROM agent-runtime-base AS enterprise-sandbox
+LABEL org.opencontainers.image.title="agent-canvas-enterprise-sandbox"
+
+# Local sandbox service used by the separated Docker development topology.
+FROM agent-runtime-base AS dev-sandbox
+LABEL org.opencontainers.image.title="agent-canvas-dev-sandbox"
+
+# ── Stage 3: Local control-plane runtime ─────────────────────────────────────
+# The control-plane and legacy all-in-one targets share these heavier layers.
+FROM agent-runtime-base AS control-plane-runtime
 
 ARG AUTOMATION_VERSION
 ARG AGENT_SERVER_SDK_GIT_REF=""
@@ -78,13 +105,6 @@ ARG OPENHANDS_BUILD_GIT_SHA=unknown
 ARG OPENHANDS_BUILD_GIT_REF=unknown
 ARG VITE_BASE_PATH="/canvas"
 ARG VITE_POSTHOG_API_KEY=""
-
-ARG AGENT_CANVAS_VERSION=dev
-LABEL org.opencontainers.image.title="agent-canvas"
-LABEL org.opencontainers.image.description="All-in-one agent-canvas: Agent Server + Automation + Frontend"
-LABEL org.opencontainers.image.source="https://github.com/OpenHands/OpenHands"
-LABEL org.opencontainers.image.version="${AGENT_CANVAS_VERSION}"
-LABEL org.opencontainers.image.revision="${OPENHANDS_BUILD_GIT_SHA}"
 
 ENV AGENT_CANVAS_BUILD_GIT_SHA=${OPENHANDS_BUILD_GIT_SHA}
 ENV AGENT_CANVAS_BUILD_GIT_REF=${OPENHANDS_BUILD_GIT_REF}
@@ -163,8 +183,21 @@ USER openhands
 #   docker run -v ~/.openhands:/home/openhands/.openhands -v ~/projects:/projects ...
 VOLUME ["/home/openhands/.openhands", "/projects"]
 
-# The entrypoint starts all services and the ingress proxy.
-# Port 8000 is the unified entry point.
+# Port 8000 is the unified control-plane entry point.
 EXPOSE 8000
 
+# ── Stage 4: Separated local control plane ───────────────────────────────────
+FROM control-plane-runtime AS control-plane
+LABEL org.opencontainers.image.title="agent-canvas-control-plane"
+LABEL org.opencontainers.image.description="Agent Canvas, Automation, and ingress for a separate Agent Server sandbox"
+ENV AGENT_CANVAS_AGENT_SERVER_MODE=external
+ENTRYPOINT ["tini", "--", "/opt/agent-canvas/entrypoint.sh"]
+
+# ── Stage 5: Legacy all-in-one compatibility image ──────────────────────────
+# Keep this target last so existing unqualified docker builds retain the
+# published image behavior while the separated topology is introduced.
+FROM control-plane-runtime AS final
+LABEL org.opencontainers.image.title="agent-canvas"
+LABEL org.opencontainers.image.description="All-in-one agent-canvas: Agent Server + Automation + Frontend"
+ENV AGENT_CANVAS_AGENT_SERVER_MODE=embedded
 ENTRYPOINT ["tini", "--", "/opt/agent-canvas/entrypoint.sh"]
