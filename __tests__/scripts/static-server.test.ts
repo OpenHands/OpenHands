@@ -145,6 +145,31 @@ describe("static-server.mjs", () => {
       expect(config.lockToCloud).toBeNull();
     });
 
+    it("defaults disableTelemetry to false", () => {
+      const config = parseArgs([], {});
+      expect(config.disableTelemetry).toBe(false);
+    });
+
+    it("parses --disable-telemetry", () => {
+      const config = parseArgs(["--disable-telemetry"], {});
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=1", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "1" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("enables disableTelemetry from AGENT_CANVAS_DISABLE_TELEMETRY=true", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "true" });
+      expect(config.disableTelemetry).toBe(true);
+    });
+
+    it("ignores a falsy AGENT_CANVAS_DISABLE_TELEMETRY value", () => {
+      const config = parseArgs([], { AGENT_CANVAS_DISABLE_TELEMETRY: "0" });
+      expect(config.disableTelemetry).toBe(false);
+    });
+
     it("defaults basePath to root", () => {
       const config = parseArgs([]);
       expect(config.basePath).toBe("/");
@@ -474,6 +499,57 @@ describe("static-server.mjs", () => {
 
       expect(response.status).toBe(200);
       expect(body).toContain("__AGENT_CANVAS_LOCK_TO_CLOUD__");
+    });
+  });
+
+  describe("disable-telemetry injection", () => {
+    async function startServerWithDisabledTelemetry(dir: string) {
+      const origin = await startServer(dir, { disableTelemetry: true });
+      return origin;
+    }
+
+    it("exposes window.__AGENT_CANVAS_DO_NOT_TRACK__ when enabled", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithDisabledTelemetry(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).toContain("window.__AGENT_CANVAS_DO_NOT_TRACK__=true");
+    });
+
+    it("injects the flag into the SPA fallback index.html", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServerWithDisabledTelemetry(buildDir);
+      const response = await fetch(`${origin}/some/deep/route`);
+      const body = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(body).toContain("window.__AGENT_CANVAS_DO_NOT_TRACK__=true");
+    });
+
+    it("does not inject the flag when telemetry is not disabled", async () => {
+      const buildDir = mkdtempSync(path.join(tmpdir(), "agent-canvas-build-"));
+      tempDirs.push(buildDir);
+      writeFileSync(
+        path.join(buildDir, "index.html"),
+        "<html><head></head><body>app</body></html>",
+      );
+
+      const origin = await startServer(buildDir);
+      const body = await (await fetch(`${origin}/`)).text();
+
+      expect(body).not.toContain("__AGENT_CANVAS_DO_NOT_TRACK__");
     });
   });
 

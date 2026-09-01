@@ -148,3 +148,40 @@ describe("HomeAutomationRunTooltip — phase", () => {
     expect(screen.queryByTestId("run-phase-row")).not.toBeInTheDocument();
   });
 });
+
+describe("HomeAutomationRunTooltip — task outcome", () => {
+  it("shows completed run task outcome and summary instead of infra error copy", () => {
+    render(
+      <HomeAutomationRunTooltip
+        automation={automation}
+        runState={makeState(
+          makeRun({
+            status: AutomationRunStatus.COMPLETED,
+            completed_at: "2026-08-01T10:05:00Z",
+            error_detail: "HUBSPOT_API_KEY was unavailable.",
+            run_metadata: {
+              finish_tool_response: {
+                status: "blocked",
+                outcome_summary:
+                  "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+              },
+            },
+          }),
+        )}
+      />,
+    );
+
+    expect(screen.getByText("AUTOMATIONS$DETAIL$BLOCKED")).toBeInTheDocument();
+    expect(
+      screen.getByText("AUTOMATIONS$DETAIL$TASK_LABEL"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Attempted HubSpot CRM contact search but HUBSPOT_API_KEY was unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("HUBSPOT_API_KEY was unavailable."),
+    ).not.toBeInTheDocument();
+  });
+});
