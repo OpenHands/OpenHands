@@ -106,6 +106,7 @@
     "build:lib": "npm run make-i18n && react-router typegen && cross-env BUILD_LIB=true vite build && tsc -p tsconfig.lib.json",
     "build:docker": "node scripts/docker-build.mjs",
     "build:docker:control-plane": "node scripts/docker-build.mjs --target control-plane",
+    "build:docker:dev-sandbox": "node scripts/docker-build.mjs --target dev-sandbox",
     "build:docker:enterprise": "node scripts/docker-build.mjs --enterprise",
     "example:acp-docker:env": "node scripts/gen-acp-docker-env.mjs",
     "predesktop": "node scripts/brand-dev-electron.mjs",

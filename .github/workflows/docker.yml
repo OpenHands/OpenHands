@@ -339,8 +339,8 @@ jobs:
             OPENHANDS_BUILD_GIT_REF=${{ env.RELEVANT_REF }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          provenance: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+          sbom: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
 
       - name: Verify inherited Agent Server entrypoint
         env:

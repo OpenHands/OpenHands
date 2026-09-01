@@ -20,6 +20,9 @@ const selfHosting = readFileSync(
   path.join(repoRoot, "docs", "SELF_HOSTING.md"),
   "utf-8",
 );
+const packageJson = JSON.parse(
+  readFileSync(path.join(repoRoot, "package.json"), "utf-8"),
+) as { scripts: Record<string, string> };
 
 interface DockerStage {
   parent: string;
@@ -91,6 +94,21 @@ describe("Enterprise sandbox distribution contract", () => {
     );
     expect(workflow).toContain(
       "push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}",
+    );
+    expect(workflow).toContain(
+      "provenance: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}",
+    );
+    expect(workflow).toContain(
+      "sbom: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}",
+    );
+  });
+
+  it("exposes symmetric local sandbox build commands", () => {
+    expect(packageJson.scripts["build:docker:dev-sandbox"]).toBe(
+      "node scripts/docker-build.mjs --target dev-sandbox",
+    );
+    expect(packageJson.scripts["build:docker:enterprise"]).toBe(
+      "node scripts/docker-build.mjs --enterprise",
     );
   });
 

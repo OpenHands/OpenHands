@@ -68,6 +68,13 @@ Build the repository-pinned image locally:
 npm run build:docker:enterprise
 ```
 
+Build the matching development sandbox target from the same pinned Agent Server
+base with:
+
+```bash
+npm run build:docker:dev-sandbox
+```
+
 To target the version shown by the Admin Console explicitly:
 
 ```bash
