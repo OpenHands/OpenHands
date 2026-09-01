@@ -86,6 +86,12 @@ describe("Enterprise sandbox distribution contract", () => {
     expect(workflow).toContain("target: enterprise-sandbox");
     expect(workflow).toContain("platforms: linux/amd64");
     expect(workflow).toContain("agent-canvas-enterprise-sandbox");
+    expect(workflow).toContain(
+      "load: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}",
+    );
+    expect(workflow).toContain(
+      "push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}",
+    );
   });
 
   it("documents the Enterprise Admin Console image configuration", () => {
