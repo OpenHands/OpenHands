@@ -526,7 +526,8 @@ export function SdkSectionPage({
 
   const handleFieldChange = React.useCallback(
     (fieldKey: string, nextValue: string | boolean) => {
-      const sourceKey = fieldKeyToSource.get(fieldKey);
+      const sourceKey =
+        fieldKeyToSource.get(fieldKey) ?? resolvedSources[0]?.settingsSource;
       if (!sourceKey) return;
       setValuesBySource((prev) => ({
         ...prev,
@@ -562,7 +563,7 @@ export function SdkSectionPage({
         };
       });
     },
-    [fieldKeyToSource],
+    [fieldKeyToSource, resolvedSources],
   );
 
   const handleError = React.useCallback(
