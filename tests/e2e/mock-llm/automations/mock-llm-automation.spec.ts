@@ -365,11 +365,18 @@ test.describe("mock-LLM automation lifecycle", () => {
     // quickly, making the failure obvious. See AGENTS.md → "Padding
     // response for internal LLM call" for more context.
     //
-    // After the main conversation finishes (responses 0-3), the dispatched
+    // After the main conversation finishes (responses 0-3),the dispatched
     // automation run spawns a NEW conversation on the same agent-server.
+
     // That conversation also calls the mock LLM. We append extra text
-    // responses (4-6) so the run's conversation can finish normally, the
-    // script fires its completion callback, and the run reaches COMPLETED.
+    // responses (4-7) so the run's conversation can finish normally,the
+    // script fires its completion callback,and the run reaches COMPLETED.
+    // NOTE: openhands-automation >= 1.10.0 makes one additional internal
+    // LLM call in the run's spawned conversation compared with 1.9.x,so
+    // the run budget needs a 4th response. If this ever drifts again,step 2's
+    // run-status timeout will surface it,and the mock server log shows
+    // "Mock LLM exhausted after N calls" pinpointing the exact count.
+
     await registerTrajectory(request, "automation-lifecycle", [
       // ── Main conversation (responses 0-3) ──
       { text: "" }, // 0: consumed by skill-activation LLM call (see above)
@@ -396,6 +403,7 @@ test.describe("mock-LLM automation lifecycle", () => {
       { text: "" }, // 4: possible internal/condenser call
       { text: "Done. Hello world echoed successfully." }, // 5: agent reply
       { text: "" }, // 6: safety buffer for any follow-up internal call
+      { text: "" }, // 7: extra safety buffer for openhands-automation >= 1.10.0
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
