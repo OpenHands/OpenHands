@@ -114,7 +114,7 @@ export function seedModelSwitchesFromHistory(
         profileName: getSwitchLLMObservationProfileName(event.observation),
       });
       latestSwitch = {
-        profileName: event.observation.profile_name,
+        profileName: getSwitchLLMObservationProfileName(event.observation),
         timestamp: event.timestamp,
       };
     }

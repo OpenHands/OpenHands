@@ -114,6 +114,8 @@ describe("seedModelSwitchesFromHistory", () => {
     expect(entries[0].switchedTo).toBe("minimax-m3");
     expect(entries[0].anchorEventId).toBe("u1");
     expect(entries[0].id).toBe("history-switch:o1");
+    expect(activeProfileFor("c1")).toBe("minimax-m3");
+    expect(stampedProfileFor("c1")).toBe("minimax-m3");
   });
 
   it("ignores failed switches (they still render as error cards)", () => {
