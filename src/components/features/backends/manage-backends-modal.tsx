@@ -86,13 +86,19 @@ export function ManageBackendsModal({
   const personalWorkspaceLabel = t(I18nKey.BACKEND$PERSONAL_WORKSPACE);
   const lockedCloudHost = getLockedCloudHost();
   const isLockedToCloud = lockedCloudHost !== null;
+  // Cookie-auth (OHE-hosted) backends have no API key to refresh — re-auth is
+  // the main-app login, so the device-flow reconnect controls don't apply.
+  const isCookieAuthBackend = active.backend.authMode === "cookie";
   const lockedCloudBackend =
-    isLockedToCloud && active.backend.kind === "cloud" ? active.backend : null;
+    isLockedToCloud && !isCookieAuthBackend && active.backend.kind === "cloud"
+      ? active.backend
+      : null;
   const lockedCloudReconnectHost =
     lockedCloudHost ?? lockedCloudBackend?.host ?? "";
-  const modalTitle = isLockedToCloud
-    ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
-    : t(I18nKey.BACKEND$MANAGE_TITLE);
+  const modalTitle =
+    isLockedToCloud && !isCookieAuthBackend
+      ? t(I18nKey.BACKEND$RECONNECT_CLOUD_TITLE)
+      : t(I18nKey.BACKEND$MANAGE_TITLE);
   const [pendingRemoval, setPendingRemoval] =
     React.useState<PendingRemoval | null>(null);
   const [editingBackend, setEditingBackend] = React.useState<Backend | null>(
@@ -220,7 +226,11 @@ export function ManageBackendsModal({
                           name: backend.name,
                         })
                       }
-                      onLogin={(apiKey) => handleCloudLogin(backend, apiKey)}
+                      onLogin={
+                        backend.authMode === "cookie"
+                          ? undefined
+                          : (apiKey) => handleCloudLogin(backend, apiKey)
+                      }
                     />
                   ))}
                 </ul>
