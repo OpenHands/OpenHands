@@ -190,9 +190,6 @@ export function ConversationPanel({
   );
   const [filterMenuOpen, setFilterMenuOpen] = React.useState(false);
   const [isListScrolled, setIsListScrolled] = React.useState(false);
-  const filterMenuRef = useClickOutsideElement<HTMLDivElement>(() => {
-    setFilterMenuOpen(false);
-  });
   const [collapsedGroupIds, setCollapsedGroupIds] = React.useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -1047,7 +1044,6 @@ export function ConversationPanel({
               <ConversationPanelFilterMenu
                 filterMenuOpen={filterMenuOpen}
                 setFilterMenuOpen={setFilterMenuOpen}
-                menuRef={filterMenuRef}
                 backendKind={activeBackend.kind}
                 organizeMode={organizeMode}
                 setOrganizeMode={setOrganizeMode}
