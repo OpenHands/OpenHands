@@ -484,12 +484,9 @@ class AgentServerConversationService {
       workingDirOverride ??
       buildConversationWorkingDirForBackend(conversationId, backendHost);
     const workingDir = await resolveAbsoluteAgentServerPath(baseWorkingDir);
-    // Project hooks live at `<workspace>/.openhands/hooks.json`, and the
-    // agent-server checks that path literally without walking parents. An
-    // explicit pick *is* the workspace, but the default launch works in a fresh
-    // `<workspace>/<hex>` subdir created only after this request — looking hooks
-    // up there always misses, which is why they never ran (#16907). Resolve the
-    // workspace root for the hooks lookup instead.
+    // The agent-server checks `<project_dir>/.openhands/hooks.json` literally,
+    // so hooks need the workspace root: the per-conversation subdir below it is
+    // created only after this request (#16907). An explicit pick is the root.
     const hooksProjectDir = workingDirOverride
       ? workingDir
       : await resolveAbsoluteAgentServerPath(

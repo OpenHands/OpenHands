@@ -488,11 +488,8 @@ describe("AgentServerConversationService", () => {
       expect(payload.worktree).toBe(false);
     });
 
-    // Regression for #16907 — the agent-server checks
-    // `<project_dir>/.openhands/hooks.json` literally and never walks parents,
-    // so looking hooks up in the conversation's own `<workspace>/<hex>` dir (a
-    // directory this request has not created yet) always misses and project
-    // hooks silently never run. The lookup must use the workspace root.
+    // Regression for #16907 — the conversation's own `<workspace>/<hex>` dir
+    // does not exist yet, so hooks looked up there are never found.
     it("looks project hooks up in the workspace root, not the conversation dir", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },
@@ -525,8 +522,7 @@ describe("AgentServerConversationService", () => {
       });
     });
 
-    // An explicit workspace pick *is* the project, so hooks belong there rather
-    // than in the agent-server's configured root.
+    // An explicit pick is the project, so hooks belong there.
     it("looks project hooks up in an explicitly picked workspace", async () => {
       mockGetSettings.mockResolvedValue({
         agent_settings: { llm: { model: "gpt-4o" } },

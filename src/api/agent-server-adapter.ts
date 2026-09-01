@@ -1299,13 +1299,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationId?: string;
   parentConversationId?: string;
   workingDir?: string;
-  /**
-   * Workspace root to look up `.openhands/hooks.json` in. Deliberately not
-   * `workingDir`: the default launch's working dir is a fresh
-   * `<workspace>/<hex>` subdir the agent-server has not created yet, so hooks
-   * are never found there (#16907). Omitted, the lookup falls back to the
-   * configured agent-server working dir.
-   */
+  /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
   hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;

@@ -94,10 +94,7 @@ vi.mock("#/api/backend-registry/active-store", () => ({
   isNoBackend: (backend: { id: string }) => backend.id === "no-backend",
 }));
 
-/**
- * The published `HookConfig` requires every event key, so build fixtures from a
- * complete base rather than a partial literal.
- */
+// `HookConfig` requires every event key, so build fixtures from a complete base.
 const makeHookConfig = (overrides: Partial<HookConfig> = {}): HookConfig => ({
   pre_tool_use: [],
   post_tool_use: [],
@@ -541,7 +538,6 @@ describe("buildStartConversationRequest", () => {
         ...DEFAULT_SETTINGS,
         conversation_settings: {
           ...DEFAULT_SETTINGS.conversation_settings,
-          // `conversation_settings` is an untyped settings bag.
           hook_config: EXPLICIT_HOOK_CONFIG as unknown as SettingsValue,
         },
       },
@@ -1862,8 +1858,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
 
   beforeEach(() => {
     mockLoadHooks.mockReset();
-    // Stub only the collaborators this function fans out to; the hooks lookup
-    // itself is the behavior under test, so `HooksService` runs for real.
+    // Stub only the collaborators; the hooks lookup is what's under test.
     settingsSpy = vi
       .spyOn(SettingsService, "getSettingsForConversation")
       .mockResolvedValue({
@@ -1878,9 +1873,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
     secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
   });
 
-  // These spies outlive the block without an explicit restore (vitest is not
-  // configured with `restoreMocks`), so anything appended after it would
-  // silently inherit them.
+  // vitest is not configured with `restoreMocks`, so restore explicitly.
   afterEach(() => {
     settingsSpy.mockRestore();
     secretsSpy.mockRestore();

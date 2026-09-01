@@ -97,16 +97,12 @@ describe("HooksService.loadWorkspaceHooks", () => {
     const result = await HooksService.loadWorkspaceHooks("/workspace/broken");
 
     expect(result).toBeNull();
-    // Without this the hooks a user configured silently never run and leave
-    // nothing to debug from.
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 
-  // The lookup is optional but sits on the conversation-start critical path,
-  // and `loadHooks()` spends its budget twice (a `/server_info` version probe,
-  // then the lookup), so the SDK's 60s default would stall a launch for two
-  // minutes against a reachable-but-wedged agent-server.
+  // The lookup is on the launch critical path; the SDK's 60s default would
+  // stall a launch against a wedged agent-server.
   it("bounds the request so a wedged agent-server cannot stall a launch", async () => {
     mockLoadHooks.mockResolvedValue({ hook_config: null });
 
