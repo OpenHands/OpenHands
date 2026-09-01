@@ -139,7 +139,14 @@ export type Settings = {
   search_api_key?: string;
   is_new_user?: boolean;
   mcp_config?: MCPConfig;
+  /** Deny-list over user- and project-authored skills. */
   disabled_skills?: string[];
+  /**
+   * Allow-list over the bundled `@openhands/extensions` catalog. `undefined`
+   * means "never migrated", the only signal `migrateSkillEnablement` has, so
+   * it is deliberately absent from `DEFAULT_SETTINGS`.
+   */
+  enabled_skills?: string[];
   max_budget_per_task: number | null;
   email?: string;
   email_verified?: boolean;

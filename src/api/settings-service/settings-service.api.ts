@@ -30,6 +30,7 @@ export const APP_PREFERENCE_FIELDS = [
   "git_user_email",
   "title_llm_profile",
   "disabled_skills",
+  "enabled_skills",
 ] as const;
 
 export type AppPreferenceField = (typeof APP_PREFERENCE_FIELDS)[number];
@@ -72,7 +73,8 @@ export interface SettingsApiResponse {
  * `conversation_settings_diff`. A partial diff like
  * `{ app_preferences: { language: "fr" } }` updates only `language` and
  * leaves every other `app_preferences` field alone. Lists
- * (`disabled_skills`) are replaced wholesale rather than merged.
+ * (`disabled_skills`, `enabled_skills`) are replaced wholesale rather than
+ * merged.
  */
 export interface SettingsUpdateRequest {
   agent_settings_diff?: Record<string, SettingsValue>;
