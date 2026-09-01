@@ -403,13 +403,13 @@ test.describe("mock-LLM automation lifecycle", () => {
       { text: "" }, // 4: possible internal/condenser call
       {
         // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
-        // requires preset automation conversations to finish via the `finish`
-        // tool — a hook waits for `finish_tool_used` before the run reaches
-        // COMPLETED. Blank turns alone would just loop and exhaust the
-        // trajectory, so script the required finish-tool turn explicitly.
+        // requires preset automation conversations to finish via the
+        // `FinishTool` tool — a hook waits for `finish_tool_used` before the
+        // run reaches COMPLETED. Blank turns alone would just loop and exhaust
+        // the trajectory, so script the required finish-tool turn explicitly.
 
         tool_call: {
-          name: "finish",
+          name: "FinishTool",
           arguments: { message: "Hello world echoed successfully." },
         },
       },
