@@ -1,5 +1,9 @@
 import { I18nKey } from "#/i18n/declaration";
 import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
+import {
+  getAutomationRunBadgeLabelKey,
+  type AutomationRunBadgeStatus,
+} from "#/utils/automation-run-display";
 
 /** Sparkline track height; bars sit on the baseline inside this. */
 export const AUTOMATION_RUN_ACTIVITY_TRACK_PX = 18;
@@ -64,13 +68,19 @@ export function durationMsToSparklineBarHeightPx(
 }
 
 export function barColorClassForStatus(
-  status: AutomationRunStatus | string,
+  status: AutomationRunBadgeStatus | string,
 ): string {
   switch (status) {
     case AutomationRunStatus.COMPLETED:
+    case "success":
       return "bg-[var(--oh-status-success)]";
     case AutomationRunStatus.FAILED:
+    case "failed":
       return "bg-[var(--oh-status-error)]";
+    case "blocked":
+    case "partial_success":
+    case "unknown":
+      return "bg-[var(--oh-warning)]";
     case AutomationRunStatus.RUNNING:
       return "bg-[var(--oh-status-success)] animate-pulse motion-reduce:animate-none";
     case AutomationRunStatus.PENDING:
@@ -84,24 +94,9 @@ export function barColorClassForStatus(
 }
 
 export function getAutomationRunStatusLabelKey(
-  status: AutomationRunStatus | string,
+  status: AutomationRunBadgeStatus | string,
 ): I18nKey {
-  switch (status) {
-    case AutomationRunStatus.COMPLETED:
-      return I18nKey.AUTOMATIONS$DETAIL$SUCCESSFUL;
-    case AutomationRunStatus.FAILED:
-      return I18nKey.AUTOMATIONS$DETAIL$FAILED;
-    case AutomationRunStatus.PENDING:
-      return I18nKey.AUTOMATIONS$DETAIL$PENDING;
-    case AutomationRunStatus.RUNNING:
-      return I18nKey.AUTOMATIONS$DETAIL$RUNNING;
-    case AutomationRunStatus.CANCELLED:
-      return I18nKey.AUTOMATIONS$DETAIL$CANCELLED;
-    case AutomationRunStatus.SKIPPED:
-      return I18nKey.AUTOMATIONS$DETAIL$SKIPPED;
-    default:
-      return I18nKey.FEATURED_AUTOMATIONS$STATUS_UNKNOWN;
-  }
+  return getAutomationRunBadgeLabelKey(status);
 }
 
 export function formatDurationForTitle(
