@@ -74,6 +74,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env scripts/dev-with-automation.mjs",
     "dev:static": "node --env-file-if-exists=.env scripts/dev-static.mjs",
+    "dev:docker:separated": "node scripts/docker-dev.mjs",
     "dev:extra-backend": "node --env-file-if-exists=.env scripts/dev-extra-backend.mjs",
     "dev:minimal": "node --env-file-if-exists=.env scripts/dev-safe.mjs",
     "dev:frontend": "npm run make-i18n && cross-env VITE_MOCK_API=false react-router dev",

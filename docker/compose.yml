@@ -1,0 +1,64 @@
+services:
+  agent-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dev-sandbox
+      args:
+        AGENT_SERVER_IMAGE: ${AGENT_SERVER_IMAGE:?AGENT_SERVER_IMAGE is required}
+        AGENT_SERVER_VERSION: ${AGENT_SERVER_VERSION:?AGENT_SERVER_VERSION is required}
+        AGENT_CANVAS_VERSION: ${AGENT_CANVAS_VERSION:?AGENT_CANVAS_VERSION is required}
+    environment:
+      OH_SECRET_KEY: ${OH_SECRET_KEY:?OH_SECRET_KEY is required}
+      OH_SESSION_API_KEYS_0: ${OH_SESSION_API_KEYS_0:?OH_SESSION_API_KEYS_0 is required}
+      OH_VSCODE_BASE_PATH: /vscode
+      OH_VSCODE_PORT: "8001"
+    expose:
+      - "8000"
+      - "8001"
+    init: true
+    volumes:
+      - ../:/workspace/project
+      - sandbox-state:/home/openhands/.openhands
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/alive"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: control-plane
+      args:
+        AGENT_SERVER_IMAGE: ${AGENT_SERVER_IMAGE:?AGENT_SERVER_IMAGE is required}
+        AGENT_SERVER_VERSION: ${AGENT_SERVER_VERSION:?AGENT_SERVER_VERSION is required}
+        AUTOMATION_VERSION: ${AUTOMATION_VERSION:?AUTOMATION_VERSION is required}
+        AGENT_CANVAS_VERSION: ${AGENT_CANVAS_VERSION:?AGENT_CANVAS_VERSION is required}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/canvas}
+    depends_on:
+      agent-server:
+        condition: service_healthy
+    environment:
+      AGENT_SERVER_PORT: "8000"
+      AGENT_SERVER_URL: http://agent-server:8000
+      AUTOMATION_AGENT_SERVER_URL: http://agent-server:8000
+      AUTOMATION_BASE_URL: http://control-plane:8000
+      LOCAL_BACKEND_API_KEY: ${LOCAL_BACKEND_API_KEY:?LOCAL_BACKEND_API_KEY is required}
+      OH_SESSION_API_KEYS_0: ${OH_SESSION_API_KEYS_0:?OH_SESSION_API_KEYS_0 is required}
+      SANDBOX_AGENT_SERVER_URL: http://localhost:8000
+      VSCODE_HOST: agent-server
+    ports:
+      - "${AGENT_CANVAS_PORT:-8000}:8000"
+    volumes:
+      - control-plane-state:/home/openhands/.openhands
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/alive"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  control-plane-state:
+  sandbox-state:

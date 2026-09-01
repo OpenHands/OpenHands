@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+
+import { buildComposeCommand } from "../../scripts/docker-dev.mjs";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -41,7 +43,13 @@ function resolveTopology(env: Record<string, string> = {}) {
   const [mode = "", proxyUrl = "", vscodeHost = ""] = result.stdout
     .trim()
     .split("\n");
-  return { mode, proxyUrl, status: result.status, stderr: result.stderr, vscodeHost };
+  return {
+    mode,
+    proxyUrl,
+    status: result.status,
+    stderr: result.stderr,
+    vscodeHost,
+  };
 }
 
 describe("Docker Agent Server topology", () => {
@@ -105,5 +113,55 @@ describe("Docker Agent Server topology", () => {
     expect(entrypoint).toMatch(
       /if \[ "\$AGENT_CANVAS_AGENT_SERVER_MODE" = "embedded" \]; then[\s\S]+openhands-agent-server[\s\S]+fi/,
     );
+  });
+});
+
+describe("separated Docker Compose topology", () => {
+  const composePath = path.join(repoRoot, "docker", "compose.yml");
+
+  it("builds distinct control-plane and sandbox targets", () => {
+    expect(existsSync(composePath)).toBe(true);
+    const compose = readFileSync(composePath, "utf-8");
+    expect(compose).toContain("target: control-plane");
+    expect(compose).toContain("target: dev-sandbox");
+    expect(compose).toContain("AGENT_SERVER_URL: http://agent-server:8000");
+    expect(compose).toContain("AUTOMATION_BASE_URL: http://control-plane:8000");
+    expect(compose).toContain(
+      "SANDBOX_AGENT_SERVER_URL: http://localhost:8000",
+    );
+  });
+
+  it("keeps runtime secrets out of the command and committed defaults", () => {
+    const invocation = buildComposeCommand(["--detach"], {});
+    expect(invocation.command).toEqual([
+      "docker",
+      "compose",
+      "-f",
+      "docker/compose.yml",
+      "up",
+      "--build",
+      "--detach",
+    ]);
+    expect(invocation.env.LOCAL_BACKEND_API_KEY).toMatch(/^[a-f0-9]{64}$/);
+    expect(invocation.env.OH_SESSION_API_KEYS_0).toBe(
+      invocation.env.LOCAL_BACKEND_API_KEY,
+    );
+    expect(invocation.env.OH_SECRET_KEY).toMatch(/^[a-f0-9]{64}$/);
+    expect(invocation.command.join(" ")).not.toContain(
+      invocation.env.LOCAL_BACKEND_API_KEY,
+    );
+
+    const compose = readFileSync(composePath, "utf-8");
+    expect(compose).not.toMatch(/[a-f0-9]{64}/);
+  });
+
+  it("preserves explicitly provided runtime secrets", () => {
+    const invocation = buildComposeCommand([], {
+      LOCAL_BACKEND_API_KEY: "provided-session",
+      OH_SECRET_KEY: "provided-secret",
+    });
+    expect(invocation.env.LOCAL_BACKEND_API_KEY).toBe("provided-session");
+    expect(invocation.env.OH_SESSION_API_KEYS_0).toBe("provided-session");
+    expect(invocation.env.OH_SECRET_KEY).toBe("provided-secret");
   });
 });
