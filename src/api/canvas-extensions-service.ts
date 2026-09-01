@@ -13,6 +13,8 @@ import type {
 } from "#/types/canvas-extension";
 
 const CANVAS_EXTENSIONS_BASE_PATH = "/api/canvas-extensions";
+const REMOTE_EXTENSION_SOURCE_PATTERN =
+  /^(?:github:|https?:\/\/|git:\/\/|file:\/\/|[\w.-]+@[\w.-]+:)/i;
 
 export type CanvasExtensionsUnsupportedReason =
   | "no-backend"
@@ -91,6 +93,31 @@ function installedExtensionPath(name: string): string {
   return `${CANVAS_EXTENSIONS_BASE_PATH}/installed/${encodeURIComponent(name)}`;
 }
 
+function joinLocalExtensionPath(source: string, repoPath: string): string {
+  const separator = source.includes("\\") && !source.includes("/") ? "\\" : "/";
+  const basePath = source.replace(/[\\/]+$/, "");
+  const childPath = repoPath.replace(/^[\\/]+/, "");
+
+  if (!childPath) return source;
+  if (!basePath) return `${separator}${childPath}`;
+  return `${basePath}${separator}${childPath}`;
+}
+
+function normalizeInstallRequest(
+  request: InstallCanvasExtensionRequest,
+): InstallCanvasExtensionRequest {
+  const repoPath = request.repo_path?.trim();
+  if (!repoPath || REMOTE_EXTENSION_SOURCE_PATTERN.test(request.source)) {
+    return request;
+  }
+
+  return {
+    ...request,
+    source: joinLocalExtensionPath(request.source, repoPath),
+    repo_path: null,
+  };
+}
+
 class CanvasExtensionsService {
   static async listInstalled(): Promise<InstalledCanvasExtensionInfo[]> {
     const client = getClient();
@@ -109,7 +136,7 @@ class CanvasExtensionsService {
     return mapUnsupported(() =>
       client.post<InstalledCanvasExtensionInfo>(
         `${CANVAS_EXTENSIONS_BASE_PATH}/install`,
-        request,
+        normalizeInstallRequest(request),
       ),
     );
   }
