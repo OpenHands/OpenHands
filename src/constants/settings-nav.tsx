@@ -74,14 +74,11 @@ export const OSS_NAV_ITEMS: SettingsNavItem[] = [
 ];
 
 /**
- * OSS nav entries listed when the canvas is locked to an organization Cloud
- * host. SaaS / self-hosted OHE own most settings pages in the OHE shell
- * (reached via "All Cloud Settings"), while Canvas owns LLM, Model Router,
- * and Application settings backed by cloud-aware APIs.
+ * Default page for locked-to-Cloud deployments. The full Canvas settings nav
+ * remains available; "All Cloud Settings" links out to the Cloud settings shell
+ * for pages Canvas does not own directly.
  */
 export const LOCKED_CLOUD_SETTINGS_NAV_PATH = "/settings/app";
-export const LOCKED_CLOUD_SETTINGS_NAV_PATHS = new Set([
-  "/settings/llm",
-  "/settings/meta-llm",
-  LOCKED_CLOUD_SETTINGS_NAV_PATH,
-]);
+export const LOCKED_CLOUD_SETTINGS_NAV_PATHS = new Set(
+  OSS_NAV_ITEMS.map((item) => item.to),
+);

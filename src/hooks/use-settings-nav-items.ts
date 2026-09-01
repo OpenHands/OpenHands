@@ -21,8 +21,8 @@ export function useSettingsNavItems(): SettingsNavRenderedItem[] {
   const { data: config } = useConfig();
   const { backend } = useActiveBackend();
   const featureFlags = config?.feature_flags;
-  // Locked-to-Cloud keeps Canvas-owned settings here; the OHE settings shell
-  // behind "All Cloud Settings" owns the remaining pages (OHE-3168).
+  // Locked-to-Cloud still lists the full Canvas settings nav; the Cloud shell
+  // remains available through "All Cloud Settings" for Cloud-owned pages.
   const isLockedToCloud = getLockedCloudHost() !== null;
 
   return OSS_NAV_ITEMS.filter(

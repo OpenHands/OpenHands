@@ -181,9 +181,9 @@ describe("useSettingsNavItems", () => {
     }
   });
 
-  it("lists Canvas-owned pages when locked to an organization Cloud host", () => {
+  it("lists every Canvas settings page when locked to an organization Cloud host", () => {
     // Arrange — SaaS / self-hosted OHE serve the canvas with `--lock-to-cloud`;
-    // the OHE settings shell ("All Cloud Settings") owns every other page.
+    // the Cloud settings shell stays reachable through "All Cloud Settings".
     vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
     useConfigMock.mockReturnValue({ data: createConfig() });
     useActiveBackendMock.mockReturnValue({
@@ -198,10 +198,6 @@ describe("useSettingsNavItems", () => {
     const paths = result.current
       .filter((item) => item.type === "item")
       .map((item) => (item.type === "item" ? item.item.to : null));
-    expect(paths).toEqual([
-      "/settings/llm",
-      "/settings/meta-llm",
-      "/settings/app",
-    ]);
+    expect(paths).toEqual(OSS_NAV_ITEMS.map((item) => item.to));
   });
 });
