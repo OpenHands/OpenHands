@@ -4,9 +4,11 @@ import type {
   InstallCanvasExtensionRequest,
   InstalledCanvasExtensionInfo,
 } from "#/types/canvas-extension";
+import { isValidCanvasExtensionIconPath } from "#/utils/canvas-extension-icon";
 import demoManifestSource from "#/fixtures/canvas-extensions/demo-page/canvas-extension.json?raw";
 // eslint-disable-next-line import-x/extensions -- Vite requires the real filename before ?raw.
 import demoBundle from "#/fixtures/canvas-extensions/demo-page/extension.js?raw";
+import demoIcon from "#/fixtures/canvas-extensions/demo-page/assets/pulse.svg?raw";
 
 export const CANVAS_EXTENSION_DEMO_SOURCE =
   "src/fixtures/canvas-extensions/demo-page";
@@ -133,6 +135,33 @@ export const CANVAS_EXTENSIONS_HANDLERS = [
       },
     });
   }),
+
+  http.get(
+    "*/api/canvas-extensions/installed/:name/file",
+    ({ params, request }) => {
+      const name = getRequestedName(params.name);
+      if (!getInstalledExtension(name)) return extensionNotFound(name);
+
+      const url = new URL(request.url);
+      const rawPath = url.searchParams.get("path") ?? "";
+      const requestedPath = decodeURIComponent(rawPath);
+      // Mirrors the agent-server contract: only a manifest-declared, safe, SVG
+      // path is served. Anything else is a 404 so invalid icons degrade to the
+      // default instead of exposing arbitrary files.
+      if (
+        requestedPath !== demoManifest.icon ||
+        !isValidCanvasExtensionIconPath(requestedPath)
+      ) {
+        return extensionNotFound(name);
+      }
+      return new HttpResponse(demoIcon, {
+        headers: {
+          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    },
+  ),
 
   http.get("*/api/canvas-extensions/installed/:name", ({ params }) => {
     const name = getRequestedName(params.name);

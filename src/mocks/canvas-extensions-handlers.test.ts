@@ -65,6 +65,28 @@ describe("Canvas Extension MSW handlers", () => {
     );
   });
 
+  it("serves the manifest-declared icon as SVG", async () => {
+    await installDemo();
+
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/canvas-extensions/installed/demo-page/file?path=assets%2Fpulse.svg",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("image/svg+xml");
+    await expect(response.text()).resolves.toContain("<svg");
+  });
+
+  it("refuses to serve a path that is not the declared icon", async () => {
+    await installDemo();
+
+    const response = await fetch(
+      "http://127.0.0.1:8000/api/canvas-extensions/installed/demo-page/file?path=extension.js",
+    );
+
+    expect(response.status).toBe(404);
+  });
+
   it("rejects arbitrary sources in mock mode", async () => {
     const response = await fetch(
       "http://127.0.0.1:8000/api/canvas-extensions/install",

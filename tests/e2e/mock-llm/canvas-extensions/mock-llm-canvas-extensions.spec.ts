@@ -37,8 +37,16 @@ const DEMO_SOURCE = "src/fixtures/canvas-extensions/demo-page";
 const FIXTURE_DIR = resolve(DEMO_SOURCE);
 const manifest = JSON.parse(
   readFileSync(join(FIXTURE_DIR, "canvas-extension.json"), "utf8"),
-) as { name: string; version: string; description: string };
+) as {
+  name: string;
+  version: string;
+  description: string;
+  icon?: string | null;
+};
 const bundle = readFileSync(join(FIXTURE_DIR, "extension.js"), "utf8");
+const iconSource = manifest.icon
+  ? readFileSync(join(FIXTURE_DIR, manifest.icon), "utf8")
+  : null;
 
 const CARD = `canvas-extension-card-${manifest.name}`;
 const SIDEBAR_ITEM = `sidebar-canvas-extension-${manifest.name}-hello`;
@@ -104,6 +112,23 @@ async function serveCanvasExtensionApi(page: Page) {
         contentType: "application/javascript; charset=utf-8",
         body: bundle,
       });
+    }
+    if (
+      method === "GET" &&
+      path === `/installed/${manifest.name}/file` &&
+      manifest.icon &&
+      iconSource
+    ) {
+      const requestedPath = decodeURIComponent(
+        new URL(request.url()).searchParams.get("path") ?? "",
+      );
+      if (requestedPath === manifest.icon) {
+        return route.fulfill({
+          status: 200,
+          contentType: "image/svg+xml; charset=utf-8",
+          body: iconSource,
+        });
+      }
     }
     if (path === `/installed/${manifest.name}`) {
       if (method === "GET") return json(200, installed);
@@ -184,6 +209,17 @@ test.describe("Canvas Extensions lifecycle", () => {
     await expect(cardToggle(page)).toHaveAttribute("aria-checked", "true");
     const sidebarItem = page.getByTestId(SIDEBAR_ITEM);
     await expect(sidebarItem).toBeVisible();
+
+    // The manifest-declared icon is served from the extension root and shown
+    // in the sidebar (not the generic default icon).
+    if (manifest.icon) {
+      const icon = sidebarItem.getByTestId("canvas-extension-icon");
+      await expect(icon).toBeVisible();
+      await expect(icon).toHaveAttribute(
+        "src",
+        new RegExp(`/file\\?path=${encodeURIComponent(manifest.icon)}$`),
+      );
+    }
 
     await sidebarItem.click();
     await waitForPath(page, new RegExp(`${PAGE_PATH}$`));
