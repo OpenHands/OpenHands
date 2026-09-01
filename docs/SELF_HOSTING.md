@@ -41,7 +41,8 @@ Only port `8000` on the control-plane container is published. The Agent Server
 and editor ports remain on the private Compose network. Stop the stack with:
 
 ```bash
-docker compose -f docker/compose.yml down
+docker compose --project-name agent-canvas-separated \
+  -f docker/compose.yml down
 ```
 
 The existing `npm run build:docker` command and published `agent-canvas` image

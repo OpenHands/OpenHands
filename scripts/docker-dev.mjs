@@ -78,6 +78,8 @@ export function buildComposeCommand(args, baseEnvironment) {
     command: [
       "docker",
       "compose",
+      "--project-name",
+      "agent-canvas-separated",
       "-f",
       "docker/compose.yml",
       "up",

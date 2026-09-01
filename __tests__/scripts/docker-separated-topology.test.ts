@@ -136,6 +136,8 @@ describe("separated Docker Compose topology", () => {
     expect(invocation.command).toEqual([
       "docker",
       "compose",
+      "--project-name",
+      "agent-canvas-separated",
       "-f",
       "docker/compose.yml",
       "up",
