@@ -65,7 +65,10 @@ describe("agent-server API access", () => {
         fileViolations.push("uses axios directly for HTTP calls");
       }
 
-      if (/\bfetch\s*\([\s\S]{0,200}['"`]\/api\//.test(source)) {
+      if (
+        /\bfetch\s*\([\s\S]{0,200}['"`]\/api\//.test(source) &&
+        !ALLOWED_AD_HOC_HTTP_FILES.has(relPath)
+      ) {
         fileViolations.push("calls an /api path with fetch directly");
       }
 

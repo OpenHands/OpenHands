@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 // Import the named export LlmSettingsScreen directly for testing the form component.
@@ -12,6 +19,9 @@ import * as activeBackendContext from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import * as useLlmProfilesHook from "#/hooks/query/use-llm-profiles";
 import LLMSubscriptionService from "#/api/llm-subscription-service";
+import ProviderConnectionsService, {
+  type ProviderConnection,
+} from "#/api/provider-connections-service/provider-connections-service.api";
 
 vi.mock("#/hooks/query/use-llm-profiles");
 // The profile manager gates mutate controls on this hook; default to a user
@@ -335,6 +345,277 @@ describe("LlmSettingsScreen", () => {
       { timeout: 2500 },
     );
     expect(pollLogin.mock.calls[0]?.[0]).toBe("device-code");
+  });
+});
+
+describe("LlmSettingsScreen - provider connection selector", () => {
+  const connection: ProviderConnection = {
+    id: "conn-1",
+    display_name: "My OpenAI",
+    provider: "openai",
+    base_url: null,
+    created_at: 1,
+    updated_at: 2,
+    api_key_set: true,
+  };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: true }),
+    );
+  });
+
+  it("hides the selector on cloud even when a connection is linked", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    const listSpy = vi
+      .spyOn(ProviderConnectionsService, "list")
+      .mockResolvedValue([connection]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      // showProviderConnection omitted → cloud path
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      screen.queryByTestId("llm-provider-connection-input"),
+    ).not.toBeInTheDocument();
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it("hides the API key / base URL inputs when linked to a connection", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    await screen.findByTestId("llm-provider-connection-input");
+    expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+  });
+
+  it("updates form state when a linked provider connection is changed to None", async () => {
+    const user = userEvent.setup();
+    let latestValues: Record<string, string | boolean> = {};
+
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([
+      connection,
+    ]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-1",
+      },
+      onSaveControlChange: (control) => {
+        latestValues = control.values;
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    const selector = await screen.findByTestId("llm-provider-connection-input");
+    expect(selector).toHaveValue("My OpenAI");
+
+    await user.click(selector);
+    await user.click(await screen.findByText("SETTINGS$MCP_AUTH_MODE_NONE"));
+
+    await waitFor(() => {
+      expect(latestValues["llm.provider_connection_id"]).toBe("");
+    });
+  });
+
+  it("still renders the selector for an orphaned link when no connections load", async () => {
+    // Regression: a profile linked to a since-deleted connection would hide the
+    // API key / base URL inputs while also hiding the selector, leaving no way
+    // to recover the credential or unlink.
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(ProviderConnectionsService, "list").mockResolvedValue([]);
+
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      showProviderConnection: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.provider_connection_id": "conn-gone",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    expect(
+      await screen.findByTestId("llm-provider-connection-input"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("LlmSettingsScreen - OpenHands provider on cloud", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockCloudBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({ llm_model: "openhands/kimi-k3", llm_api_key_set: true }),
+    );
+  });
+
+  it("hides the inline API key and base URL inputs for an OpenHands provider model", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.queryByTestId("llm-api-key-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("base-url-input")).not.toBeInTheDocument();
+    // The free-models note is still surfaced so the user understands the model.
+    expect(
+      screen.getByTestId("openhands-free-models-note"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the OpenHands API key help link on cloud (the key is server-minted)", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(
+      screen.queryByTestId("openhands-api-key-help"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("openhands-api-key-help-2"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("strips api_key and base_url from the saved settings payload", async () => {
+    const saveSettingsSpy = vi
+      .spyOn(SettingsService, "saveSettings")
+      .mockResolvedValue(true);
+    renderLlmSettingsScreen({
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "should-not-be-sent",
+        "llm.base_url": "https://should-not-be-sent.example/v1",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() => expect(saveSettingsSpy).toHaveBeenCalled());
+    const payload = saveSettingsSpy.mock.calls[0][0] as Record<string, unknown>;
+    const llmPayload = (payload.agent_settings_diff as Record<string, unknown>)
+      .llm as Record<string, unknown>;
+    expect(llmPayload.model).toBe("openhands/kimi-k3");
+    expect(llmPayload).not.toHaveProperty("api_key");
+    expect(llmPayload).not.toHaveProperty("base_url");
+  });
+
+  it("still shows the API key input for the OpenHands provider on a local backend", async () => {
+    vi.spyOn(activeBackendContext, "useActiveBackend").mockReturnValue({
+      backend: mockLocalBackend,
+    } as ReturnType<typeof activeBackendContext.useActiveBackend>);
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openhands/kimi-k3",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    // Local mode still collects an inline key for the OpenHands provider.
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
+    const openHandsHelp = screen.getByTestId("openhands-api-key-help");
+    expect(openHandsHelp).toBeInTheDocument();
+    // The OpenHands provider help uses the split TEXT/LINK/SUFFIX keys (not
+    // the stale single-string "API Keys tab" key) and links to OpenHands
+    // Cloud's API Keys page, where the OpenHands LLM Key section lives.
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_LINK",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$OPENHANDS_API_KEY_HELP_SUFFIX",
+    );
+    expect(openHandsHelp).toHaveTextContent(
+      "SETTINGS$SEE_HERE_FOR_MORE_DETAILS",
+    );
+    expect(openHandsHelp).not.toHaveTextContent("SETTINGS$NAV_API_KEYS");
+    const helpLinks = within(openHandsHelp).getAllByRole("link");
+    expect(helpLinks).toHaveLength(2);
+    expect(helpLinks[0]).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings/api-keys",
+    );
+    expect(helpLinks[1]).toHaveAttribute(
+      "href",
+      "https://docs.openhands.dev/usage/local-setup#getting-an-api-key",
+    );
+  });
+
+  it("still shows the API key input for a non-OpenHands provider on cloud", async () => {
+    renderLlmSettingsScreen({
+      embedded: true,
+      hideSaveButton: true,
+      initialValueOverrides: {
+        "llm.model": "openai/gpt-4o",
+        "llm.api_key": "",
+        "llm.base_url": "",
+      },
+    });
+
+    await screen.findByTestId("llm-settings-screen");
+
+    expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
 });
 

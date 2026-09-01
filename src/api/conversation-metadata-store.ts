@@ -35,6 +35,17 @@ export interface ConversationMetadata {
    * is ambiguous (issue #1082).
    */
   active_profile?: string | null;
+  /**
+   * When `active_profile` was stamped (ISO string). Written by the live
+   * WebSocket handler (the observation's server timestamp) and the user
+   * `/model` mutation (client clock). The history seed compares the latest
+   * SwitchLLM observation's timestamp against this so a reload can repair a
+   * missed agent switch without rolling back a newer manual switch — manual
+   * `/model` switches go through REST and leave no observation in history.
+   * Absent on stamps written before this field existed; treated as older
+   * than any observation so the seed can still repair them.
+   */
+  stamped_at?: string | null;
   /** Store plugin coordinates only; parameters may contain secrets. */
   plugins?: PluginSpec[] | null;
 }

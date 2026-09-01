@@ -52,6 +52,19 @@ describe("ProfileRow", () => {
     expect(screen.getByText("openai/gpt-4")).toBeInTheDocument();
   });
 
+  it("labels a free OpenHands route without changing the raw title", () => {
+    render(
+      <ProfileRow
+        {...defaultProps}
+        profile={{ ...mockProfile, model: "openhands/deepseek-v4-flash" }}
+      />,
+    );
+
+    expect(
+      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+    ).toHaveAttribute("title", "openhands/deepseek-v4-flash");
+  });
+
   it("does not display model when null", () => {
     const profileWithoutModel: ProfileInfo = {
       ...mockProfile,

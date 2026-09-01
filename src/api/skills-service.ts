@@ -6,7 +6,10 @@ import {
 import { SkillInfo } from "#/types/settings";
 import { getAgentServerWorkingDir } from "./agent-server-config";
 import { getActiveBackend } from "./backend-registry/active-store";
-import { fetchCloudSkills } from "./cloud/skills-service.api";
+import {
+  fetchCloudConversationSkills,
+  fetchCloudSkills,
+} from "./cloud/skills-service.api";
 import { getAgentServerClientOptions } from "./agent-server-client-options";
 
 function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
@@ -16,6 +19,7 @@ function catalogEntryToSkillInfo(entry: SkillCatalogEntry): SkillInfo {
     source: "public",
     description: entry.description,
     triggers: entry.triggers,
+    category: entry.category,
     content: entry.content,
     license: entry.license ?? null,
     compatibility: entry.compatibility ?? null,
@@ -60,6 +64,16 @@ class SkillsService {
     }
 
     return [...localSkills, ...PUBLIC_SKILLS];
+  }
+
+  /**
+   * Skills loaded into a running cloud conversation (see
+   * `fetchCloudConversationSkills`). Cloud-only: local conversations keep
+   * using `getSkills(projectDir)`, whose agent-server call already scopes to
+   * the conversation's workspace.
+   */
+  static getConversationSkills(conversationId: string): Promise<SkillInfo[]> {
+    return fetchCloudConversationSkills(conversationId);
   }
 }
 

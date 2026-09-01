@@ -1,4 +1,5 @@
 import { ACP_SETTINGS_KEYS } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -22,8 +23,16 @@ import {
   PluginSpec,
   AppConversation,
   AppConversationPage,
+  RuntimeConversationStats,
   SandboxStatus,
 } from "./conversation-service/agent-server-conversation-service.types";
+import { combineUsageMetrics } from "#/utils/conversation-metrics";
+import {
+  buildSkillEnablementFilter,
+  findInvokedCatalogSkill,
+  toSkillEnablement,
+  type SkillEnablement,
+} from "#/utils/skill-enablement";
 import SettingsService from "./settings-service/settings-service.api";
 import { getStoredConversationMetadata } from "./conversation-metadata-store";
 import LLMSubscriptionService from "./llm-subscription-service";
@@ -38,6 +47,10 @@ import {
   LEGACY_CANVAS_UI_TOOL_NAME,
   type ClientToolSpec,
 } from "./canvas-ui-client-tool";
+import {
+  LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL,
+  LAUNCH_CHILD_CONVERSATION_TOOL_NAME,
+} from "./launch-child-conversation-client-tool";
 
 export interface DirectConversationInfo {
   id: string;
@@ -59,6 +72,12 @@ export interface DirectConversationInfo {
       per_turn_token?: number;
     } | null;
   } | null;
+  /**
+   * Raw per-usage-id LLM stats from the agent-server. Search/list responses
+   * often carry real usage here even when `metrics` above comes back unset;
+   * {@link toAppConversation} combines this as a fallback in that case.
+   */
+  stats?: RuntimeConversationStats | null;
   agent?: {
     /**
      * Pydantic discriminator from the SDK union: ``"ACPAgent"`` for ACP CLI
@@ -371,7 +390,7 @@ export function toAppConversation(
               }
             : null,
         }
-      : null,
+      : combineUsageMetrics(info.stats),
     created_at: info.created_at,
     updated_at: info.updated_at,
     execution_status:
@@ -429,20 +448,68 @@ type ConversationSettingsPayload = SettingsRecord & {
 };
 
 export const ACP_SERVER_TAG_KEY = "acpserver";
+export const CLIENT_SOURCE_TAG_KEY = "clientsource";
+export const AGENT_CANVAS_SOURCE = "agentcanvas";
+
+export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
+export const AUTOMATION_ID_TAG_KEY = "automationid";
+export const AUTOMATION_NAME_TAG_KEY = "automationname";
+export const AUTOMATION_RUN_ID_TAG_KEY = "automationrunid";
 
 /**
- * Conversation tag keys Canvas itself stamps/consumes for internal routing.
- * They are already surfaced through dedicated UI (the ACP provider chip), so
- * the generic tag-chip display filters them out.
+ * Tag keys stamped on conversations created by automation runs (see the SDK's
+ * `RemoteWorkspace.default_conversation_tags`). The presence of any of these
+ * marks a conversation as automation-born.
+ */
+export const AUTOMATION_TAG_KEYS: readonly string[] = [
+  AUTOMATION_TRIGGER_TAG_KEY,
+  AUTOMATION_ID_TAG_KEY,
+  AUTOMATION_NAME_TAG_KEY,
+  AUTOMATION_RUN_ID_TAG_KEY,
+];
+
+/**
+ * Conversation tag keys that must not appear as generic chips / hovercard
+ * rows. Each is either already surfaced by a first-class UI source or is
+ * internal routing data:
+ * - ``acpserver`` → ACP provider chip
+ * - ``clientsource`` → telemetry attribution
+ * - ``title`` → conversation card heading
+ * - git / repo / branch / workspace stamps → repo-branch metadata + directory
+ *   footer / hovercard rows (``selected_repository``, ``selected_branch``,
+ *   ``git_provider``, ``workspace.working_dir``)
+ * - ``automationid`` / ``automationrunid`` → raw UUIDs consumed by the
+ *   conversation panel's automation filter (chip noise), while
+ *   ``automationname`` / ``automationtrigger`` stay visible
  */
 export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   ACP_SERVER_TAG_KEY,
+  CLIENT_SOURCE_TAG_KEY,
+  AUTOMATION_ID_TAG_KEY,
+  AUTOMATION_RUN_ID_TAG_KEY,
+  "title",
+  "git_provider",
+  "repo_name",
+  "repo",
+  "repository",
+  "selected_branch",
+  "branch",
+  "archiveworkspacepath",
+  "workspace",
+  "working_dir",
 ]);
 
 /**
+ * High-signal tag keys shown first in the chip row (before A–Z). Automations
+ * often stamp ``origin``; remaining free-form tags sort alphabetically.
+ */
+export const PRIORITY_CONVERSATION_TAG_KEYS: readonly string[] = ["origin"];
+
+/**
  * User-facing subset of a conversation's server-side tags: everything except
- * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries
- * sorted by key so chip order doesn't shuffle between refetches.
+ * {@link RESERVED_CONVERSATION_TAG_KEYS}, as stable ``[key, value]`` entries.
+ * Priority keys come first (in {@link PRIORITY_CONVERSATION_TAG_KEYS} order);
+ * the rest sort A–Z so chip order doesn't shuffle between refetches.
  */
 export function getDisplayConversationTags(
   tags: Record<string, string> | null | undefined,
@@ -450,9 +517,31 @@ export function getDisplayConversationTags(
   if (!tags) {
     return [];
   }
+  // Both the reserved-key check and the priority lookup must see the same
+  // normalized key: a cloud backend can stamp ``Origin`` / `` origin``, and
+  // ranking those off the raw key would silently drop them out of first place.
+  const priorityRank = (key: string): number => {
+    const index = PRIORITY_CONVERSATION_TAG_KEYS.indexOf(
+      key.trim().toLowerCase(),
+    );
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
+  };
+
   return Object.entries(tags)
-    .filter(([key]) => !RESERVED_CONVERSATION_TAG_KEYS.has(key))
-    .sort(([a], [b]) => a.localeCompare(b));
+    .filter(
+      ([key, value]) =>
+        !RESERVED_CONVERSATION_TAG_KEYS.has(key.trim().toLowerCase()) &&
+        typeof value === "string" &&
+        value.trim().length > 0,
+    )
+    .sort(([a], [b]) => {
+      const aRank = priorityRank(a);
+      const bRank = priorityRank(b);
+      if (aRank !== bRank) {
+        return aRank - bRank;
+      }
+      return a.localeCompare(b);
+    });
 }
 
 const FERNET_TOKEN_PREFIX = "gAAAAA";
@@ -667,7 +756,8 @@ function buildBundledSkills(): BundledSkill[] {
 function buildAgentContext(
   agentSettings: SettingsRecord,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
-  disabledSkills: string[] = [],
+  enablement: SkillEnablement = {},
+  invokedCatalogSkill?: string,
 ): SettingsRecord {
   const runtimeServicesSuffix =
     buildRuntimeServicesSystemSuffix(runtimeServicesInfo);
@@ -678,11 +768,25 @@ function buildAgentContext(
   const existingSkills = Array.isArray(existingContext.skills)
     ? (existingContext.skills as SettingsRecord[])
     : [];
+  const disabledSkills = enablement.disabledSkills ?? [];
   const disabledSkillNames = new Set(disabledSkills);
-  const mergedSkills = [...existingSkills, ...buildBundledSkills()].filter(
-    (skill) =>
-      typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
-  );
+  const isSkillEnabled = buildSkillEnablementFilter(enablement);
+
+  // The bundled catalog is allow-listed, not deny-listed: it is a build-time
+  // snapshot of ~60 skills, so a deny-list puts every future addition into
+  // every system prompt (OpenHands#16302). Skills the agent context already
+  // carries are user-authored and stay opt-out. A skill the opening message
+  // invokes by name overrides both, for this conversation only.
+  const mergedSkills = [
+    ...existingSkills.filter(
+      (skill) =>
+        typeof skill.name !== "string" || !disabledSkillNames.has(skill.name),
+    ),
+    ...buildBundledSkills().filter(
+      (skill) =>
+        skill.name === invokedCatalogSkill || isSkillEnabled(skill.name),
+    ),
+  ];
 
   return {
     ...existingContext,
@@ -699,6 +803,11 @@ function buildAgentContext(
     load_public_skills: false,
     load_user_skills: true,
     load_project_skills: true,
+    // The backend also auto-loads user/project skills; the deny-list must
+    // travel with the context so those skills are excluded from the system
+    // prompt too. The allow-list has no counterpart to send: the backend
+    // loads no catalog skills of its own (`load_public_skills` is false).
+    disabled_skills: disabledSkills,
     ...(runtimeServicesSuffix
       ? { system_message_suffix: runtimeServicesSuffix }
       : {}),
@@ -735,6 +844,7 @@ function resolveAcpCommand(agentSettings: SettingsRecord): unknown {
 function buildConfiguredAcpAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const payload: AgentSettingsPayload = {
@@ -742,7 +852,8 @@ function buildConfiguredAcpAgentSettings(
     agent_context: buildAgentContext(
       agentSettings,
       runtimeServicesInfo,
-      settings.disabled_skills,
+      toSkillEnablement(settings),
+      findInvokedCatalogSkill(query),
     ),
   };
 
@@ -801,6 +912,7 @@ function buildConfiguredAcpAgentSettings(
 function buildConfiguredOpenHandsAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   const agentSettings = toRecord(settings.agent_settings);
   const llm = toRecord(agentSettings.llm);
@@ -858,7 +970,8 @@ function buildConfiguredOpenHandsAgentSettings(
     agent_context: buildAgentContext(
       agentSettings,
       runtimeServicesInfo,
-      settings.disabled_skills,
+      toSkillEnablement(settings),
+      findInvokedCatalogSkill(query),
     ),
     tools: getAgentTools(agentSettings),
   };
@@ -867,10 +980,15 @@ function buildConfiguredOpenHandsAgentSettings(
 function buildConfiguredAgentSettings(
   settings: Settings,
   runtimeServicesInfo?: RuntimeServicesInfo | null,
+  query?: string,
 ): AgentSettingsPayload {
   return isAcpAgent(settings)
-    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo)
-    : buildConfiguredOpenHandsAgentSettings(settings, runtimeServicesInfo);
+    ? buildConfiguredAcpAgentSettings(settings, runtimeServicesInfo, query)
+    : buildConfiguredOpenHandsAgentSettings(
+        settings,
+        runtimeServicesInfo,
+        query,
+      );
 }
 
 function buildConfiguredConversationSettings(options: {
@@ -933,6 +1051,7 @@ type StartConversationPayload = Record<string, unknown> & {
   worktree: boolean;
   secrets_encrypted?: true;
   conversation_id?: string;
+  parent_conversation_id?: string;
   secrets?: Record<string, LookupSecret>;
   tags?: Record<string, string>;
   client_tools: ClientToolSpec[];
@@ -945,6 +1064,11 @@ export interface StartConversationOptions {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  // Links the new conversation to an existing one as its child. The
+  // agent-server requires the parent to exist and to share this
+  // conversation's requested `workspace.working_dir` (software-agent-sdk
+  // #4188, agent-server >= 1.37.1); older servers ignore the field.
+  parentConversationId?: string;
   workingDir?: string;
   worktree?: boolean;
   encryptedAgentSettings?: Record<string, SettingsValue>;
@@ -957,6 +1081,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  workspaceHookConfig?: HookConfig | null;
 }
 
 export function buildStartConversationRequest(
@@ -975,6 +1100,7 @@ export function buildStartConversationRequest(
   const agentSettings = buildConfiguredAgentSettings(
     sourceAgentSettings,
     options.runtimeServicesInfo,
+    options.query,
   );
   const acpServerTag = acpMode
     ? getAcpServerTag(sourceAgentSettings)
@@ -1020,8 +1146,15 @@ export function buildStartConversationRequest(
       ? { agent_profile_id: options.agentProfileId }
       : { agent_settings: agentSettings }),
     workspace: conversationSettings.workspace,
+    // The agent-server caches each client tool's schema per tool *name* for the
+    // life of the process and rejects a re-registration with a different schema
+    // (`ClientToolSchemaConflictError`). Editing either schema below therefore
+    // requires restarting a long-running dev agent-server before new
+    // conversations can start.
     client_tools:
-      launchAgentKind === "openhands" ? [CANVAS_UI_CLIENT_TOOL] : [],
+      launchAgentKind === "openhands"
+        ? [CANVAS_UI_CLIENT_TOOL, LAUNCH_CHILD_CONVERSATION_CLIENT_TOOL]
+        : [],
     confirmation_policy:
       getConversationConfirmationPolicy(conversationSettings),
     max_iterations:
@@ -1036,10 +1169,17 @@ export function buildStartConversationRequest(
     worktree: options.worktree ?? true,
   };
 
+  // Stamp the client source tag so the agent-server can attribute the
+  // conversation to Canvas in telemetry (conversation_source = "canvas").
   // A profile launch resolves the ACP server server-side, so don't stamp the
   // tag from current settings (it may not match the launched profile).
   if (!options.agentProfileId && acpServerTag) {
-    payload.tags = { [ACP_SERVER_TAG_KEY]: acpServerTag };
+    payload.tags = {
+      [ACP_SERVER_TAG_KEY]: acpServerTag,
+      [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE,
+    };
+  } else {
+    payload.tags = { [CLIENT_SOURCE_TAG_KEY]: AGENT_CANVAS_SOURCE };
   }
 
   // ``secrets_encrypted`` makes the agent-server decrypt request secrets at
@@ -1060,6 +1200,10 @@ export function buildStartConversationRequest(
     payload.conversation_id = options.conversationId;
   }
 
+  if (options.parentConversationId) {
+    payload.parent_conversation_id = options.parentConversationId;
+  }
+
   const securityAnalyzer =
     getConversationSecurityAnalyzer(conversationSettings);
   if (securityAnalyzer) {
@@ -1076,6 +1220,8 @@ export function buildStartConversationRequest(
 
   if (conversationSettings.hook_config) {
     payload.hook_config = conversationSettings.hook_config;
+  } else if (options.workspaceHookConfig) {
+    payload.hook_config = options.workspaceHookConfig;
   }
 
   const toolModuleQualnames = {
@@ -1085,6 +1231,7 @@ export function buildStartConversationRequest(
   };
   delete toolModuleQualnames[LEGACY_CANVAS_UI_TOOL_NAME];
   delete toolModuleQualnames[CANVAS_UI_CLIENT_TOOL_NAME];
+  delete toolModuleQualnames[LAUNCH_CHILD_CONVERSATION_TOOL_NAME];
   if (Object.keys(toolModuleQualnames).length > 0) {
     payload.tool_module_qualnames = toolModuleQualnames;
   }
@@ -1150,20 +1297,31 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   conversationId?: string;
+  parentConversationId?: string;
   workingDir?: string;
+  /** Workspace root for the hooks lookup, not the per-conversation `workingDir` (#16907). */
+  hooksProjectDir?: string;
   worktree?: boolean;
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
 }): Promise<Record<string, unknown>> {
-  const { SecretsService } = await import("./secrets-service");
+  const [{ SecretsService }, { default: HooksService }] = await Promise.all([
+    import("./secrets-service"),
+    import("./hooks-service"),
+  ]);
 
-  const [settingsResult, customSecrets, runtimeServicesInfo] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendRuntimeServicesInfo(),
-    ]);
+  const [
+    settingsResult,
+    customSecrets,
+    runtimeServicesInfo,
+    workspaceHookConfig,
+  ] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendRuntimeServicesInfo(),
+    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+  ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
@@ -1181,6 +1339,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    workspaceHookConfig,
   });
 }
 

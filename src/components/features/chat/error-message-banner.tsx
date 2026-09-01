@@ -1,11 +1,12 @@
 import React from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { Check, CircleX, Copy, X } from "lucide-react";
+import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
+import type { ErrorClassification } from "@openhands/typescript-client";
 
 interface ErrorMessageBannerProps {
   message: string;
@@ -15,6 +16,7 @@ interface ErrorMessageBannerProps {
   onRetry?: () => void;
   /** Recovery action (e.g. re-authenticate) shown for credential failures. */
   onReauth?: () => void;
+  classification?: ErrorClassification | null;
 }
 
 const DEFAULT_MAX_COLLAPSED_CHARS = 220;
@@ -25,6 +27,7 @@ export function ErrorMessageBanner({
   onDismiss,
   onRetry,
   onReauth,
+  classification,
 }: ErrorMessageBannerProps) {
   const { t, i18n } = useTranslation("openhands");
   const headerKey = getAcpErrorHeaderKey(code);
@@ -97,13 +100,24 @@ export function ErrorMessageBanner({
       )}
       data-testid="error-message-banner"
     >
-      <CircleX
-        aria-hidden
-        className="h-4 w-4 shrink-0"
-        strokeWidth={2}
-        style={{ color: OH_STATUS_ERROR_COLOR }}
-        data-testid="error-message-banner-icon"
-      />
+      {classification != null &&
+      classification.kind !== "internal" &&
+      classification.kind !== "unknown" ? (
+        <CircleAlert
+          aria-hidden
+          className="h-4 w-4 shrink-0 text-[var(--oh-warning)]"
+          strokeWidth={2}
+          data-testid="warning-message-banner-icon"
+        />
+      ) : (
+        <CircleX
+          aria-hidden
+          className="h-4 w-4 shrink-0"
+          strokeWidth={2}
+          style={{ color: OH_STATUS_ERROR_COLOR }}
+          data-testid="error-message-banner-icon"
+        />
+      )}
       <div className="min-w-0 flex-1">
         {headerKey && (
           <div

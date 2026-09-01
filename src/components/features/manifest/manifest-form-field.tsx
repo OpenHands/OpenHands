@@ -7,16 +7,20 @@ import { I18nKey } from "#/i18n/declaration";
 import { formControlMultilineFieldClassName } from "#/utils/form-control-classes";
 import { cn } from "#/utils/utils";
 import type { GitRepository } from "#/types/git";
+import { fieldText, fieldValues } from "#/manifests/manifest-local-validation";
+import { SetupRepositoryList } from "./manifest-repository-list";
 import type {
   SetupFieldOption,
   SetupFormField as SetupFormFieldDefinition,
+  SetupFormValue,
 } from "#/manifests/types";
 
 export interface SetupFormFieldProps {
   /** The record key the field is declared under, and what `{{form.x}}` reads. */
   name: string;
   field: SetupFormFieldDefinition;
-  value: string;
+  /** A list for a field collecting several values, a string for the rest. */
+  value: SetupFormValue;
   /** Already-resolved copy: local checks and service errors look the same here. */
   error?: string;
   /** Declared options, or the ones the deployment supplied. */
@@ -24,7 +28,7 @@ export interface SetupFormFieldProps {
   /** The picked repository, kept so the picker can show what is selected. */
   repository: GitRepository | null;
   disabled: boolean;
-  onChange: (value: string) => void;
+  onChange: (value: SetupFormValue) => void;
   onRepositoryChange: (repository: GitRepository | null) => void;
   onBlur: () => void;
 }
@@ -60,6 +64,31 @@ export function SetupFormField({
   // local-only, which makes that the common case rather than the edge one.
   const canListRepositories = backend.kind === "cloud";
 
+  // The format hint is host copy: a manifest states the format of everything it
+  // declares except a repository, whose shape the host derives.
+  const repositoryPlaceholder =
+    field.placeholder ?? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER);
+
+  if (field.type === "repo-picker" && field.multiple) {
+    return (
+      <div className="flex w-full flex-col gap-2.5">
+        <FieldLabel field={field} />
+        <SetupRepositoryList
+          name={name}
+          field={field}
+          values={fieldValues(value)}
+          canListRepositories={canListRepositories}
+          placeholder={repositoryPlaceholder}
+          disabled={disabled}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
+        <FieldError testId={testId} error={error} />
+        {help}
+      </div>
+    );
+  }
+
   if (field.type === "repo-picker" && canListRepositories) {
     return (
       <div className="flex w-full flex-col gap-2.5">
@@ -67,7 +96,7 @@ export function SetupFormField({
         <GitRepoDropdown
           provider={field.provider ?? "github"}
           value={repository?.id ?? null}
-          repositoryName={repository?.full_name ?? value ?? null}
+          repositoryName={repository?.full_name ?? fieldText(value) ?? null}
           placeholder={field.placeholder}
           disabled={disabled}
           onChange={(selected) => {
@@ -99,7 +128,7 @@ export function SetupFormField({
             key: option.value,
             label: option.label,
           }))}
-          selectedKey={value || undefined}
+          selectedKey={fieldText(value) || undefined}
           placeholder={field.placeholder}
           isDisabled={disabled}
           required={field.required}
@@ -122,7 +151,7 @@ export function SetupFormField({
           data-testid={testId}
           name={name}
           rows={4}
-          value={value}
+          value={fieldText(value)}
           placeholder={field.placeholder}
           disabled={disabled}
           aria-invalid={!!error}
@@ -145,10 +174,7 @@ export function SetupFormField({
   // states the format of everything it declares except the repository, whose
   // shape the host derives, so that one hint is host copy.
   const placeholder =
-    field.placeholder ??
-    (field.type === "repo-picker"
-      ? t(I18nKey.SETUP$REPOSITORY_PLACEHOLDER)
-      : undefined);
+    field.type === "repo-picker" ? repositoryPlaceholder : field.placeholder;
 
   return (
     <div className="flex w-full flex-col gap-2.5">
@@ -157,7 +183,7 @@ export function SetupFormField({
         name={name}
         type="text"
         label={field.label}
-        value={value}
+        value={fieldText(value)}
         placeholder={placeholder}
         isDisabled={disabled}
         showRequiredTag={field.required}

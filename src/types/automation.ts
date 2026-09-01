@@ -43,11 +43,18 @@ export interface Automation {
   notification?: string;
   timezone?: string;
   last_triggered_at?: string | null;
+  /**
+   * Service-owned preset state, returned verbatim. The GUI reads only the
+   * `template` provenance block inside it ({id, version, config}, written at
+   * setup time), and only through the guarded helper in
+   * `#/utils/automation-catalog`.
+   */
+  preset_metadata?: Record<string, unknown> | null;
 }
 
 export type AutomationSpec = Omit<
   Automation,
-  "id" | "created_at" | "updated_at" | "last_triggered_at"
+  "id" | "created_at" | "updated_at" | "last_triggered_at" | "preset_metadata"
 >;
 
 /** The envelope constants come from the interface manifest's import/export spec. */
@@ -72,6 +79,37 @@ export enum AutomationRunStatus {
   SKIPPED = "SKIPPED",
 }
 
+export type AutomationTaskOutcomeStatus =
+  | "success"
+  | "partial_success"
+  | "blocked"
+  | "failed"
+  | "unknown";
+
+export interface AutomationFinishToolResponse {
+  status?: AutomationTaskOutcomeStatus | string;
+  outcome_summary?: string;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunMetadata {
+  finish_tool_response?: AutomationFinishToolResponse | string | null;
+  [key: string]: unknown;
+}
+
+export interface AutomationRunStatusDetail {
+  phase?: string;
+  kind?: string;
+  detail?: string;
+  formatted_detail?: string;
+  transient?: boolean;
+  source?: string;
+  operation?: string;
+  code?: string;
+  status_code?: number;
+  [key: string]: unknown;
+}
+
 export interface AutomationRun {
   id: string;
   status: AutomationRunStatus;
@@ -85,6 +123,31 @@ export interface AutomationRun {
    */
   bash_command_id: string | null;
   error_detail: string | null;
+  status_detail?: AutomationRunStatusDetail | null;
+  run_metadata?: AutomationRunMetadata | null;
+  /**
+   * Accumulated LLM cost of the run in USD, reported by the SDK in the
+   * completion callback. `null` means unknown — the run predates cost
+   * tracking, or ended without a callback (cancelled, watchdog timeout).
+   * Absent entirely when the automation service is older than the release
+   * that added the field, hence optional.
+   */
+  cost?: number | null;
+  /**
+   * Machine-readable code for the run's current or last-known phase (e.g.
+   * "sandbox_provisioning"). `null` means nothing has reported one; absent
+   * entirely against an automation service that predates phase reporting.
+   * Code and label are one value, always written together.
+   */
+  phase_code?: string | null;
+  /**
+   * Author-supplied description of the phase (at most 200 characters, no
+   * control or separator characters, emoji and non-Latin text allowed).
+   * Data, not translatable interface copy.
+   */
+  phase_label?: string | null;
+  /** UTC datetime the phase was last written. Same nullability as `phase_code`. */
+  phase_updated_at?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -92,6 +155,13 @@ export interface AutomationRun {
 export interface AutomationRunsResponse {
   runs: AutomationRun[];
   total: number;
+  /**
+   * Lifetime run counts by status, unaffected by pagination. Sparse — a
+   * status with no runs has no key, so when the field is present a missing
+   * key means zero. Absent entirely when the automation service is older
+   * than the release that added it.
+   */
+  status_counts?: Partial<Record<AutomationRunStatus, number>>;
 }
 
 export type ActivityLogExportFormat = "json" | "csv";
@@ -109,4 +179,15 @@ export interface AutomationRunExportRow {
   conversation_id: string | null;
   conversation_url: string | null;
   error: string | null;
+  /**
+   * Accumulated LLM cost in USD, or null when unknown. Unlike
+   * `AutomationRun["cost"]` this is always present: the row normalizes a
+   * missing field to null so every exported record has the same shape.
+   */
+  cost: number | null;
+  /**
+   * The raw `phase_code`, like `status`, falling back to `phase_label` for a
+   * phase reported without a code. Null only when the run has no phase.
+   */
+  phase: string | null;
 }

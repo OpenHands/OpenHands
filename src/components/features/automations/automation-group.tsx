@@ -4,13 +4,21 @@ import { AutomationCard } from "./automation-card";
 import { AutomationListRow } from "./automation-list-row";
 import { StatusBadge } from "./status-badge";
 import {
-  automationListTableClassName,
+  automationActivityListClassName,
   type AutomationViewMode,
 } from "./automation-view-mode";
 import {
   extensionModuleCardGridClassName,
   extensionModuleCardGridContainerClassName,
 } from "#/utils/extension-module-card-classes";
+import type { RunSummaryState } from "#/manifests/automation-insights";
+import type { InterfaceListInsights } from "#/manifests/types";
+
+/** Present when the manifest declares the dashboard surface. */
+interface AutomationGroupInsights {
+  spec: InterfaceListInsights;
+  byId: ReadonlyMap<string, RunSummaryState>;
+}
 
 interface AutomationGroupProps {
   title: string;
@@ -23,6 +31,7 @@ interface AutomationGroupProps {
   onDelete: (id: string) => void;
   onExport: (automation: Automation) => void;
   onEdit?: (id: string) => void;
+  insights?: AutomationGroupInsights;
 }
 
 export function AutomationGroup({
@@ -36,6 +45,7 @@ export function AutomationGroup({
   onDelete,
   onExport,
   onEdit,
+  insights,
 }: AutomationGroupProps) {
   if (automations.length === 0) return null;
 
@@ -58,29 +68,37 @@ export function AutomationGroup({
                 onDelete={onDelete}
                 onExport={onExport}
                 onEdit={onEdit}
+                insights={
+                  insights && {
+                    spec: insights.spec,
+                    state: insights.byId.get(automation.id),
+                  }
+                }
               />
             ))}
           </div>
         </div>
       ) : (
-        <div className={cn(automationListTableClassName, "mt-3")}>
-          <table className="w-full min-w-full [&>tbody>tr:first-child]:border-t-0">
-            <tbody>
-              {automations.map((automation) => (
-                <AutomationListRow
-                  key={automation.id}
-                  automation={automation}
-                  onToggle={onToggle}
-                  onRunNow={onRunNow}
-                  isRunPending={runPendingId === automation.id}
-                  onDelete={onDelete}
-                  onExport={onExport}
-                  onEdit={onEdit}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className={cn(automationActivityListClassName, "mt-3")}>
+          {automations.map((automation) => (
+            <AutomationListRow
+              key={automation.id}
+              automation={automation}
+              onToggle={onToggle}
+              onRunNow={onRunNow}
+              isRunPending={runPendingId === automation.id}
+              onDelete={onDelete}
+              onExport={onExport}
+              onEdit={onEdit}
+              insights={
+                insights && {
+                  spec: insights.spec,
+                  state: insights.byId.get(automation.id),
+                }
+              }
+            />
+          ))}
+        </ul>
       )}
     </section>
   );

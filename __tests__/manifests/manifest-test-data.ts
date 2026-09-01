@@ -143,3 +143,113 @@ export function createInterfaceManifestWith(
 ): unknown {
   return { ...createInterfaceManifest(), ...overrides };
 }
+
+/**
+ * The factory manifest plus a complete sub-page surface. Like the base
+ * factory, every caption differs from the production manifest and from any
+ * host string, so a test that reads one back knows where it came from.
+ */
+export function createInterfaceManifestWithSubPages(): InterfaceManifest {
+  const base = createInterfaceManifest();
+  return {
+    ...base,
+    routes: { ...base.routes, templates: "/automations/templates" },
+    navigation: {
+      ...base.navigation,
+      subPages: [
+        { page: "list", label: "Widget dashboard", icon: "layout-dashboard" },
+        { page: "templates", label: "Widget templates", icon: "sparkles" },
+      ],
+    },
+    pages: {
+      ...base.pages,
+      list: {
+        ...base.pages.list,
+        overview: {
+          label: "Widget overview",
+          tiles: [
+            {
+              metric: "automations",
+              label: "Widget count",
+              detail: "{{active}} live",
+              icon: "bot",
+            },
+            {
+              metric: "needs-attention",
+              label: "Widget attention",
+              detail: "Broken widgets",
+              zeroDetail: "No broken widgets",
+              icon: "circle-alert",
+            },
+            {
+              metric: "total-runs",
+              label: "Widget runs",
+              detail: "Counted so far",
+              icon: "activity",
+            },
+            {
+              metric: "average-duration",
+              label: "Widget pace",
+              detail: "Recent finished runs",
+              icon: "timer",
+            },
+          ],
+        },
+        filters: [
+          {
+            id: "status",
+            label: "Filter widgets by state",
+            options: [
+              { value: "all", label: "Every state" },
+              { value: "active", label: "Live" },
+              { value: "failing", label: "Broken" },
+              { value: "disabled", label: "Off" },
+            ],
+          },
+          {
+            id: "trigger",
+            label: "Filter widgets by trigger",
+            options: [
+              { value: "all", label: "Every trigger" },
+              { value: "schedule", label: "Timed" },
+              { value: "event", label: "Evented" },
+            ],
+          },
+        ],
+        sort: {
+          label: "Order widgets",
+          default: "name",
+          options: [
+            { value: "last-run", label: "Latest" },
+            { value: "runs", label: "Busiest" },
+            { value: "name", label: "Alphabetical" },
+          ],
+        },
+        insights: {
+          health: {
+            healthy: "Fine",
+            failing: "Broken",
+            running: "Busy",
+            disabled: "Off",
+            neverRun: "Fresh",
+            checking: "Looking",
+          },
+          lastRun: {
+            label: "Last widget run",
+            never: "Not yet",
+            justNow: "Moments ago",
+          },
+          stats: {
+            runs: "Widget runs",
+            recentSuccess: "Widget wins",
+            averageDuration: "Widget pace",
+          },
+        },
+      },
+      templates: {
+        title: "Widget templates",
+        description: "Pick a proven widget to start from.",
+      },
+    },
+  };
+}

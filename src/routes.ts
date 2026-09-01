@@ -18,6 +18,8 @@ export default [
     route("customize", "routes/extensions-hub.tsx"),
     route("skills", "routes/skills-settings.tsx"),
     route("plugins", "routes/skills-plugins.tsx"),
+    route("extensions", "routes/canvas-extensions.tsx"),
+    route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
     route("settings", "routes/settings.tsx", [
       index("routes/settings-index.tsx"),
@@ -32,6 +34,8 @@ export default [
     ]),
     route("oauth/device/verify", "routes/device-verify.tsx"),
     route("automations", "routes/automations-list.tsx"),
+    route("automations/git-sync", "routes/automation-git-sync.tsx"),
+    route("automations/templates", "routes/automation-templates.tsx"),
     route("automations/new/:automationId", "routes/automation-setup-route.tsx"),
     route("automations/:automationId", "routes/automation-detail.tsx"),
   ]),

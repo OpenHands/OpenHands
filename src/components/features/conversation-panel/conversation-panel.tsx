@@ -6,15 +6,18 @@ import { useNavigation } from "#/context/navigation-context";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { useBackendScopedPath } from "#/hooks/use-backend-scoped-path";
 import { usePaginatedConversations } from "#/hooks/query/use-paginated-conversations";
+import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import { useStartTasks } from "#/hooks/query/use-start-tasks";
 import { useDeleteConversation } from "#/hooks/mutation/use-delete-conversation";
 import { useUnifiedPauseConversation } from "#/hooks/mutation/use-unified-stop-conversation";
+import { ConfirmArchiveModal } from "./confirm-archive-modal";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 import { ConfirmStopModal } from "./confirm-stop-modal";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import { ExitConversationModal } from "./exit-conversation-modal";
 import { useClickOutsideElement } from "#/hooks/use-click-outside-element";
 import { Provider } from "#/types/settings";
+import type { LocalWorkspace } from "#/types/workspace";
 import { useUpdateConversation } from "#/hooks/mutation/use-update-conversation";
 import {
   displayErrorToast,
@@ -35,13 +38,18 @@ import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-threa
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
+  applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  collectAutomationNameFacets,
   filterOutPinnedConversations,
+  getGroupDiscoveryConversationIds,
   groupConversations,
+  MAX_PAGES_PER_LOAD_MORE_CLICK,
   resolvePinnedConversations,
   sortConversationsByField,
   type ConversationGroupLaunch,
 } from "./conversation-panel-list-helpers";
+import { useArchivedConversationsStore } from "#/stores/archived-conversations-store";
 import { usePinnedConversationsStore } from "#/stores/pinned-conversations-store";
 
 interface ConversationPanelProps {
@@ -98,6 +106,8 @@ export function ConversationPanel({
 
   const [confirmDeleteModalVisible, setConfirmDeleteModalVisible] =
     React.useState(false);
+  const [confirmArchiveModalVisible, setConfirmArchiveModalVisible] =
+    React.useState(false);
   const [confirmStopModalVisible, setConfirmStopModalVisible] =
     React.useState(false);
   const [
@@ -108,6 +118,12 @@ export function ConversationPanel({
     React.useState(false);
   const showOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.showOlderConversations,
+  );
+  const showArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.showArchivedConversations,
+  );
+  const toggleShowArchivedConversations = useConversationPanelPreferencesStore(
+    (state) => state.toggleShowArchivedConversations,
   );
   const toggleShowOlderConversations = useConversationPanelPreferencesStore(
     (state) => state.toggleShowOlderConversations,
@@ -154,6 +170,18 @@ export function ConversationPanel({
   const setThreadScope = useConversationPanelPreferencesStore(
     (state) => state.setThreadScope,
   );
+  const automationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.automationFilterMode,
+  );
+  const setAutomationFilterMode = useConversationPanelPreferencesStore(
+    (state) => state.setAutomationFilterMode,
+  );
+  const selectedAutomationNames = useConversationPanelPreferencesStore(
+    (state) => state.selectedAutomationNames,
+  );
+  const toggleAutomationName = useConversationPanelPreferencesStore(
+    (state) => state.toggleAutomationName,
+  );
   const groupFolderOrder = useConversationPanelPreferencesStore(
     (state) => state.groupFolderOrder,
   );
@@ -179,8 +207,26 @@ export function ConversationPanel({
       state.pinsByBackendId[activeBackend.id] ?? EMPTY_PINNED_CONVERSATION_IDS,
   );
   const togglePin = usePinnedConversationsStore((state) => state.togglePin);
+  const unpinConversation = usePinnedConversationsStore(
+    (state) => state.unpinConversation,
+  );
   const pruneMissingPinnedConversations = usePinnedConversationsStore(
     (state) => state.pruneMissingConversations,
+  );
+  const archivedIds = useArchivedConversationsStore(
+    (state) =>
+      state.archivesByBackendId[activeBackend.id] ??
+      EMPTY_PINNED_CONVERSATION_IDS,
+  );
+  const archiveConversation = useArchivedConversationsStore(
+    (state) => state.archiveConversation,
+  );
+  const archivedIdSet = React.useMemo(
+    () => new Set(archivedIds),
+    [archivedIds],
+  );
+  const removeArchivedConversation = useArchivedConversationsStore(
+    (state) => state.removeArchivedConversation,
   );
 
   const toggleGroupCollapsed = React.useCallback((groupId: string) => {
@@ -234,11 +280,15 @@ export function ConversationPanel({
     isFetchingNextPage,
     fetchNextPage,
   } = usePaginatedConversations();
+  const { workspaces: knownWorkspaces } = useResolvedWorkspaces();
 
   // Fetch in-progress start tasks
   const { data: startTasks } = useStartTasks();
 
-  const conversations = React.useMemo(() => {
+  // Deduped, archive-unaware collection of every conversation currently loaded
+  // from the backend. Bulk actions like "Delete all" must use this list so
+  // hiding archived rows from the UI never shrinks what gets deleted.
+  const allLoadedConversations = React.useMemo(() => {
     const all = data?.pages.flatMap((page) => page.items) ?? [];
     // The 10s background refetch re-fetches every loaded page with the
     // `UPDATED_AT_DESC` cursor. If a conversation's `updated_at` shifts between
@@ -255,6 +305,102 @@ export function ConversationPanel({
     });
   }, [data]);
 
+  // Grouped pagination is folder-oriented. Record the first backend page for
+  // every conversation so later pages can introduce new folders without
+  // mutating the contents of folders that are already visible.
+  //
+  // Known limitation: the mapping is recomputed from `data.pages` on the 10s
+  // background refetch, so a conversation whose `updated_at` shifts can move
+  // to an earlier page and change its recorded discovery page. The blast
+  // radius is only which rows a collapsed preview shows (expanding a folder
+  // always reveals every loaded conversation); pinning discovery pages across
+  // refetches is not worth the extra bookkeeping today.
+  const conversationPageById = React.useMemo(() => {
+    const pageById = new Map<string, number>();
+    data?.pages.forEach((page, pageIndex) => {
+      page.items.forEach((conversation) => {
+        if (!pageById.has(conversation.id)) {
+          pageById.set(conversation.id, pageIndex);
+        }
+      });
+    });
+    return pageById;
+  }, [data]);
+
+  // Display collection: same loaded pages, with archived rows filtered out
+  // unless the user has opted into "Show archived".
+  const conversations = React.useMemo(() => {
+    if (showArchivedConversations) {
+      return allLoadedConversations;
+    }
+    return allLoadedConversations.filter(
+      (conversation) => !archivedIdSet.has(conversation.id),
+    );
+  }, [allLoadedConversations, archivedIdSet, showArchivedConversations]);
+
+  // Facets derive from the unfiltered list so the automation-name rows in the
+  // filter menu don't vanish while a narrowing selection is active.
+  const automationNameFacets = React.useMemo(
+    () => collectAutomationNameFacets(conversations),
+    [conversations],
+  );
+
+  const allWorkspacesForGrouping = React.useMemo<
+    readonly LocalWorkspace[]
+  >(() => {
+    if (
+      compact ||
+      organizeMode !== "grouped" ||
+      activeBackend.kind !== "local"
+    ) {
+      return [];
+    }
+    const normalize = (p: string) => p.trim().replace(/\/+$/, "");
+    const byPath = new Map<string, LocalWorkspace>();
+    for (const ws of knownWorkspaces) {
+      const key = normalize(ws.path);
+      if (key) {
+        byPath.set(key, ws);
+      }
+    }
+    for (const c of conversations) {
+      const normalized = c.selected_workspace
+        ? normalize(c.selected_workspace)
+        : "";
+      if (normalized && !byPath.has(normalized)) {
+        const label = normalized.split("/").filter(Boolean).pop() ?? normalized;
+        byPath.set(normalized, {
+          id: normalized,
+          name: label,
+          path: normalized,
+        });
+      }
+    }
+    return Array.from(byPath.values());
+  }, [
+    activeBackend.kind,
+    compact,
+    conversations,
+    knownWorkspaces,
+    organizeMode,
+  ]);
+
+  const automationFilteredConversations = React.useMemo(
+    () =>
+      applyAutomationConversationFilter(
+        conversations,
+        automationFilterMode,
+        selectedAutomationNames,
+        automationNameFacets,
+      ),
+    [
+      automationFilterMode,
+      automationNameFacets,
+      conversations,
+      selectedAutomationNames,
+    ],
+  );
+
   const pinnedConversations = React.useMemo(
     () => resolvePinnedConversations(pinnedIds, conversations),
     [conversations, pinnedIds],
@@ -264,16 +410,14 @@ export function ConversationPanel({
     if (!isFetched) {
       return;
     }
-    pruneMissingPinnedConversations(
-      activeBackend.id,
-      conversations.map((conversation) => conversation.id),
-    );
-  }, [
-    activeBackend.id,
-    conversations,
-    isFetched,
-    pruneMissingPinnedConversations,
-  ]);
+    // Prune pins against the unfiltered loaded pages so archived-but-still-
+    // pinned rows are not treated as missing. Archived IDs are intentionally
+    // not pruned here — pagination would otherwise drop archives that are not
+    // on the currently loaded pages and let them reappear in the list.
+    const loadedIds =
+      data?.pages.flatMap((page) => page.items.map((item) => item.id)) ?? [];
+    pruneMissingPinnedConversations(activeBackend.id, loadedIds);
+  }, [activeBackend.id, data, isFetched, pruneMissingPinnedConversations]);
 
   React.useEffect(() => {
     if (pinnedIds.length === 0) {
@@ -282,10 +426,14 @@ export function ConversationPanel({
   }, [pinnedIds.length]);
 
   const scopedConversations = React.useMemo(() => {
+    // The pinned section intentionally bypasses the automation filter (same
+    // exemption the thread scope has): a pin is an explicit user override.
     const scopeFiltered =
       threadScope === "relevant"
-        ? conversations.filter((c) => isExecutionActive(c.execution_status))
-        : conversations;
+        ? automationFilteredConversations.filter((c) =>
+            isExecutionActive(c.execution_status),
+          )
+        : automationFilteredConversations;
 
     // In the expanded panel, pinned conversations should only appear inside
     // the dedicated pinned section (not duplicated in grouped/flat lists).
@@ -294,7 +442,7 @@ export function ConversationPanel({
     }
 
     return filterOutPinnedConversations(scopeFiltered, pinnedIds);
-  }, [compact, conversations, pinnedIds, threadScope]);
+  }, [automationFilteredConversations, compact, pinnedIds, threadScope]);
 
   const { recent: recentScoped, older: olderScoped } = React.useMemo(
     () => partitionByCutoff(scopedConversations),
@@ -322,32 +470,59 @@ export function ConversationPanel({
     [t],
   );
 
-  const conversationGroups = React.useMemo(() => {
+  const groupedSourceConversations = React.useMemo(() => {
     if (compact || organizeMode !== "grouped") {
       return null;
     }
     // Use the unsorted partitions: groupConversations sorts each bucket
     // internally by `sortField`, so pre-sorting the merged input is wasted
     // work in grouped mode (the per-group sort overrides any global order).
-    const merged = [
-      ...recentScoped,
-      ...(showOlderConversations ? olderScoped : []),
-    ];
-    return groupConversations(
-      merged,
-      activeBackend.kind,
-      conversationSort,
-      groupLabels,
-    );
+    return [...recentScoped, ...(showOlderConversations ? olderScoped : [])];
   }, [
-    activeBackend.kind,
     compact,
-    conversationSort,
-    groupLabels,
     olderScoped,
     organizeMode,
     recentScoped,
     showOlderConversations,
+  ]);
+
+  const conversationGroups = React.useMemo(() => {
+    if (!groupedSourceConversations) {
+      return null;
+    }
+    // Keep every loaded conversation in the group model. Folder discovery only
+    // freezes the collapsed preview — expanding a folder must reach later-page
+    // rows for that same workspace/repo.
+    return groupConversations(
+      groupedSourceConversations,
+      activeBackend.kind,
+      conversationSort,
+      groupLabels,
+      allWorkspacesForGrouping,
+    );
+  }, [
+    activeBackend.kind,
+    conversationSort,
+    groupLabels,
+    groupedSourceConversations,
+    allWorkspacesForGrouping,
+  ]);
+
+  const groupDiscoveryConversationIds = React.useMemo(() => {
+    if (!groupedSourceConversations) {
+      return null;
+    }
+    return getGroupDiscoveryConversationIds(
+      groupedSourceConversations,
+      conversationPageById,
+      activeBackend.kind,
+      { forceIncludeConversationId: currentConversationId },
+    );
+  }, [
+    activeBackend.kind,
+    conversationPageById,
+    currentConversationId,
+    groupedSourceConversations,
   ]);
 
   const orderedConversationGroups = React.useMemo(() => {
@@ -375,27 +550,32 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupedCount = React.useMemo(() => {
-    if (!orderedConversationGroups) {
-      return 0;
-    }
-    return orderedConversationGroups.reduce(
-      (n, g) => n + g.conversations.length,
-      0,
-    );
-  }, [orderedConversationGroups]);
+  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
 
   const listIsEffectivelyEmpty =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount === 0
+      ? visibleGroupCount === 0
       : visibleFlatCount === 0;
 
-  // Number of conversations actually rendered in the list right now, in the
-  // current organize mode. "Load more" succeeds only when this number grows.
+  // Attribution is exact: the automation filter step itself produced zero
+  // rows out of a non-empty loaded set (not merely threadScope/older-cutoff
+  // effects). Used to pick the empty-state message.
+  const emptyDueToAutomationFilter =
+    listIsEffectivelyEmpty &&
+    automationFilterMode !== "all" &&
+    conversations.length > 0 &&
+    automationFilteredConversations.length === 0;
+
+  // Grouped pagination prefers discovering another folder; chronological
+  // pagination succeeds when another row appears. Pages that only deepen
+  // already-visible folders are not success for the grouped control — the
+  // driver walks past them (bounded by the per-click page cap) so a single
+  // click can still reach a folder hiding behind deepen-only pages.
   const visibleCount =
     organizeMode === "grouped" && !compact
-      ? visibleGroupedCount
+      ? visibleGroupCount
       : visibleFlatCount;
+  const loadedPageCount = data?.pages.length ?? 0;
 
   // KNOWN ISSUE (unresolved as of 2026-05-29): users still report that the
   // sidebar "Load more" sometimes requires two clicks before new conversations
@@ -413,16 +593,29 @@ export function ConversationPanel({
   // two reasons: (1) `fetchNextPage()` is silently dropped while the 10s
   // background refetch is in flight, and (2) a fetched page can yield zero
   // *visible* rows (filtered out by the active scope, or deduped as overlap),
-  // so the list does not appear to grow. We capture the visible count at click
-  // time and keep fetching pages — once the query is idle — until the visible
-  // count actually increases or there are no more pages.
+  // so the list does not appear to grow. We capture floors at click time and
+  // keep fetching — once idle — until the visible count grows, the grouped
+  // per-click page cap is hit, or pages run out. `loadedPageCount` keeps the
+  // driver advancing when a fetched page contains only folders that were
+  // already discovered.
   const [loadMoreFloor, setLoadMoreFloor] = React.useState<number | null>(null);
+  const [loadMorePageFloor, setLoadMorePageFloor] = React.useState<
+    number | null
+  >(null);
   const visibleCountRef = React.useRef(visibleCount);
   visibleCountRef.current = visibleCount;
+  const loadedPageCountRef = React.useRef(loadedPageCount);
+  loadedPageCountRef.current = loadedPageCount;
+
+  const clearLoadMoreRequest = React.useCallback(() => {
+    setLoadMoreFloor(null);
+    setLoadMorePageFloor(null);
+  }, []);
 
   const requestLoadMore = React.useCallback(() => {
     if (hasNextPage) {
       setLoadMoreFloor(visibleCountRef.current);
+      setLoadMorePageFloor(loadedPageCountRef.current);
     }
   }, [hasNextPage]);
 
@@ -432,23 +625,43 @@ export function ConversationPanel({
     }
     // Goal met: the visible list grew past where it was when the user clicked.
     if (visibleCount > loadMoreFloor) {
-      setLoadMoreFloor(null);
+      clearLoadMoreRequest();
+      return;
+    }
+    // Hard cap (grouped only): pages that merely deepen already-visible
+    // folders are walked past — a new folder may sit right behind them — but
+    // never unbounded many, so one click cannot drain the whole cursor.
+    // Chronological mode keeps its pre-existing behavior: fetch until a
+    // visible row appears or pages run out.
+    if (
+      organizeMode === "grouped" &&
+      !compact &&
+      loadMorePageFloor != null &&
+      loadedPageCount >= loadMorePageFloor + MAX_PAGES_PER_LOAD_MORE_CLICK
+    ) {
+      clearLoadMoreRequest();
+      return;
+    }
+    // Wait for any in-flight fetch (including the background refetch) to settle
+    // before evaluating `hasNextPage`; React Query may transiently clear that
+    // flag while replacing the last page.
+    if (isFetching || isFetchingNextPage) {
       return;
     }
     // Nothing more to fetch — stop waiting even if the list did not grow.
     if (!hasNextPage) {
-      setLoadMoreFloor(null);
-      return;
-    }
-    // Wait for any in-flight fetch (including the background refetch) to settle
-    // before requesting the next page, otherwise the request is dropped.
-    if (isFetching || isFetchingNextPage) {
+      clearLoadMoreRequest();
       return;
     }
     fetchNextPage();
   }, [
+    clearLoadMoreRequest,
+    compact,
     loadMoreFloor,
+    loadMorePageFloor,
     visibleCount,
+    loadedPageCount,
+    organizeMode,
     hasNextPage,
     isFetching,
     isFetchingNextPage,
@@ -467,12 +680,15 @@ export function ConversationPanel({
   // pagination, which previously caused the panel to feel like it had stray
   // scrollable space at the bottom.
   const olderHidden = olderScoped.length > 0 && !showOlderConversations;
-  // Compact mode also hides "Load more" — paginating into archived
-  // conversations contradicts the "active only" intent of the icon rail.
-  // Do not show when the visible list is empty (e.g. filters hide every
-  // loaded conversation) — that state already shows "No conversations found".
-  const showLoadMore =
-    !!hasNextPage && !olderHidden && !compact && !listIsEffectivelyEmpty;
+  // Compact mode also hides "Load more" — paginating into stale conversations
+  // contradicts the "active only" intent of the icon rail.
+  // Availability tracks backend exhaustion, never visible emptiness: a
+  // client-side filter (archiving, the automation filter) can hide every row
+  // of the loaded pages, and hiding the control there would strand the
+  // remaining pages behind an empty-state message with no way forward.
+  // `requestLoadMore`'s floor driver keeps paging until a visible row
+  // appears, so a single click walks past pages that are entirely filtered.
+  const showLoadMore = !!hasNextPage && !olderHidden && !compact;
 
   const { mutate: createConversation } = useCreateConversation();
   const isCreatingConversationFlow = useIsCreatingConversation();
@@ -505,6 +721,24 @@ export function ConversationPanel({
     [],
   );
 
+  const handleArchiveProject = React.useCallback(
+    (conversationId: string, title: string) => {
+      setConfirmArchiveModalVisible(true);
+      setSelectedConversationId(conversationId);
+      setSelectedConversationTitle(title);
+    },
+    [],
+  );
+
+  // Unarchiving needs no confirmation: it restores a row the user can archive
+  // again in one click, and nothing about the conversation itself changes.
+  const handleUnarchiveProject = React.useCallback(
+    (conversationId: string) => {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    },
+    [activeBackend.id, removeArchivedConversation],
+  );
+
   const handleStopConversation = React.useCallback((conversationId: string) => {
     setConfirmStopModalVisible(true);
     setSelectedConversationId(conversationId);
@@ -526,16 +760,29 @@ export function ConversationPanel({
 
   const handleConfirmDelete = () => {
     if (selectedConversationId) {
+      const conversationId = selectedConversationId;
       deleteConversation(
-        { conversationId: selectedConversationId },
+        { conversationId },
         {
           onSuccess: () => {
-            if (selectedConversationId === currentConversationId) {
+            removeArchivedConversation(activeBackend.id, conversationId);
+            if (conversationId === currentConversationId) {
               navigate("/conversations");
             }
           },
         },
       );
+    }
+  };
+
+  const handleConfirmArchive = () => {
+    if (!selectedConversationId) {
+      return;
+    }
+    archiveConversation(activeBackend.id, selectedConversationId);
+    unpinConversation(activeBackend.id, selectedConversationId);
+    if (selectedConversationId === currentConversationId) {
+      navigate("/conversations");
     }
   };
 
@@ -548,7 +795,10 @@ export function ConversationPanel({
   };
 
   const handleConfirmDeleteAll = async () => {
-    const idsToDelete = conversations.map((c) => c.id);
+    // Delete against the unfiltered loaded set so archived (currently hidden)
+    // conversations are still removed from the server — matching the action's
+    // "delete all conversations" label and confirmation count.
+    const idsToDelete = allLoadedConversations.map((c) => c.id);
     const results = await Promise.allSettled(
       idsToDelete.map((conversationId) =>
         deleteConversationAsync({ conversationId }),
@@ -559,6 +809,10 @@ export function ConversationPanel({
       result.status === "fulfilled" ? [idsToDelete[index]] : [],
     );
     const failedCount = results.length - deletedIds.length;
+
+    for (const conversationId of deletedIds) {
+      removeArchivedConversation(activeBackend.id, conversationId);
+    }
 
     if (
       currentConversationId !== null &&
@@ -580,6 +834,7 @@ export function ConversationPanel({
       options?: { inPinnedSection?: boolean },
     ) => {
       const isPinned = pinnedIds.includes(conversation.id);
+      const isArchived = archivedIdSet.has(conversation.id);
       if (compact) {
         return (
           <CompactConversationRow
@@ -621,7 +876,7 @@ export function ConversationPanel({
             !showHoverMetadata || openContextMenuId === conversation.id
           }
           disableAnimation={import.meta.env.MODE === "test"}
-          className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
+          className="max-w-none overflow-visible rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
           content={
             <ConversationCardPreview
               title={conversation.title ?? ""}
@@ -637,7 +892,10 @@ export function ConversationPanel({
                 conversation.workspace?.working_dir
               }
               llmModel={conversation.llm_model}
+              agentKind={conversation.agent_kind}
+              acpServer={conversation.acp_server}
               createdAt={conversation.created_at}
+              tags={conversation.tags}
             />
           }
         >
@@ -656,6 +914,22 @@ export function ConversationPanel({
             <ConversationCard
               onDelete={() =>
                 handleDeleteProject(conversation.id, conversation.title ?? "")
+              }
+              // Exactly one direction is offered per row, so the menu always
+              // reflects the conversation's current archived state.
+              onArchive={
+                isArchived
+                  ? undefined
+                  : () =>
+                      handleArchiveProject(
+                        conversation.id,
+                        conversation.title ?? "",
+                      )
+              }
+              onUnarchive={
+                isArchived
+                  ? () => handleUnarchiveProject(conversation.id)
+                  : undefined
               }
               onStop={() => handleStopConversation(conversation.id)}
               onChangeTitle={(title) =>
@@ -688,6 +962,7 @@ export function ConversationPanel({
               acpServer={conversation.acp_server}
               tags={conversation.tags}
               showTags={showTagsMetadata}
+              isArchived={isArchived}
               isPinned={isPinned}
               onTogglePin={() => togglePin(activeBackend.id, conversation.id)}
               alwaysShowPinIcon={isPinned && !options?.inPinnedSection}
@@ -698,11 +973,14 @@ export function ConversationPanel({
     },
     [
       activeBackend.id,
+      archivedIdSet,
       compact,
       currentConversationId,
+      handleArchiveProject,
       handleConversationTitleChange,
       handleDeleteProject,
       handleStopConversation,
+      handleUnarchiveProject,
       onClose,
       openContextMenuId,
       pinnedIds,
@@ -724,13 +1002,19 @@ export function ConversationPanel({
   const showInitialSkeleton = isLoading || !isFetched;
   const showPinnedSection =
     !compact && !showInitialSkeleton && pinnedConversations.length > 0;
+  const hasVisibleGroups =
+    organizeMode === "grouped" &&
+    !compact &&
+    orderedConversationGroups != null &&
+    orderedConversationGroups.length > 0;
   const showEmptyState =
     isFetched &&
     !isLoading &&
     !compact &&
     listIsEffectivelyEmpty &&
     !showPinnedSection &&
-    !startTasks?.length;
+    !startTasks?.length &&
+    !hasVisibleGroups;
 
   const showConversationHeader = !compact;
 
@@ -771,7 +1055,16 @@ export function ConversationPanel({
                 setConversationSort={setConversationSort}
                 threadScope={threadScope}
                 setThreadScope={setThreadScope}
+                automationFilterMode={automationFilterMode}
+                setAutomationFilterMode={setAutomationFilterMode}
+                selectedAutomationNames={selectedAutomationNames}
+                onToggleAutomationName={toggleAutomationName}
+                automationNameFacets={automationNameFacets}
                 showOlderConversations={showOlderConversations}
+                showArchivedConversations={showArchivedConversations}
+                toggleShowArchivedConversations={
+                  toggleShowArchivedConversations
+                }
                 toggleShowOlderConversations={toggleShowOlderConversations}
                 showRepoBranchMetadata={showRepoBranchMetadata}
                 toggleShowRepoBranchMetadata={toggleShowRepoBranchMetadata}
@@ -781,7 +1074,7 @@ export function ConversationPanel({
                 toggleShowTagsMetadata={toggleShowTagsMetadata}
                 showHoverMetadata={showHoverMetadata}
                 toggleShowHoverMetadata={toggleShowHoverMetadata}
-                totalConversationsCount={conversations.length}
+                totalConversationsCount={allLoadedConversations.length}
                 onRequestDeleteAll={() => setConfirmDeleteAllVisible(true)}
               />
             </div>
@@ -808,7 +1101,11 @@ export function ConversationPanel({
             className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8"
           >
             <p className="text-xs text-[var(--oh-muted)]">
-              {t(I18nKey.CONVERSATION$NO_CONVERSATIONS)}
+              {t(
+                emptyDueToAutomationFilter
+                  ? I18nKey.CONVERSATION_PANEL$NO_AUTOMATION_MATCHES
+                  : I18nKey.CONVERSATION$NO_CONVERSATIONS,
+              )}
             </p>
           </div>
         )}
@@ -860,6 +1157,7 @@ export function ConversationPanel({
             setGroupFolderOrder={setGroupFolderOrder}
             collapsedGroupIds={collapsedGroupIds}
             expandedGroupPreviewIds={expandedGroupPreviewIds}
+            discoveryConversationIds={groupDiscoveryConversationIds}
             onToggleGroupCollapsed={toggleGroupCollapsed}
             onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
             isCreatingConversationFlow={isCreatingConversationFlow}
@@ -919,11 +1217,26 @@ export function ConversationPanel({
         />
       )}
 
+      {confirmArchiveModalVisible && (
+        <ConfirmArchiveModal
+          onConfirm={() => {
+            handleConfirmArchive();
+            setConfirmArchiveModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          onCancel={() => {
+            setConfirmArchiveModalVisible(false);
+            setSelectedConversationTitle(null);
+          }}
+          conversationTitle={selectedConversationTitle ?? undefined}
+        />
+      )}
+
       {confirmDeleteAllVisible && (
         <ConfirmDeleteModal
           title={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_TITLE)}
           description={t(I18nKey.CONVERSATION$CONFIRM_DELETE_ALL_DESC, {
-            count: conversations.length,
+            count: allLoadedConversations.length,
           })}
           onConfirm={async () => {
             await handleConfirmDeleteAll();
