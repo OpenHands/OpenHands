@@ -130,6 +130,40 @@ describe("settings route", () => {
     expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
   });
 
+  it("keeps the section title of a page that is not in the listed navigation", () => {
+    // Arrange — the nav mock above lists only LLM + Application, mirroring a
+    // locked-to-Cloud deployment where deep-linked pages stay routable but are
+    // unlisted; the header must still describe the visited page.
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [
+          {
+            path: "/settings/agents",
+            Component: () => <div data-testid="agent-profiles-screen" />,
+          },
+        ],
+      },
+    ]);
+
+    // Act
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/agents"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    // Assert — "Agent" is absent from the nav mock, so its only occurrence is
+    // the page header.
+    expect(screen.getByText("SETTINGS$NAV_AGENT")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-page-subtitle")).toHaveTextContent(
+      "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE",
+    );
+  });
+
   it.each(["/settings/llm", "/settings/condenser", "/settings/verification"])(
     "renders %s directly when ACP settings are active",
     async (path) => {

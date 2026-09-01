@@ -17,6 +17,7 @@ import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import {
   buildConversationWorkingDirForBackend,
   getAgentServerWorkingDir,
+  getWorkspaceRootForBackend,
 } from "../agent-server-config";
 import { resolveAbsoluteAgentServerPath } from "../agent-server-home";
 import {
@@ -497,13 +498,19 @@ class AgentServerConversationService {
     // on the active backend's host (not its id): the seeded `default-local`
     // entry is mutable, so a user can edit it to point at a remote host while
     // its id stays `default-local`.
+    const backendHost = getActiveBackend().backend.host;
     const baseWorkingDir =
       workingDirOverride ??
-      buildConversationWorkingDirForBackend(
-        conversationId,
-        getActiveBackend().backend.host,
-      );
+      buildConversationWorkingDirForBackend(conversationId, backendHost);
     const workingDir = await resolveAbsoluteAgentServerPath(baseWorkingDir);
+    // The agent-server checks `<project_dir>/.openhands/hooks.json` literally,
+    // so hooks need the workspace root: the per-conversation subdir below it is
+    // created only after this request (#16907). An explicit pick is the root.
+    const hooksProjectDir = workingDirOverride
+      ? workingDir
+      : await resolveAbsoluteAgentServerPath(
+          getWorkspaceRootForBackend(backendHost),
+        );
     const resolvedWorkspaceMode =
       workspaceMode ?? (workingDirOverride ? "local_repo" : "new_worktree");
 
@@ -520,6 +527,7 @@ class AgentServerConversationService {
       // older than 1.37.1 ignore the field and create an unlinked conversation.
       parentConversationId,
       workingDir,
+      hooksProjectDir,
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,

@@ -34,6 +34,7 @@ const {
   mockActivateProfile,
   mockListProfiles,
   mockGetTelemetryDistinctId,
+  mockLoadHooks,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -49,6 +50,7 @@ const {
   mockActivateProfile: vi.fn(),
   mockListProfiles: vi.fn(),
   mockGetTelemetryDistinctId: vi.fn(),
+  mockLoadHooks: vi.fn(),
 }));
 
 const originalFetch = global.fetch;
@@ -79,6 +81,9 @@ vi.mock("@openhands/typescript-client/clients", async () => {
     VSCodeClient: vi.fn(function VSCodeClientMock() {
       return { getUrl: vi.fn() };
     }),
+    HooksClient: vi.fn(function HooksClientMock() {
+      return { loadHooks: mockLoadHooks };
+    }),
   };
 });
 
@@ -87,6 +92,7 @@ vi.mock("#/api/agent-server-config", () => ({
   getAgentServerBaseUrl: vi.fn(() => "http://localhost:54928"),
   getAgentServerSessionApiKey: vi.fn(() => "test-api-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
+  getWorkspaceRootForBackend: vi.fn(() => "/workspace/project/agent-canvas"),
   buildConversationWorkingDirForBackend: vi.fn(
     (id: string) => `/state/workspaces/${id.replace(/-/g, "")}`,
   ),
@@ -481,6 +487,68 @@ describe("AgentServerConversationService", () => {
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(false);
+    });
+
+    // Regression for #16907 — the conversation's own `<workspace>/<hex>` dir
+    // does not exist yet, so hooks looked up there are never found.
+    it("looks project hooks up in the workspace root, not the conversation dir", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as {
+        workspace: { working_dir: string };
+      };
+      expect(mockLoadHooks).toHaveBeenCalledWith({
+        project_dir: "/workspace/project/agent-canvas",
+      });
+      expect(mockLoadHooks).not.toHaveBeenCalledWith({
+        project_dir: payload.workspace.working_dir,
+      });
+    });
+
+    // An explicit pick is the project, so hooks belong there.
+    it("looks project hooks up in an explicitly picked workspace", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
+
+      expect(mockLoadHooks).toHaveBeenCalledWith({
+        project_dir: "/Users/jane/projects/foo",
+      });
     });
 
     it("honors an explicit new-worktree mode for a selected workspace", async () => {
