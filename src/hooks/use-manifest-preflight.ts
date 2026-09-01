@@ -57,6 +57,7 @@ export function useSetupPreflight(entry: SetupEntry) {
   return useCallback(
     async (
       formValues: SetupFormValues,
+      model?: string | null,
     ): Promise<MappedManifestErrors | null> => {
       try {
         // Deriving the body is inside the guard too: a bundle entry resolves
@@ -65,7 +66,7 @@ export function useSetupPreflight(entry: SetupEntry) {
         // validator that will not answer, and left outside it rejected a
         // promise no caller handles - which reads as a Continue button that
         // does nothing at all.
-        const body = buildPreflightBody(entry, formValues);
+        const body = buildPreflightBody(entry, formValues, model);
         if (!body) return null;
 
         latestRequestRef.current += 1;

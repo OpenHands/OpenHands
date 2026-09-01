@@ -77,6 +77,7 @@ export function useSetupAction() {
       values: SetupFormValues,
       /** Present for a direct entry, and absent for an assisted one. */
       payload: SetupRequestBody | null,
+      model?: string | null,
     ): Promise<SetupActionResult> => {
       if (!payload) {
         return startConversation(buildAssistedMessage(entry, values));
@@ -97,15 +98,18 @@ export function useSetupAction() {
           );
           uploadedRef.current = { key, path: tarballPath };
         }
-        const body = buildCreatePayload(entry, values, tarballPath);
+        const body = buildCreatePayload(entry, values, tarballPath, model);
         if (!body) throw new Error(`'${entry.id}' produced no create request.`);
         return {
           response: await AutomationService.createAutomationDraft(body, entry),
         };
       }
 
+      const body =
+        buildCreatePayload(entry, values, undefined, model) ?? payload;
+      if (!body) throw new Error(`'${entry.id}' produced no create request.`);
       const response = await AutomationService.createAutomationDraft(
-        payload,
+        body,
         entry,
       );
       return { response };
