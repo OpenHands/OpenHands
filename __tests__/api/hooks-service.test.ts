@@ -107,4 +107,16 @@ describe("HooksService.loadWorkspaceHooks", () => {
     expect(mockLoadHooks).not.toHaveBeenCalled();
     expect(result).toBeNull();
   });
+
+  it("returns null for unseeded/empty registry (NO_BACKEND sentinel) without calling HooksClient", async () => {
+    // Simulate a fresh install with no backends registered.
+    // setRegisteredBackends([]) computes the snapshot with NO_BACKEND,
+    // so getEffectiveLocalBackend() returns null.
+    setRegisteredBackends([]);
+
+    const result = await HooksService.loadWorkspaceHooks("/workspace/test");
+
+    expect(mockLoadHooks).not.toHaveBeenCalled();
+    expect(result).toBeNull();
+  });
 });
