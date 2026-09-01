@@ -22,9 +22,7 @@ export function useInstallCanvasExtension() {
       CanvasExtensionsService.install(request),
     onSuccess: () => {
       void invalidate();
-      displaySuccessToast(
-        t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_INSTALL_SUCCESS),
-      );
+      displaySuccessToast(t(I18nKey.SETTINGS$APPS_INSTALL_SUCCESS));
     },
   });
 }
@@ -45,9 +43,7 @@ export function useUninstallCanvasExtension() {
     mutationFn: (name: string) => CanvasExtensionsService.uninstall(name),
     onSuccess: () => {
       void invalidate();
-      displaySuccessToast(
-        t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_UNINSTALL_SUCCESS),
-      );
+      displaySuccessToast(t(I18nKey.SETTINGS$APPS_UNINSTALL_SUCCESS));
     },
   });
 }

@@ -32233,7 +32233,7 @@
     "uk": "Застосунки",
     "ca": "Aplicacions"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_PAGE_TITLE": {
+  "SETTINGS$APPS_PAGE_TITLE": {
     "en": "Apps for Agent Canvas",
     "ja": "Agent Canvas 向けアプリ",
     "zh-CN": "Agent Canvas 应用",
@@ -32692,7 +32692,7 @@
     "tr": "Bu eklenti paketindeki yetenekler",
     "uk": "Навички в цьому пакеті плагіна"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_PAGE_DESCRIPTION": {
+  "SETTINGS$APPS_PAGE_DESCRIPTION": {
     "en": "Apps are built with the Canvas Extensions API",
     "ja": "アプリは Canvas Extensions API で構築されています",
     "zh-CN": "应用使用 Canvas Extensions API 构建",
@@ -32709,7 +32709,7 @@
     "uk": "Застосунки створюються за допомогою Canvas Extensions API",
     "ca": "Les aplicacions es creen amb l’API Canvas Extensions"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_BUILD_LINK": {
+  "SETTINGS$APPS_BUILD_LINK": {
     "en": "Build an app",
     "ja": "アプリを構築",
     "zh-CN": "构建应用",
@@ -32726,7 +32726,7 @@
     "uk": "Створити застосунок",
     "ca": "Crea una aplicació"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_ADD_BUTTON": {
+  "SETTINGS$APPS_ADD_BUTTON": {
     "en": "Add app",
     "ja": "アプリを追加",
     "zh-CN": "添加应用",
@@ -32743,7 +32743,7 @@
     "uk": "Додати застосунок",
     "ca": "Afegeix una aplicació"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_INSTALLED": {
+  "SETTINGS$APPS_INSTALLED": {
     "en": "Installed apps",
     "ja": "インストール済みアプリ",
     "zh-CN": "已安装的应用",
@@ -32760,7 +32760,7 @@
     "uk": "Встановлені застосунки",
     "ca": "Aplicacions instal·lades"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_SOURCE_LABEL": {
+  "SETTINGS$APPS_SOURCE_LABEL": {
     "en": "App source",
     "ja": "アプリのソース",
     "zh-CN": "应用来源",
@@ -32777,7 +32777,7 @@
     "uk": "Джерело застосунку",
     "ca": "Origen de l’aplicació"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_EMPTY": {
+  "SETTINGS$APPS_EMPTY": {
     "en": "No apps are installed on this backend.",
     "ja": "このバックエンドにはアプリがインストールされていません。",
     "zh-CN": "此后端未安装任何应用。",
@@ -32794,7 +32794,7 @@
     "uk": "На цьому бекенді не встановлено жодного застосунку.",
     "ca": "No hi ha cap aplicació instal·lada en aquest backend."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_TRUST_NOTICE": {
+  "SETTINGS$APPS_TRUST_NOTICE": {
     "en": "This app runs trusted JavaScript inside Agent Canvas and can make authenticated requests to the active Agent Server. Review its source and revision before enabling it.",
     "ja": "このアプリは Agent Canvas 内で信頼された JavaScript を実行し、アクティブな Agent Server に認証済みリクエストを送信できます。有効にする前に、ソースとリビジョンを確認してください。",
     "zh-CN": "此应用会在 Agent Canvas 中运行受信任的 JavaScript，并可向当前 Agent Server 发出经过身份验证的请求。启用前请检查其源代码和修订版本。",
@@ -32811,7 +32811,7 @@
     "uk": "Цей застосунок запускає довірений JavaScript в Agent Canvas і може надсилати автентифіковані запити до активного Agent Server. Перевірте його джерело та ревізію перед увімкненням.",
     "ca": "Aquesta aplicació executa JavaScript de confiança dins d’Agent Canvas i pot fer sol·licituds autenticades a l’Agent Server actiu. Revisa’n l’origen i la revisió abans d’activar-la."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_ENABLE_ACTION": {
+  "SETTINGS$APPS_ENABLE_ACTION": {
     "en": "Enable trusted app",
     "ja": "信頼済みアプリを有効化",
     "zh-CN": "启用受信任的应用",
@@ -32828,7 +32828,7 @@
     "uk": "Увімкнути довірений застосунок",
     "ca": "Activa l’aplicació de confiança"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_ADD_MODAL_INTRO": {
+  "SETTINGS$APPS_ADD_MODAL_INTRO": {
     "en": "Install from a Git source or a path on the active Agent Server. The app will be installed disabled.",
     "ja": "Git ソースまたはアクティブな Agent Server 上のパスからインストールします。アプリは無効な状態でインストールされます。",
     "zh-CN": "从 Git 来源或当前 Agent Server 上的路径安装。应用安装后将保持禁用。",
@@ -32845,7 +32845,7 @@
     "uk": "Встановіть із джерела Git або шляху на активному Agent Server. Застосунок буде встановлено вимкненим.",
     "ca": "Instal·la des d’un origen Git o un camí a l’Agent Server actiu. L’aplicació s’instal·larà desactivada."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_INSTALL_SUCCESS": {
+  "SETTINGS$APPS_INSTALL_SUCCESS": {
     "en": "App installed. Review it here, then enable it when you are ready.",
     "ja": "アプリをインストールしました。ここで確認し、準備ができたら有効にしてください。",
     "zh-CN": "应用已安装。请在此检查，准备好后再启用。",
@@ -32862,7 +32862,7 @@
     "uk": "Застосунок встановлено. Перевірте його тут і ввімкніть, коли будете готові.",
     "ca": "Aplicació instal·lada. Revisa-la aquí i activa-la quan estiguis a punt."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_UNINSTALL_SUCCESS": {
+  "SETTINGS$APPS_UNINSTALL_SUCCESS": {
     "en": "App uninstalled.",
     "ja": "アプリをアンインストールしました。",
     "zh-CN": "应用已卸载。",
@@ -32879,7 +32879,7 @@
     "uk": "Застосунок видалено.",
     "ca": "Aplicació desinstal·lada."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_ENABLE_CONFIRM": {
+  "SETTINGS$APPS_ENABLE_CONFIRM": {
     "en": "This app runs trusted JavaScript inside Agent Canvas and can make authenticated requests to the active Agent Server. Review its source and revision before enabling it.",
     "ja": "このアプリは Agent Canvas 内で信頼された JavaScript を実行し、アクティブな Agent Server に認証済みリクエストを送信できます。有効にする前に、ソースとリビジョンを確認してください。",
     "zh-CN": "此应用会在 Agent Canvas 中运行受信任的 JavaScript，并可向当前 Agent Server 发出经过身份验证的请求。启用前请检查其源代码和修订版本。",
@@ -32896,7 +32896,7 @@
     "uk": "Цей застосунок запускає довірений JavaScript в Agent Canvas і може надсилати автентифіковані запити до активного Agent Server. Перевірте його джерело та ревізію перед увімкненням.",
     "ca": "Aquesta aplicació executa JavaScript de confiança dins d’Agent Canvas i pot fer sol·licituds autenticades a l’Agent Server actiu. Revisa’n l’origen i la revisió abans d’activar-la."
   },
-  "SETTINGS$CANVAS_EXTENSIONS_UNINSTALL_CONFIRM": {
+  "SETTINGS$APPS_UNINSTALL_CONFIRM": {
     "en": "Uninstall {{name}} from this backend?",
     "ja": "このバックエンドから {{name}} をアンインストールしますか？",
     "zh-CN": "要从此后端卸载 {{name}} 吗？",
@@ -32913,7 +32913,7 @@
     "uk": "Видалити {{name}} із цього бекенду?",
     "ca": "Vols desinstal·lar {{name}} d’aquest backend?"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_PAGES": {
+  "SETTINGS$APPS_PAGES": {
     "en": "Pages",
     "ja": "ページ",
     "zh-CN": "页面",
@@ -32930,7 +32930,7 @@
     "uk": "Сторінки",
     "ca": "Pàgines"
   },
-  "SETTINGS$CANVAS_EXTENSIONS_PAGE_UNAVAILABLE": {
+  "SETTINGS$APPS_PAGE_UNAVAILABLE": {
     "en": "This app is disabled, missing, or does not provide this page.",
     "ja": "このアプリは無効、存在しない、またはこのページを提供していません。",
     "zh-CN": "此应用已禁用、缺失或未提供此页面。",
