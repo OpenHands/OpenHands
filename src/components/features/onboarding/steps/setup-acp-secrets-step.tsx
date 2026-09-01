@@ -128,6 +128,9 @@ export function SetupAcpSecretsStep({
           agent_kind: "acp",
           acp_server: providerKey,
           acp_model: getAcpPreferredDefaultModel(providerKey) ?? undefined,
+          ...(providerKey === "claude-code"
+            ? { acp_session_mode: "dontAsk" }
+            : {}),
         });
       }
       onNext();

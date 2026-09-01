@@ -117,6 +117,30 @@ describe("ACP provider registry", () => {
   });
 });
 
+describe("buildAcpAgentSettingsDiff — Claude Code dontAsk seeding", () => {
+  // Claude Code's ACP provider defaults to bypassPermissions when no session
+  // mode is saved, which its subprocess rejects outright. Seeding dontAsk
+  // here means it persists in saved settings even before the agent-server
+  // adapter's own launch-time override runs.
+  it("seeds acp_session_mode: dontAsk for claude-code", () => {
+    expect(buildAcpAgentSettingsDiff("claude-code")).toMatchObject({
+      acp_session_mode: "dontAsk",
+    });
+  });
+
+  it("does not seed acp_session_mode for other providers", () => {
+    expect(buildAcpAgentSettingsDiff("codex")).not.toHaveProperty(
+      "acp_session_mode",
+    );
+    expect(buildAcpAgentSettingsDiff("gemini-cli")).not.toHaveProperty(
+      "acp_session_mode",
+    );
+    expect(buildAcpAgentSettingsDiff(ACP_CUSTOM_PRESET_KEY)).not.toHaveProperty(
+      "acp_session_mode",
+    );
+  });
+});
+
 describe("getAcpProviderSecrets — containerized credentials", () => {
   // These are the credentials a fresh container (no host login) needs, sourced
   // from the validated container contract (agent-canvas#1013/#1014) — if a

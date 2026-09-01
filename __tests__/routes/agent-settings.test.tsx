@@ -621,6 +621,10 @@ describe("AgentSettingsScreen", () => {
       // command at conversation-create time.
       acp_args: [],
       acp_model: "opus[1m]",
+      // Claude Code's ACP provider defaults to bypassPermissions, which its
+      // subprocess rejects outright — dontAsk is seeded so the very first
+      // conversation from this diff can start.
+      acp_session_mode: "dontAsk",
     });
   });
 

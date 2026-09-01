@@ -353,6 +353,7 @@ export interface CreateConversationOptions {
   // encrypted-settings builder; cloud sends it as a flat request field.
   agentProfileId?: string;
   agentProfileKind?: AgentKind;
+  agentProfileAcpServer?: string;
 }
 
 class AgentServerConversationService {
@@ -417,6 +418,7 @@ class AgentServerConversationService {
       sandboxId,
       agentProfileId,
       agentProfileKind,
+      agentProfileAcpServer,
     } = options;
 
     if (getActiveBackend().backend.kind === "cloud") {
@@ -504,6 +506,7 @@ class AgentServerConversationService {
       worktree: resolvedWorkspaceMode === "new_worktree",
       agentProfileId,
       agentProfileKind,
+      agentProfileAcpServer,
       titleLlmProfile,
     });
 
