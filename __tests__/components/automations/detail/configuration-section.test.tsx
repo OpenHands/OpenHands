@@ -77,6 +77,35 @@ describe("ConfigurationSection", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders every repository from preset metadata with its ref", () => {
+    const automation: Automation = {
+      ...cronAutomation,
+      repository: "legacy/repository",
+      branch: "legacy-branch",
+      preset_metadata: {
+        repos: [
+          { url: "OpenHands/docs", ref: "main", provider: "github" },
+          {
+            url: "https://gitlab.com/OpenHands/website",
+            ref: "release",
+            provider: "gitlab",
+            repo_path: "website",
+          },
+        ],
+      },
+    };
+
+    render(<ConfigurationSection automation={automation} />);
+
+    expect(screen.getByText("OpenHands/docs")).toBeInTheDocument();
+    expect(screen.getByText("main")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://gitlab.com/OpenHands/website"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("release")).toBeInTheDocument();
+    expect(screen.queryByText("legacy/repository")).not.toBeInTheDocument();
+  });
+
   it("does not show schedule field for event triggers", () => {
     render(<ConfigurationSection automation={eventAutomation} />);
 

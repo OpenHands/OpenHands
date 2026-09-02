@@ -66,6 +66,11 @@ export function ConfigurationSection({
   const triggerDisplay = isEvent
     ? t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_EVENT)
     : t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER_SCHEDULE);
+  const repositories = automation.preset_metadata?.repos?.length
+    ? automation.preset_metadata.repos
+    : automation.repository
+      ? [{ url: automation.repository, ref: automation.branch }]
+      : [];
 
   return (
     <SectionCard
@@ -73,15 +78,22 @@ export function ConfigurationSection({
       title={t(I18nKey.AUTOMATIONS$DETAIL$CONFIGURATION)}
     >
       <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-        {automation.repository && (
+        {repositories.length > 0 && (
           <ConfigField
             icon={<GitBranchIcon className="size-3.5" />}
             label={t(I18nKey.AUTOMATIONS$DETAIL$REPOSITORIES)}
           >
-            <span className="flex items-center gap-1">
-              {automation.repository}
-              {automation.branch && <BranchBadge branch={automation.branch} />}
-            </span>
+            <div className="flex flex-col gap-1.5">
+              {repositories.map((repository) => (
+                <span
+                  key={`${repository.url}:${repository.ref ?? ""}`}
+                  className="flex items-center gap-1"
+                >
+                  {repository.url}
+                  {repository.ref && <BranchBadge branch={repository.ref} />}
+                </span>
+              ))}
+            </div>
           </ConfigField>
         )}
 
