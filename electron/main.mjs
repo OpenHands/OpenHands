@@ -353,6 +353,32 @@ function createLoadingWindow() {
   loadingWin.once("ready-to-show", () => loadingWin?.show());
 }
 
+/**
+ * Hand a URL to the OS browser / protocol handler, but only for the schemes
+ * the policy allows. `shell.openExternal` forwards anything it is given, so
+ * `file:`, `smb:` and custom scheme handlers must never reach it.
+ */
+function openExternalUrl(url) {
+  if (isExternalBrowsableUrl(url)) {
+    shell.openExternal(url);
+  }
+}
+
+/**
+ * Keep a webContents pinned to the loopback app. Any other top-level
+ * navigation (including one reached through a server-side redirect) is
+ * cancelled and handed to the system browser instead.
+ */
+function attachNavigationGuard(webContents) {
+  const guard = (event, url) => {
+    if (isLoopbackAppUrl(url)) return;
+    event.preventDefault();
+    openExternalUrl(url);
+  };
+  webContents.on("will-navigate", guard);
+  webContents.on("will-redirect", guard);
+}
+
 function createMainWindow() {
   mainWin = new BrowserWindow({
     width: 1440,
@@ -380,6 +406,15 @@ function createMainWindow() {
     mainWin?.maximize();
   });
 
+  // Top-level navigation away from the loopback app is never legitimate: the
+  // renderer only ever navigates within its own SPA. Without this guard, any
+  // `location = "https://…"` reachable from untrusted agent/chat content
+  // replaces the app with remote content inside the app's own frameless
+  // window — the same "remote page wearing the app's chrome" problem the
+  // window-open handler below exists to prevent. External URLs still reach the
+  // user, via the system browser.
+  attachNavigationGuard(mainWin.webContents);
+
   // Route window.open() calls appropriately.
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     // The "Login with OpenHands Cloud" device-flow opens about:blank immediately
@@ -403,9 +438,7 @@ function createMainWindow() {
     if (isLoopbackAppUrl(url)) {
       return { action: "allow" };
     }
-    if (isExternalBrowsableUrl(url)) {
-      shell.openExternal(url);
-    }
+    openExternalUrl(url);
     return { action: "deny" };
   });
 
@@ -414,14 +447,25 @@ function createMainWindow() {
   // OAuth verification URL — open it in the system browser and close the
   // now-unneeded Electron popup.
   mainWin.webContents.on("did-create-window", (popupWin) => {
-    popupWin.webContents.on("will-navigate", (_event, url) => {
-      if (url !== "about:blank" && !isLoopbackAppUrl(url)) {
-        _event.preventDefault();
-        if (isExternalBrowsableUrl(url)) {
-          shell.openExternal(url);
-        }
-        popupWin.close();
-      }
+    const handOff = (event, url) => {
+      if (url === "about:blank" || isLoopbackAppUrl(url)) return;
+      event.preventDefault();
+      openExternalUrl(url);
+      popupWin.close();
+    };
+    popupWin.webContents.on("will-navigate", handOff);
+    // A loopback URL that 302s to a remote host never fires `will-navigate`
+    // for the redirect target, so without this the remote page loads in the
+    // popup — bypassing the check above.
+    popupWin.webContents.on("will-redirect", handOff);
+    // The popup is same-origin `about:blank`, so it can call window.open()
+    // itself. It inherits no handler from the parent, and the default is to
+    // allow — which would open remote content in yet another chromeless
+    // window. Apply the same policy the parent uses.
+    popupWin.webContents.setWindowOpenHandler(({ url }) => {
+      if (isLoopbackAppUrl(url)) return { action: "allow" };
+      openExternalUrl(url);
+      return { action: "deny" };
     });
   });
 
