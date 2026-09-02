@@ -278,4 +278,174 @@ describe("useUrlSearch", () => {
     // the non-matching HTTPS URL must not issue a second request.
     expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
   });
+
+  describe("superseded requests", () => {
+    type SearchResult = Awaited<
+      ReturnType<typeof GitService.searchGitRepositories>
+    >;
+
+    const repo = (fullName: string) => ({
+      id: "1",
+      full_name: fullName,
+      git_provider: "github" as const,
+      is_public: true,
+    });
+
+    const pending = () => {
+      const resolvers: ((value: SearchResult) => void)[] = [];
+      const rejecters: ((reason: unknown) => void)[] = [];
+      mockSearchGitRepositories.mockImplementation(
+        () =>
+          new Promise<SearchResult>((resolve, reject) => {
+            resolvers.push(resolve);
+            rejecters.push(reject);
+          }),
+      );
+      return { resolvers, rejecters };
+    };
+
+    it("should not list a result for input the user has already cleared", async () => {
+      const { resolvers } = pending();
+
+      type TestProps = { inputValue: string };
+      const { result, rerender } = renderHook(
+        ({ inputValue }: TestProps) => useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+          } as TestProps,
+        },
+      );
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+      });
+
+      // The user clears the field while that request is still in flight.
+      rerender({ inputValue: "" });
+
+      // Only now does the earlier request come back.
+      await act(async () => {
+        resolvers[0]({ items: [repo("owner/repo-119")], next_page_id: null });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      expect(result.current.isUrlSearchLoading).toBe(false);
+    });
+
+    it("should stop the spinner when the field is cleared mid-request", async () => {
+      pending();
+
+      type TestProps = { inputValue: string };
+      const { result, rerender } = renderHook(
+        ({ inputValue }: TestProps) => useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+          } as TestProps,
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      rerender({ inputValue: "" });
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+    });
+
+    it("should stop the spinner when the provider is cleared mid-request", async () => {
+      pending();
+
+      type TestProps = { provider: "github" | null };
+      const { result, rerender } = renderHook(
+        ({ provider }: TestProps) =>
+          useUrlSearch("https://github.com/owner/repo-119", provider),
+        { initialProps: { provider: "github" } as TestProps },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      rerender({ provider: null });
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+    });
+
+    it("should ignore an earlier request that resolves after a newer one started", async () => {
+      const { resolvers } = pending();
+
+      type TestProps = { inputValue: string };
+      const { result, rerender } = renderHook(
+        ({ inputValue }: TestProps) => useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+          } as TestProps,
+        },
+      );
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+      });
+
+      rerender({ inputValue: "https://github.com/owner/repo-200" });
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledTimes(2);
+      });
+
+      // The first request finishes late, after the second one is already out.
+      await act(async () => {
+        resolvers[0]({ items: [repo("owner/repo-119")], next_page_id: null });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      // The second request is still pending, so the spinner stays on.
+      expect(result.current.isUrlSearchLoading).toBe(true);
+    });
+
+    it("should not let an earlier failure clear a newer request's results", async () => {
+      const { resolvers, rejecters } = pending();
+
+      type TestProps = { inputValue: string };
+      const { result, rerender } = renderHook(
+        ({ inputValue }: TestProps) => useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+          } as TestProps,
+        },
+      );
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+      });
+
+      rerender({ inputValue: "https://github.com/owner/repo-200" });
+
+      await waitFor(() => {
+        expect(mockSearchGitRepositories).toHaveBeenCalledTimes(2);
+      });
+
+      await act(async () => {
+        resolvers[1]({ items: [repo("owner/repo-200")], next_page_id: null });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([repo("owner/repo-200")]);
+
+      // The superseded request now fails. It must not wipe the current results.
+      await act(async () => {
+        rejecters[0](new Error("superseded request failed"));
+      });
+
+      expect(result.current.urlSearchResults).toEqual([repo("owner/repo-200")]);
+    });
+  });
 });
