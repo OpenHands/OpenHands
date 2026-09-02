@@ -83,6 +83,10 @@ export function movePinnedId(
  * pinned ids in `misc_settings.ui_preferences` so the dashboard syncs across
  * devices. Migrates any existing localStorage data on first load.
  *
+ * Optimistic updates go through the React Query cache (`setQueryData`) so
+ * every component calling this hook sees the change immediately — no separate
+ * local state per instance.
+ *
  * Demo mode and cloud backends use in-memory state only.
  */
 export function useHomePinnedAutomations() {
@@ -96,25 +100,24 @@ export function useHomePinnedAutomations() {
   // Demo / cloud: session-order overrides kept in memory.
   const [inMemoryOrder, setInMemoryOrder] = useState<string[] | null>(null);
 
-  // Server-backed mode: optimistic local state carries the latest pin list so
-  // the UI responds instantly without waiting for a server round-trip.
-  const [localState, setLocalState] = useState<{
-    /** The `${backendId}:${orgId ?? "-"}` this state was set for. */
-    key: string;
-    ids: string[];
-  } | null>(null);
-
   const currentKey = `${active.backend.id}:${active.orgId ?? "-"}`;
   const lsKey = getHomePinnedAutomationsKey(active.backend.id, active.orgId);
 
   // Prevent migration from running more than once per backend+org.
   const migratedRef = useRef<Set<string>>(new Set());
 
-  // Fetch the server-side pinned IDs for the current backend+org.
-  const queryKey = HOME_PINNED_AUTOMATIONS_QUERY_KEYS.byBackend(
-    active.backend.id,
-    active.orgId,
+  // Stabilise the query key so writePins / useEffect deps don't churn.
+  const queryKey = useMemo(
+    () =>
+      HOME_PINNED_AUTOMATIONS_QUERY_KEYS.byBackend(
+        active.backend.id,
+        active.orgId,
+      ),
+    [active.backend.id, active.orgId],
   );
+
+  // Fetch the server-side pinned IDs for the current backend+org.
+  // `null` means "server has no entry yet"; `[]` means "explicitly empty".
   const { data: serverIds, isSuccess: serverReady } = useQuery({
     queryKey,
     queryFn: async () => {
@@ -132,10 +135,14 @@ export function useHomePinnedAutomations() {
     meta: { disableToast: true },
   });
 
-  // Write the given ids to the server and invalidate the local query cache.
+  // Write ids to the server and update the shared React Query cache
+  // optimistically so every hook instance re-renders immediately.
   const writePins = useCallback(
     (ids: string[]) => {
       if (!useServerSync) return;
+      // Update the cache first — all instances of this hook share the same
+      // query key and will re-render synchronously on the next tick.
+      queryClient.setQueryData(queryKey, ids);
       void SettingsService.patchUiPreferences({
         home_pinned_automations: { [currentKey]: ids },
       }).then(() => {
@@ -145,15 +152,14 @@ export function useHomePinnedAutomations() {
     [useServerSync, currentKey, queryClient, queryKey],
   );
 
-  // One-time migration: when the server query settles and we haven't yet
-  // initialized local state for this backend+org, migrate from localStorage.
+  // One-time migration: when the server query first settles for this
+  // backend+org, migrate any existing localStorage pins to the server.
   useEffect(() => {
     if (!serverReady || migratedRef.current.has(currentKey)) return;
     migratedRef.current.add(currentKey);
 
     if (serverIds !== null) {
-      // Server already has pin data — use it directly.
-      setLocalState({ key: currentKey, ids: serverIds });
+      // Server already has pin data — just clean up any stale localStorage key.
       try {
         localStorage.removeItem(lsKey);
       } catch {
@@ -164,33 +170,40 @@ export function useHomePinnedAutomations() {
       try {
         const raw = localStorage.getItem(lsKey);
         const ids = sanitizePinnedIds(raw !== null ? JSON.parse(raw) : []);
-        setLocalState({ key: currentKey, ids });
         if (ids.length > 0) {
           writePins(ids);
+        } else {
+          // Initialise the cache to an empty array so consumers know we've
+          // settled and won't treat `null` as "still loading".
+          queryClient.setQueryData(queryKey, [] as string[]);
         }
         localStorage.removeItem(lsKey);
       } catch {
-        setLocalState({ key: currentKey, ids: [] });
+        queryClient.setQueryData(queryKey, [] as string[]);
       }
     }
-  }, [serverReady, serverIds, currentKey, lsKey, writePins]);
+  }, [
+    serverReady,
+    serverIds,
+    currentKey,
+    lsKey,
+    writePins,
+    queryClient,
+    queryKey,
+  ]);
 
-  // Apply an updater to the current server-backed pin list, persist the
-  // result optimistically, and fire a background write to the server.
-  // Updaters that return the same reference as `current` are treated as
-  // no-ops (no state update, no server write) — used by pruneMissing.
+  // Apply an updater to the current pin list, write optimistically via the
+  // shared query cache. Updaters that return the same reference as `current`
+  // are treated as no-ops (no cache update, no server write) — used by
+  // pruneMissing.
   const updateIds = useCallback(
     (updater: (current: string[]) => string[]) => {
-      const current =
-        localState?.key === currentKey
-          ? localState.ids
-          : sanitizePinnedIds(serverIds ?? []);
+      const current = sanitizePinnedIds(serverIds ?? []);
       const next = updater(current);
       if (next === current) return;
-      setLocalState({ key: currentKey, ids: next });
       writePins(next);
     },
-    [localState, currentKey, serverIds, writePins],
+    [serverIds, writePins],
   );
 
   const pinnedIds = useMemo(() => {
@@ -202,10 +215,8 @@ export function useHomePinnedAutomations() {
     if (isCloud) {
       return sanitizePinnedIds(inMemoryOrder ?? []);
     }
-    return localState?.key === currentKey
-      ? localState.ids
-      : sanitizePinnedIds(serverIds ?? []);
-  }, [demo, isCloud, inMemoryOrder, localState, currentKey, serverIds]);
+    return sanitizePinnedIds(serverIds ?? []);
+  }, [demo, isCloud, inMemoryOrder, serverIds]);
 
   const isPinned = useCallback(
     (id: string) => pinnedIds.includes(id),
