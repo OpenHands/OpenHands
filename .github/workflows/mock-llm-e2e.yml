@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Full-suite runs can spend several minutes on dependency, browser, uv,
     # and frontend setup before Playwright starts. Keep Playwright's own
-    # 10-minute test deadline below, but give the job enough wall-clock room
+    # 20-minute test deadline below, but give the job enough wall-clock room
     # for setup plus reporting so GitHub does not terminate it mid-suite.
     timeout-minutes: 30
 
@@ -123,6 +123,7 @@ jobs:
         id: run_tests
         env:
           MOCK_LLM_PYTHON: .mock-llm-venv/bin/python3
+          MOCK_LLM_GLOBAL_TIMEOUT_MS: 1200000
         run: |
           set +e
           MARKER_DIR=".mock-llm-markers"
@@ -135,13 +136,13 @@ jobs:
           npm run test:e2e:mock-llm &
           PW_PID=$!
 
-          # Wait for tests to complete. Playwright's globalTimeout is 600s
-          # (10 min) in CI; we add 60s buffer for webServer startup/teardown.
+          # Wait for tests to complete. Playwright's globalTimeout is 20 min
+          # in CI; we add 60s buffer for webServer startup/teardown.
           # The custom DoneMarkerReporter writes .tests-done only after ALL
           # tests finish (pass or fail), before webServer teardown begins.
           # .results.json is flushed after every single test, so even if we
           # hit the deadline mid-suite the report script still has data.
-          deadline=$((SECONDS + 660))
+          deadline=$((SECONDS + (MOCK_LLM_GLOBAL_TIMEOUT_MS / 1000) + 60))
           while [ "$SECONDS" -lt "$deadline" ]; do
             if ! kill -0 "$PW_PID" 2>/dev/null; then
               break
