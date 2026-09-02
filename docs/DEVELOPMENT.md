@@ -37,11 +37,13 @@ Both modes still start the ingress proxy; the proxy only routes to the services 
 
 The dev stack uses `uvx` to run a temporary `agent-server`
 installation on `127.0.0.1:18000` and points the frontend at it. It isolates
-conversation persistence by setting separate `OH_CONVERSATIONS_PATH`,
-`OH_BASH_EVENTS_DIR`, and `OH_VSCODE_PORT` values under `.openhands-dev/`, and
-keeps its tmux sockets under `~/.openhands/agent-canvas/tmux` (via
-`TMUX_TMPDIR`), so it does not collide with other local or cloud-backed
-OpenHands sessions. If `$HOME` is on a filesystem that does not support Unix
+conversation persistence under a dedicated `stateDir` (default
+`~/.openhands/agent-canvas`, or `OH_CANVAS_SAFE_STATE_DIR` when set):
+`OH_CONVERSATIONS_PATH` → `<stateDir>/dev_conversations`,
+`OH_BASH_EVENTS_DIR` → `<stateDir>/bash_events`, and tmux sockets under
+`<stateDir>/tmux` (via `TMUX_TMPDIR`). `OH_VSCODE_PORT` is also set so the
+VS Code sidecar does not collide with other local or cloud-backed OpenHands
+sessions. If `$HOME` is on a filesystem that does not support Unix
 domain sockets (some devcontainers, NFS/CIFS homes), set the standard
 `TMUX_TMPDIR` env var to a local path such as `/tmp` and the dev stack will use
 it instead.
@@ -88,7 +90,7 @@ OH_AGENT_SERVER_VERSION=1.18.0 npm run dev
 - `OH_CANVAS_SAFE_BACKEND_PORT` — backend port for the isolated server (default `18000`)
 - `OH_CANVAS_SAFE_VSCODE_PORT` — VS Code sidecar port (default `backend port + 1`)
 - `OH_CANVAS_SAFE_STATE_DIR` — base directory for isolated server state
-- `VITE_WORKING_DIR` — repo root used for new conversations (defaults to the current checkout)
+- `VITE_WORKING_DIR` — workspace path used for new conversations (defaults to `<stateDir>/workspaces` when unset)
 
 ## Alternative development workflows
 
