@@ -411,11 +411,13 @@ test.describe("mock-LLM automation lifecycle", () => {
 
         tool_call: {
           // The agent-server registers the finish tool under its lowercase
-          // title (`finish`), and its response schema (TaskOutcome) requires
-          // the `status` + `outcome_summary` pair (that's the field alias,
-          // not `summary` or `message`).
+          // title (`finish`). The action schema requires `message`, while the
+          // attached response schema (TaskOutcome) validates the
+          // `status` + `outcome_summary` pair (that's the field alias, not
+          // `summary`); both layers must be satisfied in the same call.
           name: "finish",
           arguments: {
+            message: "Hello world echoed successfully.",
             status: "success",
             outcome_summary: "Hello world echoed successfully.",
           },
