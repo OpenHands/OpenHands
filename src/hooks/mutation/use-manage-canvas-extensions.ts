@@ -4,7 +4,11 @@ import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import type { InstallCanvasExtensionRequest } from "#/types/canvas-extension";
 import { CANVAS_EXTENSIONS_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
-import { displaySuccessToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
+import { getApiErrorMessage } from "#/utils/api-error-message";
 
 function useInvalidateCanvasExtensions() {
   const queryClient = useQueryClient();
@@ -18,6 +22,9 @@ export function useInstallCanvasExtension() {
   const invalidate = useInvalidateCanvasExtensions();
   const { t } = useTranslation("openhands");
   return useMutation({
+    // The default toast prints the client's raw `HTTP 400: {...}` message;
+    // the server's `detail` says which of Source/Ref/Path is actually wrong.
+    meta: { disableToast: true },
     mutationFn: (request: InstallCanvasExtensionRequest) =>
       CanvasExtensionsService.install(request),
     onSuccess: () => {
@@ -25,6 +32,9 @@ export function useInstallCanvasExtension() {
       displaySuccessToast(
         t(I18nKey.SETTINGS$CANVAS_EXTENSIONS_INSTALL_SUCCESS),
       );
+    },
+    onError: (error) => {
+      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
     },
   });
 }
