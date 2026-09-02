@@ -19160,23 +19160,6 @@
     "uk": "% використано",
     "ca": "% utilitzat"
   },
-  "CONVERSATION$NO_BUDGET_LIMIT": {
-    "en": "No budget limit",
-    "ja": "予算制限なし",
-    "zh-CN": "无预算限制",
-    "zh-TW": "無預算限制",
-    "ko-KR": "예산 제한 없음",
-    "de": "Kein Budgetlimit",
-    "no": "Ingen budsjettgrense",
-    "it": "Nessun limite di budget",
-    "pt": "Sem limite de orçamento",
-    "es": "Sin límite de presupuesto",
-    "ar": "لا حد للميزانية",
-    "fr": "Pas de limite de budget",
-    "tr": "Bütçe limiti yok",
-    "uk": "Без обмеження бюджету",
-    "ca": "Sense límit de pressupost"
-  },
   "CONVERSATION$INPUT": {
     "en": "Input",
     "ja": "入力",
@@ -22117,23 +22100,6 @@
     "de": "OpenHands API-Schlüssel",
     "uk": "API-ключі OpenHands",
     "ca": "Claus d'API d'OpenHands"
-  },
-  "CONVERSATION$BUDGET_USAGE_FORMAT": {
-    "en": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "ja": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "zh-CN": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "zh-TW": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "ko-KR": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "no": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "it": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "pt": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "es": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "ar": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "fr": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "tr": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "de": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "uk": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})",
-    "ca": "${currentCost} / ${maxBudget} ({usagePercentage}% {used})"
   },
   "CONVERSATION$CACHE_HIT": {
     "en": "Cache Hit",
