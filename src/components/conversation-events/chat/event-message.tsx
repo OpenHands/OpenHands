@@ -171,7 +171,7 @@ function PlanningObservationPreview({
   );
 }
 
-export function EventMessage({
+function EventMessageComponent({
   event,
   messages,
   correspondingAction: suppliedCorrespondingAction,

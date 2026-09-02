@@ -143,8 +143,10 @@ describe("EventMessage - PlanPreview rendering", () => {
 
   it("rerenders when the memoized wrapper stops being the live tail", () => {
     const event = createPlanningObservationEvent("plan-obs-1");
-    vi.mocked(useAgentState).mockReturnValue({
-      curAgentState: AgentState.RUNNING,
+    vi.mocked(usePlanningAgentState).mockReturnValue({
+      localPlanningConversationId: "planner-1",
+      curPlanningAgentState: AgentState.RUNNING,
+      isPlanningAgentRunning: true,
     });
 
     const { rerender } = renderWithProviders(
