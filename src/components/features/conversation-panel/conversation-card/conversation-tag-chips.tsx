@@ -28,23 +28,13 @@ interface ConversationTagChipsProps {
  * optical center as the ``leading-4`` chip / overflow text (raw ``h-3 w-3``
  * SVGs sit on the baseline and look high or low depending on the glyph).
  */
-function TagIconSlot({
-  icon: Icon,
-  keyName,
-  testId,
-}: {
-  icon: ConversationTagIcon;
-  keyName?: string;
-  testId?: string;
-}) {
+function TagIconSlot({ icon: Icon }: { icon: ConversationTagIcon }) {
   return (
     <span
       className={CONVERSATION_CARD_META_CHIP_ICON_SLOT_CLASSNAME}
       aria-hidden
     >
       <Icon
-        data-testid={testId}
-        data-tag-key={keyName}
         aria-hidden
         className={CONVERSATION_CARD_META_CHIP_ICON_CLASSNAME}
       />
@@ -52,40 +42,23 @@ function TagIconSlot({
   );
 }
 
-function TagChipContent({
-  icon,
-  keyName,
-  value,
-  iconTestId,
-}: {
-  icon: ConversationTagIcon;
-  keyName: string;
-  value: string;
-  /**
-   * Only the visible row passes this. The off-screen measure row renders the
-   * same chips, so tagging both would emit every chip test id twice and break
-   * ``getByTestId`` (singular) for any card with tags.
-   */
-  iconTestId?: string;
-}) {
+function TagChipContent({ label, value }: { label: string; value: string }) {
   return (
-    <>
-      <TagIconSlot icon={icon} keyName={keyName} testId={iconTestId} />
-      <span className="truncate leading-4">{truncateTagChipValue(value)}</span>
-    </>
+    <span className="truncate leading-4">
+      {label}: {truncateTagChipValue(value)}
+    </span>
   );
 }
 
 /**
- * Single-row tag chips for a conversation card. Chip labels are value-only
- * (key lives in the tooltip); chips that do not fit fold behind a ``+N``
- * button that opens a key/value popover.
+ * Single-row key/value tag chips for a conversation card. Chips that do not
+ * fit fold behind a ``+N`` button that opens a key/value popover.
  *
  * The overflow popover is portaled with ``position: fixed`` so it is not
  * clipped by the chip row's ``overflow-hidden`` or the sidebar scroller.
  */
 export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const measureRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -140,6 +113,11 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
     setIsOverflowOpen(false);
     recomputeVisibleCount();
   }, [tagsKey, recomputeVisibleCount]);
+
+  const language = i18n.resolvedLanguage ?? i18n.language;
+  React.useLayoutEffect(() => {
+    recomputeVisibleCount();
+  }, [language, recomputeVisibleCount]);
 
   React.useEffect(() => {
     const container = containerRef.current;
@@ -228,8 +206,7 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
         {tags.map(([key, value]) => (
           <span key={key} className={CONVERSATION_CARD_META_CHIP_CLASSNAME}>
             <TagChipContent
-              icon={getConversationTagIcon(key, value)}
-              keyName={key}
+              label={getConversationTagLabel(key, t)}
               value={value}
             />
           </span>
@@ -249,10 +226,8 @@ export function ConversationTagChips({ tags }: ConversationTagChipsProps) {
             className={CONVERSATION_CARD_META_CHIP_CLASSNAME}
           >
             <TagChipContent
-              icon={getConversationTagIcon(key, value)}
-              keyName={key}
+              label={getConversationTagLabel(key, t)}
               value={value}
-              iconTestId="conversation-card-tag-chip-icon"
             />
           </span>
         ))}
