@@ -45,6 +45,7 @@ import {
   WORKSPACE_TAG_KEY,
   assertSubscriptionAuthReady,
   buildStartConversationRequestWithEncryptedSettings,
+  buildStartPlanningConversationRequestWithEncryptedSettings,
   emptyHooksResponse,
   getDefaultConversationTitle,
   toAppConversation,
@@ -60,11 +61,13 @@ import { getTelemetryDistinctId } from "../../services/telemetry";
 import {
   ConversationMetadata,
   getStoredConversationMetadata,
+  mergeStoredConversationMetadata,
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
   type WorkspaceMode,
 } from "../conversation-metadata-store";
 import { resolveTitleLlmProfile } from "#/utils/title-llm-profile";
+import { isPlannerConversationOf } from "#/utils/plan-file";
 import type {
   GetHooksResponse,
   PluginSpec,
@@ -205,6 +208,19 @@ function normalizeTags(value: unknown): Record<string, string> | null {
   return tags;
 }
 
+/**
+ * ``ConversationInfo.sub_conversation_ids`` — the agent-server derives it from
+ * its own catalog of conversations that name this one as parent (SDK #4188),
+ * which is what lets Canvas find a conversation's local planner without any
+ * browser-local state. Absent on agent-servers older than 1.37.1; parsed
+ * defensively so a non-conforming payload degrades to "no children" instead of
+ * crashing the list.
+ */
+function normalizeSubConversationIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
 function normalizeLaunchedAgentProfile(
   value: unknown,
 ): DirectConversationInfo["launched_agent_profile"] {
@@ -269,6 +285,9 @@ function requireDirectConversationInfo(item: unknown): DirectConversationInfo {
     tags: normalizeTags(item.tags),
     launched_agent_profile: normalizeLaunchedAgentProfile(
       item.launched_agent_profile,
+    ),
+    sub_conversation_ids: normalizeSubConversationIds(
+      item.sub_conversation_ids,
     ),
     // SDK-runtime ACP model fields (populated when the agent-server supports
     // ``ConversationInfo.current_model_*``). Consumed by the conversation
@@ -582,6 +601,103 @@ class AgentServerConversationService {
     };
   }
 
+  static async createLocalPlanningConversation(
+    parentConversationId: string,
+    initialMessage?: string,
+  ): Promise<AppConversation> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      throw new Error("Local planning conversations require a local backend.");
+    }
+
+    const [parent] = await this.batchGetAppConversations([
+      parentConversationId,
+    ]);
+    const workingDir =
+      parent?.workspace?.working_dir ?? getAgentServerWorkingDir();
+
+    const payload =
+      await buildStartPlanningConversationRequestWithEncryptedSettings({
+        workingDir,
+        parentConversationId,
+        // Pin the planner to the parent's own current model. Only meaningful
+        // for "openhands"-kind parents: an ACP parent's active_profile is a
+        // stale launch-time snapshot (/model is a no-op for ACP), not a live
+        // value, so treating it as authoritative would pin the planner to
+        // the wrong model instead of falling through to global settings.
+        parentActiveProfileName:
+          parent?.agent_kind === "openhands"
+            ? (parent?.active_profile ?? null)
+            : null,
+        // Fallback when active_profile can't be resolved (e.g. an ACP parent).
+        parentAgentProfileId:
+          parent?.launched_agent_profile?.agent_profile_id ?? null,
+        initialMessage,
+      });
+
+    const data = await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).createConversation<DirectConversationInfo>(payload);
+
+    // Client-side fallback only: agent-servers >= 1.37.1 persist the link via
+    // `parent_conversation_id` and hand it back on the parent's
+    // `sub_conversation_ids`, which is the source of truth. This hint covers
+    // older backends that ignore the field.
+    mergeStoredConversationMetadata(parentConversationId, {
+      local_planning_conversation_id: data.id,
+    });
+
+    return toAppConversation(data);
+  }
+
+  /**
+   * Ids of the conversations owned by `parentConversationId` on a local
+   * backend — today that means its planner helper, the only child Canvas
+   * creates locally.
+   *
+   * `sub_conversation_ids` is the generic server-derived child list, so each
+   * child is kept only if it's tagged `plannerparent` for this parent —
+   * otherwise deleting the parent would also delete an unrelated non-planner
+   * child (e.g. a delegated sub-agent). The stored metadata hint is merged in
+   * for agent-servers older than 1.37.1, which report no children at all.
+   */
+  static async getLocalPlanningConversationIds(
+    parentConversationId: string,
+  ): Promise<string[]> {
+    if (getActiveBackend().backend.kind === "cloud") return [];
+
+    const ids = new Set<string>();
+
+    try {
+      const [parent] = await this.batchGetAppConversations([
+        parentConversationId,
+      ]);
+      const childIds = parent?.sub_conversation_ids ?? [];
+      if (childIds.length > 0) {
+        const children = await this.batchGetAppConversations(childIds);
+        for (const child of children) {
+          if (child && isPlannerConversationOf(child, parentConversationId)) {
+            ids.add(child.id);
+          }
+        }
+      }
+    } catch (error) {
+      // The stored hint below still covers the common case, and callers
+      // (delete) must not be blocked by a failed lookup.
+      console.warn(
+        `Failed to read sub-conversations of ${parentConversationId}`,
+        error,
+      );
+    }
+
+    const stored =
+      getStoredConversationMetadata(
+        parentConversationId,
+      )?.local_planning_conversation_id;
+    if (stored) ids.add(stored);
+
+    return [...ids];
+  }
+
   static async getStartTask(
     taskId: string,
   ): Promise<AppConversationStartTask | null> {
@@ -844,11 +960,35 @@ class AgentServerConversationService {
   static async deleteConversation(conversationId: string): Promise<void> {
     if (getActiveBackend().backend.kind === "cloud") {
       await deleteCloudConversation(conversationId);
-    } else {
-      await new ConversationClient(
-        getAgentServerClientOptions(),
-      ).deleteConversation(conversationId);
+      removeStoredConversationMetadata(conversationId);
+      return;
     }
+
+    // The agent-server orphans children rather than cascading, and the local
+    // planner helper is hidden from the conversation list by its
+    // `plannerparent` tag — so without this it would survive its parent as an
+    // invisible, unreachable conversation (plus its events and state).
+    const planningConversationIds =
+      await this.getLocalPlanningConversationIds(conversationId);
+
+    const client = new ConversationClient(getAgentServerClientOptions());
+    await Promise.all(
+      planningConversationIds.map(async (planningConversationId) => {
+        try {
+          await client.deleteConversation(planningConversationId);
+        } catch (error) {
+          // Already gone (or unreachable): never block deleting the parent the
+          // user actually asked to remove.
+          console.warn(
+            `Failed to delete planning conversation ${planningConversationId}`,
+            error,
+          );
+        }
+        removeStoredConversationMetadata(planningConversationId);
+      }),
+    );
+
+    await client.deleteConversation(conversationId);
     removeStoredConversationMetadata(conversationId);
   }
 
