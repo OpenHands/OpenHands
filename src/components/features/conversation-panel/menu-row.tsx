@@ -10,6 +10,7 @@ export function MenuRow({
   icon: Icon,
   label,
   selected,
+  variant = "radio",
   onClick,
   testId,
   disabled,
@@ -17,17 +18,27 @@ export function MenuRow({
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   label: string;
   selected?: boolean;
+  /**
+   * `"radio"` (default) is a row that's part of a mutually exclusive group
+   * (picking one clears the others — e.g. Sort by). `"checkbox"` is an
+   * independently toggleable row (e.g. the #15607 grouping toggles) that
+   * doesn't imply anything about sibling rows.
+   */
+  variant?: "radio" | "checkbox";
   onClick: () => void;
   testId?: string;
   disabled?: boolean;
 }) {
-  // Rows that show a selection checkmark are toggleable preferences, so
-  // they get `role="menuitemradio"` when they're part of a selectable
-  // group and `role="menuitemcheckbox"` when they're a standalone toggle.
-  // For simplicity we use `menuitemradio` whenever `selected` is provided
-  // (every selectable row in this menu is part of a mutually exclusive
-  // group in practice) and fall back to plain `menuitem` otherwise.
-  const role = selected === undefined ? "menuitem" : "menuitemradio";
+  // Rows that show a selection checkmark are toggleable preferences, so they
+  // get `role="menuitemradio"` when they're part of a mutually exclusive
+  // group and `role="menuitemcheckbox"` when each row toggles independently.
+  // A row with no `selected` state at all falls back to plain `menuitem`.
+  const role =
+    selected === undefined
+      ? "menuitem"
+      : variant === "checkbox"
+        ? "menuitemcheckbox"
+        : "menuitemradio";
   return (
     <button
       type="button"

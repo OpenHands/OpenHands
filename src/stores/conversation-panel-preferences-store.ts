@@ -3,7 +3,6 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import {
   type AutomationFilterMode,
   type ConversationSortField,
-  type OrganizeMode,
   type ThreadScope,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 
@@ -27,7 +26,15 @@ interface ConversationPanelPreferencesState {
   showLlmProfiles: boolean;
   showTagsMetadata: boolean;
   showHoverMetadata: boolean;
-  organizeMode: OrganizeMode;
+  /**
+   * Independent grouping toggles (#15607). Both may be active at once, in
+   * which case the sidebar nests container folders around workspace/
+   * repository folders (see `buildConversationGroups`). Neither active is
+   * the pre-existing "chronological" list — there is no longer a distinct
+   * persisted mode for it, it's just the all-off state.
+   */
+  groupByContainer: boolean;
+  groupByWorkspace: boolean;
   conversationSort: ConversationSortField;
   threadScope: ThreadScope;
   automationFilterMode: AutomationFilterMode;
@@ -48,7 +55,10 @@ interface ConversationPanelPreferencesActions {
   toggleShowTagsMetadata: () => void;
   setShowHoverMetadata: (value: boolean) => void;
   toggleShowHoverMetadata: () => void;
-  setOrganizeMode: (value: OrganizeMode) => void;
+  setGroupByContainer: (value: boolean) => void;
+  toggleGroupByContainer: () => void;
+  setGroupByWorkspace: (value: boolean) => void;
+  toggleGroupByWorkspace: () => void;
   setConversationSort: (value: ConversationSortField) => void;
   setThreadScope: (value: ThreadScope) => void;
   setAutomationFilterMode: (value: AutomationFilterMode) => void;
@@ -66,7 +76,8 @@ const initialState: ConversationPanelPreferencesState = {
   showLlmProfiles: false,
   showTagsMetadata: false,
   showHoverMetadata: true,
-  organizeMode: "chronological",
+  groupByContainer: false,
+  groupByWorkspace: false,
   conversationSort: "updated",
   threadScope: "all",
   automationFilterMode: "all",
@@ -121,7 +132,16 @@ export const useConversationPanelPreferencesStore =
             showHoverMetadata: !state.showHoverMetadata,
           })),
 
-        setOrganizeMode: (value) => set(() => ({ organizeMode: value })),
+        setGroupByContainer: (value) =>
+          set(() => ({ groupByContainer: value })),
+        toggleGroupByContainer: () =>
+          set((state) => ({ groupByContainer: !state.groupByContainer })),
+
+        setGroupByWorkspace: (value) =>
+          set(() => ({ groupByWorkspace: value })),
+        toggleGroupByWorkspace: () =>
+          set((state) => ({ groupByWorkspace: !state.groupByWorkspace })),
+
         setConversationSort: (value) =>
           set(() => ({ conversationSort: value })),
         setThreadScope: (value) => set(() => ({ threadScope: value })),
@@ -151,7 +171,8 @@ export const useConversationPanelPreferencesStore =
           showLlmProfiles: state.showLlmProfiles,
           showTagsMetadata: state.showTagsMetadata,
           showHoverMetadata: state.showHoverMetadata,
-          organizeMode: state.organizeMode,
+          groupByContainer: state.groupByContainer,
+          groupByWorkspace: state.groupByWorkspace,
           conversationSort: state.conversationSort,
           threadScope: state.threadScope,
           automationFilterMode: state.automationFilterMode,

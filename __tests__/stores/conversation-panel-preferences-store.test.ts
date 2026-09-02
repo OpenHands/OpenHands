@@ -8,13 +8,14 @@ describe("conversation-panel-preferences store", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to showing older conversations, chronological list, and expected toggles", () => {
+  it("defaults to showing older conversations, chronological list (both grouping toggles off), and expected toggles", () => {
     const state = useConversationPanelPreferencesStore.getState();
     expect(state.showOlderConversations).toBe(true);
     expect(state.showRepoBranchMetadata).toBe(false);
     expect(state.showLlmProfiles).toBe(false);
     expect(state.showTagsMetadata).toBe(false);
-    expect(state.organizeMode).toBe("chronological");
+    expect(state.groupByContainer).toBe(false);
+    expect(state.groupByWorkspace).toBe(false);
     expect(state.conversationSort).toBe("updated");
     expect(state.threadScope).toBe("all");
     expect(state.automationFilterMode).toBe("all");
@@ -75,8 +76,9 @@ describe("conversation-panel-preferences store", () => {
     expect(Object.keys(persisted.state).sort()).toEqual([
       "automationFilterMode",
       "conversationSort",
+      "groupByContainer",
+      "groupByWorkspace",
       "groupFolderOrder",
-      "organizeMode",
       "selectedAutomationNames",
       "showArchivedConversations",
       "showHoverMetadata",
@@ -100,21 +102,41 @@ describe("conversation-panel-preferences store", () => {
     ).toBe(false);
   });
 
-  it("updates organize, sort, and thread-scope preferences via their setters", () => {
+  it("updates the grouping toggles, sort, and thread-scope preferences via their setters", () => {
     const store = useConversationPanelPreferencesStore.getState();
-    store.setOrganizeMode("grouped");
+    store.setGroupByWorkspace(true);
     store.setConversationSort("created");
     store.setThreadScope("relevant");
 
     const next = useConversationPanelPreferencesStore.getState();
     expect({
-      organizeMode: next.organizeMode,
+      groupByContainer: next.groupByContainer,
+      groupByWorkspace: next.groupByWorkspace,
       conversationSort: next.conversationSort,
       threadScope: next.threadScope,
     }).toEqual({
-      organizeMode: "grouped",
+      // groupByContainer is untouched by setGroupByWorkspace — the two
+      // toggles are independent (#15607), not a mutually exclusive mode.
+      groupByContainer: false,
+      groupByWorkspace: true,
       conversationSort: "created",
       threadScope: "relevant",
+    });
+
+    // toggleGroupByContainer flips only its own field, leaving
+    // groupByWorkspace (just set above) untouched.
+    store.toggleGroupByContainer();
+    expect({
+      groupByContainer:
+        useConversationPanelPreferencesStore.getState().groupByContainer,
+      groupByWorkspace:
+        useConversationPanelPreferencesStore.getState().groupByWorkspace,
+    }).toEqual({ groupByContainer: true, groupByWorkspace: true });
+
+    // Restore defaults so later tests in this file see a pristine store.
+    useConversationPanelPreferencesStore.setState({
+      groupByContainer: false,
+      groupByWorkspace: false,
     });
   });
 
@@ -164,19 +186,44 @@ describe("conversation-panel-preferences store", () => {
       showOlderConversations: state.showOlderConversations,
       showRepoBranchMetadata: state.showRepoBranchMetadata,
       showLlmProfiles: state.showLlmProfiles,
-      organizeMode: state.organizeMode,
+      groupByContainer: state.groupByContainer,
+      groupByWorkspace: state.groupByWorkspace,
       conversationSort: state.conversationSort,
       threadScope: state.threadScope,
     }).toEqual({
       // Preserved from the legacy payload.
       showOlderConversations: false,
       showRepoBranchMetadata: true,
-      // Filled with defaults for missing fields.
+      // Filled with defaults for missing fields — including a payload from
+      // before #15607 that still carries the old `organizeMode` key: it's
+      // simply ignored (an unknown field to `persist`) rather than migrated.
       showLlmProfiles: false,
-      organizeMode: "chronological",
+      groupByContainer: false,
+      groupByWorkspace: false,
       conversationSort: "updated",
       threadScope: "all",
     });
+  });
+
+  it("does not migrate a pre-#15607 organizeMode payload — grouping resets to off", async () => {
+    // Known, deliberate limitation: a user who had the old single "grouped"
+    // mode enabled sees a flat/chronological list once after upgrading,
+    // rather than automatically mapping to groupByWorkspace=true. Documented
+    // here so a future change to add that migration doesn't silently
+    // contradict this test.
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: { organizeMode: "grouped" },
+        version: 0,
+      }),
+    );
+
+    await useConversationPanelPreferencesStore.persist.rehydrate();
+
+    const state = useConversationPanelPreferencesStore.getState();
+    expect(state.groupByContainer).toBe(false);
+    expect(state.groupByWorkspace).toBe(false);
   });
 
   it("preserves an explicitly enabled LLM-profiles preference from persisted storage", async () => {

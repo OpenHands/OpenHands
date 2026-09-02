@@ -36,14 +36,15 @@ import { cn } from "#/utils/utils";
 import { ConversationPanelFilterMenu } from "./conversation-panel-filter-menu";
 import { ConversationPanelNewThreadPicker } from "./conversation-panel-new-thread-picker";
 import { ConversationGroupFolderList } from "./conversation-group-folder-list";
+import { ConversationGroupSectionHeader } from "./conversation-group-section-header";
 import { ConversationPanelPinnedSection } from "./conversation-panel-pinned-section";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  buildConversationGroups,
   collectAutomationNameFacets,
   filterOutPinnedConversations,
   getGroupDiscoveryConversationIds,
-  groupConversations,
   MAX_PAGES_PER_LOAD_MORE_CLICK,
   resolvePinnedConversations,
   sortConversationsByField,
@@ -152,12 +153,22 @@ export function ConversationPanel({
   const toggleShowHoverMetadata = useConversationPanelPreferencesStore(
     (state) => state.toggleShowHoverMetadata,
   );
-  const organizeMode = useConversationPanelPreferencesStore(
-    (state) => state.organizeMode,
+  const groupByContainer = useConversationPanelPreferencesStore(
+    (state) => state.groupByContainer,
   );
-  const setOrganizeMode = useConversationPanelPreferencesStore(
-    (state) => state.setOrganizeMode,
+  const toggleGroupByContainer = useConversationPanelPreferencesStore(
+    (state) => state.toggleGroupByContainer,
   );
+  const groupByWorkspace = useConversationPanelPreferencesStore(
+    (state) => state.groupByWorkspace,
+  );
+  const toggleGroupByWorkspace = useConversationPanelPreferencesStore(
+    (state) => state.toggleGroupByWorkspace,
+  );
+  // Either toggle puts the list into "grouped" rendering; both together
+  // additionally nest workspace/repository folders inside container folders
+  // (see `buildConversationGroups`). Neither is the plain chronological list.
+  const isGrouped = groupByContainer || groupByWorkspace;
   const conversationSort = useConversationPanelPreferencesStore(
     (state) => state.conversationSort,
   );
@@ -254,11 +265,11 @@ export function ConversationPanel({
   }, []);
 
   React.useEffect(() => {
-    if (organizeMode !== "grouped") {
+    if (!isGrouped) {
       setCollapsedGroupIds(new Set());
       setExpandedGroupPreviewIds(new Set());
     }
-  }, [organizeMode]);
+  }, [isGrouped]);
 
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -345,14 +356,14 @@ export function ConversationPanel({
     [conversations],
   );
 
+  // Pre-seeds empty known-workspace folders (see `groupConversations`). Only
+  // meaningful for the workspace grouping axis — computed whenever that
+  // toggle is on, but deliberately NOT forwarded to `buildConversationGroups`
+  // when container grouping is also active (see that function's doc comment).
   const allWorkspacesForGrouping = React.useMemo<
     readonly LocalWorkspace[]
   >(() => {
-    if (
-      compact ||
-      organizeMode !== "grouped" ||
-      activeBackend.kind !== "local"
-    ) {
+    if (compact || !groupByWorkspace || activeBackend.kind !== "local") {
       return [];
     }
     const normalize = (p: string) => p.trim().replace(/\/+$/, "");
@@ -381,8 +392,8 @@ export function ConversationPanel({
     activeBackend.kind,
     compact,
     conversations,
+    groupByWorkspace,
     knownWorkspaces,
-    organizeMode,
   ]);
 
   const automationFilteredConversations = React.useMemo(
@@ -466,50 +477,62 @@ export function ConversationPanel({
     () => ({
       emptyWorkspace: t(I18nKey.CONVERSATION_PANEL$NO_WORKSPACE),
       emptyRepository: t(I18nKey.CONVERSATION_PANEL$NO_REPOSITORY),
+      emptyContainer: t(I18nKey.CONVERSATION_PANEL$NO_CONTAINER),
     }),
     [t],
   );
 
   const groupedSourceConversations = React.useMemo(() => {
-    if (compact || organizeMode !== "grouped") {
+    if (compact || !isGrouped) {
       return null;
     }
-    // Use the unsorted partitions: groupConversations sorts each bucket
+    // Use the unsorted partitions: the grouping helpers sort each bucket
     // internally by `sortField`, so pre-sorting the merged input is wasted
     // work in grouped mode (the per-group sort overrides any global order).
     return [...recentScoped, ...(showOlderConversations ? olderScoped : [])];
-  }, [
-    compact,
-    olderScoped,
-    organizeMode,
-    recentScoped,
-    showOlderConversations,
-  ]);
+  }, [compact, isGrouped, olderScoped, recentScoped, showOlderConversations]);
 
-  const conversationGroups = React.useMemo(() => {
+  const conversationSections = React.useMemo(() => {
     if (!groupedSourceConversations) {
       return null;
     }
     // Keep every loaded conversation in the group model. Folder discovery only
     // freezes the collapsed preview — expanding a folder must reach later-page
     // rows for that same workspace/repo.
-    return groupConversations(
+    return buildConversationGroups(
       groupedSourceConversations,
       activeBackend.kind,
       conversationSort,
-      groupLabels,
-      allWorkspacesForGrouping,
+      {
+        groupByContainer,
+        groupByWorkspace,
+        labels: groupLabels,
+        // Deliberately omitted when container grouping is also active — see
+        // `buildConversationGroups`'s doc comment.
+        knownWorkspaces: groupByContainer
+          ? undefined
+          : allWorkspacesForGrouping,
+      },
     );
   }, [
     activeBackend.kind,
+    allWorkspacesForGrouping,
     conversationSort,
+    groupByContainer,
+    groupByWorkspace,
     groupLabels,
     groupedSourceConversations,
-    allWorkspacesForGrouping,
   ]);
 
+  // Discovery-page freezing (the recently-merged folder-pagination fix) is
+  // only wired up for the pre-existing single-axis workspace/repository
+  // grouping, which is the exact scenario it was built and reviewed against.
+  // Container-only and nested grouping fall back to the plain
+  // most-recent-N-conversations preview (`getGroupConversationPreview` with
+  // no discovery pool) instead of extending that pagination machinery to
+  // axes it wasn't designed for — see the PR notes for why.
   const groupDiscoveryConversationIds = React.useMemo(() => {
-    if (!groupedSourceConversations) {
+    if (!groupedSourceConversations || groupByContainer) {
       return null;
     }
     return getGroupDiscoveryConversationIds(
@@ -522,19 +545,33 @@ export function ConversationPanel({
     activeBackend.kind,
     conversationPageById,
     currentConversationId,
+    groupByContainer,
     groupedSourceConversations,
   ]);
 
-  const orderedConversationGroups = React.useMemo(() => {
-    if (!conversationGroups) {
+  const orderedConversationSections = React.useMemo(() => {
+    if (!conversationSections) {
       return null;
     }
-    return applyGroupFolderOrder(conversationGroups, groupFolderOrder);
-  }, [conversationGroups, groupFolderOrder]);
+    // Drag-and-drop reordering (`groupFolderOrder`) is intentionally scoped
+    // within each section: applying the same persisted order independently
+    // per container means a folder can be reordered among its container's
+    // siblings, but not dragged across containers. That matches today's
+    // single-level behavior when nesting is off (there is only one section),
+    // and is a deliberately narrow limitation when nesting is on.
+    return conversationSections.map((section) => ({
+      ...section,
+      groups: applyGroupFolderOrder(section.groups, groupFolderOrder),
+    }));
+  }, [conversationSections, groupFolderOrder]);
 
-  const conversationGroupIds = React.useMemo(
-    () => conversationGroups?.map((group) => group.id) ?? [],
-    [conversationGroups],
+  const visibleGroupCount = React.useMemo(
+    () =>
+      orderedConversationSections?.reduce(
+        (count, section) => count + section.groups.length,
+        0,
+      ) ?? 0,
+    [orderedConversationSections],
   );
 
   const compactVisibleConversations = React.useMemo(
@@ -550,12 +587,8 @@ export function ConversationPanel({
 
   const visibleFlatCount = sortedVisibleConversations.length;
 
-  const visibleGroupCount = orderedConversationGroups?.length ?? 0;
-
   const listIsEffectivelyEmpty =
-    organizeMode === "grouped" && !compact
-      ? visibleGroupCount === 0
-      : visibleFlatCount === 0;
+    isGrouped && !compact ? visibleGroupCount === 0 : visibleFlatCount === 0;
 
   // Attribution is exact: the automation filter step itself produced zero
   // rows out of a non-empty loaded set (not merely threadScope/older-cutoff
@@ -572,9 +605,7 @@ export function ConversationPanel({
   // driver walks past them (bounded by the per-click page cap) so a single
   // click can still reach a folder hiding behind deepen-only pages.
   const visibleCount =
-    organizeMode === "grouped" && !compact
-      ? visibleGroupCount
-      : visibleFlatCount;
+    isGrouped && !compact ? visibleGroupCount : visibleFlatCount;
   const loadedPageCount = data?.pages.length ?? 0;
 
   // KNOWN ISSUE (unresolved as of 2026-05-29): users still report that the
@@ -634,7 +665,7 @@ export function ConversationPanel({
     // Chronological mode keeps its pre-existing behavior: fetch until a
     // visible row appears or pages run out.
     if (
-      organizeMode === "grouped" &&
+      isGrouped &&
       !compact &&
       loadMorePageFloor != null &&
       loadedPageCount >= loadMorePageFloor + MAX_PAGES_PER_LOAD_MORE_CLICK
@@ -661,7 +692,7 @@ export function ConversationPanel({
     loadMorePageFloor,
     visibleCount,
     loadedPageCount,
-    organizeMode,
+    isGrouped,
     hasNextPage,
     isFetching,
     isFetchingNextPage,
@@ -1002,11 +1033,7 @@ export function ConversationPanel({
   const showInitialSkeleton = isLoading || !isFetched;
   const showPinnedSection =
     !compact && !showInitialSkeleton && pinnedConversations.length > 0;
-  const hasVisibleGroups =
-    organizeMode === "grouped" &&
-    !compact &&
-    orderedConversationGroups != null &&
-    orderedConversationGroups.length > 0;
+  const hasVisibleGroups = isGrouped && !compact && visibleGroupCount > 0;
   const showEmptyState =
     isFetched &&
     !isLoading &&
@@ -1049,8 +1076,10 @@ export function ConversationPanel({
                 setFilterMenuOpen={setFilterMenuOpen}
                 menuRef={filterMenuRef}
                 backendKind={activeBackend.kind}
-                organizeMode={organizeMode}
-                setOrganizeMode={setOrganizeMode}
+                groupByContainer={groupByContainer}
+                toggleGroupByContainer={toggleGroupByContainer}
+                groupByWorkspace={groupByWorkspace}
+                toggleGroupByWorkspace={toggleGroupByWorkspace}
                 conversationSort={conversationSort}
                 setConversationSort={setConversationSort}
                 threadScope={threadScope}
@@ -1118,7 +1147,7 @@ export function ConversationPanel({
               setExpandedPinnedPreview((current) => !current)
             }
             activeConversationId={currentConversationId}
-            showDivider={!compact && organizeMode === "chronological"}
+            showDivider={!compact && !isGrouped}
             renderConversationCard={(conversation) =>
               renderConversationCard(conversation, { inPinnedSection: true })
             }
@@ -1147,31 +1176,56 @@ export function ConversationPanel({
 
         {!showInitialSkeleton &&
         !compact &&
-        organizeMode === "grouped" &&
-        orderedConversationGroups &&
-        orderedConversationGroups.length > 0 ? (
-          <ConversationGroupFolderList
-            groups={orderedConversationGroups}
-            groupIds={conversationGroupIds}
-            groupFolderOrder={groupFolderOrder}
-            setGroupFolderOrder={setGroupFolderOrder}
-            collapsedGroupIds={collapsedGroupIds}
-            expandedGroupPreviewIds={expandedGroupPreviewIds}
-            discoveryConversationIds={groupDiscoveryConversationIds}
-            onToggleGroupCollapsed={toggleGroupCollapsed}
-            onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
-            isCreatingConversationFlow={isCreatingConversationFlow}
-            activeConversationId={currentConversationId}
-            onLaunchFromGroup={launchFromGroup}
-            renderConversationCard={(conversation) =>
-              renderConversationCard(conversation)
-            }
-          />
-        ) : null}
+        isGrouped &&
+        orderedConversationSections &&
+        visibleGroupCount > 0
+          ? orderedConversationSections.map((section) => {
+              const sectionGroupIds = section.groups.map((group) => group.id);
+              // Each section reorders independently: a drag only rearranges
+              // folders within their own container (or within the single
+              // implicit section when only one axis is grouped). Merging the
+              // scoped result back into the full persisted order keeps other
+              // sections' custom orders intact instead of the write
+              // silently dropping them.
+              const setSectionGroupFolderOrder = (order: readonly string[]) => {
+                const sectionIdSet = new Set(sectionGroupIds);
+                setGroupFolderOrder([
+                  ...groupFolderOrder.filter((id) => !sectionIdSet.has(id)),
+                  ...order,
+                ]);
+              };
+              return (
+                <React.Fragment
+                  key={section.container?.id ?? "__ungrouped_section"}
+                >
+                  {section.container ? (
+                    <ConversationGroupSectionHeader
+                      label={section.container.label}
+                    />
+                  ) : null}
+                  <ConversationGroupFolderList
+                    groups={section.groups}
+                    groupIds={sectionGroupIds}
+                    groupFolderOrder={groupFolderOrder}
+                    setGroupFolderOrder={setSectionGroupFolderOrder}
+                    collapsedGroupIds={collapsedGroupIds}
+                    expandedGroupPreviewIds={expandedGroupPreviewIds}
+                    discoveryConversationIds={groupDiscoveryConversationIds}
+                    onToggleGroupCollapsed={toggleGroupCollapsed}
+                    onToggleGroupPreviewExpanded={toggleGroupPreviewExpanded}
+                    isCreatingConversationFlow={isCreatingConversationFlow}
+                    activeConversationId={currentConversationId}
+                    onLaunchFromGroup={launchFromGroup}
+                    renderConversationCard={(conversation) =>
+                      renderConversationCard(conversation)
+                    }
+                  />
+                </React.Fragment>
+              );
+            })
+          : null}
 
-        {!showInitialSkeleton &&
-        !compact &&
-        organizeMode === "chronological" ? (
+        {!showInitialSkeleton && !compact && !isGrouped ? (
           <div className="space-y-0.5">
             {sortedVisibleConversations.map((conversation) =>
               renderConversationCard(conversation),
