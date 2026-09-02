@@ -12,6 +12,7 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { setStoredConversationMetadata } from "#/api/conversation-metadata-store";
 import {
   getFetchCall,
   getJsonBody,
@@ -32,6 +33,8 @@ const {
   mockGetProfile,
   mockActivateProfile,
   mockListProfiles,
+  mockGetTelemetryDistinctId,
+  mockLoadHooks,
 } = vi.hoisted(() => ({
   mockHttpGet: vi.fn(),
   mockHttpPost: vi.fn(),
@@ -46,6 +49,8 @@ const {
   mockGetProfile: vi.fn(),
   mockActivateProfile: vi.fn(),
   mockListProfiles: vi.fn(),
+  mockGetTelemetryDistinctId: vi.fn(),
+  mockLoadHooks: vi.fn(),
 }));
 
 const originalFetch = global.fetch;
@@ -76,6 +81,9 @@ vi.mock("@openhands/typescript-client/clients", async () => {
     VSCodeClient: vi.fn(function VSCodeClientMock() {
       return { getUrl: vi.fn() };
     }),
+    HooksClient: vi.fn(function HooksClientMock() {
+      return { loadHooks: mockLoadHooks };
+    }),
   };
 });
 
@@ -84,7 +92,8 @@ vi.mock("#/api/agent-server-config", () => ({
   getAgentServerBaseUrl: vi.fn(() => "http://localhost:54928"),
   getAgentServerSessionApiKey: vi.fn(() => "test-api-key"),
   getAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
-  buildConversationWorkingDir: vi.fn(
+  getWorkspaceRootForBackend: vi.fn(() => "/workspace/project/agent-canvas"),
+  buildConversationWorkingDirForBackend: vi.fn(
     (id: string) => `/state/workspaces/${id.replace(/-/g, "")}`,
   ),
   getAgentServerHeaders: vi.fn(() => ({ "X-Session-API-Key": "test-api-key" })),
@@ -98,6 +107,10 @@ vi.mock("#/api/settings-service/settings-service.api", () => ({
     getSettings: mockGetSettings,
     getSettingsForConversation: mockGetSettingsForConversation,
   },
+}));
+
+vi.mock("#/services/telemetry", () => ({
+  getTelemetryDistinctId: mockGetTelemetryDistinctId,
 }));
 
 describe("AgentServerConversationService", () => {
@@ -250,6 +263,58 @@ describe("AgentServerConversationService", () => {
   });
 
   describe("createConversation", () => {
+    it("forwards the Canvas telemetry identity to the local agent server", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue("ph-canvas-user");
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      expect(mockHttpPost).toHaveBeenCalledWith(
+        "/api/conversations",
+        expect.objectContaining({ user_id: "ph-canvas-user" }),
+      );
+    });
+
+    it("omits user_id when Canvas telemetry has no consented identity", async () => {
+      mockGetTelemetryDistinctId.mockResolvedValue(null);
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "conversation-1",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const payload = mockHttpPost.mock.calls[0][1] as Record<string, unknown>;
+      expect(payload).not.toHaveProperty("user_id");
+    });
+
     it("passes the selected title profile to local conversation starts", async () => {
       mockGetSettings.mockResolvedValue({
         title_llm_profile: "Titles",
@@ -352,7 +417,7 @@ describe("AgentServerConversationService", () => {
     // home dir so the worktree and later file uploads agree on a writable
     // absolute path.
     it("resolves relative default working dirs against /api/file/home", async () => {
-      const { buildConversationWorkingDir: mockedBuilder } =
+      const { buildConversationWorkingDirForBackend: mockedBuilder } =
         await import("#/api/agent-server-config");
       vi.mocked(mockedBuilder).mockImplementationOnce(
         (id: string) => `workspace/project/${id.replace(/-/g, "")}`,
@@ -411,13 +476,9 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -426,6 +487,68 @@ describe("AgentServerConversationService", () => {
       };
       expect(payload.workspace.working_dir).toBe("/Users/jane/projects/foo");
       expect(payload.worktree).toBe(false);
+    });
+
+    // Regression for #16907 — the conversation's own `<workspace>/<hex>` dir
+    // does not exist yet, so hooks looked up there are never found.
+    it("looks project hooks up in the workspace root, not the conversation dir", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation();
+
+      const [payloadCall] = mockHttpPost.mock.calls;
+      const payload = payloadCall[1] as {
+        workspace: { working_dir: string };
+      };
+      expect(mockLoadHooks).toHaveBeenCalledWith({
+        project_dir: "/workspace/project/agent-canvas",
+      });
+      expect(mockLoadHooks).not.toHaveBeenCalledWith({
+        project_dir: payload.workspace.working_dir,
+      });
+    });
+
+    // An explicit pick is the project, so hooks belong there.
+    it("looks project hooks up in an explicitly picked workspace", async () => {
+      mockGetSettings.mockResolvedValue({
+        agent_settings: { llm: { model: "gpt-4o" } },
+        conversation_settings: {},
+      });
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "gpt-4o" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "ignored-server-id",
+          created_at: "2024-01-01",
+          updated_at: "2024-01-01",
+        },
+      });
+
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+      });
+
+      expect(mockLoadHooks).toHaveBeenCalledWith({
+        project_dir: "/Users/jane/projects/foo",
+      });
     });
 
     it("honors an explicit new-worktree mode for a selected workspace", async () => {
@@ -446,14 +569,10 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       const payload = payloadCall[1] as {
@@ -482,15 +601,11 @@ describe("AgentServerConversationService", () => {
         },
       });
 
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "/Users/jane/projects/foo",
-        "new_worktree",
-        "parent-conversation-id",
-      );
+      await AgentServerConversationService.createConversation({
+        workingDirOverride: "/Users/jane/projects/foo",
+        workspaceMode: "new_worktree",
+        parentConversationId: "parent-conversation-id",
+      });
 
       const [payloadCall] = mockHttpPost.mock.calls;
       expect(payloadCall[1]).toMatchObject({
@@ -546,6 +661,254 @@ describe("AgentServerConversationService", () => {
       expect(mockHttpDelete).toHaveBeenCalledWith(
         "/api/conversations/conv-abc",
       );
+    });
+
+    it("deletes the hidden planner helper reported by the server alongside its parent", async () => {
+      mockHttpDelete.mockResolvedValue({ data: undefined });
+      mockHttpGet.mockImplementation((_url: string, options: unknown) => {
+        const ids = (options as { params: { ids: string[] } }).params.ids;
+        if (ids.includes("conv-abc")) {
+          return Promise.resolve({
+            data: [
+              {
+                id: "conv-abc",
+                created_at: "2024-01-01T00:00:00.000Z",
+                updated_at: "2024-01-01T00:00:00.000Z",
+                sub_conversation_ids: ["plan-abc"],
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          data: [
+            {
+              id: "plan-abc",
+              created_at: "2024-01-01T00:00:00.000Z",
+              updated_at: "2024-01-01T00:00:00.000Z",
+              tags: { plannerparent: "conv-abc" },
+            },
+          ],
+        });
+      });
+
+      await AgentServerConversationService.deleteConversation("conv-abc");
+
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/plan-abc",
+      );
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+      );
+    });
+
+    it("still deletes the parent when the planner helper is already gone", async () => {
+      mockHttpGet.mockImplementation((_url: string, options: unknown) => {
+        const ids = (options as { params: { ids: string[] } }).params.ids;
+        if (ids.includes("conv-abc")) {
+          return Promise.resolve({
+            data: [
+              {
+                id: "conv-abc",
+                created_at: "2024-01-01T00:00:00.000Z",
+                updated_at: "2024-01-01T00:00:00.000Z",
+                sub_conversation_ids: ["plan-abc"],
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          data: [
+            {
+              id: "plan-abc",
+              created_at: "2024-01-01T00:00:00.000Z",
+              updated_at: "2024-01-01T00:00:00.000Z",
+              tags: { plannerparent: "conv-abc" },
+            },
+          ],
+        });
+      });
+      mockHttpDelete.mockImplementation(async (path: string) => {
+        if (path === "/api/conversations/plan-abc") {
+          throw new Error("404 Not Found");
+        }
+        return { data: undefined };
+      });
+
+      await expect(
+        AgentServerConversationService.deleteConversation("conv-abc"),
+      ).resolves.toBeUndefined();
+
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+      );
+    });
+
+    it("does not delete an unrelated non-planner child conversation", async () => {
+      // Regression: sub_conversation_ids is the generic server-derived child
+      // list, not a planner-only list — an untagged child (e.g. a delegated
+      // sub-agent from another feature) must survive deleting the parent.
+      mockHttpDelete.mockResolvedValue({ data: undefined });
+      mockHttpGet.mockImplementation((_url: string, options: unknown) => {
+        const ids = (options as { params: { ids: string[] } }).params.ids;
+        if (ids.includes("conv-abc")) {
+          return Promise.resolve({
+            data: [
+              {
+                id: "conv-abc",
+                created_at: "2024-01-01T00:00:00.000Z",
+                updated_at: "2024-01-01T00:00:00.000Z",
+                sub_conversation_ids: ["other-conv"],
+              },
+            ],
+          });
+        }
+        return Promise.resolve({
+          data: [
+            {
+              id: "other-conv",
+              created_at: "2024-01-01T00:00:00.000Z",
+              updated_at: "2024-01-01T00:00:00.000Z",
+              tags: {},
+            },
+          ],
+        });
+      });
+
+      await AgentServerConversationService.deleteConversation("conv-abc");
+
+      expect(mockHttpDelete).not.toHaveBeenCalledWith(
+        "/api/conversations/other-conv",
+      );
+      expect(mockHttpDelete).toHaveBeenCalledWith(
+        "/api/conversations/conv-abc",
+      );
+    });
+  });
+
+  describe("createLocalPlanningConversation", () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+      mockGetSettingsForConversation.mockResolvedValue({
+        agentSettings: { llm: { model: "openhands/global-model" } },
+        conversationSettings: {},
+        secretsEncrypted: true,
+      });
+      mockHttpPost.mockResolvedValue({
+        data: {
+          id: "plan-abc",
+          created_at: "2024-01-01T00:00:00.000Z",
+          updated_at: "2024-01-01T00:00:00.000Z",
+        },
+      });
+    });
+
+    afterEach(() => {
+      window.localStorage.clear();
+      __resetActiveStoreForTests();
+    });
+
+    it("ignores active_profile for an ACP parent and falls back to global settings", async () => {
+      // ACP parents get active_profile stamped with whatever LLM profile was
+      // globally active at *their* creation time — not meaningfully tied to
+      // the ACP agent — so it must not be treated as the planner's model.
+      // agent_kind and active_profile are both derived client-side by
+      // toAppConversation (from info.agent.kind and stored metadata
+      // respectively), not read off the raw GET response.
+      setStoredConversationMetadata("conv-abc", {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        active_profile: "stale-acp-snapshot",
+      });
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            agent: { kind: "ACPAgent", llm: { model: "acp-managed" } },
+            sub_conversation_ids: [],
+          },
+        ],
+      });
+
+      await AgentServerConversationService.createLocalPlanningConversation(
+        "conv-abc",
+      );
+
+      expect(mockGetProfile).not.toHaveBeenCalledWith(
+        "stale-acp-snapshot",
+        { exposeSecrets: "encrypted" },
+      );
+      const [, payload] = mockHttpPost.mock.calls[0] as [
+        string,
+        { agent: { llm: { model: string } } },
+      ];
+      expect(payload.agent.llm.model).toBe("openhands/global-model");
+    });
+
+    it("uses active_profile for an openhands-kind parent", async () => {
+      // agent_kind and active_profile are both derived client-side by
+      // toAppConversation (from info.agent.kind and stored metadata
+      // respectively), not read off the raw GET response.
+      setStoredConversationMetadata("conv-abc", {
+        selected_repository: null,
+        selected_branch: null,
+        git_provider: null,
+        active_profile: "switched-llm",
+      });
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            sub_conversation_ids: [],
+          },
+        ],
+      });
+      mockGetProfile.mockResolvedValue({
+        name: "switched-llm",
+        api_key_set: true,
+        config: { model: "openhands/switched-model" },
+      });
+
+      await AgentServerConversationService.createLocalPlanningConversation(
+        "conv-abc",
+      );
+
+      expect(mockGetProfile).toHaveBeenCalledWith("switched-llm", {
+        exposeSecrets: "encrypted",
+      });
+      const [, payload] = mockHttpPost.mock.calls[0] as [
+        string,
+        { agent: { llm: { model: string } } },
+      ];
+      expect(payload.agent.llm.model).toBe("openhands/switched-model");
+    });
+
+    it("streams the planner's LLM tokens, matching the code agent", async () => {
+      mockHttpGet.mockResolvedValue({
+        data: [
+          {
+            id: "conv-abc",
+            created_at: "2024-01-01T00:00:00.000Z",
+            updated_at: "2024-01-01T00:00:00.000Z",
+            sub_conversation_ids: [],
+          },
+        ],
+      });
+
+      await AgentServerConversationService.createLocalPlanningConversation(
+        "conv-abc",
+      );
+
+      const [, payload] = mockHttpPost.mock.calls[0] as [
+        string,
+        { agent: { llm: { stream?: boolean } } },
+      ];
+      expect(payload.agent.llm.stream).toBe(true);
     });
   });
 
@@ -646,6 +1009,50 @@ describe("AgentServerConversationService", () => {
         await AgentServerConversationService.searchConversations(10);
 
       expect(result.items[0]?.sandbox_status).toBe("PAUSED");
+    });
+
+    it("falls back to stats.usage_to_metrics when searchConversations omits metrics (#16480)", async () => {
+      const searchSpy = vi.fn().mockResolvedValue({
+        items: [
+          {
+            id: "conv-stats-only",
+            created_at: "2024-01-01",
+            updated_at: "2024-01-01",
+            stats: {
+              usage_to_metrics: {
+                default: {
+                  model_name: "test-model",
+                  accumulated_cost: 1.25,
+                  max_budget_per_task: null,
+                  accumulated_token_usage: {
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    context_window: 8000,
+                    per_turn_token: 150,
+                  },
+                  costs: [],
+                  response_latencies: [],
+                  token_usages: [],
+                },
+              },
+            },
+          },
+        ],
+        next_page_id: null,
+      });
+      mockConversationClient.mockReturnValue({
+        searchConversations: searchSpy,
+      });
+
+      const result =
+        await AgentServerConversationService.searchConversations(10);
+
+      expect(result.items[0]?.metrics?.accumulated_cost).toBe(1.25);
+      expect(
+        result.items[0]?.metrics?.accumulated_token_usage?.prompt_tokens,
+      ).toBe(100);
     });
 
     it("preserves the launched Agent Profile through the wire normalizer", async () => {
@@ -1072,7 +1479,7 @@ describe("AgentServerConversationService", () => {
       global.fetch = originalFetch;
     });
 
-    it("forwards parent_conversation_id, agent_type, and sandbox_id to the cloud createConversation payload", async () => {
+    it("marks Canvas-created cloud conversations with the GUI trigger", async () => {
       // Arrange
       fetchMock.mockResolvedValueOnce(
         mockJsonResponse({
@@ -1087,17 +1494,11 @@ describe("AgentServerConversationService", () => {
       );
 
       // Act
-      await AgentServerConversationService.createConversation(
-        undefined,
-        undefined,
-        undefined,
-        null,
-        undefined,
-        undefined,
-        "parent-conv-1",
-        "plan",
-        "sandbox-9",
-      );
+      await AgentServerConversationService.createConversation({
+        parentConversationId: "parent-conv-1",
+        agentType: "plan",
+        sandboxId: "sandbox-9",
+      });
 
       // Assert
       const [url, init] = getFetchCall(fetchMock);
@@ -1110,6 +1511,7 @@ describe("AgentServerConversationService", () => {
         parent_conversation_id: "parent-conv-1",
         agent_type: "plan",
         sandbox_id: "sandbox-9",
+        trigger: "gui",
       });
     });
 

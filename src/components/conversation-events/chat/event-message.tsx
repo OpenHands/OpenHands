@@ -22,7 +22,7 @@ import {
 } from "#/types/agent-server/type-guards";
 import { useConfig } from "#/hooks/query/use-config";
 import { useConversationStore } from "#/stores/conversation-store";
-import { useAgentState } from "#/hooks/use-agent-state";
+import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
 import { ChatMessage } from "#/components/features/chat/chat-message";
 import { GoalStatusContent } from "#/components/features/chat/goal-status-content";
@@ -55,14 +55,8 @@ interface EventMessageProps {
   suppressThought?: boolean;
 }
 
-/**
- * Extracts activated skills from a MessageEvent, supporting both
- * activated_skills and activated_microagents field names.
- */
 const getActivatedSkills = (event: MessageEvent): string[] =>
-  (event as unknown as { activated_skills?: string[] }).activated_skills ||
-  event.activated_microagents ||
-  [];
+  event.activated_skills || [];
 
 /**
  * Checks if extended content contains valid text content.
@@ -134,6 +128,41 @@ const renderUserMessageWithSkillReady = (
   }
 };
 
+/**
+ * Renders the plan preview. Its own component so `usePlanningAgentState()`
+ * only subscribes on this rare row, not every message in the conversation.
+ */
+function PlanningObservationPreview({
+  planContent,
+  isLastMessage,
+  isMainAgentRunning,
+}: {
+  planContent: string | null;
+  isLastMessage: boolean;
+  isMainAgentRunning: boolean;
+}) {
+  const {
+    localPlanningConversationId,
+    curPlanningAgentState,
+    isPlanningAgentRunning,
+  } = usePlanningAgentState();
+
+  // Guard on the id explicitly — useAgentState(undefined) falls back to the
+  // route conversation, which could be mistaken for the planner's activity.
+  const isStreaming =
+    isLastMessage &&
+    !!localPlanningConversationId &&
+    curPlanningAgentState === AgentState.RUNNING;
+
+  return (
+    <PlanPreview
+      planContent={planContent}
+      isStreaming={isStreaming}
+      isBuildDisabled={isMainAgentRunning || isPlanningAgentRunning}
+    />
+  );
+}
+
 export function EventMessage({
   event,
   messages,
@@ -146,7 +175,8 @@ export function EventMessage({
   const { planContent } = useConversationStore();
   const { curAgentState } = useAgentState();
 
-  // Disable Build button while agent is running (streaming)
+  // Planner-running state is folded in by PlanningObservationPreview below,
+  // not read here, to avoid a second useAgentState() subscription per row.
   const isAgentRunning =
     curAgentState === AgentState.RUNNING ||
     curAgentState === AgentState.LOADING;
@@ -262,14 +292,11 @@ export function EventMessage({
         planPreviewEventIds &&
         shouldShowPlanPreview(event.id, planPreviewEventIds)
       ) {
-        // Show shine effect only if this is the last message AND agent is running
-        const isStreaming =
-          isLastMessage && curAgentState === AgentState.RUNNING;
         return (
-          <PlanPreview
+          <PlanningObservationPreview
             planContent={planContent}
-            isStreaming={isStreaming}
-            isBuildDisabled={isAgentRunning}
+            isLastMessage={isLastMessage}
+            isMainAgentRunning={isAgentRunning}
           />
         );
       }

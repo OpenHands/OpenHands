@@ -221,6 +221,24 @@ export async function updateCloudConversationPublicFlag(
 }
 
 /**
+ * Rename a cloud v1 app-conversation. The title belongs to the Cloud
+ * app-conversation resource, so updating a runtime Agent Server would not
+ * persist it in the Cloud conversation list.
+ */
+export async function updateCloudConversationTitle(
+  conversationId: string,
+  title: string,
+): Promise<AppConversation> {
+  const backend = getActiveCloudBackend();
+  return callCloudProxy<AppConversation>({
+    backend,
+    method: "PATCH",
+    path: `/api/v1/app-conversations/${conversationId}`,
+    body: { title },
+  });
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops
@@ -272,6 +290,29 @@ export async function readCloudConversationFile(
     path: `/api/v1/app-conversations/${conversationId}/file?${params.toString()}`,
   });
   return data ?? "";
+}
+
+/**
+ * List every file in a cloud conversation's sandbox workspace. Hits
+ * `GET /api/v1/app-conversations/{id}/files?path=...` on the cloud backend,
+ * which resolves the conversation's runtime and runs a bounded `find`
+ * server-side (see enterprise `list_conversation_files`). Unlike the
+ * git-changes source, this returns the full tree so the Files tab matches the
+ * local-backend experience. Paths come back relative to `path`.
+ */
+export async function listCloudConversationFiles(
+  conversationId: string,
+  path: string,
+): Promise<string[]> {
+  const backend = getActiveCloudBackend();
+  const params = new URLSearchParams();
+  params.append("path", path);
+  const data = await callCloudProxy<string[]>({
+    backend,
+    method: "GET",
+    path: `/api/v1/app-conversations/${conversationId}/files?${params.toString()}`,
+  });
+  return Array.isArray(data) ? data : [];
 }
 
 /**
