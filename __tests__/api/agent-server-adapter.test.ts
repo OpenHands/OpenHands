@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import { CANVAS_UI_CLIENT_TOOL_NAME } from "#/constants/canvas-ui";
 import { LAUNCH_CHILD_CONVERSATION_TOOL_NAME } from "#/constants/child-conversation";
 
@@ -8,18 +9,24 @@ import {
   CLIENT_SOURCE_TAG_KEY,
   buildRuntimeServicesSystemSuffix,
   buildStartConversationRequest,
+  buildStartConversationRequestWithEncryptedSettings,
   fetchBackendRuntimeServicesInfo,
   getDefaultConversationTitle,
   parseRuntimeServicesInfo,
   toAppConversation,
   type DirectConversationInfo,
 } from "#/api/agent-server-adapter";
+import SettingsService from "#/api/settings-service/settings-service.api";
+import { SecretsService } from "#/api/secrets-service";
 import {
   removeStoredConversationMetadata,
   setStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
+import { HookType } from "@openhands/typescript-client";
+import type { HookConfig } from "@openhands/typescript-client";
 import { ACP_VERTEX_SAFE_MODEL } from "#/constants/acp-providers";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import type { SettingsValue } from "#/types/settings";
 import {
   LLM_AUTH_TYPE_SUBSCRIPTION,
   OPENAI_SUBSCRIPTION_VENDOR,
@@ -31,6 +38,8 @@ const {
   mockGetEffectiveLocalBackend,
   mockGetCachedAgentServerInfo,
   mockGetServerInfo,
+  mockGetActiveBackend,
+  mockLoadHooks,
 } = vi.hoisted(() => ({
   mockGetAgentServerWorkingDir: vi.fn(() => "/workspace/project/agent-canvas"),
   mockIsAgentServerToolAvailable: vi.fn((_toolName: string) => true),
@@ -43,6 +52,16 @@ const {
   })),
   mockGetCachedAgentServerInfo: vi.fn<() => unknown>(() => null),
   mockGetServerInfo: vi.fn(),
+  mockGetActiveBackend: vi.fn(() => ({
+    backend: {
+      id: "default-local",
+      name: "Local backend",
+      host: "http://127.0.0.1:8000",
+      apiKey: "session-key",
+      kind: "local" as const,
+    },
+  })),
+  mockLoadHooks: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", () => ({
@@ -50,6 +69,9 @@ vi.mock("@openhands/typescript-client/clients", () => ({
     return {
       getServerInfo: mockGetServerInfo,
     };
+  }),
+  HooksClient: vi.fn(function HooksClientMock() {
+    return { loadHooks: mockLoadHooks };
   }),
 }));
 
@@ -68,7 +90,38 @@ vi.mock("#/api/agent-server-compatibility", () => ({
 
 vi.mock("#/api/backend-registry/active-store", () => ({
   getEffectiveLocalBackend: mockGetEffectiveLocalBackend,
+  getActiveBackend: mockGetActiveBackend,
+  isNoBackend: (backend: { id: string }) => backend.id === "no-backend",
 }));
+
+// `HookConfig` requires every event key, so build fixtures from a complete base.
+const makeHookConfig = (overrides: Partial<HookConfig> = {}): HookConfig => ({
+  pre_tool_use: [],
+  post_tool_use: [],
+  user_prompt_submit: [],
+  session_start: [],
+  session_end: [],
+  stop: [],
+  ...overrides,
+});
+
+const WORKSPACE_HOOK_CONFIG = makeHookConfig({
+  session_start: [
+    {
+      matcher: "*",
+      hooks: [{ command: "cat AGENTS.md", type: HookType.COMMAND }],
+    },
+  ],
+});
+
+const EXPLICIT_HOOK_CONFIG = makeHookConfig({
+  session_start: [
+    {
+      matcher: "*",
+      hooks: [{ command: "echo explicit", type: HookType.COMMAND }],
+    },
+  ],
+});
 
 beforeEach(() => {
   mockIsAgentServerToolAvailable.mockReturnValue(true);
@@ -468,6 +521,30 @@ describe("buildStartConversationRequest", () => {
       content: [{ type: "text", text: "Follow the repo conventions." }],
       run: true,
     });
+  });
+
+  it("uses workspaceHookConfig when conversation_settings.hook_config is omitted", () => {
+    const payload = buildStartConversationRequest({
+      settings: DEFAULT_SETTINGS,
+      workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(WORKSPACE_HOOK_CONFIG);
+  });
+
+  it("prioritizes conversation_settings.hook_config over workspaceHookConfig", () => {
+    const payload = buildStartConversationRequest({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        conversation_settings: {
+          ...DEFAULT_SETTINGS.conversation_settings,
+          hook_config: EXPLICIT_HOOK_CONFIG as unknown as SettingsValue,
+        },
+      },
+      workspaceHookConfig: WORKSPACE_HOOK_CONFIG,
+    }) as Record<string, unknown>;
+
+    expect(payload.hook_config).toEqual(EXPLICIT_HOOK_CONFIG);
   });
 
   it("serializes custom secrets as host-relative LookupSecret entries", () => {
@@ -1772,5 +1849,85 @@ describe("buildStartConversationRequest — ACP discriminator", () => {
     expect(acpPayload.agent_settings.acp_env).toBeUndefined();
     expect(acpPayload.agent_settings.llm).toBeUndefined();
     expect(acpPayload.agent_settings.condenser).toBeUndefined();
+  });
+});
+
+describe("buildStartConversationRequestWithEncryptedSettings", () => {
+  let settingsSpy: MockInstance;
+  let secretsSpy: MockInstance;
+
+  beforeEach(() => {
+    mockLoadHooks.mockReset();
+    // Stub only the collaborators; the hooks lookup is what's under test.
+    settingsSpy = vi
+      .spyOn(SettingsService, "getSettingsForConversation")
+      .mockResolvedValue({
+        agentSettings: (DEFAULT_SETTINGS.agent_settings ?? {}) as Record<
+          string,
+          SettingsValue
+        >,
+        conversationSettings: (DEFAULT_SETTINGS.conversation_settings ??
+          {}) as Record<string, SettingsValue>,
+        secretsEncrypted: true,
+        skillEnablement: { disabledSkills: [] },
+      });
+    secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
+  });
+
+  // vitest is not configured with `restoreMocks`, so restore explicitly.
+  afterEach(() => {
+    settingsSpy.mockRestore();
+    secretsSpy.mockRestore();
+  });
+
+  it("looks hooks up in hooksProjectDir, not the conversation working dir", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: WORKSPACE_HOOK_CONFIG });
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      workingDir: "/workspace/my-project/0f1e2d3c",
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(mockLoadHooks).toHaveBeenCalledWith({
+      project_dir: "/workspace/my-project",
+    });
+    expect(payload.hook_config).toEqual(WORKSPACE_HOOK_CONFIG);
+  });
+
+  it("falls back to the configured working dir when no hooksProjectDir is given", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: null });
+
+    await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      workingDir: "/workspace/my-project/0f1e2d3c",
+    });
+
+    expect(mockLoadHooks).toHaveBeenCalledWith({
+      project_dir: "/workspace/project/agent-canvas",
+    });
+  });
+
+  it("omits hook_config when the workspace has no hooks", async () => {
+    mockLoadHooks.mockResolvedValue({ hook_config: null });
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(payload.hook_config).toBeUndefined();
+  });
+
+  it("starts the conversation without hooks when the lookup fails", async () => {
+    mockLoadHooks.mockRejectedValue(new Error("500 Internal Server Error"));
+
+    const payload = await buildStartConversationRequestWithEncryptedSettings({
+      settings: DEFAULT_SETTINGS,
+      hooksProjectDir: "/workspace/my-project",
+    });
+
+    expect(payload.hook_config).toBeUndefined();
+    expect(payload.agent_settings).toBeDefined();
   });
 });
