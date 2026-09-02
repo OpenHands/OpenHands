@@ -5,7 +5,11 @@ import { createRoutesStub } from "react-router";
 import SettingsScreen, { clientLoader } from "#/routes/settings";
 import OptionService from "#/api/option-service/option-service.api";
 import SettingsService from "#/api/settings-service/settings-service.api";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import {
+  __resetActiveStoreForTests,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
+import { readStoredBackends } from "#/api/backend-registry/storage";
 import { getFirstAvailablePath } from "#/utils/settings-utils";
 import { OSS_NAV_ITEMS } from "#/constants/settings-nav";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
@@ -130,6 +134,40 @@ describe("settings route", () => {
     expect(screen.getByTestId("app-settings-screen")).toBeInTheDocument();
   });
 
+  it("keeps the section title of a page that is not in the listed navigation", () => {
+    // Arrange — the nav mock above lists only LLM + Application, mirroring a
+    // locked-to-Cloud deployment where deep-linked pages stay routable but are
+    // unlisted; the header must still describe the visited page.
+    const RouterStub = createRoutesStub([
+      {
+        path: "/settings",
+        Component: SettingsScreen,
+        children: [
+          {
+            path: "/settings/agents",
+            Component: () => <div data-testid="agent-profiles-screen" />,
+          },
+        ],
+      },
+    ]);
+
+    // Act
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ActiveBackendProvider>
+          <RouterStub initialEntries={["/settings/agents"]} />
+        </ActiveBackendProvider>
+      </QueryClientProvider>,
+    );
+
+    // Assert — "Agent" is absent from the nav mock, so its only occurrence is
+    // the page header.
+    expect(screen.getByText("SETTINGS$NAV_AGENT")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-page-subtitle")).toHaveTextContent(
+      "SETTINGS$PAGE_AGENT_PROFILES_SUBLINE",
+    );
+  });
+
   it.each(["/settings/llm", "/settings/condenser", "/settings/verification"])(
     "renders %s directly when ACP settings are active",
     async (path) => {
@@ -182,4 +220,69 @@ describe("settings route", () => {
       expect(settingsSpy).not.toHaveBeenCalled();
     },
   );
+
+  describe("backend settings routes", () => {
+    it.each(["local", "cloud"] as const)(
+      "renders /settings normally when the active backend is %s",
+      (backendKind) => {
+        vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+          feature_flags: {
+            hide_llm_settings: false,
+            hide_users_page: false,
+          },
+          providers_configured: [],
+          maintenance_start_time: null,
+          recaptcha_site_key: null,
+          faulty_models: [],
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        });
+
+        const backendId = `${backendKind}-backend`;
+        window.localStorage.setItem(
+          "openhands-backends",
+          JSON.stringify([
+            {
+              id: backendId,
+              name: backendKind,
+              host:
+                backendKind === "cloud"
+                  ? "https://app.all-hands.dev"
+                  : "http://localhost:9000",
+              apiKey: "key",
+              kind: backendKind,
+            },
+          ]),
+        );
+        window.localStorage.setItem(
+          "openhands-active-backend",
+          JSON.stringify({ backendId, orgId: null }),
+        );
+        setRegisteredBackends(readStoredBackends());
+
+        const RouterStub = createRoutesStub([
+          {
+            path: "/settings",
+            Component: SettingsScreen,
+            children: [
+              {
+                path: "/settings/llm",
+                Component: () => <div data-testid="llm-settings-screen" />,
+              },
+            ],
+          },
+        ]);
+
+        render(
+          <QueryClientProvider client={new QueryClient()}>
+            <ActiveBackendProvider>
+              <RouterStub initialEntries={["/settings/llm"]} />
+            </ActiveBackendProvider>
+          </QueryClientProvider>,
+        );
+
+        expect(screen.getByTestId("llm-settings-screen")).toBeInTheDocument();
+      },
+    );
+  });
 });

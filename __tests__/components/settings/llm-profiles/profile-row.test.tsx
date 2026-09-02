@@ -56,14 +56,13 @@ describe("ProfileRow", () => {
     render(
       <ProfileRow
         {...defaultProps}
-        profile={{ ...mockProfile, model: "openhands/glm-5.2" }}
+        profile={{ ...mockProfile, model: "openhands/deepseek-v4-flash" }}
       />,
     );
 
-    expect(screen.getByText("OpenHands GLM-5.2 (free)")).toHaveAttribute(
-      "title",
-      "openhands/glm-5.2",
-    );
+    expect(
+      screen.getByText("OpenHands DeepSeek V4 Flash (free)"),
+    ).toHaveAttribute("title", "openhands/deepseek-v4-flash");
   });
 
   it("does not display model when null", () => {

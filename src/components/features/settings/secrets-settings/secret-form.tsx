@@ -33,6 +33,11 @@ export function SecretForm({
   const { mutate: updateSecret } = useUpdateSecret();
 
   const [error, setError] = React.useState<string | null>(null);
+  const [name, setName] = React.useState(
+    mode === "edit" && selectedSecret ? selectedSecret : "",
+  );
+  const [value, setValue] = React.useState("");
+  const [description, setDescription] = React.useState("");
 
   const secretDescription =
     (mode === "edit" &&
@@ -41,6 +46,14 @@ export function SecretForm({
         ?.find((secret) => secret.name === selectedSecret)
         ?.description?.trim()) ||
     "";
+  const initialName = mode === "edit" && selectedSecret ? selectedSecret : "";
+
+  React.useEffect(() => {
+    setName(mode === "edit" && selectedSecret ? selectedSecret : "");
+    setValue("");
+    setDescription(secretDescription);
+    setError(null);
+  }, [mode, selectedSecret, secretDescription]);
 
   const invalidateSecrets = () => {
     queryClient.invalidateQueries({
@@ -83,16 +96,16 @@ export function SecretForm({
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const formData = new FormData(event.currentTarget);
-    const name = formData.get("secret-name")?.toString();
-    const value = formData.get("secret-value")?.toString().trim();
-    const description = formData.get("secret-description")?.toString();
+    const trimmedName = name.trim();
+    const trimmedValue = value.trim();
+    const normalizedDescription = description || undefined;
 
-    if (name) {
+    if (trimmedName) {
       setError(null);
 
       const isNameAlreadyUsed = secrets?.some(
-        (secret) => secret.name === name && secret.name !== selectedSecret,
+        (secret) =>
+          secret.name === trimmedName && secret.name !== selectedSecret,
       );
       if (isNameAlreadyUsed) {
         setError(t(I18nKey.SECRETS$SECRET_ALREADY_EXISTS));
@@ -100,24 +113,37 @@ export function SecretForm({
       }
 
       if (mode === "add") {
-        if (!value) {
+        if (!trimmedValue) {
           setError(t(I18nKey.SECRETS$SECRET_VALUE_REQUIRED));
           return;
         }
 
-        handleCreateSecret(name, value, description || undefined);
+        handleCreateSecret(trimmedName, trimmedValue, normalizedDescription);
       } else if (mode === "edit" && selectedSecret) {
+        // Blank value means "keep the existing secret"; only send a value when
+        // the user typed a replacement (#16134).
         handleEditSecret(
           selectedSecret,
-          name,
-          description || undefined,
-          value || undefined,
+          trimmedName,
+          normalizedDescription,
+          trimmedValue || undefined,
         );
       }
     }
   };
 
   const formTestId = mode === "add" ? "add-secret-form" : "edit-secret-form";
+  const isEditDirty =
+    mode === "edit" &&
+    (name.trim() !== initialName.trim() ||
+      description !== secretDescription ||
+      value.trim() !== "");
+  const isSubmitDisabled =
+    mode === "add"
+      ? !name.trim() || !value.trim()
+      : mode === "edit"
+        ? !isEditDirty
+        : false;
 
   return (
     <form
@@ -132,7 +158,8 @@ export function SecretForm({
         label={t(I18nKey.SETTINGS$NAME)}
         className="w-full min-w-0"
         required
-        defaultValue={mode === "edit" && selectedSecret ? selectedSecret : ""}
+        value={name}
+        onChange={setName}
         placeholder={t(I18nKey.SECRETS$API_KEY_EXAMPLE)}
         pattern="^[a-zA-Z][a-zA-Z0-9_]{0,63}$"
         title={t(I18nKey.SETTINGS$SECRET_NAME_PATTERN_TITLE)}
@@ -149,6 +176,8 @@ export function SecretForm({
           data-testid="value-input"
           name="secret-value"
           required={mode === "add"}
+          value={value}
+          onChange={(event) => setValue(event.currentTarget.value)}
           className={cn(
             "resize-none",
             formControlMultilineFieldClassName,
@@ -167,7 +196,8 @@ export function SecretForm({
         <input
           data-testid="description-input"
           name="secret-description"
-          defaultValue={secretDescription}
+          value={description}
+          onChange={(event) => setDescription(event.currentTarget.value)}
           className={cn(
             formControlSettingsFieldClassName,
             "disabled:bg-[var(--oh-surface-raised)] disabled:border-[var(--oh-border-subtle)]",
@@ -184,7 +214,12 @@ export function SecretForm({
         >
           {t(I18nKey.BUTTON$CANCEL)}
         </BrandButton>
-        <BrandButton testId="submit-button" type="submit" variant="primary">
+        <BrandButton
+          testId="submit-button"
+          type="submit"
+          variant="primary"
+          isDisabled={isSubmitDisabled}
+        >
           {mode === "add" && t(I18nKey.SECRETS$ADD_SECRET)}
           {mode === "edit" && t(I18nKey.SECRETS$EDIT_SECRET)}
         </BrandButton>
