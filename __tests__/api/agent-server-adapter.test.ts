@@ -1869,6 +1869,7 @@ describe("buildStartConversationRequestWithEncryptedSettings", () => {
         conversationSettings: (DEFAULT_SETTINGS.conversation_settings ??
           {}) as Record<string, SettingsValue>,
         secretsEncrypted: true,
+        skillEnablement: { disabledSkills: [] },
       });
     secretsSpy = vi.spyOn(SecretsService, "getSecrets").mockResolvedValue([]);
   });
