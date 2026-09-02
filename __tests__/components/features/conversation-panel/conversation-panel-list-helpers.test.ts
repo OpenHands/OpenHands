@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyAutomationConversationFilter,
   applyGroupFolderOrder,
+  buildConversationGroups,
   collectAutomationNameFacets,
   getGroupConversationPreview,
   getGroupDiscoveryConversationIds,
@@ -292,17 +293,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -713,5 +715,293 @@ describe("conversation-panel-list-helpers", () => {
       knownWorkspaces,
     );
     expect(groups).toHaveLength(0);
+  });
+
+  describe("buildConversationGroups (#15607 independent container/workspace grouping)", () => {
+    const labels = {
+      emptyWorkspace: "No workspace",
+      emptyRepository: "No repository",
+      emptyContainer: "No container",
+    };
+
+    it("returns no sections when neither grouping toggle is enabled", () => {
+      const convo: AppConversation = {
+        ...base,
+        id: "c1",
+        title: "c1",
+        selected_workspace: "/workspace/alpha",
+        sandbox_id: "sandbox-a",
+      };
+      const sections = buildConversationGroups([convo], "local", "updated", {
+        groupByContainer: false,
+        groupByWorkspace: false,
+        labels,
+      });
+      expect(sections).toEqual([]);
+    });
+
+    it("only workspace enabled: one headerless section, identical in shape to groupConversations", () => {
+      const alpha: AppConversation = {
+        ...base,
+        id: "c1",
+        title: "c1",
+        selected_workspace: "/workspace/alpha",
+        sandbox_id: "sandbox-a",
+        updated_at: "2024-01-02T00:00:00.000Z",
+      };
+      const beta: AppConversation = {
+        ...base,
+        id: "c2",
+        title: "c2",
+        selected_workspace: "/workspace/beta",
+        sandbox_id: "sandbox-b",
+        updated_at: "2024-01-03T00:00:00.000Z",
+      };
+      const sections = buildConversationGroups(
+        [alpha, beta],
+        "local",
+        "updated",
+        {
+          groupByContainer: false,
+          groupByWorkspace: true,
+          labels,
+        },
+      );
+
+      expect(sections).toHaveLength(1);
+      expect(sections[0]?.container).toBeNull();
+      // Same ids/order groupConversations alone would produce (most-recently
+      // touched workspace first): container grouping plays no part here.
+      expect(sections[0]?.groups.map((g) => g.id)).toEqual([
+        "ws:/workspace/beta",
+        "ws:/workspace/alpha",
+      ]);
+    });
+
+    it("only container enabled: one headerless section keyed by sandbox_id, with no launch target", () => {
+      const inSandboxA: AppConversation = {
+        ...base,
+        id: "c1",
+        title: "c1",
+        sandbox_id: "sandbox-a",
+        updated_at: "2024-01-02T00:00:00.000Z",
+      };
+      const inSandboxB: AppConversation = {
+        ...base,
+        id: "c2",
+        title: "c2",
+        sandbox_id: "sandbox-b",
+        updated_at: "2024-01-05T00:00:00.000Z",
+      };
+      const noSandbox: AppConversation = {
+        ...base,
+        id: "c3",
+        title: "c3",
+        sandbox_id: null,
+        updated_at: "2024-01-01T00:00:00.000Z",
+      };
+      const sections = buildConversationGroups(
+        [inSandboxA, inSandboxB, noSandbox],
+        "local",
+        "updated",
+        { groupByContainer: true, groupByWorkspace: false, labels },
+      );
+
+      expect(sections).toHaveLength(1);
+      expect(sections[0]?.container).toBeNull();
+      expect(
+        sections[0]?.groups.map((g) => ({ id: g.id, label: g.label })),
+      ).toEqual([
+        { id: "container:sandbox-b", label: "sandbox-b" },
+        { id: "container:sandbox-a", label: "sandbox-a" },
+        { id: "__none_container", label: "No container" },
+      ]);
+      // A container isn't something you "start a new conversation in" the
+      // way a workspace/repo is — every group's launch target is empty.
+      expect(
+        sections[0]?.groups.every((g) => Object.keys(g.launch).length === 0),
+      ).toBe(true);
+    });
+
+    it("both enabled: nests workspace groups inside container sections, container outermost (matches the issue's tree)", () => {
+      const a1: AppConversation = {
+        ...base,
+        id: "a1",
+        title: "a1",
+        sandbox_id: "sandbox-a",
+        selected_workspace: "/workspace/alpha",
+        updated_at: "2024-01-01T00:00:00.000Z",
+      };
+      const a2: AppConversation = {
+        ...base,
+        id: "a2",
+        title: "a2",
+        sandbox_id: "sandbox-a",
+        selected_workspace: "/workspace/beta",
+        updated_at: "2024-01-02T00:00:00.000Z",
+      };
+      const b1: AppConversation = {
+        ...base,
+        id: "b1",
+        title: "b1",
+        sandbox_id: "sandbox-b",
+        selected_workspace: "/workspace/alpha",
+        updated_at: "2024-01-05T00:00:00.000Z",
+      };
+      const sections = buildConversationGroups(
+        [a1, a2, b1],
+        "local",
+        "updated",
+        {
+          groupByContainer: true,
+          groupByWorkspace: true,
+          labels,
+        },
+      );
+
+      // Two container sections, most-recently-active first (sandbox-b's b1
+      // is the newest conversation overall).
+      expect(sections.map((s) => s.container?.id)).toEqual([
+        "container:sandbox-b",
+        "container:sandbox-a",
+      ]);
+
+      const sandboxB = sections[0]!;
+      expect(sandboxB.container).toEqual({
+        id: "container:sandbox-b",
+        label: "sandbox-b",
+      });
+      expect(sandboxB.groups.map((g) => g.id)).toEqual([
+        "container:sandbox-b|ws:/workspace/alpha",
+      ]);
+      expect(sandboxB.groups[0]?.conversations.map((c) => c.id)).toEqual([
+        "b1",
+      ]);
+
+      const sandboxA = sections[1]!;
+      // Within sandbox-a, /workspace/beta (a2, newer) sorts before
+      // /workspace/alpha (a1) — nesting doesn't disturb the inner sort.
+      expect(sandboxA.groups.map((g) => g.id)).toEqual([
+        "container:sandbox-a|ws:/workspace/beta",
+        "container:sandbox-a|ws:/workspace/alpha",
+      ]);
+    });
+
+    it("qualifies inner ids by container so two containers sharing a workspace path don't collide", () => {
+      const inA: AppConversation = {
+        ...base,
+        id: "in-a",
+        title: "in-a",
+        sandbox_id: "sandbox-a",
+        selected_workspace: "/workspace/shared",
+      };
+      const inB: AppConversation = {
+        ...base,
+        id: "in-b",
+        title: "in-b",
+        sandbox_id: "sandbox-b",
+        selected_workspace: "/workspace/shared",
+      };
+      const sections = buildConversationGroups([inA, inB], "local", "updated", {
+        groupByContainer: true,
+        groupByWorkspace: true,
+        labels,
+      });
+
+      expect(sections).toHaveLength(2);
+      const allInnerIds = sections.flatMap((s) => s.groups.map((g) => g.id));
+      // Distinct qualified ids, not one shared "ws:/workspace/shared" bucket.
+      expect(new Set(allInnerIds).size).toBe(2);
+      for (const section of sections) {
+        expect(section.groups).toHaveLength(1);
+      }
+      // Each container keeps only its own conversation — no cross-container
+      // bleed from the shared workspace path. (inA/inB tie on timestamp, so
+      // section order isn't asserted here — only membership.)
+      const conversationIdsBySection = sections
+        .map((s) => s.groups[0]?.conversations.map((c) => c.id))
+        .sort();
+      expect(conversationIdsBySection).toEqual([["in-a"], ["in-b"]]);
+    });
+
+    it("does not pre-seed empty knownWorkspaces folders into every container when nesting is active", () => {
+      // If knownWorkspaces leaked into the per-container call, "alpha" would
+      // show up as an empty folder inside sandbox-b too, which it never had
+      // any conversations in.
+      const knownWorkspaces = [
+        { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },
+      ];
+      const onlyInA: AppConversation = {
+        ...base,
+        id: "c1",
+        title: "c1",
+        sandbox_id: "sandbox-a",
+        selected_workspace: "/workspace/alpha",
+      };
+      const onlyInB: AppConversation = {
+        ...base,
+        id: "c2",
+        title: "c2",
+        sandbox_id: "sandbox-b",
+        selected_workspace: "/workspace/beta",
+      };
+      const sections = buildConversationGroups(
+        [onlyInA, onlyInB],
+        "local",
+        "updated",
+        {
+          groupByContainer: true,
+          groupByWorkspace: true,
+          labels,
+          knownWorkspaces,
+        },
+      );
+
+      const sandboxB = sections.find(
+        (s) => s.container?.id === "container:sandbox-b",
+      );
+      expect(sandboxB?.groups.map((g) => g.id)).toEqual([
+        "container:sandbox-b|ws:/workspace/beta",
+      ]);
+      // No phantom "ws:/workspace/alpha" folder inside sandbox-b.
+      expect(
+        sandboxB?.groups.some((g) => g.id.endsWith("ws:/workspace/alpha")),
+      ).toBe(false);
+    });
+
+    it("nests repository groups (not workspace) inside containers for the cloud backend", () => {
+      const convo: AppConversation = {
+        ...base,
+        id: "c1",
+        title: "c1",
+        sandbox_id: "sandbox-a",
+        selected_repository: "org/repo",
+      };
+      const sections = buildConversationGroups([convo], "cloud", "updated", {
+        groupByContainer: true,
+        groupByWorkspace: true,
+        labels,
+      });
+
+      expect(sections).toEqual([
+        {
+          container: { id: "container:sandbox-a", label: "sandbox-a" },
+          groups: [
+            {
+              id: "container:sandbox-a|repo:org/repo",
+              label: "repo",
+              conversations: [convo],
+              launch: {
+                repository: {
+                  name: "org/repo",
+                  gitProvider: "github",
+                  branch: "main",
+                },
+              },
+            },
+          ],
+        },
+      ]);
+    });
   });
 });

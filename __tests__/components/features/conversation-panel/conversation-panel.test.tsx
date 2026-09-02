@@ -930,7 +930,8 @@ describe("ConversationPanel", () => {
 
     useConversationPanelPreferencesStore.setState({
       conversationSort: "updated",
-      organizeMode: "chronological",
+      groupByContainer: false,
+      groupByWorkspace: false,
       showOlderConversations: true,
     });
 
@@ -2144,7 +2145,7 @@ describe("ConversationPanel", () => {
 
     it("keeps collapsed folder previews stable while still exposing later-page conversations on expand", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       const noWorkspaceConversations = Array.from({ length: 6 }, (_, index) =>
         createMockConversation({
@@ -2230,7 +2231,7 @@ describe("ConversationPanel", () => {
 
     it("caps a grouped load-more click at three pages when no new folder appears", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       const deepenOnlyPage = (page: number, nextPageId: string) => ({
         items: Array.from({ length: 2 }, (_, index) =>
@@ -2275,7 +2276,7 @@ describe("ConversationPanel", () => {
 
     it("force-includes the active conversation in a folder preview even when it arrived on a later page", async () => {
       useConversationPanelPreferencesStore.setState({
-        organizeMode: "grouped",
+        groupByWorkspace: true,
       });
       vi.spyOn(AgentServerConversationService, "searchConversations")
         .mockResolvedValueOnce({
@@ -2334,7 +2335,7 @@ describe("ConversationPanel", () => {
 
   it("reorders grouped folders via drag and drop", async () => {
     useConversationPanelPreferencesStore.setState({
-      organizeMode: "grouped",
+      groupByWorkspace: true,
       groupFolderOrder: [],
     });
 
@@ -2438,7 +2439,7 @@ describe("ConversationPanel", () => {
   });
 
   it("renders pinned conversations only in the pinned section in grouped mode", async () => {
-    useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
+    useConversationPanelPreferencesStore.setState({ groupByWorkspace: true });
     usePinnedConversationsStore
       .getState()
       .pinConversation("default-local", "2");
@@ -2510,5 +2511,138 @@ describe("ConversationPanel", () => {
     expect(
       within(pinnedSection).getByTestId("conversation-panel-pinned-view-more"),
     ).toHaveTextContent("CONVERSATION_PANEL$MORE");
+  });
+
+  describe("nested container + workspace grouping (#15607)", () => {
+    it("renders a container header per sandbox with that container's workspace folders nested underneath", async () => {
+      useConversationPanelPreferencesStore.setState({
+        groupByContainer: true,
+        groupByWorkspace: true,
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "a1",
+            title: "Alpha in Sandbox A",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/alpha",
+          }),
+          createMockConversation({
+            id: "b1",
+            title: "Alpha in Sandbox B",
+            sandbox_id: "sandbox-b",
+            selected_workspace: "/workspace/alpha",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      const headers = await screen.findAllByTestId(
+        "conversation-group-section-header",
+      );
+      expect(headers.map((h) => h.textContent)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("sandbox-a"),
+          expect.stringContaining("sandbox-b"),
+        ]),
+      );
+      expect(headers).toHaveLength(2);
+
+      // Both containers happen to share the workspace name "alpha", but the
+      // qualified folder ids keep them as two distinct, independently
+      // collapsible folders rather than one merged "alpha" folder.
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-a-ws--workspace-alpha",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-b-ws--workspace-alpha",
+        ),
+      ).toBeInTheDocument();
+      expect(await screen.findByText("Alpha in Sandbox A")).toBeInTheDocument();
+      expect(await screen.findByText("Alpha in Sandbox B")).toBeInTheDocument();
+    });
+
+    it("scopes drag-and-drop folder reordering to its own container, leaving other containers' order untouched", async () => {
+      useConversationPanelPreferencesStore.setState({
+        groupByContainer: true,
+        groupByWorkspace: true,
+        groupFolderOrder: [],
+      });
+      vi.spyOn(
+        AgentServerConversationService,
+        "searchConversations",
+      ).mockResolvedValue({
+        items: [
+          createMockConversation({
+            id: "a1",
+            title: "A1",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/alpha",
+          }),
+          createMockConversation({
+            id: "a2",
+            title: "A2",
+            sandbox_id: "sandbox-a",
+            selected_workspace: "/workspace/beta",
+          }),
+          createMockConversation({
+            id: "b1",
+            title: "B1",
+            sandbox_id: "sandbox-b",
+            selected_workspace: "/workspace/gamma",
+          }),
+        ],
+        next_page_id: null,
+      });
+
+      renderConversationPanel();
+
+      const betaFolder = await screen.findByTestId(
+        "thread-folder-container-sandbox-a-ws--workspace-beta",
+      );
+      const dragHandle = screen.getByTestId(
+        "thread-folder-drag-container-sandbox-a-ws--workspace-alpha",
+      );
+
+      const dataTransfer = {
+        effectAllowed: "move",
+        dropEffect: "move",
+        data: {} as Record<string, string>,
+        setData(format: string, value: string) {
+          this.data[format] = value;
+        },
+        getData(format: string) {
+          return this.data[format];
+        },
+      };
+      fireEvent.dragStart(dragHandle, { dataTransfer });
+      fireEvent.dragOver(betaFolder, { dataTransfer });
+      fireEvent.drop(betaFolder, { dataTransfer });
+
+      await waitFor(() => {
+        const order =
+          useConversationPanelPreferencesStore.getState().groupFolderOrder;
+        expect(order).toEqual([
+          "container:sandbox-a|ws:/workspace/beta",
+          "container:sandbox-a|ws:/workspace/alpha",
+        ]);
+      });
+      // sandbox-b's single folder was never part of the drag and is not
+      // dropped from the persisted order (it just has nothing to reorder
+      // against yet, since it's the only folder in its container).
+      expect(
+        screen.getByTestId(
+          "thread-folder-container-sandbox-b-ws--workspace-gamma",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 });

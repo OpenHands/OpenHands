@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 import {
   Archive,
   Bot,
+  Box,
   CalendarArrowDown,
-  Clock3,
   ClockArrowDown,
   Eye,
   EyeOff,
@@ -30,7 +30,6 @@ import {
   UNNAMED_AUTOMATION_FACET,
   type AutomationFilterMode,
   type ConversationSortField,
-  type OrganizeMode,
   type ThreadScope,
 } from "./conversation-panel-list-helpers";
 import { MenuHeading } from "./menu-heading";
@@ -45,8 +44,10 @@ export interface ConversationPanelFilterMenuProps {
   setFilterMenuOpen: (open: boolean) => void;
   menuRef: React.RefObject<HTMLDivElement | null>;
   backendKind: BackendKind;
-  organizeMode: OrganizeMode;
-  setOrganizeMode: (mode: OrganizeMode) => void;
+  groupByContainer: boolean;
+  toggleGroupByContainer: () => void;
+  groupByWorkspace: boolean;
+  toggleGroupByWorkspace: () => void;
   conversationSort: ConversationSortField;
   setConversationSort: (sort: ConversationSortField) => void;
   threadScope: ThreadScope;
@@ -77,8 +78,10 @@ export function ConversationPanelFilterMenu({
   setFilterMenuOpen,
   menuRef,
   backendKind,
-  organizeMode,
-  setOrganizeMode,
+  groupByContainer,
+  toggleGroupByContainer,
+  groupByWorkspace,
+  toggleGroupByWorkspace,
   conversationSort,
   setConversationSort,
   threadScope,
@@ -105,7 +108,7 @@ export function ConversationPanelFilterMenu({
 }: ConversationPanelFilterMenuProps) {
   const { t } = useTranslation("openhands");
 
-  const groupedLabel =
+  const groupByWorkspaceLabel =
     backendKind === "local"
       ? t(I18nKey.CONVERSATION_PANEL$BY_WORKSPACE)
       : t(I18nKey.CONVERSATION_PANEL$BY_REPOSITORY);
@@ -213,23 +216,29 @@ export function ConversationPanelFilterMenu({
           )}
         >
           <MenuHeading>{t(I18nKey.CONVERSATION_PANEL$ORGANIZE)}</MenuHeading>
+          {/*
+            Two independent checkboxes (#15607) rather than the previous
+            grouped/chronological radio pair: either, both, or neither can be
+            on. Unlike the old radio rows, toggling one of these does not
+            close the menu — a checkbox is meant to be flipped alongside its
+            sibling, and a menu that closes on the first click would make
+            enabling both an extra re-open.
+          */}
           <MenuRow
             icon={Folder}
-            label={groupedLabel}
-            selected={organizeMode === "grouped"}
-            onClick={() => {
-              setOrganizeMode("grouped");
-              setFilterMenuOpen(false);
-            }}
+            label={groupByWorkspaceLabel}
+            variant="checkbox"
+            selected={groupByWorkspace}
+            onClick={toggleGroupByWorkspace}
+            testId="organize-group-by-workspace"
           />
           <MenuRow
-            icon={Clock3}
-            label={t(I18nKey.CONVERSATION_PANEL$CHRONOLOGICAL)}
-            selected={organizeMode === "chronological"}
-            onClick={() => {
-              setOrganizeMode("chronological");
-              setFilterMenuOpen(false);
-            }}
+            icon={Box}
+            label={t(I18nKey.CONVERSATION_PANEL$BY_CONTAINER)}
+            variant="checkbox"
+            selected={groupByContainer}
+            onClick={toggleGroupByContainer}
+            testId="organize-group-by-container"
           />
 
           <MenuSeparator />

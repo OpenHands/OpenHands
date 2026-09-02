@@ -21,8 +21,10 @@ function renderFilterMenu(
     setFilterMenuOpen: vi.fn(),
     menuRef: createRef<HTMLDivElement>(),
     backendKind: "local",
-    organizeMode: "grouped",
-    setOrganizeMode: vi.fn(),
+    groupByContainer: false,
+    toggleGroupByContainer: vi.fn(),
+    groupByWorkspace: true,
+    toggleGroupByWorkspace: vi.fn(),
     conversationSort: "created",
     setConversationSort: vi.fn(),
     threadScope: "all",
@@ -66,6 +68,50 @@ describe("ConversationPanelFilterMenu", () => {
       screen.getByTestId("toggle-older-conversations"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("delete-all-conversations")).toBeInTheDocument();
+  });
+
+  it("renders the two grouping rows as independent checkboxes, not a mutually exclusive radio pair (#15607)", () => {
+    renderFilterMenu({ groupByWorkspace: true, groupByContainer: false });
+
+    const workspaceRow = screen.getByTestId("organize-group-by-workspace");
+    const containerRow = screen.getByTestId("organize-group-by-container");
+
+    expect(workspaceRow).toHaveAttribute("role", "menuitemcheckbox");
+    expect(workspaceRow).toHaveAttribute("aria-checked", "true");
+    expect(containerRow).toHaveAttribute("role", "menuitemcheckbox");
+    expect(containerRow).toHaveAttribute("aria-checked", "false");
+
+    // There is no third "Chronological list" row any more — unchecking both
+    // boxes is what produces the flat/chronological list.
+    expect(
+      screen.queryByText("CONVERSATION_PANEL$CHRONOLOGICAL"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("toggles each grouping checkbox independently without closing the menu", async () => {
+    const user = userEvent.setup();
+    const toggleGroupByContainer = vi.fn();
+    const toggleGroupByWorkspace = vi.fn();
+    const setFilterMenuOpen = vi.fn();
+    renderFilterMenu({
+      groupByWorkspace: true,
+      groupByContainer: true,
+      toggleGroupByContainer,
+      toggleGroupByWorkspace,
+      setFilterMenuOpen,
+    });
+
+    await user.click(screen.getByTestId("organize-group-by-container"));
+
+    // Only the clicked toggle fires, and — unlike the old radio rows — the
+    // menu is not asked to close, since a user flipping one grouping
+    // checkbox is very likely about to flip the other one too.
+    expect(toggleGroupByContainer).toHaveBeenCalledTimes(1);
+    expect(toggleGroupByWorkspace).not.toHaveBeenCalled();
+    expect(setFilterMenuOpen).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId("organize-group-by-workspace"));
+    expect(toggleGroupByWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it("orders metadata toggles as repo/branch, model, then tags", () => {

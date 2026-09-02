@@ -9,7 +9,6 @@ import {
 
 export type ConversationSortField = "created" | "updated";
 export type ThreadScope = "all" | "relevant";
-export type OrganizeMode = "grouped" | "chronological";
 export type AutomationFilterMode =
   | "all"
   | "hide-automations"
@@ -487,6 +486,204 @@ export function groupConversations(
 
   groups.sort((a, b) => groupOrderKey(b) - groupOrderKey(a));
   return groups;
+}
+
+/**
+ * Facet bucket for a conversation with no `sandbox_id` (mirrors the
+ * `__none_workspace` / `__none_repo` idiom above).
+ */
+export const UNKNOWN_CONTAINER_GROUP_ID = "__none_container";
+
+/**
+ * Resolves the "container" grouping key for #15607.
+ *
+ * `sandbox_id` is currently the only per-conversation field that could match
+ * the issue's "Container" concept (there is no `container_id` on
+ * `AppConversation`) — flagged as an open question on the issue for a
+ * maintainer to confirm. `sandbox_id` is an opaque id with no friendlier
+ * display name available today, so the label is the id itself; swap this for
+ * a nicer name if/when one becomes available on the conversation model.
+ */
+function containerGroup(conversation: AppConversation): {
+  id: string;
+  label: string;
+} {
+  const sandboxId = conversation.sandbox_id?.trim();
+  if (!sandboxId) {
+    return { id: UNKNOWN_CONTAINER_GROUP_ID, label: "" };
+  }
+  return { id: `container:${sandboxId}`, label: sandboxId };
+}
+
+function bucketByContainer(
+  items: readonly AppConversation[],
+  emptyContainerLabel: string,
+): Map<string, { label: string; conversations: AppConversation[] }> {
+  const byId = new Map<
+    string,
+    { label: string; conversations: AppConversation[] }
+  >();
+  for (const c of items) {
+    const { id, label: rawLabel } = containerGroup(c);
+    const label =
+      id === UNKNOWN_CONTAINER_GROUP_ID ? emptyContainerLabel : rawLabel;
+    const bucket = byId.get(id);
+    if (bucket) {
+      bucket.conversations.push(c);
+    } else {
+      byId.set(id, { label, conversations: [c] });
+    }
+  }
+  return byId;
+}
+
+/** Most-recent activity across a bucket's conversations, for section/group ordering. */
+function bucketOrderKey(
+  conversations: readonly AppConversation[],
+  sortField: ConversationSortField,
+): number {
+  return conversations.reduce(
+    (max, c) =>
+      Math.max(
+        max,
+        parseConversationTimeMs(
+          sortField === "created" ? c.created_at : c.updated_at,
+        ),
+      ),
+    0,
+  );
+}
+
+export interface ConversationLeafGroup {
+  id: string;
+  label: string;
+  conversations: AppConversation[];
+  launch: ConversationGroupLaunch;
+}
+
+export interface ConversationGroupSection {
+  /**
+   * Present only when both grouping axes are active — the outer "container"
+   * level of the nested view. `null` for the single-axis (or ungrouped)
+   * cases, which render as one section with no header, identical to today's
+   * flat `groupConversations` output.
+   */
+  container: { id: string; label: string } | null;
+  groups: ConversationLeafGroup[];
+}
+
+export interface ConversationGroupLabels {
+  emptyWorkspace: string;
+  emptyRepository: string;
+  emptyContainer: string;
+}
+
+/**
+ * Builds the sidebar's grouped view for #15607's two independent grouping
+ * toggles ("Group by Container" and "Group by Workspace").
+ *
+ * - Neither on: returns `[]` (callers render the plain chronological list
+ *   instead of calling this at all).
+ * - Exactly one on: returns a single section (`container: null`) whose
+ *   `groups` are identical in shape to today's `groupConversations` output —
+ *   the existing single-axis rendering path is unaffected.
+ * - Both on: containers are the outer level, workspace/repository is the
+ *   inner level (matching the Container > Workspace tree in the issue).
+ *   Inner group ids are qualified with their container id
+ *   (`${containerId}|${innerId}`) so two containers that happen to share a
+ *   workspace path or repository can't collide into one rendered/ordered
+ *   group.
+ *
+ * `knownWorkspaces` pre-seeding (empty local-workspace folders with no
+ * loaded conversations yet) only applies to the workspace-only axis, exactly
+ * as it does today — it is intentionally NOT forwarded when containers are
+ * also grouped, since that would inject an empty workspace folder into every
+ * container section rather than just the workspaces the user actually has.
+ */
+export function buildConversationGroups(
+  items: readonly AppConversation[],
+  backendKind: BackendKind,
+  sortField: ConversationSortField,
+  options: {
+    groupByContainer: boolean;
+    groupByWorkspace: boolean;
+    labels: ConversationGroupLabels;
+    knownWorkspaces?: readonly LocalWorkspace[];
+  },
+): ConversationGroupSection[] {
+  const { groupByContainer, groupByWorkspace, labels, knownWorkspaces } =
+    options;
+
+  if (!groupByContainer && !groupByWorkspace) {
+    return [];
+  }
+
+  if (groupByWorkspace && !groupByContainer) {
+    // Exactly today's single-axis behavior, wrapped in one headerless section.
+    const groups = groupConversations(
+      items,
+      backendKind,
+      sortField,
+      {
+        emptyWorkspace: labels.emptyWorkspace,
+        emptyRepository: labels.emptyRepository,
+      },
+      knownWorkspaces,
+    );
+    return [{ container: null, groups }];
+  }
+
+  if (groupByContainer && !groupByWorkspace) {
+    // Container-only: same single-level shape, keyed by container instead.
+    const byId = bucketByContainer(items, labels.emptyContainer);
+    const groups: ConversationLeafGroup[] = [...byId.entries()]
+      .map(([id, bucket]) => ({
+        id,
+        label: bucket.label,
+        conversations: sortConversationsByField(
+          bucket.conversations,
+          sortField,
+        ),
+        // Container folders have no "start a new conversation here" target —
+        // unlike a workspace/repo, a sandbox isn't something you launch into.
+        launch: {} as ConversationGroupLaunch,
+      }))
+      .sort(
+        (a, b) =>
+          bucketOrderKey(b.conversations, sortField) -
+          bucketOrderKey(a.conversations, sortField),
+      );
+    return [{ container: null, groups }];
+  }
+
+  // Both on: nest workspace/repository groups inside each container.
+  const byContainer = bucketByContainer(items, labels.emptyContainer);
+  const sections = [...byContainer.entries()].map(([containerId, bucket]) => {
+    const innerGroups = groupConversations(
+      bucket.conversations,
+      backendKind,
+      sortField,
+      {
+        emptyWorkspace: labels.emptyWorkspace,
+        emptyRepository: labels.emptyRepository,
+      },
+      // See the doc comment above: known-workspace pre-seeding is deliberately
+      // not forwarded here.
+    ).map((g) => ({ ...g, id: `${containerId}|${g.id}` }));
+    return {
+      container: { id: containerId, label: bucket.label },
+      groups: innerGroups,
+      _conversations: bucket.conversations,
+    };
+  });
+
+  sections.sort(
+    (a, b) =>
+      bucketOrderKey(b._conversations, sortField) -
+      bucketOrderKey(a._conversations, sortField),
+  );
+
+  return sections.map(({ container, groups }) => ({ container, groups }));
 }
 
 export function applyGroupFolderOrder<T extends { id: string }>(
