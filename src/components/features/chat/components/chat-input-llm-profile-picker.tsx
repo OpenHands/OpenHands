@@ -13,7 +13,8 @@ import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { chatInputPillButtonClassName } from "#/utils/form-control-classes";
-import { formatModelNameForDisplay } from "#/utils/format-model-name";
+import { useFreeModels } from "#/hooks/query/use-free-models";
+import { formatModelPillLabel } from "#/utils/format-model-name";
 
 const PROFILE_LABEL_MAX_CHARS = 18;
 
@@ -43,6 +44,7 @@ export function ChatInputLlmProfileMenuContent({
   settingsIconClassName,
 }: ChatInputLlmProfileMenuContentProps) {
   const { t } = useTranslation("openhands");
+  const freeModels = useFreeModels();
   const {
     profiles,
     currentProfileName,
@@ -74,7 +76,10 @@ export function ChatInputLlmProfileMenuContent({
           </li>
           {profiles.map((profile) => {
             const isCurrent = profile.name === currentProfileName;
-            const displayModel = formatModelNameForDisplay(profile.model);
+            const displayModel = formatModelPillLabel(
+              profile.model,
+              freeModels,
+            );
             return (
               <ContextMenuListItem
                 key={profile.name}
@@ -127,7 +132,7 @@ export function ChatInputLlmProfileMenuContent({
             </span>
             {currentProfileModel && (
               <span className="truncate text-xs leading-4 text-[var(--oh-muted)]">
-                {formatModelNameForDisplay(currentProfileModel)}
+                {formatModelPillLabel(currentProfileModel, freeModels)}
               </span>
             )}
           </div>

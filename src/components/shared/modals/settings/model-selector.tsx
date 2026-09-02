@@ -16,23 +16,24 @@ import { HelpLink } from "#/ui/help-link";
 import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
-import {
-  FREE_MODEL_BADGE_LABEL,
-  FREE_OPENHANDS_MODEL_NOTE,
-  isFreeOpenHandsModel,
-} from "#/utils/format-model-name";
+import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
 
 const freeModelBadgeClassName =
   "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
 
-function FreeOpenHandsModelsNote() {
+function buildFreeModelsNote(provider: string, freeModelNames: string[]) {
+  const ids = freeModelNames.map((name) => `${provider}/${name}`).join(", ");
+  return `Free OpenHands models: ${ids}. Other provider endpoints with similar model names may require separate billing.`;
+}
+
+function FreeOpenHandsModelsNote({ note }: { note: string }) {
   return (
     <p
       data-testid="openhands-free-models-note"
       className="flex items-start gap-2 text-xs text-warning"
     >
       <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{FREE_OPENHANDS_MODEL_NOTE}</span>
+      <span>{note}</span>
     </p>
   );
 }
@@ -88,6 +89,17 @@ export function ModelSelector({
     [providerModels],
   );
 
+  // DB-driven set of free model names for the selected provider. Mirrors the
+  // `verified` flag: the frontend no longer hardcodes which models are free.
+  const freeModelNames = React.useMemo(
+    () => providerModels.filter((m) => m.free).map((m) => m.name),
+    [providerModels],
+  );
+  const freeModelNameSet = React.useMemo(
+    () => new Set(freeModelNames),
+    [freeModelNames],
+  );
+
   React.useEffect(() => {
     if (currentModel) {
       const { provider, model } = extractModelAndProvider(currentModel);
@@ -121,11 +133,9 @@ export function ModelSelector({
     setLitellmId(null);
   };
 
-  const selectedFullModel =
-    selectedProvider && selectedModel
-      ? `${selectedProvider}/${selectedModel}`
-      : null;
-  const isSelectedModelFree = isFreeOpenHandsModel(selectedFullModel);
+  const isSelectedModelFree = Boolean(
+    selectedModel && freeModelNameSet.has(selectedModel),
+  );
   const selectedModelMeasureRef = React.useRef<HTMLSpanElement>(null);
   const [selectedModelTextWidth, setSelectedModelTextWidth] = React.useState(0);
 
@@ -272,9 +282,7 @@ export function ModelSelector({
                 <AutocompleteItem key={model.name} textValue={model.name}>
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{model.name}</span>
-                    {isFreeOpenHandsModel(
-                      `${selectedProvider}/${model.name}`,
-                    ) ? (
+                    {model.free ? (
                       <span className={freeModelBadgeClassName}>
                         {FREE_MODEL_BADGE_LABEL}
                       </span>
@@ -329,7 +337,11 @@ export function ModelSelector({
             {t(I18nKey.CONFIGURATION$ERROR_FETCH_MODELS)}
           </p>
         )}
-        {selectedProvider === "openhands" ? <FreeOpenHandsModelsNote /> : null}
+        {selectedProvider === "openhands" && freeModelNames.length > 0 ? (
+          <FreeOpenHandsModelsNote
+            note={buildFreeModelsNote(selectedProvider, freeModelNames)}
+          />
+        ) : null}
       </fieldset>
     </div>
   );

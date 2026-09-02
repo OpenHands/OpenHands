@@ -19,6 +19,7 @@ import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { useDefaultModel } from "#/hooks/query/use-free-models";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import ProfilesService, {
   ProfileInfo,
@@ -99,6 +100,8 @@ export function LlmSettingsLocalView() {
   const { data: agentSchema } = useAgentSettingsSchema(
     settings?.agent_settings_schema,
   );
+  const createProfileDefaultModel =
+    useDefaultModel() ?? DEFAULT_SETTINGS.llm_model;
 
   // Always hold the freshest schema. `handleEditProfile` awaits a network
   // round-trip before seeding the form, so reading the schema from a ref
@@ -501,10 +504,10 @@ export function LlmSettingsLocalView() {
           viewMode === "edit" && editingProfile?.initialValues
             ? // Edit mode: use the existing profile values
               editingProfile.initialValues
-            : // Create mode: prefill the model with Canvas' free default,
+            : // Create mode: prefill with the backend-selected default model,
               // while keeping secret/base URL fields blank for a fresh profile.
               {
-                "llm.model": DEFAULT_SETTINGS.llm_model,
+                "llm.model": createProfileDefaultModel,
                 "llm.api_key": "",
                 "llm.base_url": "",
                 [LLM_PROVIDER_CONNECTION_KEY]: "",

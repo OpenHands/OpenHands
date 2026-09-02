@@ -5,6 +5,7 @@ import { useModelStore } from "#/stores/model-store";
 import { I18nKey } from "#/i18n/declaration";
 import InfoCircleIcon from "#/icons/info-circle.svg?react";
 import type { ProfileInfo } from "#/api/profiles-service/profiles-service.api";
+import { useFreeModels } from "#/hooks/query/use-free-models";
 import { formatModelNameForDisplay } from "#/utils/format-model-name";
 import { GenericEventMessage } from "./generic-event-message";
 
@@ -14,7 +15,8 @@ interface ProfileRowProps {
 
 function ProfileRow({ profile }: ProfileRowProps) {
   const [expanded, setExpanded] = React.useState(false);
-  const displayModel = formatModelNameForDisplay(profile.model);
+  const freeModels = useFreeModels();
+  const displayModel = formatModelNameForDisplay(profile.model, freeModels);
 
   return (
     <div className="border border-neutral-700 rounded-md overflow-hidden">

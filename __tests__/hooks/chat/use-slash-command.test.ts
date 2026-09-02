@@ -9,6 +9,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
+import { useFreeModelsStore } from "#/stores/free-models-store";
 
 const mockSkills = vi.hoisted(() => ({
   data: undefined as unknown[] | undefined,
@@ -94,6 +95,10 @@ describe("useSlashCommand", () => {
     mockLlmProfiles.data = undefined;
     mockLlmProfiles.isLoading = false;
     mockConversation.data = undefined;
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(),
+      defaultModel: null,
+    });
   });
 
   afterEach(() => {
@@ -140,6 +145,10 @@ describe("useSlashCommand", () => {
     // The active backend store is reset before each test, which restores the default local backend.
 
     mockSkills.data = [];
+    useFreeModelsStore.getState().setFlags({
+      freeModels: new Set(["openhands/glm-5.2"]),
+      defaultModel: "openhands/glm-5.2",
+    });
     mockLlmProfiles.data = {
       profiles: [
         {
@@ -156,7 +165,7 @@ describe("useSlashCommand", () => {
         },
         {
           name: "free",
-          model: "openhands/deepseek-v4-flash",
+          model: "openhands/glm-5.2",
           base_url: null,
           api_key_set: true,
         },
@@ -180,7 +189,7 @@ describe("useSlashCommand", () => {
     expect(
       result.current.filteredItems.find((i) => i.command === "/model free")
         ?.skill.content,
-    ).toBe("Switch to OpenHands DeepSeek V4 Flash (free)");
+    ).toBe("Switch to openhands/glm-5.2 (free)");
   });
 
   it("filters saved LLM profile suggestions by profile name or model", () => {
