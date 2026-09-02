@@ -187,7 +187,7 @@
     "@vercel/static-config": {
       "ajv": "8.20.0"
     },
-    "dompurify": "3.4.12",
+    "dompurify": "3.4.14",
     "typed-rest-client": {
       "qs": "6.15.3"
     }
