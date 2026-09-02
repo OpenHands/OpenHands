@@ -51,8 +51,8 @@ it instead.
 | Variable                  | Description                    | Default |
 | ------------------------- | ------------------------------ | ------- |
 | `PORT`                    | Ingress port                   | `8000`  |
-| `OH_AUTOMATION_GIT_REF`   | Git ref for automation backend | `main`  |
-| `OH_AGENT_SERVER_GIT_REF` | Git ref for agent-server       | `main`  |
+| `OH_AUTOMATION_GIT_REF`   | Optional git ref for automation backend (overrides the version pin) | unset (uses `config/defaults.json` `versions.automation`) |
+| `OH_AGENT_SERVER_GIT_REF` | Optional git ref for agent-server (overrides the version pin)       | unset (uses `config/defaults.json` `versions.agentServer`) |
 
 ### Alternative: Minimal Mode (without Automation)
 
