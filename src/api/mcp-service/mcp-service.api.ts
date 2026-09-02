@@ -16,6 +16,7 @@ import type {
   MCPServerConfig,
 } from "#/types/mcp-server";
 import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
+import { isBrowsableHttpUrl } from "#/utils/is-browsable-http-url";
 import { substituteRedactedMcpCredentials } from "./mcp-redacted-credentials";
 
 const OAUTH_MCP_TEST_TIMEOUT_SECONDS = 120;
@@ -279,6 +280,18 @@ class McpService {
           client,
           start.job_id,
         );
+      }
+
+      // `authorization_url` is chosen by the (untrusted) MCP server. The popup
+      // is a same-origin `about:blank`, so navigating it to a `javascript:`
+      // URL would run that script in the Canvas origin.
+      if (!isBrowsableHttpUrl(start.authorization_url)) {
+        popup?.close();
+        return finalize({
+          ok: false,
+          error: "OAuth authorization URL is not a valid http(s) URL",
+          error_kind: "unknown",
+        });
       }
 
       if (popup) {
