@@ -378,6 +378,41 @@ describe("useUrlSearch", () => {
       });
     });
 
+    it("should stop the spinner when the input becomes a non-matching URL mid-request", async () => {
+      const { resolvers } = pending();
+
+      type TestProps = { inputValue: string };
+      const { result, rerender } = renderHook(
+        ({ inputValue }: TestProps) => useUrlSearch(inputValue, "github"),
+        {
+          initialProps: {
+            inputValue: "https://github.com/owner/repo-119",
+          } as TestProps,
+        },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(true);
+      });
+
+      // Still an https:// value, but no longer owner/repo, so this run issues
+      // no request of its own and must clear the spinner itself.
+      rerender({ inputValue: "https://example.com/" });
+
+      await waitFor(() => {
+        expect(result.current.isUrlSearchLoading).toBe(false);
+      });
+      expect(mockSearchGitRepositories).toHaveBeenCalledTimes(1);
+
+      // The superseded request completes late and must be ignored.
+      await act(async () => {
+        resolvers[0]({ items: [repo("owner/repo-119")], next_page_id: null });
+      });
+
+      expect(result.current.urlSearchResults).toEqual([]);
+      expect(result.current.isUrlSearchLoading).toBe(false);
+    });
+
     it("should ignore an earlier request that resolves after a newer one started", async () => {
       const { resolvers } = pending();
 
