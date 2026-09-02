@@ -60,6 +60,21 @@ describe("IntegrationsSettingsLink", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("appends the active org so cloud integrations open on the same organization", () => {
+    // Arrange
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-123" });
+
+    // Act
+    renderWithProviders();
+
+    // Assert
+    expect(screen.getByTestId("settings-integrations-link")).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings/integrations?org=org-123",
+    );
+  });
+
   it("renders a direct Integrations shortcut when the canvas is locked to a Cloud host", () => {
     // Arrange — SaaS / self-hosted OHE serve the canvas with `--lock-to-cloud`;
     // keep Integrations visible beside the broader All Cloud Settings link.

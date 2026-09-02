@@ -1,8 +1,13 @@
+import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createUserMessageEvent } from "test-utils";
-import { ConversationWebSocketProvider } from "#/contexts/conversation-websocket-context";
+import {
+  ConversationWebSocketProvider,
+  useConversationWebSocket,
+} from "#/contexts/conversation-websocket-context";
+import { useConversationStore } from "#/stores/conversation-store";
 import { useEventStore } from "#/stores/use-event-store";
 import useMetricsStore from "#/stores/metrics-store";
 import { useOptimisticUserMessageStore } from "#/stores/optimistic-user-message-store";
@@ -74,6 +79,19 @@ vi.mock("#/hooks/query/use-user-conversation", () => ({
 vi.mock("#/utils/error-handler", () => ({
   trackError: errorHandlerMocks.trackError,
 }));
+
+const sendEventMock = vi.hoisted(() => vi.fn());
+vi.mock("@openhands/typescript-client/clients", async () => {
+  const actual = await vi.importActual<
+    typeof import("@openhands/typescript-client/clients")
+  >("@openhands/typescript-client/clients");
+  return {
+    ...actual,
+    ConversationClient: vi.fn(function ConversationClientMock() {
+      return { sendEvent: sendEventMock };
+    }),
+  };
+});
 
 const AGENT_REPLY_ID = "evt-agent-reply";
 
@@ -396,6 +414,89 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(planningCall?.options?.queryParams).not.toHaveProperty(
       "session_api_key",
     );
+  });
+
+  // The socket is never OPEN in these tests (the useWebSocket mock returns
+  // `socket: null`), so every send falls through to the REST queue — exactly
+  // the window this suite is about.
+  describe("plan-mode message routing before the planning socket opens", () => {
+    function SendMessageProbe({
+      onReady,
+    }: {
+      onReady: (send: ReturnType<typeof useConversationWebSocket>) => void;
+    }) {
+      const context = useConversationWebSocket();
+      React.useEffect(() => onReady(context), [context, onReady]);
+      return null;
+    }
+
+    const renderPlanMode = (subConversationIds?: string[]) => {
+      let context: ReturnType<typeof useConversationWebSocket> | null = null;
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ConversationWebSocketProvider
+            conversationId="conv-parent"
+            conversationUrl="http://localhost/api"
+            subConversationIds={subConversationIds}
+            // The react-query lookup that resolves ids into conversations has
+            // not landed yet — this is the race the fix is about.
+            subConversations={undefined}
+          >
+            <SendMessageProbe
+              onReady={(value) => {
+                context = value;
+              }}
+            />
+          </ConversationWebSocketProvider>
+        </QueryClientProvider>,
+      );
+      return () => context!;
+    };
+
+    beforeEach(() => {
+      sendEventMock.mockReset().mockResolvedValue(undefined);
+      useConversationStore.setState({ conversationMode: "plan" });
+    });
+
+    afterEach(() => {
+      useConversationStore.setState({ conversationMode: "code" });
+    });
+
+    it("queues the first prompt to the planner, not the parent code agent", async () => {
+      const getContext = renderPlanMode(["planning-1"]);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+
+      await act(async () => {
+        await getContext().sendMessage({
+          role: "user",
+          content: [{ type: "text", text: "plan this" }],
+        });
+      });
+
+      expect(sendEventMock).toHaveBeenCalledWith(
+        "planning-1",
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it("errors instead of falling back to the parent when no planner exists yet", async () => {
+      const getContext = renderPlanMode(undefined);
+      await waitFor(() => expect(getContext()).not.toBeNull());
+
+      await expect(
+        act(async () => {
+          await getContext().sendMessage({
+            role: "user",
+            content: [{ type: "text", text: "plan this" }],
+          });
+        }),
+      ).rejects.toThrow("Planning conversation is not ready yet");
+
+      // Falling back to `conv-parent` here would run a planning prompt in the
+      // code agent — the boundary plan mode exists to enforce.
+      expect(sendEventMock).not.toHaveBeenCalled();
+    });
   });
 
   it("preserves the conversation's attached plugins across an agent-triggered model switch", async () => {
