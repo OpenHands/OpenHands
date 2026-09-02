@@ -152,11 +152,13 @@ export function CanvasExtensionsRuntimeProvider({
     setErrors(new Map());
     setActivating(extensionsToActivate.length > 0);
 
-    clearStalePinnedExtensionRoutes(
-      backend.id,
-      orgId,
-      extensionsToActivate.map((extension) => extension.name),
-    );
+    if (query.data !== undefined) {
+      clearStalePinnedExtensionRoutes(
+        backend.id,
+        orgId,
+        extensionsToActivate.map((extension) => extension.name),
+      );
+    }
 
     const activateExtension = async (
       extension: InstalledCanvasExtensionInfo,
