@@ -9,6 +9,10 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import SettingsService from "#/api/settings-service/settings-service.api";
 import WorkspacesService from "#/api/workspaces-service/workspaces-service.api";
 import { DEFAULT_SETTINGS } from "#/services/settings";
+import {
+  LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 
 const mockNavigate = vi.fn();
 const mockUseActiveBackend = vi.fn();
@@ -200,7 +204,9 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
         type="button"
         data-testid="stub-workspace-mode-local-repo"
         onClick={() => onWorkspaceModeChange("local_repo")}
-      />
+      >
+        Local Repo
+      </button>
     </div>
   ),
 }));
@@ -321,6 +327,7 @@ describe("HomeChatLauncher", () => {
       fileUrls: [],
       timestamp: "2020-01-01T00:00:00.000Z",
     });
+    window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
     vi.spyOn(WorkspacesService, "listWorkspaces").mockResolvedValue({
       workspaces: [],
       workspaceParents: [],
@@ -329,6 +336,7 @@ describe("HomeChatLauncher", () => {
 
   afterEach(() => {
     toast.remove();
+    window.localStorage.removeItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY);
   });
 
   it("creates a conversation with just the typed query and navigates when no workspace is selected", async () => {
@@ -431,6 +439,37 @@ describe("HomeChatLauncher", () => {
     );
   });
 
+  it("restores and updates the last selected local workspace mode", async () => {
+    writeStoredLocalWorkspaceMode("new_worktree");
+    const { unmount } = renderLauncher();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
+    await user.click(screen.getByTestId("stub-workspace-mode-local-repo"));
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+
+    unmount();
+    renderLauncher();
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:local_repo",
+    );
+  });
+
   it("uses the saved worktree preference for a selected workspace", async () => {
     const getSettingsSpy = vi
       .spyOn(SettingsService, "getSettings")
@@ -444,6 +483,7 @@ describe("HomeChatLauncher", () => {
         makeConversationResponse({ app_conversation_id: "conv-default-wt" }),
       );
 
+    writeStoredLocalWorkspaceMode("local_repo");
     renderLauncher();
     await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
     const user = userEvent.setup();
@@ -455,6 +495,9 @@ describe("HomeChatLauncher", () => {
     expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
       "local:new_worktree",
     );
+    expect(
+      window.localStorage.getItem(LAST_LOCAL_WORKSPACE_MODE_STORAGE_KEY),
+    ).toBe("local_repo");
     await user.click(screen.getByTestId("stub-chat-submit"));
 
     await waitFor(() => expect(createSpy).toHaveBeenCalledTimes(1));
@@ -466,7 +509,7 @@ describe("HomeChatLauncher", () => {
     });
   });
 
-  it("allows the saved worktree preference to be overridden per conversation", async () => {
+  it("allows a one-conversation override of the saved worktree preference", async () => {
     const getSettingsSpy = vi
       .spyOn(SettingsService, "getSettings")
       .mockResolvedValue({
@@ -479,7 +522,7 @@ describe("HomeChatLauncher", () => {
         makeConversationResponse({ app_conversation_id: "conv-shared" }),
       );
 
-    renderLauncher();
+    const { unmount } = renderLauncher();
     await waitFor(() => expect(getSettingsSpy).toHaveBeenCalled());
     const user = userEvent.setup();
 
@@ -500,6 +543,18 @@ describe("HomeChatLauncher", () => {
       workingDirOverride: "/p/app",
       workspaceMode: "local_repo",
     });
+
+    unmount();
+    renderLauncher();
+    await waitFor(() => expect(getSettingsSpy).toHaveBeenCalledTimes(2));
+
+    await user.click(screen.getByTestId("open-workspace-button"));
+    await user.click(
+      await screen.findByTestId("stub-workspace-dialog-confirm"),
+    );
+    expect(screen.getByTestId("stub-workspace-mode")).toHaveTextContent(
+      "local:new_worktree",
+    );
   });
 
   it("disables the local workspace launcher when the agent server is too old", async () => {

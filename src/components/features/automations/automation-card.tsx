@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
-import { AutomationRunStatus } from "#/types/automation";
+import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
 import { useHasPermission } from "#/hooks/use-has-permission";
 import { useNavigation } from "#/context/navigation-context";
@@ -22,14 +22,16 @@ import {
   extensionModuleCardSurfaceClassName,
 } from "#/utils/extension-module-card-classes";
 import { toLatestRunState } from "./to-latest-run-state";
+import { RunPhase, shouldShowRunPhase } from "./detail/run-phase";
+import { resolveAutomationImpactStatement } from "#/utils/automation-catalog";
 import { RunStatusBadge } from "./detail/run-status-badge";
 import { AutomationRunActivitySparkline } from "#/components/features/home/featured-automations/automation-run-activity-sparkline";
 import type { RunSummaryState } from "#/manifests/automation-insights";
 import type { InterfaceListInsights } from "#/manifests/types";
 import {
   getLastRunTimestamp,
-  shortenAutomationErrorDetail,
-  shouldShowAutomationErrorHovercard,
+  shortenAutomationRunSummary,
+  shouldShowAutomationRunSummaryHovercard,
 } from "#/components/features/home/featured-automations/automation-run-health";
 
 /** Run insights shown when the manifest declares the dashboard surface. */
@@ -88,19 +90,20 @@ export function AutomationCard({
   });
 
   const runState = toLatestRunState(insights?.state);
+  const impactStatement = resolveAutomationImpactStatement(
+    automation,
+    insights?.state?.summary?.completedTotal ?? null,
+  );
   const { latestRun, recentRuns, isLoading, isError } = runState;
   const timestamp = latestRun ? getLastRunTimestamp(latestRun) : null;
-  const errorDetail =
-    latestRun?.status === AutomationRunStatus.FAILED
-      ? latestRun.error_detail?.trim() || null
-      : null;
-  const shortErrorDetail = errorDetail
-    ? shortenAutomationErrorDetail(errorDetail)
-    : null;
-  const showErrorHovercard =
-    errorDetail != null &&
-    shortErrorDetail != null &&
-    shouldShowAutomationErrorHovercard(errorDetail, shortErrorDetail);
+  const display = latestRun ? getAutomationRunDisplay(latestRun) : null;
+  const summary = display?.summary ?? null;
+  const shortSummary = summary ? shortenAutomationRunSummary(summary) : null;
+  const showSummaryHovercard =
+    summary != null &&
+    shortSummary != null &&
+    shouldShowAutomationRunSummaryHovercard(summary, shortSummary);
+  const showPhase = shouldShowRunPhase(latestRun?.status);
   const disableAnimation = import.meta.env.MODE === "test";
 
   return (
@@ -207,14 +210,27 @@ export function AutomationCard({
 
             {latestRun ? (
               <>
-                <RunStatusBadge status={latestRun.status} iconOnly showLabel />
+                <RunStatusBadge
+                  status={display?.badgeStatus ?? latestRun.status}
+                  iconOnly
+                  showLabel
+                />
 
-                {shortErrorDetail ? (
-                  showErrorHovercard && errorDetail ? (
+                {showPhase ? (
+                  <RunPhase
+                    status={latestRun.status}
+                    code={latestRun.phase_code}
+                    label={latestRun.phase_label}
+                    updatedAt={latestRun.phase_updated_at}
+                  />
+                ) : null}
+
+                {shortSummary ? (
+                  showSummaryHovercard && summary ? (
                     <Tooltip
                       content={
                         <p className="max-w-xs whitespace-pre-wrap break-words p-2 text-xs">
-                          {errorDetail}
+                          {summary}
                         </p>
                       }
                       placement="top"
@@ -222,13 +238,13 @@ export function AutomationCard({
                       disableAnimation={disableAnimation}
                       className="rounded-xl border border-[var(--oh-border)] bg-base-secondary p-0 text-white shadow-xl"
                     >
-                      <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-status-error)]">
-                        {shortErrorDetail}
+                      <span className="min-w-0 flex-1 cursor-default truncate text-[var(--oh-text-secondary)]">
+                        {shortSummary}
                       </span>
                     </Tooltip>
                   ) : (
-                    <p className="min-w-0 flex-1 truncate text-[var(--oh-status-error)]">
-                      {shortErrorDetail}
+                    <p className="min-w-0 flex-1 truncate text-[var(--oh-text-secondary)]">
+                      {shortSummary}
                     </p>
                   )
                 ) : null}
@@ -245,6 +261,15 @@ export function AutomationCard({
             </span>
           ) : null}
         </div>
+      ) : null}
+
+      {impactStatement ? (
+        <p
+          data-testid={`automation-impact-${automation.id}`}
+          className="mt-3 truncate text-xs text-[var(--oh-text-secondary)]"
+        >
+          {impactStatement}
+        </p>
       ) : null}
 
       {insights ? (

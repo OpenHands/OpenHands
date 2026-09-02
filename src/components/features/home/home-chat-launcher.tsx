@@ -26,6 +26,10 @@ import {
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
+import {
+  readStoredLocalWorkspaceMode,
+  writeStoredLocalWorkspaceMode,
+} from "#/utils/workspace-mode";
 import type { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { PluginPickerModal } from "#/components/features/plugins/plugin-picker-modal";
 import { PluginPickerTrigger } from "#/components/features/plugins/plugin-picker-trigger";
@@ -51,8 +55,9 @@ export function HomeChatLauncher() {
     useState<GitRepository | null>(null);
   const [pendingBranch, setPendingBranch] = useState<Branch | null>(null);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
-  const [workspaceMode, setWorkspaceMode] =
-    useState<WorkspaceMode>("local_repo");
+  const [workspaceMode, setWorkspaceModeState] = useState<WorkspaceMode>(() =>
+    readStoredLocalWorkspaceMode(),
+  );
   const [selectedPlugins, setSelectedPlugins] = useState<PluginSpec[]>([]);
   const [isPluginPickerOpen, setIsPluginPickerOpen] = useState(false);
 
@@ -73,6 +78,11 @@ export function HomeChatLauncher() {
   const workspacesUnsupportedMessage = isLocal
     ? getWorkspacesUnsupportedMessage(workspacesError, t)
     : null;
+
+  const setWorkspaceMode = (mode: WorkspaceMode) => {
+    setWorkspaceModeState(mode);
+    if (isLocal) writeStoredLocalWorkspaceMode(mode);
+  };
 
   const hasSelection = isLocal
     ? !!pendingWorkspace
@@ -280,9 +290,9 @@ export function HomeChatLauncher() {
             setPendingRepository(null);
             setPendingBranch(null);
             setPendingProvider(null);
-            setWorkspaceMode(
-              settings?.use_worktree_by_default ? "new_worktree" : "local_repo",
-            );
+            if (settings?.use_worktree_by_default) {
+              setWorkspaceModeState("new_worktree");
+            }
           }}
         />
       ) : (
@@ -294,7 +304,7 @@ export function HomeChatLauncher() {
             setPendingBranch(branch);
             setPendingProvider(provider ?? repository.git_provider);
             setPendingWorkspace(null);
-            setWorkspaceMode("local_repo");
+            setWorkspaceModeState("local_repo");
           }}
         />
       )}

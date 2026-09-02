@@ -262,7 +262,9 @@ export const useCreateConversation = () => {
         let installed: InstalledPluginInfo[] = [];
         try {
           installed = await queryClient.ensureQueryData({
-            queryKey: PLUGINS_QUERY_KEYS.installed,
+            // Same key `usePlugins` writes. Unscoped, this served the previous
+            // backend's list and attached plugins the target server lacks.
+            queryKey: [...PLUGINS_QUERY_KEYS.installed, backend.id, orgId],
             queryFn: () => PluginsManagementService.listInstalledPlugins(),
           });
         } catch {
