@@ -398,23 +398,35 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // ── Automation run's conversation (responses 4+) ──
       // The run starts a fresh conversation with the automation prompt.
-      // Script one internal padding call + the required `finish` tool turn
-      // (plus two trailing safety blanks** so the run reaches COMPLETED.
+      // Script one internal padding call +the required `finish` tool turn,
+      // followed by a final text reply (+ one trailing safety blank** so the
+      // run reaches COMPLETED.
       { text: "" }, // 4: possible internal/condenser call
       {
         // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
         // requires preset automation conversations to finish via the
-        // `FinishTool` tool — a hook waits for `finish_tool_used` before the
+        // `finish` tool — a hook waits for `finish_tool_used` before the
         // run reaches COMPLETED. Blank turns alone would just loop and exhaust
         // the trajectory, so script the required finish-tool turn explicitly.
 
         tool_call: {
-          name: "FinishTool",
-          arguments: { message: "Hello world echoed successfully." },
+          // The agent-server registers the finish tool under its lowercase
+          // title (`finish`), and its response schema (TaskOutcome) requires
+          // the `status` + `outcome_summary` pair (that's the field alias,
+          // not `summary` or `message`).
+          name: "finish",
+          arguments: {
+            status: "success",
+            outcome_summary: "Hello world echoed successfully.",
+          },
         },
       },
-      { text: "" }, // 6: safety buffer for any follow-up internal call after finish
-      { text: "" }, // 7: final safety — the run conversation consumes 4 LLM turns
+      // 6: after the finish tool executes, the agent still needs one more
+      // non-empty LLM turn to end the conversation — a blank here would
+      // make the harness nag ("no function call") and loop on the exhausted
+      // trajectory, so reply with the final text.
+      { text: "Done. Hello world echoed successfully." },
+      { text: "" }, // 7: safety buffer for any follow-up internal call after finish
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
