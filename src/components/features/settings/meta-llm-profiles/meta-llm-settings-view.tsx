@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HttpError } from "@openhands/typescript-client";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -15,6 +15,7 @@ import MetaProfilesService, {
 import ProfilesService, {
   type SaveProfileRequest,
 } from "#/api/profiles-service/profiles-service.api";
+import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
   displayErrorToast,
   displaySuccessToast,
@@ -72,13 +73,25 @@ export function MetaLlmSettingsView() {
   const [nameToDelete, setNameToDelete] = useState<string | null>(null);
   const [isCreatingRouterProfiles, setIsCreatingRouterProfiles] =
     useState(false);
+  const [createdProviderConnections, setCreatedProviderConnections] = useState<
+    ProviderConnection[]
+  >([]);
 
   const metaProfiles = data?.meta_profiles ?? [];
   const active = data?.active_meta_profile ?? null;
   const availableProfiles = (llmProfilesData?.profiles ?? []).map(
     (p) => p.name,
   );
-  const connections = providerConnections ?? [];
+  const connections = useMemo(() => {
+    const byId = new Map<string, ProviderConnection>();
+    for (const connection of providerConnections ?? []) {
+      byId.set(connection.id, connection);
+    }
+    for (const connection of createdProviderConnections) {
+      byId.set(connection.id, connection);
+    }
+    return [...byId.values()];
+  }, [providerConnections, createdProviderConnections]);
   const existingNames = metaProfiles.map((p) => p.name);
   // A 404 means the backend predates the /api/meta-profiles endpoints
   // (software-agent-sdk #3744). Surface that explicitly instead of a generic
@@ -172,6 +185,13 @@ export function MetaLlmSettingsView() {
     );
   };
 
+  const handleProviderConnectionCreated = (connection: ProviderConnection) => {
+    setCreatedProviderConnections((existing) => [
+      connection,
+      ...existing.filter((item) => item.id !== connection.id),
+    ]);
+  };
+
   const handleSave = async (
     name: string,
     config: MetaProfile,
@@ -236,6 +256,7 @@ export function MetaLlmSettingsView() {
         isSaving={saveMetaProfile.isPending || isCreatingRouterProfiles}
         onSave={handleSave}
         onCancel={handleCancel}
+        onProviderConnectionCreated={handleProviderConnectionCreated}
       />
     );
   }

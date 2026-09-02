@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { SettingsDropdownInput } from "#/components/features/settings/settings-dropdown-input";
 import { ProfileNameInput } from "#/components/features/settings/llm-profiles/profile-name-input";
+import { ProviderConnectionModal } from "#/components/features/settings/llm-profiles/provider-connection-modal";
 import { Typography } from "#/ui/typography";
 import { isProfileNameValid } from "#/utils/derive-profile-name";
 import { cn } from "#/utils/utils";
@@ -48,6 +49,7 @@ interface MetaProfileEditorProps {
     providerConnectionId: string | null,
   ) => void;
   onCancel: () => void;
+  onProviderConnectionCreated?: (connection: ProviderConnection) => void;
 }
 
 const EMPTY_CONFIG: MetaProfile = {
@@ -85,6 +87,7 @@ export function MetaProfileEditor({
   isSaving,
   onSave,
   onCancel,
+  onProviderConnectionCreated,
 }: MetaProfileEditorProps) {
   const { t } = useTranslation("openhands");
   const isEdit = mode === "edit";
@@ -96,12 +99,43 @@ export function MetaProfileEditor({
     initialName ?? (isEdit ? "" : DEFAULT_MAX_SCORE_PARETO_META_PROFILE_NAME),
   );
   const [config, setConfig] = useState<MetaProfile>(() => startingConfig);
-  const showRouterConnectionPicker = !isEdit && providerConnections.length > 0;
+  const [createdProviderConnections, setCreatedProviderConnections] = useState<
+    ProviderConnection[]
+  >([]);
+  const [isProviderConnectionModalOpen, setIsProviderConnectionModalOpen] =
+    useState(false);
+  const connectionOptions = useMemo(() => {
+    const byId = new Map<string, ProviderConnection>();
+    for (const connection of providerConnections)
+      byId.set(connection.id, connection);
+    for (const connection of createdProviderConnections) {
+      byId.set(connection.id, connection);
+    }
+    return [...byId.values()];
+  }, [providerConnections, createdProviderConnections]);
+  const showRouterConnectionPicker = !isEdit;
   const [routerConnectionId, setRouterConnectionId] = useState(() =>
     selectRouterConnectionByDefault && providerConnections.length > 0
       ? providerConnections[0].id
       : NO_ROUTER_CONNECTION_KEY,
   );
+
+  useEffect(() => {
+    if (
+      !showRouterConnectionPicker ||
+      routerConnectionId ||
+      !selectRouterConnectionByDefault ||
+      connectionOptions.length === 0
+    ) {
+      return;
+    }
+    setRouterConnectionId(connectionOptions[0].id);
+  }, [
+    connectionOptions,
+    routerConnectionId,
+    selectRouterConnectionByDefault,
+    showRouterConnectionPicker,
+  ]);
 
   const profileItems = useMemo(
     () => availableProfiles.map((p) => ({ key: p, label: p })),
@@ -113,12 +147,12 @@ export function MetaProfileEditor({
         key: NO_ROUTER_CONNECTION_KEY,
         label: t(I18nKey.SETTINGS$META_PROFILE_ROUTER_CONNECTION_NONE),
       },
-      ...providerConnections.map((connection) => ({
+      ...connectionOptions.map((connection) => ({
         key: connection.id,
         label: `${connection.display_name} (${connection.provider})`,
       })),
     ],
-    [providerConnections, t],
+    [connectionOptions, t],
   );
 
   const nameValid = isProfileNameValid(name, { isRequired: true });
@@ -131,6 +165,15 @@ export function MetaProfileEditor({
     config.classifier_model.trim().length > 0 &&
     config.default_model.trim().length > 0 &&
     INSTANCE_TEXT_PLACEHOLDER.test(config.prompt_template ?? "");
+
+  const handleProviderConnectionSaved = (connection: ProviderConnection) => {
+    setCreatedProviderConnections((existing) => [
+      connection,
+      ...existing.filter((item) => item.id !== connection.id),
+    ]);
+    onProviderConnectionCreated?.(connection);
+    setRouterConnectionId(connection.id);
+  };
 
   const handleSave = () => {
     if (!canSave || isSaving) return;
@@ -305,10 +348,29 @@ export function MetaProfileEditor({
               )
             }
           />
-          <p className="text-xs text-[var(--oh-muted)]">
-            {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-[var(--oh-muted)]">
+              {t(I18nKey.SETTINGS$META_PROFILE_CREATE_ROUTER_PROFILES_HELP)}
+            </p>
+            <BrandButton
+              testId="meta-profile-add-provider-connection"
+              type="button"
+              variant="secondary"
+              onClick={() => setIsProviderConnectionModalOpen(true)}
+              isDisabled={isSaving}
+            >
+              {t(I18nKey.SETTINGS$PROVIDER_CONNECTION_ADD)}
+            </BrandButton>
+          </div>
         </div>
+      ) : null}
+
+      {isProviderConnectionModalOpen ? (
+        <ProviderConnectionModal
+          isCreate
+          onClose={() => setIsProviderConnectionModalOpen(false)}
+          onSaved={handleProviderConnectionSaved}
+        />
       ) : null}
 
       <div className="flex items-center gap-3">

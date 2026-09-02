@@ -190,6 +190,25 @@ describe("MetaProfileEditor", () => {
     expect(onSave).toHaveBeenCalledWith("fast", FILLED, "conn-openhands");
   });
 
+  it("shows provider connection controls even before connections exist", () => {
+    renderWithProviders(
+      <MetaProfileEditor
+        mode="create"
+        availableProfiles={AVAILABLE}
+        isSaving={false}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("meta-profile-router-connection"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("meta-profile-add-provider-connection"),
+    ).toBeInTheDocument();
+  });
+
   it("returns no connection when the picker is set to don't create", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
