@@ -19,6 +19,12 @@ export interface AcpCredentialForm {
   hasValueFor: (name: string) => boolean;
   /** ``[credential, conflicting]`` pairs currently both set (typed or saved). */
   conflicts: Array<[string, string]>;
+  /** Whether a credential (a ``secret`` field — API key, OAuth token, or
+   * file-content blob) is already saved on the backend for this provider. This
+   * is the backend-truthful auth signal that works on Docker/cloud, where the
+   * host-login probe can't run (agent-canvas#1244). A non-credential field (a
+   * base URL or GCP scalar) being set does not count. */
+  credentialsConfigured: boolean;
   /** Whether the active backend can materialise file-content (``multiline``)
    * credentials to disk. False on cloud (agent-canvas#1016), where such a
    * credential would be orphaned. */
@@ -92,6 +98,13 @@ export function useAcpCredentialForm(
     secretExists,
     hasValueFor,
     conflicts: getAcpCredentialConflicts(providerKey, hasValueFor),
+    // `=== true` is the intended strict check: only a credential-bearing field
+    // (API key, OAuth token, file blob) counts — never a base URL or GCP scalar,
+    // which omit `secret` entirely. A field must never set `secret: false` to
+    // opt out; omit the flag instead.
+    credentialsConfigured: fields.some(
+      (field) => field.secret === true && secretExists(field.name),
+    ),
     consumesFileCredentials,
     isDirty: fields.some((field) => Boolean(values[field.name]?.trim())),
     save: (options) => saveFilled(values, options),

@@ -18,11 +18,14 @@ import {
 export function CloudSettingsLink() {
   const { t } = useTranslation("openhands");
   const { active } = useActiveBackendContext();
-  const { backend } = active;
+  const { backend, orgId } = active;
 
   if (isNoBackend(backend) || backend.kind !== "cloud") return null;
 
-  const cloudSettingsUrl = `${backend.host.replace(/\/+$/, "")}/settings`;
+  // `org` is consumed by the cloud settings loader so the page opens on the
+  // org that is active here instead of the cloud's last-used org.
+  const orgQuery = orgId ? `?org=${encodeURIComponent(orgId)}` : "";
+  const cloudSettingsUrl = `${backend.host.replace(/\/+$/, "")}/settings${orgQuery}`;
 
   return (
     <a

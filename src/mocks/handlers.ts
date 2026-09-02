@@ -1,5 +1,10 @@
 import { FILE_SERVICE_HANDLERS } from "./file-service-handlers";
 import { SECRETS_HANDLERS } from "./secrets-handlers";
+import {
+  AGENT_PROFILES_HANDLERS,
+  resetMockAgentProfiles,
+  seedMockAgentProfiles,
+} from "./agent-profiles-handlers";
 import { GIT_REPOSITORY_HANDLERS } from "./git-repository-handlers";
 import {
   SETTINGS_HANDLERS,
@@ -19,10 +24,15 @@ import {
   WORKSPACES_HANDLERS,
   resetMockWorkspaces,
 } from "./workspaces-handlers";
+import {
+  CANVAS_EXTENSIONS_HANDLERS,
+  resetCanvasExtensionsMockData,
+} from "./canvas-extensions-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
   ...SECRETS_HANDLERS,
+  ...AGENT_PROFILES_HANDLERS,
   ...GIT_REPOSITORY_HANDLERS,
   ...SETTINGS_HANDLERS,
   ...CONVERSATION_HANDLERS,
@@ -32,6 +42,7 @@ export const handlers = [
   ...AUTOMATION_HANDLERS,
   ...MCP_HANDLERS,
   ...WORKSPACES_HANDLERS,
+  ...CANVAS_EXTENSIONS_HANDLERS,
 ];
 
 export {
@@ -39,4 +50,11 @@ export {
   resetTestHandlersMockSettings,
   resetAutomationMockData,
   resetMockWorkspaces,
+  resetCanvasExtensionsMockData,
+};
+
+export {
+  AGENT_PROFILES_HANDLERS,
+  resetMockAgentProfiles,
+  seedMockAgentProfiles,
 };

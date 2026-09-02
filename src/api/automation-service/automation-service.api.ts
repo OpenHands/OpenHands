@@ -20,7 +20,10 @@ import type {
   GitSyncStatus,
   GitSyncTriggerResponse,
 } from "#/types/git-sync";
-import { AUTOMATION_CREATE_ENDPOINT } from "#/manifests/automation-setup";
+import {
+  automationCreateEndpoint,
+  automationUploadEndpoint,
+} from "#/manifests/automation-setup";
 import {
   getAutomationEndpoint,
   getAutomationIdEndpoint,
@@ -28,6 +31,7 @@ import {
 } from "#/manifests/automation-interface";
 import type {
   DeploymentCapabilities,
+  SetupEntry,
   SetupRequestBody,
   ValidateDraftResponse,
 } from "#/manifests/types";
@@ -585,9 +589,11 @@ class AutomationService {
    */
   static async createAutomationDraft(
     body: SetupRequestBody,
+    /** The entry the draft came from, which decides the create endpoint. */
+    entry?: SetupEntry,
   ): Promise<Record<string, unknown>> {
     const active = getActiveBackend().backend;
-    const path = `${AUTOMATION_BASE_PATH}${AUTOMATION_CREATE_ENDPOINT}`;
+    const path = `${AUTOMATION_BASE_PATH}${automationCreateEndpoint(entry)}`;
 
     if (active.kind === "cloud") {
       return callCloudProxy<Record<string, unknown>>({
@@ -604,6 +610,69 @@ class AutomationService {
       body,
     );
     return data;
+  }
+
+  /**
+   * Upload a packed bundle, and return the `oh-internal://` path the create
+   * call references.
+   *
+   * The body is the archive itself rather than a multipart form - the service
+   * streams it and takes its metadata from the query string, so it never has
+   * to buffer the whole file to start writing.
+   */
+  static async uploadAutomationTarball(
+    name: string,
+    archive: Uint8Array,
+  ): Promise<string> {
+    const active = getActiveBackend().backend;
+    const path =
+      `${AUTOMATION_BASE_PATH}${automationUploadEndpoint()}` +
+      `?name=${encodeURIComponent(name)}`;
+    const headers = { "Content-Type": "application/gzip" };
+
+    let upload: Record<string, unknown>;
+    if (active.kind === "cloud") {
+      // Post the archive straight to the cloud host rather than through the
+      // cloud client: that client JSON-serializes any non-FormData body, which
+      // would turn the gzip `Uint8Array` into `{"0":31,...}` even though the
+      // header says `application/gzip`. Axios preserves the raw bytes (its
+      // `transformRequest` sends the underlying buffer), so the service still
+      // receives the archive as the stream it expects, with metadata in the
+      // query string. This upload sets no host override, so a direct call
+      // matches the cloud client's own direct-to-host path -- we just add the
+      // two headers that path would (`Bearer` auth and `X-Org-Id`).
+      const { orgId } = getActiveBackend();
+      upload = (
+        await axios.post<Record<string, unknown>>(
+          `${active.host.replace(/\/+$/, "")}${path}`,
+          archive,
+          {
+            headers: {
+              ...(await buildAutomationRequestHeaders()),
+              ...headers,
+              ...(active.apiKey
+                ? { Authorization: `Bearer ${active.apiKey}` }
+                : {}),
+              ...(orgId ? { "X-Org-Id": orgId } : {}),
+            },
+          },
+        )
+      ).data;
+    } else {
+      upload = (
+        await localAutomationAxios.post<Record<string, unknown>>(
+          path,
+          archive,
+          { headers },
+        )
+      ).data;
+    }
+
+    const tarballPath = upload.tarball_path;
+    if (typeof tarballPath !== "string" || !tarballPath) {
+      throw new Error("The upload returned no tarball path.");
+    }
+    return tarballPath;
   }
 
   // Git sync paths are literal rather than routed through

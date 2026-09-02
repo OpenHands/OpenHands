@@ -19,6 +19,8 @@ import {
   formatTimeOfDay,
   parseTimeOfDay,
   formatEventOn,
+  validateCronSchedule,
+  CRON_EXPRESSION_EXAMPLE,
   type SchedulePresetKind,
 } from "#/utils/automation-schedule";
 import {
@@ -127,8 +129,7 @@ export function EditAutomationModal({
   const updateMutation = useUpdateAutomation();
   // Which attributes the dialog offers, and their copy, come from the
   // interface manifest; absent one, the host defaults reproduce today's form.
-  const editTitle =
-    getInterfaceCopy().editTitle ?? t(I18nKey.AUTOMATIONS$EDIT_TITLE);
+  const editTitle = getInterfaceCopy().editTitle;
   const nameSpec = getAttributeSpec("name");
   const promptSpec = getAttributeSpec("prompt");
   const modelSpec = getAttributeSpec("model");
@@ -153,12 +154,14 @@ export function EditAutomationModal({
   const [form, setForm] = useState<FormState>(initial);
   const [nameError, setNameError] = useState<string | null>(null);
   const [timeoutError, setTimeoutError] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setForm(initial);
       setNameError(null);
       setTimeoutError(null);
+      setScheduleError(null);
     }
   }, [isOpen, initial]);
 
@@ -191,11 +194,6 @@ export function EditAutomationModal({
     key: String(index),
     label: t(key),
   }));
-
-  const isTimeEditable =
-    !form.isCustomSchedule ||
-    parseTimeOfDay(form.timeOfDay) !== null ||
-    form.timeOfDay === "";
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -236,7 +234,22 @@ export function EditAutomationModal({
       body.timeout = timeoutResult.value;
     }
 
-    if (!form.isCustomSchedule && form.frequency !== "custom") {
+    if (automation.trigger.type !== "event" && form.isCustomSchedule) {
+      // An untouched schedule is the service's business, not the form's.
+      const trimmedSchedule = form.rawSchedule.trim();
+      if (trimmedSchedule !== (automation.trigger.schedule ?? "").trim()) {
+        const scheduleResult = validateCronSchedule(form.rawSchedule);
+        if ("errorKey" in scheduleResult) {
+          setScheduleError(t(scheduleResult.errorKey));
+          return;
+        }
+        body.trigger = {
+          ...automation.trigger,
+          schedule: scheduleResult.schedule,
+        };
+      }
+      setScheduleError(null);
+    } else if (!form.isCustomSchedule && form.frequency !== "custom") {
       const parsedTime = parseTimeOfDay(form.timeOfDay);
       if (parsedTime) {
         const newSchedule = buildCronSchedule({
@@ -308,7 +321,7 @@ export function EditAutomationModal({
               testId="edit-automation-name"
               name="name"
               type="text"
-              label={nameSpec.label ?? t(I18nKey.AUTOMATIONS$NAME)}
+              label={nameSpec.label}
               value={form.name}
               onChange={(value) => setForm((f) => ({ ...f, name: value }))}
               error={nameError ?? undefined}
@@ -318,9 +331,7 @@ export function EditAutomationModal({
 
           {promptSpec.present && (
             <label className="flex flex-col gap-2.5 w-full min-w-0">
-              <span className="text-sm">
-                {promptSpec.label ?? t(I18nKey.AUTOMATIONS$PROMPT)}
-              </span>
+              <span className="text-sm">{promptSpec.label}</span>
               <textarea
                 data-testid="edit-automation-prompt"
                 name="prompt"
@@ -334,9 +345,9 @@ export function EditAutomationModal({
                   "placeholder:italic",
                 )}
               />
-              <span className="text-xs text-muted">
-                {promptSpec.help ?? t(I18nKey.AUTOMATIONS$EDIT_PROMPT_HINT)}
-              </span>
+              {promptSpec.help !== null && (
+                <span className="text-xs text-muted">{promptSpec.help}</span>
+              )}
             </label>
           )}
 
@@ -344,7 +355,7 @@ export function EditAutomationModal({
             <SettingsDropdownInput
               testId="edit-automation-model"
               name="model"
-              label={modelSpec.label ?? t(I18nKey.AUTOMATIONS$DETAIL$MODEL)}
+              label={modelSpec.label}
               items={modelItems}
               selectedKey={form.model || ACTIVE_PROFILE_KEY}
               isLoading={isLoadingProfiles}
@@ -364,7 +375,7 @@ export function EditAutomationModal({
                 testId="edit-automation-timeout"
                 name="timeout"
                 type="number"
-                label={timeoutSpec.label ?? t(I18nKey.AUTOMATIONS$TIMEOUT)}
+                label={timeoutSpec.label}
                 value={form.timeout}
                 onChange={(value) => setForm((f) => ({ ...f, timeout: value }))}
                 error={timeoutError ?? undefined}
@@ -374,12 +385,14 @@ export function EditAutomationModal({
                 step={1}
                 placeholder={String(AUTOMATION_TIMEOUT_DEFAULT_SECONDS)}
               />
-              <span
-                data-testid="edit-automation-timeout-hint"
-                className="text-xs text-muted"
-              >
-                {timeoutSpec.help ?? t(I18nKey.AUTOMATIONS$TIMEOUT_HINT)}
-              </span>
+              {timeoutSpec.help !== null && (
+                <span
+                  data-testid="edit-automation-timeout-hint"
+                  className="text-xs text-muted"
+                >
+                  {timeoutSpec.help}
+                </span>
+              )}
             </div>
           )}
 
@@ -429,7 +442,7 @@ export function EditAutomationModal({
               <SettingsDropdownInput
                 testId="edit-automation-frequency"
                 name="frequency"
-                label={scheduleSpec.label ?? t(I18nKey.AUTOMATIONS$FREQUENCY)}
+                label={scheduleSpec.label}
                 items={frequencyItems}
                 selectedKey={form.frequency}
                 isDisabled={form.isCustomSchedule}
@@ -465,7 +478,7 @@ export function EditAutomationModal({
                   onChange={(e) =>
                     setForm((f) => ({ ...f, timeOfDay: e.target.value }))
                   }
-                  disabled={form.isCustomSchedule && !isTimeEditable}
+                  disabled={form.isCustomSchedule}
                   className={cn(
                     formControlSettingsFieldClassName,
                     "disabled:bg-[var(--oh-surface-raised)]",
@@ -479,20 +492,18 @@ export function EditAutomationModal({
               </label>
 
               {form.isCustomSchedule && (
-                <p
-                  className="text-xs text-muted"
-                  data-testid="custom-schedule-hint"
-                >
-                  {t(I18nKey.AUTOMATIONS$CUSTOM_SCHEDULE_HINT)}
-                  {form.rawSchedule && (
-                    <>
-                      {" "}
-                      <code className="text-xs text-content">
-                        {form.rawSchedule}
-                      </code>
-                    </>
-                  )}
-                </p>
+                <SettingsInput
+                  testId="edit-automation-cron"
+                  name="cron"
+                  type="text"
+                  label={t(I18nKey.AUTOMATIONS$CRON_EXPRESSION)}
+                  value={form.rawSchedule}
+                  onChange={(value) =>
+                    setForm((f) => ({ ...f, rawSchedule: value }))
+                  }
+                  error={scheduleError ?? undefined}
+                  placeholder={CRON_EXPRESSION_EXAMPLE}
+                />
               )}
             </>
           ) : null}
