@@ -1046,11 +1046,13 @@ export const SETTINGS_HANDLERS = [
           >
         )?.api_key);
 
-    // Reuse the persisted misc_settings.app_preferences for repeat fetches,
-    // but always fall back to the default-empty block so the GUI sees a
-    // deterministic shape on first read.
+    // Reuse the persisted misc_settings for repeat fetches, but always fall
+    // back to defaults so the GUI sees a deterministic shape on first read.
     const storedMisc = (settings as Record<string, unknown>).misc_settings as
-      | { app_preferences?: Record<string, unknown> }
+      | {
+          app_preferences?: Record<string, unknown>;
+          ui_preferences?: Record<string, unknown>;
+        }
       | undefined;
     const appPreferences = {
       ...DEFAULT_APP_PREFERENCES,
@@ -1061,7 +1063,12 @@ export const SETTINGS_HANDLERS = [
       agent_settings: agentSettings,
       conversation_settings: settings.conversation_settings ?? {},
       llm_api_key_is_set: llmApiKeySet,
-      misc_settings: { app_preferences: appPreferences },
+      misc_settings: {
+        app_preferences: appPreferences,
+        ...(storedMisc?.ui_preferences
+          ? { ui_preferences: storedMisc.ui_preferences }
+          : {}),
+      },
     });
   }),
 
