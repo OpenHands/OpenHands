@@ -254,6 +254,10 @@ export function BackendSelector({
   }, [onOpenManageBackends, onSelectOption]);
 
   const isLockedToCloud = getLockedCloudHost() !== null;
+  // A cookie-auth (OHE-hosted) Canvas has nothing to add, manage, or
+  // reconnect — its single locked backend is owned by the main-app session.
+  const hideBackendFooter =
+    isLockedToCloud && active.backend.authMode === "cookie";
 
   const preventDropdownMenuClose = React.useCallback(
     (event: React.SyntheticEvent<HTMLButtonElement>) => {
@@ -295,7 +299,7 @@ export function BackendSelector({
     [openManageBackendsModal, preventDropdownMenuClose],
   );
 
-  const addBackendFooter = (
+  const addBackendFooter = hideBackendFooter ? undefined : (
     <div className={dropdownMenuListClassName}>
       {isLockedToCloud ? null : (
         <button
@@ -414,25 +418,41 @@ export function BackendSelector({
             placement={settingsTooltipPlacement}
             offset={10}
           >
-            <NavigationLink
-              to="/settings"
-              data-testid="backend-selector-settings-link"
-              data-active={isSettingsActive}
-              aria-label={settingsLabel}
-              className={
-                isSettingsActive
-                  ? cn(
-                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
-                      formControlTransitionClassName,
-                    )
-                  : cn(
-                      "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
-                      formControlTransitionClassName,
-                    )
-              }
-            >
-              <Settings width={16} height={16} />
-            </NavigationLink>
+            {active.backend.kind === "cloud" ? (
+              <a
+                href={`${active.backend.host.replace(/\/+$/, "")}/settings`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="backend-selector-settings-link"
+                aria-label={settingsLabel}
+                className={cn(
+                  "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                  formControlTransitionClassName,
+                )}
+              >
+                <Settings width={16} height={16} />
+              </a>
+            ) : (
+              <NavigationLink
+                to="/settings"
+                data-testid="backend-selector-settings-link"
+                data-active={isSettingsActive}
+                aria-label={settingsLabel}
+                className={
+                  isSettingsActive
+                    ? cn(
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md bg-tertiary text-white font-normal cursor-pointer",
+                        formControlTransitionClassName,
+                      )
+                    : cn(
+                        "inline-flex items-center justify-center shrink-0 w-9 h-9 rounded-md text-[var(--oh-muted)] hover:text-white hover:bg-[var(--oh-surface-raised)] cursor-pointer",
+                        formControlTransitionClassName,
+                      )
+                }
+              >
+                <Settings width={16} height={16} />
+              </NavigationLink>
+            )}
           </StyledTooltip>
         ) : null}
       </div>
