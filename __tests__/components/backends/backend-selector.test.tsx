@@ -630,6 +630,52 @@ describe("BackendSelector", () => {
     );
   });
 
+  it("hides the backend footer actions when the locked backend uses cookie auth", async () => {
+    // Arrange: an OHE-hosted Canvas — nothing to add, manage, or reconnect.
+    vi.stubEnv("VITE_LOCK_TO_CLOUD", "https://app.all-hands.dev");
+    vi.mocked(getCloudOrganizations).mockResolvedValue({
+      items: [{ id: "org-acme", name: "Acme Inc" }],
+      currentOrgId: "org-acme",
+    });
+
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend({
+            name: "OpenHands Cloud",
+            host: "https://app.all-hands.dev",
+            apiKey: "",
+            kind: "cloud",
+            authMode: "cookie",
+          });
+        }}
+      >
+        <BackendSelector />
+      </TestSeed>,
+    );
+    await waitFor(() => {
+      const wrapper = screen.getByTestId("backend-selector");
+      const input = wrapper.querySelector("input") as HTMLInputElement;
+      expect(input.value).toBe("OpenHands Cloud – Acme Inc");
+    });
+
+    // Act
+    await openDropdown();
+
+    // Assert: the org rows render, but no footer actions do.
+    await waitFor(() => {
+      expect(
+        screen.getByText("OpenHands Cloud – Acme Inc"),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId("manage-backends-menu-item"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("add-backend-menu-item"),
+    ).not.toBeInTheDocument();
+  });
+
   it("includes the seeded default Local backend in the manage backends modal as a removable entry", async () => {
     renderWithProviders(<BackendSelector />);
 
@@ -742,6 +788,48 @@ describe("BackendSelector", () => {
     wrapper = screen.getByTestId("backend-selector");
     input = wrapper.querySelector("input") as HTMLInputElement;
     expect(input.value).toBe("BACKEND$NO_BACKEND_AVAILABLE");
+  });
+
+  describe("settings link", () => {
+    it("renders the settings link as a NavigationLink for a local backend", async () => {
+      let localId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            localId = ctx.addBackend(SEED_LOCAL_1).id;
+            ctx.setActive(localId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute("href", "/settings");
+      expect(link).not.toHaveAttribute("target", "_blank");
+    });
+
+    it("renders the settings link as an external anchor for a cloud backend", async () => {
+      let cloudId = "";
+      renderWithProviders(
+        <TestSeed
+          onMount={(ctx) => {
+            cloudId = ctx.addBackend(SEED_CLOUD_PRODUCTION).id;
+            ctx.setActive(cloudId, null);
+          }}
+        >
+          <BackendSelector />
+        </TestSeed>,
+      );
+
+      const link = screen.getByTestId("backend-selector-settings-link");
+      expect(link).toHaveAttribute(
+        "href",
+        `${SEED_CLOUD_PRODUCTION.host}/settings`,
+      );
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    });
   });
 
   describe("connection indicator", () => {
