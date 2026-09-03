@@ -4,6 +4,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import { useInstallCanvasExtension } from "#/hooks/mutation/use-manage-canvas-extensions";
+import { CORS_OR_NETWORK_ERROR_MESSAGE } from "#/utils/user-facing-error";
 
 const displayErrorToast = vi.fn();
 vi.mock("#/utils/custom-toast-handlers", () => ({
@@ -57,6 +58,22 @@ describe("useInstallCanvasExtension", () => {
     expect(displayErrorToast).toHaveBeenCalledWith(detail);
     expect(displayErrorToast).not.toHaveBeenCalledWith(
       expect.stringContaining("HTTP request failed"),
+    );
+  });
+
+  it("keeps the shared disconnect wording when the request never lands", async () => {
+    vi.spyOn(CanvasExtensionsService, "install").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
+
+    const { result } = renderHook(() => useInstallCanvasExtension(), {
+      wrapper: createWrapper(),
+    });
+    result.current.mutate({ source: "/repo" });
+
+    await waitFor(() => expect(displayErrorToast).toHaveBeenCalled());
+    expect(displayErrorToast).toHaveBeenCalledWith(
+      CORS_OR_NETWORK_ERROR_MESSAGE,
     );
   });
 });

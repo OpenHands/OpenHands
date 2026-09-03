@@ -8,7 +8,8 @@ import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { getApiErrorMessage } from "#/utils/api-error-message";
+import { getApiErrorBody, getApiErrorMessage } from "#/utils/api-error-message";
+import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
 
 function useInvalidateCanvasExtensions() {
   const queryClient = useQueryClient();
@@ -34,7 +35,12 @@ export function useInstallCanvasExtension() {
       );
     },
     onError: (error) => {
-      displayErrorToast(getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC)));
+      // A transport failure carries no response body, so keep the shared
+      // "Disconnected" wording for it and use the server's detail otherwise.
+      const message = getApiErrorBody(error)
+        ? getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC))
+        : retrieveAxiosErrorMessage(error) || t(I18nKey.ERROR$GENERIC);
+      displayErrorToast(message);
     },
   });
 }
