@@ -8,14 +8,47 @@ import { ModelSelector } from "#/components/shared/modals/settings/model-selecto
 import type { LLMModel } from "#/api/config-service/config-service.types";
 import { server } from "#/mocks/node";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: { ids?: string }) =>
+      key === "SETTINGS$OPENHANDS_FREE_MODELS_NOTE"
+        ? `Free OpenHands models: ${values?.ids}. Other provider endpoints with similar model names may require separate billing.`
+        : key,
+  }),
+}));
+
 // The "Free" badge is DB-driven: the backend model list carries a `free` flag
 // per item (the same channel as `verified`). These tests drive the selector
 // through the model list rather than the (free-less) local /api/llm channel.
 const OPENHANDS_MODELS: LLMModel[] = [
-  { provider: "openhands", name: "claude-opus-4-7", verified: true, free: false, default: false },
-  { provider: "openhands", name: "glm-5.2", verified: true, free: true, default: true },
-  { provider: "openhands", name: "deepseek-v4-flash", verified: true, free: true, default: false },
-  { provider: "openhands", name: "minimax-m2.7", verified: true, free: true, default: false },
+  {
+    provider: "openhands",
+    name: "claude-opus-4-7",
+    verified: true,
+    free: false,
+    default: false,
+  },
+  {
+    provider: "openhands",
+    name: "glm-5.2",
+    verified: true,
+    free: true,
+    default: true,
+  },
+  {
+    provider: "openhands",
+    name: "deepseek-v4-flash",
+    verified: true,
+    free: true,
+    default: false,
+  },
+  {
+    provider: "openhands",
+    name: "minimax-m2.7",
+    verified: true,
+    free: true,
+    default: false,
+  },
 ];
 
 vi.mock("#/hooks/query/use-provider-models", () => ({
@@ -72,10 +105,11 @@ describe("ModelSelector — OpenHands provider display", () => {
 
   it("makes clear which OpenHands models are free", async () => {
     const user = userEvent.setup();
-    renderWithQuery(<ModelSelector currentModel="openhands/deepseek-v4-flash" />);
+    renderWithQuery(
+      <ModelSelector currentModel="openhands/deepseek-v4-flash" />,
+    );
 
-    await waitFor(() => {
-    });
+    await waitFor(() => {});
     expect(screen.getByTestId("openhands-free-models-note")).toHaveTextContent(
       "openhands/deepseek-v4-flash",
     );
