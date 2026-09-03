@@ -1,0 +1,45 @@
+name: Audit
+
+# Fails on high/critical npm advisories so they can't accumulate unnoticed.
+# audit-ci wraps `npm audit --audit-level=high --package-lock-only` and adds the
+# allowlist in .github/audit-ci.jsonc, so a dev-only or unreachable advisory with
+# no upstream fix can be excepted (docs/SECURITY.md) instead of blocking every PR.
+#
+# The scheduled run catches advisories published against dependencies we haven't
+# touched; Dependabot (.github/dependabot.yml) lands the bumps that clear them.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Mondays at 08:00 UTC, an hour before Dependabot opens its weekly PRs.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    name: npm audit (high/critical)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24.15"
+
+      # No `npm ci`: --package-lock-only audits straight from package-lock.json.
+      - name: Audit dependencies
+        run: npx --yes audit-ci@^7 --config .github/audit-ci.jsonc

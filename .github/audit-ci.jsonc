@@ -1,0 +1,15 @@
+// Config for the `audit` workflow. Equivalent to
+// `npm audit --audit-level=high --package-lock-only`, plus an allowlist so a
+// single unfixable advisory can't block every PR.
+//
+// Adding an entry is an explicit, reviewable exception — see docs/SECURITY.md.
+{
+  "package-manager": "npm",
+  "high": true,
+  "extra-args": ["--package-lock-only"],
+  "report-type": "important",
+  // Format: "GHSA-xxxx-xxxx-xxxx" (advisory), "package" (module), or
+  // "GHSA-xxxx-xxxx-xxxx|parent>child" (specific path). Every entry needs a
+  // comment saying why it is safe and when it should be revisited.
+  "allowlist": []
+}
