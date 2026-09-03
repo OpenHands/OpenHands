@@ -239,6 +239,23 @@ export async function updateCloudConversationTitle(
 }
 
 /**
+ * Force condensation for a cloud v1 app-conversation. This must go through the
+ * same-origin Cloud API because browser requests to per-conversation runtime
+ * hosts are CORS-restricted, and the old local `/api/cloud-proxy` hop is no
+ * longer exposed by the agent-server.
+ */
+export async function condenseCloudConversation(
+  conversationId: string,
+): Promise<void> {
+  const backend = getActiveCloudBackend();
+  await callCloudProxy<unknown>({
+    backend,
+    method: "POST",
+    path: `/api/v1/app-conversations/${conversationId}/condense`,
+  });
+}
+
+/**
  * Pause the cloud sandbox backing a v1 app-conversation. Mirrors
  * OpenHands' `SandboxService.pauseSandbox`:
  * `POST /api/v1/sandboxes/{sandboxId}/pause` on the cloud backend, which stops

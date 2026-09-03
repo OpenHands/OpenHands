@@ -28,6 +28,7 @@ import { callCloudProxy } from "../cloud/proxy";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
+  condenseCloudConversation,
   createCloudAppConversation,
   deleteCloudConversation,
   downloadCloudConversation,
@@ -865,14 +866,18 @@ class AgentServerConversationService {
 
   /**
    * Force condensation ("compact") of the conversation history via
-   * `POST /api/conversations/{id}/condense` on the conversation's runtime
-   * agent-server.
+   * the backend that owns the conversation.
    */
   static async condenseConversation(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<void> {
+    if (getActiveBackend().backend.kind === "cloud") {
+      await condenseCloudConversation(conversationId);
+      return;
+    }
+
     await new ConversationClient(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).condenseConversation(conversationId);

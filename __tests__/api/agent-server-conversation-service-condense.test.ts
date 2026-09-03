@@ -7,7 +7,6 @@ import {
 import type { Backend } from "#/api/backend-registry/types";
 import { callCloudProxy } from "#/api/cloud/proxy";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
-import { ConversationClient } from "@openhands/typescript-client/clients";
 
 const { mockCondenseConversation } = vi.hoisted(() => ({
   mockCondenseConversation: vi.fn(),
@@ -61,7 +60,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
     __resetActiveStoreForTests();
   });
 
-  it("uses the runtime ConversationClient directly for cloud conversations", async () => {
+  it("routes cloud conversations through the same-origin cloud condense endpoint", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -71,31 +70,33 @@ describe("AgentServerConversationService.condenseConversation", () => {
       "sess-key",
     );
 
-    expect(ConversationClient).toHaveBeenCalledWith(
+    expect(callCloudProxy).toHaveBeenCalledWith(
       expect.objectContaining({
-        host: "http://localhost:54928",
-        apiKey: "sess-key",
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/v1/app-conversations/conv-1/condense",
       }),
     );
-    expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
-    expect(callCloudProxy).not.toHaveBeenCalled();
+    expect(mockCondenseConversation).not.toHaveBeenCalled();
   });
 
-  it("throws when a cloud conversation has no runtime URL", async () => {
-    // getEffectiveLocalBackend only resolves when the ACTIVE backend is
-    // local, so a cloud conversation without a conversation_url has no
-    // ConversationClient fallback.
+  it("does not require a runtime URL for cloud conversations", async () => {
     setRegisteredBackends([cloudBackend, localBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
-    await expect(
-      AgentServerConversationService.condenseConversation(
-        "conv-1",
-        null,
-        "sess-key",
-      ),
-    ).rejects.toThrow("No backend is configured");
-    expect(callCloudProxy).not.toHaveBeenCalled();
+    await AgentServerConversationService.condenseConversation(
+      "conv-1",
+      null,
+      "sess-key",
+    );
+
+    expect(callCloudProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: cloudBackend,
+        method: "POST",
+        path: "/api/v1/app-conversations/conv-1/condense",
+      }),
+    );
     expect(mockCondenseConversation).not.toHaveBeenCalled();
   });
 
