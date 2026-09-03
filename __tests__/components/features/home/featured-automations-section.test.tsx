@@ -46,6 +46,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock permission hooks so home automation components don't need a real
+// ActiveBackendProvider or /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
+}));
+
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
@@ -191,12 +202,12 @@ describe("home automations composer layout", () => {
 
     expect(
       await screen.findByRole("link", {
-        name: /Daily digest\s*FEATURED_AUTOMATIONS\$LAST_RUN_SUCCEEDED/,
+        name: /Daily digest\s*AUTOMATIONS\$DETAIL\$SUCCESSFUL/,
       }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("link", {
-        name: /PR review\s*FEATURED_AUTOMATIONS\$LAST_RUN_FAILED/,
+        name: /PR review\s*AUTOMATIONS\$DETAIL\$FAILED/,
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Disabled sweep")).not.toBeInTheDocument();
@@ -463,6 +474,46 @@ describe("home automations composer layout", () => {
     expect(
       screen.queryByTestId("pinned-automation-card-auto-1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows the pinned card's active-run phase using only the shared latest-run fetch, no extra request (home surface)", async () => {
+    // Arrange: a single automation with a RUNNING run that has a phase.
+    // `getAutomationRuns` is the one query both the row and the pinned
+    // dashboard card read (shared cache key + params) — if showing the
+    // phase required a second fetch, the call count below would exceed 1.
+    vi.mocked(AutomationService.getAutomationRuns).mockResolvedValue({
+      runs: [
+        makeRun({
+          status: AutomationRunStatus.RUNNING,
+          completed_at: null,
+          phase_code: "running_agent",
+          phase_label: null,
+        }),
+      ],
+      total: 1,
+    });
+    const user = userEvent.setup();
+
+    // Act
+    renderHomeAutomations(
+      <>
+        <PinnedAutomationsDashboard />
+        <RunningAutomationsList />
+      </>,
+    );
+    await screen.findByTestId("running-automations-list");
+    await user.click(screen.getByTestId("running-automation-menu-auto-1"));
+    await user.click(screen.getByTestId("running-automation-pin-auto-1"));
+
+    // Assert: the pinned card shows the phase ...
+    const dashboard = await screen.findByTestId("pinned-automations-dashboard");
+    expect(
+      await within(dashboard).findByText(
+        "AUTOMATIONS$DETAIL$PHASE_RUNNING_AGENT",
+      ),
+    ).toBeInTheDocument();
+    // ... and only one runs request was ever made for this automation.
+    expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
   });
 
   it("shows an error toast when turning an automation off fails", async () => {

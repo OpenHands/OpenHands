@@ -40,6 +40,16 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock permission hooks so cloud-backend tests don't need a real /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
+}));
+
 const localBackend: Backend = {
   id: "local-1",
   name: "Local 1",
