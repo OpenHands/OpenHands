@@ -17,8 +17,8 @@ import { EXTENSIONS_NAV_ITEMS } from "./extensions-navigation";
 
 /** Only the Skills item points to a cloud-hosted page today. */
 const CLOUD_LINKED_EXTENSION_PATH = "/skills";
-/** Plugins are not available on Cloud backends, so this item is hidden there. */
-const CLOUD_HIDDEN_EXTENSION_PATH = "/plugins";
+/** Backend-installed artifacts are not available on Cloud backends yet. */
+const CLOUD_HIDDEN_EXTENSION_PATHS = new Set(["/plugins", "/extensions"]);
 
 export function ExtensionsMobileHub() {
   const { t } = useTranslation("openhands");
@@ -35,7 +35,7 @@ export function ExtensionsMobileHub() {
       <nav className="flex flex-col gap-0.5">
         {EXTENSIONS_NAV_ITEMS.filter(
           (item) =>
-            !(item.to === CLOUD_HIDDEN_EXTENSION_PATH && isCloudBackend),
+            !(CLOUD_HIDDEN_EXTENSION_PATHS.has(item.to) && isCloudBackend),
         ).map((item) => {
           if (item.to === CLOUD_LINKED_EXTENSION_PATH && isCloudBackend) {
             const cloudSkillsUrl = `${backend.host.replace(/\/+$/, "")}/settings/skills`;

@@ -35,6 +35,12 @@ interface ConversationCardProps {
   onUnarchive?: () => void;
   onStop?: () => void;
   onChangeTitle?: (title: string) => void;
+  /**
+   * Opens the tag editor for this conversation. Local agent-server backends
+   * only — Cloud conversations don't carry server-side tags, so the panel
+   * leaves this undefined there and the menu item disappears.
+   */
+  onEditTags?: () => void;
   showOptions?: boolean;
   title: string;
   selectedRepository: RepositorySelection | null;
@@ -69,6 +75,7 @@ export function ConversationCard({
   onUnarchive,
   onStop,
   onChangeTitle,
+  onEditTags,
   showOptions,
   title,
   selectedRepository,
@@ -97,6 +104,10 @@ export function ConversationCard({
   const { trackDownloadVsCodeButtonClicked } = useTracking();
   const [titleMode, setTitleMode] = React.useState<"view" | "edit">("view");
   const { mutateAsync: downloadConversation } = useDownloadConversation();
+
+  const displayTags = getDisplayConversationTags(tags);
+  const hasDisplayTags = displayTags.length > 0;
+  const showTagChipRow = showTags && hasDisplayTags;
 
   const onTitleSave = (newTitle: string) => {
     if (newTitle !== "" && newTitle !== title) {
@@ -137,6 +148,13 @@ export function ConversationCard({
     event.preventDefault();
     event.stopPropagation();
     setTitleMode("edit");
+    onContextMenuToggle?.(false);
+  };
+
+  const handleEditTags = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onEditTags?.();
     onContextMenuToggle?.(false);
   };
 
@@ -216,6 +234,7 @@ export function ConversationCard({
     onArchive ||
     onUnarchive ||
     onChangeTitle ||
+    onEditTags ||
     showOptions
   );
   const hasHoverActions = hasContextMenu || !!onTogglePin;
@@ -224,7 +243,7 @@ export function ConversationCard({
     showRepositoryMetadata ||
     isArchived ||
     (showLlmProfiles && (agentKind === "acp" || !!llmModel)) ||
-    (showTags && getDisplayConversationTags(tags).length > 0);
+    (showTagChipRow && displayTags.length > 0);
 
   return (
     <div
@@ -251,6 +270,7 @@ export function ConversationCard({
         </div>
 
         <div
+          data-testid="conversation-card-trailing-slot"
           className={cn(
             "relative ml-auto pl-2 flex items-center justify-end shrink-0",
             // The hover action overlay (pin + ellipsis) is absolutely
@@ -277,6 +297,7 @@ export function ConversationCard({
 
           {hasHoverActions ? (
             <div
+              data-testid="conversation-card-hover-actions"
               className={cn(
                 "absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity",
                 showPersistentPinIcon
@@ -298,6 +319,7 @@ export function ConversationCard({
                       onUnarchive={onUnarchive && handleUnarchive}
                       onStop={onStop && handleStop}
                       onEdit={onChangeTitle && handleEdit}
+                      onEditTags={onEditTags && handleEditTags}
                       onDownloadViaVSCode={handleDownloadViaVSCode}
                       onDownloadConversation={handleDownloadConversation}
                       executionStatus={executionStatus}
@@ -325,6 +347,7 @@ export function ConversationCard({
                   onUnarchive={onUnarchive && handleUnarchive}
                   onStop={onStop && handleStop}
                   onEdit={onChangeTitle && handleEdit}
+                  onEditTags={onEditTags && handleEditTags}
                   onDownloadViaVSCode={handleDownloadViaVSCode}
                   onDownloadConversation={handleDownloadConversation}
                   executionStatus={executionStatus}
@@ -351,7 +374,7 @@ export function ConversationCard({
           agentKind={agentKind}
           acpServer={acpServer}
           tags={tags}
-          showTags={showTags}
+          showTags={showTagChipRow}
           isArchived={isArchived}
         />
       )}

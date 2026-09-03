@@ -46,6 +46,17 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: vi.fn(),
 }));
 
+// Mock permission hooks so home automation components don't need a real
+// ActiveBackendProvider or /me endpoint.
+vi.mock("#/hooks/use-automation-permissions", () => ({
+  useAutomationPermissions: () => ({
+    canView: true,
+    canManage: true,
+    isLoading: false,
+  }),
+  useIsAutomationOwner: () => true,
+}));
+
 vi.mock(
   "#/api/conversation-service/agent-server-conversation-service.api",
   () => ({
@@ -191,12 +202,12 @@ describe("home automations composer layout", () => {
 
     expect(
       await screen.findByRole("link", {
-        name: /Daily digest\s*FEATURED_AUTOMATIONS\$LAST_RUN_SUCCEEDED/,
+        name: /Daily digest\s*AUTOMATIONS\$DETAIL\$SUCCESSFUL/,
       }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("link", {
-        name: /PR review\s*FEATURED_AUTOMATIONS\$LAST_RUN_FAILED/,
+        name: /PR review\s*AUTOMATIONS\$DETAIL\$FAILED/,
       }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Disabled sweep")).not.toBeInTheDocument();
