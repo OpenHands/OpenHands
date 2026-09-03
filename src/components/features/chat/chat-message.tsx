@@ -53,7 +53,7 @@ export function ChatMessage({
   const [isSingleLinePendingMessage, setIsSingleLinePendingMessage] =
     React.useState(true);
   const pendingMessageContentRef = React.useRef<HTMLDivElement>(null);
-  const timestampLabel = formatEventTimestamp(timestamp, i18n.language);
+  const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
 
   React.useEffect(() => {
     setIsExpanded(false);

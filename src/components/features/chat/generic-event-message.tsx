@@ -38,7 +38,7 @@ export function GenericEventMessage({
   const [showDetails, setShowDetails] = React.useState(initiallyExpanded);
   const [isHovered, setIsHovered] = React.useState(false);
   const [hasFocusWithin, setHasFocusWithin] = React.useState(false);
-  const timestampLabel = formatEventTimestamp(timestamp, i18n.language);
+  const timestampLabel = formatEventTimestamp(timestamp, i18n?.language);
 
   const chevron = details ? (
     <button
