@@ -210,6 +210,7 @@ describe("recommended automations", () => {
       "slack-channel-monitor",
       "github-agents-md-maintainer",
       "news-digest",
+      "custom-automation",
       "github-repo-monitor",
       "slack-standup-digest",
       "linear-triage-assistant",
@@ -246,7 +247,7 @@ describe("recommended automations", () => {
     expect(betaHeading).toHaveTextContent(
       I18nKey.RECOMMENDED_AUTOMATIONS$BETA_LABEL,
     );
-    expect(within(betaHeading).getByText("13")).toBeInTheDocument();
+    expect(within(betaHeading).getByText("14")).toBeInTheDocument();
 
     const betaSection = screen.getByTestId(
       "recommended-automations-beta-section",
@@ -918,7 +919,7 @@ describe("recommended automations", () => {
       automations: [
         {
           id: "installed-1",
-          name: "GitHub Code Review Agent",
+          name: "GitHub code review",
           trigger: { type: "cron", schedule: "0 9 * * *" },
           enabled: true,
           prompt: "Review PRs",

@@ -12,6 +12,7 @@
 
 import type {
   DeploymentCapabilities,
+  SetupActionKind,
   SetupBlock,
   SetupFieldOption,
   SetupFormField,
@@ -27,6 +28,8 @@ export type SetupFieldError =
   | { code: "required" }
   | { code: "minLength"; length: number }
   | { code: "maxLength"; length: number }
+  | { code: "min"; value: number }
+  | { code: "max"; value: number }
   | { code: "invalidOption" }
   | { code: "unsafeExpressionLiteral" };
 
@@ -35,6 +38,22 @@ export type SetupFieldErrors = Record<string, SetupFieldError>;
 /** Field constraints supplied by the deployment rather than by the manifest. */
 export interface SetupFieldOverride {
   options?: SetupFieldOption[];
+}
+
+export function triggerKinds(setup: SetupBlock): string[] {
+  return Object.keys(setup.form.triggers ?? {});
+}
+
+export function initialTriggerKind(setup: SetupBlock): string | null {
+  return triggerKinds(setup)[0] ?? null;
+}
+
+export function actionKinds(setup: SetupBlock): SetupActionKind[] {
+  return Object.keys(setup.actions ?? {}) as SetupActionKind[];
+}
+
+export function initialActionKind(setup: SetupBlock): SetupActionKind | null {
+  return actionKinds(setup)[0] ?? null;
 }
 
 export type SetupFieldOverrides = Record<string, SetupFieldOverride>;
@@ -46,9 +65,33 @@ export type SetupFieldOverrides = Record<string, SetupFieldOverride>;
  * runs on, and so every derived view of the form keeps that order. Admission
  * rejects a name declared in both halves, so the merge cannot lose a field.
  */
-export function collectFields(setup: SetupBlock): SetupFormFields {
-  const triggers = Object.values(setup.form.triggers ?? {});
-  return Object.assign({}, ...triggers, setup.form.args) as SetupFormFields;
+export function collectFields(
+  setup: SetupBlock,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
+): SetupFormFields {
+  const triggers = setup.form.triggers ?? {};
+  const triggerEntries = Object.entries(triggers);
+  const activeTrigger =
+    selectedTrigger && selectedTrigger in triggers
+      ? triggers[selectedTrigger as keyof typeof triggers]
+      : triggerEntries.length === 1
+        ? triggerEntries[0][1]
+        : {};
+  const actions = setup.actions ?? {};
+  const actionEntries = Object.entries(actions);
+  const activeAction =
+    selectedAction && selectedAction in actions
+      ? actions[selectedAction as SetupActionKind]?.args
+      : actionEntries.length === 1
+        ? actionEntries[0][1]?.args
+        : {};
+  return Object.assign(
+    {},
+    activeTrigger,
+    setup.form.args,
+    activeAction,
+  ) as SetupFormFields;
 }
 
 /**
@@ -64,16 +107,46 @@ export function collectFields(setup: SetupBlock): SetupFormFields {
 export function resolveFieldOverrides(
   setup: SetupBlock,
   capabilities: DeploymentCapabilities | null,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
 ): SetupFieldOverrides {
+  const overrides: SetupFieldOverrides = {};
+  const fields = collectFields(setup, selectedTrigger, selectedAction);
   const timezones = capabilities?.triggers?.cron?.timezones;
-  if (!timezones?.length) return {};
-
-  const options = timezones.map((zone) => ({ value: zone, label: zone }));
-  return Object.fromEntries(
-    Object.entries(collectFields(setup))
+  if (timezones?.length) {
+    const options = timezones.map((zone) => ({ value: zone, label: zone }));
+    Object.entries(fields)
       .filter(([, field]) => field.type === "timezone")
-      .map(([name]) => [name, { options }]),
-  );
+      .forEach(([name]) => {
+        overrides[name] = { options };
+      });
+  }
+
+  if (capabilities?.eventSources?.length) {
+    const options = capabilities.eventSources.map((source) => ({
+      value: source,
+      label: source,
+    }));
+    Object.entries(fields)
+      .filter(([, field]) => field.type === "event-source")
+      .forEach(([name]) => {
+        overrides[name] = { options };
+      });
+  }
+
+  if (capabilities?.eventTypes?.length) {
+    const options = capabilities.eventTypes.map((type) => ({
+      value: type,
+      label: type,
+    }));
+    Object.entries(fields)
+      .filter(([, field]) => field.type === "event-type")
+      .forEach(([name]) => {
+        overrides[name] = { options };
+      });
+  }
+
+  return overrides;
 }
 
 /** The options a field offers, after deployment constraints are applied. */
@@ -91,25 +164,40 @@ export function getFieldOptions(
  * Reading both shapes as a list is what keeps validation, interpolation and
  * the payload mapping from branching on `multiple` at every use.
  */
+function isFileValue(value: SetupFormValue | undefined): value is File {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
 export function fieldValues(value: SetupFormValue | undefined): string[] {
   if (Array.isArray(value)) return value.filter((item) => item.trim() !== "");
-  return value && value.trim() !== "" ? [value] : [];
+  if (isFileValue(value)) return value.name ? [value.name] : [];
+  if (typeof value === "string" && value.trim() === "") return [];
+  if (value === undefined || value === null) return [];
+  return [String(value)];
 }
 
 /** The single value a field holds, or "" for a field collecting several. */
 export function fieldText(value: SetupFormValue | undefined): string {
-  return typeof value === "string" ? value : "";
+  if (Array.isArray(value) || value === undefined || value === null) return "";
+  if (isFileValue(value)) return value.name;
+  return String(value);
 }
 
 /** Initial form state: every declared field, seeded with its declared default. */
-export function getInitialFormValues(setup: SetupBlock): SetupFormValues {
+export function getInitialFormValues(
+  setup: SetupBlock,
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
+): SetupFormValues {
   return Object.fromEntries(
-    Object.entries(collectFields(setup)).map(([name, field]) => [
-      name,
-      // A field collecting several values starts empty rather than holding one
-      // blank entry, so "required" means "add one" rather than "fill this in".
-      field.multiple ? [] : (field.default ?? ""),
-    ]),
+    Object.entries(collectFields(setup, selectedTrigger, selectedAction)).map(
+      ([name, field]) => [
+        name,
+        // A field collecting several values starts empty rather than holding one
+        // blank entry, so "required" means "add one" rather than "fill this in".
+        field.multiple ? [] : (field.default ?? ""),
+      ],
+    ),
   );
 }
 
@@ -139,12 +227,18 @@ function validateValue(
   value: string,
   overrides: SetupFieldOverrides,
 ): SetupFieldError | null {
-  const { minLength, maxLength, format } = field.constraints ?? {};
+  const { minLength, maxLength, min, max, format } = field.constraints ?? {};
   if (minLength !== undefined && value.length < minLength) {
     return { code: "minLength", length: minLength };
   }
   if (maxLength !== undefined && value.length > maxLength) {
     return { code: "maxLength", length: maxLength };
+  }
+  if (field.type === "number") {
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) return { code: "invalidOption" };
+    if (min !== undefined && numeric < min) return { code: "min", value: min };
+    if (max !== undefined && numeric > max) return { code: "max", value: max };
   }
   if (
     format === "safeExpressionLiteral" &&
@@ -168,12 +262,13 @@ export function validateFormValues(
   setup: SetupBlock,
   values: SetupFormValues,
   overrides: SetupFieldOverrides = {},
+  selectedTrigger?: string | null,
+  selectedAction?: string | null,
 ): SetupFieldErrors {
-  return Object.entries(collectFields(setup)).reduce<SetupFieldErrors>(
-    (errors, [name, field]) => {
-      const error = validateField(name, field, values[name], overrides);
-      return error ? { ...errors, [name]: error } : errors;
-    },
-    {},
-  );
+  return Object.entries(
+    collectFields(setup, selectedTrigger, selectedAction),
+  ).reduce<SetupFieldErrors>((errors, [name, field]) => {
+    const error = validateField(name, field, values[name], overrides);
+    return error ? { ...errors, [name]: error } : errors;
+  }, {});
 }

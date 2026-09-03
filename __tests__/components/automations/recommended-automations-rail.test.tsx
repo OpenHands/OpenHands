@@ -51,7 +51,7 @@ describe("RecommendedAutomationsRail", () => {
   it("renders remaining proven workflows before conversation-only extras", () => {
     render(
       <RecommendedAutomationsRail
-        installedAutomations={[{ name: "GitHub Code Review Agent" }]}
+        installedAutomations={[{ name: "GitHub code review" }]}
         onSelect={vi.fn()}
       />,
     );
@@ -109,7 +109,9 @@ describe("RecommendedAutomationsRail", () => {
     );
 
     await user.click(
-      screen.getByTestId("recommended-automation-rail-card-slack-standup-digest"),
+      screen.getByTestId(
+        "recommended-automation-rail-card-slack-standup-digest",
+      ),
     );
 
     expect(onSelect).toHaveBeenCalledWith(
@@ -121,8 +123,8 @@ describe("RecommendedAutomationsRail", () => {
     const { container } = render(
       <RecommendedAutomationsRail
         installedAutomations={[
-          { name: "GitHub Code Review Agent" },
-          { name: "GitHub Issue to PR Agent" },
+          { name: "GitHub code review" },
+          { name: "GitHub issue to PR" },
           { name: "Slack channel monitor" },
           { name: "AGENTS.md Maintainer" },
           { name: "Daily news digest" },
@@ -175,7 +177,9 @@ describe("RecommendedAutomationsRail", () => {
         />,
       );
 
-      const scroller = screen.getByTestId("recommended-automations-rail-scroll");
+      const scroller = screen.getByTestId(
+        "recommended-automations-rail-scroll",
+      );
       const leftFade = screen.getByTestId(
         "recommended-automations-rail-fade-left",
       );

@@ -25,13 +25,51 @@ import {
   buildAssistedMessage,
   buildCreatePayload,
   isBundleEntry,
+  isUploadAction,
 } from "./automation-setup";
 import { packBundle } from "./manifest-bundle";
-import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
+import type {
+  SetupEntry,
+  SetupFormValue,
+  SetupFormValues,
+  SetupRequestBody,
+} from "./types";
 
 export interface SetupActionResult {
   /** The created resource, or the conversation that will finish setup. */
   response: Record<string, unknown>;
+}
+
+function isFileValue(value: SetupFormValue | undefined): value is File {
+  return typeof File !== "undefined" && value instanceof File;
+}
+
+function uploadCacheKey(
+  entry: SetupEntry,
+  values: SetupFormValues,
+  selectedAction?: string | null,
+): string {
+  const upload = values.tarball;
+  const uploadIdentity = isFileValue(upload)
+    ? {
+        name: upload.name,
+        size: upload.size,
+        lastModified: upload.lastModified,
+      }
+    : upload;
+  return `${entry.id}
+${selectedAction ?? ""}
+${JSON.stringify({ ...values, tarball: uploadIdentity })}`;
+}
+
+async function uploadedTarballBytes(
+  values: SetupFormValues,
+): Promise<Uint8Array> {
+  const upload = values.tarball;
+  if (!isFileValue(upload)) {
+    throw new Error("Choose a tarball before creating this automation.");
+  }
+  return new Uint8Array(await upload.arrayBuffer());
 }
 
 export function useSetupAction() {
@@ -77,6 +115,8 @@ export function useSetupAction() {
       values: SetupFormValues,
       /** Present for a direct entry, and absent for an assisted one. */
       payload: SetupRequestBody | null,
+      selectedTrigger?: string | null,
+      selectedAction?: string | null,
     ): Promise<SetupActionResult> => {
       if (!payload) {
         return startConversation(buildAssistedMessage(entry, values));
@@ -86,27 +126,40 @@ export function useSetupAction() {
       // from is an archive: pack it with the rendered config, upload it, and
       // create against the path that came back. The payload built for the form
       // carries a stand-in path, which is replaced here with the real one.
-      if (isBundleEntry(entry)) {
-        const key = `${entry.id}\n${JSON.stringify(values)}`;
+      if (isBundleEntry(entry) || isUploadAction(entry, selectedAction)) {
+        const key = uploadCacheKey(entry, values, selectedAction);
         let tarballPath = uploadedRef.current?.path ?? null;
         if (uploadedRef.current?.key !== key || tarballPath === null) {
-          const archive = await packBundle(entry, values);
+          const archive = isBundleEntry(entry)
+            ? await packBundle(entry, values)
+            : await uploadedTarballBytes(values);
           tarballPath = await AutomationService.uploadAutomationTarball(
             entry.id,
             archive,
           );
           uploadedRef.current = { key, path: tarballPath };
         }
-        const body = buildCreatePayload(entry, values, tarballPath);
+        const body = buildCreatePayload(
+          entry,
+          values,
+          tarballPath,
+          selectedTrigger,
+          selectedAction,
+        );
         if (!body) throw new Error(`'${entry.id}' produced no create request.`);
         return {
-          response: await AutomationService.createAutomationDraft(body, entry),
+          response: await AutomationService.createAutomationDraft(
+            body,
+            entry,
+            selectedAction,
+          ),
         };
       }
 
       const response = await AutomationService.createAutomationDraft(
         payload,
         entry,
+        selectedAction,
       );
       return { response };
     },

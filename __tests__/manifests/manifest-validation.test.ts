@@ -65,6 +65,47 @@ describe("validateSetupEntry", () => {
     },
   );
 
+  it("admits a direct entry with selectable cron and event trigger kinds", () => {
+    // Arrange
+    const entry = createSetupEntry({
+      setup: createSetup({
+        form: {
+          triggers: {
+            cron: {
+              schedule: {
+                type: "cron",
+                label: "Frequency",
+                help: "How often.",
+                required: true,
+              },
+            },
+            event: {
+              on: {
+                type: "event-type",
+                label: "Respond to",
+                help: "Which event.",
+                required: true,
+              },
+              source: {
+                type: "event-source",
+                label: "Source",
+                help: "Where events come from.",
+                required: true,
+              },
+            },
+          },
+          args: createSetup().form.args,
+        },
+      }),
+    });
+
+    // Act
+    const result = validateSetupEntry(entry);
+
+    // Assert
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
   // Each case is a separate invariant the host enforces on data authored in
   // another repository. A manifest that trips any of them must not render.
   it.each([
@@ -97,45 +138,6 @@ describe("validateSetupEntry", () => {
       // malformed one is refused rather than forwarded.
       "a template version that is not semver",
       { version: "v1" },
-    ],
-    [
-      // The host reads one trigger kind to build the request, so a second one
-      // would be silently dropped rather than refused.
-      "more trigger kinds than the host can send",
-      {
-        setup: createSetup({
-          form: {
-            triggers: {
-              cron: {
-                schedule: {
-                  type: "cron",
-                  label: "Frequency",
-                  help: "How often.",
-                  required: true,
-                },
-              },
-              event: {
-                on: {
-                  type: "select",
-                  label: "Respond to",
-                  help: "Which event.",
-                  required: true,
-                  options: [{ value: "push", label: "Push" }],
-                },
-              },
-            },
-            args: {
-              repository: {
-                type: "repo-picker",
-                label: "Repository",
-                help: "Which repository.",
-                provider: "github",
-                required: true,
-              },
-            },
-          },
-        }),
-      },
     ],
     [
       // An event trigger's source is read off the repository field's provider.

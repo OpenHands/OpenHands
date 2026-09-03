@@ -257,6 +257,8 @@ describe("SetupDialog", () => {
       entry,
       expect.anything(),
       null,
+      "cron",
+      null,
     );
   });
 
