@@ -5,7 +5,10 @@ import { I18nKey } from "#/i18n/declaration";
 import type { Automation } from "#/types/automation";
 import { getAutomationRunDisplay } from "#/utils/automation-run-display";
 import { KebabMenu } from "./kebab-menu";
-import { useHasPermission } from "#/hooks/use-has-permission";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import { useNavigation } from "#/context/navigation-context";
 import PlayIcon from "#/icons/play.svg?react";
 import { SkillCardPillRow } from "#/components/features/skills/skill-card-pill-row";
@@ -63,7 +66,10 @@ export function AutomationCard({
 }: AutomationCardProps) {
   const { navigate } = useNavigation();
   const { t, i18n } = useTranslation("openhands");
-  const canManage = useHasPermission("manage_automations");
+  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const isOwner = useIsAutomationOwner(automation);
+  // Write actions on a specific automation: manage OR creator (escape hatch).
+  const canManage = hasManagePermission || isOwner;
 
   const scheduleLabel =
     automation.trigger.schedule_human || automation.trigger.type;
