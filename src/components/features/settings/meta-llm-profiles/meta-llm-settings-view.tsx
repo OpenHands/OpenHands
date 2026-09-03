@@ -8,13 +8,12 @@ import { useMetaProfiles } from "#/hooks/query/use-meta-profiles";
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useProviderConnections } from "#/hooks/query/use-provider-connections";
 import { useSaveMetaProfile } from "#/hooks/mutation/use-save-meta-profile";
+import { useSaveLlmProfile } from "#/hooks/mutation/use-save-llm-profile";
 import { useActivateMetaProfile } from "#/hooks/mutation/use-activate-meta-profile";
 import MetaProfilesService, {
   type MetaProfile,
 } from "#/api/meta-profiles-service/meta-profiles-service.api";
-import ProfilesService, {
-  type SaveProfileRequest,
-} from "#/api/profiles-service/profiles-service.api";
+import type { SaveProfileRequest } from "#/api/profiles-service/profiles-service.api";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
 import {
   displayErrorToast,
@@ -57,6 +56,7 @@ export function MetaLlmSettingsView() {
   const { data: llmProfilesData } = useLlmProfiles();
   const { data: providerConnections } = useProviderConnections();
   const saveMetaProfile = useSaveMetaProfile();
+  const saveLlmProfile = useSaveLlmProfile();
   const activateMetaProfile = useActivateMetaProfile();
 
   const [view, setView] = useState<ViewMode>("list");
@@ -171,18 +171,19 @@ export function MetaLlmSettingsView() {
     );
     if (missingNames.length === 0) return;
 
-    await Promise.all(
-      missingNames.map((modelName) =>
-        ProfilesService.saveProfile(modelName, {
+    for (const modelName of missingNames) {
+      await saveLlmProfile.mutateAsync({
+        name: modelName,
+        request: {
           llm: {
             model: buildRouterModel(connection.provider, modelName),
             usage_id: modelName,
             provider_connection_id: connection.id,
           } as SaveProfileRequest["llm"],
           include_secrets: true,
-        }),
-      ),
-    );
+        },
+      });
+    }
   };
 
   const handleProviderConnectionCreated = (connection: ProviderConnection) => {
