@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CanvasExtensionHost } from "#/types/canvas-extension";
 
 const FIXTURE_PATH = resolve(
-  "tests/fixtures/canvas-extensions/svg-edit/extension.js",
+  "src/fixtures/canvas-extensions/svg-edit/extension.js",
 );
 
 describe("SVG-edit Canvas Extension fixture", () => {
@@ -20,27 +20,24 @@ describe("SVG-edit Canvas Extension fixture", () => {
     };
     const container = document.createElement("div");
     document.body.append(container);
-    let mountPage: Parameters<CanvasExtensionHost["registerPage"]>[1] | null =
-      null;
     const unregister = vi.fn();
+    const registerPage = vi.fn<CanvasExtensionHost["registerPage"]>(
+      () => unregister,
+    );
     const host = {
       apiVersion: "1",
       extension: { name: "svg-edit", version: "0.1.0", resolvedRef: null },
       backend: { id: "local", kind: "local", orgId: null },
-      registerPage: vi.fn((_id, mount) => {
-        mountPage = mount;
-        return unregister;
-      }),
+      registerPage,
       navigate: vi.fn(),
       agentServer: { request: vi.fn() },
     } satisfies CanvasExtensionHost;
 
     const disposeActivation = extensionModule.activate(host);
-    expect(host.registerPage).toHaveBeenCalledWith(
-      "editor",
-      expect.any(Function),
-    );
+    expect(registerPage).toHaveBeenCalledWith("editor", expect.any(Function));
 
+    const mountPage = registerPage.mock.calls[0]?.[1];
+    expect(mountPage).toBeDefined();
     const disposePage = await mountPage?.({
       container,
       path: "",

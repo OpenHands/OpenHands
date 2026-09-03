@@ -79,6 +79,18 @@ describe("CloudSettingsLink", () => {
     );
   });
 
+  it("appends the active org so cloud settings open on the same organization", () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-123" });
+
+    renderWithProviders();
+
+    expect(screen.getByTestId("settings-cloud-link")).toHaveAttribute(
+      "href",
+      "https://app.all-hands.dev/settings?org=org-123",
+    );
+  });
+
   it("renders nothing when a local backend is active", () => {
     setRegisteredBackends([localBackend]);
     setActiveSelection({ backendId: localBackend.id });
