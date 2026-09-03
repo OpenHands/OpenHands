@@ -44,11 +44,16 @@ export function shouldShowRunPhaseAge(
 interface RunPhaseFields {
   /** `AutomationRun.status` — decides whether the age is meaningful. */
   status: AutomationRunStatus | null | undefined;
-  /** `AutomationRun.phase_code` — `null`/absent means no phase reported. */
+  /**
+   * `AutomationRun.current_phase` — shipped 1.9.0+ user-facing string.
+   * Takes precedence over the structured code/label pair.
+   */
+  currentPhase?: string | null;
+  /** `AutomationRun.phase_code` — `null`/absent means no structured phase. */
   code: string | null | undefined;
   /** `AutomationRun.phase_label` — free-form author text, not interface copy. */
   label: string | null | undefined;
-  /** `AutomationRun.phase_updated_at` — when this phase was last written. */
+  /** `AutomationRun.phase_updated_at` — when the structured phase was last written. */
   updatedAt?: string | null;
 }
 
@@ -77,22 +82,30 @@ const KNOWN_PHASE_CODES: Record<string, I18nKey> = {
  * unrecognized rather than as an absent phase: the service accepts a phase
  * carrying only a label, and dropping those would hide a real phase.
  *
- * `code` and `label` are independently optional in the service's contract, so
+ * `current_phase` (automation ≥1.9.0) is already user-facing copy, so it
+ * wins and is never passed through `t()`. The structured `code`/`label`
+ * pair is the fallback for mock fixtures and any payload that still
+ * carries the original frontend contract.
+ *
+ * `code` and `label` are independently optional in that older contract, so
  * the last resort is the raw code — a code-only phase is a real phase and
  * must reach the screen. It is shown as stored rather than prettified: the
  * code is data like the label, and turning `poll_prs` into "Poll prs" would
  * invent English-shaped copy no automation author wrote.
  *
- * Both fields are author-supplied, which is why the lookup is an own-property
- * check and both are trimmed. A code of `toString` would otherwise resolve to
- * `Object.prototype.toString` and be handed to `t()`, and the service stores
- * a whitespace-only field as sent — it rejects only a phase blank on *both*.
+ * Both structured fields are author-supplied, which is why the lookup is an
+ * own-property check and both are trimmed. A code of `toString` would
+ * otherwise resolve to `Object.prototype.toString` and be handed to `t()`,
+ * and a whitespace-only field is stored as sent.
  */
 export function resolveRunPhaseText(
   t: (key: I18nKey) => string,
   code: string | null | undefined,
   label: string | null | undefined,
+  currentPhase?: string | null,
 ): string | null {
+  const shipped = currentPhase?.trim();
+  if (shipped) return shipped;
   const knownKey =
     code && Object.hasOwn(KNOWN_PHASE_CODES, code)
       ? KNOWN_PHASE_CODES[code]
@@ -128,13 +141,14 @@ export function formatRunPhaseAge(
  */
 export function useRunPhase({
   status,
+  currentPhase,
   code,
   label,
   updatedAt,
 }: RunPhaseFields): { text: string; age: string | null } | null {
   const { t, i18n } = useTranslation("openhands");
 
-  const text = resolveRunPhaseText(t, code, label);
+  const text = resolveRunPhaseText(t, code, label, currentPhase);
   if (!text) return null;
 
   const age = shouldShowRunPhaseAge(status)
@@ -162,12 +176,13 @@ export function useRunPhase({
  */
 export function RunPhase({
   status,
+  currentPhase,
   code,
   label,
   updatedAt,
   wide = false,
 }: RunPhaseProps) {
-  const phase = useRunPhase({ status, code, label, updatedAt });
+  const phase = useRunPhase({ status, currentPhase, code, label, updatedAt });
   if (!phase) return null;
 
   const { text, age } = phase;

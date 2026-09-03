@@ -61,6 +61,24 @@ describe("RunPhase — known code, non-English language", () => {
   });
 });
 
+describe("RunPhase — shipped current_phase (automation ≥1.9.0)", () => {
+  it("shows the user-facing string as-is, with no age when no timestamp was sent", () => {
+    render(
+      <RunPhase
+        status={RUNNING}
+        currentPhase="Examining the diff"
+        code={null}
+        label={null}
+      />,
+    );
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Examining the diff",
+    );
+    expect(screen.queryByTestId("run-phase-age")).not.toBeInTheDocument();
+  });
+});
+
 describe("RunPhase — unknown code (custom automations)", () => {
   it("shows the label as-is, including emoji and non-Latin text, for an unknown code", () => {
     render(
@@ -193,6 +211,26 @@ describe("resolveRunPhaseText — one answer for the row and its tooltip", () =>
   it("resolves to null when there is nothing to show", () => {
     expect(resolveRunPhaseText(t, "", "")).toBeNull();
     expect(resolveRunPhaseText(t, null, null)).toBeNull();
+    expect(resolveRunPhaseText(t, null, null, null)).toBeNull();
+    expect(resolveRunPhaseText(t, null, null, "   ")).toBeNull();
+  });
+
+  it("resolves the shipped current_phase as-is, without translating it", () => {
+    expect(resolveRunPhaseText(t, null, null, "Preparing environment")).toBe(
+      "Preparing environment",
+    );
+  });
+
+  it("prefers current_phase over a structured code the frontend could translate", () => {
+    expect(
+      resolveRunPhaseText(t, "queued", "ignored", "Examining the diff"),
+    ).toBe("Examining the diff");
+  });
+
+  it("falls through a whitespace-only current_phase to the structured pair", () => {
+    expect(resolveRunPhaseText(t, "checking_out", null, "   ")).toBe(
+      "checking_out",
+    );
   });
 });
 

@@ -118,7 +118,14 @@ export function mapAutomationRunToExportRow(
     // whitespace-only field as sent — it rejects only a phase blank on
     // *both* — so `??` would let a blank code suppress a real label, which
     // is exactly the empty cell this fallback exists to prevent.
-    phase: run.phase_code?.trim() || run.phase_label?.trim() || null,
+    //
+    // `current_phase` (automation ≥1.9.0) is already the dashboard string
+    // and wins when present. The structured pair is the fallback.
+    phase:
+      run.current_phase?.trim() ||
+      run.phase_code?.trim() ||
+      run.phase_label?.trim() ||
+      null,
   };
 }
 

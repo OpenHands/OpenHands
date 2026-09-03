@@ -63,6 +63,7 @@ function PhaseRow({ run }: { run: AutomationRun | null }) {
   const { t } = useTranslation("openhands");
   const phase = useRunPhase({
     status: run?.status,
+    currentPhase: run?.current_phase,
     code: run?.phase_code,
     label: run?.phase_label,
     updatedAt: run?.phase_updated_at,

@@ -125,6 +125,18 @@ describe("automation-activity-log-export", () => {
     expect(row.phase).toBe("sandbox_provisioning");
   });
 
+  it("carries the shipped current_phase into the export row, ahead of the structured pair", () => {
+    const run = sampleRun({
+      current_phase: "Examining the diff",
+      phase_code: "sandbox_provisioning",
+      phase_label: "ignored",
+    });
+
+    const row = mapAutomationRunToExportRow(run, automation);
+
+    expect(row.phase).toBe("Examining the diff");
+  });
+
   it.each([
     ["null", null],
     ["undefined", undefined],

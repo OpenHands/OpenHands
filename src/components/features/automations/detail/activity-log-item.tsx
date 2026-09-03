@@ -136,6 +136,7 @@ export function ActivityLogItem({ run, automation }: ActivityLogItemProps) {
         {showPhase && (
           <RunPhase
             status={run.status}
+            currentPhase={run.current_phase}
             code={run.phase_code}
             label={run.phase_label}
             updatedAt={run.phase_updated_at}

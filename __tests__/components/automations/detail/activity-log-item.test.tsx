@@ -373,6 +373,21 @@ describe("ActivityLogItem — run phase", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the shipped current_phase on a FAILED run", () => {
+    const run = makeRun({
+      status: AutomationRunStatus.FAILED,
+      conversation_id: null,
+      bash_command_id: null,
+      current_phase: "Installing dependencies",
+    });
+
+    renderItem(run);
+
+    expect(screen.getByTestId("run-phase")).toHaveTextContent(
+      "Installing dependencies",
+    );
+  });
+
   it("does not display the phase for a COMPLETED run, even though it was saved", () => {
     // Arrange: the run completed, but a phase was recorded along the way.
     const run = makeRun({
