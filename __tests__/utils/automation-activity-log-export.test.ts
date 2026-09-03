@@ -114,23 +114,8 @@ describe("automation-activity-log-export", () => {
     expect(csv.split("\n")[1]).toContain("0.4213");
   });
 
-  it("carries the run's raw phase_code into the export row's phase field", () => {
-    // Arrange
-    const run = sampleRun({ phase_code: "sandbox_provisioning" });
-
-    // Act
-    const row = mapAutomationRunToExportRow(run, automation);
-
-    // Assert
-    expect(row.phase).toBe("sandbox_provisioning");
-  });
-
-  it("carries the shipped current_phase into the export row, ahead of the structured pair", () => {
-    const run = sampleRun({
-      current_phase: "Examining the diff",
-      phase_code: "sandbox_provisioning",
-      phase_label: "ignored",
-    });
+  it("carries current_phase into the export row's phase field", () => {
+    const run = sampleRun({ current_phase: "Examining the diff" });
 
     const row = mapAutomationRunToExportRow(run, automation);
 
@@ -141,49 +126,22 @@ describe("automation-activity-log-export", () => {
     ["null", null],
     ["undefined", undefined],
   ])(
-    "normalizes a %s phase_code to a null phase field",
-    (_label, phase_code) => {
-      // Arrange
-      const run = sampleRun({ phase_code });
+    "normalizes a %s current_phase to a null phase field",
+    (_label, current_phase) => {
+      const run = sampleRun({ current_phase });
 
-      // Act
       const row = mapAutomationRunToExportRow(run, automation);
 
-      // Assert
       expect(row.phase).toBeNull();
     },
   );
 
-  it.each([
-    ["an empty", ""],
-    ["a whitespace-only", "   "],
-  ])(
-    "falls back to the label when phase_code is %s string",
-    (_label, phase_code) => {
-      // The service stores a whitespace-only field as sent — it rejects only
-      // a phase blank on *both* — so a blank code arrives alongside a real
-      // label. Nullish-coalescing exports the blank and loses the label,
-      // which is the empty cell the fallback exists to prevent.
-      const run = sampleRun({
-        phase_code,
-        phase_label: "Running QA checks on PR #4821",
-      });
-
-      const row = mapAutomationRunToExportRow(run, automation);
-
-      expect(row.phase).toBe("Running QA checks on PR #4821");
-    },
-  );
-
   it("trims a padded phase before exporting it", () => {
-    // Arrange
-    const run = sampleRun({ phase_code: "  queued  ", phase_label: null });
+    const run = sampleRun({ current_phase: "  Queued  " });
 
-    // Act
     const row = mapAutomationRunToExportRow(run, automation);
 
-    // Assert
-    expect(row.phase).toBe("queued");
+    expect(row.phase).toBe("Queued");
   });
 
   it.each([
@@ -199,13 +157,12 @@ describe("automation-activity-log-export", () => {
       // indistinguishable from one that never reported a phase at all.
       const run = sampleRun({
         status,
-        phase_code: "running_agent",
-        phase_label: null,
+        current_phase: "Agent is working on the task",
       });
 
       const row = mapAutomationRunToExportRow(run, automation);
 
-      expect(row.phase).toBe("running_agent");
+      expect(row.phase).toBe("Agent is working on the task");
     },
   );
 
@@ -224,7 +181,7 @@ describe("automation-activity-log-export", () => {
       sampleRow({
         run_id: "r-with-phase",
         trigger: { type: "cron" },
-        phase: "running_agent",
+        phase: "Agent is working on the task",
       }),
       sampleRow({
         run_id: "r-without-phase",
@@ -242,7 +199,9 @@ describe("automation-activity-log-export", () => {
     // Assert
     const withPhaseCells = lines[1].split(",");
     const withoutPhaseCells = lines[2].split(",");
-    expect(withPhaseCells[phaseColumnIndex]).toBe("running_agent");
+    expect(withPhaseCells[phaseColumnIndex]).toBe(
+      "Agent is working on the task",
+    );
     expect(withoutPhaseCells[phaseColumnIndex]).toBe("");
     expect(withoutPhaseCells[phaseColumnIndex]).not.toBe("null");
   });
@@ -356,19 +315,11 @@ describe("automation-activity-log-export", () => {
     expect(blob.type).toBe("text/csv;charset=utf-8");
   });
 
-  it("falls back to the label when a phase carries no code, so an empty cell means no phase", () => {
-    // Arrange — the service accepts a phase with only a label, and the UI
-    // shows it. Exporting the code alone would make such a run look identical
-    // to one that never reported a phase.
-    const run = sampleRun({
-      phase_code: null,
-      phase_label: "Reticulating splines",
-    });
+  it("exports whitespace-only current_phase as an empty cell, same as no phase", () => {
+    const run = sampleRun({ current_phase: "   " });
 
-    // Act
     const row = mapAutomationRunToExportRow(run, automation);
 
-    // Assert
-    expect(row.phase).toBe("Reticulating splines");
+    expect(row.phase).toBeNull();
   });
 });

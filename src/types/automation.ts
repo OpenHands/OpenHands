@@ -140,24 +140,6 @@ export interface AutomationRun {
    * service older than phase reporting.
    */
   current_phase?: string | null;
-  /**
-   * Structured phase code from the original frontend contract. Used only
-   * when `current_phase` is absent, so mock fixtures and any leftover
-   * payload keep rendering.
-   */
-  phase_code?: string | null;
-  /**
-   * Author-supplied description of the structured phase (at most 200
-   * characters). Data, not translatable interface copy. Ignored when
-   * `current_phase` is present.
-   */
-  phase_label?: string | null;
-  /**
-   * UTC datetime the structured phase was last written. The 1.9.0+ service
-   * does not send this; an age is shown only when the field is present and
-   * parseable.
-   */
-  phase_updated_at?: string | null;
   started_at: string;
   completed_at: string | null;
 }
@@ -196,9 +178,7 @@ export interface AutomationRunExportRow {
    */
   cost: number | null;
   /**
-   * The run's phase as stored: `current_phase` from automation ≥1.9.0,
-   * otherwise the structured `phase_code` / `phase_label` pair. Null only
-   * when the run has no phase.
+   * The run's `current_phase` as stored. Null only when the run has no phase.
    */
   phase: string | null;
 }

@@ -5,8 +5,8 @@ import type { LatestAutomationRunState } from "#/hooks/query/use-latest-automati
 import { I18nKey } from "#/i18n/declaration";
 import ClockIcon from "#/icons/clock.svg?react";
 import {
+  resolveRunPhaseText,
   shouldShowRunPhase,
-  useRunPhase,
 } from "#/components/features/automations/detail/run-phase";
 import type { Automation, AutomationRun } from "#/types/automation";
 import {
@@ -52,33 +52,19 @@ function PreviewRow({
 }
 
 /**
- * The run's phase and how long it has held it. The row that opens this
- * hovercard has to clip a long phase; here there is room to wrap, so this is
- * where the whole thing is readable — and the age is what says whether the
- * run is moving through phases or sitting in one. Only the layout differs
- * from the row's: what the phase says, and whether its age is meaningful,
- * comes from the same hook the row uses.
+ * The run's phase. The row that opens this hovercard has to clip a long
+ * phase; here there is room to wrap, so this is where the whole thing is
+ * readable. What the phase says comes from the same helper the row uses.
  */
 function PhaseRow({ run }: { run: AutomationRun | null }) {
   const { t } = useTranslation("openhands");
-  const phase = useRunPhase({
-    status: run?.status,
-    currentPhase: run?.current_phase,
-    code: run?.phase_code,
-    label: run?.phase_label,
-    updatedAt: run?.phase_updated_at,
-  });
+  const text = resolveRunPhaseText(run?.current_phase);
 
-  if (!run || !shouldShowRunPhase(run.status) || !phase) return null;
-
-  const { text, age } = phase;
+  if (!run || !shouldShowRunPhase(run.status) || !text) return null;
 
   return (
     <PreviewRow label={t(I18nKey.AUTOMATIONS$DETAIL$PHASE)}>
-      <span data-testid="run-phase-row">
-        {text}
-        {age ? <span className="text-muted"> · {age}</span> : null}
-      </span>
+      <span data-testid="run-phase-row">{text}</span>
     </PreviewRow>
   );
 }
