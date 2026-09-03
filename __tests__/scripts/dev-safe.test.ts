@@ -478,6 +478,8 @@ describe("buildAgentServerCommand", () => {
       "--with",
       "agent-client-protocol<0.11",
       "--with",
+      "fastmcp>=3.2.0,<4",
+      "--with",
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
@@ -503,6 +505,8 @@ describe("buildAgentServerCommand", () => {
       "openhands-workspace==1.18.0",
       "--with",
       "agent-client-protocol<0.11",
+      "--with",
+      "fastmcp>=3.2.0,<4",
       "--with",
       "posthog>=6,<7",
       "agent-server",
@@ -632,6 +636,41 @@ describe("buildAgentServerCommand", () => {
         "--import-modules",
         "canvas_ui_tool",
       ]);
+    }
+  });
+
+  // Regression: openhands-sdk declares `fastmcp>=3.0.0` with no ceiling, so a
+  // fresh uvx resolve picks up whatever fastmcp is newest. Both ends of that
+  // open range break MCP OAuth servers (Atlassian Rovo, GitLab): below 3.2.0
+  // the persisted token expiry is never loaded, so an expired access token
+  // reads as valid and is sent instead of being refreshed; from 4.0.0 the
+  // callback_handler() return type changed and re-authorization dies with
+  // "'tuple' object has no attribute 'state'".
+  it("bounds fastmcp away from the versions that break MCP OAuth", () => {
+    const { args } = buildAgentServerCommand({});
+    const constraint = args.find((arg) => arg.startsWith("fastmcp"));
+
+    expect(constraint).toBeDefined();
+    const lowerBound = constraint!.match(/>=([\d.]+)/)?.[1];
+    expect(lowerBound).toBeDefined();
+
+    // Floor at or above 3.2.0, the release that loads the stored token expiry.
+    const [major, minor] = lowerBound!.split(".").map(Number);
+    expect(major).toBe(3);
+    expect(minor).toBeGreaterThanOrEqual(2);
+    // Ceiling below the callback_handler() contract change.
+    expect(constraint).toContain("<4");
+  });
+
+  it("omits transitive-dep pins for local checkouts and git refs", () => {
+    // These modes exist to test SDK changes — including a fix that would drop
+    // one of these pins — so forcing the pin there would mask the fix.
+    for (const env of [
+      { OH_AGENT_SERVER_GIT_REF: "feature-branch" },
+      { OH_AGENT_SERVER_LOCAL_PATH: "/abs/path/to/software-agent-sdk" },
+    ]) {
+      const { args } = buildAgentServerCommand(env);
+      expect(args.some((arg) => arg.startsWith("fastmcp"))).toBe(false);
     }
   });
 

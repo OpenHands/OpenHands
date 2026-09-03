@@ -10,7 +10,9 @@
   },
   "constraints": {
     "_comment": "Temporary upper bound on the agent-client-protocol (acp) transitive dependency. openhands-sdk 1.35.0 requires agent-client-protocol>=0.10.1 with no upper bound, but acp 0.11.0 reordered the ACP prompt() arguments and breaks the SDK's ACP client (a PromptRequest validation error surfaces as 'ACP error: 2 validation errors for PromptRequest'). Pin acp <0.11 until a fixed openhands-sdk ships. Consumed by scripts/dev-safe.mjs (agent-server uvx install) and .github/workflows/mock-llm-e2e.yml (mock ACP server venv).",
-    "agentClientProtocol": "agent-client-protocol<0.11"
+    "agentClientProtocol": "agent-client-protocol<0.11",
+    "_fastmcpComment": "Bounds on the fastmcp transitive dependency, which owns MCP OAuth token refresh and the authorization callback. openhands-sdk declares 'fastmcp>=3.0.0' with no ceiling, so a fresh uvx install resolves fastmcp 4.x / mcp 2.x. Both ends of the unbounded range break OAuth MCP servers (Atlassian Rovo, GitLab): fastmcp <3.2.0 never loads the persisted token expiry, so is_token_valid() returns True for an expired access token, the refresh grant is skipped and the stale token is sent; fastmcp >=4 switched callback_handler() to return an AuthorizationCodeResult, so the agent-server's callback fork raises \"'tuple' object has no attribute 'state'\" and re-authorization fails. Hold fastmcp in the range that does both correctly until an SDK ships with its own ceiling. Docker is unaffected (the SDK image builds from uv.lock). Consumed by scripts/dev-safe.mjs (agent-server uvx install). See OpenHands/OpenHands#17077 and OpenHands/software-agent-sdk#4818.",
+    "fastmcp": "fastmcp>=3.2.0,<4"
   },
   "images": {
     "agentServer": "ghcr.io/openhands/agent-server",

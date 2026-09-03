@@ -58,6 +58,12 @@ const DEFAULT_AGENT_SERVER_VERSION = SHARED_DEFAULTS.versions.agentServer;
 // the SDK's ACP client. Hold acp <0.11 until a fixed SDK ships. See config/defaults.json.
 const AGENT_CLIENT_PROTOCOL_CONSTRAINT =
   SHARED_DEFAULTS.constraints?.agentClientProtocol;
+// Transitive-dep pin: openhands-sdk declares `fastmcp>=3.0.0` with no ceiling,
+// so a fresh uvx resolve picks fastmcp 4.x, whose callback_handler() contract
+// change breaks MCP OAuth re-authorization. Versions below 3.2.0 are equally
+// broken — they never load the persisted token expiry, so expired access
+// tokens are never refreshed. See config/defaults.json.
+const FASTMCP_CONSTRAINT = SHARED_DEFAULTS.constraints?.fastmcp;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_API_KEY =
   SHARED_DEFAULTS.telemetry.posthogApiKey;
 const DEFAULT_AGENT_SERVER_TELEMETRY_POSTHOG_HOST =
@@ -412,6 +418,25 @@ export function validateFrontendDependencies(
 export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
 
 /**
+ * Append the `--with` pins that bound unbounded SDK transitive deps.
+ *
+ * Only the released-PyPI branches use these. A local checkout or git ref is
+ * how an SDK fix for one of these pins gets tested, so forcing the pin there
+ * would mask the fix.
+ *
+ * @param {string[]} uvxArgs - uvx argument list, mutated in place.
+ */
+function pushTransitiveDepConstraints(uvxArgs) {
+  for (const constraint of [
+    AGENT_CLIENT_PROTOCOL_CONSTRAINT,
+    FASTMCP_CONSTRAINT,
+    AGENT_SERVER_POSTHOG_CONSTRAINT,
+  ]) {
+    if (constraint) uvxArgs.push("--with", constraint);
+  }
+}
+
+/**
  * Build the uvx command and arguments for running agent-server.
  *
  * Environment variables (highest precedence first):
@@ -499,10 +524,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${version}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    pushTransitiveDepConstraints(uvxArgs);
     uvxArgs.push("agent-server");
     source = `PyPI (${version})`;
   } else {
@@ -518,10 +540,7 @@ export function buildAgentServerCommand(env = process.env) {
       "--with",
       `openhands-workspace==${DEFAULT_AGENT_SERVER_VERSION}`,
     );
-    if (AGENT_CLIENT_PROTOCOL_CONSTRAINT) {
-      uvxArgs.push("--with", AGENT_CLIENT_PROTOCOL_CONSTRAINT);
-    }
-    uvxArgs.push("--with", AGENT_SERVER_POSTHOG_CONSTRAINT);
+    pushTransitiveDepConstraints(uvxArgs);
     uvxArgs.push("agent-server");
     source = `PyPI (${DEFAULT_AGENT_SERVER_VERSION}, default)`;
   }
