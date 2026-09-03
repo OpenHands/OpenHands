@@ -28,7 +28,6 @@ import { callCloudProxy } from "../cloud/proxy";
 import ProfilesService from "../profiles-service/profiles-service.api";
 import {
   batchGetCloudConversations,
-  condenseCloudConversation,
   createCloudAppConversation,
   deleteCloudConversation,
   downloadCloudConversation,
@@ -873,11 +872,6 @@ class AgentServerConversationService {
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<void> {
-    if (getActiveBackend().backend.kind === "cloud") {
-      await condenseCloudConversation(conversationId);
-      return;
-    }
-
     await new ConversationClient(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).condenseConversation(conversationId);

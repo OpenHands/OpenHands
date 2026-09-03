@@ -5,11 +5,11 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
-import { callCloudProxy } from "#/api/cloud/proxy";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
 
-const { mockCondenseConversation } = vi.hoisted(() => ({
+const { mockCondenseConversation, mockConversationClient } = vi.hoisted(() => ({
   mockCondenseConversation: vi.fn(),
+  mockConversationClient: vi.fn(),
 }));
 
 vi.mock("@openhands/typescript-client/clients", async () => {
@@ -18,15 +18,13 @@ vi.mock("@openhands/typescript-client/clients", async () => {
   >("@openhands/typescript-client/clients");
   return {
     ...actual,
-    ConversationClient: vi.fn(function ConversationClientMock() {
+    ConversationClient: mockConversationClient.mockImplementation(
+      function ConversationClientMock() {
       return { condenseConversation: mockCondenseConversation };
-    }),
+      },
+    ),
   };
 });
-
-vi.mock("#/api/cloud/proxy", () => ({
-  callCloudProxy: vi.fn(),
-}));
 
 const cloudBackend: Backend = {
   id: "prod",
@@ -50,7 +48,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCondenseConversation.mockReset().mockResolvedValue(undefined);
-    vi.mocked(callCloudProxy).mockReset().mockResolvedValue(undefined);
+    mockConversationClient.mockClear();
     window.localStorage.clear();
     __resetActiveStoreForTests();
   });
@@ -60,7 +58,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
     __resetActiveStoreForTests();
   });
 
-  it("routes cloud conversations through the same-origin cloud condense endpoint", async () => {
+  it("routes cloud conversations through the runtime condense endpoint", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -70,33 +68,27 @@ describe("AgentServerConversationService.condenseConversation", () => {
       "sess-key",
     );
 
-    expect(callCloudProxy).toHaveBeenCalledWith(
+    expect(mockConversationClient).toHaveBeenCalledWith(
       expect.objectContaining({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/v1/app-conversations/conv-1/condense",
+        host: "http://localhost:54928",
+        apiKey: "sess-key",
       }),
     );
-    expect(mockCondenseConversation).not.toHaveBeenCalled();
+    expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
   });
 
-  it("does not require a runtime URL for cloud conversations", async () => {
+  it("requires a runtime URL for cloud conversations", async () => {
     setRegisteredBackends([cloudBackend, localBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
-    await AgentServerConversationService.condenseConversation(
-      "conv-1",
-      null,
-      "sess-key",
-    );
+    await expect(
+      AgentServerConversationService.condenseConversation(
+        "conv-1",
+        null,
+        "sess-key",
+      ),
+    ).rejects.toThrow("No backend is configured");
 
-    expect(callCloudProxy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        backend: cloudBackend,
-        method: "POST",
-        path: "/api/v1/app-conversations/conv-1/condense",
-      }),
-    );
     expect(mockCondenseConversation).not.toHaveBeenCalled();
   });
 
@@ -108,6 +100,5 @@ describe("AgentServerConversationService.condenseConversation", () => {
     );
 
     expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
-    expect(callCloudProxy).not.toHaveBeenCalled();
   });
 });
