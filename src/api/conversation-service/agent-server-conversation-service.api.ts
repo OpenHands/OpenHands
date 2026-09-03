@@ -865,13 +865,32 @@ class AgentServerConversationService {
 
   /**
    * Force condensation ("compact") of the conversation history via
-   * the backend that owns the conversation.
+   * `POST /api/conversations/{id}/condense`.
+   *
+   * In cloud mode the browser cannot call per-conversation runtime hosts
+   * directly, so tunnel the request through the same-origin cloud proxy with
+   * the conversation's runtime URL and session API key. Local/runtime-backed
+   * conversations can call the agent-server client directly.
    */
   static async condenseConversation(
     conversationId: string,
     conversationUrl: string | null | undefined,
     sessionApiKey?: string | null,
   ): Promise<void> {
+    const active = getActiveBackend().backend;
+
+    if (active.kind === "cloud" && conversationUrl) {
+      await callCloudProxy({
+        backend: active,
+        method: "POST",
+        hostOverride: buildHttpBaseUrl(conversationUrl),
+        path: `/api/conversations/${conversationId}/condense`,
+        authMode: "session-api-key",
+        sessionApiKey,
+      });
+      return;
+    }
+
     await new ConversationClient(
       getAgentServerClientOptions({ conversationUrl, sessionApiKey }),
     ).condenseConversation(conversationId);
