@@ -8,7 +8,6 @@ import DownloadIcon from "#/icons/download.svg?react";
 import TrashIcon from "#/icons/trash.svg?react";
 import EditIcon from "#/icons/u-edit.svg?react";
 import PlayIcon from "#/icons/play.svg?react";
-import { useHasPermission } from "#/hooks/use-has-permission";
 import { ActiveStatusBadge } from "./active-status-badge";
 
 interface DetailHeaderProps {
@@ -24,6 +23,8 @@ interface DetailHeaderProps {
   onDownloadTarball: () => void;
   onRunNow?: () => void;
   isRunningNow?: boolean;
+  /** Whether the caller may mutate this automation (manage perm or owner). */
+  canManage?: boolean;
 }
 
 export function DetailHeader({
@@ -35,27 +36,12 @@ export function DetailHeader({
   onDownloadTarball,
   onRunNow,
   isRunningNow = false,
+  canManage = true,
 }: DetailHeaderProps) {
   const { t } = useTranslation("openhands");
-  const canManage = useHasPermission("manage_automations");
 
   const kebabItems = [
-    ...(onEdit
-      ? [
-          {
-            label: t(I18nKey.AUTOMATIONS$EDIT),
-            icon: <EditIcon className="size-4" />,
-            onClick: onEdit,
-          },
-        ]
-      : []),
-    {
-      label: automation.enabled
-        ? t(I18nKey.AUTOMATIONS$TURN_OFF)
-        : t(I18nKey.AUTOMATIONS$TURN_ON),
-      icon: <PowerIcon className="size-4" />,
-      onClick: onToggle,
-    },
+    // Read-only items are always available to anyone who can view.
     {
       label: t(I18nKey.AUTOMATIONS$EXPORT),
       icon: <DownloadIcon className="size-4" />,
@@ -66,11 +52,32 @@ export function DetailHeader({
       icon: <DownloadIcon className="size-4" />,
       onClick: onDownloadTarball,
     },
-    {
-      label: t(I18nKey.AUTOMATIONS$DELETE),
-      icon: <TrashIcon className="size-4" />,
-      onClick: onDelete,
-    },
+    // Write items — only when the user may mutate this automation.
+    ...(canManage && onEdit
+      ? [
+          {
+            label: t(I18nKey.AUTOMATIONS$EDIT),
+            icon: <EditIcon className="size-4" />,
+            onClick: onEdit,
+          },
+        ]
+      : []),
+    ...(canManage
+      ? [
+          {
+            label: automation.enabled
+              ? t(I18nKey.AUTOMATIONS$TURN_OFF)
+              : t(I18nKey.AUTOMATIONS$TURN_ON),
+            icon: <PowerIcon className="size-4" />,
+            onClick: onToggle,
+          },
+          {
+            label: t(I18nKey.AUTOMATIONS$DELETE),
+            icon: <TrashIcon className="size-4" />,
+            onClick: onDelete,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -107,7 +114,7 @@ export function DetailHeader({
               onToggle={onToggle}
             />
           )}
-          {canManage && <KebabMenu items={kebabItems} />}
+          <KebabMenu items={kebabItems} />
         </div>
       </div>
     </div>
