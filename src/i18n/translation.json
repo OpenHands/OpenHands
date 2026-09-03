@@ -11797,6 +11797,23 @@
     "uk": "Ключі API дозволяють вам програмно автентифікуватися за допомогою API OpenHands. Зберігайте свої ключі API в безпеці; будь-хто, хто має ваш ключ API, може отримати доступ до вашого облікового запису. Для отримання додаткової інформації про використання API, перегляньте нашу <a>документацію API</a>.",
     "ca": "Les claus d'API us permeten autenticar-vos amb l'API d'OpenHands de manera programàtica. Manteniu les vostres claus d'API segures; qualsevol persona amb la vostra clau d'API pot accedir al vostre compte. Per obtenir més informació sobre com fer servir l'API, consulteu la nostra <a>documentació de l'API</a>."
   },
+  "SETTINGS$OPENHANDS_FREE_MODELS_NOTE": {
+    "en": "Free OpenHands models: {{ids}}. Other provider endpoints with similar model names may require separate billing.",
+    "ja": "無料の OpenHands モデル: {{ids}}。同じようなモデル名を持つ他のプロバイダーのエンドポイントでは、別途料金が発生する場合があります。",
+    "zh-CN": "免费的 OpenHands 模型：{{ids}}。其他提供商中名称相似的模型端点可能需要单独付费。",
+    "zh-TW": "免費的 OpenHands 模型：{{ids}}。其他供應商中名稱相似的模型端點可能需要另外付費。",
+    "ko-KR": "무료 OpenHands 모델: {{ids}}. 이름이 비슷한 다른 제공업체의 모델 엔드포인트에는 별도 요금이 부과될 수 있습니다.",
+    "no": "Gratis OpenHands-modeller: {{ids}}. Endepunkter hos andre leverandører med lignende modellnavn kan kreve separat betaling.",
+    "it": "Modelli OpenHands gratuiti: {{ids}}. Gli endpoint di altri provider con nomi di modello simili potrebbero richiedere una fatturazione separata.",
+    "pt": "Modelos OpenHands gratuitos: {{ids}}. Endpoints de outros provedores com nomes de modelo semelhantes podem exigir cobrança separada.",
+    "es": "Modelos gratuitos de OpenHands: {{ids}}. Los endpoints de otros proveedores con nombres de modelo similares pueden requerir una facturación separada.",
+    "ar": "نماذج OpenHands المجانية: {{ids}}. قد تتطلب نقاط نهاية موفّري الخدمة الآخرين ذات أسماء النماذج المشابهة فوترة منفصلة.",
+    "fr": "Modèles OpenHands gratuits : {{ids}}. Les points de terminaison d’autres fournisseurs portant des noms de modèles similaires peuvent nécessiter une facturation distincte.",
+    "tr": "Ücretsiz OpenHands modelleri: {{ids}}. Benzer model adlarına sahip diğer sağlayıcı uç noktaları ayrı ücretlendirme gerektirebilir.",
+    "de": "Kostenlose OpenHands-Modelle: {{ids}}. Endpunkte anderer Anbieter mit ähnlichen Modellnamen können eine separate Abrechnung erfordern.",
+    "uk": "Безкоштовні моделі OpenHands: {{ids}}. Кінцеві точки інших постачальників зі схожими назвами моделей можуть потребувати окремої оплати.",
+    "ca": "Models gratuïts d’OpenHands: {{ids}}. Els endpoints d’altres proveïdors amb noms de model similars poden requerir una facturació separada."
+  },
   "SETTINGS$OPENHANDS_API_KEY_HELP_TEXT": {
     "en": "You can find your OpenHands Provider LLM Key in the",
     "ja": "OpenHands Provider LLM Key は",

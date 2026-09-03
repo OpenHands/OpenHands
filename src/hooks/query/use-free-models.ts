@@ -4,6 +4,7 @@ import ConfigService from "#/api/config-service/config-service.api";
 import type { LLMModel } from "#/api/config-service/config-service.types";
 import type { FreeModelSet } from "#/utils/format-model-name";
 import { useFreeModelsStore } from "#/stores/free-models-store";
+import { useActiveBackend } from "#/contexts/active-backend-context";
 import {
   VERIFIED_MODELS_GC_TIME,
   VERIFIED_MODELS_QUERY_KEY,
@@ -64,12 +65,25 @@ async function fetchAllOpenHandsModels(
  * Fetches the `openhands` provider's models with their DB-driven `free` /
  * `default` flags (the same channel that carries `verified`).
  */
-const useOpenHandsModels = () =>
-  useQuery({
-    queryKey: ["config", "models", OPENHANDS_PROVIDER, "flags"],
+const useOpenHandsModels = () => {
+  const { backend, orgId } = useActiveBackend();
+  const backendScope = [
+    backend.id,
+    backend.connectionRevision ?? 0,
+    orgId,
+  ] as const;
+
+  return useQuery({
+    queryKey: [
+      "config",
+      "models",
+      OPENHANDS_PROVIDER,
+      "flags",
+      ...backendScope,
+    ],
     queryFn: async ({ client }): Promise<LLMModel[]> => {
       const verifiedByProvider = await client.fetchQuery({
-        queryKey: VERIFIED_MODELS_QUERY_KEY,
+        queryKey: [...VERIFIED_MODELS_QUERY_KEY, ...backendScope],
         queryFn: fetchVerifiedModelsByProvider,
         staleTime: VERIFIED_MODELS_STALE_TIME,
       });
@@ -78,6 +92,7 @@ const useOpenHandsModels = () =>
     staleTime: VERIFIED_MODELS_STALE_TIME,
     gcTime: VERIFIED_MODELS_GC_TIME,
   });
+};
 
 /**
  * Fetches the DB-driven free / default flags once and mirrors them into the
@@ -87,11 +102,17 @@ const useOpenHandsModels = () =>
  * stay renderable in isolation without a QueryClientProvider in scope.
  */
 export const useHydrateFreeModels = (): void => {
+  const { backend, orgId } = useActiveBackend();
   const { data, isError } = useOpenHandsModels();
   const setFlags = useFreeModelsStore((state) => state.setFlags);
   const markDefaultModelReady = useFreeModelsStore(
     (state) => state.markDefaultModelReady,
   );
+  const resetFlags = useFreeModelsStore((state) => state.resetFlags);
+
+  React.useEffect(() => {
+    resetFlags();
+  }, [backend.id, backend.connectionRevision, orgId, resetFlags]);
 
   React.useEffect(() => {
     if (!data) return;

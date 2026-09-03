@@ -1,5 +1,4 @@
 import React from "react";
-import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ModelSelector } from "#/components/shared/modals/settings/model-selector";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
@@ -40,6 +39,7 @@ import {
   isFreeOpenHandsModel,
   isOpenHandsProviderModel,
 } from "#/utils/format-model-name";
+import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
 
 /** Form-values key for the shared provider connection a profile links to. */
 export const LLM_PROVIDER_CONNECTION_KEY = "llm.provider_connection_id";
@@ -119,23 +119,6 @@ function OpenHandsApiKeyHelp({ testId }: OpenHandsApiKeyHelpProps) {
       trailing="."
     />
   );
-}
-
-function OpenHandsFreeModelsNote({ note }: { note: string }) {
-  return (
-    <p
-      data-testid="openhands-free-models-note"
-      className="flex items-start gap-2 text-xs text-warning"
-    >
-      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{note}</span>
-    </p>
-  );
-}
-
-function buildFreeModelsNote(freeModels: ReadonlySet<string>): string {
-  const ids = [...freeModels].join(", ");
-  return `Free OpenHands models: ${ids}. Other provider endpoints with similar model names may require separate billing.`;
 }
 
 export function LlmSettingsScreen({
@@ -524,9 +507,7 @@ export function LlmSettingsScreen({
                   {showOpenHandsApiKeyHelp && !isLinkedToConnection ? (
                     <>
                       {isFreeOpenHandsModel(modelValue, freeModels) ? (
-                        <OpenHandsFreeModelsNote
-                          note={buildFreeModelsNote(freeModels)}
-                        />
+                        <FreeOpenHandsModelsNote modelIds={freeModels} />
                       ) : null}
                     </>
                   ) : null}

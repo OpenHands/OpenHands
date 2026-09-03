@@ -3,7 +3,6 @@ import {
   AutocompleteItem,
   AutocompleteSection,
 } from "@heroui/react";
-import { Info } from "lucide-react";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { I18nKey } from "#/i18n/declaration";
@@ -17,26 +16,10 @@ import { PRODUCT_URL } from "#/utils/constants";
 import { useSearchProviders } from "#/hooks/query/use-search-providers";
 import { useProviderModels } from "#/hooks/query/use-provider-models";
 import { FREE_MODEL_BADGE_LABEL } from "#/utils/format-model-name";
+import { FreeOpenHandsModelsNote } from "#/components/shared/free-models-note";
 
 const freeModelBadgeClassName =
   "shrink-0 rounded-full border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[10px] leading-none text-warning";
-
-function buildFreeModelsNote(provider: string, freeModelNames: string[]) {
-  const ids = freeModelNames.map((name) => `${provider}/${name}`).join(", ");
-  return `Free OpenHands models: ${ids}. Other provider endpoints with similar model names may require separate billing.`;
-}
-
-function FreeOpenHandsModelsNote({ note }: { note: string }) {
-  return (
-    <p
-      data-testid="openhands-free-models-note"
-      className="flex items-start gap-2 text-xs text-warning"
-    >
-      <Info className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-      <span>{note}</span>
-    </p>
-  );
-}
 
 interface ModelSelectorProps {
   isDisabled?: boolean;
@@ -339,7 +322,9 @@ export function ModelSelector({
         )}
         {selectedProvider === "openhands" && freeModelNames.length > 0 ? (
           <FreeOpenHandsModelsNote
-            note={buildFreeModelsNote(selectedProvider, freeModelNames)}
+            modelIds={freeModelNames.map(
+              (name) => `${selectedProvider}/${name}`,
+            )}
           />
         ) : null}
       </fieldset>

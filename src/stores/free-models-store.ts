@@ -26,6 +26,7 @@ interface FreeModelsActions {
     defaultModel: string | null;
   }) => void;
   markDefaultModelReady: () => void;
+  resetFlags: () => void;
 }
 
 type FreeModelsStore = FreeModelsState & FreeModelsActions;
@@ -43,4 +44,10 @@ export const useFreeModelsStore = create<FreeModelsStore>()((set) => ({
       defaultModelReady: true,
     }),
   markDefaultModelReady: () => set({ defaultModelReady: true }),
+  resetFlags: () =>
+    set({
+      freeModels: EMPTY_FREE_MODELS,
+      defaultModel: null,
+      defaultModelReady: false,
+    }),
 }));
