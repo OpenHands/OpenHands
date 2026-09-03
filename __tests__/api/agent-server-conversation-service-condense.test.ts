@@ -6,8 +6,8 @@ import {
 } from "#/api/backend-registry/active-store";
 import type { Backend } from "#/api/backend-registry/types";
 import { callCloudProxy } from "#/api/cloud/proxy";
-import { buildHttpBaseUrl } from "#/utils/websocket-url";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { ConversationClient } from "@openhands/typescript-client/clients";
 
 const { mockCondenseConversation } = vi.hoisted(() => ({
   mockCondenseConversation: vi.fn(),
@@ -61,7 +61,7 @@ describe("AgentServerConversationService.condenseConversation", () => {
     __resetActiveStoreForTests();
   });
 
-  it("routes cloud conversations to the runtime condense endpoint with the session key", async () => {
+  it("uses the runtime ConversationClient directly for cloud conversations", async () => {
     setRegisteredBackends([cloudBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
@@ -71,23 +71,20 @@ describe("AgentServerConversationService.condenseConversation", () => {
       "sess-key",
     );
 
-    expect(callCloudProxy).toHaveBeenCalledWith(
+    expect(ConversationClient).toHaveBeenCalledWith(
       expect.objectContaining({
-        backend: cloudBackend,
-        method: "POST",
-        hostOverride: buildHttpBaseUrl(RUNTIME_URL),
-        path: "/api/conversations/conv-1/condense",
-        authMode: "session-api-key",
-        sessionApiKey: "sess-key",
+        host: "http://localhost:54928",
+        apiKey: "sess-key",
       }),
     );
-    expect(mockCondenseConversation).not.toHaveBeenCalled();
+    expect(mockCondenseConversation).toHaveBeenCalledWith("conv-1");
+    expect(callCloudProxy).not.toHaveBeenCalled();
   });
 
-  it("throws when a cloud conversation has no runtime URL to proxy to", async () => {
+  it("throws when a cloud conversation has no runtime URL", async () => {
     // getEffectiveLocalBackend only resolves when the ACTIVE backend is
     // local, so a cloud conversation without a conversation_url has no
-    // ConversationClient fallback: the proxy path is the only route.
+    // ConversationClient fallback.
     setRegisteredBackends([cloudBackend, localBackend]);
     setActiveSelection({ backendId: cloudBackend.id });
 
