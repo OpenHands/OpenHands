@@ -31,8 +31,14 @@ import AgentServerConversationService from "#/api/conversation-service/agent-ser
 import { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
-import { __resetActiveStoreForTests } from "#/api/backend-registry/active-store";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { SEEDED_DEFAULT_BACKEND_ID } from "#/api/backend-registry/default-backend";
+import type { Backend } from "#/api/backend-registry/types";
 
 // Mock the unified stop conversation hook
 const mockStopConversationMutate = vi.fn();
@@ -101,6 +107,17 @@ describe("ConversationPanel", () => {
     options?: Parameters<typeof renderWithProviders>[1],
   ) => renderWithProviders(<RouterStub />, options);
 
+  // The old single-click filter menu is now the layouts menu, with the
+  // display toggles one level deeper in the Advanced options modal. The
+  // modal stays open across row clicks, so a second call is a no-op.
+  const openAdvancedOptions = async (
+    user: ReturnType<typeof userEvent.setup>,
+  ) => {
+    if (screen.queryByTestId("advanced-conversation-options-modal")) return;
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("advanced-options-row"));
+  };
+
   beforeAll(() => {
     vi.mock("react-router", async (importOriginal) => ({
       ...(await importOriginal<typeof import("react-router")>()),
@@ -117,6 +134,14 @@ describe("ConversationPanel", () => {
     createMockConversation({ id: "3", title: "Conversation 3" }),
   ];
 
+  const cloudBackend: Backend = {
+    id: "cloud-prod",
+    name: "Production",
+    host: "https://app.all-hands.dev",
+    apiKey: "bearer-key",
+    kind: "cloud",
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockStopConversationMutate.mockClear();
@@ -124,9 +149,13 @@ describe("ConversationPanel", () => {
     usePinnedConversationsStore.setState({ pinsByBackendId: {} });
     useArchivedConversationsStore.setState({ archivesByBackendId: {} });
     useConversationPanelPreferencesStore.setState({
+      showOlderConversations: true,
+      olderConversationCutoff: "7d",
       showArchivedConversations: false,
       automationFilterMode: "all",
       selectedAutomationNames: [],
+      selectedTagFacets: [],
+      showTagsMetadata: false,
     });
     // Setup default mock for searchConversations
     vi.spyOn(
@@ -164,6 +193,108 @@ describe("ConversationPanel", () => {
     // NOTE that we filter out conversations that don't have a created_at property
     // (mock data has 4 conversations, but only 3 have a created_at property)
     expect(cards).toHaveLength(3);
+  });
+
+  it("includes the active backend scope in conversation card links", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+
+    const ScopedRouterStub = createRoutesStub([
+      {
+        Component: () => <ConversationPanel onClose={onCloseMock} />,
+        path: "/",
+      },
+      {
+        Component: () => null,
+        path: "/conversations/:conversationId",
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <ActiveBackendProvider>
+            <NavigationProvider
+              value={{
+                currentPath: "/",
+                conversationId: null,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <ScopedRouterStub />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    const title = await screen.findByText("Conversation 1");
+    expect(title.closest("a")).toHaveAttribute(
+      "href",
+      "/conversations/1?backend=cloud-prod&org=org-2",
+    );
+  });
+
+  it("includes the active backend scope in compact conversation row links", async () => {
+    setRegisteredBackends([cloudBackend]);
+    setActiveSelection({ backendId: cloudBackend.id, orgId: "org-2" });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "running",
+          title: "Running Conversation",
+          execution_status: ExecutionStatus.RUNNING,
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    const CompactRouterStub = createRoutesStub([
+      {
+        Component: () => <ConversationPanel compact />,
+        path: "/",
+      },
+      {
+        Component: () => null,
+        path: "/conversations/:conversationId",
+      },
+    ]);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <ActiveBackendProvider>
+            <NavigationProvider
+              value={{
+                currentPath: "/",
+                conversationId: null,
+                isNavigating: false,
+                navigate: vi.fn(),
+              }}
+            >
+              <CompactRouterStub />
+            </NavigationProvider>
+          </ActiveBackendProvider>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      await screen.findByLabelText("Running Conversation"),
+    ).toHaveAttribute(
+      "href",
+      "/conversations/running?backend=cloud-prod&org=org-2",
+    );
   });
 
   it("should display an empty state when there are no conversations", async () => {
@@ -295,6 +426,188 @@ describe("ConversationPanel", () => {
     expect(await screen.findByText("Tagged Run")).toBeInTheDocument();
     expect(screen.getByText("Cloud Run")).toBeInTheDocument();
     expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
+  });
+
+  it("filters from the persistent filter bar and couples automation chips to the mode", async () => {
+    // Arrange: one tagged manual conversation, one untagged, one automation
+    // run (recognized by its automation tags).
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Manual 1",
+          tags: { project: "vault" },
+        }),
+        createMockConversation({ id: "2", title: "Manual 2" }),
+        createMockConversation({
+          id: "3",
+          title: "Nightly Run",
+          tags: { automationname: "Nightly Audit", automationtrigger: "cron" },
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // Selecting a facet in the layouts menu narrows the list.
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("tag-filters-section"));
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
+    expect(await screen.findByText("Manual 1")).toBeInTheDocument();
+    expect(screen.queryByText("Manual 2")).not.toBeInTheDocument();
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedTagFacets,
+    ).toEqual(["project=vault"]);
+
+    // Deselecting the facet restores the full list.
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
+    expect(await screen.findByText("Manual 2")).toBeInTheDocument();
+
+    // The automation scope lives in the Advanced options modal.
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await user.click(screen.getByTestId("automation-filter-only"));
+    expect(
+      useConversationPanelPreferencesStore.getState().automationFilterMode,
+    ).toBe("only-automations");
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+    expect(screen.queryByText("Manual 1")).not.toBeInTheDocument();
+  });
+
+  it("keeps an active tag filter visible outside the layouts menu", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Manual 1",
+          tags: { project: "vault" },
+        }),
+        createMockConversation({ id: "2", title: "Manual 2" }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    // Nothing to announce until something is actually filtering.
+    expect(
+      screen.queryByTestId("conversation-active-tag-filters"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("tag-filters-section"));
+    await user.click(screen.getByTestId("tag-facet-row-project=vault"));
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+
+    // With the menu closed, the strip is the only thing on screen that says
+    // where Manual 2 went — the facet checkmark is two levels inside a menu.
+    expect(
+      await screen.findByTestId("active-tag-filter-project=vault"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Manual 2")).not.toBeInTheDocument();
+
+    // And the way back out is on the strip too, not buried with the facets.
+    await user.click(screen.getByTestId("clear-tag-filters"));
+    expect(await screen.findByText("Manual 2")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("conversation-active-tag-filters"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a persisted automation-name filter both reachable and visible", async () => {
+    // `selectedAutomationNames` is persisted and narrows the list on its own,
+    // so it needs a control that can see and undo it — otherwise a reload
+    // hides conversations with nothing on screen to say why.
+    const user = userEvent.setup();
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Nightly Run",
+          tags: { automationid: "a-1", automationname: "Nightly Audit" },
+        }),
+        createMockConversation({
+          id: "2",
+          title: "Weekly Run",
+          tags: { automationid: "a-2", automationname: "Weekly Sweep" },
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+
+    // The name rows live in the advanced-options modal, under the scope.
+    await user.click(screen.getByTestId("conversation-layouts-toggle"));
+    await user.click(screen.getByTestId("advanced-options-row"));
+    await user.click(screen.getByTestId("automation-filter-only"));
+    await user.click(
+      await screen.findByTestId("automation-name-row-Nightly Audit"),
+    );
+    await user.click(screen.getByTestId("advanced-options-close"));
+
+    expect(await screen.findByText("Nightly Run")).toBeInTheDocument();
+    expect(screen.queryByText("Weekly Run")).not.toBeInTheDocument();
+
+    // With every menu closed, the strip is the only thing naming the
+    // narrowing — and the way back out.
+    const chip = await screen.findByTestId(
+      "active-automation-filter-Nightly Audit",
+    );
+    expect(chip).toHaveTextContent("Nightly Audit");
+
+    await user.click(chip);
+    expect(await screen.findByText("Weekly Run")).toBeInTheDocument();
+    expect(
+      useConversationPanelPreferencesStore.getState().selectedAutomationNames,
+    ).toEqual([]);
+  });
+
+  it("clears tag chips from the cards when the Tag chips preference is off", async () => {
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "1",
+          title: "Tagged 1",
+          tags: { project: "vault" },
+        }),
+      ],
+      next_page_id: null,
+    });
+    useConversationPanelPreferencesStore.setState({ showTagsMetadata: true });
+
+    renderConversationPanel();
+
+    expect(
+      await screen.findByTestId("conversation-card-tag-chip"),
+    ).toBeInTheDocument();
+
+    act(() => {
+      useConversationPanelPreferencesStore.setState({
+        showTagsMetadata: false,
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("conversation-card-tag-chip"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("keeps load more reachable with the filtered empty message when the automation filter hides every loaded conversation", async () => {
@@ -850,7 +1163,7 @@ describe("ConversationPanel", () => {
     await screen.findByText("Old Touched");
 
     // Act: open the filter menu and switch sort to Created.
-    await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+    await openAdvancedOptions(user);
     await user.click(
       screen.getByRole("menuitemradio", {
         name: /CONVERSATION_PANEL\$SORT_CREATED/,
@@ -1469,9 +1782,9 @@ describe("ConversationPanel", () => {
   describe("older conversations cutoff", () => {
     const recentIso = () => new Date().toISOString();
     const olderIso = () =>
-      new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 
-    it("shows conversations older than 1h and includes a summary line", async () => {
+    it("shows conversations older than 1 week and includes a summary line", async () => {
       vi.spyOn(
         AgentServerConversationService,
         "searchConversations",
@@ -1507,7 +1820,7 @@ describe("ConversationPanel", () => {
       const summary = screen.getByTestId("older-conversations-summary");
       expect(summary).toHaveTextContent("SIDEBAR$CONVERSATIONS");
       expect(
-        within(summary).getByTestId("older-conversations-filter-toggle"),
+        within(summary).getByTestId("conversation-layouts-toggle"),
       ).toBeInTheDocument();
     });
 
@@ -1537,7 +1850,7 @@ describe("ConversationPanel", () => {
       const summary = screen.getByTestId("older-conversations-summary");
       expect(summary).toBeInTheDocument();
       expect(
-        within(summary).getByTestId("older-conversations-filter-toggle"),
+        within(summary).getByTestId("conversation-layouts-toggle"),
       ).toBeInTheDocument();
     });
 
@@ -1545,16 +1858,18 @@ describe("ConversationPanel", () => {
       const user = userEvent.setup();
       renderConversationPanel();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      // Delete all lives in the layouts menu itself.
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
+      const deleteAllRow = screen.getByTestId("delete-all-conversations");
+      expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
+      expect(deleteAllRow).toHaveClass("text-danger");
+      expect(deleteAllRow).not.toHaveClass("text-[var(--oh-foreground)]");
 
+      // The older-conversations toggle lives in the Advanced options modal.
+      await user.click(screen.getByTestId("advanced-options-row"));
       const hideRow = await screen.findByTestId("toggle-older-conversations");
       expect(hideRow.querySelector("svg")).toBeInTheDocument();
       expect(hideRow).toHaveClass("group");
-
-      const deleteAllRow = screen.getByTestId("delete-all-conversations");
-      expect(deleteAllRow.querySelector("svg")).toBeInTheDocument();
-      expect(deleteAllRow).toHaveClass("text-[var(--oh-foreground)]");
-      expect(deleteAllRow).not.toHaveClass("text-danger");
     });
 
     it("toggles older conversations visibility via the filter dropdown", async () => {
@@ -1583,17 +1898,16 @@ describe("ConversationPanel", () => {
       let cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       let toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveTextContent("CONVERSATION$HIDE");
+      expect(toggle).toHaveAttribute("aria-checked", "false");
       await user.click(toggle);
 
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(1);
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
       toggle = await screen.findByTestId("toggle-older-conversations");
-      expect(toggle).toHaveTextContent("CONVERSATION$SHOW_ALL");
+      expect(toggle).toHaveAttribute("aria-checked", "true");
       await user.click(toggle);
       cards = await screen.findAllByTestId("conversation-card");
       expect(cards).toHaveLength(2);
@@ -1633,7 +1947,7 @@ describe("ConversationPanel", () => {
         screen.queryByTestId("conversation-card-selected-branch"),
       ).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-repo-branch-metadata"));
 
       expect(
@@ -1674,7 +1988,7 @@ describe("ConversationPanel", () => {
       renderConversationPanel();
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -1739,7 +2053,7 @@ describe("ConversationPanel", () => {
       expect(screen.getByText("Visible 1")).toBeInTheDocument();
       expect(screen.queryByText("Archived 1")).not.toBeInTheDocument();
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       const deleteAllButton = await screen.findByTestId(
         "delete-all-conversations",
       );
@@ -1801,7 +2115,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -1856,7 +2170,7 @@ describe("ConversationPanel", () => {
       });
       await screen.findAllByTestId("conversation-card");
 
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await user.click(screen.getByTestId("conversation-layouts-toggle"));
       await user.click(screen.getByTestId("delete-all-conversations"));
       await user.click(await screen.findByRole("button", { name: /confirm/i }));
 
@@ -1916,7 +2230,7 @@ describe("ConversationPanel", () => {
   describe("load-more link", () => {
     const recentIso = () => new Date().toISOString();
     const olderIso = () =>
-      new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
 
     it("shows a load-more link when there is a next page and no older conversations are hidden", async () => {
       vi.spyOn(
@@ -1968,7 +2282,7 @@ describe("ConversationPanel", () => {
 
       // Hide older conversations via the filter dropdown.
       const user = userEvent.setup();
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
 
       // Older conversations are hidden → no load-more.
@@ -1977,7 +2291,7 @@ describe("ConversationPanel", () => {
       ).not.toBeInTheDocument();
 
       // After showing older conversations again, the link reappears.
-      await user.click(screen.getByTestId("older-conversations-filter-toggle"));
+      await openAdvancedOptions(user);
       await user.click(screen.getByTestId("toggle-older-conversations"));
       expect(
         await screen.findByTestId("load-more-conversations"),

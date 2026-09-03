@@ -13,6 +13,10 @@ The server-side executor is a no-op that returns an acknowledgment. The actual
 UI effect happens client-side: the frontend watches the WebSocket stream for
 legacy ``canvas_ui`` and current ``canvas_ui_control`` ActionEvents and dispatches
 the command.
+
+The launchers also import this module at agent-server startup
+(``--import-modules canvas_ui_tool``) so the builtin ``FinishTool`` registration
+at the bottom runs before any conversation is created.
 """
 
 from collections.abc import Sequence
@@ -22,8 +26,10 @@ from pydantic import Field
 
 from openhands.sdk import Action, Observation, ToolDefinition
 from openhands.sdk.tool import (
+    FinishTool,
     ToolAnnotations,
     ToolExecutor,
+    list_registered_tools,
     register_tool,
 )
 
@@ -137,3 +143,16 @@ class CanvasUITool(ToolDefinition[CanvasUIAction, CanvasUIObservation]):
 # restoring their agent and events. Keep the registration until those records
 # have a server-side migration path.
 register_tool("canvas_ui", CanvasUITool)
+
+
+# openhands-automation >= 1.9.0 preset entrypoints build their agent with
+# get_default_agent(finish_tool_response_schema=TaskOutcome). That registers the
+# SDK's builtin FinishTool only inside the entrypoint's own process and
+# advertises it to the agent-server as `openhands.sdk.tool.builtins.finish` — a
+# module that does not self-register — so the remote conversation every Agent
+# Canvas automation run dispatches fails with "ToolDefinition 'FinishTool' is
+# not registered". Registering the plain builtin here is enough: resolve_tool()
+# strips `response_schema` before FinishTool.create() and re-applies it. Drop
+# this once the SDK registers its builtins for remote conversations.
+if FinishTool.__name__ not in list_registered_tools():
+    register_tool(FinishTool.__name__, FinishTool)
