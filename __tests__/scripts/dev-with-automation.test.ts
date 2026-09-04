@@ -31,8 +31,6 @@ import {
   DEFAULT_AUTOMATION_REPO,
   DEFAULT_AUTOMATION_PACKAGE,
   DEFAULT_AUTOMATION_VERSION,
-  DEFAULT_BACKEND_PORT,
-  DEFAULT_AUTOMATION_PORT,
 } from "../../scripts/dev-with-automation.mjs";
 import {
   buildAgentServerEnv,
@@ -345,22 +343,23 @@ describe("buildConfig", () => {
   });
 
   it("throws when ingress port is busy", async () => {
-    const busyPort = 8100;
-
-    // Block port 8100
     const server = net.createServer();
-    await new Promise<void>((resolve, reject) => {
-      server.listen(busyPort, "127.0.0.1", () => {
+    const busyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Expected a TCP server address"));
+          return;
+        }
         servers.push(server);
-        resolve();
+        resolve(address.port);
       });
       server.on("error", reject);
     });
 
-    // Should throw instead of falling back to a different port
     await expect(
       buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
-    ).rejects.toThrow(/ingress.*port 8100/i);
+    ).rejects.toThrow(new RegExp(`ingress.*port ${busyPort}`, "i"));
   });
 
   it("allocates valid ports for all services", async () => {
@@ -740,26 +739,6 @@ describe("stack mode routing", () => {
         envWithIsolatedKeyPath(),
       ),
     ).rejects.toThrow(/cannot be used together/);
-  });
-});
-
-describe("default constants", () => {
-  it("has expected default automation repo", () => {
-    expect(DEFAULT_AUTOMATION_REPO).toBe(
-      "https://github.com/OpenHands/automation",
-    );
-  });
-
-  it("has expected default automation package", () => {
-    expect(DEFAULT_AUTOMATION_PACKAGE).toBe("openhands-automation");
-  });
-
-  it("has expected default backend port", () => {
-    expect(DEFAULT_BACKEND_PORT).toBe(18000);
-  });
-
-  it("has expected default automation port", () => {
-    expect(DEFAULT_AUTOMATION_PORT).toBe(18001);
   });
 });
 

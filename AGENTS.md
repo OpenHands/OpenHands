@@ -340,6 +340,7 @@ Before writing any test:
 - Do not mock the hook. Instead, mock the underlying service that the hook depends on
 - Prefer adding to or extending existing test files whenever possible. Create new test files only if no suitable ones exist
 - Avoid brittle visual-presentation assertions. Functional CSS contracts such as style scoping and selector transformation may be tested directly
+- Do not mirror literal source, fixture, translation, or class-string definitions in tests. Assert consumer behavior or an actual build/runtime contract instead, and do not export internals solely to make them testable. Preserve coverage for routing, accessibility, async behavior, behavioral contracts, and functional CSS/build contracts
 - Keep the number of test cases to the minimum necessary while still fully covering the intended changes and behaviors
 
 Ensure each test is meaningful, concise, and covers a unique aspect of user interaction.
