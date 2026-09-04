@@ -354,21 +354,30 @@ export const constructBranchUrl = (
 ): string => {
   const baseUrl = getGitProviderBaseUrl(provider, host);
 
+  // Path-based providers: preserve '/' for nested branch paths, encode characters like '#', '%', '?'
+  const pathEncodedBranch = branchName
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  // Query-based providers: encode the entire branch string including '/'
+  const queryEncodedBranch = encodeURIComponent(branchName);
+
   switch (provider) {
     case "github":
-      return `${baseUrl}/${repositoryName}/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/tree/${pathEncodedBranch}`;
     case "forgejo":
-      return `${baseUrl}/${repositoryName}/src/branch/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/branch/${pathEncodedBranch}`;
     case "gitlab":
-      return `${baseUrl}/${repositoryName}/-/tree/${branchName}`;
+      return `${baseUrl}/${repositoryName}/-/tree/${pathEncodedBranch}`;
     case "bitbucket":
-      return `${baseUrl}/${repositoryName}/src/${branchName}`;
+      return `${baseUrl}/${repositoryName}/src/${pathEncodedBranch}`;
     case "bitbucket_data_center": {
       // Bitbucket Server format: /projects/{PROJECT}/repos/{repo}/browse?at=refs/heads/{branch}
       const parts = repositoryName.split("/");
       if (parts.length >= 2) {
         const [project, repo] = parts;
-        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${branchName}`;
+        return `${baseUrl}/projects/${project}/repos/${repo}/browse?at=refs/heads/${queryEncodedBranch}`;
       }
       return "";
     }
@@ -377,7 +386,7 @@ export const constructBranchUrl = (
       const parts = repositoryName.split("/");
       if (parts.length === 3) {
         const [org, project, repo] = parts;
-        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${branchName}`;
+        return `${baseUrl}/${org}/${project}/_git/${repo}?version=GB${queryEncodedBranch}`;
       }
       return "";
     }

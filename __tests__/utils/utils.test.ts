@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getStatusText } from "#/utils/utils";
+import { constructBranchUrl, getStatusText } from "#/utils/utils";
 import { AgentState } from "#/types/agent-state";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -166,5 +166,62 @@ describe("getStatusText", () => {
     });
 
     expect(result).toBe(t(I18nKey.COMMON$RUNNING));
+  });
+});
+
+describe("constructBranchUrl", () => {
+  it("encodes # and % while preserving slashes for path-based providers", () => {
+    const branchWithHash = "feature/ui#123";
+    const branchWithPercent = "100%2Fdone";
+
+    // GitHub
+    expect(constructBranchUrl("github", "owner/repo", branchWithHash)).toBe(
+      "https://github.com/owner/repo/tree/feature/ui%23123",
+    );
+    expect(constructBranchUrl("github", "owner/repo", branchWithPercent)).toBe(
+      "https://github.com/owner/repo/tree/100%252Fdone",
+    );
+
+    // GitLab
+    expect(constructBranchUrl("gitlab", "owner/repo", branchWithHash)).toBe(
+      "https://gitlab.com/owner/repo/-/tree/feature/ui%23123",
+    );
+
+    // Bitbucket
+    expect(constructBranchUrl("bitbucket", "owner/repo", branchWithHash)).toBe(
+      "https://bitbucket.org/owner/repo/src/feature/ui%23123",
+    );
+
+    // Forgejo
+    expect(constructBranchUrl("forgejo", "owner/repo", branchWithHash)).toBe(
+      "https://codeberg.org/owner/repo/src/branch/feature/ui%23123",
+    );
+  });
+
+  it("encodes entire branch name including slashes for query-based providers", () => {
+    const branchWithSlashAndHash = "feature/ui#123";
+
+    // Bitbucket Data Center
+    expect(
+      constructBranchUrl(
+        "bitbucket_data_center",
+        "PROJECT/repo",
+        branchWithSlashAndHash,
+        "server.com",
+      ),
+    ).toBe(
+      "https://server.com/projects/PROJECT/repos/repo/browse?at=refs/heads/feature%2Fui%23123",
+    );
+
+    // Azure DevOps
+    expect(
+      constructBranchUrl(
+        "azure_devops",
+        "org/project/repo",
+        branchWithSlashAndHash,
+      ),
+    ).toBe(
+      "https://dev.azure.com/org/project/_git/repo?version=GBfeature%2Fui%23123",
+    );
   });
 });
