@@ -1,3 +1,4 @@
+import React from "react";
 import {
   OpenHandsEvent,
   ActionEvent,
@@ -14,6 +15,7 @@ import {
 } from "../event-content-helpers/get-observation-result";
 import {
   isACPToolCallEvent,
+  isActionEvent,
   isObservationEvent,
 } from "#/types/agent-server/type-guards";
 import {
@@ -26,6 +28,7 @@ import { ConversationConfirmationButtons } from "#/components/shared/buttons/con
 import { SkillReadyContentList } from "./skill-ready-content-list";
 import SkillsIcon from "#/icons/skills.svg?react";
 import { isMarkdownFileEditorEvent } from "#/components/features/chat/tool-visualizers/primitives/markdown-file-preview";
+import { EventElapsedTime } from "./event-elapsed-time";
 
 interface GenericEventMessageWrapperProps {
   event: OpenHandsEvent | SkillReadyEvent;
@@ -110,6 +113,31 @@ export function GenericEventMessageWrapper({
     !isSkillReadyEvent(event) &&
     isMarkdownFileEditorEvent(event, correspondingAction);
 
+  // --- Elapsed time ---
+  // Show execution duration on tool-call cards that have a start time.
+  //
+  // ActionEvent (still in flight): startTimestamp only → live counter.
+  // ObservationEvent (completed):  correspondingAction.timestamp → event.timestamp → static.
+  //
+  // Skip for SkillReady synthetic events (no real execution time) and
+  // for cases where there is no corresponding action to derive a start time.
+  let elapsedTime: React.ReactNode = null;
+
+  if (!isSkillReadyEvent(event)) {
+    if (isActionEvent(event)) {
+      // In flight: start = action timestamp, no end.
+      elapsedTime = <EventElapsedTime startTimestamp={event.timestamp} />;
+    } else if (isObservationEvent(event) && correspondingAction) {
+      // Completed: start = action timestamp, end = observation timestamp.
+      elapsedTime = (
+        <EventElapsedTime
+          startTimestamp={correspondingAction.timestamp}
+          endTimestamp={event.timestamp}
+        />
+      );
+    }
+  }
+
   return (
     <div>
       <GenericEventMessage
@@ -117,6 +145,7 @@ export function GenericEventMessageWrapper({
         details={bodyDetails}
         success={success}
         initiallyExpanded={initiallyExpanded}
+        titleTrailing={elapsedTime}
         titleIcon={
           skillKnowledge ? (
             <SkillsIcon className="h-4 w-4 stroke-[var(--oh-muted)] flex-shrink-0 mr-2" />
