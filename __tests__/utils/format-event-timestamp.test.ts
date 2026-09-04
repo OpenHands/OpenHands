@@ -12,4 +12,9 @@ describe("formatEventTimestamp", () => {
       }),
     );
   });
+  it("reads an offset-less agent-server timestamp as UTC", () => {
+    expect(formatEventTimestamp("2026-04-16T19:32:29.828069", "en")).toBe(
+      formatEventTimestamp("2026-04-16T19:32:29.828069Z", "en"),
+    );
+  });
 });
