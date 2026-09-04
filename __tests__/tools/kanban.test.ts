@@ -46,4 +46,12 @@ describe("kanban python suite", () => {
     });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   });
+
+  it("passes pull-request creator tests", () => {
+    const result = spawnSync("python3", ["tools/test_pr_creator.py"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  });
 });
