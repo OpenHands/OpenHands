@@ -177,6 +177,22 @@ describe("CardDetailPanel", () => {
       "https://example.com/pr/1",
     );
   });
+
+  it("renders activity log entries when present", () => {
+    renderWithProviders(
+      <CardDetailPanel
+        card={makeCard({
+          activity_log: [
+            { timestamp: "2026-09-01T00:00:00Z", message: "Linked session" },
+          ],
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("kanban-activity-log")).toHaveTextContent(
+      "Linked session",
+    );
+  });
 });
 
 describe("KanbanList", () => {

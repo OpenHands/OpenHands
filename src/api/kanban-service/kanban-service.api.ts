@@ -126,6 +126,17 @@ export const KanbanService = {
     );
     return data;
   },
+
+  linkSession: async (
+    cardId: string,
+    sessionId: string,
+  ): Promise<KanbanCard> => {
+    const { data } = await kanbanAxios.post<KanbanCard>(
+      `${KANBAN_API_CARDS_PATH}/${cardId}/link-session`,
+      { session_id: sessionId },
+    );
+    return data;
+  },
 };
 
 export default KanbanService;

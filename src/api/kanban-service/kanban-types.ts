@@ -29,6 +29,7 @@ export interface KanbanCard {
   tool_calls: number | null;
   agent_time: number | null;
   agent_session_id: string | null;
+  activity_log?: { timestamp: string; message: string }[];
   position: number;
   created_at: string;
   updated_at: string;

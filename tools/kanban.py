@@ -7,6 +7,7 @@ SQLite file so they survive restarts without a new database service.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import threading
@@ -88,6 +89,18 @@ def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return {key: row[key] for key in row.keys()}
 
 
+def _hydrate_card(card: dict[str, Any]) -> dict[str, Any]:
+    raw = card.get("activity_log") or "[]"
+    if isinstance(raw, str):
+        try:
+            card["activity_log"] = json.loads(raw)
+        except json.JSONDecodeError:
+            card["activity_log"] = []
+    elif not isinstance(card.get("activity_log"), list):
+        card["activity_log"] = []
+    return card
+
+
 class KanbanStore:
     """CRUD store for boards, columns, and cards."""
 
@@ -147,6 +160,12 @@ class KanbanStore:
             );
             """
         )
+        try:
+            self.conn.execute(
+                "ALTER TABLE cards ADD COLUMN activity_log TEXT NOT NULL DEFAULT '[]'"
+            )
+        except sqlite3.OperationalError:
+            pass
         self.conn.commit()
 
     def create_board(
@@ -208,7 +227,9 @@ class KanbanStore:
         for card in cards:
             payload = _row_to_dict(card)
             assert payload is not None
-            cards_by_column.setdefault(payload["column_id"], []).append(payload)
+            cards_by_column.setdefault(payload["column_id"], []).append(
+                _hydrate_card(payload)
+            )
         board["columns"] = []
         for column in columns:
             payload = _row_to_dict(column)
@@ -363,7 +384,27 @@ class KanbanStore:
             )
         if card is None:
             raise NotFoundError(f"Card {card_id} not found")
-        return card
+        return _hydrate_card(card)
+
+    def append_activity(self, card_id: str, message: str) -> dict[str, Any]:
+        card = self.get_card(card_id)
+        log = list(card.get("activity_log") or [])
+        log.append({"timestamp": utc_now(), "message": message})
+        with self._lock:
+            self.conn.execute(
+                "UPDATE cards SET activity_log = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(log), utc_now(), card_id),
+            )
+            self._touch_board(card["board_id"])
+            self.conn.commit()
+        return self.get_card(card_id)
+
+    def column_named(self, board_id: str, name: str) -> dict[str, Any]:
+        board = self.get_board(board_id)
+        for column in board["columns"]:
+            if column["name"] == name:
+                return column
+        raise NotFoundError(f"Column {name!r} not found on board {board_id}")
 
     def update_card(self, card_id: str, **fields: Any) -> dict[str, Any]:
         card = self.get_card(card_id)

@@ -123,9 +123,20 @@ export function CardDetailPanel({
       <h3 className="mt-6 text-sm font-semibold">
         {t(I18nKey.KANBAN$ACTIVITY)}
       </h3>
-      <p className="mt-2 text-sm text-[var(--oh-muted)]">
-        {t(I18nKey.KANBAN$NO_ACTIVITY)}
-      </p>
+      {card.activity_log && card.activity_log.length > 0 ? (
+        <ul
+          data-testid="kanban-activity-log"
+          className="mt-2 space-y-1 text-sm"
+        >
+          {card.activity_log.map((item) => (
+            <li key={`${item.timestamp}-${item.message}`}>{item.message}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-[var(--oh-muted)]">
+          {t(I18nKey.KANBAN$NO_ACTIVITY)}
+        </p>
+      )}
 
       {onDelete ? (
         <div className="mt-auto pt-4">

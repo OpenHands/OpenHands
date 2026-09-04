@@ -17,6 +17,7 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from kanban import KanbanError, KanbanStore, default_db_path
+from kanban_agent import complete_session, link_session, record_progress
 
 JsonBody = dict[str, Any] | None
 Handler = Callable[[KanbanStore, dict[str, str], JsonBody], tuple[int, Any]]
@@ -31,6 +32,11 @@ COLUMN_PATH_RE = re.compile(r"^/api/columns/(?P<column_id>[^/]+)$")
 COLUMN_CARDS_PATH_RE = re.compile(r"^/api/columns/(?P<column_id>[^/]+)/cards$")
 CARD_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)$")
 CARD_MOVE_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/move$")
+CARD_LINK_SESSION_PATH_RE = re.compile(
+    r"^/api/cards/(?P<card_id>[^/]+)/link-session$"
+)
+CARD_PROGRESS_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/progress$")
+CARD_COMPLETE_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/complete$")
 
 
 def _json_body(body: JsonBody) -> dict[str, Any]:
@@ -132,6 +138,43 @@ def _move_card(
     return 200, store.move_card(params["card_id"], str(column_id), int(position))
 
 
+def _link_session(
+    store: KanbanStore, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    return 200, link_session(
+        store, params["card_id"], str(payload.get("session_id") or "")
+    )
+
+
+def _record_progress(
+    store: KanbanStore, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    return 200, record_progress(
+        store,
+        params["card_id"],
+        str(payload.get("message") or ""),
+        payload.get("status"),
+    )
+
+
+def _complete_session(
+    store: KanbanStore, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    return 200, complete_session(
+        store,
+        params["card_id"],
+        tests_passed=bool(payload.get("tests_passed")),
+        actual_tokens=payload.get("actual_tokens"),
+        actual_cost=payload.get("actual_cost"),
+        tool_calls=payload.get("tool_calls"),
+        agent_time=payload.get("agent_time"),
+        model_used=payload.get("model_used"),
+    )
+
+
 ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("GET", re.compile(rf"^{BOARDS_PATH}$"), _list_boards),
     ("POST", re.compile(rf"^{BOARDS_PATH}$"), _create_board),
@@ -144,6 +187,9 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("PATCH", CARD_PATH_RE, _update_card),
     ("DELETE", CARD_PATH_RE, _delete_card),
     ("POST", CARD_MOVE_PATH_RE, _move_card),
+    ("POST", CARD_LINK_SESSION_PATH_RE, _link_session),
+    ("POST", CARD_PROGRESS_PATH_RE, _record_progress),
+    ("POST", CARD_COMPLETE_PATH_RE, _complete_session),
 )
 
 
