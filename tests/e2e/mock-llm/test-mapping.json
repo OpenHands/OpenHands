@@ -113,6 +113,16 @@
       "tests": ["home"]
     },
     {
+      "comment": "Spaces project list, detail, and worktrees",
+      "sources": [
+        "src/components/features/projects/**",
+        "src/routes/projects.tsx",
+        "src/api/projects-service/**",
+        "src/mocks/projects-handlers.ts"
+      ],
+      "tests": ["home"]
+    },
+    {
       "comment": "Canvas Extensions install, enable, page render, disable, uninstall",
       "sources": [
         "src/components/features/canvas-extensions/**",
