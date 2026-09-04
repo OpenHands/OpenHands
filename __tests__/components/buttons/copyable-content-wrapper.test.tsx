@@ -1,9 +1,22 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { CopyableContentWrapper } from "#/components/shared/buttons/copyable-content-wrapper";
 
+const toastMocks = vi.hoisted(() => ({
+  displayErrorToast: vi.fn(),
+}));
+
+vi.mock("#/utils/custom-toast-handlers", () => ({
+  displayErrorToast: toastMocks.displayErrorToast,
+}));
+
 describe("CopyableContentWrapper", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    toastMocks.displayErrorToast.mockClear();
+  });
+
   it("should hide the copy button by default", () => {
     render(
       <CopyableContentWrapper text="hello">
@@ -55,6 +68,29 @@ describe("CopyableContentWrapper", () => {
     expect(screen.getByTestId("copy-to-clipboard")).toHaveAttribute(
       "aria-label",
       "BUTTON$COPIED",
+    );
+  });
+
+  it("shows an error toast and stays in copy mode when the clipboard rejects", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
+      new Error("denied"),
+    );
+
+    render(
+      <CopyableContentWrapper text="copy me">
+        <p>content</p>
+      </CopyableContentWrapper>,
+    );
+
+    await user.click(screen.getByTestId("copy-to-clipboard"));
+
+    expect(toastMocks.displayErrorToast).toHaveBeenCalledWith(
+      "CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED",
+    );
+    expect(screen.getByTestId("copy-to-clipboard")).toHaveAttribute(
+      "aria-label",
+      "BUTTON$COPY",
     );
   });
 });

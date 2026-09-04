@@ -4,6 +4,7 @@ import { Check, CircleAlert, CircleX, Copy, X } from "lucide-react";
 import { OH_STATUS_ERROR_COLOR } from "#/constants/status-colors";
 import { I18nKey } from "#/i18n/declaration";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { copyToClipboard } from "#/utils/clipboard";
 import { getAcpErrorHeaderKey } from "#/utils/acp-error-codes";
 import { cn } from "#/utils/utils";
 import type { ErrorClassification } from "@openhands/typescript-client";
@@ -44,10 +45,9 @@ export function ErrorMessageBanner({
   const isCollapsed = shouldShowToggle && !isExpanded;
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(displayTextForLength);
+    if (await copyToClipboard(displayTextForLength)) {
       setIsCopied(true);
-    } catch {
+    } else {
       displayErrorToast(t(I18nKey.CHAT_INTERFACE$CHAT_MESSAGE_COPY_FAILED));
     }
   };
