@@ -24,6 +24,12 @@ describe("parseModelTableNames", () => {
     expect(parseModelTableNames("- a x\n- b y\n- a z")).toEqual(["a", "b"]);
   });
 
+  it("de-duplicates case-insensitively while preserving the first spelling", () => {
+    expect(parseModelTableNames("- MiniMax-M3 x\n- minimax-m3 y")).toEqual([
+      "MiniMax-M3",
+    ]);
+  });
+
   it("returns an empty list for empty or missing tables", () => {
     expect(parseModelTableNames("")).toEqual([]);
     expect(parseModelTableNames(null)).toEqual([]);
@@ -49,6 +55,16 @@ describe("collectRequiredRouterModelNames", () => {
         model_table: "- GPT-5.4 stats\n- MiniMax-M3 stats",
       }),
     ).toEqual(["GPT-5.4", "MiniMax-M3", "router-default"]);
+  });
+
+  it("de-duplicates classifier/default against table names case-insensitively", () => {
+    expect(
+      collectRequiredRouterModelNames({
+        classifier_model: "minimax-m3",
+        default_model: "ROUTER-DEFAULT",
+        model_table: "- MiniMax-M3 stats\n- router-default stats",
+      }),
+    ).toEqual(["MiniMax-M3", "router-default"]);
   });
 
   it("ignores blank classifier/default and empty tables", () => {

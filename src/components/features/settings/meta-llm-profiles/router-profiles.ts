@@ -28,8 +28,9 @@ export function parseModelTableNames(
     const match = line.match(/^\s*-\s+(\S+)/);
     if (!match) continue;
     const name = match[1].replace(/:+$/, "");
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
     names.push(name);
   }
   return names;
@@ -57,11 +58,11 @@ export function collectRequiredRouterModelNames(config: {
   model_table?: string | null;
 }): string[] {
   const names = parseModelTableNames(config.model_table);
-  const seen = new Set(names);
+  const seen = new Set(names.map((name) => name.toLowerCase()));
   for (const extra of [config.classifier_model, config.default_model]) {
     const name = (extra ?? "").trim();
-    if (name && !seen.has(name)) {
-      seen.add(name);
+    if (name && !seen.has(name.toLowerCase())) {
+      seen.add(name.toLowerCase());
       names.push(name);
     }
   }
