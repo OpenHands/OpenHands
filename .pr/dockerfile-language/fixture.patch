@@ -4,11 +4,11 @@ index 59f0f7f..b5ca469 100644
 +++ b/src/fixtures/canvas-demo-conversation.ts
 @@ -13,27 +13,9 @@ import type { FileEditorAction } from "#/types/agent-server/core/base/action";
  import type { FileEditorObservation } from "#/types/agent-server/core/base/observation";
- 
+
  export const CANVAS_DEMO_CONVERSATION_ID = "canvas-demo";
 -export const CANVAS_DEMO_FILE_PATH = "canvas.md";
 +export const CANVAS_DEMO_FILE_PATH = "/workspace/project/deploy/Dockerfile";
- 
+
 -export const CANVAS_DEMO_MARKDOWN = [
 -  "# Agent Canvas Demo",
 -  "",
@@ -29,7 +29,7 @@ index 59f0f7f..b5ca469 100644
 -  "- The Files drawer provides the full rich Markdown view.",
 -].join("\n");
 +export const CANVAS_DEMO_MARKDOWN = "FROM node:22-alpine\nWORKDIR /app\nCOPY package*.json ./\nRUN npm ci --omit=dev\nCOPY . .\nCMD [\"node\", \"server.js\"]";
- 
+
  const BASE_TIME = Date.UTC(2026, 6, 29, 12, 0, 0);
  const timestamp = (offsetSeconds: number) =>
 @@ -117,7 +99,7 @@ export const CANVAS_DEMO_EVENTS: OpenHandsEvent[] = [
