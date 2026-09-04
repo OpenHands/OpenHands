@@ -365,7 +365,9 @@ def init_project(
     board_name: str = "Project board",
 ) -> dict[str, Any]:
     cards = preview_project(root, spec, llm_complete)
-    seeded = seed_board(store, cards, name=board_name)
+    seeded = seed_board(
+        store, cards, name=board_name, project_id=str(root)
+    )
     return {
         "suggested": [card.__dict__ for card in cards],
         "board": seeded["board"],

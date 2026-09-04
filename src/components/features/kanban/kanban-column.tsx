@@ -4,8 +4,9 @@ import type {
   KanbanCard,
   KanbanColumn,
 } from "#/api/kanban-service/kanban-types";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { I18nKey } from "#/i18n/declaration";
+import { formControlFieldClassName } from "#/utils/form-control-classes";
+import { cn } from "#/utils/utils";
 import { formatUsd } from "./kanban-cost";
 import { KanbanCard as KanbanCardView } from "./kanban-card";
 
@@ -40,27 +41,33 @@ export function KanbanColumn({
   return (
     <section
       data-testid={`kanban-column-${column.id}`}
-      className="flex w-72 shrink-0 flex-col rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)]"
+      className={cn(
+        "flex h-full w-72 shrink-0 flex-col overflow-hidden rounded-xl bg-base-secondary",
+        column.color && "border-t-2",
+      )}
+      style={column.color ? { borderTopColor: column.color } : undefined}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => handleDrop(event, cards.length)}
     >
-      <header
-        className="flex items-center justify-between gap-2 border-b border-[var(--oh-border)] px-3 py-2"
-        style={column.color ? { borderTopColor: column.color } : undefined}
-      >
-        <h2 className="text-sm font-semibold text-[var(--foreground)]">
-          {column.name}
-        </h2>
+      <header className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate text-sm font-medium leading-5 text-white">
+            {column.name}
+          </h2>
+          <span className="text-xs tabular-nums text-tertiary-light">
+            {cards.length}
+          </span>
+        </div>
         <span
           data-testid={`kanban-column-cost-${column.id}`}
-          className="text-xs text-[var(--oh-muted)]"
+          className="shrink-0 text-xs tabular-nums text-tertiary-light"
         >
           {formatUsd(aggregateCost)}
         </span>
       </header>
-      <div className="flex flex-1 flex-col gap-2 p-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3">
         {cards.length === 0 ? (
-          <p className="px-1 text-xs text-[var(--oh-muted)]">
+          <p className="px-0.5 py-2 text-xs leading-4 text-tertiary-light">
             {t(I18nKey.KANBAN$EMPTY_COLUMN)}
           </p>
         ) : (
@@ -79,7 +86,7 @@ export function KanbanColumn({
         )}
       </div>
       <form
-        className="flex gap-2 border-t border-[var(--oh-border)] p-2"
+        className="p-3"
         onSubmit={(event) => {
           event.preventDefault();
           const title = draft.trim();
@@ -93,15 +100,16 @@ export function KanbanColumn({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={t(I18nKey.KANBAN$NEW_CARD_TITLE)}
-          className="min-w-0 flex-1 rounded-md border border-[var(--oh-border)] bg-transparent px-2 py-1 text-sm"
+          aria-label={t(I18nKey.KANBAN$ADD_CARD)}
+          className={cn(formControlFieldClassName, "bg-transparent")}
         />
-        <BrandButton
+        <button
           type="submit"
-          variant="secondary"
-          testId={`kanban-add-card-${column.id}`}
+          data-testid={`kanban-add-card-${column.id}`}
+          className="sr-only"
         >
           {t(I18nKey.KANBAN$ADD_CARD)}
-        </BrandButton>
+        </button>
       </form>
     </section>
   );

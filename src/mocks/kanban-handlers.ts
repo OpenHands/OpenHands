@@ -132,9 +132,14 @@ export const KANBAN_HANDLERS = [
     const body = (await request.json()) as {
       spec?: string;
       board_name?: string;
+      root?: string | null;
+      project_id?: string | null;
     };
     const suggested = suggestedFromSpec(body.spec);
-    const board = createBoard(body.board_name ?? DEFAULT_PROJECT_BOARD_NAME);
+    const board = createBoard(
+      body.board_name ?? DEFAULT_PROJECT_BOARD_NAME,
+      body.root ?? body.project_id ?? null,
+    );
     const backlog = board.columns[0];
     const createdAt = now();
     const card: KanbanCard = {

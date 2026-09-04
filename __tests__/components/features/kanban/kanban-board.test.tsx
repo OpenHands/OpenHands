@@ -12,6 +12,12 @@ import { CostSummary } from "#/components/features/kanban/cost-summary";
 import { KanbanBoardView } from "#/components/features/kanban/kanban-board";
 import { KanbanCard as KanbanCardView } from "#/components/features/kanban/kanban-card";
 import { KanbanList } from "#/components/features/kanban/kanban-list";
+import { HOME_SELECTED_WORKSPACE_PATH_KEY } from "#/components/features/home/workspace-selection-form";
+import {
+  boardForWorkspace,
+  KANBAN_SELECTED_WORKSPACE_PATH_KEY,
+  writeKanbanWorkspacePath,
+} from "#/components/features/kanban/kanban-workspace";
 
 function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
   return {
@@ -192,6 +198,30 @@ describe("CardDetailPanel", () => {
     expect(screen.getByTestId("kanban-activity-log")).toHaveTextContent(
       "Linked session",
     );
+  });
+});
+
+describe("boardForWorkspace", () => {
+  it("returns the board whose project_id matches the workspace path", () => {
+    const boards = [
+      { ...makeBoard(), id: "other", project_id: "/tmp/other" },
+      { ...makeBoard(), id: "mine", project_id: "/tmp/openhands" },
+    ];
+    expect(boardForWorkspace(boards, "/tmp/openhands")?.id).toBe("mine");
+  });
+
+  it("returns null when no workspace is selected", () => {
+    expect(boardForWorkspace([makeBoard()], null)).toBeNull();
+  });
+
+  it("writes the kanban and home workspace keys together", () => {
+    writeKanbanWorkspacePath("/tmp/openhands");
+    expect(
+      window.sessionStorage.getItem(KANBAN_SELECTED_WORKSPACE_PATH_KEY),
+    ).toBe("/tmp/openhands");
+    expect(
+      window.sessionStorage.getItem(HOME_SELECTED_WORKSPACE_PATH_KEY),
+    ).toBe("/tmp/openhands");
   });
 });
 

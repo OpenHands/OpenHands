@@ -6,12 +6,15 @@ import {
   PROJECT_INIT_PATH,
 } from "#/api/kanban-service/kanban-constants";
 import type { KanbanCard } from "#/api/kanban-service/kanban-types";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { CardDetailPanel } from "#/components/features/kanban/card-detail-panel";
 import { CostSummary } from "#/components/features/kanban/cost-summary";
 import { KanbanBoardView } from "#/components/features/kanban/kanban-board";
 import { KanbanList } from "#/components/features/kanban/kanban-list";
-import { I18nKey } from "#/i18n/declaration";
+import { KanbanWorkspacePicker } from "#/components/features/kanban/kanban-workspace-picker";
+import { boardForWorkspace } from "#/components/features/kanban/kanban-workspace";
+import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
+import { BrandButton } from "#/components/features/settings/brand-button";
+import { useNavigation } from "#/context/navigation-context";
 import {
   useCreateKanbanBoard,
   useCreateKanbanCard,
@@ -23,8 +26,12 @@ import {
   useMoveKanbanCard,
   useUpdateKanbanCard,
 } from "#/hooks/query/use-kanban";
-import { useNavigation } from "#/context/navigation-context";
-import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
+import { useKanbanWorkspace } from "#/hooks/use-kanban-workspace";
+import { I18nKey } from "#/i18n/declaration";
+import { Typography } from "#/ui/typography";
+import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
+import { kanbanPageShellClassName } from "#/utils/kanban-page-layout-classes";
 
 type KanbanView = typeof KANBAN_VIEW_BOARD | typeof KANBAN_VIEW_LIST;
 
@@ -35,14 +42,20 @@ export default function KanbanPage() {
   const [selectedCard, setSelectedCard] = React.useState<KanbanCard | null>(
     null,
   );
-  const [boardName, setBoardName] = React.useState("");
-  const [columnName, setColumnName] = React.useState("");
+  const creatingPathRef = React.useRef<string | null>(null);
 
+  const workspace = useKanbanWorkspace();
   const boardsQuery = useKanbanBoards();
-  const selectedBoardId = boardsQuery.data?.[0]?.id ?? null;
+  const selectedBoard = boardForWorkspace(
+    boardsQuery.data ?? [],
+    workspace.selected?.path ?? null,
+  );
+  const selectedBoardId = selectedBoard?.id ?? null;
   const boardQuery = useKanbanBoard(selectedBoardId);
   const costsQuery = useKanbanBoardCosts(selectedBoardId);
-  const createBoard = useCreateKanbanBoard();
+  const { mutate: createBoard, isPending: isCreateBoardPending } =
+    useCreateKanbanBoard();
+  const failedCreatePathsRef = React.useRef(new Set<string>());
   const createCard = useCreateKanbanCard(selectedBoardId ?? "");
   const createColumn = useCreateKanbanColumn(selectedBoardId ?? "");
   const moveCard = useMoveKanbanCard(selectedBoardId ?? "");
@@ -56,132 +69,162 @@ export default function KanbanPage() {
         .find((card) => card.id === selectedCard?.id) ?? null)
     : null;
 
+  React.useEffect(() => {
+    setSelectedCard(null);
+  }, [workspace.selected?.path]);
+
+  React.useEffect(() => {
+    const selected = workspace.selected;
+    if (!selected?.path || boardsQuery.isLoading) return;
+    if (selectedBoard) {
+      creatingPathRef.current = null;
+      return;
+    }
+    if (
+      isCreateBoardPending ||
+      creatingPathRef.current === selected.path ||
+      failedCreatePathsRef.current.has(selected.path)
+    ) {
+      return;
+    }
+    creatingPathRef.current = selected.path;
+    createBoard(
+      { name: selected.name, project_id: selected.path },
+      {
+        onError: () => {
+          failedCreatePathsRef.current.add(selected.path);
+          if (creatingPathRef.current === selected.path) {
+            creatingPathRef.current = null;
+          }
+          displayErrorToast(t(I18nKey.ERROR$GENERIC));
+        },
+      },
+    );
+  }, [
+    boardsQuery.isLoading,
+    createBoard,
+    isCreateBoardPending,
+    selectedBoard,
+    t,
+    workspace.selected,
+  ]);
+
+  const isCreatingBoard =
+    Boolean(workspace.selected) &&
+    !board &&
+    (isCreateBoardPending ||
+      boardsQuery.isFetching ||
+      boardsQuery.isLoading ||
+      boardQuery.isLoading);
+
   return (
-    <main data-testid="kanban-page" className={settingsLikeMainScrollClassName}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{t(I18nKey.KANBAN$NAV)}</h1>
-        <div className="flex items-center gap-2">
-          <BrandButton
-            type="button"
-            variant="secondary"
-            testId="kanban-new-project"
-            onClick={() => navigate(PROJECT_INIT_PATH)}
-          >
-            {t(I18nKey.PROJECT_INIT$NAV)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant={view === KANBAN_VIEW_BOARD ? "primary" : "secondary"}
-            testId="kanban-view-board"
-            onClick={() => setView(KANBAN_VIEW_BOARD)}
-          >
-            {t(I18nKey.KANBAN$BOARD_VIEW)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant={view === KANBAN_VIEW_LIST ? "primary" : "secondary"}
-            testId="kanban-view-list"
-            onClick={() => setView(KANBAN_VIEW_LIST)}
-          >
-            {t(I18nKey.KANBAN$LIST_VIEW)}
-          </BrandButton>
-        </div>
-      </div>
-
-      {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
-
-      {!selectedBoardId ? (
-        <form
-          className="mt-6 flex max-w-md flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const name = boardName.trim();
-            if (!name) return;
-            createBoard.mutate({ name });
-            setBoardName("");
-          }}
-        >
-          <p data-testid="kanban-empty">{t(I18nKey.KANBAN$NO_BOARDS)}</p>
-          <input
-            data-testid="kanban-board-name"
-            value={boardName}
-            onChange={(event) => setBoardName(event.target.value)}
-            placeholder={t(I18nKey.KANBAN$BOARD_NAME)}
-            className="min-w-0 flex-1 rounded-md border border-[var(--oh-border)] bg-transparent px-3 py-2"
-          />
-          <BrandButton
-            type="submit"
-            variant="primary"
-            testId="kanban-create-board"
-          >
-            {t(I18nKey.KANBAN$CREATE_BOARD)}
-          </BrandButton>
-        </form>
-      ) : null}
-
-      {board && view === KANBAN_VIEW_BOARD ? (
-        <div className="mt-4 flex min-h-0 flex-1 gap-3">
-          <KanbanBoardView
-            board={board}
-            costs={costsQuery.data}
-            onSelectCard={setSelectedCard}
-            onAddCard={(columnId, title) =>
-              createCard.mutate({ columnId, payload: { title } })
-            }
-            onMoveCard={(cardId, columnId, position) =>
-              moveCard.mutate({
-                cardId,
-                payload: { column_id: columnId, position },
-              })
-            }
-          />
-          <form
-            className="flex w-56 shrink-0 flex-col gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const name = columnName.trim();
-              if (!name || !selectedBoardId) return;
-              createColumn.mutate({ name });
-              setColumnName("");
-            }}
-          >
-            <input
-              data-testid="kanban-column-name"
-              value={columnName}
-              onChange={(event) => setColumnName(event.target.value)}
-              placeholder={t(I18nKey.KANBAN$NEW_COLUMN_NAME)}
-              className="rounded-md border border-[var(--oh-border)] bg-transparent px-2 py-1 text-sm"
+    <main data-testid="kanban-page" className={kanbanPageShellClassName}>
+      <header className="mb-4 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <Typography.H2>{t(I18nKey.KANBAN$NAV)}</Typography.H2>
+            <KanbanWorkspacePicker
+              workspaces={workspace.workspaces}
+              parents={workspace.parents}
+              workspaceParents={workspace.workspaceParents}
+              selected={workspace.selected}
+              isLoading={workspace.isLoading}
+              listError={workspace.listError}
+              onChange={workspace.setSelected}
             />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
+            {board ? (
+              <SegmentedToggle
+                value={view}
+                onChange={setView}
+                ariaLabel={t(I18nKey.KANBAN$VIEW_MODE)}
+                testId="kanban-view"
+                options={[
+                  {
+                    value: KANBAN_VIEW_BOARD,
+                    label: t(I18nKey.KANBAN$BOARD_VIEW),
+                  },
+                  {
+                    value: KANBAN_VIEW_LIST,
+                    label: t(I18nKey.KANBAN$LIST_VIEW),
+                  },
+                ]}
+              />
+            ) : null}
             <BrandButton
-              type="submit"
+              type="button"
               variant="secondary"
-              testId="kanban-add-column"
+              testId="kanban-new-project"
+              isDisabled={!workspace.selected}
+              onClick={() => navigate(PROJECT_INIT_PATH)}
             >
-              {t(I18nKey.KANBAN$ADD_COLUMN)}
+              {t(I18nKey.PROJECT_INIT$NAV)}
             </BrandButton>
-          </form>
+          </div>
+        </div>
+      </header>
+
+      {!workspace.selected && !workspace.isLoading ? (
+        <div
+          data-testid="kanban-empty"
+          className={extensionModuleEmptyStateClassName}
+        >
+          <p className="text-sm font-medium text-white">
+            {t(I18nKey.KANBAN$NO_WORKSPACE)}
+          </p>
+          <p className="mt-2 text-sm text-tertiary-light">
+            {t(I18nKey.KANBAN$NO_WORKSPACE_HINT)}
+          </p>
         </div>
       ) : null}
 
-      {board && view === KANBAN_VIEW_LIST ? (
-        <div className="mt-4">
-          <KanbanList board={board} onSelectCard={setSelectedCard} />
-        </div>
+      {isCreatingBoard ? (
+        <p
+          data-testid="kanban-creating"
+          className="text-sm text-tertiary-light"
+        >
+          {t(I18nKey.KANBAN$CREATING_BOARD)}
+        </p>
       ) : null}
 
-      {selectedFromBoard ? (
-        <div className="fixed inset-y-0 right-0 z-20">
-          <CardDetailPanel
-            card={selectedFromBoard}
-            onClose={() => setSelectedCard(null)}
-            onUpdate={(cardId, payload) =>
-              updateCard.mutate({ cardId, payload })
-            }
-            onDelete={(cardId) => {
-              deleteCard.mutate(cardId);
-              setSelectedCard(null);
-            }}
-          />
+      {board ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            {view === KANBAN_VIEW_BOARD ? (
+              <KanbanBoardView
+                board={board}
+                costs={costsQuery.data}
+                onSelectCard={setSelectedCard}
+                onAddCard={(columnId, title) =>
+                  createCard.mutate({ columnId, payload: { title } })
+                }
+                onMoveCard={(cardId, columnId, position) =>
+                  moveCard.mutate({
+                    cardId,
+                    payload: { column_id: columnId, position },
+                  })
+                }
+                onAddColumn={(name) => createColumn.mutate({ name })}
+              />
+            ) : (
+              <KanbanList board={board} onSelectCard={setSelectedCard} />
+            )}
+          </div>
+          {selectedFromBoard ? (
+            <CardDetailPanel
+              card={selectedFromBoard}
+              onClose={() => setSelectedCard(null)}
+              onUpdate={(cardId, payload) =>
+                updateCard.mutate({ cardId, payload })
+              }
+              onDelete={(cardId) => {
+                deleteCard.mutate(cardId);
+                setSelectedCard(null);
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
     </main>
