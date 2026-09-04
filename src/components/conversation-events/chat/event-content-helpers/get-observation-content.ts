@@ -18,13 +18,8 @@ import {
   GrepObservation,
   InvokeSkillObservation,
   CanvasUIObservation,
-  ClassifyAndSwitchLLMObservation,
   SwitchLLMObservation,
 } from "#/types/agent-server/core/base/observation";
-import {
-  getSwitchLLMObservationProfileName,
-  getSwitchLLMObservationReason,
-} from "#/types/agent-server/type-guards";
 
 // File Editor Observations
 const getFileEditorObservationContent = (
@@ -190,13 +185,9 @@ const getCanvasUIObservationContent = (
     .join("\n");
 
 const getSwitchLLMObservationContent = (
-  event: ObservationEvent<
-    SwitchLLMObservation | ClassifyAndSwitchLLMObservation
-  >,
+  event: ObservationEvent<SwitchLLMObservation>,
 ): string => {
   const { observation } = event;
-  const profileName = getSwitchLLMObservationProfileName(observation);
-  const reason = getSwitchLLMObservationReason(observation);
 
   const textContent = observation.content
     .filter((c) => c.type === "text")
@@ -206,15 +197,15 @@ const getSwitchLLMObservationContent = (
   if (observation.is_error) {
     return textContent
       ? `**Error:**\n${textContent}`
-      : `**Error:**\nFailed to switch LLM profile \`${profileName}\`.`;
+      : `**Error:**\nFailed to switch LLM profile \`${observation.profile_name}\`.`;
   }
 
-  const parts = [`**Profile:** \`${profileName}\``];
+  const parts = [`**Profile:** \`${observation.profile_name}\``];
   if (observation.active_model) {
     parts.push(`**Active model:** \`${observation.active_model}\``);
   }
-  if (reason) {
-    parts.push(`**Reason:** ${reason}`);
+  if (observation.reason) {
+    parts.push(`**Reason:** ${observation.reason}`);
   }
 
   return parts.join("\n");
@@ -435,11 +426,8 @@ export const getObservationContent = (event: ObservationEvent): string => {
         : getDefaultEventContent(event);
 
     case "SwitchLLMObservation":
-    case "ClassifyAndSwitchLLMObservation":
       return getSwitchLLMObservationContent(
-        event as ObservationEvent<
-          SwitchLLMObservation | ClassifyAndSwitchLLMObservation
-        >,
+        event as ObservationEvent<SwitchLLMObservation>,
       );
 
     default:

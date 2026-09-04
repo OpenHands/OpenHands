@@ -5,10 +5,7 @@ import {
   mergeStoredConversationMetadata,
 } from "#/api/conversation-metadata-store";
 import { OpenHandsEvent } from "#/types/agent-server/core";
-import {
-  getSwitchLLMObservationProfileName,
-  isSwitchLLMObservationEvent,
-} from "#/types/agent-server/type-guards";
+import { isSwitchLLMObservationEvent } from "#/types/agent-server/type-guards";
 import { shouldRenderEvent } from "#/components/conversation-events/chat/event-content-helpers/should-render-event";
 
 export function recordModelSwitchMessage(
@@ -104,10 +101,10 @@ export function seedModelSwitchesFromHistory(
       switches.push({
         id: `history-switch:${event.id}`,
         anchorEventId: lastRenderableId,
-        profileName: getSwitchLLMObservationProfileName(event.observation),
+        profileName: event.observation.profile_name,
       });
       latestSwitch = {
-        profileName: getSwitchLLMObservationProfileName(event.observation),
+        profileName: event.observation.profile_name,
         timestamp: event.timestamp,
       };
     }

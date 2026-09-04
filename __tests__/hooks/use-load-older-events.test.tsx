@@ -225,62 +225,6 @@ describe("useLoadOlderEvents", () => {
     ]);
   });
 
-  it("seeds inline model-switch messages for router switches in a paginated older page", async () => {
-    act(() => {
-      useEventStore
-        .getState()
-        .addEvent(makeEvent("evt-recent", "2024-06-01T00:00:00Z"));
-    });
-
-    const userMsg = {
-      id: "evt-user-router-old",
-      timestamp: "2024-05-01T00:00:00Z",
-      source: "user",
-      llm_message: {
-        role: "user",
-        content: [{ type: "text", text: "route this" }],
-      },
-      activated_microagents: [],
-      extended_content: [],
-    } as unknown as OpenHandsEvent;
-    const switchObs = {
-      id: "evt-router-switch-old",
-      timestamp: "2024-05-02T00:00:00Z",
-      source: "environment",
-      action_id: "action-router-switch-old",
-      tool_name: "route_task_to_model",
-      tool_call_id: "call-router-switch-old",
-      observation: {
-        kind: "ClassifyAndSwitchLLMObservation",
-        content: [{ type: "text", text: "Switched to minimax-m3" }],
-        is_error: false,
-        model: "minimax-m3",
-        active_model: "litellm_proxy/minimax-m3",
-      },
-    } as unknown as OpenHandsEvent;
-
-    vi.spyOn(EventService, "searchEvents").mockResolvedValue(
-      makePage([switchObs, userMsg], null),
-    );
-
-    const { result } = renderHook(() => useLoadOlderEvents("conv-1"), {
-      wrapper,
-    });
-
-    await act(async () => {
-      await result.current.loadOlder();
-    });
-
-    const entries = useModelStore.getState().entriesByConversation["conv-1"];
-    expect(entries).toEqual([
-      expect.objectContaining({
-        id: "history-switch:evt-router-switch-old",
-        switchedTo: "minimax-m3",
-        anchorEventId: "evt-user-router-old",
-      }),
-    ]);
-  });
-
   it("keeps paginating while the server keeps returning full pages", async () => {
     act(() => {
       useEventStore

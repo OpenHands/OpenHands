@@ -37,7 +37,6 @@ import {
   isBrowserObservationEvent,
   isBrowserNavigateActionEvent,
   isSwitchLLMObservationEvent,
-  getSwitchLLMObservationProfileName,
   isCanvasUIActionEvent,
   isStreamingDeltaEvent,
   isLaunchChildConversationActionEvent,
@@ -710,10 +709,10 @@ export function ConversationWebSocketProvider({
             switchLLMObservation &&
             !switchLLMObservation.observation.is_error
           ) {
-            const profileName = getSwitchLLMObservationProfileName(
-              switchLLMObservation.observation,
+            recordModelSwitchMessage(
+              conversationId,
+              switchLLMObservation.observation.profile_name,
             );
-            recordModelSwitchMessage(conversationId, profileName);
 
             // Mirror the user-driven `/model` path: persist the profile so the
             // chat-header switcher shows the right name after a reload, even
@@ -722,7 +721,7 @@ export function ConversationWebSocketProvider({
             // event can't roll it back (or needlessly rewrite it).
             stampActiveLlmProfile(
               conversationId,
-              profileName,
+              switchLLMObservation.observation.profile_name,
               switchLLMObservation.timestamp,
             );
 

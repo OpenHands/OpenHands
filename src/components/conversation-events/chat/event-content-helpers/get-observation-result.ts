@@ -52,7 +52,6 @@ export const getObservationResult = (
       if (observation.is_error) return "error";
       return "success";
     case "SwitchLLMObservation":
-    case "ClassifyAndSwitchLLMObservation":
       if (observation.is_error) return "error";
       return "success";
     case "InvokeSkillObservation":

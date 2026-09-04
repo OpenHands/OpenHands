@@ -36,25 +36,6 @@ const switchObservation = (
     },
   }) as unknown as OpenHandsEvent;
 
-const classifyAndSwitchObservation = (
-  id: string,
-  profileName: string,
-  isError = false,
-): OpenHandsEvent =>
-  ({
-    id,
-    timestamp: "2024-01-01T00:00:00Z",
-    source: "environment",
-    action_id: `action-${id}`,
-    observation: {
-      kind: "ClassifyAndSwitchLLMObservation",
-      content: [],
-      is_error: isError,
-      model: profileName,
-      active_model: `litellm_proxy/${profileName}`,
-    },
-  }) as unknown as OpenHandsEvent;
-
 // An agent action event. `ThinkAction` is renderable (shown as a thinking
 // block); `PlanningFileEditorAction` is hidden by `shouldRenderEvent`.
 const agentAction = (id: string, kind: string): OpenHandsEvent =>
@@ -101,21 +82,6 @@ describe("seedModelSwitchesFromHistory", () => {
     seedModelSwitchesFromHistory("c1", events);
 
     expect(entriesFor("c1")).toHaveLength(1);
-  });
-
-  it("seeds a successful router switch from the selected model field", () => {
-    seedModelSwitchesFromHistory("c1", [
-      userMessage("u1"),
-      classifyAndSwitchObservation("o1", "minimax-m3"),
-    ]);
-
-    const entries = entriesFor("c1");
-    expect(entries).toHaveLength(1);
-    expect(entries[0].switchedTo).toBe("minimax-m3");
-    expect(entries[0].anchorEventId).toBe("u1");
-    expect(entries[0].id).toBe("history-switch:o1");
-    expect(activeProfileFor("c1")).toBe("minimax-m3");
-    expect(stampedProfileFor("c1")).toBe("minimax-m3");
   });
 
   it("ignores failed switches (they still render as error cards)", () => {

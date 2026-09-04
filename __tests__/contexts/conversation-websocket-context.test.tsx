@@ -184,22 +184,6 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     },
   });
 
-  const makeAgentClassifyAndSwitchObservation = (profileName: string) => ({
-    id: "evt-classify-switch-1",
-    timestamp: new Date().toISOString(),
-    source: "environment",
-    action_id: "action-classify-switch-1",
-    tool_name: "route_task_to_model",
-    tool_call_id: "call-classify-switch-1",
-    observation: {
-      kind: "ClassifyAndSwitchLLMObservation",
-      content: [{ type: "text", text: `Switched to ${profileName}` }],
-      is_error: false,
-      model: profileName,
-      active_model: `litellm_proxy/${profileName}`,
-    },
-  });
-
   it("stamps active_profile on a successful agent-triggered model switch so it survives reload", async () => {
     // Arrange: open a conversation with a real ws url so the main socket's
     // onMessage (handleMainMessage) is wired and captured.
@@ -228,32 +212,6 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     expect(getStoredConversationMetadata("conv-switch")?.active_profile).toBe(
       "fast-opus",
     );
-  });
-
-  it("stamps active_profile on a successful router-triggered model switch", async () => {
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ConversationWebSocketProvider
-          conversationId="conv-router-switch"
-          conversationUrl="http://localhost/api"
-        >
-          <div />
-        </ConversationWebSocketProvider>
-      </QueryClientProvider>,
-    );
-    await waitFor(() => expect(wsCapture.mainOnMessage).not.toBeNull());
-
-    act(() => {
-      wsCapture.mainOnMessage!({
-        data: JSON.stringify(
-          makeAgentClassifyAndSwitchObservation("minimax-m3"),
-        ),
-      });
-    });
-
-    expect(
-      getStoredConversationMetadata("conv-router-switch")?.active_profile,
-    ).toBe("minimax-m3");
   });
 
   it("keeps the session key out of WebSocket query parameters", async () => {
