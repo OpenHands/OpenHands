@@ -93,4 +93,13 @@ export function attachPopupPolicy(popupWin, openExternal) {
     openExternalUrl(url, openExternal);
     return { action: "deny" };
   });
+  // A loopback `window.open()` from the popup is allowed, which means Electron
+  // creates another window — and a window inherits no policy from the one that
+  // opened it. Without this, that window has no navigation guard and no
+  // window-open handler, so it can be steered to a remote host and is back to
+  // the problem this module exists to prevent, one level deeper. The policy has
+  // to follow the chain, not just its first link.
+  popupWin.webContents.on("did-create-window", (childWin) => {
+    attachPopupPolicy(childWin, openExternal);
+  });
 }

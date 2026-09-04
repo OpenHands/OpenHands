@@ -24,6 +24,13 @@ function fakeWebContents() {
     setWindowOpenHandler(handler) {
       this.windowOpenHandler = handler;
     },
+    listenerCount(event) {
+      return (listeners.get(event) ?? []).length;
+    },
+    /** `did-create-window` hands over the window itself, not (event, url). */
+    emitWindow(event, win) {
+      (listeners.get(event) ?? []).forEach((handler) => handler(win));
+    },
     /** Fire one registered listener and report whether it cancelled. */
     emit(event, url) {
       const handlers = listeners.get(event) ?? [];
@@ -237,5 +244,57 @@ describe("attachPopupPolicy", () => {
 
     expect(decision).toEqual({ action: "allow" });
     expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  // The loopback window.open() above is allowed, so Electron creates another
+  // window. A window inherits no policy from its opener, so the policy has to
+  // be re-applied down the chain or that window is unguarded.
+  it("applies the policy to a window the popup opens", () => {
+    const openExternal = vi.fn();
+    const popupWin = fakePopupWindow();
+    attachPopupPolicy(popupWin, openExternal);
+
+    const childWin = fakePopupWindow();
+    popupWin.webContents.emitWindow("did-create-window", childWin);
+
+    expect(childWin.webContents.listenerCount("will-navigate")).toBe(1);
+    expect(childWin.webContents.listenerCount("will-redirect")).toBe(1);
+    expect(childWin.webContents.windowOpenHandler).not.toBeNull();
+  });
+
+  it("cancels a remote navigation in a window the popup opened", () => {
+    const openExternal = vi.fn();
+    const popupWin = fakePopupWindow();
+    attachPopupPolicy(popupWin, openExternal);
+
+    const childWin = fakePopupWindow();
+    popupWin.webContents.emitWindow("did-create-window", childWin);
+    const { prevented } = childWin.webContents.emit(
+      "will-navigate",
+      "https://evil.example/",
+    );
+
+    expect(prevented).toBe(true);
+    expect(openExternal).toHaveBeenCalledWith("https://evil.example/");
+    expect(childWin.close).toHaveBeenCalled();
+  });
+
+  it("keeps following the chain past the first nested window", () => {
+    const openExternal = vi.fn();
+    const popupWin = fakePopupWindow();
+    attachPopupPolicy(popupWin, openExternal);
+
+    const childWin = fakePopupWindow();
+    popupWin.webContents.emitWindow("did-create-window", childWin);
+    const grandchildWin = fakePopupWindow();
+    childWin.webContents.emitWindow("did-create-window", grandchildWin);
+
+    const { prevented } = grandchildWin.webContents.emit(
+      "will-redirect",
+      "https://evil.example/",
+    );
+
+    expect(prevented).toBe(true);
+    expect(openExternal).toHaveBeenCalledWith("https://evil.example/");
   });
 });
