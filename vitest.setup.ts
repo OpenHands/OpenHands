@@ -110,6 +110,23 @@ Object.defineProperty(globalThis, "ProgressEvent", {
   },
 });
 
+// MSW resolves an intercepted XHR asynchronously, and `resetHandlers()` does
+// not cancel a request that is already in flight. Counting event-loop turns
+// therefore cannot outlast a handler that delays in wall-clock milliseconds —
+// several of ours delay up to 300ms. Track what MSW still owes a response to
+// so `afterAll` can wait for exactly that instead.
+let inFlightRequests = 0;
+server.events.on("request:start", () => {
+  inFlightRequests += 1;
+});
+server.events.on("request:end", () => {
+  inFlightRequests -= 1;
+});
+
+// Long enough for the slowest handler plus scheduling slack; the drain exits
+// as soon as the queue empties, so this only bounds a stuck request.
+const DRAIN_TIMEOUT_MS = 2_000;
+
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
@@ -176,22 +193,24 @@ afterEach(async () => {
   await Promise.resolve();
 });
 afterAll(async () => {
-  // Drain pending MSW `respondWith` callbacks (and any other queued
-  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
-  // responses asynchronously; if a late callback (e.g. PostHog analytics
-  // flushed during the last test) settles after teardown, its `createEvent`
-  // call evaluates the bare `ProgressEvent` global against a torn-down
-  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
-  // a few real-timer ticks here lets those callbacks complete while
-  // `ProgressEvent` is still defined. We restore real timers first so a test
-  // that left fake timers active can't stall the drain.
+  // Drain pending MSW `respondWith` callbacks before jsdom is torn down. If a
+  // late callback settles after teardown, its `createEvent` call evaluates the
+  // bare `ProgressEvent` global against a torn-down jsdom and throws
+  // `ReferenceError: ProgressEvent is not defined`, which Vitest reports as an
+  // unhandled rejection and fails the whole run even when every test passed.
+  // Real timers are restored first so a test that left fake timers active
+  // can't stall the drain.
   vi.useRealTimers();
   // Reset handlers first so no new intercepted requests start processing
   // during the drain window.
   server.resetHandlers();
-  for (let i = 0; i < 30; i += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  const drainDeadline = Date.now() + DRAIN_TIMEOUT_MS;
+  while (inFlightRequests > 0 && Date.now() < drainDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
+  // `request:end` fires before the interceptor's own continuation runs, so
+  // give that one more turn while `ProgressEvent` is still defined.
+  await new Promise((resolve) => setTimeout(resolve, 0));
   server.close();
   vi.unstubAllGlobals();
 });
