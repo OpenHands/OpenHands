@@ -1,7 +1,7 @@
 /**
  * MetaProfilesService wraps the agent-server's ``/api/meta-profiles`` endpoints
  * (added in software-agent-sdk PR #4287). A meta-profile is a model-routing
- * configuration consumed by the ``classify_and_switch_llm`` tool: it names a
+ * configuration consumed by the ``route_task_to_model`` tool: it names a
  * ``classifier_model``, a ``default_model`` and a direct ``prompt_template``
  * whose returned ``model`` value is matched to saved LLM profile names.
  *

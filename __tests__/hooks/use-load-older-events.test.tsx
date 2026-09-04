@@ -248,7 +248,7 @@ describe("useLoadOlderEvents", () => {
       timestamp: "2024-05-02T00:00:00Z",
       source: "environment",
       action_id: "action-router-switch-old",
-      tool_name: "classify_and_switch_llm",
+      tool_name: "route_task_to_model",
       tool_call_id: "call-router-switch-old",
       observation: {
         kind: "ClassifyAndSwitchLLMObservation",

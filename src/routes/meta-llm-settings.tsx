@@ -5,7 +5,7 @@ import { I18nKey } from "#/i18n/declaration";
 
 /**
  * Settings route for managing *meta-profiles* — declarative model-routing
- * configurations consumed by the agent's ``classify_and_switch_llm`` tool.
+ * configurations consumed by the agent's ``route_task_to_model`` tool.
  *
  * Local backends store meta-profiles on the agent-server. Organization-bound
  * cloud backends store them in the SaaS control plane and pass the active

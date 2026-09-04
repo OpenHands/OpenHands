@@ -13,7 +13,7 @@ export function useActivateMetaProfile() {
     mutationFn: (name: string) => MetaProfilesService.activateMetaProfile(name),
     onSuccess: async () => {
       // Activating a meta-profile sets ``active_meta_profile`` in settings,
-      // which controls whether the classify_and_switch_llm tool is attached to
+      // which controls whether the route_task_to_model tool is attached to
       // new conversations — so refresh the settings caches too.
       SettingsService.invalidateCache();
       await queryClient.invalidateQueries({

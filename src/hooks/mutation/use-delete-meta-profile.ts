@@ -13,7 +13,7 @@ export function useDeleteMetaProfile() {
     mutationFn: (name: string) => MetaProfilesService.deleteMetaProfile(name),
     onSuccess: async () => {
       // Deleting the *active* meta-profile clears ``active_meta_profile`` in
-      // settings (and detaches the classify_and_switch_llm tool from new
+      // settings (and detaches the route_task_to_model tool from new
       // conversations), so refresh the settings caches too — mirroring
       // activation. Without this, settings can stay stale until reload.
       SettingsService.invalidateCache();

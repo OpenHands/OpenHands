@@ -189,7 +189,7 @@ describe("ConversationWebSocketProvider — conversation-scoped event store", ()
     timestamp: new Date().toISOString(),
     source: "environment",
     action_id: "action-classify-switch-1",
-    tool_name: "classify_and_switch_llm",
+    tool_name: "route_task_to_model",
     tool_call_id: "call-classify-switch-1",
     observation: {
       kind: "ClassifyAndSwitchLLMObservation",
