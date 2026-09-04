@@ -26,6 +26,13 @@ export interface Automation {
   name: string;
   trigger: AutomationTrigger;
   enabled: boolean;
+  /**
+   * UUID of the user who created this automation. The backend returns it in
+   * `AutomationResponse.user_id`; the frontend uses it to implement the
+   * "creator escape hatch" — a member (view-only) may still edit their own
+   * automations even without `manage_automations`.
+   */
+  user_id?: string;
   repository?: string;
   /** LLM/model profile name used for automation runs. */
   model?: string | null;
