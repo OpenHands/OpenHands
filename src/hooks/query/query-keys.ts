@@ -91,6 +91,12 @@ export const KANBAN_QUERY_KEYS = {
   costs: (boardId: string) => ["kanban", "costs", boardId] as const,
 } as const;
 
+export const PROJECTS_QUERY_KEYS = {
+  all: ["projects"] as const,
+  list: () => ["projects", "list"] as const,
+  detail: (projectId: string) => ["projects", "detail", projectId] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
