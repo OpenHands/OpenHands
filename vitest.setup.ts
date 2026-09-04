@@ -150,10 +150,20 @@ vi.mock("react-router", async (importOriginal) => ({
 // Import the Zustand mock to enable automatic store resets
 vi.mock("zustand");
 
+// Track pending MSW requests to prevent late resolutions after jsdom teardown
+const pendingMswRequests = new Set<string>();
+
 // Mock requests during tests
 beforeAll(() => {
   server.listen({ onUnhandledRequest: "bypass" });
   vi.stubGlobal("ResizeObserver", MockResizeObserver);
+
+  server.events.on("request:start", ({ requestId }) => {
+    pendingMswRequests.add(requestId);
+  });
+  server.events.on("request:end", ({ requestId }) => {
+    pendingMswRequests.delete(requestId);
+  });
 });
 
 beforeEach(() => {
@@ -176,22 +186,26 @@ afterEach(async () => {
   await Promise.resolve();
 });
 afterAll(async () => {
-  // Drain pending MSW `respondWith` callbacks (and any other queued
-  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
-  // responses asynchronously; if a late callback (e.g. PostHog analytics
-  // flushed during the last test) settles after teardown, its `createEvent`
-  // call evaluates the bare `ProgressEvent` global against a torn-down
-  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
-  // a few real-timer ticks here lets those callbacks complete while
-  // `ProgressEvent` is still defined. We restore real timers first so a test
-  // that left fake timers active can't stall the drain.
+  // Restore real timers first so a test that left fake timers active
+  // can't stall the drain.
   vi.useRealTimers();
-  // Reset handlers first so no new intercepted requests start processing
-  // during the drain window.
+
+  // Wait for all tracked in-flight MSW requests to settle before tearing down
+  // the jsdom environment. This prevents late `respondWith` callbacks from
+  // evaluating `ProgressEvent` against a torn-down global and throwing
+  // `ReferenceError: ProgressEvent is not defined`.
+  while (pendingMswRequests.size > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  // Reset handlers so no new intercepted requests start processing.
   server.resetHandlers();
+
+  // Defense-in-depth: drain any lingering macrotasks queued by the resolved handlers.
   for (let i = 0; i < 30; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+
   server.close();
   vi.unstubAllGlobals();
 });
