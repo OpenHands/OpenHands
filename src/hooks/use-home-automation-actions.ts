@@ -7,7 +7,10 @@ import {
   useDispatchAutomation,
   useToggleAutomation,
 } from "#/hooks/query/use-automations";
-import { useHasPermission } from "#/hooks/use-has-permission";
+import {
+  useAutomationPermissions,
+  useIsAutomationOwner,
+} from "#/hooks/use-automation-permissions";
 import { isHomeAutomationsDemoEnabled } from "#/fixtures/home-automations-demo";
 import { I18nKey } from "#/i18n/declaration";
 import {
@@ -41,7 +44,11 @@ export function useHomeAutomationActions(
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
   const active = useActiveBackend();
-  const canManage = useHasPermission("manage_automations");
+  const { canManage: hasManagePermission } = useAutomationPermissions();
+  const isOwner = useIsAutomationOwner(automation);
+  // Write actions on a specific automation are allowed when the user has
+  // manage permission OR is the automation's creator (creator escape hatch).
+  const canManage = hasManagePermission || isOwner;
   const canEdit = active.backend.kind === "local";
   const isDemo = isHomeAutomationsDemoEnabled();
 
