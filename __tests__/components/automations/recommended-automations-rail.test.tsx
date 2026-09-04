@@ -65,6 +65,7 @@ describe("RecommendedAutomationsRail", () => {
       );
 
     expect(cardIds).toEqual([
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -125,6 +126,7 @@ describe("RecommendedAutomationsRail", () => {
         installedAutomations={[
           { name: "GitHub code review" },
           { name: "GitHub issue to PR" },
+          { name: "Custom automation" },
           { name: "Slack channel monitor" },
           { name: "AGENTS.md Maintainer" },
           { name: "Daily news digest" },
