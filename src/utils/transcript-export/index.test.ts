@@ -378,7 +378,7 @@ describe("transcript export truncation notice", () => {
       role: "user",
       content: [{ type: "text", text: `Message ${index}` }],
     },
-    activated_microagents: [],
+    activated_skills: [],
     extended_content: [],
   });
 

@@ -219,16 +219,16 @@ const fetchBoundedTranscriptEvents = async (
     let addedEvent = false;
     let pageBoundaryTimestamp: string | undefined;
     for (const event of page.items) {
-      if (!fetchedEventIds.has(event.id)) {
-        fetchedEventIds.add(event.id);
+      if (event.id === undefined || !fetchedEventIds.has(event.id)) {
+        if (event.id !== undefined) fetchedEventIds.add(event.id);
         collected.push(event);
         addedEvent = true;
       }
       if (
         !pageBoundaryTimestamp ||
         (descending
-          ? event.timestamp < pageBoundaryTimestamp
-          : event.timestamp > pageBoundaryTimestamp)
+          ? (event.timestamp ?? "") < pageBoundaryTimestamp
+          : (event.timestamp ?? "") > pageBoundaryTimestamp)
       ) {
         pageBoundaryTimestamp = event.timestamp;
       }
@@ -286,15 +286,17 @@ export const loadBoundedTranscriptEvents = async (
     headMax,
   );
 
-  const headIds = new Set(head.map((event) => event.id));
-  const eventsById = new Map<string, OpenHandsEvent>();
-  for (const event of head) eventsById.set(event.id, event);
+  const headIds = new Set(head.map((event) => event.id ?? event));
+  const eventsById = new Map<string | OpenHandsEvent, OpenHandsEvent>();
+  for (const event of head) eventsById.set(event.id ?? event, event);
   for (const event of tail) {
-    if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+    if (!eventsById.has(event.id ?? event))
+      eventsById.set(event.id ?? event, event);
   }
   // Live store events are the newest; keep any not already fetched.
   for (const event of loadedEvents) {
-    if (!eventsById.has(event.id)) eventsById.set(event.id, event);
+    if (!eventsById.has(event.id ?? event))
+      eventsById.set(event.id ?? event, event);
   }
 
   const events = [...eventsById.values()].sort(compareEventTimestamps);
@@ -303,7 +305,7 @@ export const loadBoundedTranscriptEvents = async (
   // knows where the head ends and the omission notice belongs.
   let headEventCount = 0;
   for (const event of events) {
-    if (!headIds.has(event.id)) break;
+    if (!headIds.has(event.id ?? event)) break;
     headEventCount += 1;
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MessageEvent } from "#/types/agent-server/core";
+import type { MessageEvent, OpenHandsEvent } from "#/types/agent-server/core";
 import {
   loadCompleteTranscriptEvents,
   loadBoundedTranscriptEvents,
@@ -153,7 +153,7 @@ describe("loadCompleteTranscriptEvents", () => {
 
 describe("loadBoundedTranscriptEvents", () => {
   // Cursor-based mock: pageId is an offset into the direction-ordered view.
-  const makeBoundedSearch = (ascendingAll: MessageEvent[]) =>
+  const makeBoundedSearch = (ascendingAll: OpenHandsEvent[]) =>
     vi.fn(
       async ({
         limit,
@@ -224,6 +224,25 @@ describe("loadBoundedTranscriptEvents", () => {
 
     expect(events).toEqual(all);
     expect(truncation).toBeUndefined();
+  });
+
+  it("preserves events without IDs in the head, tail, and live store", async () => {
+    const all = Array.from({ length: 8 }, (_, index) => ({
+      ...makeMessage(index),
+      id: undefined,
+      kind: "ConversationErrorEvent" as const,
+      code: "error",
+      detail: "Conversation error",
+    }));
+    const result = await loadBoundedTranscriptEvents(
+      [all[4]],
+      makeBoundedSearch(all),
+      8,
+      2,
+      2,
+    );
+    expect(result.events).toEqual([all[0], all[1], all[4], all[6], all[7]]);
+    expect(result.truncation).toEqual({ omittedCount: 3, headEventCount: 2 });
   });
 
   it("merges live store events into the newest tail without duplicating", async () => {
