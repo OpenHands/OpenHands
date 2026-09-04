@@ -38,4 +38,12 @@ describe("kanban python suite", () => {
     });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   });
+
+  it("passes cost estimator tests", () => {
+    const result = spawnSync("python3", ["tools/test_cost_estimator.py"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  });
 });

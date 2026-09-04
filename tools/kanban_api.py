@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from kanban import KanbanError, KanbanStore, default_db_path
 from kanban_agent import complete_session, link_session, record_progress
+from cost_estimator import apply_estimate
 from project_bootstrap import (
     DecompositionError,
     init_project,
@@ -43,6 +44,7 @@ CARD_LINK_SESSION_PATH_RE = re.compile(
 )
 CARD_PROGRESS_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/progress$")
 CARD_COMPLETE_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/complete$")
+CARD_ESTIMATE_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/estimate$")
 PROJECT_PREVIEW_PATH = "/api/project/preview"
 PROJECT_INIT_PATH = "/api/project/init"
 
@@ -183,6 +185,18 @@ def _complete_session(
     )
 
 
+def _estimate_card(
+    store: KanbanStore, params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    return 200, apply_estimate(
+        store,
+        params["card_id"],
+        model=payload.get("model"),
+        cost_cap=payload.get("cost_cap"),
+    )
+
+
 def _project_preview(
     _store: KanbanStore, _params: dict[str, str], body: JsonBody
 ) -> tuple[int, Any]:
@@ -222,6 +236,7 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("POST", CARD_LINK_SESSION_PATH_RE, _link_session),
     ("POST", CARD_PROGRESS_PATH_RE, _record_progress),
     ("POST", CARD_COMPLETE_PATH_RE, _complete_session),
+    ("POST", CARD_ESTIMATE_PATH_RE, _estimate_card),
     ("POST", re.compile(rf"^{PROJECT_PREVIEW_PATH}$"), _project_preview),
     ("POST", re.compile(rf"^{PROJECT_INIT_PATH}$"), _project_init),
 )
