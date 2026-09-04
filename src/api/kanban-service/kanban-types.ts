@@ -112,3 +112,26 @@ export type UpdateCardPayload = Partial<
     | "agent_session_id"
   >
 >;
+
+export interface SuggestedKanbanCard {
+  title: string;
+  description: string;
+  source: string;
+  acceptance: string[];
+  priority: KanbanPriority;
+}
+
+export interface ProjectPreviewResult {
+  suggested: SuggestedKanbanCard[];
+}
+
+export interface ProjectInitPayload {
+  spec?: string;
+  root?: string;
+  board_name?: string;
+}
+
+export interface ProjectInitResult extends ProjectPreviewResult {
+  board: KanbanBoard;
+  cards: KanbanCard[];
+}

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   KANBAN_VIEW_BOARD,
   KANBAN_VIEW_LIST,
+  PROJECT_INIT_PATH,
 } from "#/api/kanban-service/kanban-constants";
 import type { KanbanCard } from "#/api/kanban-service/kanban-types";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -22,12 +23,14 @@ import {
   useMoveKanbanCard,
   useUpdateKanbanCard,
 } from "#/hooks/query/use-kanban";
+import { useNavigation } from "#/context/navigation-context";
 import { settingsLikeMainScrollClassName } from "#/utils/settings-like-page-layout-classes";
 
 type KanbanView = typeof KANBAN_VIEW_BOARD | typeof KANBAN_VIEW_LIST;
 
 export default function KanbanPage() {
   const { t } = useTranslation("openhands");
+  const { navigate } = useNavigation();
   const [view, setView] = React.useState<KanbanView>(KANBAN_VIEW_BOARD);
   const [selectedCard, setSelectedCard] = React.useState<KanbanCard | null>(
     null,
@@ -58,6 +61,14 @@ export default function KanbanPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">{t(I18nKey.KANBAN$NAV)}</h1>
         <div className="flex items-center gap-2">
+          <BrandButton
+            type="button"
+            variant="secondary"
+            testId="kanban-new-project"
+            onClick={() => navigate(PROJECT_INIT_PATH)}
+          >
+            {t(I18nKey.PROJECT_INIT$NAV)}
+          </BrandButton>
           <BrandButton
             type="button"
             variant={view === KANBAN_VIEW_BOARD ? "primary" : "secondary"}

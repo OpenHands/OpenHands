@@ -30,4 +30,12 @@ describe("kanban python suite", () => {
     });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
   });
+
+  it("passes project bootstrap tests", () => {
+    const result = spawnSync("python3", ["tools/test_project_bootstrap.py"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  });
 });

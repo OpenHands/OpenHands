@@ -5,6 +5,7 @@ import type {
   CreateCardPayload,
   CreateColumnPayload,
   MoveCardPayload,
+  ProjectInitPayload,
   UpdateCardPayload,
 } from "#/api/kanban-service/kanban-types";
 import { KANBAN_QUERY_KEYS } from "#/hooks/query/query-keys";
@@ -133,6 +134,22 @@ export function useDeleteKanbanColumn(boardId: string) {
   const invalidate = useInvalidateKanban(boardId);
   return useMutation({
     mutationFn: (columnId: string) => KanbanService.deleteColumn(columnId),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePreviewProject() {
+  return useMutation({
+    mutationFn: (payload: ProjectInitPayload) =>
+      KanbanService.previewProject(payload),
+  });
+}
+
+export function useInitProject() {
+  const invalidate = useInvalidateKanban();
+  return useMutation({
+    mutationFn: (payload: ProjectInitPayload) =>
+      KanbanService.initProject(payload),
     onSuccess: invalidate,
   });
 }

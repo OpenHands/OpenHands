@@ -5,6 +5,8 @@ import {
   KANBAN_API_BOARDS_PATH,
   KANBAN_API_CARDS_PATH,
   KANBAN_API_COLUMNS_PATH,
+  PROJECT_API_INIT_PATH,
+  PROJECT_API_PREVIEW_PATH,
   SESSION_API_KEY_HEADER,
 } from "./kanban-constants";
 import type {
@@ -17,6 +19,9 @@ import type {
   KanbanCard,
   KanbanColumn,
   MoveCardPayload,
+  ProjectInitPayload,
+  ProjectInitResult,
+  ProjectPreviewResult,
   UpdateCardPayload,
 } from "./kanban-types";
 
@@ -134,6 +139,26 @@ export const KanbanService = {
     const { data } = await kanbanAxios.post<KanbanCard>(
       `${KANBAN_API_CARDS_PATH}/${cardId}/link-session`,
       { session_id: sessionId },
+    );
+    return data;
+  },
+
+  previewProject: async (
+    payload: ProjectInitPayload,
+  ): Promise<ProjectPreviewResult> => {
+    const { data } = await kanbanAxios.post<ProjectPreviewResult>(
+      PROJECT_API_PREVIEW_PATH,
+      payload,
+    );
+    return data;
+  },
+
+  initProject: async (
+    payload: ProjectInitPayload,
+  ): Promise<ProjectInitResult> => {
+    const { data } = await kanbanAxios.post<ProjectInitResult>(
+      PROJECT_API_INIT_PATH,
+      payload,
     );
     return data;
   },

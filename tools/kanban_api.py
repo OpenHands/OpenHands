@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
@@ -18,6 +19,11 @@ from urllib.parse import urlparse
 
 from kanban import KanbanError, KanbanStore, default_db_path
 from kanban_agent import complete_session, link_session, record_progress
+from project_bootstrap import (
+    DecompositionError,
+    init_project,
+    preview_project,
+)
 
 JsonBody = dict[str, Any] | None
 Handler = Callable[[KanbanStore, dict[str, str], JsonBody], tuple[int, Any]]
@@ -37,6 +43,8 @@ CARD_LINK_SESSION_PATH_RE = re.compile(
 )
 CARD_PROGRESS_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/progress$")
 CARD_COMPLETE_PATH_RE = re.compile(r"^/api/cards/(?P<card_id>[^/]+)/complete$")
+PROJECT_PREVIEW_PATH = "/api/project/preview"
+PROJECT_INIT_PATH = "/api/project/init"
 
 
 def _json_body(body: JsonBody) -> dict[str, Any]:
@@ -175,6 +183,30 @@ def _complete_session(
     )
 
 
+def _project_preview(
+    _store: KanbanStore, _params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    cards = preview_project(
+        payload.get("root") or os.getcwd(),
+        payload.get("spec"),
+    )
+    return 200, {"suggested": [card.__dict__ for card in cards]}
+
+
+def _project_init(
+    store: KanbanStore, _params: dict[str, str], body: JsonBody
+) -> tuple[int, Any]:
+    payload = _json_body(body)
+    result = init_project(
+        payload.get("root") or os.getcwd(),
+        payload.get("spec"),
+        store,
+        board_name=str(payload.get("board_name") or "Project board"),
+    )
+    return 201, result
+
+
 ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("GET", re.compile(rf"^{BOARDS_PATH}$"), _list_boards),
     ("POST", re.compile(rf"^{BOARDS_PATH}$"), _create_board),
@@ -190,6 +222,8 @@ ROUTES: tuple[tuple[str, re.Pattern[str], Handler], ...] = (
     ("POST", CARD_LINK_SESSION_PATH_RE, _link_session),
     ("POST", CARD_PROGRESS_PATH_RE, _record_progress),
     ("POST", CARD_COMPLETE_PATH_RE, _complete_session),
+    ("POST", re.compile(rf"^{PROJECT_PREVIEW_PATH}$"), _project_preview),
+    ("POST", re.compile(rf"^{PROJECT_INIT_PATH}$"), _project_init),
 )
 
 
@@ -210,6 +244,8 @@ def handle_request(
                 continue
             return handler(store, match.groupdict(), body)
         return 404, {"error": f"No route for {method} {pathname}"}
+    except DecompositionError as exc:
+        return 400, {"error": str(exc)}
     except KanbanError as exc:
         return exc.status, {"error": str(exc)}
     except (TypeError, ValueError) as exc:

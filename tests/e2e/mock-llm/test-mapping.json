@@ -106,6 +106,7 @@
       "sources": [
         "src/components/features/kanban/**",
         "src/routes/kanban.tsx",
+        "src/routes/project-init.tsx",
         "src/api/kanban-service/**",
         "src/mocks/kanban-handlers.ts"
       ],

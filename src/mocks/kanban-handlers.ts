@@ -1,14 +1,18 @@
 import { http, HttpResponse } from "msw";
 import {
+  DEFAULT_PROJECT_BOARD_NAME,
   KANBAN_API_BOARDS_PATH,
   KANBAN_API_CARDS_PATH,
   KANBAN_API_COLUMNS_PATH,
+  PROJECT_API_INIT_PATH,
+  PROJECT_API_PREVIEW_PATH,
 } from "#/api/kanban-service/kanban-constants";
 import type {
   KanbanBoard,
   KanbanBoardCosts,
   KanbanCard,
   KanbanColumn,
+  SuggestedKanbanCard,
 } from "#/api/kanban-service/kanban-types";
 
 const DEFAULT_COLUMNS = [
@@ -28,6 +32,40 @@ function id(prefix: string): string {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function suggestedFromSpec(spec?: string): SuggestedKanbanCard {
+  const title = spec?.trim().split("\n")[0] || "Detected work";
+  return {
+    title,
+    description: spec?.trim() || title,
+    source: spec?.trim() ? "decomposition" : "readme",
+    acceptance: ["Spec is implemented"],
+    priority: "P2",
+  };
+}
+
+function createBoard(
+  name: string,
+  projectId: string | null = null,
+): KanbanBoard {
+  const createdAt = now();
+  const boardId = id("board");
+  return {
+    id: boardId,
+    name,
+    project_id: projectId,
+    created_at: createdAt,
+    updated_at: createdAt,
+    columns: DEFAULT_COLUMNS.map((column, index) => ({
+      id: id("col"),
+      board_id: boardId,
+      name: column.name,
+      position: index,
+      color: column.color,
+      cards: [],
+    })),
+  };
 }
 
 export function resetKanbanMockData() {
@@ -86,6 +124,49 @@ function boardCosts(board: KanbanBoard): KanbanBoardCosts {
 }
 
 export const KANBAN_HANDLERS = [
+  http.post(`*${PROJECT_API_PREVIEW_PATH}`, async ({ request }) => {
+    const body = (await request.json()) as { spec?: string };
+    return HttpResponse.json({ suggested: [suggestedFromSpec(body.spec)] });
+  }),
+  http.post(`*${PROJECT_API_INIT_PATH}`, async ({ request }) => {
+    const body = (await request.json()) as {
+      spec?: string;
+      board_name?: string;
+    };
+    const suggested = suggestedFromSpec(body.spec);
+    const board = createBoard(body.board_name ?? DEFAULT_PROJECT_BOARD_NAME);
+    const backlog = board.columns[0];
+    const createdAt = now();
+    const card: KanbanCard = {
+      id: id("card"),
+      column_id: backlog.id,
+      board_id: board.id,
+      title: suggested.title,
+      description: suggested.description,
+      priority: suggested.priority,
+      status: "todo",
+      assignee: null,
+      linked_branch: null,
+      linked_pr: null,
+      estimate_tokens: null,
+      estimate_cost: null,
+      actual_tokens: null,
+      actual_cost: null,
+      model_used: null,
+      tool_calls: null,
+      agent_time: null,
+      agent_session_id: null,
+      position: 0,
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    backlog.cards = [card];
+    boards.push(board);
+    return HttpResponse.json(
+      { suggested: [suggested], board, cards: [card] },
+      { status: 201 },
+    );
+  }),
   http.get(`*${KANBAN_API_BOARDS_PATH}`, () =>
     HttpResponse.json(
       boards.map(({ columns: _columns, ...summary }) => summary),
@@ -96,23 +177,7 @@ export const KANBAN_HANDLERS = [
       name?: string;
       project_id?: string;
     };
-    const createdAt = now();
-    const boardId = id("board");
-    const board: KanbanBoard = {
-      id: boardId,
-      name: body.name ?? "Board",
-      project_id: body.project_id ?? null,
-      created_at: createdAt,
-      updated_at: createdAt,
-      columns: DEFAULT_COLUMNS.map((column, index) => ({
-        id: id("col"),
-        board_id: boardId,
-        name: column.name,
-        position: index,
-        color: column.color,
-        cards: [],
-      })),
-    };
+    const board = createBoard(body.name ?? "Board", body.project_id ?? null);
     boards.push(board);
     return HttpResponse.json(board, { status: 201 });
   }),
