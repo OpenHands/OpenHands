@@ -387,8 +387,11 @@ jobs:
           echo "Playwright exited with code $pw_exit"
 
           # When killed during teardown, the exit code is non-zero but
-          # tests may have passed.
-          if [ "$pw_exit" -ne 0 ] && [ -f "$PASS_MARKER" ]; then
+          # tests may have passed. The reporter writes .all-passed only
+          # when all tests pass and the run was complete, so require both
+          # markers — .all-passed alone is not enough if it survived from
+          # an earlier point or a truncated run.
+          if [ "$pw_exit" -ne 0 ] && [ -f "$PASS_MARKER" ] && [ -f "$DONE_MARKER" ] && [ "$(cat "$DONE_MARKER" 2>/dev/null)" = "passed" ]; then
             echo "::notice::All tests passed (marker file present); non-zero exit was teardown-related"
             pw_exit=0
           fi
