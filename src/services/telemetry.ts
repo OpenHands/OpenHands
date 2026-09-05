@@ -643,6 +643,19 @@ export function isTelemetryEnabled(): boolean {
 }
 
 /**
+ * Whether a capture would actually reach PostHog right now.
+ *
+ * `isTelemetryEnabled()` reports consent alone, but an embedder can switch
+ * telemetry off through `configureTelemetry()`; every capture path honours that
+ * flag while consent does not reflect it. A caller that has to tell the user
+ * whether their submission landed must check both, or it will report success
+ * for a silently dropped event.
+ */
+export function canCaptureTelemetry(): boolean {
+  return !telemetryDisabled && getTelemetryConsent() === "granted";
+}
+
+/**
  * Check if first use event has already been sent
  */
 function hasFirstUseSent(): boolean {
@@ -838,6 +851,26 @@ export async function trackEvent(
   if (!posthog) return;
 
   posthog.capture(eventName, properties);
+}
+
+/**
+ * Annotate the current person without changing who they are.
+ *
+ * `setTelemetryIdentity` is the wrong tool when there is no account to identify:
+ * it calls `identify`, which promotes an anonymous person to identified keyed by
+ * the device id, and it replaces the desired property set — so it races with
+ * `use-telemetry-identity`, which owns that state. `setPersonProperties` adds
+ * properties to whoever the current distinct id already refers to.
+ *
+ * No-ops without consent, like every other capture path here.
+ */
+export async function setTelemetryPersonProperties(
+  properties: Record<string, unknown>,
+): Promise<void> {
+  const posthog = await getPostHogForConsentedCapture();
+  if (!posthog) return;
+
+  posthog.setPersonProperties(properties);
 }
 
 /** Track an exception through the same consent-aware client as custom events. */
