@@ -1,5 +1,85 @@
 import { describe, it, expect } from "vitest";
-import { splitInlineThink } from "#/components/conversation-events/chat/event-thought-helpers";
+import {
+  getMessageReasoningContent,
+  splitInlineThink,
+} from "#/components/conversation-events/chat/event-thought-helpers";
+import type { MessageEvent } from "#/types/agent-server/core";
+
+const makeMessageEvent = (
+  llm_message: MessageEvent["llm_message"],
+): MessageEvent =>
+  ({
+    id: "evt-1",
+    source: "agent",
+    timestamp: "2024-01-01T00:00:00.000Z",
+    llm_message,
+  }) as unknown as MessageEvent;
+
+describe("getMessageReasoningContent", () => {
+  it("returns llm_message.reasoning_content when present", () => {
+    const event = makeMessageEvent({
+      role: "assistant",
+      content: [{ type: "text", text: "Hello" }],
+      reasoning_content: "The user wants a greeting.",
+    });
+
+    expect(getMessageReasoningContent(event)).toBe(
+      "The user wants a greeting.",
+    );
+  });
+
+  it("falls back to thinking_blocks when reasoning_content is absent", () => {
+    const event = makeMessageEvent({
+      role: "assistant",
+      content: [{ type: "text", text: "Hello" }],
+      thinking_blocks: [
+        {
+          type: "thinking",
+          signature: "sig",
+          thinking: "Step one: parse the request.",
+        },
+        {
+          type: "thinking",
+          signature: "sig2",
+          thinking: "Step two: compose the reply.",
+        },
+      ],
+    });
+
+    expect(getMessageReasoningContent(event)).toBe(
+      "Step one: parse the request.\n\nStep two: compose the reply.",
+    );
+  });
+
+  it("ignores redacted thinking blocks", () => {
+    const event = makeMessageEvent({
+      role: "assistant",
+      content: [{ type: "text", text: "Hello" }],
+      thinking_blocks: [{ type: "redacted_thinking", data: "…" }],
+    });
+
+    expect(getMessageReasoningContent(event)).toBe("");
+  });
+
+  it("returns an empty string when neither field is present", () => {
+    const event = makeMessageEvent({
+      role: "assistant",
+      content: [{ type: "text", text: "Hello" }],
+    });
+
+    expect(getMessageReasoningContent(event)).toBe("");
+  });
+
+  it("treats null reasoning_content as absent", () => {
+    const event = makeMessageEvent({
+      role: "assistant",
+      content: [{ type: "text", text: "Hello" }],
+      reasoning_content: null,
+    });
+
+    expect(getMessageReasoningContent(event)).toBe("");
+  });
+});
 
 describe("splitInlineThink", () => {
   it("returns content unchanged when there is no <think> block", () => {
