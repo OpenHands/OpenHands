@@ -5,6 +5,8 @@ import type {
   KanbanCard,
 } from "#/api/kanban-service/kanban-types";
 import { I18nKey } from "#/i18n/declaration";
+import { formatDate } from "#/utils/format-relative-time";
+import { cn } from "#/utils/utils";
 import { cardDisplayCost, formatUsd } from "./kanban-cost";
 
 export type KanbanListSortKey =
@@ -55,18 +57,21 @@ export interface KanbanListProps {
 }
 
 export function KanbanList({ board, onSelectCard }: KanbanListProps) {
-  const { t } = useTranslation("openhands");
+  const { t, i18n } = useTranslation("openhands");
   const [sortKey, setSortKey] = React.useState<KanbanListSortKey>("priority");
   const rows = flattenCards(board)
     .slice()
     .sort((a, b) => compareCards(a, b, sortKey));
 
   const header = (key: KanbanListSortKey, label: string) => (
-    <th>
+    <th className="px-3 py-2 font-medium">
       <button
         type="button"
         data-testid={`kanban-list-sort-${key}`}
-        className="font-semibold"
+        className={cn(
+          "text-left text-xs leading-4 text-tertiary-light",
+          sortKey === key && "text-white",
+        )}
         onClick={() => setSortKey(key)}
       >
         {label}
@@ -75,11 +80,13 @@ export function KanbanList({ board, onSelectCard }: KanbanListProps) {
   );
 
   return (
-    <div data-testid="kanban-list" className="overflow-x-auto">
+    <div data-testid="kanban-list" className="h-full min-h-0 overflow-auto">
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-[var(--oh-border)] text-[var(--oh-muted)]">
-            <th>{t(I18nKey.KANBAN$TITLE)}</th>
+        <thead className="sticky top-0 bg-base">
+          <tr className="border-b border-[var(--oh-border)]">
+            <th className="px-3 py-2 text-xs font-medium text-tertiary-light">
+              {t(I18nKey.KANBAN$TITLE)}
+            </th>
             {header("priority", t(I18nKey.KANBAN$PRIORITY))}
             {header("status", t(I18nKey.COMMON$STATUS))}
             {header("assignee", t(I18nKey.KANBAN$ASSIGNEE))}
@@ -92,15 +99,25 @@ export function KanbanList({ board, onSelectCard }: KanbanListProps) {
             <tr
               key={card.id}
               data-testid={`kanban-list-row-${card.id}`}
-              className="cursor-pointer border-b border-[var(--oh-border)] hover:bg-[var(--oh-surface-raised)]"
+              className="cursor-pointer border-b border-[var(--oh-border)] last:border-b-0 hover:bg-[var(--oh-interactive-hover)]"
               onClick={() => onSelectCard?.(card)}
             >
-              <td className="py-2">{card.title}</td>
-              <td>{card.priority}</td>
-              <td>{card.status}</td>
-              <td>{card.assignee ?? ""}</td>
-              <td>{formatUsd(cardDisplayCost(card).amount)}</td>
-              <td>{card.created_at}</td>
+              <td className="px-3 py-2.5 font-medium text-white">
+                {card.title}
+              </td>
+              <td className="px-3 py-2.5 text-tertiary-light">
+                {card.priority}
+              </td>
+              <td className="px-3 py-2.5 text-tertiary-light">{card.status}</td>
+              <td className="px-3 py-2.5 text-tertiary-light">
+                {card.assignee ?? ""}
+              </td>
+              <td className="px-3 py-2.5 tabular-nums text-white">
+                {formatUsd(cardDisplayCost(card).amount)}
+              </td>
+              <td className="px-3 py-2.5 tabular-nums text-tertiary-light">
+                {formatDate(card.created_at, i18n.language)}
+              </td>
             </tr>
           ))}
         </tbody>

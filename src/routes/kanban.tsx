@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { Columns3, List } from "lucide-react";
 import {
   KANBAN_VIEW_BOARD,
   KANBAN_VIEW_LIST,
@@ -10,6 +11,7 @@ import { CardDetailPanel } from "#/components/features/kanban/card-detail-panel"
 import { CostSummary } from "#/components/features/kanban/cost-summary";
 import { KanbanBoardView } from "#/components/features/kanban/kanban-board";
 import { KanbanList } from "#/components/features/kanban/kanban-list";
+import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
 import { I18nKey } from "#/i18n/declaration";
 import {
   useCreateKanbanBoard,
@@ -33,7 +35,6 @@ export default function KanbanPage() {
     null,
   );
   const [boardName, setBoardName] = React.useState("");
-  const [columnName, setColumnName] = React.useState("");
 
   const boardsQuery = useKanbanBoards();
   const selectedBoardId = boardsQuery.data?.[0]?.id ?? null;
@@ -54,30 +55,39 @@ export default function KanbanPage() {
     : null;
 
   return (
-    <main data-testid="kanban-page" className={settingsLikeMainScrollClassName}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{t(I18nKey.KANBAN$NAV)}</h1>
-        <div className="flex items-center gap-2">
-          <BrandButton
-            type="button"
-            variant={view === KANBAN_VIEW_BOARD ? "primary" : "secondary"}
-            testId="kanban-view-board"
-            onClick={() => setView(KANBAN_VIEW_BOARD)}
-          >
-            {t(I18nKey.KANBAN$BOARD_VIEW)}
-          </BrandButton>
-          <BrandButton
-            type="button"
-            variant={view === KANBAN_VIEW_LIST ? "primary" : "secondary"}
-            testId="kanban-view-list"
-            onClick={() => setView(KANBAN_VIEW_LIST)}
-          >
-            {t(I18nKey.KANBAN$LIST_VIEW)}
-          </BrandButton>
+    <main
+      data-testid="kanban-page"
+      aria-label={t(I18nKey.KANBAN$NAV)}
+      className={settingsLikeMainScrollClassName}
+    >
+      <header className="mb-3 flex h-9 shrink-0 items-center justify-between gap-3">
+        <span className="text-[13px] font-medium text-[var(--oh-foreground)]">
+          {t(I18nKey.KANBAN$NAV)}
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
+          {board ? (
+            <SegmentedToggle
+              value={view}
+              onChange={setView}
+              ariaLabel={t(I18nKey.KANBAN$VIEW_MODE)}
+              testId="kanban-view"
+              options={[
+                {
+                  value: KANBAN_VIEW_BOARD,
+                  label: t(I18nKey.KANBAN$BOARD_VIEW),
+                  icon: <Columns3 className="h-3.5 w-3.5" aria-hidden />,
+                },
+                {
+                  value: KANBAN_VIEW_LIST,
+                  label: t(I18nKey.KANBAN$LIST_VIEW),
+                  icon: <List className="h-3.5 w-3.5" aria-hidden />,
+                },
+              ]}
+            />
+          ) : null}
         </div>
-      </div>
-
-      {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
+      </header>
 
       {!selectedBoardId ? (
         <form
@@ -109,7 +119,7 @@ export default function KanbanPage() {
       ) : null}
 
       {board && view === KANBAN_VIEW_BOARD ? (
-        <div className="mt-4 flex min-h-0 flex-1 gap-3">
+        <div className="mt-4 flex min-h-0 flex-1">
           <KanbanBoardView
             board={board}
             costs={costsQuery.data}
@@ -123,32 +133,8 @@ export default function KanbanPage() {
                 payload: { column_id: columnId, position },
               })
             }
+            onAddColumn={(name) => createColumn.mutate({ name })}
           />
-          <form
-            className="flex w-56 shrink-0 flex-col gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const name = columnName.trim();
-              if (!name || !selectedBoardId) return;
-              createColumn.mutate({ name });
-              setColumnName("");
-            }}
-          >
-            <input
-              data-testid="kanban-column-name"
-              value={columnName}
-              onChange={(event) => setColumnName(event.target.value)}
-              placeholder={t(I18nKey.KANBAN$NEW_COLUMN_NAME)}
-              className="rounded-md border border-[var(--oh-border)] bg-transparent px-2 py-1 text-sm"
-            />
-            <BrandButton
-              type="submit"
-              variant="secondary"
-              testId="kanban-add-column"
-            >
-              {t(I18nKey.KANBAN$ADD_COLUMN)}
-            </BrandButton>
-          </form>
         </div>
       ) : null}
 
