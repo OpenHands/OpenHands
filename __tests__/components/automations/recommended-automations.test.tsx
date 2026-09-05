@@ -303,6 +303,24 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("matches every keyword in a multi-word search", () => {
+    render(
+      <RecommendedAutomationsSection
+        backendKind="local"
+        installedServers={[]}
+        query="jira github"
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("recommended-automation-card-jira-issue-to-pr"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("recommended-automation-card-github-pr-reviewer"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a left-aligned MCP icon stack on each card", () => {
     render(
       <RecommendedAutomationsSection
