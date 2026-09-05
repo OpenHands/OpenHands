@@ -4,7 +4,6 @@ import { useNavigation } from "#/context/navigation-context";
 import { MessageEvent } from "#/types/agent-server/core";
 import { ChatMessage } from "../../../features/chat/chat-message";
 import { ImageCarousel } from "../../../features/images/image-carousel";
-import { ConversationConfirmationButtons } from "#/components/shared/buttons/conversation-confirmation-buttons";
 import { parseMessageFromEvent } from "../event-content-helpers/parse-message-from-event";
 import { CriticResultDisplay } from "./critic-result-display";
 import { CollapsibleThinking } from "./collapsible-thinking";
@@ -26,7 +25,6 @@ interface UserAssistantEventMessageProps {
 
 export function UserAssistantEventMessage({
   event,
-  isLastMessage,
   isFromPlanningAgent,
 }: UserAssistantEventMessageProps) {
   const { t } = useTranslation("openhands");
@@ -125,7 +123,6 @@ export function UserAssistantEventMessage({
         {imageUrls.length > 0 && (
           <ImageCarousel size="small" images={imageUrls} />
         )}
-        {isLastMessage && <ConversationConfirmationButtons />}
       </ChatMessage>
       {event.source === "agent" && event.critic_result != null && (
         <CriticResultDisplay criticResult={event.critic_result} />
