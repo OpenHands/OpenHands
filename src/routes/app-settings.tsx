@@ -26,6 +26,11 @@ import { formatModelNameForDisplay } from "#/utils/format-model-name";
 
 const AUTOMATIC_TITLE_LLM_PROFILE_KEY = "__automatic__";
 
+type DesktopNotificationPermission = NotificationPermission | "unsupported";
+
+const getDesktopNotificationPermission = (): DesktopNotificationPermission =>
+  typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+
 export function AppSettingsScreen() {
   const { t } = useTranslation("openhands");
 
@@ -44,6 +49,16 @@ export function AppSettingsScreen() {
     soundNotificationsSwitchHasChanged,
     setSoundNotificationsSwitchHasChanged,
   ] = React.useState(false);
+  const [
+    desktopNotificationsSwitchHasChanged,
+    setDesktopNotificationsSwitchHasChanged,
+  ] = React.useState(false);
+  const [desktopNotificationsEnabled, setDesktopNotificationsEnabled] =
+    React.useState(false);
+  const [desktopNotificationPermission, setDesktopNotificationPermission] =
+    React.useState<DesktopNotificationPermission | null>(null);
+  const [isRequestingNotificationPermission, setIsRequestingPermission] =
+    React.useState(false);
   const [gitUserNameHasChanged, setGitUserNameHasChanged] =
     React.useState(false);
   const [gitUserEmailHasChanged, setGitUserEmailHasChanged] =
@@ -94,6 +109,8 @@ export function AppSettingsScreen() {
       : formData.get("enable-analytics-switch")?.toString() === "on";
     const enableSoundNotifications =
       formData.get("enable-sound-notifications-switch")?.toString() === "on";
+    const enableDesktopNotifications =
+      formData.get("enable-desktop-notifications-switch")?.toString() === "on";
 
     const gitUserName =
       formData.get("git-user-name-input")?.toString() ||
@@ -107,6 +124,7 @@ export function AppSettingsScreen() {
         language,
         ...(!isCloudBackend && { user_consents_to_analytics: enableAnalytics }),
         enable_sound_notifications: enableSoundNotifications,
+        enable_desktop_notifications: enableDesktopNotifications,
         git_user_name: gitUserName,
         git_user_email: gitUserEmail,
         title_llm_profile: selectedTitleLlmProfile,
@@ -124,6 +142,7 @@ export function AppSettingsScreen() {
           setLanguageInputHasChanged(false);
           setAnalyticsSwitchHasChanged(false);
           setSoundNotificationsSwitchHasChanged(false);
+          setDesktopNotificationsSwitchHasChanged(false);
           setGitUserNameHasChanged(false);
           setGitUserEmailHasChanged(false);
           setTitleLlmProfileInput(undefined);
@@ -156,6 +175,37 @@ export function AppSettingsScreen() {
     );
   };
 
+  const updateDesktopNotificationsEnabled = (checked: boolean) => {
+    const currentDesktopNotifications =
+      !!settings?.enable_desktop_notifications;
+    setDesktopNotificationsEnabled(checked);
+    setDesktopNotificationsSwitchHasChanged(
+      checked !== currentDesktopNotifications,
+    );
+  };
+
+  const handleDesktopNotificationsToggle = async (checked: boolean) => {
+    if (!checked) {
+      updateDesktopNotificationsEnabled(false);
+      return;
+    }
+
+    let permission = getDesktopNotificationPermission();
+    if (permission === "default" && typeof Notification !== "undefined") {
+      setIsRequestingPermission(true);
+      try {
+        permission = await Notification.requestPermission();
+      } catch {
+        permission = "unsupported";
+      } finally {
+        setIsRequestingPermission(false);
+      }
+    }
+
+    setDesktopNotificationPermission(permission);
+    updateDesktopNotificationsEnabled(permission === "granted");
+  };
+
   const checkIfGitUserNameHasChanged = (value: string) => {
     const currentValue = settings?.git_user_name;
     setGitUserNameHasChanged(value !== currentValue);
@@ -166,11 +216,31 @@ export function AppSettingsScreen() {
     setGitUserEmailHasChanged(value !== currentValue);
   };
 
+  React.useEffect(() => {
+    setDesktopNotificationPermission(getDesktopNotificationPermission());
+  }, []);
+
+  React.useEffect(() => {
+    if (!settings || desktopNotificationsSwitchHasChanged) return;
+
+    const permissionUnavailable =
+      desktopNotificationPermission === "denied" ||
+      desktopNotificationPermission === "unsupported";
+    setDesktopNotificationsEnabled(
+      !permissionUnavailable && !!settings.enable_desktop_notifications,
+    );
+  }, [
+    desktopNotificationPermission,
+    desktopNotificationsSwitchHasChanged,
+    settings,
+  ]);
+
   const formIsClean =
     !languageInputHasChanged &&
     !analyticsSwitchHasChanged &&
     !soundNotificationsSwitchHasChanged &&
     selectedTitleLlmProfile === storedTitleLlmProfile &&
+    !desktopNotificationsSwitchHasChanged &&
     !gitUserNameHasChanged &&
     !gitUserEmailHasChanged;
 
@@ -220,6 +290,30 @@ export function AppSettingsScreen() {
             {t(I18nKey.SETTINGS$SOUND_NOTIFICATIONS)}
           </SettingsSwitch>
 
+          <div>
+            <SettingsSwitch
+              testId="enable-desktop-notifications-switch"
+              name="enable-desktop-notifications-switch"
+              isToggled={desktopNotificationsEnabled}
+              isDisabled={
+                isRequestingNotificationPermission ||
+                desktopNotificationPermission === "denied" ||
+                desktopNotificationPermission === "unsupported"
+              }
+              onToggle={handleDesktopNotificationsToggle}
+            >
+              {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS)}
+            </SettingsSwitch>
+            <p className="mt-1 text-sm leading-5 text-tertiary-light">
+              {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_DESCRIPTION)}
+            </p>
+            {(desktopNotificationPermission === "denied" ||
+              desktopNotificationPermission === "unsupported") && (
+              <p className="mt-1 text-sm leading-5 text-danger">
+                {t(I18nKey.SETTINGS$DESKTOP_NOTIFICATIONS_UNAVAILABLE)}
+              </p>
+            )}
+          </div>
           <GettingStartedChecklistSwitch />
 
           <div className="border-t border-[var(--oh-border)] pt-6 mt-2">
