@@ -193,6 +193,36 @@ describe("BackendSelector", () => {
     expect(screen.getByText("Production")).toBeInTheDocument();
   });
 
+  it("defers inactive cloud requests until the backend menu opens", async () => {
+    renderWithProviders(
+      <TestSeed
+        onMount={(ctx) => {
+          ctx.addBackend(SEED_CLOUD_PRODUCTION);
+          // Keep a local backend active. Cloud organization, identity, and
+          // health requests should stay dormant until the user asks to see
+          // the backend menu.
+          ctx.addBackend(SEED_LOCAL_1);
+        }}
+      >
+        <BackendSelector />
+      </TestSeed>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("backend-selector")).toBeInTheDocument();
+    });
+    expect(getCloudOrganizations).not.toHaveBeenCalled();
+    expect(getCloudOrganizationMe).not.toHaveBeenCalled();
+    expect(getCurrentCloudApiKey).not.toHaveBeenCalled();
+
+    await openDropdown();
+
+    await waitFor(() => {
+      expect(getCloudOrganizations).toHaveBeenCalled();
+    });
+    expect(getCurrentCloudApiKey).toHaveBeenCalled();
+  });
+
   it("expands a cloud backend into one row per org and records the org locally without calling cloud /switch", async () => {
     vi.mocked(getCloudOrganizations).mockResolvedValue({
       items: [

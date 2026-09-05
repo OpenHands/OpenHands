@@ -150,10 +150,26 @@ export function BackendSelector({
 }: BackendSelectorProps = {}) {
   const { t } = useTranslation("openhands");
   const { backends, active, setActive } = useActiveBackendContext();
-  const cloudOrgs = useAllCloudOrganizations();
-  const currentUserIds = useCloudCurrentUserId();
-  // Probe each registered backend every 10s.
-  const healthByBackendId = useBackendsHealth(backends);
+  const [menuOpen, setMenuOpen] = React.useState(defaultOpen);
+  const cloudOrgs = useAllCloudOrganizations({
+    includeInactive: menuOpen,
+  });
+  const currentUserIds = useCloudCurrentUserId({
+    includeInactive: menuOpen,
+  });
+  const probedBackends = React.useMemo(
+    () =>
+      backends.filter(
+        (backend) =>
+          backend.kind === "local" ||
+          backend.id === active.backend.id ||
+          menuOpen,
+      ),
+    [active.backend.id, backends, menuOpen],
+  );
+  // Keep local and active-backend health fresh. Inactive Cloud backends are
+  // probed only while the user has opened the environment menu.
+  const healthByBackendId = useBackendsHealth(probedBackends);
   const navigate = useNavigate();
   const settingsMatch = useMatch("/settings");
   const settingsSubrouteMatch = useMatch("/settings/*");
@@ -399,6 +415,7 @@ export function BackendSelector({
             openUpward={openUpward}
             hideTrigger={hideTrigger}
             defaultOpen={defaultOpen}
+            onOpenChange={setMenuOpen}
             openOnHover={!hideTrigger}
             onChange={(item) => {
               if (!item) return;
