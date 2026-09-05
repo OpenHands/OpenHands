@@ -4,6 +4,7 @@ import { useResolvedWorkspaces } from "#/hooks/query/use-resolved-workspaces";
 import type { LocalWorkspace } from "#/types/workspace";
 import {
   readKanbanWorkspacePath,
+  subscribeKanbanWorkspacePath,
   writeKanbanWorkspacePath,
 } from "#/components/features/kanban/kanban-workspace";
 
@@ -29,6 +30,11 @@ export function useKanbanWorkspace() {
     setPath(workspace?.path ?? null);
     writeKanbanWorkspacePath(workspace?.path ?? null);
   }, []);
+
+  React.useEffect(
+    () => subscribeKanbanWorkspacePath((next) => setPath(next)),
+    [],
+  );
 
   React.useEffect(() => {
     if (isLoading) return;

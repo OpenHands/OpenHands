@@ -34,9 +34,22 @@ export function readKanbanWorkspacePath(): string | null {
   );
 }
 
+type KanbanWorkspacePathListener = (path: string | null) => void;
+const kanbanWorkspacePathListeners = new Set<KanbanWorkspacePathListener>();
+
+export function subscribeKanbanWorkspacePath(
+  listener: KanbanWorkspacePathListener,
+): () => void {
+  kanbanWorkspacePathListeners.add(listener);
+  return () => {
+    kanbanWorkspacePathListeners.delete(listener);
+  };
+}
+
 export function writeKanbanWorkspacePath(path: string | null): void {
   writeStorage(KANBAN_SELECTED_WORKSPACE_PATH_KEY, path);
   writeStorage(HOME_SELECTED_WORKSPACE_PATH_KEY, path);
+  kanbanWorkspacePathListeners.forEach((listener) => listener(path));
 }
 
 export function boardForWorkspace(

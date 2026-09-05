@@ -487,8 +487,6 @@ describe("Sidebar", () => {
       "sidebar-conversations-link",
       "sidebar-automations-link",
       "sidebar-skills-link",
-      "sidebar-kanban-link",
-      "sidebar-projects-link",
     ]) {
       const link = screen.getByTestId(testId);
       expect(link.querySelector("svg")).not.toBeNull();
@@ -509,12 +507,10 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("sidebar-automations-link")).toHaveTextContent(
       "Automate",
     );
-    expect(screen.getByTestId("sidebar-kanban-link")).toHaveTextContent(
-      "Kanban",
-    );
-    expect(screen.getByTestId("sidebar-projects-link")).toHaveTextContent(
-      "Spaces",
-    );
+    expect(screen.queryByTestId("sidebar-kanban-link")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sidebar-projects-link"),
+    ).not.toBeInTheDocument();
   });
 
   it("pins and unpins a sidebar page as the home route without navigating", () => {
