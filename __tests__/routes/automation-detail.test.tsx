@@ -9,6 +9,7 @@ import { HttpError } from "@openhands/typescript-client";
 import { I18nKey } from "#/i18n/declaration";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
+import { getCloudOrganizationMember } from "#/api/cloud/organization-service.api";
 import {
   __resetActiveStoreForTests,
   setActiveSelection,
@@ -39,6 +40,15 @@ vi.mock("#/hooks/use-automation-permissions", () => ({
     isLoading: false,
   }),
   useIsAutomationOwner: () => true,
+}));
+
+// Mock only the member lookup the "Automation Runs As" field depends on; the
+// rest of the cloud organization service keeps its real implementation.
+vi.mock("#/api/cloud/organization-service.api", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("#/api/cloud/organization-service.api")
+  >()),
+  getCloudOrganizationMember: vi.fn(),
 }));
 
 const localBackend: Backend = {
@@ -247,5 +257,77 @@ describe("AutomationDetail — backend-change guard", () => {
     // Assert — the off-state gate prevents the dispatch API from firing.
     expect(runNow).toBeDisabled();
     expect(AutomationService.dispatchAutomation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationDetail — Automation Runs As", () => {
+  const creatorId = "3f1c2a54-0b8e-4c1d-9a7e-5d2f6b8c9e01";
+  const orgId = "0b93b5f2-5396-49f2-8d98-61f906184270";
+  const cloudAutomation: Automation = { ...automation, user_id: creatorId };
+
+  beforeEach(() => {
+    vi.mocked(getCloudOrganizationMember).mockReset();
+    vi.mocked(AutomationService.getAutomation).mockResolvedValue(
+      cloudAutomation,
+    );
+  });
+
+  it("shows the creator's email on a cloud backend", async () => {
+    // Arrange — the creator resolves to an org member with an email.
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockResolvedValue({
+      org_id: orgId,
+      user_id: creatorId,
+      email: "jdoe@acme.com",
+    });
+
+    // Act
+    renderDetail();
+
+    // Assert — the field is labelled and shows the resolved email.
+    expect(await screen.findByText("jdoe@acme.com")).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+    expect(getCloudOrganizationMember).toHaveBeenCalledWith(
+      orgId,
+      creatorId,
+      expect.objectContaining({ id: cloudBackend.id }),
+    );
+  });
+
+  it("falls back to the raw user id when the member lookup fails", async () => {
+    // Arrange — e.g. the creator left the org, or an older app-server
+    // without the member-by-id route: the lookup 404s.
+    setActiveSelection({ backendId: cloudBackend.id, orgId });
+    vi.mocked(getCloudOrganizationMember).mockRejectedValue(
+      new HttpError(404, "Not Found", { detail: "Member not found" }),
+    );
+
+    // Act
+    renderDetail();
+
+    // Assert — the field still identifies the run identity by id.
+    expect(await screen.findByText(creatorId)).toBeInTheDocument();
+    expect(
+      screen.getByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the field or look up the member on a local backend", async () => {
+    // Arrange — default beforeEach selects the local backend.
+    renderDetail();
+    await waitFor(() => {
+      expect(AutomationService.getAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    // Act — wait for the page to render its configuration.
+    expect(await screen.findByText("daily-profile")).toBeInTheDocument();
+
+    // Assert — no identity field and no cloud call for local automations.
+    expect(
+      screen.queryByText(I18nKey.AUTOMATIONS$DETAIL$RUNS_AS),
+    ).not.toBeInTheDocument();
+    expect(getCloudOrganizationMember).not.toHaveBeenCalled();
   });
 });

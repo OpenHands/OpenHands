@@ -14893,6 +14893,23 @@
     "uk": "Репозиторії",
     "ca": "Repositoris"
   },
+  "AUTOMATIONS$DETAIL$RUNS_AS": {
+    "en": "Automation Runs As",
+    "ja": "自動化の実行ユーザー",
+    "zh-CN": "自动化运行身份",
+    "zh-TW": "自動化執行身分",
+    "ko-KR": "자동화 실행 계정",
+    "no": "Automatiseringen kjører som",
+    "it": "L'automazione viene eseguita come",
+    "pt": "A automação é executada como",
+    "es": "La automatización se ejecuta como",
+    "ar": "تعمل الأتمتة باسم",
+    "fr": "L'automatisation s'exécute en tant que",
+    "tr": "Otomasyon şu kimlikle çalışır",
+    "de": "Automatisierung wird ausgeführt als",
+    "uk": "Автоматизація виконується від імені",
+    "ca": "L'automatització s'executa com a"
+  },
   "AUTOMATIONS$DETAIL$SCHEDULE": {
     "en": "Schedule",
     "ja": "スケジュール",
