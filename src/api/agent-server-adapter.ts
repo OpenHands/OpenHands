@@ -4,7 +4,12 @@ import { ServerClient } from "@openhands/typescript-client/clients";
 import { SKILLS_CATALOG } from "@openhands/extensions/skills";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { ExecutionStatus } from "#/types/agent-server/core";
-import { AgentKind, Settings, SettingsValue } from "#/types/settings";
+import {
+  AgentKind,
+  Settings,
+  SettingsValue,
+  isProvider,
+} from "#/types/settings";
 import {
   getAcpPreferredDefaultModel,
   getAcpProvider,
@@ -366,10 +371,23 @@ export function toAppConversation(
   return {
     id: info.id,
     created_by_user_id: null,
-    selected_repository: metadata?.selected_repository ?? null,
-    selected_branch: metadata?.selected_branch ?? null,
-    git_provider: metadata?.git_provider ?? null,
-    selected_workspace: metadata?.selected_workspace ?? null,
+    // Stored metadata wins over the tags — localStorage is the warm cache on
+    // the creating client; tags are the cross-client fallback for devices
+    // that don't have this client's localStorage.
+    selected_repository:
+      metadata?.selected_repository ?? info.tags?.[REPOSITORY_TAG_KEY] ?? null,
+    selected_branch:
+      metadata?.selected_branch ?? info.tags?.[SELECTED_BRANCH_TAG_KEY] ?? null,
+    // The ``git_provider`` tag is free-form wire data — validate it against
+    // the known provider union instead of casting, so an unrecognized value
+    // degrades to "no provider" rather than poisoning provider-keyed lookups.
+    git_provider:
+      metadata?.git_provider ??
+      (isProvider(info.tags?.[GIT_PROVIDER_TAG_KEY])
+        ? info.tags[GIT_PROVIDER_TAG_KEY]
+        : null),
+    selected_workspace:
+      metadata?.selected_workspace ?? info.tags?.[WORKSPACE_TAG_KEY] ?? null,
     active_profile: metadata?.active_profile ?? null,
     title: info.title?.trim()
       ? info.title
@@ -476,6 +494,11 @@ export const ACP_SERVER_TAG_KEY = "acpserver";
 export const CLIENT_SOURCE_TAG_KEY = "clientsource";
 export const AGENT_CANVAS_SOURCE = "agentcanvas";
 
+export const REPOSITORY_TAG_KEY = "repository";
+export const SELECTED_BRANCH_TAG_KEY = "selected_branch";
+export const GIT_PROVIDER_TAG_KEY = "git_provider";
+export const WORKSPACE_TAG_KEY = "workspace";
+
 export const AUTOMATION_TRIGGER_TAG_KEY = "automationtrigger";
 export const AUTOMATION_ID_TAG_KEY = "automationid";
 export const AUTOMATION_NAME_TAG_KEY = "automationname";
@@ -519,14 +542,14 @@ export const RESERVED_CONVERSATION_TAG_KEYS: ReadonlySet<string> = new Set([
   AUTOMATION_NAME_TAG_KEY,
   AUTOMATION_RUN_ID_TAG_KEY,
   "title",
-  "git_provider",
+  GIT_PROVIDER_TAG_KEY,
   "repo_name",
   "repo",
-  "repository",
-  "selected_branch",
+  REPOSITORY_TAG_KEY,
+  SELECTED_BRANCH_TAG_KEY,
   "branch",
   "archiveworkspacepath",
-  "workspace",
+  WORKSPACE_TAG_KEY,
   "working_dir",
   LOCAL_PLANNER_PARENT_TAG_KEY,
 ]);
