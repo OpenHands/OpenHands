@@ -15,7 +15,10 @@ import {
   fetchCloudSettingsSchema,
   saveCloudSettings,
 } from "../cloud/settings-service.api";
-import { getAgentServerClientOptions } from "../agent-server-client-options";
+import {
+  getAgentServerClientOptions,
+  type AgentServerClientOptions,
+} from "../agent-server-client-options";
 
 /**
  * Fields the agent-server stores under `misc_settings.app_preferences` (see
@@ -158,29 +161,79 @@ async function withRetry<T>(
   throw new Error("Retry attempts exhausted");
 }
 
-/**
- * In-memory cache for settings to avoid repeated network calls.
- * The cache is invalidated on save operations.
- */
-let settingsCache: {
-  /** Settings with redacted secrets for display */
-  redacted: SettingsApiResponse | null;
-  /** Settings with encrypted secrets for conversation start */
-  encrypted: SettingsApiResponse | null;
-  /** Timestamp when the cache was last populated */
-  timestamp: number;
-} = {
-  redacted: null,
-  encrypted: null,
-  timestamp: 0,
-};
-
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const isCacheValid = () => Date.now() - settingsCache.timestamp < CACHE_TTL_MS;
+type SettingsExposureMode = "redacted" | "encrypted";
+
+interface SettingsCacheEntry {
+  backendId: string;
+  connectionRevision: number;
+  exposureMode: SettingsExposureMode;
+  response: SettingsApiResponse;
+  fetchedAt: number;
+}
+
+/**
+ * Local settings are owned by a specific backend connection and exposure
+ * mode. Keeping that identity in the cache prevents one backend (or its
+ * encrypted conversation payload) from being reused for another.
+ */
+const settingsCache = new Map<string, SettingsCacheEntry>();
+
+const getSettingsCacheKey = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+) => JSON.stringify([backendId, connectionRevision, exposureMode]);
+
+const readCachedSettings = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+): SettingsApiResponse | null => {
+  const key = getSettingsCacheKey(backendId, connectionRevision, exposureMode);
+  const entry = settingsCache.get(key);
+  if (!entry) return null;
+
+  if (Date.now() - entry.fetchedAt >= CACHE_TTL_MS) {
+    settingsCache.delete(key);
+    return null;
+  }
+
+  return entry.response;
+};
+
+const cacheSettings = (
+  backendId: string,
+  connectionRevision: number,
+  exposureMode: SettingsExposureMode,
+  response: SettingsApiResponse,
+) => {
+  // A connection revision replaces every cached representation for the prior
+  // connection, so repeated host/API-key edits do not retain old revisions.
+  settingsCache.forEach((entry, key) => {
+    if (
+      entry.backendId === backendId &&
+      entry.connectionRevision !== connectionRevision
+    ) {
+      settingsCache.delete(key);
+    }
+  });
+
+  settingsCache.set(
+    getSettingsCacheKey(backendId, connectionRevision, exposureMode),
+    {
+      backendId,
+      connectionRevision,
+      exposureMode,
+      response,
+      fetchedAt: Date.now(),
+    },
+  );
+};
 
 const clearCache = () => {
-  settingsCache = { redacted: null, encrypted: null, timestamp: 0 };
+  settingsCache.clear();
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -451,9 +504,10 @@ class SettingsService {
    */
   static async fetchSettingsFromApi(
     exposeSecrets?: ExposeSecretsMode,
+    clientOptions: AgentServerClientOptions = getAgentServerClientOptions(),
   ): Promise<SettingsApiResponse> {
     return withRetry(() =>
-      new SettingsClient(getAgentServerClientOptions()).getSettings({
+      new SettingsClient(clientOptions).getSettings({
         exposeSecrets,
       }),
     ) as Promise<SettingsApiResponse>;
@@ -480,15 +534,24 @@ class SettingsService {
       }
     }
 
-    // Check cache first
-    if (isCacheValid() && settingsCache.redacted) {
-      return syncDerivedSettings(transformApiResponse(settingsCache.redacted));
+    const backend = getActiveBackend().backend;
+    const connectionRevision = backend.connectionRevision ?? 0;
+    const clientOptions = getAgentServerClientOptions();
+    const cached = readCachedSettings(
+      backend.id,
+      connectionRevision,
+      "redacted",
+    );
+    if (cached) {
+      return syncDerivedSettings(transformApiResponse(cached));
     }
 
     try {
-      const response = await this.fetchSettingsFromApi();
-      settingsCache.redacted = response;
-      settingsCache.timestamp = Date.now();
+      const response = await this.fetchSettingsFromApi(
+        undefined,
+        clientOptions,
+      );
+      cacheSettings(backend.id, connectionRevision, "redacted", response);
       return syncDerivedSettings(transformApiResponse(response));
     } catch (error) {
       // If API fails, return defaults
@@ -511,11 +574,18 @@ class SettingsService {
     secretsEncrypted: boolean;
     skillEnablement: SkillEnablement;
   }> {
-    // Check cache first
-    if (isCacheValid() && settingsCache.encrypted) {
+    const backend = getActiveBackend().backend;
+    const connectionRevision = backend.connectionRevision ?? 0;
+    const clientOptions = getAgentServerClientOptions();
+    const cached = readCachedSettings(
+      backend.id,
+      connectionRevision,
+      "encrypted",
+    );
+    if (cached) {
       return {
-        agentSettings: settingsCache.encrypted.agent_settings,
-        conversationSettings: settingsCache.encrypted.conversation_settings,
+        agentSettings: cached.agent_settings,
+        conversationSettings: cached.conversation_settings,
         secretsEncrypted: true,
         skillEnablement: getSkillEnablement(settingsCache.encrypted),
       };
@@ -523,11 +593,11 @@ class SettingsService {
 
     // Fetch encrypted settings - this MUST succeed for conversations to work.
     // Do not fall back to redacted settings as that would cause auth failures.
-    const response = await this.fetchSettingsFromApi("encrypted");
-    settingsCache.encrypted = response;
-    if (!settingsCache.timestamp) {
-      settingsCache.timestamp = Date.now();
-    }
+    const response = await this.fetchSettingsFromApi(
+      "encrypted",
+      clientOptions,
+    );
+    cacheSettings(backend.id, connectionRevision, "encrypted", response);
     return {
       agentSettings: response.agent_settings,
       conversationSettings: response.conversation_settings,
