@@ -85,16 +85,12 @@ function resolveTerminalForeground(host: HTMLElement): string {
   return getComputedStyle(host).color;
 }
 
-// Create a persistent reference that survives component unmounts
-// This ensures terminal history is preserved when navigating away and back
-const persistentLastCommandIndex = { current: 0 };
-
 export const useTerminal = () => {
   const commands = useCommandStore((state) => state.commands);
   const terminal = React.useRef<Terminal | null>(null);
   const fitAddon = React.useRef<FitAddon | null>(null);
   const ref = React.useRef<HTMLDivElement>(null);
-  const lastCommandIndex = persistentLastCommandIndex; // Use the persistent reference
+  const lastCommandIndex = React.useRef(0);
   const isDisposed = React.useRef(false);
 
   const createTerminal = (host: HTMLDivElement) =>
