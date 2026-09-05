@@ -231,12 +231,36 @@ def check_enhancement(sections: dict[str, str]) -> ReadinessResult:
     return result
 
 
+def infer_issue_type(sections: dict[str, str]) -> str | None:
+    """Infer issue type from body section structure when no label is present.
+
+    Returns "bug", "enhancement", or None if the structure is ambiguous or
+    insufficient to determine a type.
+    """
+    repro = visible_text(find_section(sections, "steps to reproduce", "reproduction"))
+    actual = visible_text(find_section(sections, "actual behavior", "actual"))
+    desired = visible_text(find_section(sections, "desired behavior", "desired"))
+
+    has_bug_structure = bool(repro) or bool(actual)
+    has_enhancement_structure = bool(desired)
+
+    # Both present or neither — ambiguous; cannot infer reliably.
+    if has_bug_structure == has_enhancement_structure:
+        return None
+    if has_bug_structure:
+        return BUG_LABEL
+    return ENHANCEMENT_LABEL
+
+
 def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     """Return the readiness result for an issue body + label set.
 
-    An issue is only a candidate when it carries the `bug` or `enhancement`
-    label. If it has neither, it is treated as not-ready-for-dev (the gate does
-    not apply a label it cannot validate).
+    An issue is a candidate when it carries the `bug` or `enhancement`
+    label. If it has neither, the readiness check tries to infer the type from
+    the body structure (presence of Steps to Reproduce/Actual Behavior vs
+    Desired Behavior). Only when the type can be inferred does it apply the
+    corresponding readiness criteria; otherwise it reports a labeling gap so
+    the author knows to add the appropriate label.
     """
     label_set = {label.lower() for label in labels}
     sections = extract_sections(body or "")
@@ -244,6 +268,13 @@ def evaluate_readiness(body: str, labels: list[str]) -> ReadinessResult:
     if BUG_LABEL in label_set:
         return check_bug(sections)
     if ENHANCEMENT_LABEL in label_set:
+        return check_enhancement(sections)
+
+    # No label present — try to infer type from body structure.
+    inferred_type = infer_issue_type(sections)
+    if inferred_type == BUG_LABEL:
+        return check_bug(sections)
+    if inferred_type == ENHANCEMENT_LABEL:
         return check_enhancement(sections)
 
     return ReadinessResult(
