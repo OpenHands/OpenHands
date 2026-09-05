@@ -81,27 +81,39 @@ function withMembership(
  */
 export function useSkillEnablement(): SkillEnablementController {
   const { t } = useTranslation("openhands");
-  const { backend } = useActiveBackend();
+  const { backend, orgId } = useActiveBackend();
+  const settingsIdentity = JSON.stringify([backend.id, orgId]);
   const usesCatalogAllowList = backend.kind !== "cloud";
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const { mutate: saveSettings } = useSaveSettings();
 
   const [enablement, setEnablement] = React.useState<SkillEnablement>({});
+  const [hydratedSettingsIdentity, setHydratedSettingsIdentity] =
+    React.useState<string | null>(null);
   const savedRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
-    if (settingsLoading || !settings) return;
+    if (
+      settingsLoading ||
+      !settings ||
+      hydratedSettingsIdentity === settingsIdentity
+    ) {
+      return;
+    }
     const hydrated = readSkillEnablement(settings, usesCatalogAllowList);
     savedRef.current = snapshot(hydrated);
     setEnablement(hydrated);
+    setHydratedSettingsIdentity(settingsIdentity);
   }, [
     settingsLoading,
-    settings?.enabled_skills,
-    settings?.disabled_skills,
+    settings,
+    settingsIdentity,
+    hydratedSettingsIdentity,
     usesCatalogAllowList,
   ]);
 
   React.useEffect(() => {
+    if (hydratedSettingsIdentity !== settingsIdentity) return;
     // Writing the hydrated value straight back would race the one-shot
     // migration and could narrow a workspace it had just preserved.
     const next = snapshot(enablement);
@@ -124,7 +136,14 @@ export function useSkillEnablement(): SkillEnablementController {
         },
       },
     );
-  }, [enablement, usesCatalogAllowList, saveSettings, t]);
+  }, [
+    enablement,
+    hydratedSettingsIdentity,
+    settingsIdentity,
+    usesCatalogAllowList,
+    saveSettings,
+    t,
+  ]);
 
   const isEnabled = React.useMemo(() => {
     const enabled = buildSkillEnablementFilter(enablement);
