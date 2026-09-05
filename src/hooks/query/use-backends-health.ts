@@ -10,6 +10,7 @@ import {
   validateLocalBackend,
   INVALID_BACKEND_API_KEY_ERROR,
 } from "#/api/agent-server-compatibility";
+import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import type { Backend } from "#/api/backend-registry/types";
 import {
   isCorsOrNetworkError,
@@ -210,14 +211,23 @@ export function useBackendsHealth(
   options: UseBackendsHealthOptions = {},
 ): Record<string, BackendHealth> {
   const { probeDisabledOnce = false } = options;
+  const { active } = useActiveBackendContext();
   const healthMap = React.useSyncExternalStore(
     subscribeBackendHealth,
     getHealthSnapshot,
     getHealthSnapshot,
   );
 
+  // Only probe the active backend. Polling inactive backends keeps the
+  // cloud-proxy OPTIONS preflight firing after the user has switched away
+  // from a cloud backend (issue #15822). The health store still surfaces
+  // "disconnected" for non-active backends because they are absent from
+  // the result map — consumers (the dot indicator, the disabled cap) read
+  // healthMap directly and tolerate missing keys.
+  const activeBackends = backends.filter((b) => b.id === active.backend.id);
+
   const results = useQueries({
-    queries: backends.map((b) => {
+    queries: activeBackends.map((b) => {
       const entry = healthMap[b.id];
       const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
       const isDisabled = entry?.disabled === true;
@@ -267,8 +277,13 @@ export function useBackendsHealth(
   });
 
   const out: Record<string, BackendHealth> = {};
-  backends.forEach((b, i) => {
-    const r = results[i];
+  backends.forEach((b) => {
+    // Look up the live probe result by index in the activeBackends slice.
+    // `b` is from the original `backends` list; if it's the active backend,
+    // its index in `activeBackends` matches `results`. Non-active backends
+    // have no entry in `results` (no probe fired), so `r` is undefined.
+    const activeIdx = activeBackends.findIndex((ab) => ab.id === b.id);
+    const r = activeIdx >= 0 ? results[activeIdx] : undefined;
     const entry = healthMap[b.id];
     const hasMissingCloudApiKey = hasMissingBackendApiKey(b);
     const disabled = hasMissingCloudApiKey ? false : entry?.disabled === true;
@@ -287,8 +302,8 @@ export function useBackendsHealth(
       // so existing consumers (dot, badge) render red without needing
       // to know about the new fields.
       isConnected = false;
-    } else if (r.isSuccess) isConnected = true;
-    else if (r.isError) isConnected = false;
+    } else if (r?.isSuccess) isConnected = true;
+    else if (r?.isError) isConnected = false;
     else isConnected = null;
 
     out[b.id] = { isConnected, consecutiveFailures, lastError, disabled };

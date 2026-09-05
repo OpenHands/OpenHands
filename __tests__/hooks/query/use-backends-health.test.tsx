@@ -26,6 +26,37 @@ const getServerInfoMock = vi.fn();
 const getCurrentCloudApiKeyMock = vi.fn();
 const getCloudOrganizationsMock = vi.fn();
 
+// The hook now reads `active.backend.id` from useActiveBackendContext.
+// Each test sets the active backend via setActiveBackendForTests so that
+// we exercise the gating logic introduced for #15822. The default is
+// `null`; beforeEach sets it to localBackend so existing tests keep
+// their behavior, and the new #15822 tests override it explicitly.
+let activeBackendForTests: Backend | null = null;
+const setActiveBackendForTests = (b: Backend) => {
+  activeBackendForTests = b;
+};
+vi.mock("#/contexts/active-backend-context", () => ({
+  useActiveBackendContext: () => ({
+    backends: [],
+    active: {
+      backend: activeBackendForTests ?? {
+        id: "no-active",
+        name: "None",
+        host: "",
+        apiKey: "",
+        kind: "local",
+      },
+      orgId: null,
+    },
+    setActive: () => undefined,
+    addBackend: () => {
+      throw new Error("not used in tests");
+    },
+    updateBackend: () => undefined,
+    removeBackend: () => undefined,
+  }),
+}));
+
 vi.mock("@openhands/typescript-client/clients", () => ({
   ServerClient: vi.fn(function ServerClientMock() {
     return { getServerInfo: getServerInfoMock };
@@ -75,6 +106,9 @@ beforeEach(() => {
   vi.mocked(SettingsClient).mockClear();
   window.localStorage.clear();
   __resetHealthStoreForTests();
+  // Default active backend to localBackend so existing tests keep their
+  // assumption that the local probe fires. New #15822 tests override this.
+  setActiveBackendForTests(localBackend);
 });
 
 afterEach(() => {
@@ -177,6 +211,9 @@ describe("useBackendsHealth", () => {
   });
 
   it("probes cloud backends via getCurrentCloudApiKey", async () => {
+    // The cloud backend must be the active one for the probe to fire —
+    // useBackendsHealth only polls the active backend (issue #15822).
+    setActiveBackendForTests(cloudBackend);
     getCurrentCloudApiKeyMock.mockResolvedValue({
       orgId: "org-1",
       isLegacyKey: false,
@@ -200,6 +237,8 @@ describe("useBackendsHealth", () => {
       apiKey: "",
       authMode: "cookie",
     };
+    // See #15822 — the cloud backend must be active for its probe to run.
+    setActiveBackendForTests(cookieBackend);
     getCloudOrganizationsMock.mockResolvedValue({ items: [], currentOrgId: null });
 
     const { result } = renderHook(() => useBackendsHealth([cookieBackend]), {
@@ -214,6 +253,7 @@ describe("useBackendsHealth", () => {
   });
 
   it("reports disconnected when the cloud probe throws", async () => {
+    setActiveBackendForTests(cloudBackend);
     getCurrentCloudApiKeyMock.mockRejectedValue(new Error("Network Error"));
 
     const { result } = renderHook(() => useBackendsHealth([cloudBackend]), {
@@ -227,6 +267,7 @@ describe("useBackendsHealth", () => {
   });
 
   it("reports logged out when the cloud probe returns 401", async () => {
+    setActiveBackendForTests(cloudBackend);
     getCurrentCloudApiKeyMock.mockRejectedValue(
       Object.assign(new Error("Unauthorized"), {
         isAxiosError: true,
@@ -398,5 +439,66 @@ describe("useBackendsHealth", () => {
     );
     expect(getSettingsMock).toHaveBeenCalled();
     expect(window.localStorage.getItem(BACKEND_HEALTH_STORAGE_KEY)).toBeNull();
+  });
+
+  // Tests for issue #15822 — only the active backend is probed. The cloud
+  // kind's probe calls getCurrentCloudApiKey / getCloudOrganizations, which
+  // trigger the OPTIONS preflight to /api/cloud-proxy. Polling inactive
+  // cloud backends is what kept the preflight firing after the user had
+  // switched to a local backend.
+  it("does not probe a cloud backend that is not the active backend (#15822)", async () => {
+    // Arrange — register one local + one cloud backend; local is active.
+    setActiveBackendForTests(localBackend);
+    getCurrentCloudApiKeyMock.mockResolvedValue({
+      isLegacyKey: false,
+      orgId: "org-1",
+    });
+    getSettingsMock.mockResolvedValue({});
+
+    const { result } = renderHook(
+      () => useBackendsHealth([localBackend, cloudBackend]),
+      { wrapper },
+    );
+
+    await waitFor(() =>
+      expect(result.current[localBackend.id].isConnected).toBe(true),
+    );
+
+    // Assert — the inactive cloud backend's probe was never called.
+    expect(getCurrentCloudApiKeyMock).not.toHaveBeenCalled();
+    expect(getCloudOrganizationsMock).not.toHaveBeenCalled();
+    // The result map still has an entry for the inactive cloud backend,
+    // but it is null (not yet probed) rather than an errored state.
+    expect(result.current[cloudBackend.id]?.isConnected).toBeNull();
+  });
+
+  it("probes a cloud backend when it becomes the active backend (#15822)", async () => {
+    // Phase 1: local is active — cloud probe is gated off.
+    setActiveBackendForTests(localBackend);
+    getCurrentCloudApiKeyMock.mockResolvedValue({
+      isLegacyKey: false,
+      orgId: "org-1",
+    });
+    getSettingsMock.mockResolvedValue({});
+
+    renderHook(() => useBackendsHealth([localBackend, cloudBackend]), {
+      wrapper,
+    });
+
+    // Give any in-flight probes time to settle.
+    await waitFor(() =>
+      expect(getSettingsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(getCurrentCloudApiKeyMock).not.toHaveBeenCalled();
+
+    // Phase 2: cloud becomes active — its probe should fire.
+    setActiveBackendForTests(cloudBackend);
+    renderHook(() => useBackendsHealth([localBackend, cloudBackend]), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(getCurrentCloudApiKeyMock).toHaveBeenCalledTimes(1),
+    );
   });
 });
