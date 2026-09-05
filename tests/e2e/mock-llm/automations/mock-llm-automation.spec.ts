@@ -365,11 +365,18 @@ test.describe("mock-LLM automation lifecycle", () => {
     // quickly, making the failure obvious. See AGENTS.md → "Padding
     // response for internal LLM call" for more context.
     //
-    // After the main conversation finishes (responses 0-3), the dispatched
+    // After the main conversation finishes (responses 0-3),the dispatched
     // automation run spawns a NEW conversation on the same agent-server.
-    // That conversation also calls the mock LLM. We append extra text
-    // responses (4-6) so the run's conversation can finish normally, the
-    // script fires its completion callback, and the run reaches COMPLETED.
+
+    // That conversation also calls the mock LLM. Recent openhands-automation
+    // versions (>= 1.10.0, PR openhands/automation#405) require
+    // preset automation conversations to call the `finish` tool before the
+    // run reaches COMPLETED — so we script one blank internal call followed
+    // by the required finish-tool turn (and one trailing blank safety) below.
+    // If this ever drifts again, step 2's run-status timeout will surface it,
+    // and the mock server log shows "Mock LLM exhausted after N calls"
+    // pinpointing the exact count.
+
     await registerTrajectory(request, "automation-lifecycle", [
       // ── Main conversation (responses 0-3) ──
       { text: "" }, // 0: consumed by skill-activation LLM call (see above)
@@ -391,11 +398,37 @@ test.describe("mock-LLM automation lifecycle", () => {
 
       // ── Automation run's conversation (responses 4+) ──
       // The run starts a fresh conversation with the automation prompt.
-      // Provide enough responses for any internal LLM calls + the agent's
-      // turn so the conversation finishes and the completion callback fires.
+      // Script one internal padding call +the required `finish` tool turn,
+      // followed by a final text reply (+ one trailing safety blank** so the
+      // run reaches COMPLETED.
       { text: "" }, // 4: possible internal/condenser call
-      { text: "Done. Hello world echoed successfully." }, // 5: agent reply
-      { text: "" }, // 6: safety buffer for any follow-up internal call
+      {
+        // 5: openhands-automation >= 1.10.0 (openhands/automation#405)
+        // requires preset automation conversations to finish via the
+        // `finish` tool — a hook waits for `finish_tool_used` before the
+        // run reaches COMPLETED. Blank turns alone would just loop and exhaust
+        // the trajectory, so script the required finish-tool turn explicitly.
+
+        tool_call: {
+          // The agent-server registers the finish tool under its lowercase
+          // title (`finish`). The action schema requires `message`, while the
+          // attached response schema (TaskOutcome) validates the
+          // `status` + `outcome_summary` pair (that's the field alias, not
+          // `summary`); both layers must be satisfied in the same call.
+          name: "finish",
+          arguments: {
+            message: "Hello world echoed successfully.",
+            status: "success",
+            outcome_summary: "Hello world echoed successfully.",
+          },
+        },
+      },
+      // 6: after the finish tool executes, the agent still needs one more
+      // non-empty LLM turn to end the conversation — a blank here would
+      // make the harness nag ("no function call") and loop on the exhausted
+      // trajectory, so reply with the final text.
+      { text: "Done. Hello world echoed successfully." },
+      { text: "" }, // 7: safety buffer for any follow-up internal call after finish
     ]);
 
     // Activate it so the mock LLM uses this trajectory for the next conversation
@@ -485,9 +518,9 @@ test.describe("mock-LLM automation lifecycle", () => {
       const automation = await getAutomation(request, createdAutomationId!);
       automationIds.add(automation.id);
 
-      // Wait for the run to reach COMPLETED. The trajectory includes extra
-      // responses (indices 4-6) for the automation run's spawned conversation
-      // so it can finish and fire the completion callback.
+      // Wait for the run to reach COMPLETED. The trajectory scripts the required
+      // `finish` tool turn (plus padding) for the automation run's spawned
+      // conversation so it can finish and fire the completion callback.
       const run = await waitForRunStatus(
         request,
         automation.id,

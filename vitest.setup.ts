@@ -62,24 +62,30 @@ if (typeof requestAnimationFrame === "undefined") {
 
 // MSW's XMLHttpRequest interceptor references the bare `ProgressEvent`
 // global from inside async `respondWith` callbacks (via `createEvent`).
-// Vitest's jsdom environment installs `ProgressEvent` as an own accessor on
-// `globalThis` while the environment is alive and *deletes* it during
-// per-file teardown (it is part of vitest's `LIVING_KEYS`). If an in-flight
-// intercepted XHR (e.g. PostHog analytics) resolves its mocked response
-// after teardown, the late callback evaluates `ProgressEvent` against a
-// torn-down global and throws `ReferenceError: ProgressEvent is not defined`,
-// which Vitest reports as an unhandled rejection and fails the whole run.
+// Vitest's jsdom environment installs `ProgressEvent` as an own property on
+// `globalThis` and removes it during per-file teardown with
+// `keys.forEach((key) => delete global[key])`. If an in-flight intercepted
+// XHR (e.g. PostHog analytics, or any request that escaped to the real
+// network under `onUnhandledRequest: "bypass"` and is still waiting on a
+// socket) settles after teardown, its callback evaluates `ProgressEvent`
+// against a torn-down global and throws
+// `ReferenceError: ProgressEvent is not defined`. Vitest reports that as an
+// unhandled rejection and fails the whole run even though every test passed.
 //
-// The robust fix is to drain those pending async response callbacks in
-// `afterAll` (which runs *before* jsdom teardown) so they settle while
-// `ProgressEvent` is still defined. See `afterAll` below. The getter below
-// stashes the live class as a light defense-in-depth for any callback that
-// fires before teardown completes; it cannot help after teardown because
-// Vitest deletes the accessor (part of its `LIVING_KEYS`) during per-file
-// teardown — which is exactly why the `afterAll` drain is the real fix.
-// `configurable: true` is required so Vitest *can* delete the accessor
-// during teardown; `configurable: false` would prevent cleanup and leave
-// a stale getter pointing at a torn-down jsdom environment.
+// Two earlier attempts at this (an own-property getter, then the `afterAll`
+// drain below) both put the fallback where teardown can reach it, or bounded
+// how long a late callback may take. Neither holds: `delete` removes any own
+// property regardless of who defined it, and a request stuck on a real socket
+// can settle long after 30 macrotask ticks.
+//
+// `delete` only removes *own* properties, while identifier resolution walks
+// the prototype chain. So the fallback goes on an object inserted into
+// `globalThis`'s prototype chain, where teardown cannot delete it: while the
+// environment is alive jsdom's own property shadows it, and once teardown
+// removes that own property, the bare `ProgressEvent` identifier resolves
+// through the prototype to the class below. Node's `globalThis` does not have
+// `Object.prototype` as its direct prototype, so this adds nothing to plain
+// objects.
 class MockProgressEvent extends Event {
   readonly lengthComputable: boolean;
 
@@ -95,20 +101,28 @@ class MockProgressEvent extends Event {
   }
 }
 
-// `afterAll` runs while jsdom is still active, so `globalThis.ProgressEvent`
-// is jsdom's constructor here. Stash it so the post-teardown getter can
-// keep returning the real class even after the accessor is removed.
-const _liveProgressEvent =
-  typeof globalThis.ProgressEvent !== "undefined"
-    ? globalThis.ProgressEvent
-    : MockProgressEvent;
+// Setup files run once per test file, and a worker process is reused across
+// files. Without this marker each file would splice another holder into the
+// prototype chain, so the chain would grow with every file in the run.
+const PROGRESS_EVENT_FALLBACK = Symbol.for(
+  "agent-canvas.progress-event-fallback",
+);
 
-Object.defineProperty(globalThis, "ProgressEvent", {
-  configurable: true,
-  get() {
-    return _liveProgressEvent;
-  },
-});
+function installProgressEventFallback(fallback: unknown) {
+  const currentProto = Object.getPrototypeOf(globalThis) as object | null;
+  if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
+
+  const holder = Object.create(currentProto) as Record<PropertyKey, unknown>;
+  Object.defineProperty(holder, PROGRESS_EVENT_FALLBACK, { value: true });
+  Object.defineProperty(holder, "ProgressEvent", {
+    value: fallback,
+    configurable: true,
+    writable: true,
+  });
+  Object.setPrototypeOf(globalThis, holder);
+}
+
+installProgressEventFallback(MockProgressEvent);
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
@@ -177,14 +191,13 @@ afterEach(async () => {
 });
 afterAll(async () => {
   // Drain pending MSW `respondWith` callbacks (and any other queued
-  // macrotasks) before jsdom is torn down. MSW resolves intercepted XHR
-  // responses asynchronously; if a late callback (e.g. PostHog analytics
-  // flushed during the last test) settles after teardown, its `createEvent`
-  // call evaluates the bare `ProgressEvent` global against a torn-down
-  // jsdom and throws `ReferenceError: ProgressEvent is not defined`. Running
-  // a few real-timer ticks here lets those callbacks complete while
-  // `ProgressEvent` is still defined. We restore real timers first so a test
-  // that left fake timers active can't stall the drain.
+  // macrotasks) before jsdom is torn down, so most late callbacks settle
+  // against a live jsdom rather than a torn-down one. This is a best-effort
+  // tidy-up, not the guarantee: a callback can always outlast the drain
+  // window (a bypassed request stuck on a real socket, for instance), which
+  // is what the prototype-chain `ProgressEvent` fallback above is for. We
+  // restore real timers first so a test that left fake timers active can't
+  // stall the drain.
   vi.useRealTimers();
   // Reset handlers first so no new intercepted requests start processing
   // during the drain window.
