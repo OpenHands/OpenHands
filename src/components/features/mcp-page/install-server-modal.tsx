@@ -160,6 +160,17 @@ export function InstallServerModal({
   // never seed card health from it.
   const { backend } = useActiveBackend();
   const isCloudBackend = backend.kind === "cloud";
+  // Snapshot the active backend scope at render so concurrent saves don't
+  // race against a backend switch (the mutation handler could otherwise
+  // seed into the new backend's bucket).
+  const scopeRef = React.useRef({
+    backendId: backend.id,
+    connectionRevision: backend.connectionRevision,
+  });
+  scopeRef.current = {
+    backendId: backend.id,
+    connectionRevision: backend.connectionRevision,
+  };
 
   const [state, setState] = React.useState<FieldState>(() =>
     makeInitialState(entry),
@@ -255,7 +266,12 @@ export function InstallServerModal({
           addMcpServer(serverToSave, {
             onSuccess: () => {
               if (!isCloudBackend) {
-                seedMcpServerHealth(serverToSave, result, existingServers);
+                seedMcpServerHealth(
+                  scopeRef.current,
+                  serverToSave,
+                  result,
+                  existingServers,
+                );
               }
               displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
               setIsFinalizingInstall(true);
@@ -300,7 +316,12 @@ export function InstallServerModal({
         addMcpServer(serverToSave, {
           onSuccess: () => {
             if (!isCloudBackend) {
-              seedMcpServerHealth(serverToSave, result, existingServers);
+              seedMcpServerHealth(
+                scopeRef.current,
+                serverToSave,
+                result,
+                existingServers,
+              );
             }
             displaySuccessToast(t(I18nKey.MCP$INSTALL_SUCCESS));
             setIsFinalizingInstall(true);

@@ -117,14 +117,20 @@ describe("InstallServerModal", () => {
 
     // Assert: the health store carries the saved config's verdict (the
     // mocked test returns no tool_result, so it proves connectivity only).
-    const expectedKey = getMcpServerHealthKey({
-      id: "irrelevant-for-key",
-      type: "stdio",
-      name: "slack",
-      command: "npx",
-      args: ["-y", "@zencoderai/slack-mcp-server"],
-      env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: "xoxb-abc" },
-    });
+    // The test wraps in `<ActiveBackendProvider>`; with no stored backend
+    // selection, the provider falls back to `makeDefaultLocalBackend()`,
+    // which in jsdom resolves to `{ id: "default-local" }`.
+    const expectedKey = getMcpServerHealthKey(
+      { backendId: "default-local" },
+      {
+        id: "irrelevant-for-key",
+        type: "stdio",
+        name: "slack",
+        command: "npx",
+        args: ["-y", "@zencoderai/slack-mcp-server"],
+        env: { SLACK_TEAM_ID: "T01", SLACK_BOT_TOKEN: "xoxb-abc" },
+      },
+    );
     await waitFor(() =>
       expect(getMcpHealthSnapshot()[expectedKey]).toMatchObject({
         status: "healthy",

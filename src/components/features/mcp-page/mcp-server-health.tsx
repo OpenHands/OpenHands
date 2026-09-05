@@ -102,7 +102,16 @@ export function McpServerHealthSection({
       {
         // The update mutation clears this server's health entry; re-seed it
         // from the probe that just succeeded so the verdict survives the save.
-        onSuccess: () => seedMcpServerHealth(serverToSave, result, []),
+        onSuccess: () =>
+          seedMcpServerHealth(
+            {
+              backendId: backend.id,
+              connectionRevision: backend.connectionRevision,
+            },
+            serverToSave,
+            result,
+            [],
+          ),
         onError: (err: unknown) =>
           displayErrorToast(
             retrieveAxiosErrorMessage(err as AxiosError) ||
