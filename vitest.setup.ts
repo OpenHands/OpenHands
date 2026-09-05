@@ -124,6 +124,23 @@ function installProgressEventFallback(fallback: unknown) {
 
 installProgressEventFallback(MockProgressEvent);
 
+// The getter above and the `afterAll` drain are only safeguards while the
+// jsdom environment is alive. Vitest's jsdom teardown DELETES every own
+// global in its LIVING_KEYS (including `ProgressEvent`), so a late msw XHR
+// `respondWith` callback that settles after teardown still sees no own
+// `ProgressEvent` property and throws a ReferenceError. The reliable fix is
+// a fallback on the prototype chain: once the torn-down own property is
+// gone, the bare lookup resolves through the chain to the polyfill instead
+// of throwing. While jsdom is alive its own property takes precedence, so
+// this changes nothing for in-test behavior.
+Object.defineProperty(Object.prototype, "ProgressEvent", {
+  configurable: true,
+  enumerable: false,
+  get() {
+    return MockProgressEvent;
+  },
+});
+
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
   observe = vi.fn();
