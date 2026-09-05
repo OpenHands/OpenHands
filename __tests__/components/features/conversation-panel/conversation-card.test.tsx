@@ -15,6 +15,7 @@ import { formatTimeDelta } from "#/utils/format-time-delta";
 import { ConversationCard } from "#/components/features/conversation-panel/conversation-card/conversation-card";
 import { clickOnEditButton } from "./utils";
 import { ConversationCardActions } from "#/components/features/conversation-panel/conversation-card/conversation-card-actions";
+import ConversationService from "#/api/conversation-service/conversation-service.api";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 import {
   __resetActiveStoreForTests,
@@ -1200,5 +1201,42 @@ describe("ConversationCard", () => {
       screen.getByTestId("conversation-pin-toggle-conversation-1"),
     ).toBeVisible();
     expect(screen.getByRole("time")).toBeInTheDocument();
+  });
+  // A link opened with `_blank` and no `noopener` hands the new tab a live
+  // `window.opener`, letting the opened page navigate this one (reverse
+  // tabnabbing). See #16871.
+  it("opens the VS Code URL with noopener and noreferrer", async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    const getVSCodeUrl = vi
+      .spyOn(ConversationService, "getVSCodeUrl")
+      .mockResolvedValue({ vscode_url: "https://vscode.example.com/?tkn=abc" });
+
+    renderWithProviders(
+      <ConversationCard
+        title="Conversation 1"
+        selectedRepository={null}
+        lastUpdatedAt="2021-10-01T12:00:00Z"
+        conversationId="conversation-1"
+        onDelete={vi.fn()}
+        contextMenuOpen
+        onContextMenuToggle={vi.fn()}
+        showOptions
+      />,
+    );
+
+    await user.click(screen.getByTestId("download-vscode-button"));
+
+    await vi.waitFor(() => expect(getVSCodeUrl).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://vscode.example.com/?tkn=abc",
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    );
+
+    openSpy.mockRestore();
+    getVSCodeUrl.mockRestore();
   });
 });
