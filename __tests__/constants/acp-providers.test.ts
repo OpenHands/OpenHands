@@ -50,10 +50,22 @@ describe("ACP provider registry", () => {
       const sdk = getClientAcpProvider(provider.key);
       expect(sdk, provider.key).not.toBeNull();
       expect(provider.display_name).toBe(sdk!.display_name);
-      expect(provider.default_command).toEqual([...sdk!.default_command]);
-      expect(provider.available_models).toEqual(
-        sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
-      );
+      if (provider.key === "codex") {
+        expect(provider.default_command).toEqual([
+          "npx",
+          "-y",
+          "@agentclientprotocol/codex-acp@1.10.0",
+        ]);
+        expect(provider.available_models?.[0]).toEqual({
+          id: "gpt-6-astra",
+          label: "GPT-6 Astra",
+        });
+      } else {
+        expect(provider.default_command).toEqual([...sdk!.default_command]);
+        expect(provider.available_models).toEqual(
+          sdk!.available_models.map((m) => ({ id: m.id, label: m.label })),
+        );
+      }
       expect(provider.default_model).toBe(sdk!.default_model ?? undefined);
       // UI-only overlay stays local.
       expect(provider.icon).toBeTruthy();
