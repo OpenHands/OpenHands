@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openhands.dev/schemas/project-config.json",
+  "title": "OpenHands project config",
+  "type": "object",
+  "required": ["project"],
+  "additionalProperties": false,
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "routing": {
+          "type": "object",
+          "properties": {
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["task_type", "provider", "model"],
+                "properties": {
+                  "task_type": { "type": "string", "minLength": 1 },
+                  "provider": {
+                    "type": "string",
+                    "enum": ["claude", "cursor", "opencode"]
+                  },
+                  "model": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              }
+            },
+            "default": {
+              "type": "object",
+              "required": ["provider", "model"],
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": ["claude", "cursor", "opencode"]
+                },
+                "model": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "kanban": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "color": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            },
+            "card_types": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["task", "bug", "feature", "discussion", "refinement"]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "lint": {
+          "type": "object",
+          "properties": {
+            "rules": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "config"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["slack", "whatsapp", "buzz"]
+              },
+              "config": { "type": "object" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "standards": {
+          "type": "object",
+          "properties": {
+            "plugins": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "enabled"],
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "enabled": { "type": "boolean" },
+                  "config": { "type": "object" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "cost_cap": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
