@@ -41,8 +41,11 @@ ENHANCEMENT_LABEL = "enhancement"
 
 # Issue-form fields render as h3 headings, while hand-edited and free-form
 # issues commonly use h2. Capture the level so nested h3 headings can remain
-# part of an h2 section.
-HEADING_RE = re.compile(r"(?m)^(?P<level>#{2,3})\s+(?P<title>.+?)\s*$")
+# part of an h2 section. The separator and trailing class are spaces and tabs
+# rather than `\s` so a heading cannot run past its own line: `find_headings`
+# blanks fenced code, and `\s` would then absorb the masked lines into the
+# heading match and drop the section's body.
+HEADING_RE = re.compile(r"(?m)^(?P<level>#{2,3})[ \t]+(?P<title>.+?)[ \t]*$")
 
 READINESS_SECTION_LABELS = {
     "steps to reproduce",

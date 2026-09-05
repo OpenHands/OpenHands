@@ -34,6 +34,24 @@ Describe testing here
     assert set(extract_sections(body)) == {"Summary"}
 
 
+def test_section_opening_with_a_fence_keeps_its_body():
+    """Same masked-whitespace trap as the issue checker: `## Test Plan` then a fence."""
+    body = """## Summary
+Fixes the thing.
+
+## How to Test
+```bash
+pytest .github/scripts/tests/
+```
+
+## Issue Number
+Fixes #16553
+"""
+    sections = extract_sections(body)
+    assert "pytest .github/scripts/tests/" in sections["How to Test"]
+    assert set(sections) == {"Summary", "How to Test", "Issue Number"}
+
+
 def test_fenced_heading_does_not_truncate_how_to_test():
     body = """## How to Test
 Run the focused checker tests.
@@ -294,6 +312,28 @@ I really did test this thoroughly by hand, twice, on my own machine.
 AGENT:
 ```
 """
+
+
+def test_human_note_opening_with_a_fence_survives():
+    """`HUMAN:` then a fence hits the same masked-whitespace trap as the headings.
+
+    The markers have no capture group to absorb a CRLF's `\\r`, so the pattern
+    matches it explicitly and both line endings are pinned here.
+    """
+    body = """## Summary
+Fixes it.
+
+HUMAN:
+```
+I ran this by hand on my laptop and watched it reproduce twice.
+```
+
+AGENT:
+did the work
+"""
+    for name, text in (("lf", body), ("crlf", body.replace("\n", "\r\n"))):
+        note = extract_human_note(text)
+        assert "reproduce twice" in note, name
 
 
 def test_fenced_human_marker_does_not_supply_the_note():

@@ -343,6 +343,56 @@ something went wrong
     assert evaluate_readiness(body, [BUG_LABEL]).ready
 
 
+def test_section_opening_with_a_fence_keeps_its_body():
+    """A masked fence is whitespace, and `HEADING_RE` must not absorb it.
+
+    Masking preserves offsets by writing spaces, so a fence that opens on the line
+    after a heading turns the rest of the section into blank lines. A heading pattern
+    that runs to `\\s*$` swallows them, and the section the author wrote is reported
+    as empty.
+    """
+    body = """### Actual Behavior
+```
+npm run dev
+Error: the button overlaps the field
+```
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+"""
+    section = extract_sections(body)["actual behavior"]
+    assert "npm run dev" in section
+    assert "user-attachments" in section
+
+
+def test_bug_ready_when_actual_behavior_opens_with_a_fence():
+    """End-to-end guard, not a red/green case for this fix.
+
+    It passes with the patterns reverted too, because the screenshot sits after
+    the fence and survives the swallow. Kept because it pins the whole path for a
+    body shaped the way the bug needs, in both line endings; the section content
+    itself is covered red/green by `test_section_opening_with_a_fence_keeps_its_body`.
+    """
+    body = """### Steps to Reproduce
+Start the app with `npm run dev`.
+
+### Actual Behavior
+```
+npm run dev
+Error: the button overlaps the field
+```
+
+![screenshot](https://github.com/user-attachments/assets/abc123)
+
+### Acceptance Criteria
+- [ ] The button lines up
+"""
+    result = evaluate_readiness(body, [BUG_LABEL])
+    assert result.ready, result.reasons
+    # GitHub stores web-submitted bodies with CRLF, so that is the shape most
+    # production hits take.
+    assert evaluate_readiness(body.replace("\n", "\r\n"), [BUG_LABEL]).ready
+
+
 def test_unclosed_fence_does_not_swallow_later_sections():
     """One stray marker in a log paste must not reject an otherwise-ready report."""
     body = """### Steps to Reproduce
