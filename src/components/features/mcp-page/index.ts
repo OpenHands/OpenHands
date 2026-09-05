@@ -7,3 +7,4 @@ export { SaveAsSecretToggle } from "./save-as-secret-toggle";
 export { CustomServerEditor } from "./custom-server-editor";
 export { McpToolbar } from "./mcp-toolbar";
 export type { McpSectionFilter } from "./mcp-section-filter";
+export { OauthCallbackFallback } from "./oauth-callback-fallback";

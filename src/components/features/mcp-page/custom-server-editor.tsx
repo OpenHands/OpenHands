@@ -26,6 +26,7 @@ import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
 import McpService from "#/api/mcp-service/mcp-service.api";
 import { MCP_RENAME_CREDENTIAL_ERROR } from "#/utils/mcp-config";
+import { OauthCallbackFallback } from "./oauth-callback-fallback";
 
 interface CustomServerEditorProps {
   server: MCPServerConfig;
@@ -59,6 +60,7 @@ export function CustomServerEditor({
   const [oauthTestResult, setOauthTestResult] =
     React.useState<ExtendedMCPTestResponse | null>(null);
   const [isOauthTesting, setIsOauthTesting] = React.useState(false);
+  const [oauthJobId, setOauthJobId] = React.useState<string | null>(null);
 
   // The MCP connectivity-test endpoint only exists on the local agent-server.
   // For cloud backends `McpService.testServer` short-circuits with a synthetic
@@ -69,8 +71,10 @@ export function CustomServerEditor({
 
   const isEditing = !!server.id;
   const isPending = isAdding || isUpdating || isDeleting;
-  const isDismissBlocked =
-    isPending || isTesting || isOauthTesting || showDeleteConfirm;
+  // Deliberately excludes `isOauthTesting`: that wait is interactive (the user
+  // is off in a provider popup, for up to 300s) and abandoning it must stay
+  // possible. See the ModalBackdrop comment below.
+  const isDismissBlocked = isPending || isTesting || showDeleteConfirm;
 
   const testMessage: TestMessage | null = React.useMemo(() => {
     const result = oauthTestResult ?? testResult;
@@ -121,7 +125,7 @@ export function CustomServerEditor({
     setOauthTestResult(null);
     if (payload.auth?.strategy === "oauth2") {
       setIsOauthTesting(true);
-      void McpService.authorizeOAuth(payload)
+      void McpService.authorizeOAuth(payload, { onJobStarted: setOauthJobId })
         .then((result) => {
           setOauthTestResult(result);
           if (!result.ok) return;
@@ -148,7 +152,10 @@ export function CustomServerEditor({
           }
         })
         .catch(handleError)
-        .finally(() => setIsOauthTesting(false));
+        .finally(() => {
+          setIsOauthTesting(false);
+          setOauthJobId(null);
+        });
       return;
     }
     testServer(payload, {
@@ -188,10 +195,13 @@ export function CustomServerEditor({
     setOauthTestResult(null);
     if (payload.auth?.strategy === "oauth2" && !isCloudBackend) {
       setIsOauthTesting(true);
-      void McpService.authorizeOAuth(payload)
+      void McpService.authorizeOAuth(payload, { onJobStarted: setOauthJobId })
         .then(setOauthTestResult)
         .catch(handleError)
-        .finally(() => setIsOauthTesting(false));
+        .finally(() => {
+          setIsOauthTesting(false);
+          setOauthJobId(null);
+        });
       return;
     }
     testServer(payload);
@@ -214,9 +224,12 @@ export function CustomServerEditor({
   return (
     <>
       <ModalBackdrop
-        // Block backdrop-click / Escape from dismissing the modal while
-        // a mutation is in flight — closing mid-request would orphan
-        // the request and leave the user with no error feedback.
+        // Block backdrop-click / Escape from dismissing the modal while a
+        // save/test mutation is in flight — closing mid-request would orphan
+        // the request and leave the user with no error feedback. An in-flight
+        // OAuth authorization is NOT blocked: it is an interactive wait the
+        // user may legitimately abandon, and there is nothing to orphan
+        // beyond a backend job that times out on its own.
         onClose={isDismissBlocked ? undefined : onClose}
         closeOnEscape={!isDismissBlocked}
         aria-label={
@@ -239,6 +252,12 @@ export function CustomServerEditor({
               ? t(I18nKey.MCP$EDIT_CUSTOM_TITLE)
               : t(I18nKey.MCP$ADD_CUSTOM_TITLE)}
           </h2>
+          {/* Above the form: the form ends with the Save/Test row, and this
+              modal scrolls — placing the relay after it would hide the escape
+              hatch below the fold exactly when it is needed. */}
+          {isOauthTesting && oauthJobId ? (
+            <OauthCallbackFallback jobId={oauthJobId} />
+          ) : null}
           <MCPServerForm
             mode={isEditing ? "edit" : "add"}
             server={isEditing ? server : undefined}

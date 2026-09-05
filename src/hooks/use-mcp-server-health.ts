@@ -14,6 +14,10 @@ import { getMcpServerHealthKey } from "#/utils/mcp-server-health-key";
 /**
  * Subscribe to an installed server's connection health and expose the
  * probe actions bound to its current config.
+ *
+ * `oauthJobId` is non-null only while a reauthorization is pending; it lets
+ * the card offer the manual callback-URL relay for deployments where the
+ * browser cannot reach the agent-server's loopback listener (issue #15430).
  */
 export function useMcpServerHealth(server: MCPServerConfig) {
   const key = getMcpServerHealthKey(server);
@@ -31,10 +35,16 @@ export function useMcpServerHealth(server: MCPServerConfig) {
     () => probeMcpServerHealth(serverRef.current),
     [],
   );
-  const reauthorize = React.useCallback(
-    () => reauthorizeMcpServerHealth(serverRef.current),
-    [],
-  );
+  const [oauthJobId, setOauthJobId] = React.useState<string | null>(null);
+  const reauthorize = React.useCallback(async () => {
+    try {
+      return await reauthorizeMcpServerHealth(serverRef.current, {
+        onJobStarted: setOauthJobId,
+      });
+    } finally {
+      setOauthJobId(null);
+    }
+  }, []);
 
-  return { health, probe, reauthorize };
+  return { health, probe, reauthorize, oauthJobId };
 }
