@@ -143,6 +143,46 @@ describe("LlmSettingsScreen", () => {
     expect(screen.getByTestId("llm-api-key-input")).toBeInTheDocument();
   });
 
+  it("hides the stream setting because Agent Canvas always streams", async () => {
+    const schema = structuredClone(
+      MOCK_DEFAULT_USER_SETTINGS.agent_settings_schema!,
+    );
+    const llmSection = schema.sections.find(
+      (section) => section.key === "llm",
+    )!;
+    const temperatureField = llmSection.fields.find(
+      (field) => field.key === "llm.temperature",
+    )!;
+    llmSection.fields.push({
+      ...temperatureField,
+      key: "llm.stream",
+      label: "Stream",
+      description: "Enable streaming responses from the LLM.",
+      value_type: "boolean",
+      default: false,
+    });
+
+    vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
+      buildSettings({
+        agent_settings_schema: schema,
+      }),
+    );
+
+    renderLlmSettingsScreen();
+
+    await screen.findByTestId("llm-settings-screen");
+    const allToggle = screen.getByTestId("sdk-section-all-toggle");
+    fireEvent.click(allToggle);
+
+    expect(allToggle).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByTestId("sdk-settings-llm.temperature"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("sdk-settings-llm.stream"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the API key as set on the global settings page when a key exists", async () => {
     vi.spyOn(SettingsService, "getSettings").mockResolvedValue(
       buildSettings({ llm_model: "openai/gpt-4o", llm_api_key_set: true }),
