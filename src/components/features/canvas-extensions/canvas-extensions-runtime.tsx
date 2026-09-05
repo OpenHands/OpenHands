@@ -4,6 +4,7 @@ import CanvasExtensionsService from "#/api/canvas-extensions-service";
 import { useActiveBackend } from "#/contexts/active-backend-context";
 import { loadCanvasExtensionModule } from "#/extensions/canvas-extension-module-loader";
 import { useCanvasExtensions } from "#/hooks/query/use-canvas-extensions";
+import { clearStalePinnedExtensionRoutes } from "#/hooks/use-pinned-home-route";
 import {
   CANVAS_EXTENSION_HOST_API_VERSION,
   type CanvasExtensionDispose,
@@ -150,6 +151,14 @@ export function CanvasExtensionsRuntimeProvider({
     setPages([]);
     setErrors(new Map());
     setActivating(extensionsToActivate.length > 0);
+
+    if (query.data !== undefined) {
+      clearStalePinnedExtensionRoutes(
+        backend.id,
+        orgId,
+        extensionsToActivate.map((extension) => extension.name),
+      );
+    }
 
     const activateExtension = async (
       extension: InstalledCanvasExtensionInfo,
