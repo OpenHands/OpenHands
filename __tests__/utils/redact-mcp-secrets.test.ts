@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MCPServerConfig } from "#/types/mcp-server";
 import { REDACTED_MCP_SECRET_VALUE } from "#/utils/mcp-config";
-import { redactMcpSecrets } from "#/utils/redact-mcp-secrets";
+import { collectMcpSecretValues, redactMcpSecrets } from "#/utils/redact-mcp-secrets";
 
 describe("redactMcpSecrets", () => {
   it("masks configured secret values wherever they appear in the text", () => {
@@ -62,5 +62,63 @@ describe("redactMcpSecrets", () => {
     const text = "could not resolve eu endpoint";
 
     expect(redactMcpSecrets(text, server)).toBe(text);
+  });
+});
+
+describe("collectMcpSecretValues, URL query-string secrets", () => {
+  const server = (url: string): MCPServerConfig =>
+    ({
+      id: "s1",
+      name: "s1",
+      type: "sse",
+      url,
+    }) as unknown as MCPServerConfig;
+
+  it("collects ?api_key= when the password is plain", () => {
+    const s = server(
+      "https://alice:plainpassword@mcp.example.com/sse?api_key=QUERYSECRET1234",
+    );
+    expect(collectMcpSecretValues(s)).toContain("QUERYSECRET1234");
+  });
+
+  it("collects ?api_key= when the password contains a bare percent sign", () => {
+    // Regression for issue #16978: a bare '%' in the password makes
+    // decodeURIComponent throw, which used to abort the whole
+    // addUrlSecrets() pass and silently drop the query-string secret.
+    const s = server(
+      "https://alice:pa%ssword@mcp.example.com/sse?api_key=QUERYSECRET1234",
+    );
+    expect(collectMcpSecretValues(s)).toContain("QUERYSECRET1234");
+  });
+
+  it("collects ?api_key= when the username contains a bare percent sign", () => {
+    const s = server(
+      "https://al%ice:password@mcp.example.com/sse?api_key=QUERYSECRET1234",
+    );
+    expect(collectMcpSecretValues(s)).toContain("QUERYSECRET1234");
+  });
+
+  it("still collects the raw username and password when percent decoding fails", () => {
+    const s = server("https://alice:pa%ssword@mcp.example.com/sse");
+    const values = collectMcpSecretValues(s);
+    expect(values).toContain("alice");
+    expect(values).toContain("pa%ssword");
+  });
+
+  it("redacts the query-string secret end-to-end when the password has a bare '%'", () => {
+    const s = server(
+      "https://alice:pa%ssword@mcp.example.com/sse?api_key=QUERYSECRET1234",
+    );
+    const redacted = redactMcpSecrets(
+      "401 for https://alice:pa%ssword@mcp.example.com/sse?api_key=QUERYSECRET1234",
+      s,
+    );
+    expect(redacted).not.toContain("QUERYSECRET1234");
+    expect(redacted).toContain(REDACTED_MCP_SECRET_VALUE);
+  });
+
+  it("collects nothing and does not throw for a genuinely unparseable URL", () => {
+    const s = server("not a url");
+    expect(collectMcpSecretValues(s)).toEqual([]);
   });
 });
