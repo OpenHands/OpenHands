@@ -11,6 +11,7 @@ import { useAgentState } from "#/hooks/use-agent-state";
 import { RuntimeWaitingState } from "#/components/features/conversation-panel/runtime-waiting-state";
 import { ConversationTabEmptyState } from "#/components/features/conversation/conversation-tab-empty-state";
 import { useConversationStore } from "#/stores/conversation-store";
+import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edit";
 
 /**
  * The Files tab's "Commits" view: the workspace's recent commit history
@@ -19,6 +20,7 @@ import { useConversationStore } from "#/stores/conversation-store";
  * offered when the agent server supports the commits API.
  */
 function GitCommits() {
+  useAutoRefreshFilesOnEdit();
   const { t } = useTranslation("openhands");
   const { conversationId } = useConversationId();
   const { commits, hasMore, isUnsupported, isLoading, isSuccess } =
