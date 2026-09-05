@@ -52,6 +52,19 @@ error state) and then the result after your fix. A terminal screenshot or video
 is fine for non-UI bugs.
 -->
 
+## Design Doc
+
+<!--
+Optional, encouraged for non-trivial PRs. Add a self-contained HTML design doc under the
+temporary `.pr/` directory (e.g. `.pr/design.html`) covering the code/API design and a
+before/after of your change, then link it here via htmlpreview so reviewers see it at a glance:
+
+  https://htmlpreview.github.io/?https://github.com/<your-fork>/<repo>/blob/<your-branch>/.pr/design.html
+
+The `.pr/` directory is temporary — it is removed automatically when the PR is approved.
+See docs/DEVELOPMENT.md ("Design doc for non-trivial PRs") for details.
+-->
+
 ## Type
 
 - [ ] Bug fix
