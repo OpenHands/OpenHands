@@ -33,7 +33,12 @@ export function normalizeAutomationKey(value: string): string {
 }
 
 function catalogMatchKeys(entry: RecommendedAutomation): string[] {
-  return [entry.id, entry.name, entry.skill]
+  return [
+    entry.id,
+    entry.name,
+    entry.name ? `${entry.name} Agent` : undefined,
+    entry.skill,
+  ]
     .filter((value): value is string => Boolean(value))
     .map(normalizeAutomationKey);
 }

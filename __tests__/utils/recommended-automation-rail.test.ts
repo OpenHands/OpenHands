@@ -49,6 +49,7 @@ describe("recommended automation rail", () => {
     ]);
 
     expect(groups.proven.map((entry) => entry.id)).toEqual([
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -62,6 +63,7 @@ describe("recommended automation rail", () => {
 
     expect(groups.proven.map((entry) => entry.id)).toEqual([
       "github-pr-reviewer",
+      "custom-automation",
       "github-issue-to-pr",
       "slack-channel-monitor",
       "github-agents-md-maintainer",
@@ -94,6 +96,7 @@ describe("recommended automation rail", () => {
     const groups = getRecommendedRailGroups([
       { name: "GitHub Code Review Agent" },
       { name: "GitHub Issue to PR Agent" },
+      { name: "Custom automation" },
       { name: "Slack channel monitor" },
       { name: "AGENTS.md Maintainer" },
       { name: "Daily news digest" },
