@@ -6,9 +6,10 @@ For the main install options and overall context, see [README.md](./README.md).
 
 ## Option 2: With a Docker Sandbox (Windows)
 
-**Prerequisites**:
+Before starting:
 
-- Docker Desktop for Windows
+- Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/).
+- Make sure Docker has enough free disk space for the Agent Canvas image and your project data.
 - A host directory for `PROJECTS_PATH` containing the project folders you want the agent to access (create it before starting the container)
 
 ```powershell
