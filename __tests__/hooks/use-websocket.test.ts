@@ -823,10 +823,112 @@ describe("useWebSocket", () => {
       expect(onCloseSpy).not.toHaveBeenCalled();
       expect(onErrorSpy).not.toHaveBeenCalled();
 
+      // Assert: the stale socket's late close also does not mutate the
+      // hook's internal connection state (#16842). Before the fix,
+      // setIsConnected(false) and setError(...) ran unconditionally
+      // before the wasReplaced guard, so the UI briefly showed a
+      // disconnect + error while the replacement socket was live.
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBe(null);
+
       // ...while the current socket's close still notifies as before.
       act(() => currentSocket.emitClose());
       expect(onCloseSpy).toHaveBeenCalledOnce();
       expect(onErrorSpy).toHaveBeenCalledOnce();
+
+      // Closing the current socket also flips state, as expected.
+      expect(result.current.isConnected).toBe(false);
+      expect(result.current.error).not.toBe(null);
+
+      unmount();
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+      MockWebSocket.instances.length = 0;
+    }
+  });
+
+  it("a late close from a replaced socket does not set isConnected=false or error (#16842 regression)", async () => {
+    // Regression test for #16842: a replaced socket's late close event
+    // must not mutate the hook's internal state. The bug was that
+    // setIsConnected(false) and setError(...) ran before the wasReplaced
+    // guard, so the UI showed a disconnect + error while the replacement
+    // socket was live.
+    class MockWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      static readonly instances: MockWebSocket[] = [];
+
+      readonly url: string;
+      readyState = MockWebSocket.CONNECTING;
+      onopen: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+
+      constructor(url: string) {
+        this.url = url;
+        MockWebSocket.instances.push(this);
+      }
+
+      send() {}
+
+      close() {
+        this.readyState = MockWebSocket.CLOSED;
+      }
+
+      emitOpen() {
+        this.readyState = MockWebSocket.OPEN;
+        this.onopen?.(new Event("open"));
+      }
+
+      emitClose(code = 1006) {
+        this.onclose?.(
+          new CloseEvent("close", { code, reason: "", wasClean: false }),
+        );
+      }
+    }
+
+    const originalWebSocket = globalThis.WebSocket;
+    vi.stubGlobal("WebSocket", MockWebSocket);
+
+    try {
+      const { result, unmount } = renderHook(() =>
+        useWebSocket("ws://acme.com/ws"),
+      );
+      const oldSocket = MockWebSocket.instances[0];
+      act(() => oldSocket.emitOpen());
+
+      // Pre-condition: connected, no error.
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBe(null);
+
+      // Replace the socket: reconnect() creates a new socket and removes
+      // the old one from the allowed-to-reconnect set, but does not fire
+      // the old socket's close event yet.
+      act(() => {
+        result.current.reconnect();
+      });
+      const newSocket = MockWebSocket.instances[1];
+      act(() => newSocket.emitOpen());
+
+      // The replacement is live — state must reflect that.
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBe(null);
+
+      // Now the old socket's close event arrives late (code 1006, the
+      // "abnormal closure" a browser sends when a replaced TCP connection
+      // finally drops).
+      act(() => oldSocket.emitClose(1006));
+
+      // #16842: isConnected must stay true and error must stay null.
+      expect(result.current.isConnected).toBe(true);
+      expect(result.current.error).toBe(null);
+
+      // Closing the *current* socket still updates state as before.
+      act(() => newSocket.emitClose(1000));
+      expect(result.current.isConnected).toBe(false);
 
       unmount();
     } finally {
