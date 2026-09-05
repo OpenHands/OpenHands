@@ -12,6 +12,7 @@ import {
 import { I18nKey } from "#/i18n/declaration";
 import type { LocalWorkspace, LocalWorkspaceParent } from "#/types/workspace";
 import { getWorkspacesUnsupportedMessage } from "#/utils/workspaces-compatibility";
+import { cn } from "#/utils/utils";
 
 export interface KanbanWorkspacePickerProps {
   workspaces: LocalWorkspace[];
@@ -21,6 +22,7 @@ export interface KanbanWorkspacePickerProps {
   isLoading: boolean;
   listError: unknown;
   onChange: (workspace: LocalWorkspace | null) => void;
+  className?: string;
 }
 
 export function KanbanWorkspacePicker({
@@ -31,6 +33,7 @@ export function KanbanWorkspacePicker({
   isLoading,
   listError,
   onChange,
+  className,
 }: KanbanWorkspacePickerProps) {
   const { t } = useTranslation("openhands");
   const [isBrowserOpen, setIsBrowserOpen] = React.useState(false);
@@ -45,7 +48,10 @@ export function KanbanWorkspacePicker({
 
   return (
     <>
-      <div className="w-full max-w-sm" data-testid="kanban-workspace-picker">
+      <div
+        className={cn("w-full max-w-[14rem]", className)}
+        data-testid="kanban-workspace-picker"
+      >
         <WorkspaceDropdown
           key={selected?.path ?? "empty-workspace-selection"}
           workspaces={workspaces}
