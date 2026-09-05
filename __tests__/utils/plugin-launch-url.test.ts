@@ -22,4 +22,22 @@ describe("buildPluginLaunchPath", () => {
     expect(url.pathname).toBe("/launch");
     expect(decoded).toEqual(plugins);
   });
+
+  it("correctly encodes plugins with Unicode parameters", () => {
+    const plugins: PluginSpec[] = [
+      {
+        source: "github:owner/repo",
+        parameters: { task: "整理发布说明 🚀" },
+      },
+    ];
+
+    const path = buildPluginLaunchPath(plugins);
+    const url = new URL(path, "http://localhost");
+    
+    const decodedB64 = atob(url.searchParams.get("plugins") ?? "");
+    const bytes = Uint8Array.from(decodedB64, (c) => c.charCodeAt(0));
+    const decoded = JSON.parse(new TextDecoder().decode(bytes));
+
+    expect(decoded).toEqual(plugins);
+  });
 });
