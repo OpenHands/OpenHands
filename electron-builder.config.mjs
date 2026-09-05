@@ -287,7 +287,7 @@ function getDirSizeBytes(dir) {
 const config = {
   appId: "dev.openhands.agent-canvas",
   productName: "OpenHands Agent Canvas",
-  copyright: "Copyright © 2025 All Hands AI",
+  copyright: "Copyright © 2025 OpenHands contributors",
 
   // Stamp the packaged app with the released version (see rootPackageJson
   // note above).
@@ -434,7 +434,7 @@ const config = {
     // fpm-backed targets (deb) require a maintainer with an email address;
     // electron/package.json carries no author, so set it here. Without this
     // the deb step fails with "Please specify author 'email'".
-    maintainer: "All-Hands AI <contact@all-hands.dev>",
+    maintainer: "OpenHands <contact@all-hands.dev>",
   },
 };
 

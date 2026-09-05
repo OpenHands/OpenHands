@@ -967,6 +967,27 @@ class AgentServerConversationService {
   }
 
   /**
+   * Replaces the conversation's complete server-side tag map (the PATCH is
+   * replace-all, so callers must merge user edits with any reserved/internal
+   * keys before calling). Mirrors `updateConversationTitle`; local
+   * agent-server conversations only — Cloud conversations don't carry tags.
+   */
+  static async updateConversationTags(
+    conversationId: string,
+    tags: Record<string, string>,
+  ): Promise<AppConversation> {
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, {
+      tags,
+    });
+    const [conversation] = await this.batchGetAppConversations([
+      conversationId,
+    ]);
+    return requireAppConversation(conversation, conversationId);
+  }
+
+  /**
    * Forks a conversation, copying event history up to and including
    * `fromEventId`. Local agent-server only; needs agent-server >= 1.31.0 for
    * `from_event_id` (older backends copy the whole conversation).
