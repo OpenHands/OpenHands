@@ -264,8 +264,8 @@ describe("buildConfig", () => {
    * Build an env that points persisted dev API key files at a fresh temp dir,
    * so tests don't write to the user's real ~/.openhands/agent-canvas files.
    *
-   * Also redirects all service ports to high port numbers so that buildConfig's
-   * assertPortsFree check passes even when a real dev stack is running on the
+   * Also redirects all service ports to high port numbers so allocation stays
+   * on the requested ports even when a real dev stack is running on the
    * default ports (18000, 18001, 3001, 8000).
    */
   function envWithIsolatedKeyPath(
@@ -275,7 +275,7 @@ describe("buildConfig", () => {
     keyDirs.push(dir);
     return {
       OH_SESSION_API_KEY_PATH: path.join(dir, "session-api-key.txt"),
-      // High ports that are almost certainly free, so assertPortsFree passes.
+      // High ports that are almost certainly free.
       PORT: "19902",
       OH_CANVAS_SAFE_BACKEND_PORT: "19900",
       OH_CANVAS_SAFE_AUTOMATION_PORT: "19901",
@@ -344,10 +344,9 @@ describe("buildConfig", () => {
     expect(config.ingressPort).toBe(preferredPort);
   });
 
-  it("throws when ingress port is busy", async () => {
+  it("falls back to a free ingress port when the preferred one is busy", async () => {
     const busyPort = 8100;
 
-    // Block port 8100
     const server = net.createServer();
     await new Promise<void>((resolve, reject) => {
       server.listen(busyPort, "127.0.0.1", () => {
@@ -357,10 +356,39 @@ describe("buildConfig", () => {
       server.on("error", reject);
     });
 
-    // Should throw instead of falling back to a different port
-    await expect(
-      buildConfig({ port: busyPort }, envWithIsolatedKeyPath()),
-    ).rejects.toThrow(/ingress.*port 8100/i);
+    const config = await buildConfig(
+      { port: busyPort },
+      envWithIsolatedKeyPath(),
+    );
+
+    expect(config.ingressPort).not.toBe(busyPort);
+    expect(config.ingressPort).toBeGreaterThan(0);
+    expect(config.stateDir).toBe(
+      path.join(homedir(), ".openhands", `agent-canvas-${config.ingressPort}`),
+    );
+  });
+
+  it("keeps an explicit state dir when ports are remapped", async () => {
+    const busyPort = 8101;
+    const stateDir = mkdtempSync(path.join(tmpdir(), "canvas-state-"));
+    keyDirs.push(stateDir);
+
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.listen(busyPort, "127.0.0.1", () => {
+        servers.push(server);
+        resolve();
+      });
+      server.on("error", reject);
+    });
+
+    const config = await buildConfig(
+      { port: busyPort },
+      envWithIsolatedKeyPath({ OH_CANVAS_SAFE_STATE_DIR: stateDir }),
+    );
+
+    expect(config.ingressPort).not.toBe(busyPort);
+    expect(config.stateDir).toBe(path.resolve(stateDir));
   });
 
   it("allocates valid ports for all services", async () => {

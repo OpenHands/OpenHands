@@ -48,17 +48,17 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, resolve, dirname, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import process from "node:process";
 
 import {
-  assertPortsFree,
   buildAgentServerCommand,
   buildSafeDevConfig,
   buildAgentServerEnv,
   buildNpmScriptCommand,
   buildRuntimeServicesInfo,
+  defaultCanvasStateDir,
+  findFreePorts,
   formatMissingUvxGuidance,
   validateFrontendDependencies,
   validateLocalAgentServerPath,
@@ -430,35 +430,65 @@ async function buildConfig(args, env = process.env) {
     parseInt(env.OH_CANVAS_SAFE_AUTOMATION_PORT, 10) || DEFAULT_AUTOMATION_PORT;
   const preferredVitePort = parseInt(env.OH_CANVAS_SAFE_VITE_PORT, 10) || 3001;
 
-  // Fail fast if any preferred port for a service in this mode is already in use.
-  const requiredPorts = [{ name: "ingress", port: preferredIngressPort }];
+  const preferredPorts = [{ name: "ingress", preferred: preferredIngressPort }];
   if (launchAgentServer) {
-    requiredPorts.push({ name: "agent-server", port: preferredBackendPort });
+    preferredPorts.push({
+      name: "agent-server",
+      preferred: preferredBackendPort,
+    });
   }
   if (launchAutomation) {
-    requiredPorts.push({ name: "automation", port: preferredAutomationPort });
+    preferredPorts.push({
+      name: "automation",
+      preferred: preferredAutomationPort,
+    });
   }
   if (launchFrontend) {
-    requiredPorts.push({ name: "frontend", port: preferredVitePort });
+    preferredPorts.push({ name: "frontend", preferred: preferredVitePort });
   }
 
   logStep("ports", "Checking ports...");
-  await assertPortsFree(requiredPorts);
+  const allocated = await findFreePorts(preferredPorts);
+  const ingressPort = allocated.ingress;
+  const agentServerPort = launchAgentServer
+    ? allocated["agent-server"]
+    : preferredBackendPort;
+  const autoBackendPort = launchAutomation
+    ? allocated.automation
+    : preferredAutomationPort;
+  const vitePort = launchFrontend ? allocated.frontend : preferredVitePort;
 
-  const vscodePort = preferredBackendPort + 1000;
+  const vscodeAllocated = await findFreePorts([
+    {
+      name: "vscode",
+      preferred: agentServerPort + 1000,
+    },
+  ]);
+  const vscodePort = vscodeAllocated.vscode;
+
+  const remapped =
+    ingressPort !== preferredIngressPort ||
+    (launchAgentServer && agentServerPort !== preferredBackendPort) ||
+    (launchAutomation && autoBackendPort !== preferredAutomationPort) ||
+    (launchFrontend && vitePort !== preferredVitePort);
+  if (remapped) {
+    logStep(
+      "ports",
+      `Preferred ports busy — using ingress http://127.0.0.1:${ingressPort}`,
+    );
+  }
 
   // API key — shared by both agent-server and automation backend.
   // Both validate it via the `X-Session-API-Key` header.
   // LOCAL_BACKEND_API_KEY is the single user-facing env var: if set it's
   // used directly; otherwise one is auto-generated and persisted.
-  const stateDir =
-    env.OH_CANVAS_SAFE_STATE_DIR ||
-    join(homedir(), ".openhands", "agent-canvas");
+  const instanceKey = remapped ? String(ingressPort) : null;
+  const stateDir = defaultCanvasStateDir(env, instanceKey);
 
   const safeConfig = buildSafeDevConfig(projectRoot, {
     ...env,
     OH_CANVAS_SAFE_STATE_DIR: stateDir,
-    OH_CANVAS_SAFE_BACKEND_PORT: preferredBackendPort.toString(),
+    OH_CANVAS_SAFE_BACKEND_PORT: agentServerPort.toString(),
     OH_CANVAS_SAFE_VSCODE_PORT: vscodePort.toString(),
   });
   const sessionApiKey = safeConfig.sessionApiKey;
@@ -478,12 +508,12 @@ async function buildConfig(args, env = process.env) {
 
   return {
     // Ingress port (main entry point)
-    ingressPort: preferredIngressPort,
+    ingressPort,
 
     // Service ports (internal)
-    agentServerPort: preferredBackendPort,
-    autoBackendPort: preferredAutomationPort,
-    vitePort: preferredVitePort,
+    agentServerPort,
+    autoBackendPort,
+    vitePort,
     vscodePort,
     // Prefix the editor is served under on the ingress origin. Carried on the
     // config so the route table and the agent-server env are built from one
