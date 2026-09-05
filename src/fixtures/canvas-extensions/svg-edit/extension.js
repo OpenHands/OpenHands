@@ -3,6 +3,12 @@ const SVG_EDIT_URL = `https://unpkg.com/svgedit@${SVG_EDIT_VERSION}/dist/editor/
 
 export { SVG_EDIT_VERSION, SVG_EDIT_URL };
 
+/**
+ * Registers the SVG-edit page on the Canvas Extension host.
+ *
+ * @param {CanvasExtensionHost} host - The host runtime that manages page lifecycle.
+ * @returns {() => void} Dispose function that unregisters the page.
+ */
 export function activate(host) {
   return host.registerPage("editor", ({ container }) => {
     const frame = document.createElement("iframe");
