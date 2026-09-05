@@ -14,7 +14,7 @@ import { useSidebarStore } from "#/stores/sidebar-store";
 import {
   NavigationProvider,
   type NavigationContextValue,
-} from "#/context/navigation-context";
+} from "#/contexts/navigation-context";
 import { getPinnedHomeRouteKey } from "#/hooks/use-pinned-home-route";
 import translations from "#/i18n/translation.json";
 

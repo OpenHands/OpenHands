@@ -8,7 +8,7 @@ import {
   displaySuccessToast,
   TOAST_OPTIONS,
 } from "#/utils/custom-toast-handlers";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
 import { useTracking } from "#/hooks/use-tracking";
 
