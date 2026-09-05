@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
-  Columns3,
-  FolderGit2,
   Plus,
   Server,
   Settings,
@@ -23,8 +21,6 @@ import {
 } from "#/hooks/use-pinned-home-route";
 import { SidebarCollapsedIconSlot } from "./sidebar-collapsed-icon-slot";
 import { SidebarNavLink } from "./sidebar-nav-link";
-import { KANBAN_PATH } from "#/api/kanban-service/kanban-constants";
-import { PROJECTS_PATH } from "#/api/projects-service/projects-constants";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
@@ -240,28 +236,6 @@ export function SidebarRailBody({
               <path d="M12 13.5V8" />
             </svg>
           }
-        />
-        <SidebarNavLink
-          to={KANBAN_PATH}
-          label={t(I18nKey.KANBAN$NAV)}
-          testId="sidebar-kanban-link"
-          collapsed={collapsed}
-          icon={<Columns3 width={ICON_SIZE} height={ICON_SIZE} />}
-          pinAction={buildPinAction(
-            KANBAN_PATH,
-            "sidebar-pin-home-toggle-kanban",
-          )}
-        />
-        <SidebarNavLink
-          to={PROJECTS_PATH}
-          label={t(I18nKey.PROJECTS$NAV)}
-          testId="sidebar-projects-link"
-          collapsed={collapsed}
-          icon={<FolderGit2 width={ICON_SIZE} height={ICON_SIZE} />}
-          pinAction={buildPinAction(
-            PROJECTS_PATH,
-            "sidebar-pin-home-toggle-projects",
-          )}
         />
         {/* The interface manifest owns this entry's label, so an absent
             manifest leaves the rail without it rather than with host copy. */}

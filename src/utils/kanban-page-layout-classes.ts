@@ -5,7 +5,7 @@ import { cn } from "#/utils/utils";
  * settings-like pages with a 260px aside. Match the home-screen gutter
  * (`px-4` / `lg:px-[42px]`) rather than `settingsLikeMainScrollClassName`.
  */
-export const kanbanPageGutterClassName = "px-4 pt-6 pb-4 lg:px-[42px]";
+export const kanbanPageGutterClassName = "px-3 pt-3 pb-3 lg:px-5";
 
 export const kanbanPageShellClassName = cn(
   "flex h-full min-h-0 flex-col overflow-hidden",

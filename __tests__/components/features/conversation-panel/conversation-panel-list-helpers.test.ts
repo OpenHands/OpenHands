@@ -19,6 +19,7 @@ import {
   resolvePinnedConversations,
   sortConversationsByField,
   UNNAMED_AUTOMATION_FACET,
+  workspacePathFromGroupId,
 } from "#/components/features/conversation-panel/conversation-panel-list-helpers";
 import type { AppConversation } from "#/api/conversation-service/agent-server-conversation-service.types";
 import { ExecutionStatus } from "#/types/agent-server/core";
@@ -298,17 +299,18 @@ describe("conversation-panel-list-helpers", () => {
     ]);
 
     expect([
+      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local"),
+    ]).toEqual(["none-1", "alpha-1"]);
+
+    expect([
       ...getGroupDiscoveryConversationIds(
         items,
         pageByConversationId,
         "local",
+        {
+          forceIncludeConversationId: "none-2",
+        },
       ),
-    ]).toEqual(["none-1", "alpha-1"]);
-
-    expect([
-      ...getGroupDiscoveryConversationIds(items, pageByConversationId, "local", {
-        forceIncludeConversationId: "none-2",
-      }),
     ]).toEqual(["none-1", "alpha-1", "none-2"]);
 
     const grouped = groupConversations(items, "local", "updated", {
@@ -875,5 +877,16 @@ describe("partitionByCutoff", () => {
     expect(isOlderConversationCutoff("1h")).toBe(true);
     expect(isOlderConversationCutoff("1d")).toBe(true);
     expect(isOlderConversationCutoff("2h")).toBe(false);
+  });
+});
+
+describe("workspacePathFromGroupId", () => {
+  it("returns the folder path for workspace groups and null otherwise", () => {
+    expect(workspacePathFromGroupId("ws:/workspace/alpha")).toBe(
+      "/workspace/alpha",
+    );
+    expect(workspacePathFromGroupId("__none_workspace")).toBeNull();
+    expect(workspacePathFromGroupId("repo:org/name")).toBeNull();
+    expect(workspacePathFromGroupId("ws:")).toBeNull();
   });
 });

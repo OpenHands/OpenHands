@@ -80,12 +80,9 @@ export function KanbanList({ board, onSelectCard }: KanbanListProps) {
   );
 
   return (
-    <div
-      data-testid="kanban-list"
-      className="h-full min-h-0 overflow-auto rounded-xl bg-base-secondary"
-    >
+    <div data-testid="kanban-list" className="h-full min-h-0 overflow-auto">
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="sticky top-0 bg-base-secondary">
+        <thead className="sticky top-0 bg-base">
           <tr className="border-b border-[var(--oh-border)]">
             <th className="px-3 py-2 text-xs font-medium text-tertiary-light">
               {t(I18nKey.KANBAN$TITLE)}

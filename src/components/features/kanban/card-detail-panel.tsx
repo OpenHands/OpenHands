@@ -36,7 +36,7 @@ export function CardDetailPanel({
     <aside
       data-testid="kanban-card-detail"
       className={cn(
-        "flex h-[min(50%,24rem)] w-full shrink-0 flex-col overflow-y-auto border-[var(--oh-border)] bg-base-secondary p-4",
+        "flex h-[min(50%,24rem)] w-full shrink-0 flex-col overflow-y-auto border-[var(--oh-border-subtle)] bg-[var(--oh-surface-raised)]/40 p-4",
         "border-t lg:h-full lg:w-[min(100%,22rem)] lg:border-t-0 lg:border-l",
       )}
     >

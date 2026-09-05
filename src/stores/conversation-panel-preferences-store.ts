@@ -63,7 +63,7 @@ export type LayoutSettingsSlice = Pick<
 >;
 
 export const DEFAULT_LAYOUT_SETTINGS: LayoutSettingsSlice = {
-  organizeMode: "chronological",
+  organizeMode: "grouped",
   conversationSort: "updated",
   threadScope: "all",
   showOlderConversations: true,
@@ -119,6 +119,8 @@ const initialState: ConversationPanelPreferencesState = {
   selectedTagFacets: [],
   groupFolderOrder: [],
 };
+
+const CONVERSATION_PANEL_PREFERENCES_VERSION = 1;
 
 export const useConversationPanelPreferencesStore =
   create<ConversationPanelPreferencesStore>()(
@@ -214,7 +216,15 @@ export const useConversationPanelPreferencesStore =
       }),
       {
         name: "conversation-panel-preferences",
+        version: CONVERSATION_PANEL_PREFERENCES_VERSION,
         storage: createJSONStorage(() => localStorage),
+        migrate: (persistedState, version) => {
+          const state = persistedState as ConversationPanelPreferencesState;
+          if (version < 1) {
+            return { ...state, organizeMode: "grouped" };
+          }
+          return state;
+        },
         // Only persist the data fields — actions are recreated on each load.
         partialize: (state): ConversationPanelPreferencesState => ({
           showOlderConversations: state.showOlderConversations,

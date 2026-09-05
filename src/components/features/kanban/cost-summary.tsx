@@ -14,12 +14,12 @@ export function CostSummary({ costs }: CostSummaryProps) {
   return (
     <div
       data-testid="kanban-cost-summary"
-      className="flex items-baseline gap-2 text-sm leading-5 text-tertiary-light"
+      className="flex items-baseline gap-1.5 text-xs leading-4 text-[var(--oh-muted)]"
     >
       <span>{t(I18nKey.KANBAN$TOTAL_COST)}</span>
       <span
         data-testid="kanban-board-total-cost"
-        className="tabular-nums font-medium text-white"
+        className="tabular-nums text-[var(--oh-foreground)]"
       >
         {formatUsd(total)}
       </span>

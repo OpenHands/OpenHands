@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { Columns3, FolderPlus, List } from "lucide-react";
 import {
   KANBAN_VIEW_BOARD,
   KANBAN_VIEW_LIST,
@@ -13,7 +14,6 @@ import { KanbanList } from "#/components/features/kanban/kanban-list";
 import { KanbanWorkspacePicker } from "#/components/features/kanban/kanban-workspace-picker";
 import { boardForWorkspace } from "#/components/features/kanban/kanban-workspace";
 import { SegmentedToggle } from "#/components/features/files-tab/segmented-toggle";
-import { BrandButton } from "#/components/features/settings/brand-button";
 import { useNavigation } from "#/context/navigation-context";
 import {
   useCreateKanbanBoard,
@@ -27,8 +27,8 @@ import {
   useUpdateKanbanCard,
 } from "#/hooks/query/use-kanban";
 import { useKanbanWorkspace } from "#/hooks/use-kanban-workspace";
+import { StyledTooltip } from "#/components/shared/buttons/styled-tooltip";
 import { I18nKey } from "#/i18n/declaration";
-import { Typography } from "#/ui/typography";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { extensionModuleEmptyStateClassName } from "#/utils/extension-module-card-classes";
 import { kanbanPageShellClassName } from "#/utils/kanban-page-layout-classes";
@@ -118,51 +118,55 @@ export default function KanbanPage() {
       boardQuery.isLoading);
 
   return (
-    <main data-testid="kanban-page" className={kanbanPageShellClassName}>
-      <header className="mb-4 shrink-0">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <Typography.H2>{t(I18nKey.KANBAN$NAV)}</Typography.H2>
-            <KanbanWorkspacePicker
-              workspaces={workspace.workspaces}
-              parents={workspace.parents}
-              workspaceParents={workspace.workspaceParents}
-              selected={workspace.selected}
-              isLoading={workspace.isLoading}
-              listError={workspace.listError}
-              onChange={workspace.setSelected}
+    <main
+      data-testid="kanban-page"
+      aria-label={t(I18nKey.KANBAN$NAV)}
+      className={kanbanPageShellClassName}
+    >
+      <header className="mb-3 flex h-9 shrink-0 items-center justify-between gap-3">
+        <KanbanWorkspacePicker
+          workspaces={workspace.workspaces}
+          parents={workspace.parents}
+          workspaceParents={workspace.workspaceParents}
+          selected={workspace.selected}
+          isLoading={workspace.isLoading}
+          listError={workspace.listError}
+          onChange={workspace.setSelected}
+        />
+        <div className="flex shrink-0 items-center gap-2">
+          {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
+          {board ? (
+            <SegmentedToggle
+              value={view}
+              onChange={setView}
+              ariaLabel={t(I18nKey.KANBAN$VIEW_MODE)}
+              testId="kanban-view"
+              options={[
+                {
+                  value: KANBAN_VIEW_BOARD,
+                  label: t(I18nKey.KANBAN$BOARD_VIEW),
+                  icon: <Columns3 className="h-3.5 w-3.5" aria-hidden />,
+                },
+                {
+                  value: KANBAN_VIEW_LIST,
+                  label: t(I18nKey.KANBAN$LIST_VIEW),
+                  icon: <List className="h-3.5 w-3.5" aria-hidden />,
+                },
+              ]}
             />
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {costsQuery.data ? <CostSummary costs={costsQuery.data} /> : null}
-            {board ? (
-              <SegmentedToggle
-                value={view}
-                onChange={setView}
-                ariaLabel={t(I18nKey.KANBAN$VIEW_MODE)}
-                testId="kanban-view"
-                options={[
-                  {
-                    value: KANBAN_VIEW_BOARD,
-                    label: t(I18nKey.KANBAN$BOARD_VIEW),
-                  },
-                  {
-                    value: KANBAN_VIEW_LIST,
-                    label: t(I18nKey.KANBAN$LIST_VIEW),
-                  },
-                ]}
-              />
-            ) : null}
-            <BrandButton
+          ) : null}
+          <StyledTooltip content={t(I18nKey.PROJECT_INIT$NAV)}>
+            <button
               type="button"
-              variant="secondary"
-              testId="kanban-new-project"
-              isDisabled={!workspace.selected}
+              data-testid="kanban-new-project"
+              disabled={!workspace.selected}
+              aria-label={t(I18nKey.PROJECT_INIT$NAV)}
               onClick={() => navigate(PROJECT_INIT_PATH)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--oh-muted)] hover:bg-[var(--oh-interactive-hover)] hover:text-[var(--oh-foreground)] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {t(I18nKey.PROJECT_INIT$NAV)}
-            </BrandButton>
-          </div>
+              <FolderPlus className="h-4 w-4" aria-hidden />
+            </button>
+          </StyledTooltip>
         </div>
       </header>
 
