@@ -34,11 +34,16 @@ jobs:
       - name: Build test matrix
         id: matrix
         run: |
-          echo 'matrix={"include":[{"name":"ubuntu","os":"ubuntu-24.04","full_checks":true},{"name":"windows","os":"windows-latest","full_checks":false}]}' >> "$GITHUB_OUTPUT"
+          # `job_label` names each lane after the steps it actually runs. Only the
+          # `full_checks` lane runs lint, tests, the library build and the package
+          # check, so the lane without them is named `build`, not `test-and-build`.
+          # Keep `test-and-build (ubuntu)` stable: the Release Tag ruleset and
+          # release.yml both wait on that exact check name.
+          echo 'matrix={"include":[{"name":"ubuntu","os":"ubuntu-24.04","full_checks":true,"job_label":"test-and-build"},{"name":"windows","os":"windows-latest","full_checks":false,"job_label":"build"}]}' >> "$GITHUB_OUTPUT"
 
   test-and-build:
     needs: prepare-test-matrix
-    name: test-and-build (${{ matrix.name }})
+    name: ${{ matrix.job_label }} (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
