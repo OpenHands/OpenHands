@@ -97,6 +97,13 @@ export const PROJECTS_QUERY_KEYS = {
   detail: (projectId: string) => ["projects", "detail", projectId] as const,
 } as const;
 
+export const FEATURE_DEV_QUERY_KEYS = {
+  all: ["feature-developer"] as const,
+  list: () => ["feature-developer", "list"] as const,
+  detail: (runId: string) => ["feature-developer", "detail", runId] as const,
+  report: (runId: string) => ["feature-developer", "report", runId] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

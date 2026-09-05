@@ -30,6 +30,10 @@ import {
 } from "./canvas-extensions-handlers";
 import { KANBAN_HANDLERS, resetKanbanMockData } from "./kanban-handlers";
 import { PROJECTS_HANDLERS, resetProjectsMockData } from "./projects-handlers";
+import {
+  FEATURE_DEV_HANDLERS,
+  resetFeatureDevMockData,
+} from "./feature-developer-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -47,6 +51,7 @@ export const handlers = [
   ...CANVAS_EXTENSIONS_HANDLERS,
   ...KANBAN_HANDLERS,
   ...PROJECTS_HANDLERS,
+  ...FEATURE_DEV_HANDLERS,
 ];
 
 export {
@@ -57,6 +62,7 @@ export {
   resetCanvasExtensionsMockData,
   resetKanbanMockData,
   resetProjectsMockData,
+  resetFeatureDevMockData,
 };
 
 export {
