@@ -203,10 +203,36 @@ function writeProxyError(res, message) {
   res.destroy();
 }
 
+export function stripSecureFromSetCookieHeader(value) {
+  // Remove the `Secure` attribute (case-insensitive) from a single
+  // Set-Cookie value. Browsers refuse to send a `Secure` cookie back over a
+  // plain http:// connection to a non-loopback host, which breaks the
+  // workspace-session cookie flow (401 on workspace file preview) when the
+  // GUI is served over http on a LAN/VM/container IP. Used by the
+  // `--disable-secure` / stripSecureCookie option.
+  if (typeof value !== "string") return value;
+  return value
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part.toLowerCase() !== "secure")
+    .join("; ");
+}
+
+export function stripSecureFromSetCookie(proxyRes) {
+  const raw = proxyRes.headers["set-cookie"];
+  if (raw === undefined) return;
+  if (Array.isArray(raw)) {
+    proxyRes.headers["set-cookie"] = raw.map(stripSecureFromSetCookieHeader);
+  } else {
+    proxyRes.headers["set-cookie"] = stripSecureFromSetCookieHeader(raw);
+  }
+}
+
 export function createProxyHandlers({
   label = "proxy",
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
+  stripSecureCookie = false,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
@@ -235,6 +261,19 @@ export function createProxyHandlers({
       resOrSocket.destroy();
     }
   });
+
+  if (stripSecureCookie) {
+    // The backing agent-server sets the workspace-session cookie with the
+    // `Secure` attribute. On an http:// (non-HTTPS) listener a browser will
+    // not send that cookie back to a non-loopback host, so the workspace file
+    // preview gets a 401. When the user opts in with --disable-secure, drop
+    // the Secure attribute on every Set-Cookie we forward. httpxy emits this
+    // event before it writes headers to the client, so mutating
+    // proxyRes.headers["set-cookie"] here is reflected in the response.
+    proxy.on("proxyRes", (_proxyRes) => {
+      stripSecureFromSetCookie(_proxyRes);
+    });
+  }
 
   function proxyHttp(req, res, target) {
     metrics.activeHttpRequests += 1;
