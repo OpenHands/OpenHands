@@ -60,9 +60,25 @@ export function makeDefaultLocalBackend(): Backend | null {
 
   if (!host || !apiKey) return null;
 
+  // Use the hostname as the backend name for clarity. On a VM the base URL
+  // is something like https://canvas.acme.com, so showing "Local" is
+  // misleading. Fall back to the default name for loopback addresses.
+  let name: string;
+  try {
+    const url = new URL(host);
+    const hostname = url.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+      name = DEFAULT_LOCAL_BACKEND_NAME;
+    } else {
+      name = url.port ? `${hostname}:${url.port}` : hostname;
+    }
+  } catch {
+    name = DEFAULT_LOCAL_BACKEND_NAME;
+  }
+
   return {
     id: SEEDED_DEFAULT_BACKEND_ID,
-    name: DEFAULT_LOCAL_BACKEND_NAME,
+    name,
     host,
     apiKey,
     kind: "local",
