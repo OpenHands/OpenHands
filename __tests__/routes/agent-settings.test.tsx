@@ -549,7 +549,7 @@ describe("AgentSettingsScreen", () => {
     await user.clear(commandInput);
     await user.type(
       commandInput,
-      "npx -y @agentclientprotocol/codex-acp@1.1.7",
+      "npx -y @agentclientprotocol/codex-acp@1.10.0",
     );
 
     // The model field now reflects the Codex default, not the stale Claude one.
