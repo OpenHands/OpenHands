@@ -650,4 +650,44 @@ describe("HomeChatLauncher", () => {
       screen.getByTestId("recommended-automations-rail"),
     ).toBeInTheDocument();
   });
+
+  it("dismisses creating-conversation toast even when attachment send errors", async () => {
+    const toastDismissSpy = vi.spyOn(toast, "dismiss");
+
+    // Arrange: a successful conversation creation followed by a failing
+    // sendMessageWithAttachments — the toast must still be dismissed.
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockResolvedValue(makeConversationResponse());
+    sendMessageWithAttachments.mockRejectedValue(
+      new Error("Attachment upload failed"),
+    );
+    mockImages = [new File(["x"], "photo.png", { type: "image/png" })];
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() =>
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith("Attachment upload failed"),
+    );
+    expect(toastDismissSpy).toHaveBeenCalledWith("creating-conversation");
+  });
+
+  it("dismisses creating-conversation toast on conversation creation failure", async () => {
+    const toastDismissSpy = vi.spyOn(toast, "dismiss");
+
+    vi.spyOn(
+      AgentServerConversationService,
+      "createConversation",
+    ).mockRejectedValue(new Error("Network down"));
+
+    renderLauncher();
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("stub-chat-submit"));
+
+    await waitFor(() => expect(mockDisplayErrorToast).toHaveBeenCalled());
+    expect(toastDismissSpy).toHaveBeenCalledWith("creating-conversation");
+  });
 });
