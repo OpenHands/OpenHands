@@ -7,6 +7,7 @@ interface ConfirmationModalProps {
   text: string;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmText?: string;
   /**
    * Disables both action buttons while an asynchronous confirm
    * mutation is in flight. Defaults to false to preserve existing
@@ -19,6 +20,7 @@ export function ConfirmationModal({
   text,
   onConfirm,
   onCancel,
+  confirmText,
   isConfirming = false,
 }: ConfirmationModalProps) {
   const { t } = useTranslation("openhands");
@@ -53,7 +55,7 @@ export function ConfirmationModal({
             variant="primary"
             isDisabled={isConfirming}
           >
-            {t(I18nKey.BUTTON$CONFIRM)}
+            {confirmText ?? t(I18nKey.BUTTON$CONFIRM)}
           </BrandButton>
         </div>
       </div>

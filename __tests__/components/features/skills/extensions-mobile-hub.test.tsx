@@ -53,6 +53,16 @@ describe("ExtensionsMobileHub", () => {
     expect(pluginsItem).not.toHaveAttribute("aria-disabled");
   });
 
+  it("links Apps to its management page", () => {
+    renderMobileHub(<ExtensionsMobileHub />);
+
+    const hub = screen.getByTestId("extensions-mobile-hub");
+    expect(within(hub).getByTestId("sidebar-extensions-/apps")).toHaveAttribute(
+      "href",
+      "/apps",
+    );
+  });
+
   describe("cloud backend", () => {
     it("renders the Skills item as an external link to {cloudHost}/settings/skills with the renamed label", () => {
       setRegisteredBackends([cloudBackend]);
@@ -74,7 +84,7 @@ describe("ExtensionsMobileHub", () => {
       );
     });
 
-    it("hides the Plugins item", () => {
+    it("hides the Plugins and Apps items", () => {
       setRegisteredBackends([cloudBackend]);
       setActiveSelection({ backendId: cloudBackend.id });
 
@@ -83,6 +93,9 @@ describe("ExtensionsMobileHub", () => {
       const hub = screen.getByTestId("extensions-mobile-hub");
       expect(
         within(hub).queryByTestId("sidebar-extensions-/plugins"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(hub).queryByTestId("sidebar-extensions-/apps"),
       ).not.toBeInTheDocument();
     });
   });
