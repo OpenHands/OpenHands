@@ -34,7 +34,10 @@ export function OpenHandsLogoButton({
       <OpenHandsLogo
         width={logoWidth}
         height={logoHeight}
-        className={cn("shrink-0", logoClassName)}
+        className={cn(
+          "shrink-0 text-white [&_path[fill=white]]:fill-current",
+          logoClassName,
+        )}
       />
     </NavigationLink>
   );
