@@ -1,7 +1,7 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Globe, Info, Monitor } from "lucide-react";
+import { ChevronDown, CloudCog, Globe, Info, Monitor } from "lucide-react";
 import { ServerClient } from "@openhands/typescript-client/clients";
 import OpenHandsLogoWhite from "#/assets/branding/openhands-logo-white.svg?react";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
@@ -39,6 +39,15 @@ import ServerIcon from "#/icons/server.svg?react";
 import { getBackendStatusLabel } from "./backend-status-label";
 import { BackendStatusDot } from "./backend-status-dot";
 import { DeviceFlowAuth } from "./device-flow-auth";
+import {
+  DigitalOceanDropletsStep,
+  DigitalOceanTokenStep,
+  ThirdPartyProviderPanel,
+} from "./third-party-provider-panel";
+import {
+  DIGITALOCEAN_PROVIDER_ID,
+  type ThirdPartyBackendProviderId,
+} from "./third-party-backend-providers";
 
 export type BackendFormMode = "add" | "edit";
 
@@ -155,7 +164,7 @@ const DEPLOYMENT_OPTIONS_URL =
 export type BackendConnectionMethod = "manual" | "cloud_login";
 
 export type BackendAddedSource = CloudConnectionSource;
-type AddBackendOption = "cloud" | "agent-server";
+type AddBackendOption = "cloud" | "agent-server" | "providers";
 type AgentServerLocation = "local" | "remote";
 
 function getConnectionTestFailedTitle(
@@ -1102,6 +1111,8 @@ interface BackendOptionTabProps {
   onSelect: (value: AddBackendOption) => void;
   panelId: string;
   testId: string;
+  /** Hide the subtitle so a 3-up tablist can keep titles on one line. */
+  showDescription?: boolean;
 }
 
 /**
@@ -1120,6 +1131,7 @@ function BackendOptionTab({
   onSelect,
   panelId,
   testId,
+  showDescription = true,
 }: BackendOptionTabProps) {
   const isSelected = value === selectedValue;
   const tabId = `${testId}-tab`;
@@ -1131,11 +1143,11 @@ function BackendOptionTab({
       role="tab"
       aria-selected={isSelected}
       aria-controls={panelId}
+      aria-description={showDescription ? undefined : description}
       data-testid={testId}
       onClick={() => onSelect(value)}
       className={cn(
-        "relative flex min-h-16 w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors",
-        "first:border-r first:border-r-[var(--oh-border)]",
+        "relative flex min-h-14 w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
         "focus-visible:z-10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-300",
         isSelected
           ? "bg-[var(--oh-surface-raised)] text-white after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary"
@@ -1143,16 +1155,18 @@ function BackendOptionTab({
       )}
     >
       <span
-        className="flex size-8 shrink-0 items-center justify-center"
+        className="flex size-7 shrink-0 items-center justify-center"
         aria-hidden
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{title}</span>
-        <span className="mt-0.5 block text-xs leading-tight text-[var(--oh-muted)]">
-          {description}
-        </span>
+        {showDescription ? (
+          <span className="mt-0.5 block text-xs leading-tight text-[var(--oh-muted)]">
+            {description}
+          </span>
+        ) : null}
       </span>
     </button>
   );
@@ -1334,9 +1348,46 @@ function AgentServerGuidance({ location }: { location: AgentServerLocation }) {
   );
 }
 
+type AddBackendSlideStep = 0 | 1 | 2;
+
+/**
+ * Horizontal slide used when a provider card takes over the whole modal.
+ * Matches the onboarding rail: only the active pane is in flow, so height
+ * tracks the current step while neighbors stay overlaid for the animation.
+ */
+function AddBackendSlide({
+  index,
+  currentStep,
+  children,
+}: {
+  index: AddBackendSlideStep;
+  currentStep: AddBackendSlideStep;
+  children: React.ReactNode;
+}) {
+  const isActive = index === currentStep;
+  const offsetPct = (index - currentStep) * 100;
+
+  return (
+    <div
+      data-testid={`add-backend-slide-${index}`}
+      data-active={isActive}
+      aria-hidden={!isActive}
+      inert={!isActive ? true : undefined}
+      style={{ transform: `translateX(${offsetPct}%)` }}
+      className={cn(
+        "w-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+        !isActive && "pointer-events-none absolute inset-0",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function AddBackendChooser({
   onConnected,
   source,
+  onSelectProvider,
 }: {
   onConnected: (
     payload: BackendFormSubmitPayload,
@@ -1344,6 +1395,7 @@ function AddBackendChooser({
     metadata?: BackendConnectionTestMetadata,
   ) => void;
   source: BackendAddedSource;
+  onSelectProvider: (id: ThirdPartyBackendProviderId) => void;
 }) {
   const { t } = useTranslation("openhands");
   const [selectedOption, setSelectedOption] =
@@ -1353,13 +1405,14 @@ function AddBackendChooser({
   const panelId = "add-backend-selected-panel";
   const selectedTabId = `add-backend-option-${selectedOption}-tab`;
   const isCloudSelected = selectedOption === "cloud";
+  const isProvidersSelected = selectedOption === "providers";
 
   return (
     <div data-testid="add-backend-chooser" className="flex flex-col">
       <div
         role="tablist"
         aria-label={t(I18nKey.BACKEND$CHOOSER_TITLE)}
-        className="grid grid-cols-2 overflow-hidden rounded-lg border border-[var(--oh-border)]"
+        className="grid grid-cols-3 divide-x divide-[var(--oh-border)] overflow-hidden rounded-lg border border-[var(--oh-border)]"
       >
         <BackendOptionTab
           value="cloud"
@@ -1376,6 +1429,7 @@ function AddBackendChooser({
           onSelect={setSelectedOption}
           panelId={panelId}
           testId="add-backend-option-cloud"
+          showDescription={false}
         />
         <BackendOptionTab
           value="agent-server"
@@ -1386,6 +1440,18 @@ function AddBackendChooser({
           onSelect={setSelectedOption}
           panelId={panelId}
           testId="add-backend-option-agent-server"
+          showDescription={false}
+        />
+        <BackendOptionTab
+          value="providers"
+          selectedValue={selectedOption}
+          title={t(I18nKey.BACKEND$PROVIDERS_TITLE)}
+          description={t(I18nKey.BACKEND$PROVIDERS_OPTION_DESCRIPTION)}
+          icon={<CloudCog className="size-6" />}
+          onSelect={setSelectedOption}
+          panelId={panelId}
+          testId="add-backend-option-providers"
+          showDescription={false}
         />
       </div>
 
@@ -1418,6 +1484,8 @@ function AddBackendChooser({
                   showBranding={false}
                 />
               </div>
+            ) : isProvidersSelected ? (
+              <ThirdPartyProviderPanel onSelectProvider={onSelectProvider} />
             ) : (
               <div
                 data-testid="add-backend-agent-server-panel"
@@ -1483,9 +1551,11 @@ function AddBackendChooser({
 function AddBackendConnectionOptions({
   onClose,
   source,
+  onSelectProvider,
 }: {
   onClose: () => void;
   source: BackendAddedSource;
+  onSelectProvider: (id: ThirdPartyBackendProviderId) => void;
 }) {
   const { addBackend } = useActiveBackendContext();
   const redirectAfterAdd = useRedirectAfterAddBackend();
@@ -1523,7 +1593,109 @@ function AddBackendConnectionOptions({
     );
   }
 
-  return <AddBackendChooser onConnected={handleConnected} source={source} />;
+  return (
+    <AddBackendChooser
+      onConnected={handleConnected}
+      source={source}
+      onSelectProvider={onSelectProvider}
+    />
+  );
+}
+
+function AddBackendAddModeBody({
+  hideCloseButton,
+  onClose,
+  source,
+}: {
+  hideCloseButton: boolean;
+  onClose: () => void;
+  source: BackendAddedSource;
+}) {
+  const { t } = useTranslation("openhands");
+  const [slideStep, setSlideStep] = React.useState<AddBackendSlideStep>(0);
+  const [token, setToken] = React.useState("");
+  const [selectedDropletIds, setSelectedDropletIds] = React.useState<string[]>(
+    [],
+  );
+
+  const handleSelectProvider = (id: ThirdPartyBackendProviderId) => {
+    if (id === DIGITALOCEAN_PROVIDER_ID) {
+      setSlideStep(1);
+    }
+  };
+
+  const handleBackToChooser = () => {
+    setSlideStep(0);
+    setToken("");
+    setSelectedDropletIds([]);
+  };
+
+  return (
+    <div
+      data-testid="add-backend-slide-rail"
+      className="relative overflow-hidden"
+    >
+      <AddBackendSlide index={0} currentStep={slideStep}>
+        {hideCloseButton ? null : (
+          <div className="pr-8">
+            <h2 className={modalTitleLgClassName}>
+              {t(I18nKey.BACKEND$CHOOSER_TITLE)}
+            </h2>
+            <p
+              className="mt-2 text-sm leading-6 text-[var(--oh-muted)]"
+              data-testid="add-backend-description"
+            >
+              {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
+              <a
+                href={DEPLOYMENT_OPTIONS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
+                data-testid="add-backend-deployment-options-link"
+                className="text-primary hover:underline"
+              >
+                {t(I18nKey.CTA$LEARN_MORE)}
+                <ExternalLinkIcon
+                  className="ml-1 inline size-3.5 align-[-0.125em]"
+                  aria-hidden
+                />
+              </a>
+            </p>
+          </div>
+        )}
+        <div className={hideCloseButton ? undefined : "mt-5"}>
+          <AddBackendConnectionOptions
+            onClose={onClose}
+            source={source}
+            onSelectProvider={handleSelectProvider}
+          />
+        </div>
+      </AddBackendSlide>
+
+      <AddBackendSlide index={1} currentStep={slideStep}>
+        <DigitalOceanTokenStep
+          token={token}
+          onTokenChange={setToken}
+          onContinue={() => setSlideStep(2)}
+          onBack={handleBackToChooser}
+        />
+      </AddBackendSlide>
+
+      <AddBackendSlide index={2} currentStep={slideStep}>
+        <DigitalOceanDropletsStep
+          selectedDropletIds={selectedDropletIds}
+          onToggleDroplet={(id) =>
+            setSelectedDropletIds((current) =>
+              current.includes(id)
+                ? current.filter((dropletId) => dropletId !== id)
+                : [...current, id],
+            )
+          }
+          onBack={() => setSlideStep(1)}
+        />
+      </AddBackendSlide>
+    </div>
+  );
 }
 
 // ── Modal wrappers ──────────────────────────────────────────────────
@@ -1555,44 +1727,18 @@ export function BackendFormModal({
             hideCloseButton ? "onboarding-modal" : "add-backend-modal"
           }
           className={cn(
-            "relative max-h-[92vh] w-[720px] overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
+            "relative max-h-[92vh] w-[720px] overflow-x-hidden overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-base-secondary p-6",
             MODAL_MAX_WIDTH_VIEWPORT,
           )}
         >
           {hideCloseButton ? null : (
             <ModalCloseButton onClose={onClose} testId="add-backend-close" />
           )}
-          {hideCloseButton ? null : (
-            <div className="pr-8">
-              <h2 className={modalTitleLgClassName}>
-                {t(I18nKey.BACKEND$CHOOSER_TITLE)}
-              </h2>
-              <p
-                className="mt-2 text-sm leading-6 text-[var(--oh-muted)]"
-                data-testid="add-backend-description"
-              >
-                {t(I18nKey.BACKEND$CHOOSER_DESCRIPTION)}{" "}
-                <a
-                  href={DEPLOYMENT_OPTIONS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={t(I18nKey.BACKEND$DEPLOYMENT_OPTIONS)}
-                  data-testid="add-backend-deployment-options-link"
-                  className="text-primary hover:underline"
-                >
-                  {t(I18nKey.CTA$LEARN_MORE)}
-                  <ExternalLinkIcon
-                    className="ml-1 inline size-3.5 align-[-0.125em]"
-                    aria-hidden
-                  />
-                </a>
-              </p>
-            </div>
-          )}
-
-          <div className={hideCloseButton ? undefined : "mt-5"}>
-            <AddBackendConnectionOptions onClose={onClose} source={source} />
-          </div>
+          <AddBackendAddModeBody
+            hideCloseButton={hideCloseButton}
+            onClose={onClose}
+            source={source}
+          />
         </div>
       </ModalBackdrop>
     );
