@@ -15,7 +15,7 @@ import {
   USER_MESSAGE_LINE_HEIGHT_PX,
 } from "./user-message-body";
 
-export type ChatMessagePendingStatus = "sending" | "error";
+export type ChatMessagePendingStatus = "uploading" | "sending" | "error";
 
 interface ChatMessageProps {
   type: SourceType;
@@ -27,6 +27,8 @@ interface ChatMessageProps {
   }>;
   isFromPlanningAgent?: boolean;
   pendingStatus?: ChatMessagePendingStatus;
+  /** Upload progress (0–100). Only meaningful when `pendingStatus === "uploading"`. */
+  uploadProgress?: number;
   onRetry?: () => void;
   onDismiss?: () => void;
   onStop?: () => void;
@@ -40,6 +42,7 @@ export function ChatMessage({
   actions,
   isFromPlanningAgent = false,
   pendingStatus,
+  uploadProgress,
   onRetry,
   onDismiss,
   onStop,
@@ -80,8 +83,12 @@ export function ChatMessage({
 
   const isPendingUserMessage =
     type === "user" &&
-    (pendingStatus === "error" || pendingStatus === "sending");
-  const canStopPendingMessage = pendingStatus === "sending" && onStop != null;
+    (pendingStatus === "uploading" ||
+      pendingStatus === "sending" ||
+      pendingStatus === "error");
+  const canStopPendingMessage =
+    (pendingStatus === "sending" || pendingStatus === "uploading") &&
+    onStop != null;
   const showStopButton = canStopPendingMessage && isHovering;
   const useTruncatedUserBody = type === "user" && pendingStatus == null;
   const isCollapsed = useTruncatedUserBody && isTruncatable && !isExpanded;
@@ -158,13 +165,18 @@ export function ChatMessage({
           "border border-[#597ff4] bg-tertiary p-4 mt-2",
         pendingStatus === "error" &&
           "border border-[var(--oh-status-error)]/40",
+        pendingStatus === "uploading" && "opacity-60",
         !isPendingUserMessage && "last:mb-4",
       )}
     >
       <div
         className={cn(
           "absolute -top-2.5 -right-2.5 z-10",
-          !isHovering || pendingStatus === "sending" ? "hidden" : "flex",
+          !isHovering ||
+            pendingStatus === "sending" ||
+            pendingStatus === "uploading"
+            ? "hidden"
+            : "flex",
           "items-center gap-1",
         )}
         onClick={(event) => event.stopPropagation()}
@@ -284,6 +296,48 @@ export function ChatMessage({
               {t(I18nKey.CHAT_INTERFACE$MESSAGE_DISMISS)}
             </button>
           ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "user" && pendingStatus === "uploading") {
+    const progressPct = uploadProgress ?? 0;
+    const uploadLabel =
+      progressPct > 0
+        ? t(I18nKey.CHAT_INTERFACE$MESSAGE_UPLOADING_PROGRESS, {
+            progress: progressPct,
+          })
+        : t(I18nKey.CHAT_INTERFACE$MESSAGE_UPLOADING);
+    return (
+      <div className="flex w-full max-w-full flex-col last:mb-4">
+        {messageBubble}
+        <div className="my-1 w-full py-1">
+          <TextShimmer
+            as="p"
+            role="status"
+            aria-live="polite"
+            data-testid="chat-message-uploading"
+            className="block w-full text-sm font-normal"
+            duration={1.2}
+            spread={2}
+          >
+            {uploadLabel}
+          </TextShimmer>
+          <div
+            role="progressbar"
+            aria-valuenow={progressPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={uploadLabel}
+            className="mt-1 h-1 w-full overflow-hidden rounded-full bg-[var(--oh-border)]"
+          >
+            <div
+              data-testid="chat-message-upload-progress-bar"
+              className="h-full rounded-full bg-[var(--oh-color-primary)] transition-[width] duration-300 ease-in-out"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </div>
       </div>
     );
