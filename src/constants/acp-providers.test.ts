@@ -12,6 +12,11 @@ describe("ACP_PROVIDERS", () => {
       id: "gpt-6-astra",
       label: "GPT-6 Astra",
     });
+    expect(codex?.default_command).toEqual([
+      "npx",
+      "-y",
+      "@agentclientprotocol/codex-acp@1.10.0",
+    ]);
   });
 });
 

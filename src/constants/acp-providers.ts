@@ -148,6 +148,11 @@ const CODEX_ASTRA_MODEL: ACPModelOption = {
   id: "gpt-6-astra",
   label: "GPT-6 Astra",
 };
+const CODEX_ASTRA_COMMAND = [
+  "npx",
+  "-y",
+  "@agentclientprotocol/codex-acp@1.10.0",
+];
 
 function getAvailableModels(key: string): ACPModelOption[] | undefined {
   const models = getClientAcpProvider(key)?.available_models?.map((model) => ({
@@ -171,7 +176,12 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   return {
     key,
     display_name: info?.display_name ?? key,
-    default_command: info ? [...info.default_command] : [],
+    default_command:
+      key === "codex"
+        ? [...CODEX_ASTRA_COMMAND]
+        : info
+          ? [...info.default_command]
+          : [],
     available_models: getAvailableModels(key),
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
