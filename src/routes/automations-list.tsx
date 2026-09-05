@@ -186,9 +186,18 @@ export default function AutomationsList() {
 
   const handleToggle = (id: string, currentEnabled: boolean) => {
     const willEnable = !currentEnabled;
-    toggleMutation.mutate({ id, enabled: willEnable });
+    const automation = data?.automations.find((item) => item.id === id);
+    toggleMutation.mutate({
+      id,
+      enabled: willEnable,
+      context: automation
+        ? {
+            triggerType: automation.trigger.type,
+            triggerSource: automation.trigger.source,
+          }
+        : undefined,
+    });
     if (willEnable) {
-      const automation = data?.automations.find((a) => a.id === id);
       trackPrebuiltAutomationEnabled({
         automationId: id,
         automationName: automation?.name ?? id,

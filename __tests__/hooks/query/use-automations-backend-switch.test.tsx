@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import AutomationService from "#/api/automation-service/automation-service.api";
@@ -10,6 +11,7 @@ import {
   setRegisteredBackends,
 } from "#/api/backend-registry/active-store";
 import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import { AutomationDisableFeedbackProvider } from "#/components/providers/automation-disable-feedback-provider";
 import {
   useAutomations,
   useCancelAutomationRun,
@@ -46,6 +48,7 @@ vi.mock("#/api/automation-service/automation-service.api", () => ({
 }));
 
 let captureMock: ReturnType<typeof vi.spyOn>;
+let telemetryEnabledMock: ReturnType<typeof vi.spyOn>;
 
 vi.mock("#/hooks/query/use-settings", () => ({
   useSettings: () => ({ data: { user_consents_to_analytics: true } }),
@@ -101,7 +104,11 @@ function makeWrapper() {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ActiveBackendProvider>{children}</ActiveBackendProvider>
+        <ActiveBackendProvider>
+          <AutomationDisableFeedbackProvider>
+            {children}
+          </AutomationDisableFeedbackProvider>
+        </ActiveBackendProvider>
       </QueryClientProvider>
     );
   };
@@ -109,6 +116,9 @@ function makeWrapper() {
 
 beforeEach(() => {
   captureMock = vi.spyOn(telemetry, "trackEvent").mockResolvedValue(undefined);
+  telemetryEnabledMock = vi
+    .spyOn(telemetry, "isTelemetryEnabled")
+    .mockReturnValue(true);
   window.localStorage.clear();
   __resetActiveStoreForTests();
   vi.mocked(AutomationService.getAutomations).mockReset();
@@ -137,6 +147,7 @@ beforeEach(() => {
 
 afterEach(() => {
   captureMock.mockRestore();
+  telemetryEnabledMock.mockRestore();
   window.localStorage.clear();
   __resetActiveStoreForTests();
 });
@@ -209,53 +220,49 @@ describe("useAutomationRuns — polling", () => {
     completed_at: "2026-01-02T00:00:30Z",
   };
 
-  it(
-    "re-fetches while a run is non-terminal, and stops once all runs are terminal",
-    async () => {
-      // Arrange: first fetch returns a PENDING run (polling should engage);
-      // subsequent fetches return a COMPLETED run (polling should then stop).
-      const pendingResponse: AutomationRunsResponse = {
-        runs: [pendingRun],
-        total: 1,
-      };
-      const completedResponse: AutomationRunsResponse = {
-        runs: [completedRun],
-        total: 1,
-      };
-      vi.mocked(AutomationService.getAutomationRuns)
-        .mockResolvedValueOnce(pendingResponse)
-        .mockResolvedValue(completedResponse);
+  it("re-fetches while a run is non-terminal, and stops once all runs are terminal", async () => {
+    // Arrange: first fetch returns a PENDING run (polling should engage);
+    // subsequent fetches return a COMPLETED run (polling should then stop).
+    const pendingResponse: AutomationRunsResponse = {
+      runs: [pendingRun],
+      total: 1,
+    };
+    const completedResponse: AutomationRunsResponse = {
+      runs: [completedRun],
+      total: 1,
+    };
+    vi.mocked(AutomationService.getAutomationRuns)
+      .mockResolvedValueOnce(pendingResponse)
+      .mockResolvedValue(completedResponse);
 
-      // Act
-      renderHook(
-        () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
-        { wrapper: makeWrapper() },
-      );
+    // Act
+    renderHook(
+      () => useAutomationRuns({ id: "auto-1", limit: 20, offset: 0 }),
+      { wrapper: makeWrapper() },
+    );
 
-      // Assert: the initial fetch fires once.
-      await waitFor(() => {
-        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
-      });
+    // Assert: the initial fetch fires once.
+    await waitFor(() => {
+      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(1);
+    });
 
-      // The cached data still contains a PENDING run, so refetchInterval
-      // engages and a second fetch arrives within the poll window.
-      await waitFor(
-        () => {
-          expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-        },
-        { timeout: 5000 },
-      );
+    // The cached data still contains a PENDING run, so refetchInterval
+    // engages and a second fetch arrives within the poll window.
+    await waitFor(
+      () => {
+        expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+      },
+      { timeout: 5000 },
+    );
 
-      // The second fetch returned a COMPLETED run, so polling should stop.
-      // Give the would-be next poll window plenty of slack and assert no
-      // further calls happen.
-      await new Promise((resolve) => {
-        setTimeout(resolve, 4000);
-      });
-      expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
-    },
-    15000,
-  );
+    // The second fetch returned a COMPLETED run, so polling should stop.
+    // Give the would-be next poll window plenty of slack and assert no
+    // further calls happen.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 4000);
+    });
+    expect(AutomationService.getAutomationRuns).toHaveBeenCalledTimes(2);
+  }, 15000);
 });
 
 describe("run mutations — sidebar conversation refresh", () => {
@@ -381,19 +388,68 @@ describe("automation mutation hooks — analytics tracking", () => {
     });
   });
 
-  it("captures automation_disable_button when an automation is disabled", async () => {
+  it("captures linked disable and optional feedback events without automation content", async () => {
+    const user = userEvent.setup();
     const { result } = renderHook(() => useToggleAutomation(), {
       wrapper: makeWrapper(),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ id: "auto-1", enabled: false });
+      await result.current.mutateAsync({
+        id: "auto-1",
+        enabled: false,
+        context: {
+          triggerType: automation.trigger.type,
+          triggerSource: automation.trigger.source,
+          templateId: "daily-summary",
+        },
+      });
     });
+
+    const disableCall = captureMock.mock.calls.find(
+      (call: [string, Record<string, unknown>]) =>
+        call[0] === "automation_disable_button",
+    );
+    expect(disableCall).toBeDefined();
+    const disableProperties = disableCall?.[1] as Record<string, unknown>;
+    expect(disableProperties).toEqual(
+      expect.objectContaining({
+        backend_kind: "local",
+        automation_id: "auto-1",
+        automation_type: "schedule",
+        automation_template_id: "daily-summary",
+        disablement_id: expect.any(String),
+      }),
+    );
+    expect(disableProperties).not.toHaveProperty("automation_name");
+    expect(disableProperties).not.toHaveProperty("prompt");
+
+    expect(
+      await screen.findByTestId("automation-disable-feedback-modal"),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("radio", {
+        name: "AUTOMATIONS$DISABLE_REASON_UNRELIABLE",
+      }),
+    );
+    await user.type(
+      screen.getByLabelText("AUTOMATIONS$DISABLE_FEEDBACK_DETAILS_LABEL"),
+      "It failed twice this week.",
+    );
+    await user.click(screen.getByTestId("submit-automation-disable-feedback"));
 
     await waitFor(() => {
       expect(captureMock).toHaveBeenCalledWith(
-        "automation_disable_button",
-        expect.objectContaining({ backend_kind: "local" }),
+        "automation_disable_feedback",
+        expect.objectContaining({
+          backend_kind: "local",
+          automation_id: "auto-1",
+          automation_type: "schedule",
+          automation_template_id: "daily-summary",
+          disablement_id: disableProperties.disablement_id,
+          reason: "unreliable",
+          details: "It failed twice this week.",
+        }),
       );
     });
   });
@@ -411,5 +467,60 @@ describe("automation mutation hooks — analytics tracking", () => {
       "automation_disable_button",
       expect.anything(),
     );
+  });
+
+  it("does not ask for feedback when telemetry cannot capture it", async () => {
+    telemetryEnabledMock.mockReturnValue(false);
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "auto-1",
+        enabled: false,
+        context: { triggerType: "schedule" },
+      });
+    });
+
+    expect(
+      screen.queryByTestId("automation-disable-feedback-modal"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps disable analytics tied to the backend where the mutation started", async () => {
+    let resolveToggle: ((value: Automation) => void) | undefined;
+    vi.mocked(AutomationService.toggleAutomation).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveToggle = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useToggleAutomation(), {
+      wrapper: makeWrapper(),
+    });
+
+    act(() => {
+      result.current.mutate({
+        id: "auto-1",
+        enabled: false,
+        context: { triggerType: "schedule" },
+      });
+    });
+    await waitFor(() => {
+      expect(AutomationService.toggleAutomation).toHaveBeenCalledTimes(1);
+    });
+
+    setActiveSelection({ backendId: cloudBackend.id });
+    await act(async () => {
+      resolveToggle?.(automation);
+    });
+
+    await waitFor(() => {
+      expect(captureMock).toHaveBeenCalledWith(
+        "automation_disable_button",
+        expect.objectContaining({ backend_kind: "local" }),
+      );
+    });
   });
 });
