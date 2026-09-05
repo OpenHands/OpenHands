@@ -102,6 +102,16 @@
       "tests": ["mcp"]
     },
     {
+      "comment": "Local kanban board and list views",
+      "sources": [
+        "src/components/features/kanban/**",
+        "src/routes/kanban.tsx",
+        "src/api/kanban-service/**",
+        "src/mocks/kanban-handlers.ts"
+      ],
+      "tests": ["home"]
+    },
+    {
       "comment": "Canvas Extensions install, enable, page render, disable, uninstall",
       "sources": [
         "src/components/features/canvas-extensions/**",
