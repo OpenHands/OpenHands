@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
 import { BrandButton } from "#/components/features/settings/brand-button";
@@ -8,8 +9,9 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
-import { getApiErrorBody } from "#/utils/api-error-message";
+import { getApiErrorBody, getApiErrorMessage } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
+import { useAutomationRuns } from "#/hooks/query/use-automation-detail";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
 import { useSetupPreflight } from "#/hooks/use-manifest-preflight";
@@ -35,6 +37,7 @@ import {
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import type { GitRepository } from "#/types/git";
 import type {
   SetupEntry,
@@ -46,8 +49,9 @@ import type {
 import { SetupFormField } from "./manifest-form-field";
 import { SetupPrerequisitesStep } from "./manifest-prerequisites-step";
 import { SetupReviewStep } from "./manifest-review-step";
+import { SetupTestRunStep } from "./manifest-setup-test-run-step";
 
-type SetupStep = "prerequisites" | "form" | "review";
+type SetupStep = "prerequisites" | "form" | "review" | "test";
 
 /** How long a field rests after a blur before the draft is sent for checking. */
 const PREFLIGHT_DEBOUNCE_MS = 400;
@@ -72,14 +76,22 @@ function getDestination(response: Record<string, unknown>): string | null {
   return null;
 }
 
+function isRunInFlight(run: AutomationRun | null): boolean {
+  return (
+    run?.status === AutomationRunStatus.PENDING ||
+    run?.status === AutomationRunStatus.RUNNING
+  );
+}
+
 export interface SetupDialogProps {
   entry: SetupEntry;
   onClose: () => void;
 }
 
 /**
- * The setup host: capabilities check, prerequisites, form, review, and the
- * action the manifest's mode selects, rendered as a dialog.
+ * The setup host: capabilities check, prerequisites, form, review, a controlled
+ * test run for newly-created direct automations, and the action the manifest's
+ * mode selects, rendered as a dialog.
  *
  * The host runs the stages and owns everything the same for every entry; the
  * manifest supplies only what varies. Any string the user reads here is either
@@ -111,6 +123,15 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const [serviceErrors, setServiceErrors] =
     useState<MappedManifestErrors>(NO_SERVICE_ERRORS);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdAutomationId, setCreatedAutomationId] = useState<string | null>(
+    null,
+  );
+  const [testRunId, setTestRunId] = useState<string | null>(null);
+  const [dispatchedRun, setDispatchedRun] = useState<AutomationRun | null>(
+    null,
+  );
+  const [isDispatchingTest, setIsDispatchingTest] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   // Blur-triggered preflight reads the values as they are when the field is
   // left, which can be the same tick as the change that caused it.
@@ -160,6 +181,19 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   // nothing to check from flashing an empty first screen.
   const currentStep: SetupStep =
     step === "prerequisites" && !showPrerequisites ? "form" : step;
+
+  const testRuns = useAutomationRuns({
+    id: createdAutomationId ?? "",
+    enabled: currentStep === "test" && testRunId !== null,
+  });
+  const testRun =
+    (testRunId
+      ? testRuns.data?.runs.find((run) => run.id === testRunId)
+      : null) ?? (dispatchedRun?.id === testRunId ? dispatchedRun : null);
+  const testIsRunning = isRunInFlight(testRun);
+  const testPassed = testRun?.status === AutomationRunStatus.COMPLETED;
+  const isBusy =
+    isSubmitting || isDispatchingTest || isFinalizing || testIsRunning;
 
   const setFieldValue = (name: string, value: SetupFormValue) => {
     valuesRef.current = { ...valuesRef.current, [name]: value };
@@ -211,11 +245,27 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   ) => {
     setIsSubmitting(true);
     try {
-      const { response } = await runAction(entry, values, actionPayload);
+      const { response, created } = await runAction(
+        entry,
+        values,
+        actionPayload,
+      );
       trackAutomationSetupCreated({
         automationId: entry.id,
         setupMode,
       });
+
+      if (created && typeof response.id === "string") {
+        setCreatedAutomationId(response.id);
+        setTestRunId(null);
+        setDispatchedRun(null);
+        setServiceErrors(NO_SERVICE_ERRORS);
+        setStep("test");
+        return;
+      }
+
+      // Assisted setup opens its conversation, and an idempotent direct create
+      // opens the already-existing automation without changing or disabling it.
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
       else onClose();
@@ -244,6 +294,90 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
   const handleConfirm = () => submitAction(payload, entry.setup.mode);
 
+  const handleRunTest = async () => {
+    if (!createdAutomationId) return;
+    setIsDispatchingTest(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      const run =
+        await AutomationService.dispatchAutomation(createdAutomationId);
+      setDispatchedRun(run);
+      setTestRunId(run.id);
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [
+          getApiErrorMessage(error, t(I18nKey.AUTOMATIONS$RUN_NOW_ERROR)),
+        ],
+      });
+    } finally {
+      setIsDispatchingTest(false);
+    }
+  };
+
+  const handleEditAfterTest = async () => {
+    if (!createdAutomationId || isBusy) return;
+    setIsSubmitting(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      // The setup action's unique pending trigger proved ownership of this
+      // disabled record. Removing it before editing is what makes a later
+      // create use the changed answers instead of hitting template idempotency.
+      await AutomationService.deleteAutomation(createdAutomationId);
+      setCreatedAutomationId(null);
+      setTestRunId(null);
+      setDispatchedRun(null);
+      setStep("form");
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC))],
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFinalize = async () => {
+    if (!createdAutomationId || !testPassed || isBusy) return;
+    setIsFinalizing(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      await AutomationService.toggleAutomation(createdAutomationId, true);
+      navigate(automationDetailPath(createdAutomationId), { replace: true });
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC))],
+      });
+    } finally {
+      setIsFinalizing(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (isBusy) return;
+    if (!createdAutomationId) {
+      onClose();
+      return;
+    }
+
+    setIsSubmitting(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      // Closing setup is abandonment, not finalization. Remove only the record
+      // whose unique pending marker proved it belongs to this setup session.
+      await AutomationService.deleteAutomation(createdAutomationId);
+      onClose();
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [getApiErrorMessage(error, t(I18nKey.ERROR$GENERIC))],
+      });
+      setIsSubmitting(false);
+    }
+  };
+
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed
   // a conversation that finishes setup instead.
@@ -265,19 +399,20 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (currentStep === "prerequisites")
       return t(I18nKey.SETUP$PREREQUISITES_TITLE);
     if (currentStep === "review") return t(I18nKey.SETUP$REVIEW_TITLE);
+    if (currentStep === "test") return t(I18nKey.AUTOMATIONS$RUN_NOW);
     return entry.name;
   })();
 
   return (
-    <ModalBackdrop onClose={onClose} aria-label={entry.name}>
+    <ModalBackdrop onClose={() => void handleClose()} aria-label={entry.name}>
       <div
         data-testid="setup-dialog"
         className="relative flex max-h-[85vh] w-[92vw] max-w-lg flex-col rounded-xl border border-[var(--oh-border)] bg-base-secondary"
       >
         <ModalCloseButton
-          onClose={onClose}
+          onClose={() => void handleClose()}
           testId="setup-dialog-close"
-          disabled={isSubmitting}
+          disabled={isBusy}
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
@@ -352,6 +487,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             <SetupReviewStep setup={entry.setup} values={values} />
           )}
 
+          {!isLoading && !isUnsupported && currentStep === "test" && (
+            <SetupTestRunStep run={testRun} description={entry.description} />
+          )}
+
           {serviceErrors.formErrors.map((message) => (
             <p
               key={message}
@@ -365,13 +504,17 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         </div>
 
         <footer className="flex flex-shrink-0 justify-end gap-2 px-6 pb-6 pt-4">
-          {currentStep === "review" && (
+          {(currentStep === "review" || currentStep === "test") && (
             <BrandButton
               testId="setup-back-button"
               type="button"
               variant="secondary"
-              isDisabled={isSubmitting}
-              onClick={() => setStep("form")}
+              isDisabled={isBusy}
+              onClick={
+                currentStep === "test"
+                  ? handleEditAfterTest
+                  : () => setStep("form")
+              }
             >
               {t(I18nKey.BUTTON$BACK)}
             </BrandButton>
@@ -399,6 +542,32 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                 </BrandButton>
               )}
             </>
+          ) : currentStep === "test" ? (
+            testPassed ? (
+              <BrandButton
+                testId="setup-finalize-button"
+                type="button"
+                variant="primary"
+                isDisabled={isBusy}
+                onClick={handleFinalize}
+              >
+                {t(I18nKey.AUTOMATIONS$TURN_ON)}
+              </BrandButton>
+            ) : (
+              <BrandButton
+                testId="setup-test-run-button"
+                type="button"
+                variant="primary"
+                isDisabled={isBusy}
+                onClick={handleRunTest}
+              >
+                {testIsRunning
+                  ? t(I18nKey.AUTOMATIONS$DETAIL$RUNNING)
+                  : isDispatchingTest
+                    ? t(I18nKey.AUTOMATIONS$STARTING)
+                    : t(I18nKey.AUTOMATIONS$RUN_NOW)}
+              </BrandButton>
+            )
           ) : (
             <BrandButton
               testId="setup-continue-button"

@@ -17,6 +17,7 @@ import { useCallback, useRef } from "react";
 import AutomationService from "#/api/automation-service/automation-service.api";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { useConversationStore } from "#/stores/conversation-store";
+import type { Automation } from "#/types/automation";
 import {
   setConversationState,
   setPendingTaskDraft,
@@ -26,12 +27,117 @@ import {
   buildCreatePayload,
   isBundleEntry,
 } from "./automation-setup";
+import { getImportExportSpec } from "./automation-interface";
 import { packBundle } from "./manifest-bundle";
 import type { SetupEntry, SetupFormValues, SetupRequestBody } from "./types";
 
 export interface SetupActionResult {
   /** The created resource, or the conversation that will finish setup. */
   response: Record<string, unknown>;
+  /** True only when this call created and parked a new direct automation. */
+  created: boolean;
+}
+
+function generatePendingSetupEvent(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return `pending.${crypto.randomUUID()}`;
+  }
+  return `pending.${Date.now()}.${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function hasPendingSetupTrigger(
+  response: Record<string, unknown>,
+  pendingEvent: string,
+): boolean {
+  const trigger = response.trigger;
+  if (
+    typeof trigger !== "object" ||
+    trigger === null ||
+    Array.isArray(trigger)
+  ) {
+    return false;
+  }
+  const candidate = trigger as Record<string, unknown>;
+  return candidate.type === "event" && candidate.on === pendingEvent;
+}
+
+async function cleanupParkedAutomation(
+  id: string,
+  cause: unknown,
+): Promise<never> {
+  try {
+    await AutomationService.deleteAutomation(id);
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [cause, cleanupError],
+      "Failed to finish the new automation setup and clean it up.",
+    );
+  }
+  throw cause;
+}
+
+async function createParkedAutomation(
+  entry: SetupEntry,
+  body: SetupRequestBody,
+): Promise<SetupActionResult> {
+  const pendingEvent = generatePendingSetupEvent();
+  const pendingTrigger: SetupRequestBody = {
+    type: "event",
+    source: getImportExportSpec().importDefaults.placeholderEventSource,
+    on: pendingEvent,
+  };
+  const createBody: SetupRequestBody = {
+    ...body,
+    trigger: pendingTrigger,
+    // Preset endpoints support this atomically. The raw bundle endpoint does
+    // not, but its unique pending event keeps that record inert until the PATCH
+    // below applies the real trigger and disabled state together.
+    ...(!isBundleEntry(entry) && { enabled: false }),
+  };
+
+  const response = await AutomationService.createAutomationDraft(
+    createBody,
+    entry,
+  );
+
+  // Template creation is idempotent: an existing automation is returned
+  // unchanged. Only the record created by this request can carry this unique
+  // pending event, so never mutate a response that does not echo the marker.
+  if (!hasPendingSetupTrigger(response, pendingEvent)) {
+    return { response, created: false };
+  }
+
+  const id = response.id;
+  if (typeof id !== "string" || !id) {
+    throw new Error("The automation create response returned no id.");
+  }
+  const realTrigger = body.trigger;
+  if (
+    typeof realTrigger !== "object" ||
+    realTrigger === null ||
+    Array.isArray(realTrigger)
+  ) {
+    return cleanupParkedAutomation(
+      id,
+      new Error("The automation setup produced no trigger."),
+    );
+  }
+
+  try {
+    const parked = await AutomationService.updateAutomation(id, {
+      trigger: realTrigger as unknown as Automation["trigger"],
+      enabled: false,
+    });
+    return {
+      response: parked as unknown as Record<string, unknown>,
+      created: true,
+    };
+  } catch (error) {
+    return cleanupParkedAutomation(id, error);
+  }
 }
 
 export function useSetupAction() {
@@ -66,7 +172,7 @@ export function useSetupAction() {
       }
       window.setTimeout(() => setMessageToSend(message), 0);
 
-      return { response: { ...conversation } };
+      return { response: { ...conversation }, created: false };
     },
     [createConversation, setMessageToSend],
   );
@@ -99,16 +205,10 @@ export function useSetupAction() {
         }
         const body = buildCreatePayload(entry, values, tarballPath);
         if (!body) throw new Error(`'${entry.id}' produced no create request.`);
-        return {
-          response: await AutomationService.createAutomationDraft(body, entry),
-        };
+        return createParkedAutomation(entry, body);
       }
 
-      const response = await AutomationService.createAutomationDraft(
-        payload,
-        entry,
-      );
-      return { response };
+      return createParkedAutomation(entry, payload);
     },
     [startConversation],
   );
