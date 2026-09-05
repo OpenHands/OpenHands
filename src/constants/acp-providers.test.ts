@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
+  ACP_PROVIDERS,
   resolveEffectiveAcpModel,
 } from "./acp-providers";
+
+describe("ACP_PROVIDERS", () => {
+  it("offers GPT-6 Astra first for Codex ACP", () => {
+    const codex = ACP_PROVIDERS.find(({ key }) => key === "codex");
+    expect(codex?.available_models?.[0]).toEqual({
+      id: "gpt-6-astra",
+      label: "GPT-6 Astra",
+    });
+  });
+});
 
 describe("resolveEffectiveAcpModel", () => {
   it("surfaces the real claude-agent-acp 0.44+ 'default' model", () => {

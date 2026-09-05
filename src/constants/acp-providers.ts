@@ -144,10 +144,26 @@ const ACP_PROVIDER_UI: Record<
   },
 };
 
+const CODEX_ASTRA_MODEL: ACPModelOption = {
+  id: "gpt-6-astra",
+  label: "GPT-6 Astra",
+};
+
+function getAvailableModels(key: string): ACPModelOption[] | undefined {
+  const models = getClientAcpProvider(key)?.available_models?.map((model) => ({
+    id: model.id,
+    label: model.label,
+  }));
+  if (key !== "codex") return models;
+  return [
+    CODEX_ASTRA_MODEL,
+    ...(models ?? []).filter(({ id }) => id !== CODEX_ASTRA_MODEL.id),
+  ];
+}
+
 // Built-in ACP providers Canvas surfaces, built by enriching each upstream
 // registry record (``@openhands/typescript-client`` → Python SDK) with the
-// Canvas UI metadata above. Model lists + defaults are no longer hand-kept
-// here (closes agent-canvas#740) — they track the SDK via the pinned client.
+// Canvas UI metadata above.
 export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
   ACP_PROVIDER_UI,
 ).map(([key, ui]) => {
@@ -156,10 +172,7 @@ export const ACP_PROVIDERS: ACPProviderConfig[] = Object.entries(
     key,
     display_name: info?.display_name ?? key,
     default_command: info ? [...info.default_command] : [],
-    available_models: info?.available_models?.map((model) => ({
-      id: model.id,
-      label: model.label,
-    })),
+    available_models: getAvailableModels(key),
     default_model: info?.default_model ?? undefined,
     description_key: ui.description_key,
     icon: ui.icon,
