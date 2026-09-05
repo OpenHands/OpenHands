@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { PluginLaunchModal } from "#/components/features/launch/plugin-launch-modal";
 import { PluginSpec } from "#/api/conversation-service/agent-server-conversation-service.types";
+import { decodePluginsPayload } from "#/utils/plugin-launch-url";
 import { useCreateConversation } from "#/hooks/mutation/use-create-conversation";
 import { I18nKey } from "#/i18n/declaration";
 
@@ -26,7 +27,7 @@ function parsePluginsFromUrl(searchParams: URLSearchParams): ParseResult {
   const pluginsParam = searchParams.get("plugins");
   if (pluginsParam) {
     try {
-      const decoded = atob(pluginsParam);
+      const decoded = decodePluginsPayload(pluginsParam);
       const parsed = JSON.parse(decoded);
 
       if (!Array.isArray(parsed)) {
