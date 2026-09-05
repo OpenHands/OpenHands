@@ -187,10 +187,12 @@ export function buildCreatePayload(
   values: SetupFormValues,
   /** Bundle entries only: what the upload returned. */
   tarballPath: string = PREFLIGHT_TARBALL_PATH,
+  model?: string | null,
 ): SetupRequestBody | null {
   const { setup } = entry;
   if (setup.mode !== "direct") return null;
-  if (setup.bundle) return buildBundlePayload(entry, values, tarballPath);
+  if (setup.bundle)
+    return buildBundlePayload(entry, values, tarballPath, model);
   if (!setup.prompt) return null;
 
   const scope = { form: values, automation: entry };
@@ -200,6 +202,7 @@ export function buildCreatePayload(
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
     prompt: interpolateText(setup.prompt, scope),
+    ...(model?.trim() ? { model: model.trim() } : {}),
   };
 
   if (repos.length > 0 && repoPicker?.field.provider) {
@@ -296,12 +299,14 @@ function buildBundlePayload(
   entry: SetupEntry,
   values: SetupFormValues,
   tarballPath: string,
+  model?: string | null,
 ): SetupRequestBody {
   const bundle = entry.setup.bundle!;
   const scope = { form: values, automation: entry };
 
   const payload: SetupRequestBody = {
     name: deriveName(entry, values),
+    ...(model?.trim() ? { model: model.trim() } : {}),
   };
 
   const trigger = buildTrigger(entry, values);
@@ -353,8 +358,14 @@ function interpolateConfig(
 export function buildPreflightBody(
   entry: SetupEntry,
   values: SetupFormValues,
+  model?: string | null,
 ): SetupRequestBody | null {
-  const draft = buildCreatePayload(entry, values);
+  const draft = buildCreatePayload(
+    entry,
+    values,
+    PREFLIGHT_TARBALL_PATH,
+    model,
+  );
   if (!draft) return null;
 
   return {

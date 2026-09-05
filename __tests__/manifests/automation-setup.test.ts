@@ -239,6 +239,22 @@ describe("buildCreatePayload", () => {
     },
   );
 
+  it("includes the selected LLM profile in bundle create payloads", () => {
+    // Arrange
+    const entry = requireEntry("github-pr-reviewer");
+
+    // Act
+    const payload = buildCreatePayload(
+      entry,
+      { repositories: ["OpenHands/automation"] },
+      "/tmp/automation.tar.gz",
+      "chatgpt-subscription",
+    );
+
+    // Assert
+    expect(payload?.model).toBe("chatgpt-subscription");
+  });
+
   it("names an automation after the one repository it watches", () => {
     // Arrange
     const entry = requireEntry("github-pr-reviewer");
