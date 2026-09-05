@@ -209,6 +209,14 @@ vi.mock("#/components/features/home/home-git-control-bar-preview", () => ({
   ),
 }));
 
+vi.mock("#/components/features/home/featured-automations/pinned-automations-dashboard", () => ({
+  PinnedAutomationsDashboard: () => null,
+}));
+
+vi.mock("#/components/features/home/featured-automations/running-automations-list", () => ({
+  RunningAutomationsList: () => null,
+}));
+
 // Stub the picker modal: pressing it selects one plugin then closes, mirroring
 // the real modal's `onChange` + `onClose` contract. The picker catalog itself
 // is covered by plugin-picker.test.tsx.

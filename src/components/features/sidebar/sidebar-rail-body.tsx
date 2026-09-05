@@ -6,7 +6,6 @@ import {
   Plus,
   Server,
   Settings,
-  PanelsTopLeft,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -42,6 +41,7 @@ import {
   sidebarNavRowClassName,
 } from "./sidebar-layout";
 import { useCanvasExtensionsRuntime } from "#/components/features/canvas-extensions/canvas-extensions-runtime";
+import { CanvasExtensionIcon } from "#/components/features/canvas-extensions/canvas-extension-icon";
 import type { Backend } from "#/api/backend-registry/types";
 
 const ICON_SIZE = 18;
@@ -259,7 +259,12 @@ export function SidebarRailBody({
             label={page.contribution.nav_label || page.contribution.title}
             testId={`sidebar-canvas-extension-${page.extension.name}-${page.contribution.id}`}
             collapsed={collapsed}
-            icon={<PanelsTopLeft width={ICON_SIZE} height={ICON_SIZE} />}
+            icon={
+              <CanvasExtensionIcon
+                extension={page.extension}
+                size={ICON_SIZE}
+              />
+            }
           />
         ))}
       </nav>
