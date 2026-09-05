@@ -10,6 +10,19 @@ import { modalTitleLgClassName } from "#/utils/modal-classes";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ModalBackdrop } from "#/components/shared/modals/modal-backdrop";
 import { ModalCloseButton } from "#/components/shared/modals/modal-close-button";
+import {
+  AutomationPreviewField,
+  automationPreviewListClassName,
+} from "./automation-preview-field";
+import {
+  ImportEventIcon,
+  ImportNameIcon,
+  ImportPluginsIcon,
+  ImportPromptIcon,
+  ImportScheduleIcon,
+} from "./automation-preview-icons";
+import { previewChipItems } from "./automation-preview-chips";
+import { sortPreviewFields } from "./automation-preview-order";
 
 interface ImportAutomationModalProps {
   isOpen: boolean;
@@ -18,19 +31,6 @@ interface ImportAutomationModalProps {
   onClose: () => void;
   onImport: () => void;
   onFile: (file: File) => void;
-}
-
-function PreviewField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted">
-        {label}
-      </dt>
-      <dd className="whitespace-pre-wrap break-words text-sm text-content">
-        {value}
-      </dd>
-    </div>
-  );
 }
 
 function takeDroppedFile(event: DragEvent<HTMLElement>): File | null {
@@ -158,6 +158,54 @@ export function ImportAutomationModal({
           .join(" · ")
     : "";
 
+  const previewRows = spec
+    ? sortPreviewFields(
+        [
+          {
+            name: "name",
+            kind: "name" as const,
+            icon: <ImportNameIcon className="size-3.5" />,
+            label: t(I18nKey.AUTOMATIONS$NAME),
+            value: spec.name,
+          },
+          {
+            name: "trigger",
+            kind: "trigger" as const,
+            icon:
+              spec.trigger.type === "event" ? (
+                <ImportEventIcon className="size-3.5" aria-hidden="true" />
+              ) : (
+                <ImportScheduleIcon className="size-3.5" />
+              ),
+            label: t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER),
+            value: trigger,
+          },
+          {
+            name: "prompt",
+            kind: "prompt" as const,
+            icon: <ImportPromptIcon className="size-3.5" />,
+            label: t(I18nKey.AUTOMATIONS$PROMPT),
+            value: spec.prompt ?? "",
+            layout: "stacked" as const,
+          },
+          ...(spec.plugins && spec.plugins.length > 0
+            ? [
+                {
+                  name: "plugins",
+                  kind: "plugins" as const,
+                  icon: <ImportPluginsIcon className="size-3.5" />,
+                  label: t(I18nKey.AUTOMATIONS$DETAIL$PLUGINS),
+                  value: spec.plugins.join(", "),
+                  chips: previewChipItems("plugins", "plugins", spec.plugins),
+                },
+              ]
+            : []),
+        ],
+        (row) => row.name,
+        (row) => row.kind,
+      )
+    : [];
+
   return (
     <ModalBackdrop
       onClose={isImporting ? undefined : onClose}
@@ -188,25 +236,17 @@ export function ImportAutomationModal({
 
         {spec ? (
           <>
-            <dl className="mx-6 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-xl border border-[var(--oh-border)] bg-[var(--oh-surface)] px-4 py-4">
-              <PreviewField
-                label={t(I18nKey.AUTOMATIONS$NAME)}
-                value={spec.name}
-              />
-              <PreviewField
-                label={t(I18nKey.AUTOMATIONS$DETAIL$TRIGGER)}
-                value={trigger}
-              />
-              <PreviewField
-                label={t(I18nKey.AUTOMATIONS$PROMPT)}
-                value={spec.prompt ?? ""}
-              />
-              {spec.plugins && spec.plugins.length > 0 ? (
-                <PreviewField
-                  label={t(I18nKey.AUTOMATIONS$DETAIL$PLUGINS)}
-                  value={spec.plugins.join(", ")}
+            <dl className={automationPreviewListClassName}>
+              {previewRows.map((row) => (
+                <AutomationPreviewField
+                  key={row.name}
+                  icon={row.icon}
+                  label={row.label}
+                  value={row.value}
+                  chips={row.chips}
+                  layout={row.layout}
                 />
-              ) : null}
+              ))}
             </dl>
 
             <footer className="px-6 py-5">

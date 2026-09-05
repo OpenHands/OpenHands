@@ -37350,6 +37350,23 @@
     "uk": "Перевірка",
     "ca": "Revisa"
   },
+  "SETUP$REVIEW_DESCRIPTION": {
+    "en": "Review the automation details before creating.",
+    "ja": "作成する前にオートメーションの詳細を確認してください。",
+    "zh-CN": "请在创建前检查自动化详情。",
+    "zh-TW": "請在建立前檢查自動化詳細資料。",
+    "ko-KR": "만들기 전에 자동화 세부 정보를 검토하세요.",
+    "no": "Se gjennom automatiseringsdetaljene før du oppretter.",
+    "it": "Controlla i dettagli dell'automazione prima di crearla.",
+    "pt": "Revise os detalhes da automação antes de criar.",
+    "es": "Revise los detalles de la automatización antes de crearla.",
+    "ar": "راجع تفاصيل الأتمتة قبل الإنشاء.",
+    "fr": "Vérifiez les détails de l'automatisation avant de la créer.",
+    "tr": "Oluşturmadan önce otomasyon ayrıntılarını inceleyin.",
+    "de": "Prüfen Sie vor dem Erstellen die Details der Automatisierung.",
+    "uk": "Перевірте деталі автоматизації перед створенням.",
+    "ca": "Reviseu els detalls de l'automatització abans de crear-la."
+  },
   "SETUP$CONFIRM": {
     "en": "Confirm and create",
     "ja": "確認して作成",

@@ -185,6 +185,23 @@ describe("SetupDialog", () => {
     expect(screen.queryByTestId("setup-prerequisites")).toBeNull();
   });
 
+  it("shows the catalog name before schedule on review", async () => {
+    const { user } = renderDialog();
+    await fillForm(user);
+
+    await user.click(screen.getByTestId("setup-continue-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("setup-review")).toBeInTheDocument(),
+    );
+
+    const review = screen.getByTestId("setup-review").textContent ?? "";
+    expect(review.indexOf("Widget monitor")).toBeLessThan(
+      review.indexOf("Check frequency"),
+    );
+    expect(screen.getByTestId("setup-back-button")).toBeInTheDocument();
+    expect(screen.getByTestId("setup-continue-button")).toBeInTheDocument();
+  });
+
   it("holds an unanswered required field back from the service", async () => {
     // Arrange — nothing typed, so two required fields are still empty.
     const { user } = renderDialog();
