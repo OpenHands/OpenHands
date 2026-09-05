@@ -1,5 +1,9 @@
 {
   "_comment": "Single source of truth for version pins, ports, paths, and defaults shared across the npm and Docker install paths. Read by scripts/dev-safe.mjs, scripts/dev-with-automation.mjs, docker/entrypoint.sh (via generated defaults.env), and .github/workflows/docker.yml.",
+  "_agentServerVariantComment": "Image variant suffix for the agent-server tag: <images.agentServer>:<versions.agentServer>-<variants.agentServer>. `python-slim` omits the preinstalled ACP providers (~324 MB on amd64); the SDK falls back to a version-pinned `npx` install on first use, cached under ~/.openhands. Set to `python` to get them preinstalled — see docs/ACP_AGENTS.md#slim-vs-full-images.",
+  "variants": {
+    "agentServer": "python-slim"
+  },
   "versions": {
     "agentServer": "1.44.1",
     "agentCanvas": "1.16.0",

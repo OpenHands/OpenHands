@@ -23,7 +23,7 @@ const config = JSON.parse(
   readFileSync(join(projectRoot, "config", "defaults.json"), "utf-8"),
 );
 
-const agentServerImage = `${config.images.agentServer}:${config.versions.agentServer}-python`;
+const agentServerImage = `${config.images.agentServer}:${config.versions.agentServer}-${config.variants.agentServer}`;
 const automationVersion = config.versions.automation;
 const canvasBasePath = config.paths.canvasBasePath;
 
