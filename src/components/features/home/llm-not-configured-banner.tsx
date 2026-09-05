@@ -19,11 +19,22 @@ import { Typography } from "#/ui/typography";
 export function LlmNotConfiguredBanner() {
   const { t } = useTranslation("openhands");
   const { navigate } = useNavigation();
-  const { isConfigured, isLoading } = useLlmConfigured();
+  const { isConfigured, isLoading, apiKeyMissing } = useLlmConfigured();
 
   if (isLoading || isConfigured) {
     return null;
   }
+
+  // #15609: when an active local profile exists but its API key is missing,
+  // the generic "LLM not set up" message is misleading — the user already
+  // set up a profile, the key just got lost. Surface the specific cause and
+  // route them straight to the LLM settings where they can re-enter it.
+  const messageKey = apiKeyMissing
+    ? I18nKey.HOME$LLM_API_KEY_MISSING_MESSAGE
+    : I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE;
+  const actionKey = apiKeyMissing
+    ? I18nKey.HOME$LLM_API_KEY_MISSING_ACTION
+    : I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION;
 
   return (
     <div
@@ -36,7 +47,7 @@ export function LlmNotConfiguredBanner() {
           <FaTriangleExclamation className="align-middle text-yellow-400" />
         </div>
         <Typography.Text className="ml-3 text-sm font-medium">
-          {t(I18nKey.HOME$LLM_NOT_CONFIGURED_MESSAGE)}
+          {t(messageKey)}
         </Typography.Text>
       </div>
 
@@ -47,7 +58,7 @@ export function LlmNotConfiguredBanner() {
         className="w-fit shrink-0 self-start whitespace-nowrap sm:self-auto"
         onClick={() => navigate("/settings/llm")}
       >
-        {t(I18nKey.HOME$LLM_NOT_CONFIGURED_ACTION)}
+        {t(actionKey)}
       </BrandButton>
     </div>
   );
