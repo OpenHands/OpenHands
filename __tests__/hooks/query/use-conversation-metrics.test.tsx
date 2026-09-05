@@ -5,6 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useConversationMetrics } from "#/hooks/query/use-conversation-metrics";
 import AgentServerConversationService from "#/api/conversation-service/agent-server-conversation-service.api";
+import { ActiveBackendProvider } from "#/contexts/active-backend-context";
+import {
+  __resetActiveStoreForTests,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { ExecutionStatus } from "#/types/agent-server/core/base/common";
 
 const runtimeInfo = {
@@ -29,21 +35,32 @@ const runtimeInfo = {
   },
 };
 
-function makeWrapper() {
+function makeWrapper({ activeBackend = false } = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
+  return ({ children }: { children: React.ReactNode }) => {
+    const content = activeBackend ? (
+      <ActiveBackendProvider>{children}</ActiveBackendProvider>
+    ) : (
+      children
+    );
+    return <QueryClientProvider client={client}>{content}</QueryClientProvider>;
+  };
 }
 
 afterEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  __resetActiveStoreForTests();
 });
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  __resetActiveStoreForTests();
 });
 
 describe("useConversationMetrics", () => {
@@ -56,6 +73,17 @@ describe("useConversationMetrics", () => {
       .spyOn(AgentServerConversationService, "getRuntimeConversation")
       .mockResolvedValue(runtimeInfo);
 
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+
     // Act
     const { result } = renderHook(
       () =>
@@ -65,7 +93,7 @@ describe("useConversationMetrics", () => {
           "session-key",
           true,
         ),
-      { wrapper: makeWrapper() },
+      { wrapper: makeWrapper({ activeBackend: true }) },
     );
 
     // Assert — the query fires and resolves to the runtime data.
@@ -77,6 +105,31 @@ describe("useConversationMetrics", () => {
       "https://runtime-abc.prod-runtime.all-hands.dev/api/conversations/conv-abc",
       "session-key",
     );
+  });
+
+  it("waits for the runtime URL before polling metrics on cloud backends", async () => {
+    const spy = vi.spyOn(
+      AgentServerConversationService,
+      "getRuntimeConversation",
+    );
+    setRegisteredBackends([
+      {
+        id: "cloud-1",
+        name: "Cloud",
+        host: "https://app.example.com",
+        apiKey: "cloud-key",
+        kind: "cloud",
+      },
+    ]);
+    setActiveSelection({ backendId: "cloud-1", orgId: null });
+
+    const { result } = renderHook(
+      () => useConversationMetrics("conv-abc", null, "session-key", true),
+      { wrapper: makeWrapper({ activeBackend: true }) },
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("fires the query when sessionApiKey is null (local backends without auth)", async () => {
