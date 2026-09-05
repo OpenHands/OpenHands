@@ -17,7 +17,13 @@ describe("SVG-edit Canvas Extension fixture", () => {
     const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
     const extensionModule = (await import(moduleUrl)) as {
       activate: (host: CanvasExtensionHost) => void | (() => void);
+      SVG_EDIT_VERSION: string;
+      SVG_EDIT_URL: string;
     };
+    expect(extensionModule.SVG_EDIT_VERSION).toBe("7.4.2");
+    expect(extensionModule.SVG_EDIT_URL).toBe(
+      "https://unpkg.com/svgedit@7.4.2/dist/editor/index.html",
+    );
     const container = document.createElement("div");
     document.body.append(container);
     const unregister = vi.fn();

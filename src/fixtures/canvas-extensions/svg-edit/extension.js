@@ -1,6 +1,8 @@
 const SVG_EDIT_VERSION = "7.4.2";
 const SVG_EDIT_URL = `https://unpkg.com/svgedit@${SVG_EDIT_VERSION}/dist/editor/index.html`;
 
+export { SVG_EDIT_VERSION, SVG_EDIT_URL };
+
 export function activate(host) {
   return host.registerPage("editor", ({ container }) => {
     const frame = document.createElement("iframe");
