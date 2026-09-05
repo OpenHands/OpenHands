@@ -423,4 +423,32 @@ describe("PluginLaunchModal", () => {
       expect(input1).toHaveValue("new-val1");
     });
   });
+
+  describe("source display in the trust prompt (launch URL spoofing)", () => {
+    it("shortens a real github.com URL to its repo coordinate", () => {
+      const modal = renderModal([{ source: "https://github.com/owner/repo-name.git" }]);
+      expect(screen.getByText(/owner\/repo-name/)).toBeTruthy();
+    });
+
+    it("shortens github: shorthand", () => {
+      const modal = renderModal([{ source: "github:owner/plugin1" }]);
+      const elements = screen.getAllByText(/owner\/plugin1/);
+      expect(elements.length).toBeGreaterThan(0);
+    });
+
+    it("shows the whole URL when the host only looks like GitHub", () => {
+      const spoofed = "https://evil.example/github.com/All-Hands-AI/openhands-plugin";
+      const modal = renderModal([{ source: spoofed }]);
+      // The real host must be visible in the trust prompt, not hidden behind a
+      // repo coordinate the attacker placed in their own path.
+      expect(screen.getByText(/evil\.example/)).toBeTruthy();
+    });
+
+    it("shows the whole URL for non-GitHub git hosts", () => {
+      const source = "https://gitlab.com/owner/repo";
+      const modal = renderModal([{ source }]);
+      expect(screen.getByText(/gitlab\.com/)).toBeTruthy();
+    });
+  });
+
 });
