@@ -33,10 +33,10 @@ export function CardDetailPanel({
   return (
     <aside
       data-testid="kanban-card-detail"
-      className="flex h-full w-full max-w-md shrink-0 flex-col border-l border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+      className="flex h-full w-full max-w-md shrink-0 flex-col overflow-y-auto border-l border-[var(--oh-border-subtle)] bg-[var(--oh-surface-raised)]/40 p-4"
     >
       <div className="mb-4 flex items-start justify-between gap-2">
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">
+        <h2 className="text-sm font-medium leading-5 text-white">
           {card.title}
         </h2>
         <BrandButton
@@ -123,20 +123,9 @@ export function CardDetailPanel({
       <h3 className="mt-6 text-sm font-semibold">
         {t(I18nKey.KANBAN$ACTIVITY)}
       </h3>
-      {card.activity_log && card.activity_log.length > 0 ? (
-        <ul
-          data-testid="kanban-activity-log"
-          className="mt-2 space-y-1 text-sm"
-        >
-          {card.activity_log.map((item) => (
-            <li key={`${item.timestamp}-${item.message}`}>{item.message}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-2 text-sm text-[var(--oh-muted)]">
-          {t(I18nKey.KANBAN$NO_ACTIVITY)}
-        </p>
-      )}
+      <p className="mt-2 text-sm text-[var(--oh-muted)]">
+        {t(I18nKey.KANBAN$NO_ACTIVITY)}
+      </p>
 
       {onDelete ? (
         <div className="mt-auto pt-4">
