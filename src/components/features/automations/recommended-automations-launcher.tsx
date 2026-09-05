@@ -25,6 +25,7 @@ import {
 import { InstallServerModal } from "#/components/features/mcp-page/install-server-modal";
 import { useTracking } from "#/hooks/use-tracking";
 import {
+  automationDetailPath,
   automationSetupPath,
   hasAutomationInterface,
 } from "#/manifests/automation-interface";
@@ -38,6 +39,7 @@ import { useAutomations } from "#/hooks/query/use-automations";
 import { RecommendedAutomationsRail } from "./recommended-automations-rail";
 import { RecommendedAutomationsSection } from "./recommended-automations-section";
 import { ResponderDeploymentModal } from "./responder-deployment-modal";
+import { SdlcAutomationsGuide } from "./sdlc-automations-guide";
 
 interface RecommendedAutomationsLauncherProps {
   query?: string;
@@ -48,7 +50,7 @@ interface RecommendedAutomationsLauncherProps {
    * Compact discovery rail for New Chat and the automations dashboard.
    * The templates page keeps the full catalog section.
    */
-  variant?: "catalog" | "rail";
+  variant?: "catalog" | "rail" | "guide";
   className?: string;
 }
 
@@ -97,9 +99,10 @@ export function RecommendedAutomationsLauncher({
   const [isPreparingLocalResponder, setIsPreparingLocalResponder] =
     useState(false);
   const isRail = variant === "rail";
+  const isGuide = variant === "guide";
   const { data: automationsData, isLoading: isAutomationsLoading } =
     useAutomations({
-      enabled: isRail && activeBackend.backend.kind === "local",
+      enabled: (isRail || isGuide) && activeBackend.backend.kind === "local",
     });
 
   const installedMcpConfig = useMemo(
@@ -277,11 +280,20 @@ export function RecommendedAutomationsLauncher({
   // automations are managed elsewhere.
   if (activeBackend.backend.kind === "cloud") return null;
 
-  if (isRail && isAutomationsLoading) return null;
+  if ((isRail || isGuide) && isAutomationsLoading) return null;
 
   return (
     <>
-      {isRail ? (
+      {isGuide ? (
+        <SdlcAutomationsGuide
+          installedAutomations={automationsData?.automations ?? []}
+          installedServers={installedMcpConfig}
+          onSelect={handleSelectAutomation}
+          onOpenInstalled={(automation) =>
+            navigate?.(automationDetailPath(automation.id))
+          }
+        />
+      ) : isRail ? (
         <RecommendedAutomationsRail
           className={className}
           installedAutomations={automationsData?.automations ?? []}

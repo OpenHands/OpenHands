@@ -406,6 +406,8 @@ export default function AutomationsList() {
         />
       )}
 
+      <RecommendedAutomationsLauncher variant="guide" />
+
       {/* Search */}
       <div
         className={cn(

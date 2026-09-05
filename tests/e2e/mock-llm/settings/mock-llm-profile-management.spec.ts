@@ -505,14 +505,24 @@ test.describe("OpenHands provider hidden base_url preservation", () => {
       expect(EXPECTED_OPENHANDS_MODELS).toContain(config.model);
     });
 
-    await test.step("profile survives page reload", async () => {
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await waitForTestId(page, "add-llm-profile");
+    await test.step("profile survives a fresh page load", async () => {
+      const freshPage = await page.context().newPage();
+      try {
+        await seedLocalStorage(freshPage);
+        await routeSessionApiKey(freshPage);
+        await freshPage.goto("/settings/llm", {
+          waitUntil: "domcontentloaded",
+        });
+        await dismissAnalyticsModal(freshPage);
+        await waitForTestId(freshPage, "add-llm-profile");
 
-      // Re-read via API to confirm persistence is durable
-      const config = await getProfileConfig(request, OPENHANDS_PROFILE);
-      expect(config.base_url).toBe(CUSTOM_BASE_URL);
-      expect(EXPECTED_OPENHANDS_MODELS).toContain(config.model);
+        // Re-read via API to confirm persistence is durable.
+        const config = await getProfileConfig(request, OPENHANDS_PROFILE);
+        expect(config.base_url).toBe(CUSTOM_BASE_URL);
+        expect(EXPECTED_OPENHANDS_MODELS).toContain(config.model);
+      } finally {
+        await freshPage.close();
+      }
     });
   });
 });

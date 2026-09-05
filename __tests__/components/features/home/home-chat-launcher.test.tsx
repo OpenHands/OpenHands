@@ -228,6 +228,19 @@ vi.mock(
   }),
 );
 
+// The automation widgets have their own focused tests. Keeping them out of the
+// launcher tests also prevents their delayed health request from outliving the
+// per-test jsdom environment while this suite exercises unrelated launch flows.
+vi.mock(
+  "#/components/features/home/featured-automations/pinned-automations-dashboard",
+  () => ({ PinnedAutomationsDashboard: () => null }),
+);
+
+vi.mock(
+  "#/components/features/home/featured-automations/running-automations-list",
+  () => ({ RunningAutomationsList: () => null }),
+);
+
 vi.mock("#/components/features/plugins/plugin-picker-modal", () => ({
   PluginPickerModal: ({
     onChange,
