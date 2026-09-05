@@ -203,22 +203,18 @@ export function GitControlBar({ onSuggestionsClick }: GitControlBarProps) {
     );
   };
 
-  // Local backends never use the remote-repo "Connect Repo" CTA, so suppress the
-  // empty-state button there. A repo or workspace label inferred from local git
-  // metadata is still informational and stays visible.
-  const showRepoButton =
-    !isLocalBackend || !!selectedRepository || !!workspaceName;
+  // Do not show an empty-state "Connect Repo" chip. Repo / workspace labels
+  // inferred from conversation or local git metadata stay visible on both
+  // backends; identity and attach flows live in overview / home, not here.
+  const showRepoButton = !!selectedRepository || !!workspaceName;
   // On a local backend the informational pill (e.g. workspace name, or a repo
   // detected without a recognized provider) should not open the remote-repo
   // modal — that flow is cloud-only. Disable the button in that case so the
   // click is a no-op. Linkable repos render as <a> and ignore `disabled`.
   const isRepoButtonInert = isLocalBackend && !hasRepository;
 
-  // True when the bar will render at least one chip (cloud always shows
-  // "Open Repository"; local needs a repo or a workspace name; selected
-  // branch or push/pull/PR also count). When false, the bar has nothing to
-  // show — return null so the wrapper above collapses to its natural padding
-  // instead of leaving an empty DOM node below the chat input.
+  // True when the bar will render at least one chip. When false, return null
+  // so the composer wrapper collapses instead of leaving empty space.
   const hasAnyContent = showRepoButton || !!selectedBranch || hasRepository;
   if (!hasAnyContent) return null;
 
