@@ -50,10 +50,16 @@ export async function searchAllSubdirectories(
   }
 }
 
+export const searchSubdirsQueryKey = (
+  path: string | null,
+  backendId: string,
+  orgId: string | null,
+) => ["file", "search_subdirs", path, backendId, orgId] as const;
+
 export const useSearchSubdirs = (path: string | null) => {
   const active = useActiveBackend();
   return useQuery({
-    queryKey: ["file", "search_subdirs", path, active.backend.id, active.orgId],
+    queryKey: searchSubdirsQueryKey(path, active.backend.id, active.orgId),
     queryFn: () => searchAllSubdirectories(path as string),
     enabled: !!path,
     retry: false,
