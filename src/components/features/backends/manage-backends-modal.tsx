@@ -140,7 +140,7 @@ export function ManageBackendsModal({
             "relative flex flex-col bg-[var(--oh-surface)] border border-[var(--oh-border)] rounded-xl",
             modalWidthClassName("lg"),
             MODAL_MAX_WIDTH_VIEWPORT,
-            "max-h-[70vh]",
+            "max-h-[70vh] overflow-x-auto",
           )}
         >
           {recoveryMode ? null : (
