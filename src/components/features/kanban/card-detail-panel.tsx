@@ -33,10 +33,10 @@ export function CardDetailPanel({
   return (
     <aside
       data-testid="kanban-card-detail"
-      className="flex h-full w-full max-w-md shrink-0 flex-col border-l border-[var(--oh-border)] bg-[var(--oh-surface)] p-4"
+      className="flex h-full w-full max-w-md shrink-0 flex-col overflow-y-auto border-l border-[var(--oh-border-subtle)] bg-[var(--oh-surface-raised)]/40 p-4"
     >
       <div className="mb-4 flex items-start justify-between gap-2">
-        <h2 className="text-lg font-semibold text-[var(--foreground)]">
+        <h2 className="text-sm font-medium leading-5 text-white">
           {card.title}
         </h2>
         <BrandButton

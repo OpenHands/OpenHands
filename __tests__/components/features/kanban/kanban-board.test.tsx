@@ -12,6 +12,7 @@ import { CostSummary } from "#/components/features/kanban/cost-summary";
 import { KanbanBoardView } from "#/components/features/kanban/kanban-board";
 import { KanbanCard as KanbanCardView } from "#/components/features/kanban/kanban-card";
 import { KanbanList } from "#/components/features/kanban/kanban-list";
+import { pullRequestChipLabel } from "#/components/features/kanban/kanban-pr-label";
 
 function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
   return {
@@ -111,6 +112,22 @@ describe("KanbanCard", () => {
     );
   });
 
+  it("chips a linked pull request number and a live session", () => {
+    renderWithProviders(
+      <KanbanCardView
+        card={makeCard({
+          agent_session_id: "sess-1",
+          status: "in_progress",
+          linked_pr: "https://github.com/org/repo/pull/42",
+        })}
+      />,
+    );
+    expect(screen.getByTestId("kanban-card-pr-card-1")).toHaveTextContent(
+      "#42",
+    );
+    expect(screen.getByTestId("kanban-card-live-card-1")).toBeInTheDocument();
+  });
+
   it("shows actual cost when the card is done", () => {
     renderWithProviders(
       <KanbanCardView
@@ -148,6 +165,17 @@ describe("KanbanBoardView", () => {
     });
     expect(onMoveCard).toHaveBeenCalledWith("card-1", "col-2", 0);
   });
+
+  it("keeps the new-card composer collapsed until New is clicked", () => {
+    renderWithProviders(<KanbanBoardView board={makeBoard()} />);
+    expect(
+      screen.queryByTestId("kanban-add-card-input-col-1"),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("kanban-add-card-col-1"));
+    expect(
+      screen.getByTestId("kanban-add-card-input-col-1"),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("CostSummary", () => {
@@ -176,6 +204,16 @@ describe("CardDetailPanel", () => {
     expect(screen.getByTestId("kanban-detail-pr")).toHaveTextContent(
       "https://example.com/pr/1",
     );
+  });
+});
+
+describe("pullRequestChipLabel", () => {
+  it("extracts a GitHub-style pull number and falls back otherwise", () => {
+    expect(pullRequestChipLabel("https://github.com/org/repo/pull/42")).toBe(
+      "#42",
+    );
+    expect(pullRequestChipLabel("https://example.com/pr/1")).toBe("#1");
+    expect(pullRequestChipLabel("https://example.com/compare/main")).toBe("PR");
   });
 });
 
