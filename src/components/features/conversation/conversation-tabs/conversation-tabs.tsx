@@ -387,8 +387,7 @@ export function ConversationTabs({
             data-testid="planner-tab-build-button"
           >
             <Typography.Text className="text-[11px] font-normal leading-5 text-black">
-              {/* eslint-disable-next-line i18next/no-literal-string */}
-              {t(I18nKey.COMMON$BUILD)} ⌘↩
+              {t(I18nKey.COMMON$BUILD)}
             </Typography.Text>
           </button>
         </div>

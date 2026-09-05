@@ -24,7 +24,6 @@ import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";
 import { useIsArchivedConversation } from "#/hooks/use-is-archived-conversation";
-import { useHandleBuildPlanClick } from "#/hooks/use-handle-build-plan-click";
 
 import { ScrollToBottomButton } from "#/components/shared/buttons/scroll-to-bottom-button";
 import { LoadingSpinner } from "#/components/shared/loading-spinner";
@@ -67,8 +66,7 @@ export function ChatInterface() {
   useAutoRefreshFilesOnEdit();
 
   const { trackInitialQuerySubmitted, trackUserMessageSent } = useTracking();
-  const { setMessageToSend, conversationMode, planContent } =
-    useConversationStore();
+  const { setMessageToSend } = useConversationStore();
   const {
     errorMessage,
     errorCode,
@@ -116,7 +114,6 @@ export function ChatInterface() {
 
   const { curAgentState } = useAgentState();
   const { isPlanningAgentRunning } = usePlanningAgentState();
-  const { handleBuildPlanClick } = useHandleBuildPlanClick();
 
   // Cloud conversations whose sandbox is MISSING or ERROR are read-only:
   // the sandbox is gone and cannot be resumed, so we hide the chat input
@@ -131,44 +128,6 @@ export function ChatInterface() {
   const { isConfigured: isLlmConfigured, isLoading: isLlmConfigLoading } =
     useLlmConfigured();
   const llmBlocked = !isLlmConfigLoading && !isLlmConfigured;
-
-  // Disable Build button while agent is running (streaming)
-  const isAgentRunning =
-    curAgentState === AgentState.RUNNING ||
-    curAgentState === AgentState.LOADING;
-
-  // Global keyboard shortcut for Build button (Cmd+Enter / Ctrl+Enter)
-  // This is placed here instead of PlanPreview to avoid duplicate listeners
-  // when multiple PlanPreview components exist in the chat.
-  // Gated on the same conditions as the Build button (ConversationTabs'
-  // `isBuildDisabled`) so it cannot fire outside the plan flow.
-  React.useEffect(() => {
-    if (isAgentRunning || conversationMode !== "plan" || !planContent) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        handleBuildPlanClick(event);
-        scrollDomToBottom();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [
-    isAgentRunning,
-    conversationMode,
-    planContent,
-    handleBuildPlanClick,
-    scrollDomToBottom,
-  ]);
 
   const { selectedRepository, replayJson } = useInitialQueryStore();
   const { conversationId } = useOptionalConversationId();

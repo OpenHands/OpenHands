@@ -104,25 +104,27 @@ class MockProgressEvent extends Event {
 // Setup files run once per test file, and a worker process is reused across
 // files. Without this marker each file would splice another holder into the
 // prototype chain, so the chain would grow with every file in the run.
-const PROGRESS_EVENT_FALLBACK = Symbol.for(
-  "agent-canvas.progress-event-fallback",
-);
+const TEARDOWN_FALLBACK = Symbol.for("agent-canvas.teardown-fallback");
 
-function installProgressEventFallback(fallback: unknown) {
+function installTeardownFallback(name: string, fallback: unknown) {
   const currentProto = Object.getPrototypeOf(globalThis) as object | null;
-  if (currentProto && PROGRESS_EVENT_FALLBACK in currentProto) return;
+  const holder =
+    currentProto && TEARDOWN_FALLBACK in currentProto
+      ? currentProto
+      : (Object.create(currentProto) as Record<PropertyKey, unknown>);
 
-  const holder = Object.create(currentProto) as Record<PropertyKey, unknown>;
-  Object.defineProperty(holder, PROGRESS_EVENT_FALLBACK, { value: true });
-  Object.defineProperty(holder, "ProgressEvent", {
+  Object.defineProperty(holder, TEARDOWN_FALLBACK, { value: true });
+  Object.defineProperty(holder, name, {
     value: fallback,
     configurable: true,
     writable: true,
   });
-  Object.setPrototypeOf(globalThis, holder);
+
+  if (holder !== currentProto) Object.setPrototypeOf(globalThis, holder);
 }
 
-installProgressEventFallback(MockProgressEvent);
+installTeardownFallback("ProgressEvent", MockProgressEvent);
+installTeardownFallback("XMLHttpRequestUpload", class extends EventTarget {});
 
 // Mock ResizeObserver for test environment
 class MockResizeObserver {
