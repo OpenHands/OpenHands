@@ -10,12 +10,14 @@ import {
   subscribeActiveBackend,
 } from "#/api/backend-registry/active-store";
 import { makeDefaultLocalBackend } from "#/api/backend-registry/default-backend";
+import { mergePortableBackends } from "#/api/backend-registry/portable-config";
 import {
   dropBackendHealth,
   resetBackendHealth,
 } from "#/api/backend-registry/health-store";
 import {
   type Backend,
+  type BackendInput,
   type BackendSelection,
   type ResolvedActiveBackend,
 } from "#/api/backend-registry/types";
@@ -26,8 +28,6 @@ import {
   setTelemetryIdentity,
 } from "#/services/telemetry";
 
-type BackendInput = Omit<Backend, "id" | "connectionRevision">;
-
 interface ActiveBackendContextValue {
   backends: Backend[];
   active: ResolvedActiveBackend;
@@ -35,6 +35,7 @@ interface ActiveBackendContextValue {
   addBackend: (backend: BackendInput) => Backend;
   updateBackend: (id: string, patch: Partial<BackendInput>) => void;
   removeBackend: (id: string) => void;
+  importBackends: (backends: BackendInput[]) => void;
 }
 
 const ActiveBackendContext =
@@ -203,6 +204,47 @@ export function ActiveBackendProvider({
     [retryBootstrapProbe],
   );
 
+  const importBackends = React.useCallback(
+    (importedBackends: BackendInput[]) => {
+      const previous = getRegisteredBackends();
+      const previousActive = getSnapshot().active;
+      const activeBackendId = previousActive.backend.id;
+      const merged = mergePortableBackends(
+        previous,
+        importedBackends,
+        generateId,
+      );
+      const previousById = new Map(
+        previous.map((backend) => [backend.id, backend]),
+      );
+      const changedConnectionIds = merged
+        .filter((backend) => {
+          const before = previousById.get(backend.id);
+          return (
+            before?.host !== backend.host ||
+            before?.apiKey !== backend.apiKey ||
+            before?.kind !== backend.kind ||
+            before?.authMode !== backend.authMode
+          );
+        })
+        .map((backend) => backend.id);
+
+      setRegisteredBackends(merged);
+      changedConnectionIds.forEach(resetBackendHealth);
+
+      const nextActive = getSnapshot().active;
+      applyTelemetrySelectionBoundary(previousActive, nextActive);
+
+      if (
+        changedConnectionIds.includes(activeBackendId) ||
+        nextActive.backend.id !== activeBackendId
+      ) {
+        retryBootstrapProbe();
+      }
+    },
+    [retryBootstrapProbe],
+  );
+
   const value = React.useMemo<ActiveBackendContextValue>(
     () => ({
       backends: snapshot.backends,
@@ -211,8 +253,16 @@ export function ActiveBackendProvider({
       addBackend,
       updateBackend,
       removeBackend,
+      importBackends,
     }),
-    [snapshot, setActive, addBackend, updateBackend, removeBackend],
+    [
+      snapshot,
+      setActive,
+      addBackend,
+      updateBackend,
+      removeBackend,
+      importBackends,
+    ],
   );
 
   return (
