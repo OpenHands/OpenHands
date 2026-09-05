@@ -8,7 +8,7 @@ import { LoadingSpinner } from "#/components/shared/loading-spinner";
 import { I18nKey } from "#/i18n/declaration";
 import { cn } from "#/utils/utils";
 import { modalTitleLgClassName } from "#/utils/modal-classes";
-import { getApiErrorBody } from "#/utils/api-error-message";
+import { getApiErrorBody, getApiErrorMessage } from "#/utils/api-error-message";
 import { useTracking } from "#/hooks/use-tracking";
 import { useSetupCapabilities } from "#/hooks/query/use-manifest-capabilities";
 import { useSetupPrerequisites } from "#/hooks/query/use-manifest-prerequisites";
@@ -35,7 +35,9 @@ import {
 } from "#/manifests/manifest-error-map";
 import { automationDetailPath } from "#/manifests/automation-interface";
 import { findAutomationCommand } from "#/utils/automation-catalog";
+import AutomationService from "#/api/automation-service/automation-service.api";
 import type { GitRepository } from "#/types/git";
+import { AutomationRunStatus, type AutomationRun } from "#/types/automation";
 import type {
   SetupEntry,
   SetupFormValue,
@@ -46,11 +48,13 @@ import type {
 import { SetupFormField } from "./manifest-form-field";
 import { SetupPrerequisitesStep } from "./manifest-prerequisites-step";
 import { SetupReviewStep } from "./manifest-review-step";
+import { SetupTestRunStep } from "./manifest-test-run-step";
 
-type SetupStep = "prerequisites" | "form" | "review";
+type SetupStep = "prerequisites" | "form" | "review" | "test";
 
 /** How long a field rests after a blur before the draft is sent for checking. */
 const PREFLIGHT_DEBOUNCE_MS = 400;
+const TEST_RUN_POLL_MS = 3000;
 
 const NO_SERVICE_ERRORS: MappedManifestErrors = {
   fieldErrors: {},
@@ -60,6 +64,12 @@ const NO_SERVICE_ERRORS: MappedManifestErrors = {
 function hasAnyError(errors: MappedManifestErrors): boolean {
   return (
     errors.formErrors.length > 0 || Object.keys(errors.fieldErrors).length > 0
+  );
+}
+
+function isTerminalRun(run: AutomationRun): boolean {
+  return ![AutomationRunStatus.PENDING, AutomationRunStatus.RUNNING].includes(
+    run.status,
   );
 }
 
@@ -111,17 +121,28 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
   const [serviceErrors, setServiceErrors] =
     useState<MappedManifestErrors>(NO_SERVICE_ERRORS);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdAutomationId, setCreatedAutomationId] = useState<string | null>(
+    null,
+  );
+  const [testRun, setTestRun] = useState<AutomationRun | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   // Blur-triggered preflight reads the values as they are when the field is
   // left, which can be the same tick as the change that caused it.
   const valuesRef = useRef(values);
   const blurTimerRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
+  const testPollTimerRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
       if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current);
-    },
-    [],
-  );
+      if (testPollTimerRef.current)
+        window.clearTimeout(testPollTimerRef.current);
+    };
+  }, []);
 
   const fields = useMemo(() => collectFields(entry.setup), [entry]);
   const overrides = useMemo(
@@ -216,6 +237,13 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         automationId: entry.id,
         setupMode,
       });
+      if (setupMode === "direct" && typeof response.id === "string") {
+        setCreatedAutomationId(response.id);
+        setTestRun(null);
+        setTestError(null);
+        setStep("test");
+        return;
+      }
       const destination = getDestination(response);
       if (destination) navigate(destination, { replace: true });
       else onClose();
@@ -244,6 +272,78 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
 
   const handleConfirm = () => submitAction(payload, entry.setup.mode);
 
+  const handleRunTest = async () => {
+    if (!createdAutomationId) return;
+    if (testPollTimerRef.current) window.clearTimeout(testPollTimerRef.current);
+
+    setIsTesting(true);
+    setTestError(null);
+
+    const poll = async (runId: string): Promise<void> => {
+      try {
+        const response = await AutomationService.getAutomationRuns(
+          createdAutomationId,
+          20,
+          0,
+        );
+        if (!isMountedRef.current) return;
+        const current = response.runs.find(({ id }) => id === runId);
+        if (current) setTestRun(current);
+        if (current && isTerminalRun(current)) {
+          setIsTesting(false);
+          return;
+        }
+        testPollTimerRef.current = window.setTimeout(
+          () => void poll(runId),
+          TEST_RUN_POLL_MS,
+        );
+      } catch (error) {
+        if (!isMountedRef.current) return;
+        setTestError(
+          getApiErrorMessage(error, t(I18nKey.SETUP$TEST_REQUEST_FAILED)),
+        );
+        setIsTesting(false);
+      }
+    };
+
+    try {
+      const run =
+        await AutomationService.dispatchAutomation(createdAutomationId);
+      if (!isMountedRef.current) return;
+      setTestRun(run);
+      if (isTerminalRun(run)) {
+        setIsTesting(false);
+        return;
+      }
+      await poll(run.id);
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      setTestError(
+        getApiErrorMessage(error, t(I18nKey.SETUP$TEST_REQUEST_FAILED)),
+      );
+      setIsTesting(false);
+    }
+  };
+
+  const handleEnableAndFinish = async () => {
+    if (!createdAutomationId) return;
+    setIsSubmitting(true);
+    setServiceErrors(NO_SERVICE_ERRORS);
+    try {
+      await AutomationService.updateAutomation(createdAutomationId, {
+        enabled: true,
+      });
+      navigate(automationDetailPath(createdAutomationId), { replace: true });
+    } catch (error) {
+      setServiceErrors({
+        fieldErrors: {},
+        formErrors: [getApiErrorMessage(error, t(I18nKey.SETUP$ENABLE_FAILED))],
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // A direct entry whose deployment cannot run the direct path degrades to the
   // assisted outcome: the skill command and the entry's fallback message seed
   // a conversation that finishes setup instead.
@@ -265,6 +365,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
     if (currentStep === "prerequisites")
       return t(I18nKey.SETUP$PREREQUISITES_TITLE);
     if (currentStep === "review") return t(I18nKey.SETUP$REVIEW_TITLE);
+    if (currentStep === "test") return t(I18nKey.SETUP$TEST_TITLE);
     return entry.name;
   })();
 
@@ -277,7 +378,7 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
         <ModalCloseButton
           onClose={onClose}
           testId="setup-dialog-close"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isTesting}
         />
         <header className="flex-shrink-0 px-6 pb-4 pt-6">
           <h2 className={cn("pr-6", modalTitleLgClassName)}>{title}</h2>
@@ -352,6 +453,10 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
             <SetupReviewStep setup={entry.setup} values={values} />
           )}
 
+          {!isLoading && !isUnsupported && currentStep === "test" && (
+            <SetupTestRunStep run={testRun} error={testError} />
+          )}
+
           {serviceErrors.formErrors.map((message) => (
             <p
               key={message}
@@ -398,6 +503,41 @@ export function SetupDialog({ entry, onClose }: SetupDialogProps) {
                   {t(I18nKey.SETUP$FALLBACK_CONVERSATION)}
                 </BrandButton>
               )}
+            </>
+          ) : currentStep === "test" ? (
+            <>
+              {testRun?.status === AutomationRunStatus.COMPLETED && (
+                <BrandButton
+                  testId="setup-run-test-button"
+                  type="button"
+                  variant="secondary"
+                  isDisabled={isSubmitting || isTesting}
+                  onClick={handleRunTest}
+                >
+                  {t(I18nKey.COMMON$RUN_TEST)}
+                </BrandButton>
+              )}
+              <BrandButton
+                testId={
+                  testRun?.status === AutomationRunStatus.COMPLETED
+                    ? "setup-enable-button"
+                    : "setup-run-test-button"
+                }
+                type="button"
+                variant="primary"
+                isDisabled={isSubmitting || isTesting}
+                onClick={
+                  testRun?.status === AutomationRunStatus.COMPLETED
+                    ? handleEnableAndFinish
+                    : handleRunTest
+                }
+              >
+                {testRun?.status === AutomationRunStatus.COMPLETED
+                  ? t(I18nKey.SETUP$ENABLE_AND_FINISH)
+                  : isTesting
+                    ? t(I18nKey.AUTOMATIONS$DETAIL$RUNNING)
+                    : t(I18nKey.COMMON$RUN_TEST)}
+              </BrandButton>
             </>
           ) : (
             <BrandButton
