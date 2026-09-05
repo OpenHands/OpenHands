@@ -263,6 +263,75 @@ describe("recommended automations", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a catalog-owned setup-effort estimate only when it is a positive integer", () => {
+    const automation = AUTOMATION_CATALOG.find(
+      (item) => item.id === "github-pr-reviewer",
+    )!;
+    const runtimeAutomation = automation as { estimatedSetupMinutes?: number };
+    const originalEstimate = automation.estimatedSetupMinutes;
+
+    try {
+      automation.estimatedSetupMinutes = 2;
+      const { rerender } = render(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByTestId(
+          "recommended-automation-setup-effort-github-pr-reviewer",
+        ),
+      ).toHaveTextContent("RECOMMENDED_AUTOMATIONS$MINUTES:2");
+
+      automation.estimatedSetupMinutes = 0;
+      rerender(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByTestId(
+          "recommended-automation-setup-effort-github-pr-reviewer",
+        ),
+      ).not.toBeInTheDocument();
+
+      runtimeAutomation.estimatedSetupMinutes = undefined;
+      rerender(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByTestId(
+          "recommended-automation-setup-effort-github-pr-reviewer",
+        ),
+      ).not.toBeInTheDocument();
+
+      automation.estimatedSetupMinutes = 2.5;
+      rerender(
+        <RecommendedAutomationsSection
+          backendKind="local"
+          installedServers={[]}
+          onSelect={vi.fn()}
+        />,
+      );
+      expect(
+        screen.queryByTestId(
+          "recommended-automation-setup-effort-github-pr-reviewer",
+        ),
+      ).not.toBeInTheDocument();
+    } finally {
+      automation.estimatedSetupMinutes = originalEstimate;
+    }
+  });
+
   it("sorts recommendation popularity deterministically when ranks are missing or tied", () => {
     const makeAutomation = (
       id: string,

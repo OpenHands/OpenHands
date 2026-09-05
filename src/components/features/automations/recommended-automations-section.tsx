@@ -225,6 +225,9 @@ function AutomationCardGrid({
     <div className={cn("mt-3", extensionModuleCardGridClassName)}>
       {automations.map((automation) => {
         const integrations = getIntegrationEntries(automation);
+        const hasSetupEffortEstimate =
+          Number.isInteger(automation.estimatedSetupMinutes) &&
+          automation.estimatedSetupMinutes > 0;
         // "N MCPs to connect" only counts entries the install flow can
         // actually connect; an external-setup integration is surfaced on its
         // own pill instead.
@@ -262,6 +265,21 @@ function AutomationCardGrid({
                     </h3>
                     <p className="mt-0.5 truncate text-xs text-tertiary-alt">
                       {automation.category}
+                      {hasSetupEffortEstimate ? (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          <span
+                            data-testid={`recommended-automation-setup-effort-${automation.id}`}
+                          >
+                            {translate(
+                              I18nKey.RECOMMENDED_AUTOMATIONS$MINUTES,
+                              {
+                                count: automation.estimatedSetupMinutes,
+                              },
+                            )}
+                          </span>
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   <CirclePlusBadge
