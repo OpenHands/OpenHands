@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACP_MANAGED_SENTINEL,
   ACP_PROVIDERS,
+  resolveCodexDefaultCommand,
   resolveEffectiveAcpModel,
 } from "./acp-providers";
 
@@ -17,6 +18,32 @@ describe("ACP_PROVIDERS", () => {
       "-y",
       "@agentclientprotocol/codex-acp@1.10.0",
     ]);
+  });
+});
+
+describe("resolveCodexDefaultCommand", () => {
+  it("overrides only the exact stale codex pin from the pinned client", () => {
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.1.7",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.10.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@2.0.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@2.0.0"]);
   });
 });
 

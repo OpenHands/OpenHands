@@ -10,6 +10,7 @@ import {
   getAcpProvider,
   getAcpProviderDisplayName,
   getAcpProviderSecrets,
+  resolveCodexDefaultCommand,
 } from "#/constants/acp-providers";
 
 describe("getAcpProviderDisplayName", () => {
@@ -84,6 +85,37 @@ describe("ACP provider registry", () => {
         provider.key,
       ).toBe(true);
     }
+  });
+
+  it("temporarily overrides only the exact stale codex pin from the pinned client", () => {
+    // Unlike the model dedup, the launch-command shim has a guard: once the pinned
+    // client ships the upstream command, Canvas defers to the registry value so the
+    // temporary shim stops firing without a separate cleanup pass.
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.1.7",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+
+    // Registry values at-or-newer than the tested version stay authoritative —
+    // the shim must never revert a future upstream bump.
+
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@1.10.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@1.10.0"]);
+    expect(
+      resolveCodexDefaultCommand([
+        "npx",
+        "-y",
+        "@agentclientprotocol/codex-acp@2.0.0",
+      ]),
+    ).toEqual(["npx", "-y", "@agentclientprotocol/codex-acp@2.0.0"]);
   });
 
   it("does not suggest generic default model placeholders", () => {
