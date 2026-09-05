@@ -9,6 +9,7 @@ import {
 import { handleCanvasUIAction, openWorkspaceFile } from "#/services/canvas-ui";
 import { useConversationStore } from "#/stores/conversation-store";
 import { useFilesTabStore } from "#/stores/files-tab-store";
+import { useLivePreviewStore } from "#/stores/live-preview-store";
 import type { CanvasUIAction } from "#/types/agent-server/core";
 import { isCanvasUIActionEvent } from "#/types/agent-server/type-guards";
 
@@ -31,6 +32,7 @@ describe("handleCanvasUIAction", () => {
       selectedConversationId: null,
       openPaths: [],
     });
+    useLivePreviewStore.setState({ requestedPaths: {} });
   });
 
   it("navigate_to_file selects the files tab, reveals the panel, and sets selectedPath", () => {
@@ -61,6 +63,19 @@ describe("handleCanvasUIAction", () => {
 
     expect(useConversationStore.getState().selectedTab).toBe("terminal");
     expect(useFilesTabStore.getState().selectedPath).toBeNull();
+  });
+
+  it("open_tab preview reveals the panel and remembers the requested entrypoint", () => {
+    handleCanvasUIAction(
+      action({ command: "open_tab", tab: "preview", path: "index.html" }),
+      "conv-preview",
+    );
+
+    expect(useConversationStore.getState().selectedTab).toBe("preview");
+    expect(useConversationStore.getState().isRightPanelShown).toBe(true);
+    expect(useLivePreviewStore.getState().requestedPaths["conv-preview"]).toBe(
+      "index.html",
+    );
   });
 
   it("open_tab ignores unknown tab values and surfaces a warning for debuggability", () => {
@@ -144,6 +159,7 @@ describe("openWorkspaceFile", () => {
       selectedConversationId: null,
       openPaths: [],
     });
+    useLivePreviewStore.setState({ requestedPaths: {} });
   });
 
   it("delegates to navigate_to_file with the active conversation", () => {
