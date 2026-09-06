@@ -19,7 +19,7 @@ import { useAutoRefreshFilesOnEdit } from "#/hooks/use-auto-refresh-files-on-edi
 import { WorkspaceFilesForChatProvider } from "./chat-markdown-path-code";
 import { TypingIndicator } from "./typing-indicator";
 import { ChatSuggestions } from "./chat-suggestions";
-import { ScrollProvider } from "#/context/scroll-context";
+import { ScrollProvider } from "#/contexts/scroll-context";
 import { useInitialQueryStore } from "#/stores/initial-query-store";
 import { useSendMessage } from "#/hooks/use-send-message";
 import { useAgentState, usePlanningAgentState } from "#/hooks/use-agent-state";

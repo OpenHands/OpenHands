@@ -45,7 +45,7 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("#/components/features/onboarding/onboarding-modal", async () => {
   const React = await import("react");
-  const { useNavigation } = await import("#/context/navigation-context");
+  const { useNavigation } = await import("#/contexts/navigation-context");
 
   return {
     OnboardingModal: ({ onClose }: { onClose: () => void }) => {

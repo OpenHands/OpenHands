@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useNavigation } from "#/context/navigation-context";
+import { useNavigation } from "#/contexts/navigation-context";
 import { useConversationStore } from "#/stores/conversation-store";
 
 export function useLaunchSkillInChat() {
