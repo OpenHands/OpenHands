@@ -35,7 +35,7 @@ const acpAuthStatusMock = vi.hoisted(() =>
 );
 
 vi.mock("#/hooks/query/use-acp-auth-status", () => ({
-  useAcpAuthStatus: (providerKey?: unknown) => acpAuthStatusMock(providerKey),
+  useAcpAuthStatus: (...args: unknown[]) => acpAuthStatusMock(...args),
 }));
 
 vi.mock("#/hooks/query/use-llm-subscription-models", () => ({

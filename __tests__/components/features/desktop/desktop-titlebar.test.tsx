@@ -8,7 +8,7 @@ describe("DesktopTitlebar", () => {
 
     const bar = screen.getByTestId("desktop-titlebar");
     expect(bar).toHaveAttribute("aria-hidden", "true");
-    expect(bar.getAttribute("style") ?? "").toMatch(/app-region:\s*drag/i);
+    expect(bar.className).toMatch(/app-region:\s*drag/i);
     expect(bar.className).toMatch(/h-10/);
   });
 });
