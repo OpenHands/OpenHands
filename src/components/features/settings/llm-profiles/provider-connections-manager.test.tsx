@@ -15,16 +15,50 @@ vi.mock("#/utils/custom-toast-handlers", () => ({
   displaySuccessToast,
 }));
 
-vi.mock("#/hooks/query/use-search-providers", () => ({
-  useSearchProviders: () => ({
-    data: [
-      { name: "openai", verified: true },
-      { name: "anthropic", verified: true },
-      { name: "openhands", verified: true },
-      { name: "azure", verified: false },
-    ],
+const openaiSubscriptionStatusMock = vi.hoisted(() =>
+  vi.fn(() => ({ data: { connected: false } })),
+);
+
+vi.mock("#/hooks/query/use-llm-subscription-status", () => ({
+  useOpenAISubscriptionStatus: () => openaiSubscriptionStatusMock(),
+}));
+
+const acpAuthStatusMock = vi.hoisted(() =>
+  vi.fn((_providerKey?: unknown) => ({
+    status: "unauthenticated" as
+      | "authenticated"
+      | "unauthenticated"
+      | "unknown",
+    isChecking: false,
+    isSupported: true,
+  })),
+);
+
+vi.mock("#/hooks/query/use-acp-auth-status", () => ({
+  useAcpAuthStatus: (providerKey?: unknown) => acpAuthStatusMock(providerKey),
+}));
+
+vi.mock("#/hooks/query/use-llm-subscription-models", () => ({
+  useOpenAISubscriptionModels: () => ({ data: ["gpt-5.4"] }),
+}));
+
+const saveProfileMutate = vi.hoisted(() => vi.fn());
+
+vi.mock("#/hooks/mutation/use-save-llm-profile", () => ({
+  useSaveLlmProfile: () => ({
+    mutateAsync: saveProfileMutate,
+    isPending: false,
   }),
 }));
+
+vi.mock(
+  "#/components/features/settings/llm-settings/openai-subscription-auth-card",
+  () => ({
+    OpenAISubscriptionAuthCard: () => (
+      <div data-testid="openai-subscription-auth-card" />
+    ),
+  }),
+);
 
 const renderWith = (ui: React.ReactElement) => renderWithProviders(ui);
 
@@ -42,6 +76,17 @@ describe("ProviderConnectionsManager", () => {
   beforeEach(() => {
     displayErrorToast.mockReset();
     displaySuccessToast.mockReset();
+    saveProfileMutate.mockReset();
+    openaiSubscriptionStatusMock.mockReset();
+    openaiSubscriptionStatusMock.mockReturnValue({
+      data: { connected: false },
+    });
+    acpAuthStatusMock.mockReset();
+    acpAuthStatusMock.mockReturnValue({
+      status: "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    });
   });
 
   afterEach(() => {
@@ -63,7 +108,114 @@ describe("ProviderConnectionsManager", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows supported providers in the create-connection selector", async () => {
+  it("lists already-signed-in CLIs without adding a connection", () => {
+    acpAuthStatusMock.mockImplementation((providerKey: unknown) => ({
+      status:
+        providerKey === "cursor-cli" ? "authenticated" : "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    }));
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("provider-connections-empty"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Cursor CLI")).toBeInTheDocument();
+    expect(screen.queryByText("OpenCode")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Signed in|PROVIDER_CONNECTION_SIGNED_IN/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/0 model/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("provider-connection-delete"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the detected model count on a signed-in CLI", () => {
+    acpAuthStatusMock.mockImplementation((providerKey: unknown) => ({
+      status:
+        providerKey === "cursor-cli" ? "authenticated" : "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    }));
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        catalogCountsBySource={{
+          chatgpt: 0,
+          claude: 0,
+          "cursor-cli": 12,
+          opencode: 0,
+        }}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    expect(
+      screen.getByText(/12 model|PROVIDER_CONNECTION_MODEL_COUNT/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Signed in|PROVIDER_CONNECTION_SIGNED_IN/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists an already-signed-in Claude subscription without adding a connection", () => {
+    acpAuthStatusMock.mockImplementation((providerKey: unknown) => ({
+      status:
+        providerKey === "claude-code" ? "authenticated" : "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    }));
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("provider-connections-empty"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Claude subscription|LLM_AUTH_TYPE_CLAUDE_SUBSCRIPTION/),
+    ).toBeInTheDocument();
+  });
+
+  it("lists a ChatGPT subscription that is already connected on the host", () => {
+    openaiSubscriptionStatusMock.mockReturnValue({ data: { connected: true } });
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("provider-connections-empty"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/ChatGPT subscription|LLM_AUTH_TYPE_SUBSCRIPTION/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows providers a key or ChatGPT login can actually configure", async () => {
     const user = userEvent.setup();
 
     renderWith(
@@ -84,11 +236,204 @@ describe("ProviderConnectionsManager", () => {
 
     expect(screen.getByText("OpenAI")).toBeInTheDocument();
     expect(screen.getByText("Anthropic")).toBeInTheDocument();
+    expect(screen.getByText("Cursor CLI")).toBeInTheDocument();
+    expect(screen.getByText("OpenCode")).toBeInTheDocument();
     expect(screen.getByText("OpenHands")).toBeInTheDocument();
-    expect(screen.getByText("Azure")).toBeInTheDocument();
+    expect(screen.getByText("Ollama")).toBeInTheDocument();
+    expect(screen.queryByText("Azure")).not.toBeInTheDocument();
+    expect(screen.queryByText("chatgpt")).not.toBeInTheDocument();
 
     await user.click(screen.getByText("Anthropic"));
     expect(providerSelector).toHaveValue("Anthropic");
+  });
+
+  it("lets OpenAI connect with a ChatGPT subscription instead of an API key", async () => {
+    const user = userEvent.setup();
+    openaiSubscriptionStatusMock.mockReturnValue({ data: { connected: true } });
+    saveProfileMutate.mockResolvedValue({});
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "ChatGPT",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-openai"));
+
+    expect(
+      screen.getByTestId("provider-connection-api-key-input"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("provider-connection-auth-input"));
+    const chatgptAuthOptions = screen.getAllByText(
+      /ChatGPT subscription|LLM_AUTH_TYPE_SUBSCRIPTION/,
+    );
+    await user.click(chatgptAuthOptions[chatgptAuthOptions.length - 1]);
+
+    expect(
+      screen.queryByTestId("provider-connection-api-key-input"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("openai-subscription-auth-card"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(saveProfileMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "ChatGPT",
+          request: expect.objectContaining({
+            llm: expect.objectContaining({
+              auth_type: "subscription",
+              subscription_vendor: "openai",
+              model: "gpt-5.4",
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  it("lets Anthropic connect with a Claude subscription instead of an API key", async () => {
+    const user = userEvent.setup();
+    acpAuthStatusMock.mockImplementation((providerKey: unknown) => ({
+      status:
+        providerKey === "claude-code" ? "authenticated" : "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    }));
+    const createSpy = vi.spyOn(ProviderConnectionsService, "create");
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.click(screen.getByRole("combobox", { name: /provider/i }));
+    await user.click(screen.getByTestId("provider-item-anthropic"));
+
+    expect(
+      screen.getByTestId("provider-connection-api-key-input"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("provider-connection-auth-input"));
+    const claudeAuthOptions = screen.getAllByText(
+      /Claude subscription|LLM_AUTH_TYPE_CLAUDE_SUBSCRIPTION/,
+    );
+    await user.click(claudeAuthOptions[claudeAuthOptions.length - 1]);
+
+    expect(
+      screen.queryByTestId("provider-connection-api-key-input"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("cli-subscription-auth-card"),
+    ).toBeInTheDocument();
+    expect(acpAuthStatusMock).toHaveBeenCalledWith(
+      "claude-code",
+      expect.anything(),
+    );
+
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(displaySuccessToast).toHaveBeenCalled();
+    });
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(saveProfileMutate).not.toHaveBeenCalled();
+  });
+
+  it("lets Cursor CLI connect from a host login without an API key", async () => {
+    const user = userEvent.setup();
+    acpAuthStatusMock.mockImplementation((providerKey: unknown) => ({
+      status:
+        providerKey === "cursor-cli" ? "authenticated" : "unauthenticated",
+      isChecking: false,
+      isSupported: true,
+    }));
+    const createSpy = vi.spyOn(ProviderConnectionsService, "create");
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.click(screen.getByRole("combobox", { name: /provider/i }));
+    await user.click(screen.getByTestId("provider-item-cursor-cli"));
+
+    expect(
+      screen.queryByTestId("provider-connection-auth-input"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("cli-subscription-auth-card"),
+    ).toBeInTheDocument();
+    expect(acpAuthStatusMock).toHaveBeenCalledWith(
+      "cursor-cli",
+      expect.anything(),
+    );
+
+    await user.click(screen.getByTestId("provider-connection-submit"));
+
+    await waitFor(() => {
+      expect(displaySuccessToast).toHaveBeenCalled();
+    });
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it("requires a base URL for Ollama and not an API key", async () => {
+    const user = userEvent.setup();
+
+    renderWith(
+      <ProviderConnectionsManager
+        connections={[]}
+        linkedCountById={{}}
+        isLoading={false}
+        loadError={null}
+      />,
+    );
+
+    await user.click(screen.getByTestId("add-provider-connection"));
+    await user.type(
+      screen.getByTestId("provider-connection-name-input"),
+      "Local",
+    );
+
+    const providerSelector = screen.getByRole("combobox", {
+      name: /provider/i,
+    });
+    await user.click(providerSelector);
+    await user.click(screen.getByTestId("provider-item-ollama"));
+
+    expect(screen.getByTestId("provider-connection-submit")).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("provider-connection-base-url-input"),
+      "http://127.0.0.1:11434",
+    );
+    expect(screen.getByTestId("provider-connection-submit")).toBeEnabled();
   });
 
   it("submits the raw provider id when creating a connection", async () => {
@@ -148,7 +493,11 @@ describe("ProviderConnectionsManager", () => {
 
     expect(screen.getByTestId("provider-connection-row")).toBeInTheDocument();
     expect(screen.getByText("My OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("openai")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI")).toBeInTheDocument();
+    expect(
+      screen.getByText(/3 profile|PROVIDER_CONNECTION_PROFILE_COUNT/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/3 model/)).not.toBeInTheDocument();
   });
 
   it("shows supported providers in the edit-connection selector", async () => {

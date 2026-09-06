@@ -44,7 +44,7 @@ describe("AcpService.getAuthStatus", () => {
         "authenticated",
       );
       expect(executeCommand).toHaveBeenCalledWith(
-        "claude auth status --json",
+        expect.stringContaining("claude auth status --json"),
         undefined,
         expect.any(Number),
       );
@@ -59,6 +59,18 @@ describe("AcpService.getAuthStatus", () => {
       );
       await expect(AcpService.getAuthStatus("claude-code")).resolves.toBe(
         "unauthenticated",
+      );
+    });
+
+    it("treats a Claude subscription in ~/.claude.json as authenticated even when loggedIn is false", async () => {
+      executeCommand.mockResolvedValue(
+        bashOutput({
+          stdout: `${JSON.stringify({ loggedIn: false, authMethod: "none" })}\n---\noauth:present\n`,
+          exit_code: 0,
+        }),
+      );
+      await expect(AcpService.getAuthStatus("claude-code")).resolves.toBe(
+        "authenticated",
       );
     });
 
@@ -121,10 +133,90 @@ describe("AcpService.getAuthStatus", () => {
     });
   });
 
+  describe("cursor-cli (agent status)", () => {
+    it("→ authenticated from JSON loggedIn:true", async () => {
+      executeCommand.mockResolvedValue(
+        bashOutput({ stdout: JSON.stringify({ loggedIn: true }) }),
+      );
+      await expect(AcpService.getAuthStatus("cursor-cli")).resolves.toBe(
+        "authenticated",
+      );
+      expect(executeCommand.mock.calls[0][0]).toMatch(/agent status/);
+    });
+
+    it("→ unauthenticated from 'Not authenticated' text", async () => {
+      executeCommand.mockResolvedValue(
+        bashOutput({ stdout: "Not authenticated\n", exit_code: 1 }),
+      );
+      await expect(AcpService.getAuthStatus("cursor-cli")).resolves.toBe(
+        "unauthenticated",
+      );
+    });
+  });
+
+  describe("opencode (opencode auth list)", () => {
+    it("→ authenticated when a provider is listed", async () => {
+      executeCommand.mockResolvedValue(
+        bashOutput({ stdout: "anthropic  (oauth)\n" }),
+      );
+      await expect(AcpService.getAuthStatus("opencode")).resolves.toBe(
+        "authenticated",
+      );
+      expect(executeCommand.mock.calls[0][0]).toMatch(/opencode auth/);
+    });
+
+    it("→ unauthenticated when no providers are configured", async () => {
+      executeCommand.mockResolvedValue(
+        bashOutput({ stdout: "No providers configured\n" }),
+      );
+      await expect(AcpService.getAuthStatus("opencode")).resolves.toBe(
+        "unauthenticated",
+      );
+    });
+  });
+
   it("→ unknown for an unprobeable provider, without running any command", async () => {
     await expect(AcpService.getAuthStatus("openhands")).resolves.toBe(
       "unknown",
     );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("AcpService.listModels", () => {
+  it("parses Cursor CLI `agent models` output", async () => {
+    executeCommand.mockResolvedValue(
+      bashOutput({
+        stdout: "Available models\n\nauto - Auto\ngpt-5.2 - GPT-5.2\n",
+      }),
+    );
+    await expect(AcpService.listModels("cursor-cli")).resolves.toEqual([
+      { source: "cursor-cli", id: "auto", label: "Auto" },
+      { source: "cursor-cli", id: "gpt-5.2", label: "GPT-5.2" },
+    ]);
+    expect(executeCommand).toHaveBeenCalledWith(
+      expect.stringContaining("agent models"),
+      undefined,
+      expect.any(Number),
+    );
+  });
+
+  it("parses OpenCode `opencode models` output", async () => {
+    executeCommand.mockResolvedValue(
+      bashOutput({ stdout: "opencode/claude-sonnet-5\nopencode/gpt-5.2\n" }),
+    );
+    await expect(AcpService.listModels("opencode")).resolves.toEqual([
+      {
+        source: "opencode",
+        id: "opencode/claude-sonnet-5",
+        label: "claude-sonnet-5",
+      },
+      { source: "opencode", id: "opencode/gpt-5.2", label: "gpt-5.2" },
+    ]);
+  });
+
+  it("returns no models for sources without a CLI listing command", async () => {
+    await expect(AcpService.listModels("chatgpt")).resolves.toEqual([]);
     expect(executeCommand).not.toHaveBeenCalled();
   });
 });

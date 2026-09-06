@@ -1,6 +1,12 @@
 import { BashClient } from "@openhands/typescript-client/clients";
 import type { BashOutput } from "@openhands/typescript-client";
 import { getAgentServerClientOptions } from "../agent-server-client-options";
+import {
+  parseCursorAgentModels,
+  parseOpenCodeModels,
+  type SubscriptionModelOffer,
+  type SubscriptionSource,
+} from "#/utils/subscription-model-catalog";
 
 export type AcpAuthStatus = "authenticated" | "unauthenticated" | "unknown";
 
@@ -22,15 +28,18 @@ function streams(out: BashOutput): string {
   return `${out.stdout ?? ""}\n${out.stderr ?? ""}`;
 }
 
-// Claude Code: ``claude auth status --json`` prints {"loggedIn": bool, …}. The
-// CLI exits non-zero when logged out, so we read the JSON, not the exit code.
-// No parseable ``loggedIn`` (e.g. the CLI isn't installed → "command not
-// found", empty stdout) ⇒ unknown, so onboarding shows the API-key fields
-// rather than guessing.
+// Claude Code: ``claude auth status --json`` prints {"loggedIn": bool, …}.
+// Subscription accounts often still have ``loggedIn: false`` while
+// ``~/.claude.json`` holds a real ``oauthAccount`` (Claude Pro/Max). Trust
+// that file when the CLI status is stale or the binary is missing.
 function classifyClaude(out: BashOutput): AcpAuthStatus {
+  const text = streams(out);
+  if (text.includes("oauth:present")) return "authenticated";
+
+  const jsonChunk = (out.stdout ?? "").split(/\n---\n/)[0]?.trim() ?? "";
   let parsed: unknown;
   try {
-    parsed = JSON.parse((out.stdout ?? "").trim());
+    parsed = JSON.parse(jsonChunk);
   } catch {
     return "unknown";
   }
@@ -65,11 +74,71 @@ function classifyGemini(out: BashOutput): AcpAuthStatus {
   return "unknown";
 }
 
-// Per-provider login detection, keyed by ``acp_server`` / OnboardingAgentId.
-// Providers absent here (OpenHands, custom, unknown) report ``unknown``.
+function classifyCursor(out: BashOutput): AcpAuthStatus {
+  if (out.exit_code === 127) return "unknown";
+  const stdout = (out.stdout ?? "").trim();
+  try {
+    const parsed = JSON.parse(stdout) as {
+      loggedIn?: unknown;
+      authenticated?: unknown;
+    };
+    if (typeof parsed.loggedIn === "boolean") {
+      return parsed.loggedIn ? "authenticated" : "unauthenticated";
+    }
+    if (typeof parsed.authenticated === "boolean") {
+      return parsed.authenticated ? "authenticated" : "unauthenticated";
+    }
+  } catch {
+    // Fall through to text matching — `agent status` without --format json.
+  }
+  const text = streams(out).toLowerCase();
+  if (
+    text.includes("not authenticated") ||
+    text.includes("not logged in") ||
+    text.includes("logged out")
+  ) {
+    return "unauthenticated";
+  }
+  if (text.includes("authenticated") || text.includes("logged in")) {
+    return "authenticated";
+  }
+  return "unknown";
+}
+
+function classifyOpenCode(out: BashOutput): AcpAuthStatus {
+  if (out.exit_code === 127) return "unknown";
+  const stdout = (out.stdout ?? "").trim().toLowerCase();
+  if (stdout === "present") return "authenticated";
+  if (stdout === "absent") return "unauthenticated";
+  const text = streams(out).toLowerCase();
+  if (
+    text.includes("no provider") ||
+    text.includes("not authenticated") ||
+    text.includes("no credentials")
+  ) {
+    return "unauthenticated";
+  }
+  if (out.exit_code === 0 && text.trim()) return "authenticated";
+  return "unknown";
+}
+
+// Per-provider login detection, keyed by ``acp_server`` / onboarding id /
+// Add-provider CLI ids (cursor-cli, opencode). Absent keys report ``unknown``.
+const MODEL_LIST_PROBES: Partial<
+  Record<SubscriptionSource, { command: string }>
+> = {
+  "cursor-cli": {
+    command: "agent models || cursor-agent models",
+  },
+  opencode: {
+    command: "opencode models",
+  },
+};
+
 const ACP_AUTH_PROBES: Record<string, AcpAuthProbe> = {
   "claude-code": {
-    command: "claude auth status --json",
+    command:
+      '(claude auth status --json || true); echo \'---\'; python3 -c \'import json,os;p=os.path.expanduser("~/.claude.json");a={};\ntry:\n a=(json.load(open(p)).get("oauthAccount") or {}) if os.path.isfile(p) else {}\nexcept Exception:\n pass\nprint("oauth:present" if a.get("accountUuid") or a.get("emailAddress") else "oauth:absent")\'',
     classify: classifyClaude,
   },
   codex: {
@@ -80,6 +149,16 @@ const ACP_AUTH_PROBES: Record<string, AcpAuthProbe> = {
     command:
       'test -f "$HOME/.gemini/oauth_creds.json" && echo present || echo absent',
     classify: classifyGemini,
+  },
+  "cursor-cli": {
+    command:
+      "agent status --format json || cursor-agent status --format json || agent status || cursor-agent status",
+    classify: classifyCursor,
+  },
+  opencode: {
+    command:
+      'opencode auth list || (test -s "$HOME/.local/share/opencode/auth.json" && echo present || echo absent)',
+    classify: classifyOpenCode,
   },
 };
 
@@ -104,6 +183,24 @@ class AcpService {
       getAgentServerClientOptions(),
     ).executeCommand(probe.command, undefined, PROBE_TIMEOUT_SECONDS);
     return probe.classify(out);
+  }
+
+  /**
+   * List models the host CLI says this account can use. ChatGPT uses the
+   * agent-server subscription endpoint instead; Claude uses the ACP registry.
+   */
+  static async listModels(
+    source: SubscriptionSource,
+  ): Promise<SubscriptionModelOffer[]> {
+    const probe = MODEL_LIST_PROBES[source];
+    if (!probe) return [];
+    const out = await new BashClient(
+      getAgentServerClientOptions(),
+    ).executeCommand(probe.command, undefined, PROBE_TIMEOUT_SECONDS);
+    const text = streams(out);
+    if (source === "cursor-cli") return parseCursorAgentModels(text);
+    if (source === "opencode") return parseOpenCodeModels(text);
+    return [];
   }
 }
 

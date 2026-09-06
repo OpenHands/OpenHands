@@ -7,35 +7,50 @@ import { LlmProfilesManager } from "#/components/features/settings/llm-profiles/
 import ProfilesService, {
   ProfileInfo,
 } from "#/api/profiles-service/profiles-service.api";
+import type { SubscriptionModelCatalog } from "#/hooks/query/use-subscription-model-catalog";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, string>) => {
       const translations: Record<string, string> = {
-        "SETTINGS$AVAILABLE_PROFILES": "Available LLM Profiles",
-        "SETTINGS$ADD_LLM_PROFILE": "Add LLM Profile",
-        "SETTINGS$PROFILES_LOAD_ERROR": "Failed to load profiles",
-        "SETTINGS$PROFILES_EMPTY": "No profiles saved yet",
-        "SETTINGS$PROFILE_ACTIVE": "Active",
-        "SETTINGS$PROFILE_MENU": "Profile menu",
-        "SETTINGS$PROFILE_EDIT": "Edit",
-        "SETTINGS$PROFILE_SET_ACTIVE": "Set as active",
-        "SETTINGS$PROFILE_RENAME_TITLE": "Rename Profile",
-        "SETTINGS$PROFILE_DELETE_TITLE": "Delete Profile",
-        "SETTINGS$PROFILE_DELETE_CONFIRMATION": params?.name
+        SETTINGS$AVAILABLE_PROFILES: "Available LLM Profiles",
+        SETTINGS$ADD_LLM_PROFILE: "Add LLM Profile",
+        SETTINGS$PROFILES_LOAD_ERROR: "Failed to load profiles",
+        SETTINGS$PROFILES_EMPTY:
+          "No chat models saved yet. Add a profile to pick one in new conversations.",
+        SETTINGS$SUBSCRIPTION_MODELS_EMPTY:
+          "No subscription models yet. Connect a provider below, or add a custom profile.",
+        SETTINGS$LLM_PROFILES_SUBLINE:
+          "Models from your signed-in subscriptions. Turn one off to hide it from chat.",
+        SETTINGS$CUSTOM_LLM_PROFILES: "Custom profiles",
+        SETTINGS$LLM_AUTH_TYPE_SUBSCRIPTION: "ChatGPT subscription",
+        SETTINGS$LLM_AUTH_TYPE_CLAUDE_SUBSCRIPTION: "Claude subscription",
+        SETTINGS$SUBSCRIPTION_MODEL_TOGGLE: params?.model
+          ? `Include ${params.model}`
+          : "Include model",
+        SETTINGS$SUBSCRIPTION_MODEL_ALSO_ON: params?.sources
+          ? `Also in ${params.sources}`
+          : "Also in",
+        SETTINGS$PROFILE_ACTIVE: "Active",
+        SETTINGS$PROFILE_MENU: "Profile menu",
+        SETTINGS$PROFILE_EDIT: "Edit",
+        SETTINGS$PROFILE_SET_ACTIVE: "Set as active",
+        SETTINGS$PROFILE_RENAME_TITLE: "Rename Profile",
+        SETTINGS$PROFILE_DELETE_TITLE: "Delete Profile",
+        SETTINGS$PROFILE_DELETE_CONFIRMATION: params?.name
           ? `Are you sure you want to delete "${params.name}"?`
           : "Are you sure you want to delete this profile?",
-        "SETTINGS$PROFILE_ACTIVATED": params?.name
+        SETTINGS$PROFILE_ACTIVATED: params?.name
           ? `Profile "${params.name}" activated`
           : "Profile activated",
-        "SETTINGS$PROFILE_NAME_LABEL": "Profile Name",
-        "SETTINGS$PROFILE_NAME_PLACEHOLDER": "Enter profile name",
-        "SETTINGS$PROFILE_NAME_RULE":
+        SETTINGS$PROFILE_NAME_LABEL: "Profile Name",
+        SETTINGS$PROFILE_NAME_PLACEHOLDER: "Enter profile name",
+        SETTINGS$PROFILE_NAME_RULE:
           "1-64 chars, start with alphanumeric, then alphanumerics or . _ -",
-        "BUTTON$RENAME": "Rename",
-        "BUTTON$DELETE": "Delete",
-        "BUTTON$CANCEL": "Cancel",
-        "ERROR$GENERIC": "An error occurred",
+        BUTTON$RENAME: "Rename",
+        BUTTON$DELETE: "Delete",
+        BUTTON$CANCEL: "Cancel",
+        ERROR$GENERIC: "An error occurred",
       };
       return translations[key] || key;
     },
@@ -44,6 +59,28 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("#/api/profiles-service/profiles-service.api");
 vi.mock("#/utils/custom-toast-handlers");
+
+const emptyCatalog: SubscriptionModelCatalog = {
+  offers: [],
+  rows: [],
+  countsBySource: {
+    chatgpt: 0,
+    claude: 0,
+    "cursor-cli": 0,
+    opencode: 0,
+  },
+  isLoading: false,
+};
+
+const catalogMock = vi.hoisted(() => vi.fn<() => SubscriptionModelCatalog>());
+
+vi.mock("#/hooks/query/use-subscription-model-catalog", () => ({
+  useSubscriptionModelCatalog: () => catalogMock(),
+}));
+
+vi.mock("#/hooks/use-sync-chatgpt-subscription-profiles", () => ({
+  useSyncChatgptSubscriptionProfiles: () => undefined,
+}));
 
 const mockProfiles: ProfileInfo[] = [
   {
@@ -63,10 +100,12 @@ const mockProfiles: ProfileInfo[] = [
 describe("LlmProfilesManager", () => {
   let queryClient: QueryClient;
 
-  const renderManager = (props: {
-    onAddProfile?: () => void;
-    onEditProfile?: (profile: ProfileInfo) => void;
-  } = {}) => {
+  const renderManager = (
+    props: {
+      onAddProfile?: () => void;
+      onEditProfile?: (profile: ProfileInfo) => void;
+    } = {},
+  ) => {
     return render(
       <QueryClientProvider client={queryClient}>
         <LlmProfilesManager {...props} />
@@ -81,6 +120,7 @@ describe("LlmProfilesManager", () => {
         mutations: { retry: false },
       },
     });
+    catalogMock.mockReturnValue(emptyCatalog);
   });
 
   afterEach(() => {
@@ -90,7 +130,8 @@ describe("LlmProfilesManager", () => {
 
   it("displays the section title", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -100,7 +141,8 @@ describe("LlmProfilesManager", () => {
 
   it("shows Add LLM Profile button when onAddProfile is provided", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [], active_profile: null,
+      profiles: [],
+      active_profile: null,
     });
 
     renderManager({ onAddProfile: vi.fn() });
@@ -111,7 +153,8 @@ describe("LlmProfilesManager", () => {
 
   it("does not show Add LLM Profile button when onAddProfile is not provided", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [], active_profile: null,
+      profiles: [],
+      active_profile: null,
     });
 
     renderManager();
@@ -123,7 +166,8 @@ describe("LlmProfilesManager", () => {
     const user = userEvent.setup();
     const handleAddProfile = vi.fn();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [], active_profile: null,
+      profiles: [],
+      active_profile: null,
     });
 
     renderManager({ onAddProfile: handleAddProfile });
@@ -135,7 +179,8 @@ describe("LlmProfilesManager", () => {
 
   it("displays profiles when they exist", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -146,12 +191,15 @@ describe("LlmProfilesManager", () => {
 
   it("shows empty state when no profiles exist", async () => {
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: [], active_profile: null,
+      profiles: [],
+      active_profile: null,
     });
 
     renderManager();
 
-    await screen.findByText("No profiles saved yet");
+    await screen.findByText(
+      "No subscription models yet. Connect a provider below, or add a custom profile.",
+    );
   });
 
   it("shows loading spinner while loading", () => {
@@ -179,7 +227,8 @@ describe("LlmProfilesManager", () => {
     const user = userEvent.setup();
     const handleEditProfile = vi.fn();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager({ onEditProfile: handleEditProfile });
@@ -200,7 +249,8 @@ describe("LlmProfilesManager", () => {
   it("opens rename modal when Rename is clicked from profile menu", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -220,7 +270,8 @@ describe("LlmProfilesManager", () => {
   it("opens delete modal when Delete is clicked from profile menu", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -241,7 +292,8 @@ describe("LlmProfilesManager", () => {
   it("closes rename modal when onClose is called", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -259,13 +311,16 @@ describe("LlmProfilesManager", () => {
     await user.click(screen.getByText("Cancel"));
 
     // Modal should be closed
-    expect(screen.queryByTestId("rename-profile-input")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("rename-profile-input"),
+    ).not.toBeInTheDocument();
   });
 
   it("closes delete modal when onClose is called", async () => {
     const user = userEvent.setup();
     vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
-      profiles: mockProfiles, active_profile: "gpt-4-profile",
+      profiles: mockProfiles,
+      active_profile: "gpt-4-profile",
     });
 
     renderManager();
@@ -288,5 +343,41 @@ describe("LlmProfilesManager", () => {
     expect(
       screen.queryByText('Are you sure you want to delete "claude-profile"?'),
     ).not.toBeInTheDocument();
+  });
+
+  it("lists detected subscription models with source groups", async () => {
+    vi.mocked(ProfilesService.listProfiles).mockResolvedValue({
+      profiles: [],
+      active_profile: null,
+    });
+    catalogMock.mockReturnValue({
+      offers: [
+        { source: "chatgpt", id: "gpt-5.2", label: "GPT-5.2" },
+        { source: "cursor-cli", id: "gpt-5.2", label: "GPT-5.2" },
+      ],
+      rows: [
+        {
+          key: "gpt-5.2",
+          label: "GPT-5.2",
+          offers: [
+            { source: "chatgpt", id: "gpt-5.2", label: "GPT-5.2" },
+            { source: "cursor-cli", id: "gpt-5.2", label: "GPT-5.2" },
+          ],
+        },
+      ],
+      countsBySource: {
+        chatgpt: 1,
+        claude: 0,
+        "cursor-cli": 1,
+        opencode: 0,
+      },
+      isLoading: false,
+    } satisfies SubscriptionModelCatalog);
+
+    renderManager();
+
+    await screen.findByTestId("subscription-models-body");
+    expect(screen.getAllByText("GPT-5.2")).toHaveLength(2);
+    expect(screen.queryByTestId("profiles-empty")).not.toBeInTheDocument();
   });
 });

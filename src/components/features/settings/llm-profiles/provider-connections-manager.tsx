@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { ProviderConnectionRow } from "./provider-connection-row";
 import { ProviderConnectionModal } from "./provider-connection-modal";
 import { DeleteProviderConnectionModal } from "./delete-provider-connection-modal";
 import type { ProviderConnection } from "#/api/provider-connections-service/provider-connections-service.api";
+import { useHostDetectedConnections } from "#/hooks/query/use-host-detected-connections";
+import { mergeHostDetectedConnections } from "#/utils/host-detected-provider-connections";
+import {
+  subscriptionSourceForConnection,
+  type SubscriptionSource,
+} from "#/utils/subscription-model-catalog";
 import { cn } from "#/utils/utils";
 import {
   settingsListContainerClassName,
@@ -17,6 +23,8 @@ interface ProviderConnectionsManagerProps {
   connections: ProviderConnection[];
   /** Number of LLM profiles linked to each connection id. */
   linkedCountById: Record<string, number>;
+  /** Detected models per signed-in subscription. */
+  catalogCountsBySource?: Record<SubscriptionSource, number>;
   isLoading: boolean;
   loadError: Error | null;
 }
@@ -29,10 +37,17 @@ interface ProviderConnectionsManagerProps {
 export function ProviderConnectionsManager({
   connections,
   linkedCountById,
+  catalogCountsBySource,
   isLoading,
   loadError,
 }: ProviderConnectionsManagerProps) {
   const { t } = useTranslation("openhands");
+  const { connections: detectedConnections, isChecking: isDetecting } =
+    useHostDetectedConnections();
+  const visibleConnections = useMemo(
+    () => mergeHostDetectedConnections(connections, detectedConnections),
+    [connections, detectedConnections],
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [connectionToEdit, setConnectionToEdit] =
     useState<ProviderConnection | null>(null);
@@ -40,7 +55,7 @@ export function ProviderConnectionsManager({
     useState<ProviderConnection | null>(null);
 
   const renderBody = () => {
-    if (isLoading) return null;
+    if (isLoading || isDetecting) return null;
 
     if (loadError) {
       return (
@@ -55,7 +70,7 @@ export function ProviderConnectionsManager({
       );
     }
 
-    if (connections.length === 0) {
+    if (visibleConnections.length === 0) {
       return (
         <div
           data-testid="provider-connections-empty"
@@ -75,15 +90,21 @@ export function ProviderConnectionsManager({
           settingsListDividerClassName,
         )}
       >
-        {connections.map((connection) => (
-          <ProviderConnectionRow
-            key={connection.id}
-            connection={connection}
-            linkedProfileCount={linkedCountById[connection.id] ?? 0}
-            onEdit={setConnectionToEdit}
-            onDelete={setConnectionToDelete}
-          />
-        ))}
+        {visibleConnections.map((connection) => {
+          const source = subscriptionSourceForConnection(connection);
+          return (
+            <ProviderConnectionRow
+              key={connection.id}
+              connection={connection}
+              linkedProfileCount={linkedCountById[connection.id] ?? 0}
+              catalogCount={
+                source ? (catalogCountsBySource?.[source] ?? 0) : null
+              }
+              onEdit={setConnectionToEdit}
+              onDelete={setConnectionToDelete}
+            />
+          );
+        })}
       </div>
     );
   };
