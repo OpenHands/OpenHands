@@ -42,6 +42,11 @@ DEFAULT_MAX_COST_USD = 5.0
 DEFAULT_ON_FAILURE = ON_FAILURE_AUTO_FIX
 TOKENS_PER_SECOND = 50
 MIN_STAGE_COST_USD = 0.000001
+STAGE_HANDLERS: dict[str, Any] = {}
+
+
+def register_stage_handler(definition_name: str, stage_name: str, handler: Any) -> None:
+    STAGE_HANDLERS[f"{definition_name}:{stage_name}"] = handler
 
 
 class LoopError(Exception):
@@ -140,6 +145,7 @@ class LoopStore:
                 max_iterations INTEGER NOT NULL,
                 max_cost_usd REAL NOT NULL,
                 on_failure TEXT NOT NULL,
+                config TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -171,6 +177,14 @@ class LoopStore:
             );
             """
         )
+        columns = [
+            row[1]
+            for row in self.conn.execute("PRAGMA table_info(loop_definitions)")
+        ]
+        if "config" not in columns:
+            self.conn.execute(
+                "ALTER TABLE loop_definitions ADD COLUMN config TEXT NOT NULL DEFAULT '{}'"
+            )
         self.conn.commit()
 
     def create_definition(
@@ -181,6 +195,7 @@ class LoopStore:
         max_iterations: int | None = None,
         max_cost_usd: float | None = None,
         on_failure: str | None = None,
+        config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         name = (name or "").strip()
         project_id = (project_id or "").strip()
@@ -198,6 +213,10 @@ class LoopStore:
         cost_cap = float(max_cost_usd if max_cost_usd is not None else DEFAULT_MAX_COST_USD)
         if cost_cap < 0:
             raise LoopError("max_cost_usd must be >= 0")
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise LoopError("config must be an object")
         definition_id = new_id()
         now = utc_now()
         with self._lock:
@@ -205,8 +224,8 @@ class LoopStore:
                 """
                 INSERT INTO loop_definitions (
                     id, name, project_id, stages, max_iterations, max_cost_usd,
-                    on_failure, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    on_failure, config, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     definition_id,
@@ -216,6 +235,7 @@ class LoopStore:
                     iterations,
                     cost_cap,
                     mode,
+                    json.dumps(config),
                     now,
                     now,
                 ),
@@ -241,7 +261,27 @@ class LoopStore:
         if row is None:
             raise NotFoundError(f"Loop definition {definition_id} not found")
         row["stages"] = json.loads(row["stages"])
+        row["config"] = json.loads(row.get("config") or "{}")
         return row
+
+    def set_definition_config(
+        self, definition_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        self.get_definition(definition_id)
+        if not isinstance(config, dict):
+            raise LoopError("config must be an object")
+        now = utc_now()
+        with self._lock:
+            self.conn.execute(
+                """
+                UPDATE loop_definitions
+                SET config = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (json.dumps(config), now, definition_id),
+            )
+            self.conn.commit()
+        return self.get_definition(definition_id)
 
     def list_runs(self, definition_id: str) -> list[dict[str, Any]]:
         self.get_definition(definition_id)
@@ -431,20 +471,33 @@ class LoopStore:
             current_stage=stage["name"],
             iteration=int(run["iteration"]) + 1,
         )
-        cmd = resolve_stage_cmd(stage, worktree_dir)
+        handler = STAGE_HANDLERS.get(f"{definition['name']}:{stage['name']}")
         t0 = time.monotonic()
-        result = subprocess.run(
-            cmd,
-            cwd=worktree_dir,
-            shell=True,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        if handler is not None:
+            try:
+                passed, output = handler(
+                    run_id=run_id,
+                    stage=stage,
+                    worktree_dir=worktree_dir,
+                    definition=definition,
+                )
+            except Exception as exc:
+                passed, output = False, str(exc)
+            output = (output or "").strip()
+        else:
+            cmd = resolve_stage_cmd(stage, worktree_dir)
+            result = subprocess.run(
+                cmd,
+                cwd=worktree_dir,
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            output = ((result.stdout or "") + (result.stderr or "")).strip()
+            passed = result.returncode == 0
         duration = time.monotonic() - t0
         cost = estimate_attempt_cost(duration)
-        output = ((result.stdout or "") + (result.stderr or "")).strip()
-        passed = result.returncode == 0
         self._add_cost(run_id, cost)
         updated = self.get_run(run_id)
         over_budget = float(updated["total_cost_usd"]) > float(definition["max_cost_usd"])
