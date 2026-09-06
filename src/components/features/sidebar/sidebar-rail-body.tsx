@@ -7,6 +7,7 @@ import {
   Server,
   Settings,
   PanelsTopLeft,
+  Zap,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
 import { NavigationLink } from "#/components/shared/navigation-link";
@@ -236,6 +237,14 @@ export function SidebarRailBody({
               <path d="M12 13.5V8" />
             </svg>
           }
+        />
+        <SidebarNavLink
+          to="/loops"
+          label={t(I18nKey.LOOPS$NAV)}
+          testId="sidebar-loops-link"
+          collapsed={collapsed}
+          pinAction={buildPinAction("/loops", "sidebar-pin-home-toggle-loops")}
+          icon={<Zap width={ICON_SIZE} height={ICON_SIZE} />}
         />
         {/* The interface manifest owns this entry's label, so an absent
             manifest leaves the rail without it rather than with host copy. */}

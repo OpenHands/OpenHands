@@ -34,6 +34,7 @@ import {
   FEATURE_DEV_HANDLERS,
   resetFeatureDevMockData,
 } from "./feature-developer-handlers";
+import { LOOP_HANDLERS, resetLoopMockData } from "./loop-handlers";
 
 export const handlers = [
   ...FILE_SERVICE_HANDLERS,
@@ -52,6 +53,7 @@ export const handlers = [
   ...KANBAN_HANDLERS,
   ...PROJECTS_HANDLERS,
   ...FEATURE_DEV_HANDLERS,
+  ...LOOP_HANDLERS,
 ];
 
 export {
@@ -63,6 +65,7 @@ export {
   resetKanbanMockData,
   resetProjectsMockData,
   resetFeatureDevMockData,
+  resetLoopMockData,
 };
 
 export {
