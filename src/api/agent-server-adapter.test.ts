@@ -257,6 +257,34 @@ describe("buildStartConversationRequest", () => {
   });
 });
 
+describe("buildStartConversationRequest — execution runtime", () => {
+  it("requests DockerExecutionWorkspace from Docker execution servers", () => {
+    const payload = buildStartConversationRequest({
+      settings: makeSettings({ agent_kind: "openhands" }),
+      workingDir: "/host/workspace",
+      executionRuntime: "docker",
+    });
+
+    expect(payload.workspace).toEqual({
+      kind: "DockerExecutionWorkspace",
+      working_dir: "/workspace",
+    });
+    expect(payload.worktree).toBe(false);
+  });
+
+  it("keeps LocalWorkspace for local and older servers", () => {
+    const payload = buildStartConversationRequest({
+      settings: makeSettings({ agent_kind: "openhands" }),
+      workingDir: "/host/workspace",
+    });
+
+    expect(payload.workspace).toEqual({
+      kind: "LocalWorkspace",
+      working_dir: "/host/workspace",
+    });
+  });
+});
+
 describe("buildStartConversationRequest — agentProfileId path", () => {
   it("sends agent_profile_id and omits agent_settings (mutually exclusive)", () => {
     const settings = makeSettings({

@@ -178,7 +178,7 @@ export function parseRuntimeServicesInfo(
   return parsed;
 }
 
-export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServicesInfo | null> {
+async function fetchBackendServerInfo() {
   let clientOptions: ReturnType<typeof getAgentServerClientOptions>;
   try {
     clientOptions = getAgentServerClientOptions({ timeout: 3000 });
@@ -186,19 +186,21 @@ export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServices
     return null;
   }
 
-  const cached = parseRuntimeServicesInfo(
-    getCachedAgentServerInfo({ host: clientOptions.host })?.runtime_services,
-  );
+  const cached = getCachedAgentServerInfo({ host: clientOptions.host });
   if (cached) return cached;
 
   try {
-    const serverInfo = await new ServerClient(clientOptions).getServerInfo();
-    return parseRuntimeServicesInfo(
-      (serverInfo as { runtime_services?: unknown }).runtime_services,
-    );
+    return await new ServerClient(clientOptions).getServerInfo();
   } catch {
     return null;
   }
+}
+
+export async function fetchBackendRuntimeServicesInfo(): Promise<RuntimeServicesInfo | null> {
+  const serverInfo = await fetchBackendServerInfo();
+  return parseRuntimeServicesInfo(
+    (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
+  );
 }
 
 /**
@@ -435,6 +437,13 @@ interface LocalWorkspacePayload {
   working_dir: string;
 }
 
+interface DockerExecutionWorkspacePayload {
+  kind: "DockerExecutionWorkspace";
+  working_dir: "/workspace";
+}
+
+type WorkspacePayload = LocalWorkspacePayload | DockerExecutionWorkspacePayload;
+
 interface InitialMessagePayload {
   role: "user";
   content: Array<{ type: "text"; text: string }>;
@@ -442,7 +451,7 @@ interface InitialMessagePayload {
 }
 
 type ConversationSettingsPayload = SettingsRecord & {
-  workspace: LocalWorkspacePayload;
+  workspace: WorkspacePayload;
   initial_message?: InitialMessagePayload;
 };
 
@@ -996,9 +1005,16 @@ function buildConfiguredConversationSettings(options: {
   conversationInstructions?: string;
   plugins?: PluginSpec[];
   workingDir?: string;
+  executionRuntime?: string;
 }): ConversationSettingsPayload {
-  const { settings, query, conversationInstructions, plugins, workingDir } =
-    options;
+  const {
+    settings,
+    query,
+    conversationInstructions,
+    plugins,
+    workingDir,
+    executionRuntime,
+  } = options;
   const conversationSettings = toRecord(settings.conversation_settings);
   const initialMessage = buildInitialMessage(query, conversationInstructions);
 
@@ -1006,12 +1022,16 @@ function buildConfiguredConversationSettings(options: {
     (key) => delete conversationSettings[key],
   );
 
+  const workspace: WorkspacePayload =
+    executionRuntime === "docker"
+      ? { kind: "DockerExecutionWorkspace", working_dir: "/workspace" }
+      : {
+          kind: "LocalWorkspace",
+          working_dir: workingDir ?? getAgentServerWorkingDir(),
+        };
   const payload: ConversationSettingsPayload = {
     ...conversationSettings,
-    workspace: {
-      kind: "LocalWorkspace",
-      working_dir: workingDir ?? getAgentServerWorkingDir(),
-    },
+    workspace,
     ...(initialMessage ? { initial_message: initialMessage } : {}),
     ...(plugins?.length
       ? {
@@ -1039,7 +1059,7 @@ type StartConversationPayload = Record<string, unknown> & {
   // exclusive agent sources; the server resolves the profile server-side.
   agent_settings?: AgentSettingsPayload;
   agent_profile_id?: string;
-  workspace: LocalWorkspacePayload;
+  workspace: WorkspacePayload;
   confirmation_policy: SettingsRecord;
   security_analyzer?: SettingsRecord;
   initial_message?: InitialMessagePayload;
@@ -1080,6 +1100,7 @@ export interface StartConversationOptions {
   agentProfileKind?: AgentKind;
   titleLlmProfile?: string;
   runtimeServicesInfo?: RuntimeServicesInfo | null;
+  executionRuntime?: string;
 }
 
 export function buildStartConversationRequest(
@@ -1114,9 +1135,10 @@ export function buildStartConversationRequest(
       }
     : options;
 
-  const conversationSettings = buildConfiguredConversationSettings(
-    sourceConversationOptions,
-  );
+  const conversationSettings = buildConfiguredConversationSettings({
+    ...sourceConversationOptions,
+    executionRuntime: options.executionRuntime,
+  });
 
   const payload: StartConversationPayload = {
     // ``agent_profile_id`` and ``agent_settings`` are mutually exclusive agent
@@ -1164,7 +1186,10 @@ export function buildStartConversationRequest(
     ...(options.titleLlmProfile
       ? { title_llm_profile: options.titleLlmProfile }
       : {}),
-    worktree: options.worktree ?? true,
+    worktree:
+      options.executionRuntime === "docker"
+        ? false
+        : (options.worktree ?? true),
   };
 
   // Stamp the client source tag so the agent-server can attribute the
@@ -1302,15 +1327,19 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
 }): Promise<Record<string, unknown>> {
   const { SecretsService } = await import("./secrets-service");
 
-  const [settingsResult, customSecrets, runtimeServicesInfo] =
-    await Promise.all([
-      SettingsService.getSettingsForConversation(),
-      SecretsService.getSecrets(),
-      fetchBackendRuntimeServicesInfo(),
-    ]);
+  const [settingsResult, customSecrets, serverInfo] = await Promise.all([
+    SettingsService.getSettingsForConversation(),
+    SecretsService.getSecrets(),
+    fetchBackendServerInfo(),
+  ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
+  const runtimeServicesInfo = parseRuntimeServicesInfo(
+    (serverInfo as { runtime_services?: unknown } | null)?.runtime_services,
+  );
+  const executionRuntime = (serverInfo as { execution_runtime?: string } | null)
+    ?.execution_runtime;
 
   // A profile launch resolves the LLM server-side, so the current-settings
   // subscription check doesn't apply (and can't see the profile's LLM).
@@ -1325,6 +1354,7 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     secretsEncrypted,
     customSecrets,
     runtimeServicesInfo,
+    executionRuntime,
   });
 }
 
