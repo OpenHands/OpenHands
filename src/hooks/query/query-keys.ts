@@ -135,6 +135,11 @@ export const CHANNELS_QUERY_KEYS = {
   messages: () => ["channels", "messages"] as const,
 } as const;
 
+export const MEETILY_QUERY_KEYS = {
+  all: ["meetily"] as const,
+  preview: () => ["meetily", "preview"] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;

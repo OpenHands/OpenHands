@@ -291,6 +291,16 @@ def handle_request(
         from channel_host_api import handle_request as handle_channels
 
         return handle_channels(_channel_host(), method, path, body)
+    if pathname.startswith("/api/meetings"):
+        from meetily import MeetilyService
+        from meetily_api import handle_request as handle_meetily
+
+        return handle_meetily(
+            MeetilyService(store, channel_host=_channel_host()),
+            method,
+            path,
+            body,
+        )
     try:
         for route_method, pattern, handler in ROUTES:
             if route_method != method:

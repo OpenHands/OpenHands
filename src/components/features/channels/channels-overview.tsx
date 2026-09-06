@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import type { ChannelState } from "#/api/channel-service/channel-types";
 import { ChannelConfig } from "#/components/features/channels/channel-config";
+import { MeetilyImport } from "#/components/features/channels/meetily";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import {
   useChannelMessages,
@@ -130,6 +131,7 @@ export function ChannelsOverview() {
           </ul>
         )}
       </section>
+      <MeetilyImport />
       {configChannel ? (
         <ChannelConfig
           channel={configChannel}

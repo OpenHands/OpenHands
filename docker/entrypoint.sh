@@ -7,7 +7,7 @@
 #   2. Automation     on port $AUTOMATION_PORT     (default 18001)
 #   3. Kanban API     on port $KANBAN_PORT         (default 18004)
 #   4. Static server  on port $PORT               (default 8000)
-#      Routes /api/automation/* → automation, /api/boards|columns|cards|project
+#      Routes /api/automation/* → automation, /api/boards|columns|cards|project|channels|meetings
 #      → kanban, /api/* → agent-server, and serves the frontend otherwise.
 #   4. (Optional) Public-mode static server on $PUBLIC_MODE_PORT
 #      Same frontend, but with --auth-required (no baked session key).
@@ -409,6 +409,8 @@ node /opt/agent-canvas/static-server.mjs \
   --route "/api/columns=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api/cards=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
+  --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
   --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
@@ -465,6 +467,8 @@ if [ -n "${PUBLIC_MODE_PORT:-}" ]; then
     --route "/api/columns=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api/cards=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api/project=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/channels=http://127.0.0.1:${KANBAN_PORT}" \
+    --route "/api/meetings=http://127.0.0.1:${KANBAN_PORT}" \
     --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/server_info=http://127.0.0.1:${AGENT_SERVER_PORT}" \
     --route "/sockets=http://127.0.0.1:${AGENT_SERVER_PORT}" \
