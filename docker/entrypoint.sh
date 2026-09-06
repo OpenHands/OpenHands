@@ -387,12 +387,13 @@ RUNTIME_SERVICES_INFO="$(node /opt/agent-canvas/runtime-services-info.mjs \
   --automation-url "$AUTOMATION_BASE_URL")"
 
 # EFFECTIVE_SESSION_KEY is set above from LOCAL_BACKEND_API_KEY or the persisted api-key.txt
-node /opt/agent-canvas/static-server.mjs \
+# Pass the session key via SESSION_API_KEY env (not argv) so it is not
+# visible in `ps`/`/proc/<pid>/cmdline` on shared hosts.
+SESSION_API_KEY="$EFFECTIVE_SESSION_KEY" node /opt/agent-canvas/static-server.mjs \
   --port "$PORT" \
   --host :: \
   --dir /opt/agent-canvas/frontend \
   --base-path "$AGENT_CANVAS_BASE_PATH" \
-  --session-api-key "$EFFECTIVE_SESSION_KEY" \
   --runtime-services-info "$RUNTIME_SERVICES_INFO" \
   --route "/api/automation=http://127.0.0.1:${AUTOMATION_PORT}" \
   --route "/api=http://127.0.0.1:${AGENT_SERVER_PORT}" \
