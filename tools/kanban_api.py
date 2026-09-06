@@ -262,6 +262,18 @@ def _channel_host():
             factories["slack"] = SlackAdapter
         except ImportError:
             pass
+        try:
+            from whatsapp_adapter import WhatsAppAdapter
+
+            factories["whatsapp"] = WhatsAppAdapter
+        except ImportError:
+            pass
+        try:
+            from buzz_adapter import BuzzAdapter
+
+            factories["buzz"] = BuzzAdapter
+        except ImportError:
+            pass
         host.discover_adapters(factories)
         _CHANNEL_HOST = host
     return _CHANNEL_HOST

@@ -320,6 +320,21 @@ class ChannelHost:
         )
         return correlation_id
 
+    def auto_reply(
+        self,
+        channel_id: str,
+        envelope: dict[str, Any],
+        message: str,
+    ) -> str | None:
+        if envelope.get(HOLD_FOR_HUMAN):
+            return None
+        return self.send(
+            channel_id,
+            str(envelope.get("channel_ref") or ""),
+            message,
+            thread_ref=str(envelope.get("thread_ref") or "") or None,
+        )
+
     def ack(self, correlation_id: str) -> dict[str, Any]:
         with self._lock:
             row = self._conn.execute(
