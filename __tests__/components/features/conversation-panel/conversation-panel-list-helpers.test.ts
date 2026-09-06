@@ -656,6 +656,84 @@ describe("conversation-panel-list-helpers", () => {
     expect(groups.every((g) => g.conversations.length === 0)).toBe(true);
   });
 
+  it("does not pre-seed empty groups for implicit /projects example workspaces", () => {
+    const knownWorkspaces = [
+      {
+        id: "/projects/demo-app",
+        name: "demo-app",
+        path: "/projects/demo-app",
+        parentPath: "/projects",
+      },
+      {
+        id: "/projects/sample-tools",
+        name: "sample-tools",
+        path: "/projects/sample-tools",
+        parentPath: "/projects",
+      },
+      { id: "/workspace/mine", name: "mine", path: "/workspace/mine" },
+    ];
+    const groups = groupConversations(
+      [],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/workspace/mine", label: "mine" },
+    ]);
+  });
+
+  it("still groups conversations in an implicit workspace using its known name", () => {
+    const knownWorkspaces = [
+      {
+        id: "/projects/demo-app",
+        name: "Demo App",
+        path: "/projects/demo-app",
+        parentPath: "/projects",
+      },
+    ];
+    const convo: AppConversation = {
+      ...base,
+      id: "c1",
+      title: "c1",
+      selected_workspace: "/projects/demo-app",
+      updated_at: "2024-01-02T00:00:00.000Z",
+    };
+    const groups = groupConversations(
+      [convo],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/projects/demo-app", label: "Demo App" },
+    ]);
+    expect(groups[0]?.conversations.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("pre-seeds empty groups for children of a user-added workspace parent", () => {
+    const knownWorkspaces = [
+      {
+        id: "/work/alpha",
+        name: "alpha",
+        path: "/work/alpha",
+        parentPath: "/work",
+      },
+    ];
+    const groups = groupConversations(
+      [],
+      "local",
+      "updated",
+      { emptyWorkspace: "No workspace", emptyRepository: "No repository" },
+      knownWorkspaces,
+    );
+    expect(groups.map((g) => ({ id: g.id, label: g.label }))).toEqual([
+      { id: "ws:/work/alpha", label: "alpha" },
+    ]);
+  });
+
   it("merges known workspaces with conversations from paginated pages into one unified group list", () => {
     const knownWorkspaces = [
       { id: "/workspace/alpha", name: "alpha", path: "/workspace/alpha" },

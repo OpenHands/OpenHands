@@ -1,3 +1,9 @@
+/**
+ * Dev-only implicit parent whose children (mock `/projects` examples) should
+ * not occupy empty space headers until a conversation actually lands there.
+ */
+export const IMPLICIT_WORKSPACE_PARENT_PATH = "/projects";
+
 export interface LocalWorkspace {
   id: string;
   name: string;

@@ -321,4 +321,23 @@ describe("conversation-panel-preferences store", () => {
     expect(state.organizeMode).toBe("grouped");
     expect(state.showOlderConversations).toBe(false);
   });
+
+  it("migrates v1 chronological lists to grouped spaces", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          organizeMode: "chronological",
+          showOlderConversations: false,
+        },
+        version: 1,
+      }),
+    );
+
+    await useConversationPanelPreferencesStore.persist.rehydrate();
+
+    const state = useConversationPanelPreferencesStore.getState();
+    expect(state.organizeMode).toBe("grouped");
+    expect(state.showOlderConversations).toBe(false);
+  });
 });

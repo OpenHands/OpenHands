@@ -2531,6 +2531,31 @@ describe("ConversationPanel", () => {
     });
   });
 
+  it("labels the session list Spaces when grouped on a local backend", async () => {
+    useConversationPanelPreferencesStore.setState({ organizeMode: "grouped" });
+    vi.spyOn(
+      AgentServerConversationService,
+      "searchConversations",
+    ).mockResolvedValue({
+      items: [
+        createMockConversation({
+          id: "alpha-chat",
+          title: "Alpha Chat",
+          selected_workspace: "/workspace/alpha",
+        }),
+      ],
+      next_page_id: null,
+    });
+
+    renderConversationPanel();
+
+    const summary = await screen.findByTestId("older-conversations-summary");
+    expect(summary).toHaveTextContent("PROJECTS$TITLE");
+    expect(
+      await screen.findByTestId("thread-folder-ws--workspace-alpha"),
+    ).toBeInTheDocument();
+  });
+
   it("reorders grouped folders via drag and drop", async () => {
     useConversationPanelPreferencesStore.setState({
       organizeMode: "grouped",

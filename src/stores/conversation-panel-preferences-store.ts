@@ -120,7 +120,7 @@ const initialState: ConversationPanelPreferencesState = {
   groupFolderOrder: [],
 };
 
-const CONVERSATION_PANEL_PREFERENCES_VERSION = 1;
+const CONVERSATION_PANEL_PREFERENCES_VERSION = 2;
 
 export const useConversationPanelPreferencesStore =
   create<ConversationPanelPreferencesStore>()(
@@ -220,7 +220,7 @@ export const useConversationPanelPreferencesStore =
         storage: createJSONStorage(() => localStorage),
         migrate: (persistedState, version) => {
           const state = persistedState as ConversationPanelPreferencesState;
-          if (version < 1) {
+          if (version < 2) {
             return { ...state, organizeMode: "grouped" };
           }
           return state;

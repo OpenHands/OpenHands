@@ -1083,7 +1083,9 @@ export function ConversationPanel({
             className="flex min-w-0 flex-nowrap items-center gap-x-2 py-2 pl-4 pr-2.5 text-[var(--oh-muted)]"
           >
             <span className="min-w-0 truncate text-sm font-medium text-[var(--oh-muted)]">
-              {t(I18nKey.SIDEBAR$CONVERSATIONS)}
+              {organizeMode === "grouped" && activeBackend.kind === "local"
+                ? t(I18nKey.PROJECTS$TITLE)
+                : t(I18nKey.SIDEBAR$CONVERSATIONS)}
             </span>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               <ConversationPanelNewThreadPicker
