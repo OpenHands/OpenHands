@@ -2,6 +2,7 @@ import axios from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AGENT_CANVAS_CLIENT_VERSION } from "#/api/client-source";
 import {
+  _resetCanvasAuthReported,
   authenticateWithMainAppCookie,
   MAIN_APP_ANALYTICS_EVENTS_PATH,
   MAIN_APP_AUTHENTICATE_PATH,
@@ -21,6 +22,7 @@ const isAxiosErrorMock = vi.mocked(axios.isAxiosError);
 describe("main app cookie authentication", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetCanvasAuthReported();
   });
 
   it("reports the Canvas version after authentication succeeds", async () => {
@@ -65,5 +67,14 @@ describe("main app cookie authentication", () => {
     postMock.mockRejectedValue(new Error("analytics unavailable"));
 
     await expect(reportCanvasAuthenticated()).resolves.toBeUndefined();
+  });
+
+  it("fires the analytics event at most once per page load", async () => {
+    postMock.mockResolvedValue({});
+
+    await reportCanvasAuthenticated();
+    await reportCanvasAuthenticated();
+
+    expect(postMock).toHaveBeenCalledOnce();
   });
 });

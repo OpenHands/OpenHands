@@ -23,7 +23,15 @@ export function shouldUseMainAppCookieAuth(): boolean {
   return getLockedCloudAuthMode() === "cookie" && !isLocalBrowserHost();
 }
 
+let canvasAuthenticatedReported = false;
+
+export function _resetCanvasAuthReported(): void {
+  canvasAuthenticatedReported = false;
+}
+
 export async function reportCanvasAuthenticated(): Promise<void> {
+  if (canvasAuthenticatedReported) return;
+  canvasAuthenticatedReported = true;
   try {
     await axios.post(
       MAIN_APP_ANALYTICS_EVENTS_PATH,
