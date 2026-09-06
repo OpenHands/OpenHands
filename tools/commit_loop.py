@@ -180,6 +180,14 @@ class CommitLoopService:
             str(card.get("title") or "change"),
         )
         sha = self._commit(worktree, message)
+        from loop_triggers import notify_commit
+
+        notify_commit(
+            project_id,
+            str(session.get("branch_name") or ""),
+            sha,
+            worktree_dir=worktree,
+        )
         if self.kanban_store is not None and card.get("id"):
             complete_session(
                 self.kanban_store,
@@ -202,6 +210,7 @@ class CommitLoopService:
                 commit_type=commit_type_for_card(card),
                 kanban_store=self.kanban_store,
                 card_id=card.get("id"),
+                project_id=project_id,
             )
         return {
             "status": STATUS_PASSED,

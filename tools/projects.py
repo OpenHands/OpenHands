@@ -285,6 +285,20 @@ class ProjectStore:
             self.conn.commit()
         return self.get_project(project_id)
 
+    def record_commit(
+        self,
+        project_id: str,
+        branch: str,
+        commit_hash: str,
+        worktree_dir: str | None = None,
+    ) -> list[dict[str, Any]]:
+        self.get_project(project_id)
+        from loop_triggers import notify_commit
+
+        return notify_commit(
+            project_id, branch, commit_hash, worktree_dir=worktree_dir
+        )
+
     def delete_project(self, project_id: str) -> None:
         project = self.get_project(project_id)
         for worktree in list(project["worktrees"]):

@@ -410,7 +410,7 @@ export function validateFrontendDependencies(
  * bottom of tools/canvas_ui_tool.py.
  */
 export const AGENT_SERVER_IMPORT_MODULES =
-  "canvas_ui_tool,cursor_tool,opencode_tool";
+  "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers";
 
 /**
  * Build the uvx command and arguments for running agent-server.

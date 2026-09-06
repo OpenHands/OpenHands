@@ -179,6 +179,7 @@ def create_pull_request_from_session(
     repo: str | None = None,
     kanban_store: KanbanStore | None = None,
     card_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
     if not _has_changes(repo_path):
         raise PrCreatorError("No changes to commit")
@@ -205,6 +206,10 @@ def create_pull_request_from_session(
     pr_number = pr.get("number")
     if kanban_store is not None and card_id:
         kanban_store.update_card(card_id, linked_pr=pr_url, linked_branch=branch)
+    if project_id:
+        from loop_triggers import notify_pr
+
+        notify_pr(project_id, branch, pr_url, worktree_dir=repo_path)
     return {
         "branch": branch,
         "commit_message": message,
