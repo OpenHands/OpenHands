@@ -118,6 +118,17 @@ export const LOOPS_QUERY_KEYS = {
   events: () => ["loops", "events"] as const,
 } as const;
 
+export const ROUTING_QUERY_KEYS = {
+  all: ["routing"] as const,
+  config: () => ["routing", "config"] as const,
+  taxonomy: () => ["routing", "taxonomy"] as const,
+  registry: () => ["routing", "registry"] as const,
+  sources: () => ["routing", "sources"] as const,
+  routerModel: () => ["routing", "router-model"] as const,
+  localRuntimes: () => ["routing", "local-runtimes"] as const,
+  audit: () => ["routing", "audit"] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
