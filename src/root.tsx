@@ -238,10 +238,15 @@ export default function App() {
   // reload the baked key is still null, but the registry has the key.
   // So: skip the instant gate when a registered backend already carries
   // an API key — let the normal /server_info probe validate it instead.
+  const { active } = useActiveBackendContext();
   const bakedKeyMissing = isAuthRequiredAndMissing();
   const hasRegisteredKey = Boolean(getEffectiveLocalBackend()?.apiKey);
-  const authMissing = bakedKeyMissing && !hasRegisteredKey;
-  const { active } = useActiveBackendContext();
+  // When the active backend is cloud, local session-key auth is irrelevant —
+  // the cloud backend uses its own bearer token. Skip the API-key entry screen
+  // in that case so Docker/public mode doesn't block cloud-only sessions.
+  const isActiveCloudBackend = active.backend.kind === "cloud";
+  const authMissing =
+    bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
   // host matches the configured locked Cloud host. A missing backend, a stale
   // Local backend (e.g. one persisted from a previous non-locked session), or
