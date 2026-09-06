@@ -8,8 +8,10 @@ import {
   Settings,
   PanelsTopLeft,
   Zap,
+  Waypoints,
 } from "lucide-react";
 import { OpenHandsLogoButton } from "#/components/shared/buttons/openhands-logo-button";
+import { ROUTING_PATH } from "#/api/routing-service/routing-constants";
 import { NavigationLink } from "#/components/shared/navigation-link";
 import {
   automationListPath,
@@ -237,6 +239,17 @@ export function SidebarRailBody({
               <path d="M12 13.5V8" />
             </svg>
           }
+        />
+        <SidebarNavLink
+          to={ROUTING_PATH}
+          label={t(I18nKey.ROUTING$NAV)}
+          testId="sidebar-routing-link"
+          collapsed={collapsed}
+          pinAction={buildPinAction(
+            ROUTING_PATH,
+            "sidebar-pin-home-toggle-routing",
+          )}
+          icon={<Waypoints width={ICON_SIZE} height={ICON_SIZE} />}
         />
         <SidebarNavLink
           to="/loops"
