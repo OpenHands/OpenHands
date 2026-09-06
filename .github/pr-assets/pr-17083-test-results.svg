@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240" font-family="monospace">
-  <rect width="720" height="240" fill="#1e1e1e" rx="8"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="260" viewBox="0 0 720 260" font-family="monospace">
+  <rect width="720" height="260" fill="#1e1e1e" rx="8"/>
   <rect x="0" y="0" width="720" height="32" fill="#2d2d2d" rx="8"/>
   <circle cx="16" cy="16" r="6" fill="#ff5f56"/>
   <circle cx="36" cy="16" r="6" fill="#ffbd2e"/>
@@ -11,6 +11,7 @@
   <text x="16" y="128" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ reports the Canvas version after authentication succeeds</text>
   <text x="16" y="152" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ does not report unauthenticated arrivals</text>
   <text x="16" y="176" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ isolates analytics failures from application startup</text>
-  <text x="16" y="204" fill="#27c93f" font-size="13" xml:space="preserve"> Test Files  1 passed (1)</text>
-  <text x="16" y="224" fill="#27c93f" font-size="13" xml:space="preserve">      Tests  3 passed (3)</text>
+  <text x="16" y="200" fill="#d4d4d4" font-size="13" xml:space="preserve">   ✓ fires the analytics event at most once per page load</text>
+  <text x="16" y="228" fill="#27c93f" font-size="13" xml:space="preserve"> Test Files  1 passed (1)</text>
+  <text x="16" y="248" fill="#27c93f" font-size="13" xml:space="preserve">      Tests  4 passed (4)</text>
 </svg>
