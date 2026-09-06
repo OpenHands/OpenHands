@@ -966,6 +966,37 @@ class AgentServerConversationService {
     return requireAppConversation(conversation, conversationId);
   }
 
+  static async replaceConversationTags(
+    conversationId: string,
+    tags: Record<string, string>,
+  ): Promise<void> {
+    await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).updateConversation(conversationId, { tags });
+  }
+
+  /**
+   * Search for a conversation that has the given tag key set to the given
+   * value. Returns the first match, or null if none is found.
+   *
+   * The agent-server interprets each element of `tag` as `"key=value"` for
+   * exact matching. Local backend only.
+   */
+  static async findConversationByTag(
+    tagKey: string,
+    tagValue: string,
+  ): Promise<AppConversation | null> {
+    const data = await new ConversationClient(
+      getAgentServerClientOptions(),
+    ).searchConversations({
+      limit: 1,
+      tag: [`${tagKey}=${tagValue}`],
+    });
+    const page = requireConversationSearchPage(data);
+    const [first] = toConversationPage(page).items;
+    return first ?? null;
+  }
+
   /**
    * Replaces the conversation's complete server-side tag map (the PATCH is
    * replace-all, so callers must merge user edits with any reserved/internal
