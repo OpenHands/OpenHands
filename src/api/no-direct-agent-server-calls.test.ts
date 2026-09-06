@@ -14,6 +14,7 @@ const ALLOWED_AD_HOC_HTTP_FILES = new Set([
   "api/feature-developer-service/feature-developer-service.api.ts",
   "api/loop-service/loop-service.api.ts",
   "api/routing-service/routing-service.api.ts",
+  "api/graph-service/graph-service.api.ts",
   "api/channel-service/channel-service.api.ts",
   "api/meetily-service/meetily-service.api.ts",
 ]);

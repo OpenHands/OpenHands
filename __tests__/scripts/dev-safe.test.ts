@@ -481,7 +481,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
     ]);
     expect(cmd.source).toBe("PyPI (1.44.1, default)");
   });
@@ -507,7 +507,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
     ]);
     expect(cmd.source).toBe("PyPI (1.18.0)");
   });
@@ -532,7 +532,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
     ]);
     expect(cmd.source).toBe("git (feature-branch)");
   });
@@ -555,7 +555,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
     ]);
     expect(cmd.source).toBe("git (abc1234)");
   });
@@ -593,7 +593,7 @@ describe("buildAgentServerCommand", () => {
       "posthog>=6,<7",
       "agent-server",
       "--import-modules",
-      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+      "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
     ]);
     expect(cmd.source).toBe(`local (${sdk})`);
   });
@@ -630,7 +630,7 @@ describe("buildAgentServerCommand", () => {
       expect(executable).toBeGreaterThan(-1);
       expect(args.slice(executable + 1)).toEqual([
         "--import-modules",
-        "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers",
+        "canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer",
       ]);
     }
   });

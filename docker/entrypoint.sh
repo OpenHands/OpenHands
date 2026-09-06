@@ -274,7 +274,7 @@ export AUTOMATION_AGENT_SERVER_URL="${AUTOMATION_AGENT_SERVER_URL:-http://127.0.
 # FinishTool registration lets automation runs resolve the tool on their
 # remote conversations (see the note at the bottom of tools/canvas_ui_tool.py).
 export OH_EXTRA_PYTHON_PATH="${OH_EXTRA_PYTHON_PATH:-/opt/agent-canvas/tools}"
-AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers"
+AGENT_SERVER_IMPORT_MODULES="canvas_ui_tool,cursor_tool,opencode_tool,loop_triggers,graph_indexer"
 
 # Track child PIDs so we can clean up on exit.
 PIDS=()

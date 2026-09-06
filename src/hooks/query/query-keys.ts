@@ -129,6 +129,12 @@ export const ROUTING_QUERY_KEYS = {
   audit: () => ["routing", "audit"] as const,
 } as const;
 
+export const GRAPH_QUERY_KEYS = {
+  all: ["graph"] as const,
+  status: () => ["graph", "status"] as const,
+  config: () => ["graph", "config"] as const,
+} as const;
+
 export const CHANNELS_QUERY_KEYS = {
   all: ["channels"] as const,
   list: () => ["channels", "list"] as const,

@@ -51,6 +51,10 @@ project:
         config:
           strict: false
   cost_cap: 25.5
+  graph:
+    enabled: true
+    max_context_files: 8
+    graph_budget_lines: 200
 """
 
 
@@ -68,6 +72,7 @@ class ProjectConfigTests(unittest.TestCase):
         self.assertEqual(data["project"]["channels"][0]["type"], "slack")
         self.assertTrue(data["project"]["standards"]["plugins"][0]["enabled"])
         self.assertAlmostEqual(data["project"]["cost_cap"], 25.5)
+        self.assertTrue(data["project"]["graph"]["enabled"])
 
     def test_rejects_unknown_provider(self) -> None:
         data = parse_project_yaml(VALID_YAML)

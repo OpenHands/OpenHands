@@ -116,7 +116,22 @@
           },
           "additionalProperties": false
         },
-        "cost_cap": { "type": "number", "minimum": 0 }
+        "cost_cap": { "type": "number", "minimum": 0 },
+        "graph": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "strict": { "type": "boolean" },
+            "languages": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "graph_budget_lines": { "type": "integer", "minimum": 0 },
+            "max_context_files": { "type": "integer", "minimum": 0 },
+            "stale_after_minutes": { "type": "integer", "minimum": 0 }
+          }
+        }
       }
     }
   }

@@ -69,6 +69,8 @@ def validate_project_config(data: dict[str, Any]) -> dict[str, Any]:
         raise ProjectConfigError("project.cost_cap must be a number")
     if "cost_cap" in project and project["cost_cap"] < 0:
         raise ProjectConfigError("project.cost_cap must be >= 0")
+    if "graph" in project:
+        _validate_graph(project["graph"])
     extra = set(project) - {
         "name",
         "description",
@@ -78,6 +80,7 @@ def validate_project_config(data: dict[str, Any]) -> dict[str, Any]:
         "channels",
         "standards",
         "cost_cap",
+        "graph",
     }
     if extra:
         raise ProjectConfigError(f"Unknown project keys: {sorted(extra)}")
@@ -166,6 +169,24 @@ def _validate_standards(standards: Any) -> None:
             raise ProjectConfigError("plugin needs a name")
         if not isinstance(plugin.get("enabled"), bool):
             raise ProjectConfigError("plugin.enabled must be a boolean")
+
+
+def _validate_graph(graph: Any) -> None:
+    if not isinstance(graph, dict):
+        raise ProjectConfigError("graph must be an object")
+    if "enabled" in graph and not isinstance(graph["enabled"], bool):
+        raise ProjectConfigError("graph.enabled must be a boolean")
+    if "strict" in graph and not isinstance(graph["strict"], bool):
+        raise ProjectConfigError("graph.strict must be a boolean")
+    if "languages" in graph:
+        languages = graph["languages"]
+        if not isinstance(languages, list) or any(
+            not isinstance(item, str) for item in languages
+        ):
+            raise ProjectConfigError("graph.languages must be a list of strings")
+    for key in ("graph_budget_lines", "max_context_files", "stale_after_minutes"):
+        if key in graph and not _is_number(graph[key]):
+            raise ProjectConfigError(f"graph.{key} must be a number")
 
 
 def _parse_simple_yaml(text: str) -> dict[str, Any]:

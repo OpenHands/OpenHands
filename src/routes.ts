@@ -22,6 +22,7 @@ export default [
     route("extensions/:extensionName/*", "routes/canvas-extension-page.tsx"),
     route("mcp", "routes/mcp.tsx"),
     route("routing", "routes/routing.tsx"),
+    route("graph", "routes/graph.tsx"),
     route("channels", "routes/channels.tsx"),
     route("kanban", "routes/kanban.tsx"),
     route("projects", "routes/projects.tsx"),

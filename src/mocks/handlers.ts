@@ -36,6 +36,7 @@ import {
 } from "./feature-developer-handlers";
 import { LOOP_HANDLERS, resetLoopMockData } from "./loop-handlers";
 import { ROUTING_HANDLERS, resetRoutingMockData } from "./routing-handlers";
+import { GRAPH_HANDLERS, resetGraphMockData } from "./graph-handlers";
 import { CHANNEL_HANDLERS, resetChannelMockData } from "./channel-handlers";
 import { MEETILY_HANDLERS } from "./meetily-handlers";
 
@@ -58,6 +59,7 @@ export const handlers = [
   ...FEATURE_DEV_HANDLERS,
   ...LOOP_HANDLERS,
   ...ROUTING_HANDLERS,
+  ...GRAPH_HANDLERS,
   ...CHANNEL_HANDLERS,
   ...MEETILY_HANDLERS,
 ];
@@ -73,6 +75,7 @@ export {
   resetFeatureDevMockData,
   resetLoopMockData,
   resetRoutingMockData,
+  resetGraphMockData,
   resetChannelMockData,
 };
 
