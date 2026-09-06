@@ -7,7 +7,8 @@
 
 export const DEFAULT_BIND_HOST = "127.0.0.1";
 
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+const STATIC_LOOPBACK_HOSTS = new Set(["::1", "localhost"]);
+const IPV4_LOOPBACK_RE = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 export function isLoopbackBind(host) {
   if (host == null || host === "") return false;
@@ -15,7 +16,7 @@ export function isLoopbackBind(host) {
     .trim()
     .replace(/^\[|\]$/g, "")
     .toLowerCase();
-  return LOOPBACK_HOSTS.has(normalized);
+  return STATIC_LOOPBACK_HOSTS.has(normalized) || IPV4_LOOPBACK_RE.test(normalized);
 }
 
 /**

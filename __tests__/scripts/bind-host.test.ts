@@ -29,6 +29,13 @@ describe("bind-host", () => {
     expect(isLoopbackBind("localhost")).toBe(true);
   });
 
+  it("recognizes the full 127.0.0.0/8 loopback range (RFC 3330)", () => {
+    expect(isLoopbackBind("127.0.0.2")).toBe(true);
+    expect(isLoopbackBind("127.0.0.3")).toBe(true);
+    expect(isLoopbackBind("127.1.2.3")).toBe(true);
+    expect(isLoopbackBind("127.255.255.255")).toBe(true);
+  });
+
   it("strips the session key when bound off-loopback", () => {
     const warn = vi.fn();
     const policy = applySessionKeyPolicy({
