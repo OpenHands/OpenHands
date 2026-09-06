@@ -83,6 +83,7 @@ class FeatureDeveloper:
         router_store: Any | None = None,
         dispatch_runner: Callable[..., dict[str, Any]] | None = None,
         connected_providers: list[str] | None = None,
+        graph_store: Any | None = None,
     ) -> None:
         self.db_path = db_path
         self.kanban_store = kanban_store or KanbanStore()
@@ -96,6 +97,7 @@ class FeatureDeveloper:
         self.router_store = router_store
         self.dispatch_runner = dispatch_runner
         self.connected_providers = connected_providers
+        self.graph_store = graph_store
         self._lock = threading.RLock()
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -396,6 +398,37 @@ class FeatureDeveloper:
         )
         routing = self._resolve_ticket(run, ticket)
         try:
+            if self.graph_store is not None:
+                from graph_agent_hooks import apply_dispatch_graph_context
+
+                card_desc = ""
+                if ticket.get("card_id"):
+                    try:
+                        card = self.kanban_store.get_card(ticket["card_id"])
+                        card_desc = str(card.get("description") or "")
+                    except Exception:
+                        card_desc = ""
+                attached = apply_dispatch_graph_context(
+                    {
+                        "task_text": (
+                            f"{ticket.get('title') or ''}\n{card_desc}"
+                        ),
+                        "spec_text": run.get("spec_text") or "",
+                        "root": self.graph_store.status().get("root"),
+                        "card_id": ticket.get("card_id"),
+                    },
+                    store=self.graph_store,
+                    kanban_store=self.kanban_store,
+                )
+                ticket = {
+                    **ticket,
+                    "description": attached.get("spec_text") or card_desc,
+                    "_graph_block": (attached.get("graph_context") or {}).get(
+                        "block"
+                    ),
+                }
+                if attached.get("spec_text"):
+                    self._set_run(run_id, spec_text=attached["spec_text"])
             if self.implement_fn is not None:
                 result = self.implement_fn(self.get_run(run_id), ticket)
             else:
@@ -473,6 +506,12 @@ class FeatureDeveloper:
         if self.project_store is not None:
             tree = self.project_store.create_worktree(run["project_id"], branch)
             worktree_dir = tree["path"]
+        try:
+            from graph_agent_hooks import write_graph_context_file
+
+            write_graph_context_file(worktree_dir, ticket.get("_graph_block"))
+        except Exception:
+            pass
         if self.coordinator is not None:
             session = self.coordinator.assign_card(run["project_id"], ticket["card_id"])
         elif self.fleet_store is not None:

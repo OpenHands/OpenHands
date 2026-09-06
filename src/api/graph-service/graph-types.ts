@@ -60,3 +60,10 @@ export interface GraphQueryParams {
   root?: string;
   budget?: number;
 }
+
+export interface GraphRelevantFile {
+  file: string;
+  relevance: number;
+  reason: string;
+  lines?: number;
+}

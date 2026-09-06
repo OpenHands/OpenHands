@@ -13,6 +13,7 @@ import { GraphSettings } from "#/components/features/graph/graph-settings";
 import { IndexerStatusCard } from "#/components/features/graph/indexer-status-card";
 import { QueryConsole } from "#/components/features/graph/query-console";
 import { GraphPage } from "#/components/features/graph/graph-page";
+import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
 import { I18nKey } from "#/i18n/declaration";
 
 const STATUS: GraphIndexStatus = {
@@ -134,6 +135,62 @@ describe("GraphSettings", () => {
   });
 });
 
+describe("RelevantFilesCard", () => {
+  it("lists files, reasons, budget, and toggle", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    renderWithProviders(
+      <RelevantFilesCard
+        files={[
+          {
+            file: "helper.py",
+            relevance: 400,
+            reason: "defined here",
+            lines: 3,
+          },
+        ]}
+        budgetLines={400}
+        usedLines={3}
+        enabled
+        defaultEnabled
+        onToggle={onToggle}
+      />,
+    );
+    expect(screen.getByTestId("graph-relevant-row-helper.py")).toHaveTextContent(
+      "helper.py",
+    );
+    expect(screen.getByTestId("graph-relevant-row-helper.py")).toHaveTextContent(
+      "defined here",
+    );
+    expect(screen.getByTestId("graph-budget-usage")).toHaveTextContent("3/400");
+    expect(screen.getByTestId("graph-relevant-default")).toHaveAttribute(
+      "data-default-enabled",
+      "true",
+    );
+    await user.click(
+      screen.getByRole("switch", { name: I18nKey.GRAPH$CONTEXT_TOGGLE }),
+    );
+    expect(onToggle).toHaveBeenCalled();
+  });
+
+  it("shows a stale-skipped banner", () => {
+    renderWithProviders(
+      <RelevantFilesCard
+        files={[]}
+        budgetLines={400}
+        usedLines={0}
+        enabled={false}
+        defaultEnabled
+        staleSkipped
+        onToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("graph-stale-skipped")).toHaveTextContent(
+      I18nKey.GRAPH$STALE_SKIPPED,
+    );
+  });
+});
+
 describe("GraphPage", () => {
   it("wires status, query, and config PUT", async () => {
     const user = userEvent.setup();
@@ -146,6 +203,7 @@ describe("GraphPage", () => {
 
     renderWithProviders(<GraphPage />);
     await screen.findByTestId("graph-indexer-status");
+    expect(screen.getByTestId("graph-relevant-files")).toBeInTheDocument();
     await user.click(screen.getByTestId("graph-query-submit"));
     await waitFor(() => {
       expect(GraphService.query).toHaveBeenCalled();

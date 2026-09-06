@@ -96,6 +96,7 @@ class CommitLoopService:
         router_store: Any | None = None,
         dispatch_runner: Any | None = None,
         connected_providers: list[str] | None = None,
+        graph_store: Any | None = None,
     ) -> None:
         self.loop_store = loop_store or LoopStore()
         self.kanban_store = kanban_store
@@ -105,6 +106,7 @@ class CommitLoopService:
         self.router_store = router_store
         self.dispatch_runner = dispatch_runner
         self.connected_providers = connected_providers
+        self.graph_store = graph_store
         self._owns_loop_store = loop_store is None
 
     def close(self) -> None:
@@ -161,6 +163,26 @@ class CommitLoopService:
             worktree_dir=worktree,
             session_id=session_id,
         )
+        try:
+            from graph_agent_hooks import apply_dispatch_graph_context
+
+            graph = apply_dispatch_graph_context(
+                {
+                    "task_text": str(
+                        card.get("title") or session.get("branch_name") or "commit loop"
+                    ),
+                    "worktree_dir": worktree,
+                    "root": worktree,
+                    "card_id": card.get("id"),
+                    "seeds": changed_files(worktree) if worktree else [],
+                },
+                store=self.graph_store,
+                kanban_store=self.kanban_store,
+            )
+            run["graph_context"] = graph.get("graph_context")
+            run["prompt"] = graph.get("spec_text")
+        except Exception:
+            pass
         routing = None
         if self.router_store is not None:
             from router_runtime import persist_dispatch_trace, resolve_for_dispatch

@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
+import type { GraphRelevantFile } from "#/api/graph-service/graph-types";
 import type { LoopRun, LoopRunStatus } from "#/api/loop-service/loop-types";
+import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
 import { formatUsd } from "#/components/features/kanban/kanban-cost";
 import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
@@ -35,9 +37,26 @@ const STATUS_CLASS: Record<string, string> = {
 export interface LoopRunTimelineProps {
   run: LoopRun;
   triggerReason?: string | null;
+  graphFiles?: GraphRelevantFile[];
+  graphEnabled?: boolean;
+  graphDefaultEnabled?: boolean;
+  graphBudgetLines?: number;
+  graphUsedLines?: number;
+  graphStaleSkipped?: boolean;
+  onGraphToggle?: () => void;
 }
 
-export function LoopRunTimeline({ run, triggerReason }: LoopRunTimelineProps) {
+export function LoopRunTimeline({
+  run,
+  triggerReason,
+  graphFiles,
+  graphEnabled = true,
+  graphDefaultEnabled = true,
+  graphBudgetLines = 0,
+  graphUsedLines = 0,
+  graphStaleSkipped = false,
+  onGraphToggle,
+}: LoopRunTimelineProps) {
   const { t } = useTranslation("openhands");
 
   return (
@@ -65,6 +84,17 @@ export function LoopRunTimeline({ run, triggerReason }: LoopRunTimelineProps) {
           {t(I18nKey.LOOPS$TRIGGER_REASON)}
           <span className="ml-2 text-white">{triggerReason}</span>
         </p>
+      ) : null}
+      {onGraphToggle ? (
+        <RelevantFilesCard
+          files={graphFiles ?? []}
+          budgetLines={graphBudgetLines}
+          usedLines={graphUsedLines}
+          enabled={graphEnabled}
+          defaultEnabled={graphDefaultEnabled}
+          staleSkipped={graphStaleSkipped}
+          onToggle={onGraphToggle}
+        />
       ) : null}
       <ol className="flex flex-col gap-2">
         {run.stages.map((stage) => (

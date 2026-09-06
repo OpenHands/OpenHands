@@ -4,6 +4,7 @@ import type { GraphQueryKind } from "#/api/graph-service/graph-types";
 import { GraphSettings } from "#/components/features/graph/graph-settings";
 import { IndexerStatusCard } from "#/components/features/graph/indexer-status-card";
 import { QueryConsole } from "#/components/features/graph/query-console";
+import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
 import {
   useClearGraphIndex,
   useGraphConfig,
@@ -33,9 +34,12 @@ export function GraphPage() {
   const retrigger = useRetriggerGraphIndex();
   const query = useGraphQuery();
   const importConfig = useImportGraphProjectConfig();
+  const [runEnabled, setRunEnabled] = React.useState<boolean | null>(null);
 
   const status = statusQuery.data;
   const config = configQuery.data;
+  const defaultEnabled = config?.enabled ?? true;
+  const enabled = runEnabled ?? defaultEnabled;
 
   return (
     <div className="flex flex-col gap-4 pb-8">
@@ -45,6 +49,16 @@ export function GraphPage() {
           isBusy={clearIndex.isPending || retrigger.isPending}
           onClear={() => clearIndex.mutate(undefined)}
           onRetrigger={() => retrigger.mutate(undefined)}
+        />
+      ) : null}
+      {config ? (
+        <RelevantFilesCard
+          files={[]}
+          budgetLines={config.graph_budget_lines}
+          usedLines={0}
+          enabled={enabled}
+          defaultEnabled={defaultEnabled}
+          onToggle={() => setRunEnabled(!enabled)}
         />
       ) : null}
       <QueryConsole

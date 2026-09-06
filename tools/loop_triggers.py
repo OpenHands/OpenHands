@@ -132,6 +132,7 @@ class LoopTriggerService:
         poll_seconds: float = DEFAULT_POLL_SECONDS,
         router_store: Any | None = None,
         kanban_store: Any | None = None,
+        graph_store: Any | None = None,
     ) -> None:
         self.db_path = db_path
         self.loop_store = loop_store or LoopStore()
@@ -139,6 +140,7 @@ class LoopTriggerService:
         self.poll_seconds = poll_seconds
         self.router_store = router_store
         self.kanban_store = kanban_store
+        self.graph_store = graph_store
         self._owns_loop_store = loop_store is None
         self._lock = threading.RLock()
         self._stop = threading.Event()
@@ -415,15 +417,35 @@ class LoopTriggerService:
             trigger_id, run["id"], EVENT_FIRED, context.get("reason")
         )
         result: dict[str, Any] = {"event": event, "run": run}
+        payload = trigger.get("payload") or {}
+        task_text = str(
+            context.get("task_text")
+            or payload.get("task_text")
+            or f"{trigger['trigger_type']} {trigger['loop_definition_id']}"
+        )
+        try:
+            from graph_agent_hooks import apply_dispatch_graph_context
+
+            graph = apply_dispatch_graph_context(
+                {
+                    "task_text": task_text,
+                    "worktree_dir": worktree_dir,
+                    "root": worktree_dir or context.get("root"),
+                    "card_id": context.get("card_id") or payload.get("card_id"),
+                    "graph_enabled": context.get("graph_enabled"),
+                    "seeds": context.get("seeds"),
+                },
+                store=self.graph_store,
+                kanban_store=self.kanban_store,
+            )
+            result["graph_context"] = graph.get("graph_context")
+            if graph.get("spec_text"):
+                result["prompt"] = graph["spec_text"]
+        except Exception:
+            pass
         if self.router_store is not None:
             from router_runtime import persist_dispatch_trace, resolve_for_dispatch
 
-            payload = trigger.get("payload") or {}
-            task_text = str(
-                context.get("task_text")
-                or payload.get("task_text")
-                or f"{trigger['trigger_type']} {trigger['loop_definition_id']}"
-            )
             routing = resolve_for_dispatch(
                 self.router_store,
                 task_text=task_text,

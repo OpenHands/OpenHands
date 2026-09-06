@@ -4,6 +4,8 @@ import type {
   FeatureDevStatus,
   FeatureDevTicketStatus,
 } from "#/api/feature-developer-service/feature-developer-types";
+import type { GraphRelevantFile } from "#/api/graph-service/graph-types";
+import { RelevantFilesCard } from "#/components/features/graph/relevant-files-card";
 import { formatUsd } from "#/components/features/kanban/kanban-cost";
 import { I18nKey } from "#/i18n/declaration";
 import { extensionModuleCardPillClassName } from "#/utils/extension-module-card-classes";
@@ -41,9 +43,25 @@ const STATUS_CLASS: Record<string, string> = {
 
 export interface RunTimelineProps {
   run: FeatureDevRun;
+  graphFiles?: GraphRelevantFile[];
+  graphEnabled?: boolean;
+  graphDefaultEnabled?: boolean;
+  graphBudgetLines?: number;
+  graphUsedLines?: number;
+  graphStaleSkipped?: boolean;
+  onGraphToggle?: () => void;
 }
 
-export function RunTimeline({ run }: RunTimelineProps) {
+export function RunTimeline({
+  run,
+  graphFiles,
+  graphEnabled = true,
+  graphDefaultEnabled = true,
+  graphBudgetLines = 0,
+  graphUsedLines = 0,
+  graphStaleSkipped = false,
+  onGraphToggle,
+}: RunTimelineProps) {
   const { t } = useTranslation("openhands");
 
   return (
@@ -66,6 +84,17 @@ export function RunTimeline({ run }: RunTimelineProps) {
           <span className="ml-2">{formatUsd(run.total_actual_usd)}</span>
         </span>
       </div>
+      {onGraphToggle ? (
+        <RelevantFilesCard
+          files={graphFiles ?? []}
+          budgetLines={graphBudgetLines}
+          usedLines={graphUsedLines}
+          enabled={graphEnabled}
+          defaultEnabled={graphDefaultEnabled}
+          staleSkipped={graphStaleSkipped}
+          onToggle={onGraphToggle}
+        />
+      ) : null}
       <ol className="flex flex-col gap-2">
         {run.tickets.map((item) => (
           <li
