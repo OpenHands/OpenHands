@@ -1626,17 +1626,13 @@ export async function buildStartConversationRequestWithEncryptedSettings(options
     import("./hooks-service"),
   ]);
 
-  const [
-    settingsResult,
-    customSecrets,
-    serverInfo,
-    workspaceHookConfig,
-  ] = await Promise.all([
-    SettingsService.getSettingsForConversation(),
-    SecretsService.getSecrets(),
-    fetchBackendServerInfo(),
-    HooksService.loadWorkspaceHooks(options.hooksProjectDir),
-  ]);
+  const [settingsResult, customSecrets, serverInfo, workspaceHookConfig] =
+    await Promise.all([
+      SettingsService.getSettingsForConversation(),
+      SecretsService.getSecrets(),
+      fetchBackendServerInfo(),
+      HooksService.loadWorkspaceHooks(options.hooksProjectDir),
+    ]);
 
   const { agentSettings, conversationSettings, secretsEncrypted } =
     settingsResult;
