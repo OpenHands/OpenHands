@@ -25,6 +25,8 @@ export default [
     route("projects", "routes/projects.tsx"),
     route("projects/:projectId", "routes/project-detail.tsx"),
     route("project-init", "routes/project-init.tsx"),
+    route("loops", "routes/loops.tsx"),
+    route("loops/runs/:runId", "routes/loops-detail.tsx"),
     route("feature-developer", "routes/feature-developer.tsx"),
     route("feature-developer/:runId", "routes/feature-developer-detail.tsx"),
     route("settings", "routes/settings.tsx", [

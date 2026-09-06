@@ -109,6 +109,15 @@ export const FEATURE_DEV_QUERY_KEYS = {
   report: (runId: string) => ["feature-developer", "report", runId] as const,
 } as const;
 
+export const LOOPS_QUERY_KEYS = {
+  all: ["loops"] as const,
+  definitions: () => ["loops", "definitions"] as const,
+  runs: (definitionId: string) => ["loops", "runs", definitionId] as const,
+  run: (runId: string) => ["loops", "run", runId] as const,
+  triggers: () => ["loops", "triggers"] as const,
+  events: () => ["loops", "events"] as const,
+} as const;
+
 export const LOCAL_PLANNER_MUTATION_KEYS = {
   create: ["create-local-planning-conversation"] as const,
 } as const;
